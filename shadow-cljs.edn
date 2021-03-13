@@ -9,6 +9,12 @@
    :modules {:main {:init-fn frontend.core/init}
              :code-editor
              {:entries [frontend.extensions.code]
+              :depends-on #{:main}}
+             :age-encryption
+             {:entries [frontend.extensions.age-encryption]
+              :depends-on #{:main}}
+             :excalidraw
+             {:entries [frontend.extensions.excalidraw]
               :depends-on #{:main}}}
 
    :output-dir "./static/js"
@@ -33,6 +39,13 @@
     :watch-path   "static"
     :preloads     [devtools.preload]}}
 
+  :electron {:target :node-script
+             :output-to "static/electron.js"
+             :main electron.core/main
+             :devtools
+             {:before-load electron.core/stop
+              :after-load electron.core/start}}
+
   :test
   {:target :node-test
    :output-to "static/tests.js"
@@ -45,6 +58,12 @@
    :modules {:main {:init-fn frontend.publishing/init}
              :code-editor
              {:entries [frontend.extensions.code]
+              :depends-on #{:main}}
+             :age-encryption
+             {:entries [frontend.extensions.age-encryption]
+              :depends-on #{:main}}
+             :excalidraw
+             {:entries [frontend.extensions.excalidraw]
               :depends-on #{:main}}}
 
    :output-dir "./static/js/publishing"

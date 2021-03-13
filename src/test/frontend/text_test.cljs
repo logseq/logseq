@@ -19,13 +19,12 @@
     "[single bracket]" "[single bracket]"
     "no brackets" "no brackets"))
 
-(deftest sep-by-comma-or-quote
+(deftest sep-by-comma
   []
-  (are [x y] (= (text/sep-by-comma-or-quote x) y)
+  (are [x y] (= (text/sep-by-comma x) y)
     "foo,bar" ["foo" "bar"]
     "foo, bar" ["foo" "bar"]
     "foo bar" ["foo bar"]
-    "foo \"bar\"" ["foo" "bar"]
     "[[foo]] [[bar]]" ["[[foo]] [[bar]]"]
     "[[foo]],[[bar]]" ["[[foo]]", "[[bar]]"]
     "[[foo]], [[bar]]" ["[[foo]]", "[[bar]]"]
@@ -46,7 +45,9 @@
     "[[nested [[foo]]]]" #{"nested [[foo]]"}
     "[[nested [[foo]]]], [[foo]]" #{"nested [[foo]]" "foo"}
     "#tag," #{"tag"}
-    "#tag1,#tag2" #{"tag1" "tag2"}))
+    "#tag" #{"tag"}
+    "#tag1,#tag2" #{"tag1" "tag2"}
+    "[[Jan 26th, 2021]], hello" #{"hello" "Jan 26th, 2021"}))
 
 (defn extract-level-spaces
   []
@@ -104,18 +105,6 @@
 
     "hello\n:PROPERTIES:\n:id: f9873a81-07b9-4246-b910-53a6f5ec7e04\na: b\n:END:\n"
     "hello\n:PROPERTIES:\na: b\n:END:"))
-
-(defn remove-timestamp-property!
-  []
-  (are [x y] (= (text/remove-timestamp-property! x) y)
-    "hello\n:PROPERTIES:\n:created_at: 1\n:END:\n"
-    "hello\n:PROPERTIES:\n:END:"
-
-    "hello\n:PROPERTIES:\n:created_at: 1\n:last_modified_at: 2\n:END:\n"
-    "hello\n:PROPERTIES:\n:END:"
-
-    "hello\n:PROPERTIES:\n:a: b\n:created_at: 1\n:last_modified_at: 2\n:END:\n"
-    "hello\n:PROPERTIES:\n:a: b\n:END:"))
 
 (deftest re-construct-block-properties
   []

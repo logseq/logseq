@@ -13,10 +13,10 @@
 (defn set-router!
   []
   (rfe/start!
-   (rf/router routes/routes {})
+   (rf/router routes/routes nil)
    route/set-route-match!
    ;; set to false to enable HistoryAPI
-   {:use-fragment false}))
+   {:use-fragment true}))
 
 (defn display-welcome-message
   []

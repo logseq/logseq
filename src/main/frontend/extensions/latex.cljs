@@ -18,7 +18,8 @@
     (try
       (js/katex.render s (gdom/getElement id)
                       #js {:displayMode display?
-                           :throwOnError false})
+                           :throwOnError false
+                           :strict false})
       (catch js/Error e
         (js/console.error e)))))
 

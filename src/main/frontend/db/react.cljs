@@ -283,46 +283,42 @@
   [repo-url tx-data {:keys [key data files-db?] :as handler-opts
                      :or {files-db? false}}]
   (when-not config/publishing?
-    (try
-      (let [repo-url (or repo-url (state/get-current-repo))
-            tx-data (->> (util/remove-nils tx-data)
-                         (remove nil?))
-            get-conn (fn [] (if files-db?
-                              (conn/get-files-conn repo-url)
-                              (conn/get-conn repo-url false)))]
-        (when (and (seq tx-data) (get-conn))
-          (let [tx-result (d/transact! (get-conn) (vec tx-data))
-                db (:db-after tx-result)
-                handler-keys (get-handler-keys handler-opts)]
-            (doseq [handler-key handler-keys]
-              (let [handler-key (vec (cons repo-url handler-key))]
-                (when-let [cache (get @query-state handler-key)]
-                  (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
-                    (when (or query query-fn)
-                      (let [new-result (->
-                                        (cond
-                                          query-fn
-                                          (profile
-                                           "Query:"
-                                           (doall (query-fn db)))
+    (let [repo-url (or repo-url (state/get-current-repo))
+          tx-data (->> (util/remove-nils tx-data)
+                       (remove nil?))
+          get-conn (fn [] (if files-db?
+                            (conn/get-files-conn repo-url)
+                            (conn/get-conn repo-url false)))]
+      (when (and (seq tx-data) (get-conn))
+        (let [tx-result (d/transact! (get-conn) (vec tx-data))
+              db (:db-after tx-result)
+              handler-keys (get-handler-keys handler-opts)]
+          (doseq [handler-key handler-keys]
+            (let [handler-key (vec (cons repo-url handler-key))]
+              (when-let [cache (get @query-state handler-key)]
+                (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
+                  (when (or query query-fn)
+                    (let [new-result (->
+                                      (cond
+                                        query-fn
+                                        (profile
+                                         "Query:"
+                                         (doall (query-fn db)))
 
-                                          inputs-fn
-                                          (let [inputs (inputs-fn)]
-                                            (apply d/q query db inputs))
+                                        inputs-fn
+                                        (let [inputs (inputs-fn)]
+                                          (apply d/q query db inputs))
 
-                                          (keyword? query)
-                                          (db-utils/get-key-value repo-url query)
+                                        (keyword? query)
+                                        (db-utils/get-key-value repo-url query)
 
-                                          (seq inputs)
-                                          (apply d/q query db inputs)
+                                        (seq inputs)
+                                        (apply d/q query db inputs)
 
-                                          :else
-                                          (d/q query db))
-                                        transform-fn)]
-                        (set-new-result! handler-key new-result))))))))))
-      (catch js/Error e
-        ;; FIXME: check error type and notice user
-        (log/error :db/transact! e)))))
+                                        :else
+                                        (d/q query db))
+                                      transform-fn)]
+                      (set-new-result! handler-key new-result))))))))))))
 
 (defn set-key-value
   [repo-url key value]
@@ -339,18 +335,3 @@
      (-> (q repo-url [:kv key] {} key key)
          react
          key))))
-
-(defn set-file-content!
-  [repo path content]
-  (when (and repo path)
-    (let [tx-data {:file/path path
-                   :file/content content
-                   :file/last-modified-at (util/time-ms)}
-          tx-data (if (config/local-db? repo)
-                    (dissoc tx-data :file/last-modified-at)
-                    tx-data)]
-      (transact-react!
-       repo
-       [tx-data]
-       {:key [:file/content path]
-        :files-db? true}))))

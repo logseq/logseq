@@ -13,6 +13,8 @@
 
 (defonce page-ref-re #"\[\[(.*?)\]\]")
 
+(defonce page-ref-re-2 #"(\[\[.*?\]\])")
+
 (defonce between-re #"\(between ([^\)]+)\)")
 
 (defn page-ref-un-brackets!
@@ -22,32 +24,38 @@
       (subs s 2 (- (count s) 2))
       s)))
 
-;; E.g "Foo Bar \"Bar Baz\""
-(defn sep-by-comma-or-quote
+;; E.g "Foo Bar"
+(defn sep-by-comma
   [s]
   (when s
     (some->>
-     (string/split s #"[\"|\,|，]{1}")
+     (string/split s #"[\,|，]{1}")
      (remove string/blank?)
      (map string/trim))))
 
 (defn split-page-refs-without-brackets
-  [s]
-  (if (and (string? s)
-           (or (re-find #"[\"|\,|，]+" s)
-               (re-find page-ref-re s)))
-    (let [result (->> s
-                      (sep-by-comma-or-quote)
-                      (map page-ref-un-brackets!)
-                      (distinct))]
-      (if (or (coll? result)
-              (and (string? result)
-                   (string/starts-with? result "#")))
-        (let [result (if coll? result [result])
-              result (map (fn [s] (string/replace s #"^#+" "")) result)]
-          (set result))
-        (first result)))
-    s))
+  ([s]
+   (split-page-refs-without-brackets s false))
+  ([s comma?]
+   (if (and (string? s)
+            ;; Either a page ref, a tag or a comma separated collection
+            (or (re-find page-ref-re s)
+                (re-find (if comma? #"[\,|，|#]+" #"#") s)))
+     (let [result (->> (string/split s page-ref-re-2)
+                       (remove string/blank?)
+                       (mapcat (fn [s]
+                                 (if (page-ref? s)
+                                   [(page-ref-un-brackets! s)]
+                                   (sep-by-comma s))))
+                       (distinct))]
+       (if (or (coll? result)
+               (and (string? result)
+                    (string/starts-with? result "#")))
+         (let [result (if coll? result [result])
+               result (map (fn [s] (string/replace s #"^#+" "")) result)]
+           (set result))
+         (first result)))
+     s)))
 
 (defn extract-level-spaces
   [text format]
@@ -128,14 +136,6 @@
                                          (> (count s) 36)
                                          (subs s (- (count s) 36)))]
                                  (and id (util/uuid-string? id)))))))]
-    (string/join "\n" lines)))
-
-(defn remove-timestamp-property!
-  [content]
-  (let [lines (->> (string/split-lines content)
-                   (remove #(let [s (string/lower-case (string/trim %))]
-                              (or (string/starts-with? s ":created_at:")
-                                  (string/starts-with? s ":last_modified_at:")))))]
     (string/join "\n" lines)))
 
 (defn build-properties-str
@@ -243,3 +243,9 @@
               body (drop-while properties? properties-and-body)]
           (->> (concat title-lines new-properties body)
                (string/join "\n")))))))
+
+(defn build-data-value
+  [col]
+  (let [items (map (fn [item] (str "\"" item "\"")) col)]
+    (util/format "[%s]"
+                 (string/join ", " items))))

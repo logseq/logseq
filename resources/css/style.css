@@ -2,6 +2,7 @@
 @import "./inter.css";
 @import "./reveal.min.css";
 @import "./reveal_black.min.css";
+@import "./fonts.css";
 @import "./excalidraw.min.css";
 @import "./katex.min.css";
 @import "./codemirror.min.css";
@@ -9,6 +10,7 @@
 @import "./table.css";
 @import "./datepicker.css";
 @import "./highlight.css";
-@import "../../static/css/tailwind.core.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
+@import "./tailwind.core.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
+@import "./tooltip.css";
 @import "./common.css";
-@import "../../static/css/tailwind.build.css"; /* Build by gulp. Check `_buildTailwind` for more detail */
+@import "./tailwind.build.css"; /* Build by gulp. Check `_buildTailwind` for more detail */

@@ -3,11 +3,14 @@
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.search :as search]
+            [frontend.config :as config]
             [clojure.string :as string]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.format :as format]
-            [frontend.handler.common :as common-handler]))
+            [frontend.handler.common :as common-handler]
+            [frontend.handler.draw :as draw]
+            [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -101,10 +104,13 @@
      ["Scheduled" [[:editor/clear-current-slash]
                    [:editor/show-date-picker]]]
      ["Query" [[:editor/input "{{query }}" {:backward-pos 2}]]]
-     ["Draw" [[:editor/input "/draw "]
-              [:editor/show-input [{:command :draw
-                                    :id :title
-                                    :placeholder "Draw title"}]]]]
+     ["Draw" (fn []
+               (let [file (draw/file-name)
+                     path (str config/default-draw-directory "/" file)
+                     text (util/format "[[%s]]" path)]
+                 (p/let [_ (draw/create-draw-with-default-content path)]
+                   (println "draw file created, " path))
+                 text))]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
      ["Tomorrow" #(get-page-ref-text (date/tomorrow))]
@@ -123,10 +129,24 @@
                   [:editor/search-template]]]
      ;; same as link
      ["Image Link" link-steps]
-     (when (state/logged?)
+     (cond
+       (and (util/electron?) (config/local-db? (state/get-current-repo)))
+
+       ["Upload an asset (image, pdf, docx, etc.)" [[:editor/click-hidden-file-input :id]]]
+
+       (state/logged?)
        ["Upload an image" [[:editor/click-hidden-file-input :id]]])
+
+     (when (util/zh-CN-supported?)
+       ["Embed Bilibili Video" [[:editor/input "{{bilibili }}" {:last-pattern slash
+                                                                :backward-pos 2}]]])
+
      ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
                                                             :backward-pos 2}]]]
+
+     ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
+                                                        :backward-pos 2}]]]
+
      ["Html Inline " (->inline "html")]
 
      ;; TODO:
@@ -186,6 +206,7 @@
      ["Tip" (->block "tip")]
      ["Important" (->block "important")]
      ["Caution" (->block "caution")]
+     ["Pinned" (->block "pinned")]
      ["Warning" (->block "warning")]
      ["Example" (->block "example")]
      ["Export" (->block "export")]
@@ -254,6 +275,26 @@
     (util/move-cursor-to input new-pos)
     (when check-fn
       (check-fn new-value (dec (count prefix)) new-pos))))
+
+(defn insert-before!
+  [id value
+   {:keys [backward-pos forward-pos check-fn]
+    :as option}]
+  (let [input (gdom/getElement id)
+        edit-content (gobj/get input "value")
+        current-pos (:pos (util/get-caret-pos input))
+        suffix (subs edit-content 0 current-pos)
+        new-value (str value
+                       suffix
+                       (subs edit-content current-pos))
+        new-pos (- (+ (count suffix)
+                      (count value)
+                      (or forward-pos 0))
+                   (or backward-pos 0))]
+    (state/set-block-content-and-last-pos! id new-value new-pos)
+    (util/move-cursor-to input new-pos)
+    (when check-fn
+      (check-fn new-value (dec (count suffix)) new-pos))))
 
 (defn simple-replace!
   [id value selected

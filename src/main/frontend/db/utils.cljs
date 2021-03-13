@@ -35,8 +35,12 @@
 (defn group-by-page
   [blocks]
   (some->> blocks
-           (group-by :block/page)
-           (sort-by (fn [[p _blocks]] (:page/last-modified-at p)) >)))
+           (group-by :block/page)))
+
+(defn group-by-file
+  [blocks]
+  (some->> blocks
+           (group-by :block/file)))
 
 (defn get-tx-id [tx-report]
   (get-in tx-report [:tempids :db/current-tx]))

@@ -5,11 +5,13 @@
             [frontend.db.model]
             [frontend.db.react]
             [frontend.db.query-custom]
+            [frontend.db.query-react]
             [frontend.util :as util]
             [datascript.core :as d]
             [frontend.state :as state]
             [promesa.core :as p]
             [frontend.db-schema :as db-schema]
+            [frontend.db.default :as default-db]
             [clojure.core.async :as async]
             [frontend.idb :as idb]))
 
@@ -45,30 +47,37 @@
   get-date-scheduled-or-deadlines get-db-type get-empty-pages get-file get-file-after-blocks get-file-after-blocks-meta
   get-file-blocks get-file-contents get-file-last-modified-at get-file-no-sub get-file-page get-file-page-id
   get-file-pages get-files get-files-blocks get-files-full get-files-that-referenced-page get-journals-length
-  get-latest-journals get-marker-blocks get-matched-blocks get-page get-page-alias get-page-alias-names get-page-blocks
+  get-latest-journals get-marker-blocks get-matched-blocks get-page get-page-alias get-page-alias-names get-page-blocks get-page-linked-refs-refed-pages
   get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-name get-page-properties
   get-page-properties-content get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references
   get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
-  set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages page-empty? get-alias-source-page]
+  set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages page-empty? get-alias-source-page
+  set-file-content!]
 
  [frontend.db.react
-  get-current-marker get-current-page get-current-priority get-handler-keys set-file-content! set-key-value
+  get-current-marker get-current-page get-current-priority get-handler-keys set-key-value
   transact-react! remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   clear-query-state-without-refs-and-embeds! get-block-blocks-cache-atom get-page-blocks-cache-atom kv q
   query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value]
 
  [frontend.db.query-custom
-  custom-query custom-query-result-transform])
+  custom-query]
+
+ [frontend.db.query-react
+  react-query custom-query-result-transform]
+ )
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]
   (let [file-key (datascript-files-db repo)
         non-file-key (datascript-db repo)
-        file-db (d/db (get-files-conn repo))
-        non-file-db (d/db (get-conn repo false))
-        file-db-str (db->string file-db)
-        non-file-db-str (db->string non-file-db)]
+        files-conn (get-files-conn repo)
+        file-db (when files-conn (d/db files-conn))
+        non-file-conn (get-conn repo false)
+        non-file-db (d/db non-file-conn)
+        file-db-str (if file-db (db->string file-db) "")
+        non-file-db-str (if non-file-db (db->string non-file-db) "")]
     (p/let [_ (idb/set-batch! [{:key file-key :value file-db-str}
                                {:key non-file-key :value non-file-db-str}])]
       (state/set-last-persist-transact-id! repo true (get-max-tx-id file-db))
@@ -104,10 +113,11 @@
   [repo conn files-db?]
   (d/listen! conn :persistence
              (fn [tx-report]
-               (let [tx-id (get-tx-id tx-report)]
-                 (state/set-last-transact-time! repo (util/time-ms))
-                 ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
-                 (persist-if-idle! repo))
+               (when-not (util/electron?)
+                (let [tx-id (get-tx-id tx-report)]
+                  (state/set-last-transact-time! repo (util/time-ms))
+                  ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
+                  (persist-if-idle! repo)))
 
                ;; rebuild search indices
                (when-not files-db?
@@ -146,7 +156,8 @@
          (p/let [stored (idb/get-item db-name)
                  _ (when stored
                      (let [stored-db (string->db stored)
-                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                           attached-db (d/db-with stored-db
+                                                  [(me-tx stored-db me)])]
                        (conn/reset-conn! db-conn attached-db)))
                  db-name (datascript-db repo)
                  db-conn (d/create-conn db-schema/schema)
@@ -155,7 +166,9 @@
                  stored (idb/get-item db-name)
                  _ (if stored
                      (let [stored-db (string->db stored)
-                           attached-db (d/db-with stored-db [(me-tx stored-db me)])]
+                           attached-db (d/db-with stored-db (concat
+                                                             [(me-tx stored-db me)]
+                                                             default-db/built-in-pages))]
                        (conn/reset-conn! db-conn attached-db))
                      (when logged?
                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]

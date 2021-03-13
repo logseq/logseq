@@ -8,7 +8,7 @@
   ;; FIXME: doesn't work on my archlinux laptop (tienson)
   ;; The required namespace "datascript.core" is not available, it was required by "frontend/db.cljs".
   datascript/datascript       {:git/url "https://github.com/tiensonqin/datascript",
-                               :sha "7c2822565d9a114c7d8604c335af89de4640e2e5"}
+                               :sha "efde8d389e6703b6f60ca3538f484a579b0d6de0"}
   ;; datascript                  {:mvn/version "1.0.1"}
   datascript-transit/datascript-transit
   {:mvn/version "0.3.0"
@@ -21,7 +21,9 @@
   cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
   prismatic/dommy             {:mvn/version "1.1.0"}
   org.clojure/core.match      {:mvn/version "1.0.0"}
-  com.andrewmcveigh/cljs-time {:mvn/version "0.5.2"}
+  ;; fork
+  com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time",
+                               :sha "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
   cljs-drag-n-drop/cljs-drag-n-drop
   {:mvn/version "0.1.0"}
   borkdude/sci                {:mvn/version "0.1.1-alpha.6"}
@@ -33,28 +35,23 @@
   expound/expound             {:mvn/version "0.8.6"}
   lambdaisland/glogi          {:mvn/version "1.0.74"}
   nano-id/nano-id             {:mvn/version "1.0.0"}}
+  binaryage/devtools          {:mvn/version "1.0.2"}
 
- :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/"]
+ :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.764"}
-                                binaryage/devtools          {:mvn/version "1.0.2"}
                                 org.clojure/tools.namespace {:mvn/version "0.2.11"}
-                                cider/cider-nrepl           {:mvn/version "0.25.5"}
-                                org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
+                                cider/cider-nrepl           {:mvn/version "0.25.5"}}
                   :main-opts ["-m" "shadow.cljs.devtools.cli"]}
            :test
            {:extra-paths ["src/test/"]
-            :extra-deps  {
-                          org.clojure/clojurescript {:mvn/version "1.10.764"}
+            :extra-deps  {org.clojure/clojurescript {:mvn/version "1.10.764"}
                           org.clojure/test.check {:mvn/version "RELEASE"}}
             :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            :test-clj
            {:extra-paths ["src/test/"]
             :extra-deps
-            {
-             com.cognitect/test-runner
+            {com.cognitect/test-runner
              {:git/url "https://github.com/cognitect-labs/test-runner",
               :sha "76568540e7f40268ad2b646110f237a60295fa3c"}},
             :main-opts ["-m" "cognitect.test-runner" "-d" "src/test"]}}}
-
-

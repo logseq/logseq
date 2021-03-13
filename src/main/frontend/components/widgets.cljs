@@ -5,6 +5,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.web.nfs :as nfs]
+            [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.ui :as ui]
@@ -59,24 +60,24 @@
                           (reset! branch (util/evalue e)))}]]]]
 
         (ui/button
-          (t :git/add-repo-prompt-confirm)
-          :on-click
-          (fn []
-            (let [branch (string/trim @branch)]
-              (if (string/blank? branch)
-                (notification/show!
-                 [:p.text-gray-700.dark:text-gray-300 "Please input a branch, make sure it's matched with your setting on Github."]
-                 :error
-                 false)
-                (let [repo (util/lowercase-first @repo)]
-                  (if (util/starts-with? repo "https://github.com/")
-                    (let [repo (string/replace repo ".git" "")]
-                      (repo-handler/create-repo! repo branch))
+         (t :git/add-repo-prompt-confirm)
+         :on-click
+         (fn []
+           (let [branch (string/trim @branch)]
+             (if (string/blank? branch)
+               (notification/show!
+                [:p.text-gray-700.dark:text-gray-300 "Please input a branch, make sure it's matched with your setting on Github."]
+                :error
+                false)
+               (let [repo (util/lowercase-first @repo)]
+                 (if (util/starts-with? repo "https://github.com/")
+                   (let [repo (string/replace repo ".git" "")]
+                     (repo-handler/create-repo! repo branch))
 
-                    (notification/show!
-                     [:p.text-gray-700.dark:text-gray-300 "Please input a valid repo url, e.g. https://github.com/username/repo"]
-                     :error
-                     false)))))))]])))
+                   (notification/show!
+                    [:p.text-gray-700.dark:text-gray-300 "Please input a valid repo url, e.g. https://github.com/username/repo"]
+                    :error
+                    false)))))))]])))
 
 (rum/defcs add-local-directory
   []
@@ -87,11 +88,15 @@
        [:div.cp__widgets-open-local-directory
         [:div.select-file-wrap.cursor
          (when nfs-supported?
-           {:on-click nfs/ls-dir-files})
+           {:on-click page-handler/ls-dir-files!})
          [:div
           [:h1.title "Open a local directory"]
-          [:p.text-sm
-           "Your data will be stored only in your device."]
+          [:p "Logseq supports both Markdown and Org-mode, you can open an existing directory or creating a new one. Your data will be stored only on this device."]
+          [:p "After you opened your directory, it will create three sub-directories in that directory:"]
+          [:ul
+           [:li "/journals - store your journal pages"]
+           [:li "/pages - store the other pages"]
+           [:li "/logseq - store configuration, custom.css, and some metadata."]]
           (when-not nfs-supported?
             (ui/admonition :warning
                            [:p "It seems that your browser doesn't support the "
@@ -105,13 +110,13 @@
   [state & {:keys [graph-types]
             :or {graph-types [:local :github]}
             :as opts}]
-  (let [github-authed? (:github-authed? (state/get-me))
+  (let [github-authed? (state/github-authed?)
         generate-f (fn [x]
                      (case x
                        :github
-                       (when github-authed?
+                       (when (and github-authed? (not (util/electron?)))
                          (rum/with-key (add-github-repo)
-                                       "add-github-repo"))
+                           "add-github-repo"))
 
                        :local
                        (rum/with-key (add-local-directory)

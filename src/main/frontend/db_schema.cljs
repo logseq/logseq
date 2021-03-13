@@ -5,7 +5,6 @@
 (def files-db-schema
   {:file/path {:db/unique :db.unique/identity}
    :file/content {}
-   :file/last-modified-at {}
    :file/size {}
    :file/handle {}})
 
@@ -13,9 +12,11 @@
 ;; a month journal file can have multiple pages,
 ;; also, each block can be treated as a page too.
 (def schema
-  {:schema/version {}
-   :db/type {}
-   :db/ident {:db/unique :db.unique/identity}
+  {:schema/version  {}
+   :db/type         {}
+   :db/ident        {:db/unique :db.unique/identity}
+   :db/encrypted?    {}
+   :db/encryption-keys {}
 
    ;; user
    :me/name {}
@@ -50,8 +51,6 @@
                :db/cardinality :db.cardinality/many}
    :page/journal? {}
    :page/journal-day {}
-   :page/created-at {}
-   :page/last-modified-at {}
 
    ;; block
    :block/uuid {:db/unique :db.unique/identity}
@@ -64,6 +63,9 @@
    ;; referenced pages
    :block/ref-pages {:db/valueType :db.type/ref
                      :db/cardinality :db.cardinality/many}
+   ;; referenced pages inherited from the parents
+   :block/path-ref-pages {:db/valueType   :db.type/ref
+                          :db/cardinality :db.cardinality/many}
 
    ;; Referenced pages
    ;; Notice: it's only for org mode, :tag1:tag2:

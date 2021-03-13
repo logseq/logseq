@@ -4,7 +4,6 @@
             [datascript.core :as d]
             [frontend.state :as state]
             [frontend.util :as util :refer-macros [profile]]
-            [frontend.tools.html-export :as html-export]
             [frontend.config :as config]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
@@ -13,6 +12,7 @@
             [frontend.handler.git :as git-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.project :as project-handler]
+            [frontend.handler.web.nfs :as web-nfs]
             [frontend.handler.notification :as notification]
             [frontend.handler.config :as config-handler]
             [frontend.handler.ui :as ui-handler]
@@ -25,7 +25,9 @@
             [lambdaisland.glogi :as log]
             [frontend.format.mldoc :as mldoc]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [cljs.reader :as reader]
+            [goog.object :as gobj]))
 
 (defn- get-directory
   [journal?]
@@ -46,11 +48,11 @@
            :or {redirect? true}}]
    (let [title (and title (string/trim title))
          repo (state/get-current-repo)
-         dir (util/get-repo-dir repo)
+         dir (config/get-repo-dir repo)
          journal-page? (date/valid-journal-title? title)
          directory (get-directory journal-page?)]
      (when dir
-       (p/let [_ (-> (fs/mkdir (str dir "/" directory))
+       (p/let [_ (-> (fs/mkdir! (str dir "/" directory))
                      (p/catch (fn [_e])))]
          (let [format (name (state/get-preferred-format))
                page (string/lower-case title)
@@ -65,14 +67,20 @@
                 [:p.content
                  (util/format "File %s already exists!" file-path)]
                 :error)
-               ;; create the file
+               ;; Create the file
                (let [content (util/default-content-with-title format title)]
-                 (p/let [_ (fs/create-if-not-exists repo dir file-path content)
+                 ;; Write to the db first, then write to the filesystem,
+                 ;; otherwise, the main electron ipc will notify that there's
+                 ;; a new file created.
+                 ;; Question: what if the fs write failed?
+                 (p/let [_ (file-handler/reset-file! repo path content)
+                         _ (fs/create-if-not-exists repo dir file-path content)
                          _ (git-handler/git-add repo path)]
-                   (file-handler/reset-file! repo path content)
                    (when redirect?
                      (route-handler/redirect! {:to :page
                                                :path-params {:name page}})
+
+                     ;; Edit the first block
                      (let [blocks (db/get-page-blocks page)
                            last-block (last blocks)]
                        (when last-block
@@ -83,22 +91,27 @@
 (defn page-add-properties!
   [page-name properties]
   (let [page (db/entity [:page/name page-name])
-        page-format (db/get-page-format page-name)
-        properties-content (db/get-page-properties-content page-name)
-        properties-content (if properties-content
-                             (string/trim properties-content)
-                             (config/properties-wrapper page-format))]
-    (let [file (db/entity (:db/id (:page/file page)))
-          file-path (:file/path file)
-          file-content (db/get-file file-path)
-          after-content (subs file-content (inc (count properties-content)))
-          new-properties-content (db/add-properties! page-format properties-content properties)
-          full-content (str new-properties-content "\n\n" (string/trim after-content))]
-      (file-handler/alter-file (state/get-current-repo)
-                               file-path
-                               full-content
-                               {:reset? true
-                                :re-render-root? true}))))
+        page-title (:or (:page/original-name page) (:page/name page))
+        file (:page/file page)]
+    (if file
+      (let [page-format (db/get-page-format page-name)
+            properties-content (db/get-page-properties-content page-name)
+            properties-content (if properties-content
+                                 (string/trim properties-content)
+                                 (config/properties-wrapper page-format))
+            file (db/entity (:db/id (:page/file page)))
+            file-path (:file/path file)
+            file-content (db/get-file file-path)
+            after-content (subs file-content (inc (count properties-content)))
+            new-properties-content (db/add-properties! page-format properties-content properties)
+            full-content (str new-properties-content "\n\n" (string/trim after-content))]
+        (file-handler/alter-file (state/get-current-repo)
+                                 file-path
+                                 full-content
+                                 {:reset? true
+                                  :re-render-root? true}))
+      (p/let [_ (create! page-name)]
+        (page-add-properties! page-name properties)))))
 
 (defn page-remove-property!
   [page-name k]
@@ -167,9 +180,9 @@
     @plugins))
 
 (defn publish-page-as-slide!
-  ([page-name project-add-modal]
-   (publish-page-as-slide! page-name (db/get-page-blocks page-name) project-add-modal))
-  ([page-name blocks project-add-modal]
+  ([page-name project-add-modal export-page-html]
+   (publish-page-as-slide! page-name (db/get-page-blocks page-name) project-add-modal export-page-html))
+  ([page-name blocks project-add-modal export-page-html]
    (project-handler/exists-or-create!
     (fn [project]
       (config-handler/set-config! [:project :name] project)
@@ -180,7 +193,7 @@
             data {:project project
                   :title page-name
                   :permalink (:permalink properties)
-                  :html (html-export/export-page page-name blocks notification/show!)
+                  :html (export-page-html page-name blocks notification/show!)
                   :tags (:tags properties)
                   :settings (merge
                              (assoc properties
@@ -195,7 +208,7 @@
     project-add-modal)))
 
 (defn publish-page!
-  [page-name project-add-modal]
+  [page-name project-add-modal export-page-html]
   (project-handler/exists-or-create!
    (fn [project]
      (let [properties (db/get-page-properties page-name)
@@ -212,7 +225,7 @@
              (let [data {:project project
                          :title page-name
                          :permalink (:permalink properties)
-                         :html (html-export/export-page page-name blocks notification/show!)
+                         :html (export-page-html page-name blocks notification/show!)
                          :tags (:tags properties)
                          :settings (merge properties plugins)
                          :repo (state/get-current-repo)}]
@@ -272,15 +285,12 @@
               (db/transact! tx-data)
               ;; remove file
               (->
-               (p/let [_ (git/remove-file repo file-path)
-                       _ (fs/unlink (str (util/get-repo-dir repo)
-                                         "/"
-                                         file-path)
-                                    nil)]
+               (p/let [_ (or (config/local-db? repo) (git/remove-file repo file-path))
+                       _ (fs/unlink! (config/get-repo-path repo file-path) nil)]
                  (common-handler/check-changed-files-status)
                  (repo-handler/push-if-auto-enabled! repo))
                (p/catch (fn [err]
-                          (prn "error: " err))))))
+                          (js/console.error "error: " err))))))
 
           (db/transact! [[:db.fn/retractEntity [:page/name page-name]]])
 
@@ -309,10 +319,15 @@
       (when-let [file (d/entity (d/db conn) [:file/path old-path])]
         (d/transact! conn [{:db/id (:db/id file)
                             :file/path new-path}])))
+
     (->
-     (p/let [_ (fs/rename repo
-                          (str (util/get-repo-dir repo) "/" old-path)
-                          (str (util/get-repo-dir repo) "/" new-path))
+     (p/let [_ (fs/rename! repo
+                           (if (util/electron?)
+                             old-path
+                             (str (config/get-repo-dir repo) "/" old-path))
+                           (if (util/electron?)
+                             new-path
+                             (str (config/get-repo-dir repo) "/" new-path)))
              _ (when-not (config/local-db? repo)
                  (git/rename repo old-path new-path))]
        (common-handler/check-changed-files-status)
@@ -372,9 +387,15 @@
   (when (and page (contains? config/mldoc-support-formats format))
     (let [old-name page
           new-name (let [ast (mldoc/->edn content (mldoc/default-config format))]
-                     (db/get-page-name path ast))]
-      (when (not= old-name new-name)
-        (rename! old-name new-name)))))
+                     (db/get-page-name path ast))
+          journal? (date/valid-journal-title? old-name)]
+      (if (not= old-name new-name)
+        (if journal?
+          [true old-name]
+          (do
+            (rename! old-name new-name)
+            [false new-name]))
+        [journal? old-name]))))
 
 (defn handle-add-page-to-contents!
   [page-name]
@@ -488,20 +509,83 @@
         (let [templates (map string/lower-case templates)]
           (contains? (set templates) (string/lower-case title)))))))
 
+(defn ls-dir-files!
+  []
+  (web-nfs/ls-dir-files-with-handler!
+    (fn []
+      (init-commands!))))
+
+
+;; TODO: add use :file/last-modified-at
 (defn get-pages-with-modified-at
   [repo]
-  (let [now-long (tc/to-long (t/now))]
-    (->> (db/get-modified-pages repo)
-         (seq)
-         (sort-by (fn [[page modified-at]]
-                    [modified-at page]))
-         (reverse)
-         (remove (fn [[page modified-at]]
-                   (or (util/file-page? page)
-                       (and modified-at
-                            (> modified-at now-long))))))))
+  (->> (db/get-modified-pages repo)
+       (remove util/file-page?)))
+
+(defn save-filter!
+  [page-name filter-state]
+  (if (empty? filter-state)
+    (page-remove-property! page-name "filters")
+    (page-add-properties! page-name {"filters" filter-state})))
+
+(defn get-filter
+  [page-name]
+  (let [properties (db/get-page-properties page-name)]
+    (atom (reader/read-string (get-in properties [:filters] "{}")))))
 
 (defn page-exists?
   [page-name]
   (when page-name
     (db/entity [:page/name page-name])))
+
+;; Editor
+(defn page-not-exists-handler
+  [input id q current-pos]
+  (state/set-editor-show-page-search! false)
+  (if (state/org-mode-file-link? (state/get-current-repo))
+    (let [page-ref-text (get-page-ref-text q)
+          value (gobj/get input "value")
+          old-page-ref (util/format "[[%s]]" q)
+          new-value (string/replace value
+                                    old-page-ref
+                                    page-ref-text)]
+      (state/set-edit-content! id new-value)
+      (let [new-pos (+ current-pos
+                       (- (count page-ref-text)
+                          (count old-page-ref))
+                       2)]
+        (util/move-cursor-to input new-pos)))
+    (util/cursor-move-forward input 2)))
+
+(defn on-chosen-handler
+  [input id q pos format]
+  (let [current-pos (:pos (util/get-caret-pos input))
+        edit-content (state/sub [:editor/content id])
+        edit-block (state/sub :editor/block)
+        q (or
+           @editor-handler/*selected-text
+           (when (state/sub :editor/show-page-search-hashtag?)
+             (util/safe-subs edit-content pos current-pos))
+           (when (> (count edit-content) current-pos)
+             (util/safe-subs edit-content pos current-pos)))]
+    (if (state/sub :editor/show-page-search-hashtag?)
+      (fn [chosen _click?]
+        (state/set-editor-show-page-search! false)
+        (let [chosen (if (re-find #"\s+" chosen)
+                       (util/format "[[%s]]" chosen)
+                       chosen)]
+          (editor-handler/insert-command! id
+                                          (str "#" chosen)
+                                          format
+                                          {:last-pattern (let [q (if @editor-handler/*selected-text "" q)]
+                                                           (if (and q (string/starts-with? q "#"))
+                                                             q
+                                                             (str "#" q)))})))
+      (fn [chosen _click?]
+        (state/set-editor-show-page-search! false)
+        (let [page-ref-text (get-page-ref-text chosen)]
+          (editor-handler/insert-command! id
+                                          page-ref-text
+                                          format
+                                          {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
+                                           :postfix-fn   (fn [s] (util/replace-first "]]" s ""))}))))))

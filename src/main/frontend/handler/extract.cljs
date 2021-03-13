@@ -36,7 +36,8 @@
                    (fn [[page blocks]]
                      (if page
                        (map (fn [block]
-                              (let [block-ref-pages (seq (:block/ref-pages block))]
+                              (let [block-ref-pages (seq (:block/ref-pages block))
+                                    block-path-ref-pages (seq (:block/path-ref-pages block))]
                                 (when block-ref-pages
                                   (swap! ref-pages set/union (set block-ref-pages)))
                                 (-> block
@@ -48,7 +49,8 @@
                                            :block/ref-pages (mapv
                                                              (fn [page]
                                                                (block/page-with-journal page))
-                                                             block-ref-pages)))))
+                                                             block-ref-pages)
+                                           :block/path-ref-pages block-path-ref-pages))))
                             blocks)))
                    (remove nil? pages)))
           pages (doall
@@ -63,47 +65,46 @@
                           page-list (when-let [list-content (:list properties)]
                                       (extract-page-list list-content))]
                       (cond->
-                       (util/remove-nils
-                        {:page/name (string/lower-case page)
-                         :page/original-name page
-                         :page/file [:file/path file]
-                         :page/journal? journal?
-                         :page/journal-day (if journal?
-                                             (date/journal-title->int (string/capitalize page))
-                                             0)
-                         :page/created-at journal-date-long
-                         :page/last-modified-at journal-date-long})
+                        (util/remove-nils
+                         {:page/name (string/lower-case page)
+                          :page/original-name page
+                          :page/file [:file/path file]
+                          :page/journal? journal?
+                          :page/journal-day (if journal?
+                                              (date/journal-title->int page)
+                                              0)})
                         (seq properties)
                         (assoc :page/properties properties)
 
                         aliases
                         (assoc :page/alias
                                (map
-                                (fn [alias]
-                                  (let [page-name (string/lower-case alias)
-                                        aliases (distinct
-                                                 (conj
-                                                  (remove #{alias} aliases)
-                                                  page))
-                                        aliases (if (seq aliases)
-                                                  (map
-                                                   (fn [alias]
-                                                     {:page/name alias})
-                                                   aliases))]
-                                    (if (seq aliases)
-                                      {:page/name page-name
-                                       :page/alias aliases}
-                                      {:page/name page-name})))
-                                aliases))
+                                 (fn [alias]
+                                   (let [page-name (string/lower-case alias)
+                                         aliases (distinct
+                                                  (conj
+                                                   (remove #{alias} aliases)
+                                                   page))
+                                         aliases (if (seq aliases)
+                                                   (map
+                                                     (fn [alias]
+                                                       {:page/name alias})
+                                                     aliases))]
+                                     (if (seq aliases)
+                                       {:page/name page-name
+                                        :page/alias aliases}
+                                       {:page/name page-name})))
+                                 aliases))
 
                         (:tags properties)
-                        (assoc :page/tags (let [tags (:tags properties)]
+                        (assoc :page/tags (let [tags (->> (:tags properties)
+                                                          (remove string/blank?))]
                                             (swap! ref-tags set/union (set tags))
                                             (map (fn [tag] {:page/name (string/lower-case tag)
                                                             :page/original-name tag})
-                                                 tags))))))
+                                              tags))))))
                   (->> (map first pages)
-                       (remove nil?))))
+                       (remove string/blank?))))
           pages (concat
                  pages
                  (map
@@ -129,7 +130,7 @@
   [repo-url file content utf8-content]
   (if (string/blank? content)
     []
-    (let [journal? (util/starts-with? file "journals/")
+    (let [journal? (util/journal? file)
           format (format/get-format file)
           ast (mldoc/->edn content
                            (mldoc/default-config format))
@@ -159,7 +160,7 @@
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
-              block-ids-set (set block-ids)
+              block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
               ;; To prevent "unique constraint" on datascript
               pages-index (map #(select-keys % [:page/name]) pages)
               blocks (map (fn [b]

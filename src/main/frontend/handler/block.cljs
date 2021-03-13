@@ -6,7 +6,9 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.date :as date]
             [frontend.config :as config]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [clojure.set :as set]
+            [medley.core :as medley]))
 
 (defn blocks->vec-tree [col]
   (let [col (map (fn [h] (cond->
@@ -15,7 +17,14 @@
                            (dissoc h :block/meta))) col)
         parent? (fn [item children]
                   (and (seq children)
-                       (every? #(< (:block/level item) (:block/level %)) children)))]
+                       (every? #(< (:block/level item) (:block/level %)) children)))
+        get-all-refs (fn [block]
+                       (let [refs (if-let [refs (seq (:block/refs-with-children block))]
+                                    refs
+                                    (concat
+                                     (:block/ref-pages block)
+                                     (:block/tags block)))]
+                         (distinct refs)))]
     (loop [col (reverse col)
            children (list)]
       (if (empty? col)
@@ -23,7 +32,9 @@
         (let [[item & others] col
               cur-level (:block/level item)
               bottom-level (:block/level (first children))
-              pre-block? (:block/pre-block? item)]
+              pre-block? (:block/pre-block? item)
+              item (assoc item :block/refs-with-children (->> (get-all-refs item)
+                                                              (remove nil?)))]
           (cond
             (empty? children)
             (recur others (list item))
@@ -38,9 +49,13 @@
             (let [[children other-children] (split-with (fn [h]
                                                           (> (:block/level h) cur-level))
                                                         children)
-
+                  refs-with-children (->> (mapcat get-all-refs (cons item children))
+                                          (remove nil?)
+                                          distinct)
                   children (cons
-                            (assoc item :block/children children)
+                            (assoc item
+                                   :block/children children
+                                   :block/refs-with-children refs-with-children)
                             other-children)]
               (recur others children))))))))
 
@@ -128,9 +143,9 @@
 (defn pre-block-with-only-title?
   [repo block-id]
   (when-let [block (db/entity repo [:block/uuid block-id])]
-    (let [properties (:page/properties (:block/page block))]
-      (and (:title properties)
-           (= 1 (count properties))
+    (let [properties (:page/properties (:block/page block))
+          property-names (keys properties)]
+      (and (every? #(contains? #{:title :filters} %) property-names)
            (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
              (or
               (empty? (rest ast))
@@ -179,3 +194,42 @@
                              :block/pre-block? false})
                           default-option)]
          (conj blocks dummy))))))
+
+(defn filter-blocks
+  [repo ref-blocks filters group-by-page?]
+  (let [ref-pages (->> (if group-by-page?
+                         (mapcat last ref-blocks)
+                         ref-blocks)
+                       (mapcat (fn [b] (concat (:block/ref-pages b) (:block/children-refs b))))
+                       (distinct)
+                       (map :db/id)
+                       (db/pull-many repo '[:db/id :page/name]))
+        ref-pages (zipmap (map :page/name ref-pages) (map :db/id ref-pages))
+        exclude-ids (->> (map (fn [page] (get ref-pages page)) (get filters false))
+                         (remove nil?)
+                         (set))
+        include-ids (->> (map (fn [page] (get ref-pages page)) (get filters true))
+                         (remove nil?)
+                         (set))]
+    (if (empty? filters)
+      ref-blocks
+      (let [filter-f (fn [ref-blocks]
+                       (cond->> ref-blocks
+                         (seq exclude-ids)
+                         (remove (fn [block]
+                                   (let [ids (set (concat (map :db/id (:block/ref-pages block))
+                                                          (map :db/id (:block/children-refs block))))]
+                                     (seq (set/intersection exclude-ids ids)))))
+
+                         (seq include-ids)
+                         (remove (fn [block]
+                                   (let [ids (set (concat (map :db/id (:block/ref-pages block))
+                                                          (map :db/id (:block/children-refs block))))]
+                                     (empty? (set/intersection include-ids ids)))))
+                         ))]
+        (if group-by-page?
+          (->> (map (fn [[p ref-blocks]]
+                      [p (filter-f ref-blocks)]) ref-blocks)
+               (remove #(empty? (second %))))
+          (->> (filter-f ref-blocks)
+               (remove nil?)))))))

@@ -31,6 +31,41 @@
   (let [switch (reductions not= true (map pred? coll (rest coll)))]
     (map (partial map first) (partition-by second (map list coll switch)))))
 
+(defn highlight-exact-query
+  [content q]
+  (let [q-words (string/split q #" ")
+        lc-content (string/lower-case content)
+        lc-q (string/lower-case q)]
+    (if (or (string/includes? lc-content lc-q)
+            (not (re-find #" " q)))
+      (let [i (string/index-of lc-content lc-q)
+            [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
+        [:p
+         (when-not (string/blank? before)
+           [:span before])
+         [:mark (subs content i (+ i (count q)))]
+         (when-not (string/blank? after)
+           [:span after])])
+      (let [elements (loop [words q-words
+                            content content
+                            result []]
+                       (if (and (seq words) content)
+                         (let [word (first words)
+                               lc-word (string/lower-case word)
+                               lc-content (string/lower-case content)]
+                           (if-let [i (string/index-of lc-content lc-word)]
+                             (recur (rest words)
+                                    (subs content (+ i (count word)))
+                                    (vec
+                                     (concat result
+                                             [[:span (subs content 0 i)]
+                                              [:mark (subs content i (+ i (count word)))]])))
+                             (recur nil
+                                    content
+                                    result)))
+                         (conj result [:span content])))]
+        [:p elements]))))
+
 (rum/defc highlight-fuzzy
   [content indexes]
   (let [n (count content)
@@ -86,19 +121,27 @@
 
 (defn- leave-focus
   []
-  (when-let [input (gdom/getElement "search_field")]
+  (when-let [input (gdom/getElement "search-field")]
     (.blur input)))
 
+(defonce search-timeout (atom nil))
+
 (rum/defc search-auto-complete
-  [{:keys [pages files blocks]} search-q]
+  [{:keys [pages files blocks] :as result} search-q]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (let [new-page [{:type :new-page}]
-          new-file (when-let [ext (util/get-file-ext search-q)]
+    (let [new-file (when-let [ext (util/get-file-ext search-q)]
                      (when (contains? config/mldoc-support-formats (keyword (string/lower-case ext)))
                        [{:type :new-file}]))
           pages (map (fn [page] {:type :page :data page}) pages)
           files (map (fn [file] {:type :file :data file}) files)
           blocks (map (fn [block] {:type :block :data block}) blocks)
+          new-page (if (or
+                        (and (seq pages)
+                             (= (string/lower-case search-q)
+                                (string/lower-case (:data (first pages)))))
+                        (nil? result))
+                     []
+                     [{:type :new-page}])
           result (if config/publishing?
                    (concat pages files blocks)
                    (concat new-page pages new-file files blocks))]
@@ -109,7 +152,8 @@
                  :width 500})}
        (ui/auto-complete
         result
-        {:on-chosen (fn [{:keys [type data]}]
+        {:class "search-results"
+         :on-chosen (fn [{:keys [type data]}]
                       (search-handler/clear-search!)
                       (leave-focus)
                       (case type
@@ -129,9 +173,10 @@
 
                         :block
                         (let [block-uuid (uuid (:block/uuid data))
-                              page (:page/name (:block/page (db/entity [:block/uuid block-uuid])))
-                              path (str "/page/" (util/encode-str page) "#ls-block-" (:block/uuid data))]
-                          (route/redirect-with-fragment! path))
+                              page (:page/name (:block/page (db/entity [:block/uuid block-uuid])))]
+                          (route/redirect! {:to :page
+                                            :path-params {:name page}
+                                            :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))
                         nil))
          :on-shift-chosen (fn [{:keys [type data]}]
                             (case type
@@ -181,11 +226,12 @@
                                          (:page/name page))]
                             [:div.flex-1
                              [:div.text-sm.font-medium (str "-> " page)]
-                             (highlight-fuzzy content indexes)])
+                             (highlight-exact-query content search-q)])
 
                           nil))})])))
 
-(rum/defc search < rum/reactive
+(rum/defcs search < rum/reactive
+  (rum/local false ::inside-box?)
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
@@ -193,36 +239,42 @@
       :on-hide (fn []
                  (search-handler/clear-search!)
                  (leave-focus)))))
-  []
+  [state]
   (let [search-result (state/sub :search/result)
         search-q (state/sub :search/q)
-        show-result? (boolean (seq search-result))]
+        show-result? (boolean (seq search-result))
+        blocks-count (or (db/blocks-count) 0)
+        timeout (if (> blocks-count 2000) 500 100)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#search.flex-1.flex
-       [:div.flex.md:ml-0
-        [:label.sr-only {:for "search_field"} (t :search)]
+       [:div.inner
+        [:label.sr-only {:for "search-field"} (t :search)]
         [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
-         [:div.absolute.inset-y-0.flex.items-center.pointer-events-none.left-0
+         [:div.absolute.inset-y-0.flex.items-center.pointer-events-none {:style {:left 6}}
           [:svg.h-5.w-5
            {:view-box "0 0 20 20", :fill "currentColor"}
            [:path
             {:d
-             "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z",
-             :clip-rule "evenodd",
+             "M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+             :clip-rule "evenodd"
              :fill-rule "evenodd"}]]]
-         [:input#search_field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.sm:bg-transparent
-
+         [:input#search-field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.sm:bg-transparent
           {:style {:padding-left "2rem"}
            :placeholder (t :search)
            :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
            :default-value ""
            :on-change (fn [e]
+                        (when @search-timeout
+                          (js/clearTimeout @search-timeout))
                         (let [value (util/evalue e)]
                           (if (string/blank? value)
                             (search-handler/clear-search!)
                             (do
                               (state/set-q! value)
-                              (search-handler/search value)))))}]
+                              (reset! search-timeout
+                                      (js/setTimeout
+                                       #(search-handler/search value)
+                                       timeout))))))}]
          (when-not (string/blank? search-q)
            (ui/css-transition
             {:class-names "fade"

@@ -10,6 +10,20 @@
   width: 100%;
   top: 0;
   left: 0;
+
+  user-select: none;
+
+  .it svg {
+      transform: scale(0.8);
+  }
+
+  .repos {
+    .dropdown-wrapper {
+      left: unset;
+      right: -46px;
+      min-width: 14rem;
+    }
+  }
 }
 
 .cp__header-left-menu {
@@ -32,8 +46,11 @@
 
 .cp__header-logo,
 .cp__right-menu-button {
-  opacity: 0.7;
-  display: none;
+  opacity: 0.3;
+}
+
+.cp__header-logo {
+    display: none;
 }
 
 .cp__header-logo:hover,
@@ -50,6 +67,10 @@
   @apply ml-3;
 }
 
+.cp__right-menu-button {
+    display: block;
+}
+
 @screen sm {
   .cp__header {
     @apply shadow-none;
@@ -62,9 +83,5 @@
   .cp__header-logo {
     display: flex;
     align-items: center;
-  }
-
-  .cp__right-menu-button {
-    display: block;
   }
 }

@@ -25,6 +25,25 @@
   []
   (state/toggle-sidebar-open?!))
 
+(defn toggle-contents!
+  []
+  (when-let [current-repo (state/get-current-repo)]
+    (let [id "contents"]
+      (if (state/sidebar-block-exists? id)
+        (state/sidebar-remove-block! id)
+        (state/sidebar-add-block! current-repo id :contents nil)))))
+
+(defn toggle-help!
+  []
+  (when-let [current-repo (state/get-current-repo)]
+    (let [id "help"]
+      (if (state/sidebar-block-exists? id)
+        (state/sidebar-remove-block! id)
+        (state/sidebar-add-block! current-repo id :help nil)))))
+
+(defn toggle-settings-modal!
+  []
+  (state/toggle-settings!))
 
 ;; FIXME: re-render all embedded blocks since they will not be re-rendered automatically
 
@@ -81,3 +100,12 @@
                     ;; (state/get-custom-css-link)
 )]
     (util/add-style! style)))
+
+(defn toggle-wide-mode!
+  []
+  (let [wide? (state/get-wide-mode?)
+        elements (array-seq (js/document.getElementsByClassName "cp__sidebar-main-content"))
+        max-width (if wide? "var(--ls-main-content-max-width)" "100%")]
+    (when-let [element (first elements)]
+      (dom/set-style! element :max-width max-width))
+    (state/toggle-wide-mode!)))

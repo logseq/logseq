@@ -28,16 +28,16 @@
                            (state/sub :editor/show-page-search?)
                            (state/sub :editor/show-block-search?)
                            (state/sub :editor/show-template-search?))
-        composition? (atom false)
-        set-composition? #(reset! composition? %)
         on-composition (fn [e]
                          (if skip-composition?
                            (on-change e)
                            (case e.type
-                             "compositionend" (do (set-composition? false) (on-change e))
-                             (set-composition? true))))
+                             "compositionend" (do
+                                                (state/set-editor-in-composition! false)
+                                                (on-change e))
+                             (state/set-editor-in-composition! true))))
         props (assoc props
-                     :on-change (fn [e] (when-not @composition?
+                     :on-change (fn [e] (when-not (state/editor-in-composition?)
                                           (on-change e)))
                      :on-composition-start on-composition
                      :on-composition-update on-composition
@@ -79,7 +79,7 @@
    child])
 
 (rum/defc dropdown-with-links
-  [content-fn links {:keys [modal-class links-header z-index] :as opts}]
+  [content-fn links {:keys [modal-class links-header links-footer z-index] :as opts}]
   (dropdown
    content-fn
    (fn [{:keys [close-fn] :as state}]
@@ -100,24 +100,26 @@
 ]]
           (rum/with-key
             (menu-link new-options child)
-            title)))])
+            title)))
+      (when links-footer links-footer)])
    opts))
 
 (defn button
-  [text & {:keys [background on-click href]
+  [text & {:keys [background href class intent]
            :as   option}]
-  (let [class "inline-flex.items-center.px-3.py-2.border.border-transparent.text-sm.leading-4.font-medium.rounded-md.text-white.bg-indigo-600.hover:bg-indigo-700.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.active:bg-indigo-700.transition.ease-in-out.duration-150.mt-1"
-        class (if background (string/replace class "indigo" background) class)]
+  (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700")
+        klass (if background (string/replace klass "indigo" background) klass)]
     (if href
-      [:a.button (merge
-                  {:type  "button"
-                   :class (util/hiccup->class class)}
-                  (dissoc option :background))
-       text]
-      [:button
+      [:a.ui__button.is-link
        (merge
         {:type  "button"
-         :class (util/hiccup->class class)}
+         :class (str (util/hiccup->class klass) " " class)}
+        (dissoc option :background))
+       text]
+      [:button.ui__button
+       (merge
+        {:type  "button"
+         :class (str (util/hiccup->class klass) " " class)}
         (dissoc option :background))
        text])))
 
@@ -136,7 +138,7 @@
                 :stroke-linejoin "round"
                 :stroke-linecap  "round"}]]]
             :warning
-            ["text-gray-900"
+            ["text-gray-900 dark:text-gray-300 "
              [:svg.h-6.w-6.text-yellow-500
               {:stroke "currentColor", :viewBox "0 0 24 24", :fill "none"}
               [:path
@@ -231,9 +233,13 @@
   []
   (let [cl (.-classList js/document.documentElement)]
     (if util/mac? (.add cl "is-mac"))
+    (if util/win32? (.add cl "is-win32"))
+    (if (util/electron?) (.add cl "is-electron"))
     (if (util/ios?) (.add cl "is-ios"))
     (if (util/mobile?) (.add cl "is-mobile"))
-    (if (util/safari?) (.add cl "is-safari"))))
+    (if (util/safari?) (.add cl "is-safari"))
+    (when (util/electron?)
+      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")))))
 
 (defn inject-dynamic-style-node!
   []
@@ -383,14 +389,16 @@
 (def datepicker frontend.ui.date-picker/date-picker)
 
 (defn toggle
-  [on? on-click]
-  [:a {:on-click on-click}
-   [:span.relative.inline-block.flex-shrink-0.h-6.w-11.border-2.border-transparent.rounded-full.cursor-pointer.transition-colors.ease-in-out.duration-200.focus:outline-none.focus:shadow-outline
-    {:aria-checked "false", :tab-index "0", :role "checkbox"
-     :class        (if on? "bg-indigo-600" "bg-gray-200")}
-    [:span.inline-block.h-5.w-5.rounded-full.bg-white.shadow.transform.transition.ease-in-out.duration-200
-     {:class       (if on? "translate-x-5" "translate-x-0")
-      :aria-hidden "true"}]]])
+  ([on? on-click] (toggle on? on-click false))
+  ([on? on-click small?]
+   [:a.ui__toggle {:on-click on-click
+                   :class (if small? "is-small" "")}
+    [:span.wrapper.transition-colors.ease-in-out.duration-200
+     {:aria-checked "false", :tab-index "0", :role "checkbox"
+      :class        (if on? "bg-indigo-600" "bg-gray-200")}
+     [:span.switcher.transform.transition.ease-in-out.duration-200
+      {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
+       :aria-hidden "true"}]]]))
 
 (defn tooltip
   ([label children]
@@ -407,27 +415,27 @@
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
   [state]
-  [:div.fixed.inset-0.transition-opacity
+  [:div.ui__modal-overlay
    {:class (case state
              "entering" "ease-out duration-300 opacity-0"
              "entered" "ease-out duration-300 opacity-100"
              "exiting" "ease-in duration-200 opacity-100"
              "exited" "ease-in duration-200 opacity-0")}
-   [:div.absolute.inset-0.bg-gray-500.opacity-75]])
+   [:div.absolute.inset-0.opacity-75]])
 
 (rum/defc modal-panel
-  [panel-content state close-fn]
-  [:div.relative.bg-white.rounded-lg.px-4.pt-5.pb-4.overflow-hidden.shadow-xl.transform.transition-all.sm:max-w-lg.sm:w-full.sm:p-6
-   {:class (case state
+  [panel-content transition-state close-fn fullscreen?]
+  [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
+   {:class (case transition-state
              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
-   [:div.absolute.top-0.right-0.pt-4.pr-4
-    [:button.text-gray-400.hover:text-gray-500.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150
+   [:div.absolute.top-0.right-0.pt-2.pr-2
+    [:button.ui__modal-close
      {:aria-label "Close"
       :type       "button"
-      :on-click   close-fn}
+      :on-click   (fn [] (apply (or (gobj/get close-fn "user-close") close-fn) []))}
      [:svg.h-6.w-6
       {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
       [:path
@@ -436,15 +444,25 @@
         :stroke-linejoin "round"
         :stroke-linecap  "round"}]]]]
 
-   (panel-content close-fn)])
+   [:div {:class (if fullscreen? "" "panel-content")}
+    (panel-content close-fn)]])
 
 (rum/defc modal < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/hide-when-esc-or-outside
+      state
+      :on-hide (fn []
+                 (-> (.querySelector (rum/dom-node state) "button.ui__modal-close")
+                     (.click)))
+      :outside? false)))
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
+        fullscreen? (state/sub :modal/fullscreen?)
         show? (boolean modal-panel-content)
         close-fn #(state/close-modal!)
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
-    [:div.fixed.bottom-0.inset-x-0.px-4.pb-4.sm:inset-0.sm:flex.sm:items-center.sm:justify-center
+    [:div.ui__modal
      {:style {:z-index (if show? 10 -1)}}
      (css-transition
       {:in show? :timeout 0}
@@ -453,7 +471,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-panel modal-panel-content state close-fn)))]))
+        (modal-panel modal-panel-content state close-fn fullscreen?)))]))
 
 (defn make-confirm-modal
   [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm] :as opts}]
@@ -473,7 +491,7 @@
               :stroke-linejoin "round"
               :stroke-linecap  "round"}]]]
           [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-           [:h2.headline.text-lg.leading-6.font-medium.text-gray-900
+           [:h2.headline.text-lg.leading-6.font-medium
             (if (keyword? title) (t title) title)]
            [:label.sublabel
             (when sub-checkbox?
@@ -564,6 +582,7 @@
                       "important" svg/important
                       "caution" svg/caution
                       "warning" svg/warning
+                      "pinned" svg/pinned
                       nil)]
       [:div.flex.flex-row.admonitionblock.align-items {:class type}
        [:div.pr-4.admonition-icon.flex.flex-col.justify-center

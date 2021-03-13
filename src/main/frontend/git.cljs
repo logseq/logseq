@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [clone merge])
   (:require [promesa.core :as p]
             [frontend.util :as util]
+            [frontend.config :as config]
             [clojure.string :as string]
             [clojure.set :as set]
             [frontend.state :as state]
@@ -30,7 +31,7 @@
 
 (defn clone
   [repo-url token]
-  (js/window.workerThread.clone (util/get-repo-dir repo-url)
+  (js/window.workerThread.clone (config/get-repo-dir repo-url)
                                 repo-url
                                 (get-cors-proxy repo-url)
                                 1
@@ -40,12 +41,12 @@
 
 (defn list-files
   [repo-url]
-  (js/window.workerThread.listFiles (util/get-repo-dir repo-url)
+  (js/window.workerThread.listFiles (config/get-repo-dir repo-url)
                                     (state/get-default-branch repo-url)))
 
 (defn fetch
   [repo-url token]
-  (js/window.workerThread.fetch (util/get-repo-dir repo-url)
+  (js/window.workerThread.fetch (config/get-repo-dir repo-url)
                                 repo-url
                                 (get-cors-proxy repo-url)
                                 100
@@ -55,23 +56,23 @@
 
 (defn merge
   [repo-url]
-  (js/window.workerThread.merge (util/get-repo-dir repo-url)
+  (js/window.workerThread.merge (config/get-repo-dir repo-url)
                                 (state/get-default-branch repo-url)))
 
 (defn checkout
   [repo-url]
-  (js/window.workerThread.checkout (util/get-repo-dir repo-url)
+  (js/window.workerThread.checkout (config/get-repo-dir repo-url)
                                    (state/get-default-branch repo-url)))
 
 (defn log
   [repo-url depth]
-  (js/window.workerThread.log (util/get-repo-dir repo-url)
+  (js/window.workerThread.log (config/get-repo-dir repo-url)
                               (state/get-default-branch repo-url)
                               depth))
 
 (defn pull
   [repo-url token]
-  (js/window.workerThread.pull (util/get-repo-dir repo-url)
+  (js/window.workerThread.pull (config/get-repo-dir repo-url)
                                (get-cors-proxy repo-url)
                                (state/get-default-branch repo-url)
                                (get-username)
@@ -80,12 +81,12 @@
 (defn add
   [repo-url file]
   (when js/window.git
-    (js/window.workerThread.add (util/get-repo-dir repo-url)
+    (js/window.workerThread.add (config/get-repo-dir repo-url)
                                 file)))
 
 (defn remove-file
   [repo-url file]
-  (js/window.workerThread.remove (util/get-repo-dir repo-url)
+  (js/window.workerThread.remove (config/get-repo-dir repo-url)
                                  file))
 
 (defn rename
@@ -100,7 +101,7 @@
    (commit repo-url message nil))
   ([repo-url message parent]
    (let [{:keys [name email]} (:me @state/state)]
-     (js/window.workerThread.commit (util/get-repo-dir repo-url)
+     (js/window.workerThread.commit (config/get-repo-dir repo-url)
                                     message
                                     name
                                     email
@@ -109,7 +110,7 @@
 (defn add-all
   "Equivalent to `git add --all`. Returns changed files."
   [repo-url]
-  (p/let [repo-dir (util/get-repo-dir repo-url)
+  (p/let [repo-dir (config/get-repo-dir repo-url)
 
           ; statusMatrix will return `[]` rather than raising an error if the repo directory does
           ; not exist. So checks whether repo-dir exists before proceeding.
@@ -141,14 +142,14 @@
 
 (defn read-commit
   [repo-url oid]
-  (js/window.workerThread.readCommit (util/get-repo-dir repo-url)
+  (js/window.workerThread.readCommit (config/get-repo-dir repo-url)
                                      oid))
 
 
 ;; FIXME: not working
 ;; (defn descendent?
 ;;   [repo-url oid ancestor]
-;;   (js/window.workerThread.isDescendent (util/get-repo-dir repo-url)
+;;   (js/window.workerThread.isDescendent (config/get-repo-dir repo-url)
 ;;                                        oid
 ;;                                        ancestor))
 
@@ -166,7 +167,7 @@
   ([repo-url token]
    (push repo-url token false))
   ([repo-url token force?]
-   (js/window.workerThread.push (util/get-repo-dir repo-url)
+   (js/window.workerThread.push (config/get-repo-dir repo-url)
                                 (get-cors-proxy repo-url)
                                 (state/get-default-branch repo-url)
                                 force?
@@ -188,7 +189,7 @@
 (defn get-diffs
   [repo-url hash-1 hash-2]
   (and js/window.git
-       (let [dir (util/get-repo-dir repo-url)]
+       (let [dir (config/get-repo-dir repo-url)]
          (p/let [diffs (js/window.workerThread.getFileStateChanges hash-1 hash-2 dir)
                  diffs (cljs-bean.core/->clj diffs)
                  diffs (remove #(= (:type %) "equal") diffs)
@@ -217,16 +218,16 @@
 
 (defn read-blob
   [repo-url oid path]
-  (js/window.workerThread.readBlob (util/get-repo-dir repo-url)
+  (js/window.workerThread.readBlob (config/get-repo-dir repo-url)
                                    oid
                                    path))
 ;; (resolve-ref (state/get-current-repo) "refs/remotes/origin/master")
 (defn resolve-ref
   [repo-url ref]
-  (js/window.workerThread.resolveRef (util/get-repo-dir repo-url) ref))
+  (js/window.workerThread.resolveRef (config/get-repo-dir repo-url) ref))
 
 (defn write-ref!
   [repo-url oid]
-  (js/window.workerThread.writeRef (util/get-repo-dir repo-url)
+  (js/window.workerThread.writeRef (config/get-repo-dir repo-url)
                                    (state/get-default-branch repo-url)
                                    oid))

@@ -1,0 +1,105 @@
+.cp__settings {
+  &-main {
+    > h1.title {
+      margin-bottom: 2rem;
+    }
+
+    hr {
+      margin: 1rem 0;
+      opacity: .5;
+    }
+
+    .panel-wrap {
+      padding: 0 12px;
+
+      > .it {
+        margin-bottom: 0;
+        padding-bottom: 20px;
+        align-items: center;
+
+        label {
+          display: flex;
+          align-items: center;
+
+          & + div {
+            display: flex;
+            align-items: center;
+            min-height: 24px;
+            user-select: none;
+
+            .max-w-lg {
+              width: 100%;
+            }
+          }
+        }
+
+        &.app-updater {
+          padding-top: 15px;
+          align-items: start;
+
+          > .wrap {
+            display: block;
+
+            .ver {
+              position: relative;
+              top: -2px;
+            }
+          }
+        }
+
+        .form-select, .form-input {
+          width: 68%;
+        }
+      }
+    }
+
+    .admonitionblock {
+      p {
+        @apply text-sm;
+      }
+    }
+  }
+
+  &-app-updater {
+    min-height: 20px;
+    position: relative;
+    margin-bottom: -5px;
+
+    button.check-update {
+      position: absolute;
+      right: 0;
+      top: -42px;
+
+      &:disabled {
+        cursor: progress;
+      }
+    }
+
+    .update-state {
+      padding: 15px;
+      background-color: var(--ls-secondary-background-color);
+      border-radius: 4px;
+
+      > p {
+        margin: 0;
+      }
+
+      .link {
+        font-size: 16px;
+        line-height: 1em;
+        letter-spacing: 1px;
+
+        svg {
+          display: inline-block;
+          position: relative;
+          top: -1px;
+          margin-right: 2px;
+        }
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+  }
+}

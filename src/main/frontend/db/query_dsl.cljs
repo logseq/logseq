@@ -4,9 +4,8 @@
             [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [clojure.string :as string]
-            [frontend.db :as db]
             [frontend.text :as text]
-            [frontend.db.query-custom :as query-custom]
+            [frontend.db.query-react :as react]
             [frontend.date :as date]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -14,7 +13,8 @@
             [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.core]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.template :as template]))
 
 ;; Query fields:
 
@@ -146,9 +146,7 @@
        page-ref?
        (let [page-name (-> (text/page-ref-un-brackets! e)
                            (string/lower-case))]
-         (when (and (not (string/blank? page-name))
-                    (some? (db-utils/entity repo [:page/name page-name])))
-           [['?b :block/ref-pages [:page/name page-name]]]))
+         [['?b :block/path-ref-pages [:page/name page-name]]])
 
        (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map (fn [form]
@@ -273,7 +271,8 @@
              nil)))
 
        (= 'page fe)
-       (let [page-name (string/lower-case (first (rest e)))]
+       (let [page-name (string/lower-case (first (rest e)))
+             page-name (text/page-ref-un-brackets! page-name)]
          [['?b :block/page [:page/name page-name]]])
 
        (= 'page-property fe)
@@ -299,9 +298,11 @@
                tags (map (comp string/lower-case name) tags)]
            (when (seq tags)
              (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))]
-               [['?p :page/tags '?t]
-                ['?t :page/name '?tag]
-                [(list 'contains? tags '?tag)]]))))
+               (let [sym-1 (uniq-symbol counter "?t")
+                     sym-2 (uniq-symbol counter "?tag")]
+                 [['?p :page/tags sym-1]
+                  [sym-1 :page/name sym-2]
+                  [(list 'contains? tags sym-2)]])))))
 
        (= 'all-page-tags fe)
        [['?e :page/tags '?p]]
@@ -377,14 +378,32 @@
 
 (defn query
   [repo query-string]
-  (when query-string
-    (let [{:keys [query sort-by blocks?]} (parse repo query-string)]
+  (when (string? query-string)
+    (let [query-string (template/resolve-dynamic-template! query-string)
+          {:keys [query sort-by blocks?]} (parse repo query-string)]
       (when query
         (let [query (query-wrapper query blocks?)]
-          (query-custom/react-query repo
-                                    {:query query}
-                                    (if sort-by
-                                      {:transform-fn sort-by})))))))
+          (react/react-query repo
+                             {:query query}
+                             (if sort-by
+                               {:transform-fn sort-by})))))))
+
+(defn custom-query
+  [repo query-m query-opts]
+  (when (seq (:query query-m))
+    (let [query-string (pr-str (:query query-m))
+          query-string (template/resolve-dynamic-template! query-string)
+          {:keys [query sort-by blocks?]} (parse repo query-string)]
+      (when query
+        (let [query (query-wrapper query blocks?)]
+          (react/react-query repo
+                             (merge
+                              query-m
+                              {:query query})
+                             (merge
+                              query-opts
+                              (if sort-by
+                                {:transform-fn sort-by}))))))))
 
 (comment
   ;; {{query (and (page-property foo bar) [[hello]])}}

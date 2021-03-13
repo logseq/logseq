@@ -5,3 +5,8 @@
   []
   (api/watch :app)
   (api/repl :app))
+
+(defn electron-repl
+  []
+  (api/watch :electron)
+  (api/repl :electron))
