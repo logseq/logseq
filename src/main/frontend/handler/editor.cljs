@@ -5,7 +5,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.git :as git-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file :as file-handler]
@@ -463,8 +462,7 @@
                              (or (:page/original-name page)
                                  (:page/name page)))
                            value)]
-          (p/let [_ (fs/create-if-not-exists repo dir file-path content)
-                  _ (git-handler/git-add repo path)]
+          (p/let [_ (fs/create-if-not-exists repo dir file-path content)]
             (file-handler/reset-file! repo path content)
             (ui-handler/re-render-root!)
 

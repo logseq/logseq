@@ -8,7 +8,6 @@
             [frontend.db :as db]
             [frontend.git :as git]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.git :as git-handler]
             [frontend.handler.extract :as extract-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.route :as route-handler]
@@ -185,8 +184,6 @@
       (db/set-file-content! repo path content))
     (util/p-handle (write-file!)
                    (fn [_]
-                     (when-not from-disk?
-                       (git-handler/git-add repo path update-status?))
                      (when (= path (config/get-config-path repo))
                        (restore-config! repo true))
                      (when (= path (config/get-custom-css-path repo))
@@ -216,7 +213,7 @@
                                    :path-params {:path path}}))))))
 
 (defn alter-files
-  [repo files {:keys [add-history? update-status? git-add-cb reset? update-db? chan chan-callback resolved-handler]
+  [repo files {:keys [add-history? update-status? finish-handler reset? update-db? chan chan-callback resolved-handler]
                :or {add-history? true
                     update-status? true
                     reset? false
@@ -240,7 +237,7 @@
           (chan-callback))))))
 
 (defn alter-files-handler!
-  [repo files {:keys [add-history? update-status? git-add-cb reset? chan]
+  [repo files {:keys [add-history? update-status? finish-handler reset? chan]
                :or {add-history? true
                     update-status? true
                     reset? false}} file->content]
@@ -253,29 +250,18 @@
                                         (log/error :write-file/failed {:path path
                                                                        :content content
                                                                        :error error}))))))
-        git-add-f (fn []
-                    (let [add-helper
-                          (fn []
-                            (map
-                              (fn [[path content]]
-                                (git-handler/git-add repo path update-status?))
-                              files))]
-                      (-> (p/all (add-helper))
-                          (p/then (fn [_]
-                                    (when git-add-cb
-                                      (git-add-cb))))
-                          (p/catch (fn [error]
-                                     (println "Git add failed:")
-                                     (js/console.error error)))))
-                    (ui-handler/re-render-file!)
-                    (when add-history?
-                      (let [files-tx (mapv (fn [[path content]]
-                                             (let [original-content (get file->content path)]
-                                               [path original-content content])) files)]
-                        (history/add-history! repo files-tx))))]
+        finish-handler (fn []
+                         (when finish-handler
+                           (finish-handler))
+                         (ui-handler/re-render-file!)
+                         (when add-history?
+                           (let [files-tx (mapv (fn [[path content]]
+                                                  (let [original-content (get file->content path)]
+                                                    [path original-content content])) files)]
+                             (history/add-history! repo files-tx))))]
     (-> (p/all (map write-file-f files))
         (p/then (fn []
-                  (git-add-f)
+                  (finish-handler)
                   (when chan
                     (async/put! chan true))))
         (p/catch (fn [error]
@@ -339,5 +325,4 @@
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
-        (reset-file! repo-url path default-content)
-        (git-handler/git-add repo-url path)))))
+        (reset-file! repo-url path default-content)))))

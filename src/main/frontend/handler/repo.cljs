@@ -64,8 +64,7 @@
         (p/let [file-exists? (fs/create-if-not-exists repo-url repo-dir (str app-dir "/" config/config-file) default-content)]
           (when-not file-exists?
             (file-handler/reset-file! repo-url path default-content)
-            (common-handler/reset-config! repo-url default-content)
-            (git-handler/git-add repo-url path)))))))
+            (common-handler/reset-config! repo-url default-content)))))))
 
 (defn create-contents-file
   [repo-url]
@@ -85,8 +84,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
-        (file-handler/reset-file! repo-url path default-content)
-        (git-handler/git-add repo-url path)))))
+        (file-handler/reset-file! repo-url path default-content)))))
 
 (defn create-custom-theme
   [repo-url]
@@ -98,8 +96,7 @@
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
-        (file-handler/reset-file! repo-url path default-content)
-        (git-handler/git-add repo-url path)))))
+        (file-handler/reset-file! repo-url path default-content)))))
 
 (defn create-dummy-notes-page
   [repo-url content]
@@ -149,8 +146,7 @@
              (file-handler/reset-file! repo-url path content)
              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
                (when-not (state/editing?)
-                 (ui-handler/re-render-root!))
-               (git-handler/git-add repo-url path)))))))))
+                 (ui-handler/re-render-root!))))))))))
 
 (defn create-today-journal!
   []

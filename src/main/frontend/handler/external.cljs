@@ -12,7 +12,7 @@
 
 (defonce debug-files (atom nil))
 (defn index-files!
-  [repo files git-add-cb]
+  [repo files finish-handler]
   (let [titles (->> files
                     (map :title)
                     (map :text)
@@ -39,7 +39,7 @@
       (file-handler/alter-files repo files {:add-history? false
                                             :update-db? false
                                             :update-status? false
-                                            :git-add-cb git-add-cb}))
+                                            :finish-handler finish-handler}))
     (let [journal-pages-tx (let [titles (filter date/valid-journal-title? titles)]
                              (map
                               (fn [title]

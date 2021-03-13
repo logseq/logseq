@@ -9,7 +9,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.git :as git-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.project :as project-handler]
             [frontend.handler.web.nfs :as web-nfs]
@@ -74,8 +73,7 @@
                  ;; a new file created.
                  ;; Question: what if the fs write failed?
                  (p/let [_ (file-handler/reset-file! repo path content)
-                         _ (fs/create-if-not-exists repo dir file-path content)
-                         _ (git-handler/git-add repo path)]
+                         _ (fs/create-if-not-exists repo dir file-path content)]
                    (when redirect?
                      (route-handler/redirect! {:to :page
                                                :path-params {:name page}})

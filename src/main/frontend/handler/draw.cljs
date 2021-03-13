@@ -6,7 +6,6 @@
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.handler.file :as file-handler]
-            [frontend.handler.git :as git-handler]
             [frontend.date :as date]
             [frontend.config :as config]
             [frontend.storage :as storage]
@@ -33,7 +32,6 @@
          (p/do!
           (create-draws-directory! repo)
           (fs/write-file! repo repo-dir path data nil)
-          (git-handler/git-add repo path)
           (db/transact! repo
                         [{:file/path path
                           :page/name file
