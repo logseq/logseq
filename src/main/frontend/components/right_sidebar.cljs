@@ -56,7 +56,8 @@
 
 (defn recent-pages
   []
-  (let [pages (db/get-key-value :recent/pages)]
+  (let [pages (->> (db/get-key-value :recent/pages)
+                   (remove #(= (string/lower-case %) "contents")))]
     [:div.recent-pages.text-sm.flex-col.flex.ml-3.mt-2
      (if (seq pages)
        (for [page pages]
