@@ -890,13 +890,50 @@
                                    (get name))
                                (get (state/get-macros) name)
                                (get (state/get-macros) (keyword name)))
-                macro-content (if (and (seq arguments) macro-content)
+                macro-content (cond
+                                (= (str name) "img")
+                                (case (count arguments)
+                                  1
+                                  (util/format "[:img {:src \"%s\"}]" (first arguments))
+                                  4
+                                  (if (and (util/safe-parse-int (nth arguments 1))
+                                           (util/safe-parse-int (nth arguments 2)))
+                                    (util/format "[:img.%s {:src \"%s\" :style {:width %s :height %s}}]"
+                                                 (nth arguments 3)
+                                                 (first arguments)
+                                                 (util/safe-parse-int (nth arguments 1))
+                                                 (util/safe-parse-int (nth arguments 2))))
+                                  3
+                                  (if (and (util/safe-parse-int (nth arguments 1))
+                                           (util/safe-parse-int (nth arguments 2)))
+                                    (util/format "[:img {:src \"%s\" :style {:width %s :height %s}}]"
+                                                 (first arguments)
+                                                 (util/safe-parse-int (nth arguments 1))
+                                                 (util/safe-parse-int (nth arguments 2))))
+
+                                  2
+                                  (cond
+                                    (and (util/safe-parse-int (nth arguments 1)))
+                                    (util/format "[:img {:src \"%s\" :style {:width %s}}]"
+                                                 (first arguments)
+                                                 (util/safe-parse-int (nth arguments 1)))
+                                    (contains? #{"left" "right" "center"} (string/lower-case (nth arguments 1)))
+                                    (util/format "[:img.%s {:src \"%s\"}]"
+                                                 (string/lower-case (nth arguments 1))
+                                                 (first arguments))
+                                    :else
+                                    macro-content)
+
+                                  macro-content)
+
+                                (and (seq arguments) macro-content)
                                 (block/macro-subs macro-content arguments)
+
+                                :else
                                 macro-content)
                 macro-content (when macro-content
                                 (template/resolve-dynamic-template! macro-content))]
             (render-macro config name arguments macro-content format))
-
           (when-let [macro-txt (macro->text name arguments)]
             (let [macro-txt (when macro-txt
                               (template/resolve-dynamic-template! macro-txt))
@@ -2050,6 +2087,7 @@
                      (fn [acc block]
                        (let [block (dissoc block :block/meta)
                              level (:block/level block)
+                             config (assoc config :block/uuid (:block/uuid block))
                              block-cp (if build-block-fn
                                         (build-block-fn config block)
                                         (rum/with-key
