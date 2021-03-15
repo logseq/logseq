@@ -570,7 +570,8 @@
         (->> (string/split-lines content)
              (take-while (fn [line]
                            (or (string/blank? line)
-                               (string/starts-with? line "#+"))))
+                               (string/starts-with? line "#+")
+                               (re-find #"^:.+?:" line))))
              (string/join "\n"))
 
         :markdown
