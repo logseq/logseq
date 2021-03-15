@@ -99,5 +99,5 @@
           k [:custom query']]
       (apply react/q repo k query-opts query inputs))
     (catch js/Error e
-      (println "Custom query failed: ")
+      (println "Custom query failed: " {:query query'})
       (js/console.dir e))))
