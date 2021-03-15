@@ -95,6 +95,7 @@
                                            v
                                            (text/split-page-refs-without-brackets v comma?))]
                                    [k v])))
+                          (reverse)
                           (into {}))
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
           macros (if (seq macro-properties)
