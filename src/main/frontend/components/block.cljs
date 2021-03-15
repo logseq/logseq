@@ -48,7 +48,8 @@
             [lambdaisland.glogi :as log]
             [frontend.context.i18n :as i18n]
             [frontend.template :as template]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [frontend.search :as search]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -1747,7 +1748,15 @@
   [state]
   (let [[config query] (:rum/args state)
         query-atom (if (:dsl-query? config)
-                     (query-dsl/query (state/get-current-repo) (:query query))
+                     (let [result (query-dsl/query (state/get-current-repo) (:query query))]
+                       (if (string? result) ; full-text search
+                         (atom
+                          (if (string/blank? result)
+                            []
+                            (let [blocks (search/block-search result 50)]
+                              (when (seq blocks)
+                                (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))))))
+                         result))
                      (db/custom-query query))]
     (assoc state :query-atom query-atom)))
 
@@ -1983,7 +1992,7 @@
 
       ["Custom" "warning" options result content]
       (admonition config "warning" options result)
-      
+
       ["Custom" "pinned" options result content]
       (admonition config "pinned" options result)
 
