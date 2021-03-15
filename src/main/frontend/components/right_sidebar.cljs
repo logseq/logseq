@@ -201,7 +201,7 @@
 
                (date/journal-name))]
     (if page
-      (util/url-decode (string/lower-case page)))))
+      (string/lower-case page))))
 
 (defn get-current-page
   []
