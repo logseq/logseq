@@ -102,7 +102,9 @@
             file (db/entity (:db/id (:page/file page)))
             file-path (:file/path file)
             file-content (db/get-file file-path)
-            after-content (subs file-content (inc (count properties-content)))
+            after-content (if (empty? properties-content)
+                            file-content
+                            (subs file-content (inc (count properties-content))))
             new-properties-content (db/add-properties! page-format properties-content properties)
             full-content (str new-properties-content "\n\n" (string/trim after-content))]
         (file-handler/alter-file (state/get-current-repo)
