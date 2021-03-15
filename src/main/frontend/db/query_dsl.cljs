@@ -133,7 +133,7 @@
    (build-query repo e env 0))
   ([repo e {:keys [sort-by blocks? counter current-filter] :as env} level]
    ;; TODO: replace with multi-methods for extensibility.
-   (if (symbol? e)
+   (if (or (symbol? e) (string? e))
      ;; regex, FIXME: filter out the current block
      (let [q (re-pattern (str e))]
        (reset! blocks? true)
