@@ -321,10 +321,8 @@
                                      done
                                      (conj done (:db/id current))))
                                  [] old-ref-blocks)]
-    ;; removes retracted pages and blocks
-    (into
-     (mapv (fn [ref] [:db/retract eid :block/ref-pages ref]) retracted-pages)
-     (mapv (fn [ref] [:db/retract eid :block/ref-blocks ref]) retracted-blocks))))
+    ;; removes refs
+    (mapv (fn [ref] [:db/retract eid :block/refs ref]) retracted-pages)))
 
 (defn- block-with-title
   [content format]

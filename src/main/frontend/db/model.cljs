@@ -362,7 +362,7 @@
   (->> (d/q
         '[:find ?id2 ?id1
           :where
-          [?id1 :block/ref-blocks ?id2]]
+          [?id1 :block/refs ?id2]]
         (conn/get-conn repo))
        (map first)
        (frequencies)))
@@ -832,7 +832,7 @@
                                     :where
                                     [?block :block/page ?p]
                                     [(contains? ?pages ?p)]
-                                    [?block :block/ref-pages ?ref-page]
+                                    [?block :block/refs ?ref-page]
                                     [?ref-page :block/name ?ref-page-name]]
                                   pages)
                          react
@@ -848,8 +848,8 @@
          :in $ % ?page
          :where
          [?p :block/name ?page]
-         [?b :block/path-ref-pages ?p]
-         [?b :block/ref-pages ?other-p]
+         [?b :block/path-refs ?p]
+         [?b :block/refs ?other-p]
          [(not= ?p ?other-p)]
          [?other-p :block/name ?ref-page]]
        conn
@@ -883,14 +883,14 @@
                 :where
                 [?p :block/name ?page]
                 [?block :block/page ?p]
-                [?block :block/ref-pages ?ref-page]
+                [?block :block/refs ?ref-page]
                 [?ref-page :block/name ?ref-page-name]]
               '[:find ?page ?ref-page-name
                 :where
                 [?p :block/journal? false]
                 [?p :block/name ?page]
                 [?block :block/page ?p]
-                [?block :block/ref-pages ?ref-page]
+                [?block :block/refs ?ref-page]
                 [?ref-page :block/name ?ref-page-name]])]
       (->>
        (d/q q conn)
@@ -907,7 +907,7 @@
                                         '[:find ?mentioned-page-name
                                           :in $ ?pages ?page-name
                                           :where
-                                          [?block :block/ref-pages ?p]
+                                          [?block :block/refs ?p]
                                           [(contains? ?pages ?p)]
                                           [?block :block/page ?mentioned-page]
                                           [?mentioned-page :block/name ?mentioned-page-name]]
@@ -938,7 +938,7 @@
                      :where
                      (parent ?p ?b)
                      [(contains? ?block-ids ?p)]
-                     [?b :block/ref-pages ?ref]]
+                     [?b :block/refs ?ref]]
                    conn
                    rules
                    block-ids)
@@ -961,7 +961,7 @@
                                            [?block :block/page ?alias]
                                            [(contains? ?aliases ?alias)]]
                                           [(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
-                                           [?block :block/ref-pages ?ref-page]
+                                           [?block :block/refs ?ref-page]
                                            [(contains? ?pages ?ref-page)]]]]
                               (react/q repo [:page/refed-blocks page-id] {}
                                        '[:find (pull ?block [*])
@@ -975,7 +975,7 @@
                                      '[:find (pull ?block [*])
                                        :in $ ?pages
                                        :where
-                                       [?block :block/ref-pages ?ref-page]
+                                       [?block :block/refs ?ref-page]
                                        [(contains? ?pages ?ref-page)]]
                                      pages))
              result (->> query-result
@@ -1020,7 +1020,7 @@
             '[:find ?path
               :in $ ?page-id
               :where
-              [?block :block/ref-pages ?page-id]
+              [?block :block/refs ?page-id]
               [?block :block/page ?p]
               [?p :block/file ?f]
               [?f :file/path ?path]]
@@ -1045,7 +1045,7 @@
               pattern)
              db-utils/seq-flatten
              (remove (fn [block]
-                       (let [ref-pages (set (map :db/id (:block/ref-pages block)))]
+                       (let [ref-pages (set (map :db/id (:block/refs block)))]
                          (or
                           (= (get-in block [:block/page :db/id]) page-id)
                           (seq (set/intersection
@@ -1065,7 +1065,7 @@
                       :in $ ?block-uuid
                       :where
                       [?block :block/uuid ?block-uuid]
-                      [?ref-block :block/ref-blocks ?block]]
+                      [?ref-block :block/refs ?block]]
                     block-uuid)
            react
            db-utils/seq-flatten
@@ -1293,17 +1293,17 @@
   (d/q '[:find [(pull ?b [*]) ...]
          :in $ % ?refs
          :where
-         [?b :block/ref-pages ?p]
+         [?b :block/refs ?p]
          ;; Filter other blocks
          [(contains? ?refs ?p)]
          (or-join [?b ?refs]
-                  (matches-all ?b :block/ref-pages ?refs)
+                  (matches-all ?b :block/refs ?refs)
                   (and
                    (parent ?p ?b)
                    ;; FIXME: not working
-                   ;; (matches-all (union ?p ?b) :block/ref-pages ?refs)
-                   [?p :block/ref-pages ?p-ref]
-                   [?b :block/ref-pages ?b-ref]
+                   ;; (matches-all (union ?p ?b) :block/refs ?refs)
+                   [?p :block/refs ?p-ref]
+                   [?b :block/refs ?b-ref]
                    [(not= ?p-ref ?b-ref)]
                    [(contains? ?refs ?p-ref)]
                    [(contains? ?refs ?b-ref)]))]

@@ -36,8 +36,8 @@
                    (fn [[page blocks]]
                      (if page
                        (map (fn [block]
-                              (let [block-ref-pages (seq (:block/ref-pages block))
-                                    block-path-ref-pages (seq (:block/path-ref-pages block))]
+                              (let [block-ref-pages (seq (:block/refs block))
+                                    block-path-ref-pages (seq (:block/path-refs block))]
                                 (when block-ref-pages
                                   (swap! ref-pages set/union (set block-ref-pages)))
                                 (-> block
@@ -46,11 +46,11 @@
                                            :block/file [:file/path file]
                                            :block/format format
                                            :block/page [:block/name (string/lower-case page)]
-                                           :block/ref-pages (mapv
+                                           :block/refs (mapv
                                                              (fn [page]
                                                                (block/page-name->map page))
                                                              block-ref-pages)
-                                           :block/path-ref-pages block-path-ref-pages))))
+                                           :block/path-refs block-path-ref-pages))))
                             blocks)))
                    (remove nil? pages)))
           pages (doall
@@ -164,7 +164,5 @@
               ;; To prevent "unique constraint" on datascript
               pages-index (map #(select-keys % [:block/name]) pages)
               blocks (map (fn [b]
-                            (-> b
-                                (update :block/ref-blocks #(set/intersection (set %) block-ids-set))
-                                (update :block/embed-blocks #(set/intersection (set %) block-ids-set)))) blocks)]
+                            (update b :block/refs #(set/intersection (set %) block-ids-set))) blocks)]
           (apply concat [pages-index pages block-ids blocks]))))))

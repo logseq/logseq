@@ -37,12 +37,12 @@
    ;; belongs to which page
    :block/page {:db/valueType :db.type/ref
                 :db/index true}
-   ;; referenced pages
-   :block/ref-pages {:db/valueType :db.type/ref
-                     :db/cardinality :db.cardinality/many}
+   ;; reference blocks
+   :block/refs {:db/valueType :db.type/ref
+                :db/cardinality :db.cardinality/many}
    ;; referenced pages inherited from the parents
-   :block/path-ref-pages {:db/valueType   :db.type/ref
-                          :db/cardinality :db.cardinality/many}
+   :block/path-refs {:db/valueType   :db.type/ref
+                     :db/cardinality :db.cardinality/many}
 
    :block/tags {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
@@ -50,14 +50,6 @@
    :block/alias {:db/valueType :db.type/ref
                  :db/cardinality :db.cardinality/many}
 
-   ;; referenced blocks
-   :block/ref-blocks {:db/valueType :db.type/ref
-                      :db/cardinality :db.cardinality/many}
-   :block/embed-blocks {:db/valueType :db.type/ref
-                        :db/cardinality :db.cardinality/many}
-
-   :block/embed-pages {:db/valueType :db.type/ref
-                       :db/cardinality :db.cardinality/many}
    :block/content {}
    :block/marker {}
    :block/priority {}
@@ -90,10 +82,10 @@
 
    ;; file
    :file/path {:db/unique :db.unique/identity}
-   :file/created-at {}
-   :file/last-modified-at {}
-   :file/size {}
-   :file/handle {}
+   ;; :file/created-at {}
+   ;; :file/last-modified-at {}
+   ;; :file/size {}
+   ;; :file/handle {}
 
    ;; git
    :repo/cloned? {}
@@ -122,9 +114,9 @@
    :block/title {}
    :block/content {}
    :block/properties {}
-   :block/ref-blocks {:db/valueType :db.type/ref
-                      :db/cardinality :db.cardinality/many}
-   :block/embed-blocks {:db/cardinality :db.cardinality/many}
+   :block/refs {:db/valueType :db.type/ref
+                :db/cardinality :db.cardinality/many}
+   :block/embeds {:db/cardinality :db.cardinality/many}
    :block/created-at {}
    :block/updated-at {}
    :block/alias {:db/cardinality :db.cardinality/many}

@@ -146,7 +146,7 @@
        page-ref?
        (let [page-name (-> (text/page-ref-un-brackets! e)
                            (string/lower-case))]
-         [['?b :block/path-ref-pages [:block/name page-name]]])
+         [['?b :block/path-refs [:block/name page-name]]])
 
        (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map (fn [form]

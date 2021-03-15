@@ -33,7 +33,7 @@
                         {:block/children ...}])
         :in $ ?pages
         :where
-        [?b :block/ref-pages ?ref-page]
+        [?b :block/refs ?ref-page]
         [(contains? ?pages ?ref-page)]]
       (get-conn)
       page-and-aliases)

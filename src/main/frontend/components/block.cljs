@@ -1557,7 +1557,7 @@
                                    (remove nil?)))]
                     (text/build-data-value refs))
         data-refs-self (let [refs  (model/get-page-names-by-ids
-                                    (->> (map :db/id (:block/ref-pages block))
+                                    (->> (map :db/id (:block/refs block))
                                          (remove nil?)))]
                          (text/build-data-value refs))]
     [:div.ls-block.flex.flex-col.rounded-sm

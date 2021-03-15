@@ -22,7 +22,7 @@
                        (let [refs (if-let [refs (seq (:block/refs-with-children block))]
                                     refs
                                     (concat
-                                     (:block/ref-pages block)
+                                     (:block/refs block)
                                      (:block/tags block)))]
                          (distinct refs)))]
     (loop [col (reverse col)
@@ -198,7 +198,7 @@
   (let [ref-pages (->> (if group-by-page?
                          (mapcat last ref-blocks)
                          ref-blocks)
-                       (mapcat (fn [b] (concat (:block/ref-pages b) (:block/children-refs b))))
+                       (mapcat (fn [b] (concat (:block/refs b) (:block/children-refs b))))
                        (distinct)
                        (map :db/id)
                        (db/pull-many repo '[:db/id :block/name]))
@@ -215,13 +215,13 @@
                        (cond->> ref-blocks
                          (seq exclude-ids)
                          (remove (fn [block]
-                                   (let [ids (set (concat (map :db/id (:block/ref-pages block))
+                                   (let [ids (set (concat (map :db/id (:block/refs block))
                                                           (map :db/id (:block/children-refs block))))]
                                      (seq (set/intersection exclude-ids ids)))))
 
                          (seq include-ids)
                          (remove (fn [block]
-                                   (let [ids (set (concat (map :db/id (:block/ref-pages block))
+                                   (let [ids (set (concat (map :db/id (:block/refs block))
                                                           (map :db/id (:block/children-refs block))))]
                                      (empty? (set/intersection include-ids ids)))))
                          ))]

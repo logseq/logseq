@@ -297,27 +297,27 @@
             [path-refs parents]
             (cond
               (zero? level-diff)            ; sibling
-              (let [path-refs (mapcat :block/ref-pages (drop-last parents))
+              (let [path-refs (mapcat :block/refs (drop-last parents))
                     parents (conj (vec (butlast parents)) block)]
                 [path-refs parents])
 
               (> level-diff 0)              ; child
-              (let [path-refs (mapcat :block/ref-pages parents)]
+              (let [path-refs (mapcat :block/refs parents)]
                 [path-refs (conj parents block)])
 
               (< level-diff 0)              ; new parent
               (let [parents (vec (take-while (fn [p] (< (:block/level p) cur-level)) parents))
-                    path-refs (mapcat :block/ref-pages parents)]
+                    path-refs (mapcat :block/refs parents)]
                 [path-refs (conj parents block)]))
             path-ref-pages (->> path-refs
-                                (concat (:block/ref-pages block))
+                                (concat (:block/refs block))
                                 (remove string/blank?)
                                 (map string/lower-case)
                                 (distinct)
                                 (map (fn [p]
                                        {:block/name p})))]
         (recur (rest blocks)
-               (conj acc (assoc block :block/path-ref-pages path-ref-pages))
+               (conj acc (assoc block :block/path-refs path-ref-pages))
                parents)))))
 
 (defn block-tags->pages
@@ -454,7 +454,7 @@
            blocks (extract-blocks ast content-length encoded-content)
            ref-pages-atom (atom [])
            parent-ref-pages (->> (db/get-block-parent (state/get-current-repo) uuid)
-                                 :block/path-ref-pages
+                                 :block/path-refs
                                  (map :db/id))
            blocks (doall
                    (map-indexed
@@ -475,12 +475,12 @@
                                     :block/content (utf8/substring encoded-content
                                                                    (:start-pos meta)
                                                                    (:end-pos meta))
-                                    :block/path-ref-pages path-ref-pages}
+                                    :block/path-refs path-ref-pages}
                                    ;; Preserve the original block id
                                    (when (zero? idx)
                                      {:block/uuid uuid})
                                    (when (seq ref-pages)
-                                     {:block/ref-pages
+                                     {:block/refs
                                       (mapv
                                        (fn [page]
                                          (let [page (page-name->map page)]
