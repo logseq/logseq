@@ -1024,6 +1024,7 @@
 (defn page-name-sanity
   [page-name]
   (-> page-name
+      (string/replace #"/" ".")
       ;; Windows reserved path characters
       (string/replace #"[\\/:\\*\\?\"<>|]+" "_")))
 

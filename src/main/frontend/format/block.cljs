@@ -241,8 +241,11 @@
            (swap! ref-pages conj tag)))
        form)
      (concat title body))
-    (let [ref-pages (remove string/blank? @ref-pages)]
-      (assoc block :ref-pages (vec ref-pages)))))
+    (let [ref-pages (remove string/blank? @ref-pages)
+          children-pages (->> (mapcat (fn [p] (if (string/includes? p "/") (string/split p #"/"))) ref-pages)
+                              (remove string/blank?))
+          ref-pages (distinct (concat ref-pages children-pages))]
+      (assoc block :ref-pages ref-pages))))
 
 (defn with-block-refs
   [{:keys [title body] :as block}]
