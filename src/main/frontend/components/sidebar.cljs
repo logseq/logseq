@@ -185,6 +185,11 @@
          (route-handler/redirect! {:to :page
                                    :path-params {:name (:page default-home)}})
 
+         (and config/publishing?
+              (not default-home)
+              (empty? latest-journals))
+         (route-handler/redirect! {:to :all-pages})
+
          importing-to-db?
          (ui/loading (t :parsing-files))
 
