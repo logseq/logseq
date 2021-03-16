@@ -56,26 +56,38 @@
   #(.unregisterProtocol protocol "assets"))
 
 (defn- handle-export-publish-assets [_event html]
-  (let
-   [app-path (. app getAppPath)
-    paths (js->clj (. dialog showOpenDialogSync (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]})))]
-    (when (vector? paths)
-      (let [root-dir (first (js->clj paths))
+  (let [app-path (. app getAppPath)
+        paths (js->clj (. dialog showOpenDialogSync (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]})))]
+    (when (seq paths)
+      (let [root-dir (first paths)
             static-dir (path/join root-dir "static")
             path (path/join root-dir "index.html")]
-        (p/let [_ (. fs ensureDir static-dir)]
-          (let  [_ (p/all  (concat
-                            [(. fs writeFile
-                                path
-                                html)]
-                            [(. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
+        (p/let [_ (. fs ensureDir static-dir)
+                _ (p/all  (concat
+                           [(. fs writeFile path html)
+                            (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
 
-                            (map
+                           (map
                              (fn [part]
                                (. fs copy (path/join app-path part) (path/join static-dir part)))
-                             ["css" "fonts" "icons" "img" "js" "dev.html"])))]
+                             ["css" "fonts" "icons" "img" "js"])))
+                js-files ["main.js" "code-editor.js" "excalidraw.js"]
+                _ (p/all (map (fn [file]
+                                (. fs removeSync (path/join static-dir "js" file)))
+                           js-files))
+                _ (p/all (map (fn [file]
+                                (. fs moveSync
+                                   (path/join static-dir "js" "publishing" file)
+                                   (path/join static-dir "js" file)))
+                           js-files))
+                _ (. fs removeSync (path/join static-dir "js" "publishing"))
+                ;; remove source map files
+                ;; TODO: ugly, replace with ls-files and filter with ".map"
+                _ (p/all (map (fn [file]
+                                (. fs removeSync (path/join static-dir "js" (str file ".map"))))
+                           ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+          (. dialog showMessageBox (clj->js {:message (str "Export publish assets to " root-dir " successfully")})))))))
 
-            (. dialog showMessageBox (clj->js {:message (str "Export publish assets to " root-dir " successfully")}))))))))
 (defn setup-app-manager!
   [^js win]
   (let [toggle-win-channel "toggle-max-or-min-active-win"

@@ -28,10 +28,17 @@
 (def asset-domain (util/format "https://asset.%s.com"
                                app-name))
 
+;; TODO: Remove this, switch to lazy loader
 (defn asset-uri
   [path]
-  (if (util/file-protocol?)
+  (cond
+    publishing?
+    path
+
+    (util/file-protocol?)
     (string/replace path "/static/" "./")
+
+    :else
     (if dev? path
         (str asset-domain path))))
 
