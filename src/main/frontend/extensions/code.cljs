@@ -102,6 +102,7 @@
         "objective-c" "text/x-objectivec"
         "scala" "text/x-scala"
         "js" "text/javascript"
+        "typescript" "text/typescript"
         "ts" "text/typescript"
         "tsx" "text/typescript-jsx"
         mode))))
