@@ -179,9 +179,9 @@
   []
   (:custom-css-url (get-config)))
 
-(defn all-pages-publishable?
+(defn all-pages-public?
   []
-  (true? (:all-pages-publishable? (get-config))))
+  (true? (:all-pages-public? (get-config))))
 
 (defn enable-grammarly?
   []
@@ -376,7 +376,7 @@
      ;;                        (remove #(= leader-parent %)))]
      ;;     (prn "followers: " (count followers))
      ;;     ))
-     )))
+)))
 
 (defn get-edit-input-id
   []
