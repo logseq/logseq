@@ -104,6 +104,7 @@
         "js" "text/javascript"
         "typescript" "text/typescript"
         "ts" "text/typescript"
+        "typescript" "text/typescript"
         "tsx" "text/typescript-jsx"
         mode))))
 
