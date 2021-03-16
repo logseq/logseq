@@ -283,7 +283,7 @@
                       (= page-name (string/lower-case (date/journal-name))))
               developer-mode? (state/sub [:ui/developer-mode?])
               published? (= "true" (:published properties))
-              publishable? (= "true" (:publishable properties))]
+              public? (= "true" (:public properties))]
           [:div.flex-1.page.relative (if (seq (:page/tags page))
                                        (let [page-names (model/get-page-names-by-ids (map :db/id (:page/tags page)))]
                                          {:data-page-tags (text/build-data-value page-names)})
@@ -313,12 +313,12 @@
                               {:title (t :page/delete)
                                :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-                            {:title  (t (if publishable? :page/make-private :page/make-public))
+                            {:title  (t (if public? :page/make-private :page/make-public))
                              :options {:on-click
                                        (fn []
                                          (page-handler/update-public-attribute!
                                           page-name
-                                          (if publishable? false true))
+                                          (if public? false true))
                                          (state/close-modal!))}}
 
                             (when file

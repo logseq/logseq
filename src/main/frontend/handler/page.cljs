@@ -432,7 +432,7 @@
 
 (defn update-public-attribute!
   [page-name value]
-  (page-add-properties! page-name {:publishable value}))
+  (page-add-properties! page-name {:public value}))
 
 (defn get-page-ref-text
   [page]
@@ -516,8 +516,8 @@
 (defn ls-dir-files!
   []
   (web-nfs/ls-dir-files-with-handler!
-   (fn []
-     (init-commands!))))
+    (fn []
+      (init-commands!))))
 
 
 ;; TODO: add use :file/last-modified-at

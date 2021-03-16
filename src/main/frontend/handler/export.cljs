@@ -59,7 +59,7 @@
 (defn export-repo-as-html!
   [repo]
   (when-let [db (db/get-conn repo)]
-    (let [db           (if (state/all-pages-publishable?)
+    (let [db           (if (state/all-pages-public?)
                          (db/clean-export! db)
                          (db/filter-only-public-pages-and-blocks db))
           db-str       (db/db->string db)
