@@ -16,6 +16,7 @@
             ["codemirror/mode/clojure/clojure"]
             ["codemirror/mode/powershell/powershell"]
             ["codemirror/mode/javascript/javascript"]
+            ["codemirror/mode/jsx/jsx"]
             ["codemirror/mode/clike/clike"]
             ["codemirror/mode/vue/vue"]
             ["codemirror/mode/commonlisp/commonlisp"]
@@ -100,6 +101,9 @@
         "csharp" "text/x-csharp"
         "objective-c" "text/x-objectivec"
         "scala" "text/x-scala"
+        "js" "text/javascript"
+        "ts" "text/typescript"
+        "tsx" "text/typescript-jsx"
         mode))))
 
 (defn render!
