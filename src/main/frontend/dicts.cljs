@@ -50,7 +50,7 @@ some changes on the right sidebar, those referenced blocks will be changed too!
 ### DONE Create a page
 ### CANCELED [#C] Write a page with more than 1000 blocks
 ## That's it! You can create more bullets or open a local directory to import some notes now!
-## You can also download our desktop app at https://github.com/logseq/logseq/releases.
+## You can also download our desktop app at https://github.com/logseq/logseq/releases
 "
         :tutorial/dummy-notes "---
 title: How to take dummy notes?
