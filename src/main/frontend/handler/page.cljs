@@ -436,27 +436,27 @@
 
 (defn get-page-ref-text
   [page]
-  (when-let [edit-block (state/get-edit-block)]
-    (let [page-name (string/lower-case page)
-          edit-block-file-path (-> (:db/id (:block/file edit-block))
-                                   (db/entity)
-                                   :file/path)]
-      (if (and edit-block-file-path
-               (state/org-mode-file-link? (state/get-current-repo)))
-        (if-let [ref-file-path (:file/path (:page/file (db/entity [:page/name page-name])))]
+  (let [edit-block-file-path (some-> (state/get-edit-block)
+                                     (get-in [:block/file :db/id])
+                                     db/entity
+                                     :file/path)
+        page-name (string/lower-case page)]
+    (if (and edit-block-file-path
+             (state/org-mode-file-link? (state/get-current-repo)))
+      (if-let [ref-file-path (:file/path (:page/file (db/entity [:page/name page-name])))]
+        (util/format "[[file:%s][%s]]"
+                     (util/get-relative-path edit-block-file-path ref-file-path)
+                     page)
+        (let [journal? (date/valid-journal-title? page)
+              ref-file-path (str (get-directory journal?)
+                                 "/"
+                                 (get-file-name journal? page)
+                                 ".org")]
+          (create! page {:redirect? false})
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
-                       page)
-          (let [journal? (date/valid-journal-title? page)
-                ref-file-path (str (get-directory journal?)
-                                   "/"
-                                   (get-file-name journal? page)
-                                   ".org")]
-            (create! page {:redirect? false})
-            (util/format "[[file:%s][%s]]"
-                         (util/get-relative-path edit-block-file-path ref-file-path)
-                         page)))
-        (util/format "[[%s]]" page)))))
+                       page)))
+      (util/format "[[%s]]" page))))
 
 (defn init-commands!
   []
