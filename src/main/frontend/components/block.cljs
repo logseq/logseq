@@ -639,7 +639,7 @@
           [:span.warning {:title "Invalid link"} full_text]
 
           ;; image
-          (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) s)) img-formats)
+          (text/image-link? img-formats s)
           (image-link config url s label metadata full_text)
 
           (= \# (first s))
@@ -677,7 +677,7 @@
             (block-reference config (:link (second url)))
 
             (= protocol "file")
-            (if (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
+            (if (text/image-link? img-formats href)
               (image-link config url href label metadata full_text)
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
@@ -702,7 +702,7 @@
                    (map-inline config label)))))
 
             ;; image
-            (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
+            (text/image-link? img-formats href)
             (image-link config url href label metadata full_text)
 
             :else
