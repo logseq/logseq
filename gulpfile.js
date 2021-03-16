@@ -1,11 +1,9 @@
 const fs = require('fs')
+const utils = require('util')
 const cp = require('child_process')
+const exec = utils.promisify(cp.exec)
 const path = require('path')
 const gulp = require('gulp')
-const postcss = require('gulp-postcss')
-const concat = require('gulp-concat')
-const cached = require('gulp-cached')
-const remember = require('gulp-remember')
 const cleanCSS = require('gulp-clean-css')
 const del = require('del')
 
@@ -14,44 +12,15 @@ const resourcesPath = path.join(__dirname, 'resources')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
 
-const tailwindCoreEntry = path.join(__dirname, 'tailwind.css')
-const tailwindBuildEntry = path.join(sourcePath, '**/*.css')
-const tailwind = {
-  paths: [tailwindCoreEntry, tailwindBuildEntry],
-  outputDir: path.join(outputPath, 'css'),
-  outputName: 'tailwind.build.css',
-}
-
 const css = {
-  async watchCSS () {
-    // remove tailwind core css
-    await new Promise((resolve) => {
-      css._buildTailwind(
-        tailwind.paths.shift(),
-        'tailwind.core.css'
-      )
-        .on('end', resolve)
-    })
-
-    return gulp.watch(
-      tailwind.paths, { ignoreInitial: false },
-      css._buildTailwind.bind(null, void 0, void 0))
+  watchCSS () {
+    return exec(`yarn css:watch`, {})
   },
 
   buildCSS (...params) {
     return gulp.series(
-      css._buildTailwind.bind(null, tailwindCoreEntry, 'tailwind.core.css'),
-      css._buildTailwind.bind(null, tailwindBuildEntry, 'tailwind.build.css'),
+      () => exec(`yarn css:build`, {}),
       css._optimizeCSSForRelease)(...params)
-  },
-
-  _buildTailwind (entry, output) {
-    return gulp.src(entry || tailwind.paths)
-      .pipe(cached('postcss-' + entry))
-      .pipe(postcss())
-      .pipe(remember('postcss-' + entry))
-      .pipe(concat(output || tailwind.outputName))
-      .pipe(gulp.dest(tailwind.outputDir))
   },
 
   _optimizeCSSForRelease () {
