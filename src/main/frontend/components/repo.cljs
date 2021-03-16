@@ -78,16 +78,17 @@
                                   :on-click (fn []
                                               (repo-handler/re-index! nfs-handler/rebuild-index!))}
                  "Re-index"]
-                ;; [:a.control.ml-4 {:title "Export as JSON"
-                ;;                   :on-click (fn []
-                ;;                               (export-handler/export-repo-as-json! (:url repo)))}
-                ;;  "Export as JSON"]
+                [:a.control.ml-4 {:title "Export as EDN"
+                                  :on-click (fn []
+                                              (export-handler/export-repo-as-edn! (:url repo)))}
+                 "Export as EDN"]
                 [:a.text-gray-400.ml-4 {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
                                         :on-click (fn []
                                                     (repo-handler/remove-repo! repo))}
                  "Unlink"]]]))]
 
-         [:a#download-as-json.hidden]]
+         [:a#download-as-json.hidden]
+         [:a#download-as-edn.hidden]]
         (widgets/add-graph)))))
 
 (rum/defc sync-status < rum/reactive
