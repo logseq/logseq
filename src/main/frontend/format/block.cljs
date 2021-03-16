@@ -242,7 +242,11 @@
        form)
      (concat title body))
     (let [ref-pages (remove string/blank? @ref-pages)
-          children-pages (->> (mapcat (fn [p] (if (string/includes? p "/") (string/split p #"/"))) ref-pages)
+          children-pages (->> (mapcat (fn [p]
+                                        (if (string/includes? p "/")
+                                          ;; Don't create the last page for now
+                                          (butlast (string/split p #"/"))))
+                                      ref-pages)
                               (remove string/blank?))
           ref-pages (distinct (concat ref-pages children-pages))]
       (assoc block :ref-pages ref-pages))))
