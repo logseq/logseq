@@ -37,9 +37,11 @@
 
 (defn- get-file-name
   [journal? title]
-  (if journal?
-    (date/journal-title->default title)
-    (util/page-name-sanity (string/lower-case title))))
+  (when-let [s (if journal?
+            (date/journal-title->default title)
+            (util/page-name-sanity (string/lower-case title)))]
+    ;; Win10 file path has a length limit of 260 chars
+    (util/safe-subs s 0 200)))
 
 (defn create!
   ([title]
