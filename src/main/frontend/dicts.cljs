@@ -229,7 +229,7 @@ title: How to take dummy notes?
         :page/open-in-finder "Open in directory"
         :page/open-with-default-app "Open with default app"
         :page/action-publish "Publish"
-        :page/make-public "Publish it when exporting to an html file"
+        :page/make-public "Publish it for export"
         :page/make-private "Make it private"
         :page/delete "Delete page"
         :page/publish "Publish this page on Logseq"
