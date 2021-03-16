@@ -126,7 +126,7 @@
           :options {:on-click #(ui-handler/toggle-settings-modal!)}
           :icon svg/settings-sm})
 
-       (when current-repo
+       (when (and (util/electron?) current-repo)
          {:title (t :export)
           :options {:on-click (fn []
                                 (export/export-repo-as-html! current-repo))}
@@ -148,7 +148,7 @@
       (remove nil?))
      ;; {:links-footer (when (and (util/electron?) (not logged?))
      ;;                  [:div.px-2.py-2 (login logged?)])}
-)))
+     )))
 
 (rum/defc header
   < rum/reactive

@@ -314,13 +314,14 @@
                               {:title (t :page/delete)
                                :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-                            {:title  (t (if public? :page/make-private :page/make-public))
-                             :options {:on-click
-                                       (fn []
-                                         (page-handler/update-public-attribute!
-                                          page-name
-                                          (if public? false true))
-                                         (state/close-modal!))}}
+                            (when (util/electron?)
+                              {:title  (t (if public? :page/make-private :page/make-public))
+                               :options {:on-click
+                                         (fn []
+                                           (page-handler/update-public-attribute!
+                                            page-name
+                                            (if public? false true))
+                                           (state/close-modal!))}})
 
                             (when file
                               {:title (t :page/re-index)
