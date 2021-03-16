@@ -100,8 +100,7 @@
   (let [conn (db/get-conn repo)]
     (->>
      (filterv (fn [[path _]]
-                (or (string/ends-with? path ".md")
-                    (string/ends-with? path ".org")))
+                (or (string/ends-with? path ".md")))
               (db/get-file-contents repo))
      (mapv (fn [[path content]] {:path path :content content
                                    :names (d/q '[:find [?n ?n2]
@@ -192,8 +191,19 @@
   [repo]
   (when-let [repo (state/get-current-repo)]
     (when-let [files (get-file-contents-with-suffix repo)]
-      (mapv (fn [{:keys [path content names format]}]
-              [path (fp/exportMarkdown f/mldoc-record content
-                                       (f/get-default-config format)
-                                       (js/JSON.stringify
-                                        (clj->js (get-embed-and-refs-blocks-pages repo (first names)))))]) files))))
+      (let [files
+            (->> files
+                 (mapv (fn [{:keys [path content names format]}]
+                         (when (first names)
+                           [path (fp/exportMarkdown f/mldoc-record content
+                                                    (f/get-default-config format)
+                                                    (js/JSON.stringify
+                                                     (clj->js (get-embed-and-refs-blocks-pages repo (first names)))))])
+                         ) )
+                 (remove nil?))]
+        (p/let [zipfile (zip/make-zip repo files)]
+          (when-let [anchor (gdom/getElement "export-as-markdown")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))
+        ))))

@@ -215,4 +215,5 @@
                        :default-home default-home})
 
        [:a#download-as-html.hidden]
-       [:a#download-as-zip.hidden]])))
+       [:a#download-as-zip.hidden]
+       [:a#export-as-markdown.hidden]])))
