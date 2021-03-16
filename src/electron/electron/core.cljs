@@ -59,11 +59,8 @@
   (let
    [app-path (. app getAppPath)
     paths (js->clj (. dialog showOpenDialogSync (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]})))]
-    (if (vector? paths)
-      (let [published-dir (str "published-at-" (.toString (.getTime (js/Date.))))
-            root-dir (path/join
-                      (first (js->clj paths))
-                      published-dir)
+    (when (vector? paths)
+      (let [root-dir (first (js->clj paths))
             static-dir (path/join root-dir "static")
             path (path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)]
