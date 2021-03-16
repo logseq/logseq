@@ -39,7 +39,7 @@
                         (clj->js {:keys ["uuid" "content"]
                                   :shouldSort true
                                   :tokenize true
-                                  :minMatchCharLength 3
+                                  :minMatchCharLength 2
                                   :distance 1000
                                   :threshold 0.35}))]
       (swap! indices assoc-in [repo :blocks] indice)
@@ -56,7 +56,7 @@
                         (clj->js {:keys ["name"]
                                   :shouldSort true
                                   :tokenize true
-                                  :minMatchCharLength 3
+                                  :minMatchCharLength 2
                                   :distance 1000
                                   :threshold 0.35
                                   }))]
