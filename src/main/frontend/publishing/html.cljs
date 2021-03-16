@@ -84,4 +84,4 @@
             ;; TODO: should make this configurable
            [:script {:src "/static/js/highlight.min.js"}]
            [:script {:src "/static/js/interact.min.js"}]
-           [:script {:src "/static/js/publishing/main.js"}]]))))
+           [:script {:src "/static/js/main.js"}]]))))
