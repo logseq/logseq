@@ -42,7 +42,7 @@ some changes on the right sidebar, those referenced blocks will be changed too!
         [:iframe
          {:allowFullScreen \"allowfullscreen\"
           :allow
-          \"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture\"
+          \"accelerometer; autoplay; encrypted-media; gyroscope\"
         :frameBorder \"0\"
         :src \"https://www.youtube.com/embed/Afmqowr0qEQ\"
         :height \"367\"
