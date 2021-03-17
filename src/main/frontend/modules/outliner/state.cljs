@@ -1,4 +1,5 @@
 (ns frontend.modules.outliner.state
+  "A state management implement for outliner blocks."
   (:require [frontend.modules.outliner.tree :as tree]
             [frontend.db.conn :as conn]
             [frontend.db.outliner :as db-outliner]
