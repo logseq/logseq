@@ -156,8 +156,8 @@
 (defn on-load-events
   []
   (let [f (fn []
-            (init-sentry))]
-   (set! js/window.onload f)))
+            (when-not config/dev? (init-sentry)))]
+    (set! js/window.onload f)))
 
 (defn start!
   [render]
