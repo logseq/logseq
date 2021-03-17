@@ -75,26 +75,3 @@
       (when (satisfied-inode? right-node)
         (let [new-right-node (-set-left-id right-node left-node-id)]
          (-save new-right-node))))))
-
-(defn render-react-tree
-  [init-node node-number
-   {:keys [single-node-render
-           parent-&-children-render
-           sibling-nodes-render]
-    :as _renders}]
-  (let [number (atom (dec node-number))]
-    (letfn [(render [node children]
-              (let [node-tree (let [down (-get-down node)]
-                                (if (and (satisfied-inode? down)
-                                      (pos? @number))
-                                  (do (swap! number dec)
-                                      (parent-&-children-render node (render down nil)))
-                                  (single-node-render node)))
-                    right (-get-right node)]
-                (let [new-children (sibling-nodes-render children node-tree)]
-                  (if (and (satisfied-inode? right)
-                        (pos? @number))
-                    (do (swap! number dec)
-                        (render right new-children))
-                    new-children))))]
-      (render init-node nil))))
