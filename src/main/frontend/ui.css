@@ -32,7 +32,7 @@
 
 .ui__toggle {
   .wrapper {
-    @apply relative inline-block flex-shrink-0
+    @apply relative flex-shrink-0
     h-6 w-11 border-2 border-transparent flex
     rounded-full cursor-pointer focus:outline-none focus:shadow-outline;
   }
