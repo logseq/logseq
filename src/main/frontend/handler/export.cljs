@@ -204,8 +204,7 @@
   [repo]
   (when-let [repo (state/get-current-repo)]
     (when-let [files (get-file-contents-with-suffix repo)]
-      (let [heading-to-list?
-            (boolean (:export-heading-to-list? (state/get-config)))
+      (let [heading-to-list? (state/export-heading-to-list?)
             files
             (->> files
                  (mapv (fn [{:keys [path content names format]}]
@@ -214,8 +213,9 @@
                                                     (f/get-default-config format heading-to-list?)
                                                     (js/JSON.stringify
                                                      (clj->js (get-embed-and-refs-blocks-pages repo (first names)))))])))
-                 (remove nil?))]
-        (p/let [zipfile (zip/make-zip repo files)]
+                 (remove nil?))
+            zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files)]
           (when-let [anchor (gdom/getElement "export-as-markdown")]
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
             (.setAttribute anchor "download" (.-name zipfile))

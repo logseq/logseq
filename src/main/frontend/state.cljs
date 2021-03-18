@@ -198,6 +198,11 @@
   (not (false? (:feature/enable-journals?
                 (get (sub-config) repo)))))
 
+(defn export-heading-to-list?
+  []
+  (not (false? (:export/heading-to-list?
+                (get (sub-config) (get-current-repo))))))
+
 (defn enable-encryption?
   [repo]
   (:feature/enable-encryption?

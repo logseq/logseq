@@ -23,11 +23,11 @@
    (let [format (string/capitalize (name (or format :markdown)))]
      (js/JSON.stringify
       (bean/->js
-       (assoc {:toc false
-               :heading_number false
-               :keep_line_break true}
-              :format format
-              :heading_to_list export-heading-to-list?))))))
+       {:toc false
+        :heading_number false
+        :keep_line_break true
+        :format format
+        :heading_to_list export-heading-to-list?})))))
 
 (def default-references
   (js/JSON.stringify
