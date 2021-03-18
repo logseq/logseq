@@ -103,13 +103,13 @@
                 (or (string/ends-with? path ".md")))
               (db/get-file-contents repo))
      (mapv (fn [[path content]] {:path path :content content
-                                   :names (d/q '[:find [?n ?n2]
-                                                 :in $ ?p
-                                                 :where [?e :file/path ?p]
-                                                 [?e2 :page/file ?e]
-                                                 [?e2 :page/name ?n]
-                                                 [?e2 :page/original-name ?n2]] conn path)
-                                   :format (f/get-format path)})))))
+                                 :names (d/q '[:find [?n ?n2]
+                                               :in $ ?p
+                                               :where [?e :file/path ?p]
+                                               [?e2 :page/file ?e]
+                                               [?e2 :page/name ?n]
+                                               [?e2 :page/original-name ?n2]] conn path)
+                                 :format (f/get-format path)})))))
 
 (defn- get-embed-and-refs-blocks-pages-aux
   [repo page-or-block is-block? exclude-blocks exclude-pages]
@@ -191,19 +191,19 @@
   [repo]
   (when-let [repo (state/get-current-repo)]
     (when-let [files (get-file-contents-with-suffix repo)]
-      (let [files
+      (let [heading-to-list?
+            (boolean (:export-heading-to-list? (state/get-config)))
+            files
             (->> files
                  (mapv (fn [{:keys [path content names format]}]
                          (when (first names)
                            [path (fp/exportMarkdown f/mldoc-record content
-                                                    (f/get-default-config format)
+                                                    (f/get-default-config format heading-to-list?)
                                                     (js/JSON.stringify
-                                                     (clj->js (get-embed-and-refs-blocks-pages repo (first names)))))])
-                         ) )
+                                                     (clj->js (get-embed-and-refs-blocks-pages repo (first names)))))])))
                  (remove nil?))]
         (p/let [zipfile (zip/make-zip repo files)]
           (when-let [anchor (gdom/getElement "export-as-markdown")]
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
             (.setAttribute anchor "download" (.-name zipfile))
-            (.click anchor)))
-        ))))
+            (.click anchor)))))))

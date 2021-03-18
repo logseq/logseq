@@ -17,14 +17,17 @@
 (defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
 
 (defn default-config
-  [format]
-  (let [format (string/capitalize (name (or format :markdown)))]
-    (js/JSON.stringify
-     (bean/->js
-      (assoc {:toc false
-              :heading_number false
-              :keep_line_break true}
-             :format format)))))
+  ([format]
+   (default-config format false))
+  ([format export-heading-to-list?]
+   (let [format (string/capitalize (name (or format :markdown)))]
+     (js/JSON.stringify
+      (bean/->js
+       (assoc {:toc false
+               :heading_number false
+               :keep_line_break true}
+              :format format
+              :heading_to_list export-heading-to-list?))))))
 
 (def default-references
   (js/JSON.stringify
