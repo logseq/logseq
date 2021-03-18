@@ -1,5 +1,5 @@
 @import "tailwindcss/base";
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
-
+@import "resources/css/common.css";
 @import-glob "src/main/frontend/**/*.css";
