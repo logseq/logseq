@@ -11,10 +11,10 @@
             [frontend.context.i18n :as i18n]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.export :as export]
             [frontend.components.svg :as svg]
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
+            [frontend.components.export :as export]
             [frontend.handler.project :as project-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
@@ -126,16 +126,10 @@
           :options {:on-click #(ui-handler/toggle-settings-modal!)}
           :icon svg/settings-sm})
 
-       (when (and (util/electron?) current-repo)
-         {:title (t :export)
-          :options {:on-click (fn []
-                                (export/export-repo-as-html! current-repo))}
-          :icon nil})
-
        (when current-repo
-         {:title (t :export-markdown)
-          :options {:on-click (fn []
-                                (export/export-repo-as-markdown! current-repo))}})
+         {:title (t :export)
+          :options {:on-click #(state/set-modal! export/export)}
+          :icon nil})
 
        (when current-repo
          {:title (t :import)
@@ -218,8 +212,4 @@
        (dropdown-menu {:me me
                        :t t
                        :current-repo current-repo
-                       :default-home default-home})
-
-       [:a#download-as-html.hidden]
-       [:a#download-as-zip.hidden]
-       [:a#export-as-markdown.hidden]])))
+                       :default-home default-home})])))
