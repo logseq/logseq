@@ -47,6 +47,12 @@
         (-save new-right-node))
       (-save node))))
 
+(defn insert-node
+  [new-node target-node sibling?]
+  (if sibling?
+    (insert-node-as-sibling new-node target-node)
+    (insert-node-as-first-child new-node target-node)))
+
 (defn delete-node
   "Delete node from the tree."
   [node]
