@@ -2,11 +2,8 @@
   (:require [frontend.modules.outliner.tree :as tree]
             [frontend.db.outliner :as db-outliner]
             [frontend.db.conn :as conn]
-            [frontend.util :as util]
             [frontend.modules.outliner.utils :as outliner-u]
-            [nano-id.core :as nano]
-            [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [nano-id.core :as nano]))
 
 (def block-id-size 9)
 
@@ -18,7 +15,7 @@
   [m]
   (outliner-u/->Block m))
 
-(defn get-by-parent-&-left
+(defn- get-by-parent-&-left
   [parent-id left-id]
   (some->
     (db-outliner/get-by-parent-&-left
@@ -26,6 +23,25 @@
       [:block/id parent-id]
       [:block/id left-id])
     (block)))
+
+(defn- index-blocks-by-left-id
+  [blocks]
+  (reduce
+    (fn [acc block]
+      (assert (tree/satisfied-inode? block) "Block should match satisfied-inode?.")
+      (let [left-id (tree/-get-left-id block)]
+        (assert (nil? (get acc left-id))
+          "There are two block have the same left-id")
+        (assoc acc left-id block)))
+    {}
+    blocks))
+
+(defn- get-children
+  [id]
+  (some->>
+    (db-outliner/get-by-parent-id conn/outliner-db
+      [:block/id id])
+    (mapv block)))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent-id, :block/left-id should be datascript lookup ref
@@ -81,9 +97,18 @@
       (db-outliner/del-block conn [:block/id block-id])))
 
   (-get-children [this]
-    (let [first-child (tree/-get-down this)]
-      (loop [current first-child
-             children [first-child]]
-        (if-let [node (tree/-get-right current)]
-          (recur node (conj children node))
-          children)))))
+    (let [children (get-children (tree/-get-id this))
+          left-id->block (index-blocks-by-left-id children)]
+      (loop [sorted-children []
+             current-node this]
+        (let [id (tree/-get-id current-node)]
+          (if-let [right (get left-id->block id)]
+            (recur (conj sorted-children right) right)
+            (do
+              (let [should-equal
+                    (=
+                      (count children)
+                      (count sorted-children))]
+                (assert should-equal
+                  "Number of children and sorted-children are not equal."))
+              sorted-children)))))))
