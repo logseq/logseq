@@ -65,7 +65,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
       - name: Fetch yarn deps
-        run: yarn cache clean && yarn install --frozen-lockfile
+        run: yarn cache clean && yarn install
 
       - name: Run Clojure test
         run: |
