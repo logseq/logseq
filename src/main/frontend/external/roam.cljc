@@ -5,7 +5,8 @@
             [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.text :as text]))
 
 (defonce all-refed-uids (atom #{}))
 (defonce uid->uuid (atom {}))
@@ -34,12 +35,9 @@
 (defn macro-transform
   [text]
   (string/replace text macro-pattern (fn [[original text]]
-                                       (let [[name arg] (-> (string/replace text #" " "")
-                                                            (string/split #":"))]
+                                       (let [[name arg] (util/split-first ":" text)]
                                          (if name
-                                           (let [name (case name
-                                                        "[[embed]]" "embed"
-                                                        name)]
+                                           (let [name (text/page-ref-un-brackets! name)]
                                              (util/format "{{%s %s}}" name arg))
                                            original)))))
 
