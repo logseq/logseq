@@ -1,6 +1,9 @@
 (ns frontend.handler.export
   (:require [frontend.state :as state]
             [frontend.db :as db]
+            [frontend.format.protocol :as fp]
+            [frontend.format :as f]
+            [datascript.core :as d]
             [frontend.util :as util]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -102,3 +105,118 @@
           (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
           (.setAttribute anchor "download" (.-name zipfile))
           (.click anchor))))))
+
+
+
+(defn- get-file-contents-with-suffix
+  [repo]
+  (let [conn (db/get-conn repo)]
+    (->>
+     (filterv (fn [[path _]]
+                (or (string/ends-with? path ".md")))
+              (db/get-file-contents repo))
+     (mapv (fn [[path content]] {:path path :content content
+                                 :names (d/q '[:find [?n ?n2]
+                                               :in $ ?p
+                                               :where [?e :file/path ?p]
+                                               [?e2 :page/file ?e]
+                                               [?e2 :page/name ?n]
+                                               [?e2 :page/original-name ?n2]] conn path)
+                                 :format (f/get-format path)})))))
+
+(defn- get-embed-and-refs-blocks-pages-aux
+  [repo page-or-block is-block? exclude-blocks exclude-pages]
+  (let [[ref-blocks ref-pages]
+        (->> (if is-block?
+               [page-or-block]
+               (db/get-page-blocks
+                repo page-or-block {:use-cache? false
+                                    :pull-keys '[:block/ref-pages :block/ref-blocks]}))
+             (filterv #(or (:block/ref-blocks %) (:block/ref-pages %)))
+             (mapv (fn [b] [(:block/ref-blocks b), (:block/ref-pages b)]))
+             (apply mapv vector)
+             (mapv #(vec (distinct (flatten (remove nil? %))))))
+        ref-block-ids
+        (->> ref-blocks
+             (#(remove (fn [b] (contains? exclude-blocks (:db/id b))) %))
+             (mapv #(:db/id %)))
+        ref-page-ids
+        (->> ref-pages
+             (#(remove (fn [b] (contains? exclude-pages (:db/id b))) %))
+             (mapv #(:db/id %)))
+        ref-blocks
+        (->> ref-block-ids
+             (db/pull-many repo '[*])
+             (flatten))
+        ref-pages
+        (->> ref-page-ids
+             (db/pull-many repo '[*])
+             (flatten))
+        [next-ref-blocks1 next-ref-pages1]
+        (->> ref-blocks
+             (mapv #(get-embed-and-refs-blocks-pages-aux repo % true
+                                                         (set (concat ref-block-ids exclude-blocks)) exclude-pages))
+             (apply mapv vector))
+        [next-ref-blocks2 next-ref-pages2]
+        (->> ref-pages
+             (mapv #(get-embed-and-refs-blocks-pages-aux repo (:page/name %) false
+                                                         exclude-blocks (set (concat ref-page-ids exclude-pages))))
+             (apply mapv vector))]
+    [(->> (concat ref-block-ids next-ref-blocks1 next-ref-blocks2)
+          (flatten)
+          (distinct))
+     (->> (concat ref-page-ids next-ref-pages1 next-ref-pages2)
+          (flatten)
+          (distinct))]))
+
+
+(defn- get-embed-and-refs-blocks-pages
+  [repo page]
+  (let [[block-ids page-ids]
+        (get-embed-and-refs-blocks-pages-aux repo page false #{} #{})
+        blocks
+        (db/pull-many repo '[*] block-ids)
+        pages-name-and-content
+        (->> page-ids
+             (d/q '[:find ?n (pull ?p [:file/path])
+                    :in $ [?e ...]
+                    :where
+                    [?e :page/file ?p]
+                    [?e :page/name ?n]] (db/get-conn repo))
+             (mapv (fn [[page-name file-path]] [page-name (:file/path file-path)]))
+             (d/q '[:find ?n ?c
+                    :in $ [[?n ?p] ...]
+                    :where
+                    [?e :file/path ?p]
+                    [?e :file/content ?c]] @(db/get-files-conn repo)))
+        embed-blocks
+        (mapv (fn [b] [(str (:block/uuid b))
+                       [(apply str
+                               (mapv #(:block/content %)
+                                     (db/get-block-and-children repo (:block/uuid b))))
+                        (:block/title b)]])
+              blocks)]
+    {:embed_blocks embed-blocks
+     :embed_pages pages-name-and-content}))
+
+
+(defn export-repo-as-markdown!
+  [repo]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [files (get-file-contents-with-suffix repo)]
+      (let [heading-to-list? (state/export-heading-to-list?)
+            files
+            (->> files
+                 (mapv (fn [{:keys [path content names format]}]
+                         (when (first names)
+                           [path (fp/exportMarkdown f/mldoc-record content
+                                                    (f/get-default-config format heading-to-list?)
+                                                    (js/JSON.stringify
+                                                     (clj->js (get-embed-and-refs-blocks-pages repo (first names)))))])))
+                 (remove nil?))
+            zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files)]
+          (when-let [anchor (gdom/getElement "export-as-markdown")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))

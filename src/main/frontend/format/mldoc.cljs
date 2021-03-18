@@ -14,16 +14,26 @@
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
 (defonce parseHtml (gobj/get Mldoc "parseHtml"))
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
+(defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
 
 (defn default-config
-  [format]
-  (let [format (string/capitalize (name (or format :markdown)))]
-    (js/JSON.stringify
-     (bean/->js
-      (assoc {:toc false
-              :heading_number false
-              :keep_line_break true}
-             :format format)))))
+  ([format]
+   (default-config format false))
+  ([format export-heading-to-list?]
+   (let [format (string/capitalize (name (or format :markdown)))]
+     (js/JSON.stringify
+      (bean/->js
+       {:toc false
+        :heading_number false
+        :keep_line_break true
+        :format format
+        :heading_to_list export-heading-to-list?})))))
+
+(def default-references
+  (js/JSON.stringify
+   (clj->js {:embed_blocks []
+             :embed_pages []
+             :refer_blocks []})))
 
 (defn parse-json
   [content config]
@@ -32,6 +42,12 @@
 (defn inline-parse-json
   [text config]
   (parseInlineJson text (or config default-config)))
+
+(defn parse-export-markdown
+  [content config references]
+  (parseAndExportMarkdown content
+                          (or config default-config)
+                          (or references default-references)))
 
 ;; Org-roam
 (defn get-tags-from-definition
@@ -178,7 +194,10 @@
   (loaded? [this]
     true)
   (lazyLoad [this ok-handler]
-    true))
+    true)
+  (exportMarkdown [this content config references]
+    (parse-export-markdown content config references))
+  )
 
 (defn plain->text
   [plains]

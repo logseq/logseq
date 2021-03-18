@@ -131,6 +131,12 @@
           :options {:on-click (fn []
                                 (export/export-repo-as-html! current-repo))}
           :icon nil})
+
+       (when current-repo
+         {:title (t :export-markdown)
+          :options {:on-click (fn []
+                                (export/export-repo-as-markdown! current-repo))}})
+
        (when current-repo
          {:title (t :import)
           :options {:href (rfe/href :import)}
@@ -215,4 +221,5 @@
                        :default-home default-home})
 
        [:a#download-as-html.hidden]
-       [:a#download-as-zip.hidden]])))
+       [:a#download-as-zip.hidden]
+       [:a#export-as-markdown.hidden]])))

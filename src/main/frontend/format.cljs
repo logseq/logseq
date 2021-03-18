@@ -33,8 +33,10 @@
 
 ;; html
 (defn get-default-config
-  [format]
-  (mldoc/default-config format))
+  ([format]
+   (mldoc/default-config format))
+  ([format heading-to-list?]
+   (mldoc/default-config format heading-to-list?)))
 
 (defn to-html
   ([content format]

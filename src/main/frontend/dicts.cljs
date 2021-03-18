@@ -311,6 +311,7 @@ title: How to take dummy notes?
         :close "Close"
         :re-index "Re-index"
         :export-json "Export as JSON"
+        :export-markdown "Export as Markdown"
         :unlink "unlink"
         :search (if config/publishing?
                   "Search"
@@ -1033,6 +1034,7 @@ title: How to take dummy notes?
            :cancel "取消"
            :re-index "重新建立索引"
            :export-json "以 JSON 格式导出"
+           :export-markdown "以 Markdown 格式导出"
            :unlink "解除绑定"
            :search (if config/publishing?
                      "搜索"
@@ -1297,6 +1299,7 @@ title: How to take dummy notes?
              :cancel "取消"
              :re-index "重新建立索引"
              :export-json "以 JSON 格式導出"
+             :export-markdown "以 Markdown 格式導出"
              :unlink "解除綁定"
              :search (if config/publishing?
                        "搜索"
