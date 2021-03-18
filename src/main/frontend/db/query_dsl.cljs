@@ -388,7 +388,9 @@
       (when-not (string/blank? query-string)
         (let [{:keys [query sort-by blocks?] :as result} (parse repo query-string)]
           (if (string? result)
-            result
+            (if (= "\"" (first result) (last result))
+              (subs result 1 (dec (count result)))
+              result)
             (when-let [query (query-wrapper query blocks?)]
               (react/react-query repo
                                  {:query query}

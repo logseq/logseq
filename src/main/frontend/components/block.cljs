@@ -804,7 +804,7 @@
                   [:iframe
                    {:allow-full-screen "allowfullscreen"
                     :allow
-                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
                     :frame-border "0"
                     :src (str "https://www.youtube.com/embed/" youtube-id)
                     :height height
@@ -821,7 +821,7 @@
                   [:iframe
                    {:allow-full-screen "allowfullscreen"
                     :allow
-                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
                     :frame-border "0"
                     :src (str "https://player.vimeo.com/video/" vimeo-id)
                     :height height

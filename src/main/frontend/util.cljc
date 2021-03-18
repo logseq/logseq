@@ -1,4 +1,5 @@
 (ns frontend.util
+  #?(:clj (:refer-clojure :exclude [format]))
   (:require
       #?(:cljs [cljs-bean.core :as bean])
       #?(:cljs [cljs-time.coerce :as tc])
@@ -747,6 +748,18 @@
     (defn get-input-pos
       [input]
       (and input (.-selectionStart input))))
+
+#?(:cljs
+   (defn input-start?
+     [input]
+     (and input (zero? (.-selectionStart input)))))
+
+#?(:cljs
+   (defn input-end?
+     [input]
+     (and input
+          (= (count (.-value input))
+             (.-selectionStart input)))))
 
 #?(:cljs
     (defn get-selected-text

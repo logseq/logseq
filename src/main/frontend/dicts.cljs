@@ -42,7 +42,7 @@ some changes on the right sidebar, those referenced blocks will be changed too!
         [:iframe
          {:allowFullScreen \"allowfullscreen\"
           :allow
-          \"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture\"
+          \"accelerometer; autoplay; encrypted-media; gyroscope\"
         :frameBorder \"0\"
         :src \"https://www.youtube.com/embed/Afmqowr0qEQ\"
         :height \"367\"
@@ -229,7 +229,7 @@ title: How to take dummy notes?
         :page/open-in-finder "Open in directory"
         :page/open-with-default-app "Open with default app"
         :page/action-publish "Publish"
-        :page/make-public "Publish it when exporting to an html file"
+        :page/make-public "Make it public for publishing"
         :page/make-private "Make it private"
         :page/delete "Delete page"
         :page/publish "Publish this page on Logseq"
