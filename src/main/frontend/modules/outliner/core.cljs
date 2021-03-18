@@ -1,6 +1,5 @@
 (ns frontend.modules.outliner.core
   (:require [frontend.modules.outliner.tree :as tree]
-            [frontend.modules.outliner.state :as state]
             [frontend.db.outliner :as db-outliner]
             [frontend.db.conn :as conn]
             [frontend.util :as util]
@@ -18,6 +17,15 @@
 (defn block
   [m]
   (outliner-u/->Block m))
+
+(defn get-by-parent-&-left
+  [parent-id left-id]
+  (some->
+    (db-outliner/get-by-parent-&-left
+      conn/outliner-db
+      [:block/id parent-id]
+      [:block/id left-id])
+    (block)))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent-id, :block/left-id should be datascript lookup ref
@@ -55,22 +63,21 @@
   (-get-right [this]
     (let [left-id (tree/-get-id this)
           parent-id (tree/-get-parent-id this)]
-      (state/get-block-and-ensure-position parent-id left-id)))
+      (get-by-parent-&-left parent-id left-id)))
 
   (-get-down [this]
     (let [parent-id (tree/-get-id this)]
-      (state/get-block-and-ensure-position parent-id parent-id)))
+      (get-by-parent-&-left parent-id parent-id)))
 
   (-save [this]
     (let [conn (conn/get-outliner-conn)
           data (:data this)]
-      (state/save-&-revise-positions this)
-      (db-outliner/save-block conn data)))
+      (db-outliner/save-block conn data)
+      this))
 
   (-del [this]
     (let [conn (conn/get-outliner-conn)
           block-id (tree/-get-id this)]
-      (state/reset-the-position this)
       (db-outliner/del-block conn [:block/id block-id])))
 
   (-get-children [this]

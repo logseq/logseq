@@ -7,12 +7,11 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.core]
             [frontend.fixtures :as fixtures]
-            [nano-id.core :as nano]))
+            [cljs-run-test :refer [run-test]]))
 
 (use-fixtures :each
   fixtures/react-impl
   fixtures/react-components
-  fixtures/outliner-position-state
   fixtures/outliner-db)
 
 (defn build-block
@@ -171,220 +170,220 @@
       (is (= [6 9] old-parent's-children))
       (is (= [13 14 3 15] new-parent's-children)))))
 
-(defn- get-block-id
-  [block]
-  (get-in block [:data :block/id]))
-
-(defn sibling-nodes
-  [acc new-sibling]
-  (if (empty? acc)
-    [new-sibling]
-    (conj acc new-sibling)))
-
-(declare render)
-
-(r/defc down-component
-  [number node]
-  (let [down (tree/-get-down node)]
-    (if (and
-          (tree/satisfied-inode? down)
-          (pos? @number))
-      (do (swap! number dec)
-          [(get-block-id node)
-           (->> (render number down nil)
-             (r/with-key (str (tree/-get-id down) "-children"))
-             (deref))])
-      [(get-block-id node)])))
-
-(r/defc right-component
-  [number node children node-tree]
-  (let [right (tree/-get-right node)
-        new-children (sibling-nodes children node-tree)]
-    (if (and
-          (tree/satisfied-inode? right)
-          (pos? @number))
-      (do (swap! number dec)
-          (->> (render number right new-children)
-            (r/with-key (str (tree/-get-id right) "-find-right"))
-            (deref)))
-      new-children)))
-
-(r/defc render
-  [number node children]
-  (let [node-tree (->> (down-component number node)
-                    (r/with-key (str (tree/-get-id node) "-render-find-down"))
-                    (deref))]
-    (->> (right-component number node children node-tree)
-      (r/with-key (str (tree/-get-id node) "-render-find-right"))
-      (deref))))
-
-(r/defc render-react-tree
-  [init-node node-number]
-  (let [num-react (r/react node-number)
-        number (atom (dec num-react))]
-    (->> (render number init-node nil)
-      (r/with-key (str "render-react-tree-" (tree/-get-id init-node)))
-      (deref))))
-
-(deftest test-react-for-update-paginate-number
-  "
-  [1 [[2 [[3 [[4]
-              [5]]]
-          [6 [[7 [[8]]]]]
-          [9 [[10]
-              [11]]]]]
-      [12 [[13]
-           [14]
-           [15]]]
-      [16 [[17]]]]]
-      "
-  (build-db-records node-tree)
-  (let [root (build-block 1 nil nil)
-        number (atom 10)
-        result (->> (render-react-tree root number)
-                 (r/with-key (str "root-" (tree/-get-id root))))]
-    (is (= [[1 [[2 [[3 [[4]
-                        [5]]]
-                    [6 [[7 [[8]]]]]
-                    [9 [[10]]]]]]]]
-          @result))
-    (do (reset! number 12)
-        (is (= [[1 [[2 [[3 [[4] [5]]]
-                        [6 [[7 [[8]]]]]
-                        [9 [[10] [11]]]]]
-                    [12]]]]
-              @result)))))
-
-(deftest test-react-for-insert-node-as-sibling
-  "
-  [1 [[2 [[3 [[4]
-              [5]]]
-          [6 [[7 [[8]]]]]
-          [9 [[10]
-              [11]]]]]
-      [12 [[13]
-           [14]
-           [15]]]
-      [16 [[17]]]]]
-      "
-  (build-db-records node-tree)
-  (let [root (build-block 1 nil nil)
-        number (atom 10)
-        result (->> (render-react-tree root number)
-                 (r/with-key (str "root-" (tree/-get-id root))))]
-    (is (= [[1 [[2 [[3 [[4]
-                        [5]]]
-                    [6 [[7 [[8]]]]]
-                    [9 [[10]]]]]]]]
-          @result))
-    (let [new-node (build-block 18 nil nil)
-          left-node (build-block 3 2 2)]
-      (tree/insert-node-as-sibling new-node left-node)
-      (is (= [[1 [[2 [[3 [[4]
-                          [5]]]
-                      [18]
-                      [6 [[7 [[8]]]]]
-                      [9]]]]]]
-            @result)))))
-
-
-(deftest test-react-insert-node-as-first-child
-  "
-  [1 [[2 [[3 [[4]
-              [5]]]
-          [6 [[7 [[8]]]]]
-          [9 [[10]
-              [11]]]]]
-      [12 [[13]
-           [14]
-           [15]]]
-      [16 [[17]]]]]
-      "
-  (build-db-records node-tree)
-  (let [root (build-block 1 nil nil)
-        number (atom 10)
-        result (->> (render-react-tree root number)
-                 (r/with-key (str "root-" (tree/-get-id root))))]
-    (is (= [[1 [[2 [[3 [[4]
-                        [5]]]
-                    [6 [[7 [[8]]]]]
-                    [9 [[10]]]]]]]]
-          @result))
-    (let [new-node (build-block 18 nil nil)
-          parent-node (build-block 2 1 1)]
-      (tree/insert-node-as-first-child new-node parent-node)
-      (is (= [[1 [[2 [[18]
-                      [3 [[4] [5]]]
-                      [6 [[7 [[8]]]]]
-                      [9]]]]]]
-            @result)))))
-
-(deftest test-react-for-delete-node
-  "
-  [1 [[2 [[3 [[4]
-              [5]]]
-          [6 [[7 [[8]]]]]
-          [9 [[10]
-              [11]]]]]
-      [12 [[13]
-           [14]
-           [15]]]
-      [16 [[17]]]]]
-      "
-  (build-db-records node-tree)
-  (let [root (build-block 1 nil nil)
-        number (atom 10)
-        result (->> (render-react-tree root number)
-                 (r/with-key (str "root-" (tree/-get-id root))))]
-    (is (= [[1 [[2 [[3 [[4]
-                        [5]]]
-                    [6 [[7 [[8]]]]]
-                    [9 [[10]]]]]]]]
-          @result))
-    (let [node (build-block 6 2 3)]
-      (tree/delete-node node)
-      (is (= [[1 [[2 [[3 [[4] [5]]]
-                      [9 [[10] [11]]]]]
-                  [12 [[13]]]]]]
-            @result)))))
-
-(deftest test-react-for-move-subtree
-  "
-  [1 [[2 [[3 [[4]
-              [5]]]
-          [6 [[7 [[8]]]]]
-          [9 [[10]
-              [11]]]]]
-      [12 [[13]
-           [14]
-           [15]]]
-      [16 [[17]]]]]
-      "
-  (build-db-records node-tree)
-  (let [root (build-block 1 nil nil)
-        number (atom 20)
-        result (->> (render-react-tree root number)
-                 (r/with-key (str "root-" (tree/-get-id root))))]
-    (is (= [[1 [[2 [[3 [[4]
-                        [5]]]
-                    [6 [[7 [[8]]]]]
-                    [9 [[10]
-                        [11]]]]]
-                [12 [[13]
-                     [14]
-                     [15]]]
-                [16 [[17]]]]]]
-          @result))
-    (let [node (build-block 3 2 2)
-          new-parent (build-block 12 1 2)
-          new-left (build-block 14 12 13)]
-      (tree/move-subtree node new-parent new-left)
-      (is (= [[1 [[2 [[6 [[7 [[8]]]]]
-                      [9 [[10] [11]]]]]
-                  [12 [[13]
-                       [14]
-                       [3 [[4]
-                           [5]]]
-                       [15]]]
-                  [16 [[17]]]]]]
-            @result)))))
+;(defn- get-block-id
+;  [block]
+;  (get-in block [:data :block/id]))
+;
+;(defn sibling-nodes
+;  [acc new-sibling]
+;  (if (empty? acc)
+;    [new-sibling]
+;    (conj acc new-sibling)))
+;
+;(declare render)
+;
+;(r/defc down-component
+;  [number node]
+;  (let [down (tree/-get-down node)]
+;    (if (and
+;          (tree/satisfied-inode? down)
+;          (pos? @number))
+;      (do (swap! number dec)
+;          [(get-block-id node)
+;           (->> (render number down nil)
+;             (r/with-key (str (tree/-get-id down) "-children"))
+;             (deref))])
+;      [(get-block-id node)])))
+;
+;(r/defc right-component
+;  [number node children node-tree]
+;  (let [right (tree/-get-right node)
+;        new-children (sibling-nodes children node-tree)]
+;    (if (and
+;          (tree/satisfied-inode? right)
+;          (pos? @number))
+;      (do (swap! number dec)
+;          (->> (render number right new-children)
+;            (r/with-key (str (tree/-get-id right) "-find-right"))
+;            (deref)))
+;      new-children)))
+;
+;(r/defc render
+;  [number node children]
+;  (let [node-tree (->> (down-component number node)
+;                    (r/with-key (str (tree/-get-id node) "-render-find-down"))
+;                    (deref))]
+;    (->> (right-component number node children node-tree)
+;      (r/with-key (str (tree/-get-id node) "-render-find-right"))
+;      (deref))))
+;
+;(r/defc render-react-tree
+;  [init-node node-number]
+;  (let [num-react (r/react node-number)
+;        number (atom (dec num-react))]
+;    (->> (render number init-node nil)
+;      (r/with-key (str "render-react-tree-" (tree/-get-id init-node)))
+;      (deref))))
+;
+;(deftest test-react-for-update-paginate-number
+;  "
+;  [1 [[2 [[3 [[4]
+;              [5]]]
+;          [6 [[7 [[8]]]]]
+;          [9 [[10]
+;              [11]]]]]
+;      [12 [[13]
+;           [14]
+;           [15]]]
+;      [16 [[17]]]]]
+;      "
+;  (build-db-records node-tree)
+;  (let [root (build-block 1 nil nil)
+;        number (atom 10)
+;        result (->> (render-react-tree root number)
+;                 (r/with-key (str "root-" (tree/-get-id root))))]
+;    (is (= [[1 [[2 [[3 [[4]
+;                        [5]]]
+;                    [6 [[7 [[8]]]]]
+;                    [9 [[10]]]]]]]]
+;          @result))
+;    (do (reset! number 12)
+;        (is (= [[1 [[2 [[3 [[4] [5]]]
+;                        [6 [[7 [[8]]]]]
+;                        [9 [[10] [11]]]]]
+;                    [12]]]]
+;              @result)))))
+;
+;(deftest test-react-for-insert-node-as-sibling
+;  "
+;  [1 [[2 [[3 [[4]
+;              [5]]]
+;          [6 [[7 [[8]]]]]
+;          [9 [[10]
+;              [11]]]]]
+;      [12 [[13]
+;           [14]
+;           [15]]]
+;      [16 [[17]]]]]
+;      "
+;  (build-db-records node-tree)
+;  (let [root (build-block 1 nil nil)
+;        number (atom 10)
+;        result (->> (render-react-tree root number)
+;                 (r/with-key (str "root-" (tree/-get-id root))))]
+;    (is (= [[1 [[2 [[3 [[4]
+;                        [5]]]
+;                    [6 [[7 [[8]]]]]
+;                    [9 [[10]]]]]]]]
+;          @result))
+;    (let [new-node (build-block 18 nil nil)
+;          left-node (build-block 3 2 2)]
+;      (tree/insert-node-as-sibling new-node left-node)
+;      (is (= [[1 [[2 [[3 [[4]
+;                          [5]]]
+;                      [18]
+;                      [6 [[7 [[8]]]]]
+;                      [9]]]]]]
+;            @result)))))
+;
+;
+;(deftest test-react-insert-node-as-first-child
+;  "
+;  [1 [[2 [[3 [[4]
+;              [5]]]
+;          [6 [[7 [[8]]]]]
+;          [9 [[10]
+;              [11]]]]]
+;      [12 [[13]
+;           [14]
+;           [15]]]
+;      [16 [[17]]]]]
+;      "
+;  (build-db-records node-tree)
+;  (let [root (build-block 1 nil nil)
+;        number (atom 10)
+;        result (->> (render-react-tree root number)
+;                 (r/with-key (str "root-" (tree/-get-id root))))]
+;    (is (= [[1 [[2 [[3 [[4]
+;                        [5]]]
+;                    [6 [[7 [[8]]]]]
+;                    [9 [[10]]]]]]]]
+;          @result))
+;    (let [new-node (build-block 18 nil nil)
+;          parent-node (build-block 2 1 1)]
+;      (tree/insert-node-as-first-child new-node parent-node)
+;      (is (= [[1 [[2 [[18]
+;                      [3 [[4] [5]]]
+;                      [6 [[7 [[8]]]]]
+;                      [9]]]]]]
+;            @result)))))
+;
+;(deftest test-react-for-delete-node
+;  "
+;  [1 [[2 [[3 [[4]
+;              [5]]]
+;          [6 [[7 [[8]]]]]
+;          [9 [[10]
+;              [11]]]]]
+;      [12 [[13]
+;           [14]
+;           [15]]]
+;      [16 [[17]]]]]
+;      "
+;  (build-db-records node-tree)
+;  (let [root (build-block 1 nil nil)
+;        number (atom 10)
+;        result (->> (render-react-tree root number)
+;                 (r/with-key (str "root-" (tree/-get-id root))))]
+;    (is (= [[1 [[2 [[3 [[4]
+;                        [5]]]
+;                    [6 [[7 [[8]]]]]
+;                    [9 [[10]]]]]]]]
+;          @result))
+;    (let [node (build-block 6 2 3)]
+;      (tree/delete-node node)
+;      (is (= [[1 [[2 [[3 [[4] [5]]]
+;                      [9 [[10] [11]]]]]
+;                  [12 [[13]]]]]]
+;            @result)))))
+;
+;(deftest test-react-for-move-subtree
+;  "
+;  [1 [[2 [[3 [[4]
+;              [5]]]
+;          [6 [[7 [[8]]]]]
+;          [9 [[10]
+;              [11]]]]]
+;      [12 [[13]
+;           [14]
+;           [15]]]
+;      [16 [[17]]]]]
+;      "
+;  (build-db-records node-tree)
+;  (let [root (build-block 1 nil nil)
+;        number (atom 20)
+;        result (->> (render-react-tree root number)
+;                 (r/with-key (str "root-" (tree/-get-id root))))]
+;    (is (= [[1 [[2 [[3 [[4]
+;                        [5]]]
+;                    [6 [[7 [[8]]]]]
+;                    [9 [[10]
+;                        [11]]]]]
+;                [12 [[13]
+;                     [14]
+;                     [15]]]
+;                [16 [[17]]]]]]
+;          @result))
+;    (let [node (build-block 3 2 2)
+;          new-parent (build-block 12 1 2)
+;          new-left (build-block 14 12 13)]
+;      (tree/move-subtree node new-parent new-left)
+;      (is (= [[1 [[2 [[6 [[7 [[8]]]]]
+;                      [9 [[10] [11]]]]]
+;                  [12 [[13]
+;                       [14]
+;                       [3 [[4]
+;                           [5]]]
+;                       [15]]]
+;                  [16 [[17]]]]]]
+;            @result)))))
