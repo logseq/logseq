@@ -20,23 +20,12 @@ const css = {
   buildCSS (...params) {
     return gulp.series(
       () => exec(`yarn css:build`, {}),
-      css._optimizeVendorCSSForRelease,
-      css._optimizeMainCSSForRelease
+      css._optimizeCSSForRelease
     )(...params)
   },
 
   _optimizeCSSForRelease () {
     return gulp.src(path.join(outputPath, 'css', 'style.css'))
-      .pipe(cleanCSS())
-      .pipe(gulp.dest(path.join(outputPath, 'css')))
-  },
-  _optimizeVendorCSSForRelease () {
-    return gulp.src(path.join(outputPath, 'css', 'vendor.css'))
-      .pipe(cleanCSS())
-      .pipe(gulp.dest(path.join(outputPath, 'css')))
-  },
-  _optimizeMainCSSForRelease () {
-    return gulp.src(path.join(outputPath, 'css', 'main.css'))
       .pipe(cleanCSS())
       .pipe(gulp.dest(path.join(outputPath, 'css')))
   }
