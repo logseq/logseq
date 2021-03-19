@@ -20,7 +20,9 @@ const css = {
   buildCSS (...params) {
     return gulp.series(
       () => exec(`yarn css:build`, {}),
-      css._optimizeCSSForRelease)(...params)
+      css._optimizeVendorCSSForRelease,
+      css._optimizeMainCSSForRelease
+    )(...params)
   },
 
   _optimizeCSSForRelease () {
@@ -28,6 +30,16 @@ const css = {
       .pipe(cleanCSS())
       .pipe(gulp.dest(path.join(outputPath, 'css')))
   },
+  _optimizeVendorCSSForRelease () {
+    return gulp.src(path.join(outputPath, 'css', 'vendor.css'))
+      .pipe(cleanCSS())
+      .pipe(gulp.dest(path.join(outputPath, 'css')))
+  },
+  _optimizeMainCSSForRelease () {
+    return gulp.src(path.join(outputPath, 'css', 'main.css'))
+      .pipe(cleanCSS())
+      .pipe(gulp.dest(path.join(outputPath, 'css')))
+  }
 }
 
 const common = {
@@ -40,7 +52,7 @@ const common = {
   },
 
   keepSyncResourceFile () {
-    return gulp.watch(resourceFilePath, { ignoreInitial: false }, common.syncResourceFile)
+    return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
   }
 }
 
@@ -89,5 +101,5 @@ exports.electronMaker = async () => {
 }
 
 exports.clean = common.clean
-exports.watch = gulp.parallel(common.keepSyncResourceFile, css.watchCSS)
+exports.watch = gulp.series(common.syncResourceFile, gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
 exports.build = gulp.series(common.clean, common.syncResourceFile, css.buildCSS)

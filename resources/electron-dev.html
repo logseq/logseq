@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta content="minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no" name="viewport">
-  <link href="./css/style.css" rel="stylesheet" type="text/css">
+  <link href="./css/vendor.css" rel="stylesheet" type="text/css">
+  <link href="./css/main.css" rel="stylesheet" type="text/css">
   <link href="./img/logo.png" rel="shortcut icon" type="image/png">
   <link href="./img/logo.png" rel="shortcut icon" sizes="192x192">
   <link href="./img/logo.png" rel="apple-touch-icon">
@@ -26,6 +27,7 @@
   <title>Logseq: A local-first knowledge base</title>
   <meta content="logseq" property="og:site_name">
   <meta content="A local-first knowledge base which can be synced using Git." name="description">
+  <script>window.localStorage.getItem('http-entry-port') && (location.href = 'http://localhost:' + window.localStorage.getItem('http-entry-port'))</script>
 </head>
 <body>
 <div id="root">

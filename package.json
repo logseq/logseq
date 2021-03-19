@@ -25,8 +25,8 @@
         "tailwindcss": "2.0.3"
     },
     "scripts": {
-        "watch": "run-p gulp:build gulp:watch cljs:watch",
-        "electron-watch": "run-p gulp:build gulp:watch cljs:electron-watch",
+        "watch": "run-p gulp:watch cljs:watch",
+        "electron-watch": "run-p gulp:watch cljs:electron-watch",
         "release": "run-s gulp:build cljs:release",
         "watch-app": "run-p gulp:watch cljs:watch-app",
         "release-app": "run-s gulp:build cljs:release-app",
@@ -41,8 +41,8 @@
         "style:lint": "stylelint \"src/**/*.css\" ",
         "gulp:watch": "gulp watch",
         "gulp:build": "cross-env NODE_ENV=production gulp build",
-        "css:build": "postcss tailwind.all.css -o static/css/tailwind.build.css --verbose",
-        "css:watch": "npm run css:build -- --watch --env development",
+        "css:build": "postcss tailwind.all.css -o static/css/main.css --verbose --env production",
+        "css:watch": "postcss tailwind.all.css -o static/css/main.css --verbose --watch",
         "cljs:watch": "clojure -M:cljs watch app publishing electron",
         "cljs:electron-watch": "clojure -M:cljs watch app electron",
         "cljs:release": "clojure -M:cljs release app publishing electron",
