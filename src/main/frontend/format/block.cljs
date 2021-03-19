@@ -60,11 +60,11 @@
                (and (vector? block)
                     (= "Macro" (first block)))
                (let [{:keys [name arguments]} (second block)]
-                 (when (and (= name "embed")
-                            (string? (first arguments))
-                            (string/starts-with? (first arguments) "[[")
-                            (string/ends-with? (first arguments) "]]"))
-                   (subs (first arguments) 2 (- (count (first arguments)) 2))))
+                 (let [argument (string/join ", " arguments)]
+                   (when (and (= name "embed")
+                              (string? argument)
+                              (text/page-ref? argument))
+                     (text/page-ref-un-brackets! argument))))
                :else
                nil)]
     (when (and
