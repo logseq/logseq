@@ -14,7 +14,10 @@ const resourceFilePath = path.join(resourcesPath, '**')
 
 const css = {
   watchCSS () {
-    return exec(`yarn css:watch`, {})
+    return cp.spawn(`yarn css:watch`, {
+      shell: true,
+      stdio: 'inherit'
+    })
   },
 
   buildCSS (...params) {
