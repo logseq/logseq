@@ -11,10 +11,10 @@
             [frontend.context.i18n :as i18n]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.handler.export :as export]
             [frontend.components.svg :as svg]
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
+            [frontend.components.export :as export]
             [frontend.handler.project :as project-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
@@ -128,9 +128,9 @@
 
        (when current-repo
          {:title (t :export)
-          :options {:on-click (fn []
-                                (export/export-repo-as-html! current-repo))}
+          :options {:on-click #(state/set-modal! export/export)}
           :icon nil})
+
        (when current-repo
          {:title (t :import)
           :options {:href (rfe/href :import)}
@@ -148,7 +148,7 @@
       (remove nil?))
      ;; {:links-footer (when (and (util/electron?) (not logged?))
      ;;                  [:div.px-2.py-2 (login logged?)])}
-)))
+     )))
 
 (rum/defc header
   < rum/reactive
@@ -212,7 +212,4 @@
        (dropdown-menu {:me me
                        :t t
                        :current-repo current-repo
-                       :default-home default-home})
-
-       [:a#download-as-html.hidden]
-       [:a#download-as-zip.hidden]])))
+                       :default-home default-home})])))

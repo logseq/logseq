@@ -42,7 +42,7 @@ some changes on the right sidebar, those referenced blocks will be changed too!
         [:iframe
          {:allowFullScreen \"allowfullscreen\"
           :allow
-          \"accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture\"
+          \"accelerometer; autoplay; encrypted-media; gyroscope\"
         :frameBorder \"0\"
         :src \"https://www.youtube.com/embed/Afmqowr0qEQ\"
         :height \"367\"
@@ -50,7 +50,7 @@ some changes on the right sidebar, those referenced blocks will be changed too!
 ### DONE Create a page
 ### CANCELED [#C] Write a page with more than 1000 blocks
 ## That's it! You can create more bullets or open a local directory to import some notes now!
-##
+## You can also download our desktop app at https://github.com/logseq/logseq/releases
 "
         :tutorial/dummy-notes "---
 title: How to take dummy notes?
@@ -229,7 +229,7 @@ title: How to take dummy notes?
         :page/open-in-finder "Open in directory"
         :page/open-with-default-app "Open with default app"
         :page/action-publish "Publish"
-        :page/make-public "Publish it when exporting to an html file"
+        :page/make-public "Make it public for publishing"
         :page/make-private "Make it private"
         :page/delete "Delete page"
         :page/publish "Publish this page on Logseq"
@@ -310,7 +310,6 @@ title: How to take dummy notes?
         :cancel "Cancel"
         :close "Close"
         :re-index "Re-index"
-        :export-json "Export as JSON"
         :unlink "unlink"
         :search (if config/publishing?
                   "Search"
@@ -320,7 +319,11 @@ title: How to take dummy notes?
         :graph "Graph"
         :graph-view "View Graph"
         :publishing "Publishing"
-        :export "Export public pages"
+        :export "Export"
+        :export-json "Export as JSON"
+        :export-markdown "Export as Markdown"
+        :export-public-pages "Export public pages"
+        :export-edn "Export as EDN"
         :all-graphs "All graphs"
         :all-pages "All pages"
         :all-files "All files"
@@ -1033,6 +1036,7 @@ title: How to take dummy notes?
            :cancel "取消"
            :re-index "重新建立索引"
            :export-json "以 JSON 格式导出"
+           :export-markdown "以 Markdown 格式导出"
            :unlink "解除绑定"
            :search (if config/publishing?
                      "搜索"
@@ -1297,6 +1301,7 @@ title: How to take dummy notes?
              :cancel "取消"
              :re-index "重新建立索引"
              :export-json "以 JSON 格式導出"
+             :export-markdown "以 Markdown 格式導出"
              :unlink "解除綁定"
              :search (if config/publishing?
                        "搜索"

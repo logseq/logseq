@@ -174,7 +174,7 @@
 
                (date/journal-name))]
     (when page
-      (let [page-name (util/url-decode (string/lower-case page))]
+      (let [page-name (string/lower-case page)]
         (db-utils/entity [:block/name page-name])))))
 
 (defn get-current-priority

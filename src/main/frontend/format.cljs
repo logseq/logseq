@@ -33,8 +33,10 @@
 
 ;; html
 (defn get-default-config
-  [format]
-  (mldoc/default-config format))
+  ([format]
+   (mldoc/default-config format))
+  ([format heading-to-list?]
+   (mldoc/default-config format heading-to-list?)))
 
 (defn to-html
   ([content format]
@@ -62,7 +64,7 @@
     (protocol/loaded? record)))
 
 (def marker-pattern
-  #"^(NOW|LATER|TODO|DOING|DONE|WAIT|WAITING|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\s?")
+  #"^(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\s?")
 
 (def bare-marker-pattern
-  #"^(NOW|LATER|TODO|DOING|DONE|WAIT|WAITING|CANCELED|CANCELLED|STARTED|IN-PROGRESS){1}\s+")
+  #"^(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS){1}\s+")

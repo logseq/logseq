@@ -152,7 +152,7 @@
                   (when file
                     (nfs-saved-handler repo path file))))
               (do
-                (js/alert (str "The file has been modified in your local disk! File path: " path
+                (js/alert (str "The file has been modified on your local disk! File path: " path
                                ", please save your changes and click the refresh button to reload it.")))))
            ;; create file handle
           (->

@@ -111,7 +111,8 @@
 (defn create-today-journal-if-not-exists
   ([repo-url]
    (create-today-journal-if-not-exists repo-url nil))
-  ([repo-url content]
+  ([repo-url {:keys [content write-file?]
+              :or {write-file? true}}]
    (spec/validate :repos/url repo-url)
    (when (state/enable-journals? repo-url)
      (let [repo-dir (config/get-repo-dir repo-url)
@@ -144,22 +145,28 @@
                  file-exists? (fs/file-exists? repo-dir file-path)]
            (when-not file-exists?
              (file-handler/reset-file! repo-url path content)
-             (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
+             (if write-file?
+               (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
+                 (when-not (state/editing?)
+                   (ui-handler/re-render-root!))
+                 (git-handler/git-add repo-url path))
                (when-not (state/editing?)
                  (ui-handler/re-render-root!))))))))))
 
 (defn create-today-journal!
-  []
-  (state/set-today! (date/today))
-  (when-let [repo (state/get-current-repo)]
-    (when (or (db/cloned? repo)
-              (and (config/local-db? repo)
-                   ;; config file exists
-                   (let [path (config/get-config-path)]
-                     (db/get-file path))))
-      (let [today-page (string/lower-case (date/today))]
-        (when (empty? (db/get-page-blocks-no-cache repo today-page))
-          (create-today-journal-if-not-exists repo))))))
+  ([]
+   (create-today-journal! true))
+  ([write-file?]
+   (state/set-today! (date/today))
+   (when-let [repo (state/get-current-repo)]
+     (when (or (db/cloned? repo)
+               (and (config/local-db? repo)
+                    ;; config file exists
+                    (let [path (config/get-config-path)]
+                      (db/get-file path))))
+       (let [today-page (string/lower-case (date/today))]
+         (when (empty? (db/get-page-blocks-no-cache repo today-page))
+           (create-today-journal-if-not-exists repo {:write-file? write-file?})))))))
 
 (defn create-default-files!
   ([repo-url]
@@ -169,7 +176,7 @@
    (file-handler/create-metadata-file repo-url encrypted?)
    ;; TODO: move to frontend.handler.file
    (create-config-file-if-not-exists repo-url)
-   (create-today-journal-if-not-exists repo-url)
+   (create-today-journal-if-not-exists repo-url {:write-file? false})
    (create-contents-file repo-url)
    (create-custom-theme repo-url)))
 
@@ -611,7 +618,7 @@
              (when-not config/publishing?
                (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
                      tutorial (string/replace-first tutorial "$today" (date/today))]
-                 (create-today-journal-if-not-exists repo tutorial)))
+                 (create-today-journal-if-not-exists repo {:content tutorial})))
              (create-config-file-if-not-exists repo)
              (create-contents-file repo)
              (create-custom-theme repo)

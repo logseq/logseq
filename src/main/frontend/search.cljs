@@ -38,8 +38,10 @@
           indice (fuse. blocks
                         (clj->js {:keys ["uuid" "content"]
                                   :shouldSort true
+                                  :tokenize true
                                   :minMatchCharLength 2
-                                  :threshold 0.2}))]
+                                  :distance 1000
+                                  :threshold 0.35}))]
       (swap! indices assoc-in [repo :blocks] indice)
       indice)))
 
@@ -53,8 +55,10 @@
           indice (fuse. pages
                         (clj->js {:keys ["name"]
                                   :shouldSort true
+                                  :tokenize true
                                   :minMatchCharLength 2
-                                  :threshold 0.2
+                                  :distance 1000
+                                  :threshold 0.35
                                   }))]
       (swap! indices assoc-in [repo :pages] indice)
       indice)))

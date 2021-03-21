@@ -14,16 +14,26 @@
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
 (defonce parseHtml (gobj/get Mldoc "parseHtml"))
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
+(defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
 
 (defn default-config
-  [format]
-  (let [format (string/capitalize (name (or format :markdown)))]
-    (js/JSON.stringify
-     (bean/->js
-      (assoc {:toc false
-              :heading_number false
-              :keep_line_break true}
-             :format format)))))
+  ([format]
+   (default-config format false))
+  ([format export-heading-to-list?]
+   (let [format (string/capitalize (name (or format :markdown)))]
+     (js/JSON.stringify
+      (bean/->js
+       {:toc false
+        :heading_number false
+        :keep_line_break true
+        :format format
+        :heading_to_list export-heading-to-list?})))))
+
+(def default-references
+  (js/JSON.stringify
+   (clj->js {:embed_blocks []
+             :embed_pages []
+             :refer_blocks []})))
 
 (defn parse-json
   [content config]
@@ -32,6 +42,12 @@
 (defn inline-parse-json
   [text config]
   (parseInlineJson text (or config default-config)))
+
+(defn parse-export-markdown
+  [content config references]
+  (parseAndExportMarkdown content
+                          (or config default-config)
+                          (or references default-references)))
 
 ;; Org-roam
 (defn get-tags-from-definition
@@ -82,8 +98,12 @@
   (if (seq ast)
     (let [original-ast ast
           ast (map first ast)           ; without position meta
-          directive? (fn [item] (= "directive" (string/lower-case (first item))))
-          properties (->> (take-while directive? ast)
+          directive?
+          (fn [[item _]] (= "directive" (string/lower-case (first item))))
+          grouped-ast (group-by directive? original-ast)
+          [directive-ast other-ast]
+          [(get grouped-ast true) (get grouped-ast false)]
+          properties (->> (map first directive-ast)
                           (map (fn [[_ k v]]
                                  (let [k (keyword (string/lower-case k))
                                        comma? (contains? #{:tags :alias :roam_tags} k)
@@ -91,6 +111,7 @@
                                            v
                                            (text/split-page-refs-without-brackets v comma?))]
                                    [k v])))
+                          (reverse)
                           (into {}))
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
           macros (if (seq macro-properties)
@@ -134,8 +155,7 @@
                          (update :roam_alias ->vec)
                          (update :roam_tags (constantly roam-tags))
                          (update :filetags (constantly filetags)))
-          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
-          other-ast (drop-while (fn [[item _pos]] (directive? item)) original-ast)]
+          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))
@@ -174,7 +194,10 @@
   (loaded? [this]
     true)
   (lazyLoad [this ok-handler]
-    true))
+    true)
+  (exportMarkdown [this content config references]
+    (parse-export-markdown content config references))
+  )
 
 (defn plain->text
   [plains]

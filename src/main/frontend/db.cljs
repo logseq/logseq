@@ -30,7 +30,7 @@
   remove-conn!]
 
  [frontend.db.utils
-  date->int db->json db->string get-max-tx-id get-tx-id
+  date->int db->json db->edn-str db->string get-max-tx-id get-tx-id
   group-by-page seq-flatten sort-by-pos
   string->db with-repo
 

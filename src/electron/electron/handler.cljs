@@ -71,7 +71,7 @@
 ;; TODO: Is it going to be slow if it's a huge directory
 (defmethod handle :openDir [^js window _messages]
   (let [result (.showOpenDialogSync dialog (bean/->js
-                                            {:properties ["openDirectory"]}))
+                                            {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
         path (first result)]
     (.. ^js window -webContents
         (send "open-dir-confirmed"

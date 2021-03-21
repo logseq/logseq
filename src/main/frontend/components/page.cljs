@@ -173,14 +173,14 @@
 
 (rum/defcs rename-page-dialog-inner <
   (rum/local "" ::input)
-  [state page-name close-fn]
+  [state title page-name close-fn]
   (let [input (get state ::input)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.w-full.sm:max-w-lg.sm:w-96
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
          [:h3#modal-headline.text-lg.leading-6.font-medium
-          (t :page/rename-to page-name)]]]
+          (t :page/rename-to title)]]]
 
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
         {:auto-focus true
@@ -193,11 +193,10 @@
          [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
           {:type "button"
            :on-click (fn []
-                       (let [value @input]
-                         (let [value (string/trim value)]
-                           (when-not (string/blank? value)
-                             (page-handler/rename! page-name value)
-                             (state/close-modal!)))))}
+                       (let [value (string/trim @input)]
+                         (when-not (string/blank? value)
+                           (page-handler/rename! page-name value)
+                           (state/close-modal!))))}
           (t :submit)]]
         [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
          [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
@@ -206,9 +205,9 @@
           (t :cancel)]]]])))
 
 (defn rename-page-dialog
-  [page-name]
+  [title page-name]
   (fn [close-fn]
-    (rename-page-dialog-inner page-name close-fn)))
+    (rename-page-dialog-inner title page-name close-fn)))
 
 (defn tagged-pages
   [repo tag]
@@ -235,9 +234,8 @@
   [state {:keys [repo] :as option}]
   (let [current-repo (state/sub :git/current-repo)
         repo (or repo current-repo)
-        encoded-page-name (or (get-page-name state)
-                              (state/get-current-page))
-        path-page-name (util/url-decode encoded-page-name)
+        path-page-name (or (get-page-name state)
+                           (state/get-current-page))
         page-name (string/lower-case path-page-name)
         marker-page? (util/marker? page-name)
         priority-page? (contains? #{"a" "b" "c"} page-name)
@@ -303,7 +301,7 @@
 
                             (when-not contents?
                               {:title (t :page/rename)
-                               :options {:on-click #(state/set-modal! (rename-page-dialog page-name))}})
+                               :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
 
                             (when (and file-path (util/electron?))
                               [{:title   (t :page/open-in-finder)
@@ -315,38 +313,14 @@
                               {:title (t :page/delete)
                                :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-                            {:title   (t :page/action-publish)
-                             :options {:on-click
-                                       (fn []
-                                         (state/set-modal!
-                                          (fn []
-                                            [:div.cp__page-publish-actions
-                                             (mapv (fn [{:keys [title options]}]
-                                                     (when title
-                                                       [:div.it
-                                                        (apply (partial ui/button title) (flatten (seq options)))]))
-                                                   [(if published?
-                                                      {:title   (t :page/unpublish)
-                                                       :options {:on-click (fn []
-                                                                             (page-handler/unpublish-page! page-name))}}
-                                                      {:title   (t :page/publish)
-                                                       :options {:on-click (fn []
-                                                                             (page-handler/publish-page!
-                                                                              page-name project/add-project
-                                                                              html-export/export-page))}})
-                                                    (when-not published?
-                                                      {:title   (t :page/publish-as-slide)
-                                                       :options {:on-click (fn []
-                                                                             (page-handler/publish-page-as-slide!
-                                                                              page-name project/add-project
-                                                                              html-export/export-page))}})
-                                                    {:title   (t (if public? :page/make-private :page/make-public))
-                                                     :options {:background (if public? "gray" "indigo")
-                                                               :on-click (fn []
-                                                                           (page-handler/update-public-attribute!
-                                                                            page-name
-                                                                            (if public? false true))
-                                                                           (state/close-modal!))}}])])))}}
+                            (when (util/electron?)
+                              {:title  (t (if public? :page/make-private :page/make-public))
+                               :options {:on-click
+                                         (fn []
+                                           (page-handler/update-public-attribute!
+                                            page-name
+                                            (if public? false true))
+                                           (state/close-modal!))}})
 
                             (when file
                               {:title (t :page/re-index)
@@ -437,7 +411,7 @@
                   (block/block-parents config repo block-id format)]))
 
              ;; blocks
-             (page-blocks-cp repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format)]]
+             (page-blocks-cp repo page file-path page-name page-original-name page-name sidebar? journal? block? block-id format)]]
 
            (when-not block?
              (today-queries repo today? sidebar?))
@@ -516,21 +490,20 @@
               [:th (t :file/last-modified-at)]]]
             [:tbody
              (for [page pages]
-               (let [encoded-page (util/encode-str page)]
-                 [:tr {:key encoded-page}
-                  [:td [:a {:on-click (fn [e]
-                                        (let [repo (state/get-current-repo)
-                                              page (db/pull repo '[*] [:block/name (string/lower-case page)])]
-                                          (when (gobj/get e "shiftKey")
-                                            (state/sidebar-add-block!
-                                             repo
-                                             (:db/id page)
-                                             :page
-                                             {:page page}))))
-                            :href (rfe/href :page {:name encoded-page})}
-                        page]]
-                  [:td [:span.text-gray-500.text-sm
-                        (t :file/no-data)]]]))]]))])))
+               [:tr {:key page}
+                [:td [:a {:on-click (fn [e]
+                                      (let [repo (state/get-current-repo)
+                                            page (db/pull repo '[*] [:block/name (string/lower-case page)])]
+                                        (when (gobj/get e "shiftKey")
+                                          (state/sidebar-add-block!
+                                           repo
+                                           (:db/id page)
+                                           :page
+                                           {:page page}))))
+                          :href (rfe/href :page {:name page})}
+                      page]]
+                [:td [:span.text-gray-500.text-sm
+                      (t :file/no-data)]]])]]))])))
 
 (rum/defcs new < rum/reactive
   (rum/local "" ::title)

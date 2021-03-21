@@ -26,4 +26,6 @@
   (lazyLoad [this ok-handler]
     (loader/load
      "https://cdnjs.cloudflare.com/ajax/libs/asciidoctor.js/1.5.9/asciidoctor.min.js"
-     ok-handler)))
+     ok-handler))
+  (exportMarkdown [this content config references]
+    (throw "not support")))

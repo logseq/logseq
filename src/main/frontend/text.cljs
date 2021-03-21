@@ -249,3 +249,7 @@
   (let [items (map (fn [item] (str "\"" item "\"")) col)]
     (util/format "[%s]"
                  (string/join ", " items))))
+
+(defn image-link?
+  [img-formats s]
+  (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))

@@ -41,7 +41,7 @@
     :all-journals
     "All journals"
     :file
-    (str "File " (util/url-decode (:path path-params)))
+    (str "File " (:path path-params))
     :new-page
     "Create a new page"
     :page
@@ -55,13 +55,12 @@
               (str (subs content 0 48) "...")
               content))
           "Page no longer exists!!")
-        (let [page (util/url-decode name)
-              page (db/pull [:block/name (string/lower-case page)])]
+        (let [page (db/pull [:block/name (string/lower-case name)])]
           (or (:block/original-name page)
               (:block/name page)
               "Logseq"))))
     :tag
-    (str "#" (util/url-decode (:name path-params)))
+    (str "#"  (:name path-params))
     :diff
     "Git diff"
     :draw

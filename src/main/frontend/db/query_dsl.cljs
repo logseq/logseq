@@ -46,16 +46,17 @@
 
 (defn query-wrapper
   [where blocks?]
-  (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
-            '[:find (pull ?b [*])
-              :where]
-            '[:find (pull ?p [*])
-              :where])
-        result (if (coll? (first where))
-                 (apply conj q where)
-                 (conj q where))]
-    (prn "Datascript query: " result)
-    result))
+  (when where
+    (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
+             '[:find (pull ?b [*])
+               :where]
+               '[:find (pull ?p [*])
+                 :where])
+         result (if (coll? (first where))
+                  (apply conj q where)
+                  (conj q where))]
+     (prn "Datascript query: " result)
+     result)))
 
 ;; (between -7d +7d)
 (defn- ->journal-day-int [input]
@@ -151,7 +152,7 @@
        (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map (fn [form]
                                  (build-query repo form (assoc env :current-filter fe) (inc level)))
-                               (rest e))
+                            (rest e))
                           remove-nil?
                           (distinct))]
          (when (seq clauses)
@@ -221,7 +222,7 @@
                        (text/page-ref-un-brackets!))
              sym (if (= current-filter 'or)
                    '?v
-                   (uniq-symbol counter "?v"))]
+                     (uniq-symbol counter "?v"))]
          [['?b :block/properties '?prop]
           [(list 'get '?prop (name (nth e 1))) sym]
           (list
@@ -354,39 +355,47 @@
       (try
         (let [form (some-> s
                            (pre-transform)
-                           (reader/read-string))
-              sort-by (atom nil)
-              blocks? (atom nil)
-              result (when form (build-query repo form {:sort-by sort-by
-                                                        :blocks? blocks?
-                                                        :counter counter}))
-              result (when (seq result)
-                       (let [key (if (coll? (first result))
-                                   (keyword (ffirst result))
-                                   (keyword (first result)))
-                             result (case key
-                                      :and
-                                      (rest result)
+                           (reader/read-string))]
+          (if (symbol? form)
+            (str form)
+            (let [sort-by (atom nil)
+                  blocks? (atom nil)
+                  result (when form (build-query repo form {:sort-by sort-by
+                                                            :blocks? blocks?
+                                                            :counter counter}))]
+              (if (string? result)
+                result
+                (let [result (when (seq result)
+                              (let [key (if (coll? (first result))
+                                          (keyword (ffirst result))
+                                          (keyword (first result)))
+                                    result (case key
+                                             :and
+                                             (rest result)
 
-                                      result)]
-                         (add-bindings! result)))]
-          {:query result
-           :sort-by @sort-by
-           :blocks? (boolean @blocks?)})
+                                             result)]
+                                (add-bindings! result)))]
+                 {:query result
+                  :sort-by @sort-by
+                  :blocks? (boolean @blocks?)})))))
         (catch js/Error e
           (log/error :query-dsl/parse-error e))))))
 
 (defn query
   [repo query-string]
   (when (string? query-string)
-    (let [query-string (template/resolve-dynamic-template! query-string)
-          {:keys [query sort-by blocks?]} (parse repo query-string)]
-      (when query
-        (let [query (query-wrapper query blocks?)]
-          (react/react-query repo
-                             {:query query}
-                             (if sort-by
-                               {:transform-fn sort-by})))))))
+    (let [query-string (template/resolve-dynamic-template! query-string)]
+      (when-not (string/blank? query-string)
+        (let [{:keys [query sort-by blocks?] :as result} (parse repo query-string)]
+          (if (string? result)
+            (if (= "\"" (first result) (last result))
+              (subs result 1 (dec (count result)))
+              result)
+            (when-let [query (query-wrapper query blocks?)]
+              (react/react-query repo
+                                 {:query query}
+                                 (if sort-by
+                                   {:transform-fn sort-by})))))))))
 
 (defn custom-query
   [repo query-m query-opts]
@@ -395,7 +404,7 @@
           query-string (template/resolve-dynamic-template! query-string)
           {:keys [query sort-by blocks?]} (parse repo query-string)]
       (when query
-        (let [query (query-wrapper query blocks?)]
+        (when-let [query (query-wrapper query blocks?)]
           (react/react-query repo
                              (merge
                               query-m

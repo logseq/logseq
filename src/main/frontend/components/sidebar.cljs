@@ -131,7 +131,8 @@
            (ui/loading (t :loading))]]
 
          :else
-         [:div.max-w-7xl.mx-auto {:style {:margin-bottom (if global-graph-pages? 0 120)}}
+         [:div {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
+                :style {:margin-bottom (if global-graph-pages? 0 120)}}
           main-content])]]
      (right-sidebar/sidebar)]))
 
@@ -183,6 +184,11 @@
               (not (state/route-has-p?)))
          (route-handler/redirect! {:to :page
                                    :path-params {:name (:page default-home)}})
+
+         (and config/publishing?
+              (not default-home)
+              (empty? latest-journals))
+         (route-handler/redirect! {:to :all-pages})
 
          importing-to-db?
          (ui/loading (t :parsing-files))

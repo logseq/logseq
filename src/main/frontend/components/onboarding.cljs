@@ -241,8 +241,8 @@
          [:tr [:td (t :help/new-line-in-block)] [:td "Shift-Enter"]]
          [:tr [:td (t :undo)] [:td (util/->platform-shortcut "Ctrl-z")]]
          [:tr [:td (t :redo)] [:td (util/->platform-shortcut "Ctrl-y")]]
-         [:tr [:td (t :help/zoom-in)] [:td (util/->platform-shortcut (if util/mac? "Alt-." "Alt-Right"))]]
-         [:tr [:td (t :help/zoom-out)] [:td (util/->platform-shortcut (if util/mac? "Alt-," "Alt-left"))]]
+         [:tr [:td (t :help/zoom-in)] [:td (util/->platform-shortcut (if util/mac? "Cmd-." "Alt-Right"))]]
+         [:tr [:td (t :help/zoom-out)] [:td (util/->platform-shortcut (if util/mac? "Cmd-," "Alt-left"))]]
          [:tr [:td (t :help/follow-link-under-cursor)] [:td (util/->platform-shortcut "Ctrl-o")]]
          [:tr [:td (t :help/open-link-in-sidebar)] [:td (util/->platform-shortcut "Ctrl-shift-o")]]
          [:tr [:td (t :expand)] [:td (util/->platform-shortcut "Ctrl-Down")]]
@@ -268,7 +268,7 @@
          [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
          [:tr [:td (t :help/toggle-settings)] [:td "t s"]]
          [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
-         [:tr [:td (t :help/jump-to-journals)] [:td (util/->platform-shortcut "Ctrl-j")]]]]
+         [:tr [:td (t :help/jump-to-journals)] [:td (if util/mac? "Cmd-j" "Alt-j")]]]]
        [:table
         [:thead
          [:tr

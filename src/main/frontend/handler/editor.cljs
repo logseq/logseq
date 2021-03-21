@@ -2336,6 +2336,47 @@
            (not (in-auto-complete? input)))
       (on-up-down state e up?))))
 
+(defn- move-to-block-when-cross-boundrary
+  [state e direction]
+  (let [up? (= :left direction)
+        pos (if up? :max 0)
+        {:keys [id block-id block block-parent-id dummy? value format] :as block-state} (get-state state)
+        element (gdom/getElement id)]
+    (when block-id
+      (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
+            sibling-block (f (gdom/getElement block-parent-id))]
+        (when sibling-block
+          (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+            (let [state (get-state state)
+                  content (:block/content block)
+                  value (:value state)]
+              (when (not= (-> content
+                              (text/remove-level-spaces format)
+                              text/remove-properties!
+                              string/trim)
+                          (string/trim value))
+                (save-block! state (:value state))))
+            (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
+              (edit-block! block pos format id)
+              (util/stop e))))))))
+
+(defn- on-arrow-move-to-boundray
+  [state input e direction]
+  (when (or (and (= :left direction) (util/input-start? input))
+            (and (= :right direction) (util/input-end? input)))
+    (move-to-block-when-cross-boundrary state e direction)))
+
+(defn keydown-arrow-handler
+  [input direction]
+  (fn [state e]
+    (when (and
+           input
+           (not (gobj/get e "shiftKey"))
+           (not (gobj/get e "ctrlKey"))
+           (not (gobj/get e "metaKey"))
+           (not (in-auto-complete? input)))
+      (on-arrow-move-to-boundray state input e direction))))
+
 (defn keydown-backspace-handler
   [repo input id]
   (fn [state e]

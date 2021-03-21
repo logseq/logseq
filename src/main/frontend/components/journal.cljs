@@ -70,7 +70,6 @@
   (let [;; Don't edit the journal title
         page (string/lower-case title)
         repo (state/sub :git/current-repo)
-        encoded-page-name (util/encode-str page)
         today? (= (string/lower-case title)
                   (string/lower-case (date/journal-name)))
         intro? (and (not (state/logged?))

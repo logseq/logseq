@@ -20,6 +20,9 @@
     (for [d (d/datoms db :eavt)]
       #js [(:e d) (name (:a d)) (:v d)]))))
 
+(defn db->edn-str [db]
+  (pr-str db))
+
 (defn string->db [s]
   (dt/read-transit-str s))
 

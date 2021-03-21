@@ -48,7 +48,8 @@
             [lambdaisland.glogi :as log]
             [frontend.context.i18n :as i18n]
             [frontend.template :as template]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [frontend.search :as search]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -638,7 +639,7 @@
           [:span.warning {:title "Invalid link"} full_text]
 
           ;; image
-          (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) s)) img-formats)
+          (text/image-link? img-formats s)
           (image-link config url s label metadata full_text)
 
           (= \# (first s))
@@ -676,7 +677,7 @@
             (block-reference config (:link (second url)))
 
             (= protocol "file")
-            (if (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
+            (if (text/image-link? img-formats href)
               (image-link config url href label metadata full_text)
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
@@ -701,7 +702,7 @@
                    (map-inline config label)))))
 
             ;; image
-            (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt)) href)) img-formats)
+            (text/image-link? img-formats href)
             (image-link config url href label metadata full_text)
 
             :else
@@ -803,7 +804,7 @@
                   [:iframe
                    {:allow-full-screen "allowfullscreen"
                     :allow
-                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
                     :frame-border "0"
                     :src (str "https://www.youtube.com/embed/" youtube-id)
                     :height height
@@ -820,7 +821,7 @@
                   [:iframe
                    {:allow-full-screen "allowfullscreen"
                     :allow
-                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
                     :frame-border "0"
                     :src (str "https://player.vimeo.com/video/" vimeo-id)
                     :height height
@@ -889,13 +890,50 @@
                                    (get name))
                                (get (state/get-macros) name)
                                (get (state/get-macros) (keyword name)))
-                macro-content (if (and (seq arguments) macro-content)
+                macro-content (cond
+                                (= (str name) "img")
+                                (case (count arguments)
+                                  1
+                                  (util/format "[:img {:src \"%s\"}]" (first arguments))
+                                  4
+                                  (if (and (util/safe-parse-int (nth arguments 1))
+                                           (util/safe-parse-int (nth arguments 2)))
+                                    (util/format "[:img.%s {:src \"%s\" :style {:width %s :height %s}}]"
+                                                 (nth arguments 3)
+                                                 (first arguments)
+                                                 (util/safe-parse-int (nth arguments 1))
+                                                 (util/safe-parse-int (nth arguments 2))))
+                                  3
+                                  (if (and (util/safe-parse-int (nth arguments 1))
+                                           (util/safe-parse-int (nth arguments 2)))
+                                    (util/format "[:img {:src \"%s\" :style {:width %s :height %s}}]"
+                                                 (first arguments)
+                                                 (util/safe-parse-int (nth arguments 1))
+                                                 (util/safe-parse-int (nth arguments 2))))
+
+                                  2
+                                  (cond
+                                    (and (util/safe-parse-int (nth arguments 1)))
+                                    (util/format "[:img {:src \"%s\" :style {:width %s}}]"
+                                                 (first arguments)
+                                                 (util/safe-parse-int (nth arguments 1)))
+                                    (contains? #{"left" "right" "center"} (string/lower-case (nth arguments 1)))
+                                    (util/format "[:img.%s {:src \"%s\"}]"
+                                                 (string/lower-case (nth arguments 1))
+                                                 (first arguments))
+                                    :else
+                                    macro-content)
+
+                                  macro-content)
+
+                                (and (seq arguments) macro-content)
                                 (block/macro-subs macro-content arguments)
+
+                                :else
                                 macro-content)
                 macro-content (when macro-content
                                 (template/resolve-dynamic-template! macro-content))]
             (render-macro config name arguments macro-content format))
-
           (when-let [macro-txt (macro->text name arguments)]
             (let [macro-txt (when macro-txt
                               (template/resolve-dynamic-template! macro-txt))
@@ -1747,7 +1785,15 @@
   [state]
   (let [[config query] (:rum/args state)
         query-atom (if (:dsl-query? config)
-                     (query-dsl/query (state/get-current-repo) (:query query))
+                     (let [result (query-dsl/query (state/get-current-repo) (:query query))]
+                       (if (string? result) ; full-text search
+                         (atom
+                          (if (string/blank? result)
+                            []
+                            (let [blocks (search/block-search result 50)]
+                              (when (seq blocks)
+                                (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))))))
+                         result))
                      (db/custom-query query))]
     (assoc state :query-atom query-atom)))
 
@@ -2041,6 +2087,7 @@
                      (fn [acc block]
                        (let [block (dissoc block :block/meta)
                              level (:block/level block)
+                             config (assoc config :block/uuid (:block/uuid block))
                              block-cp (if build-block-fn
                                         (build-block-fn config block)
                                         (rum/with-key

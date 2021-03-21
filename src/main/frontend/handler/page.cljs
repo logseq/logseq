@@ -36,9 +36,11 @@
 
 (defn- get-file-name
   [journal? title]
-  (if journal?
-    (date/journal-title->default title)
-    (util/page-name-sanity (string/lower-case title))))
+  (when-let [s (if journal?
+            (date/journal-title->default title)
+            (util/page-name-sanity (string/lower-case title)))]
+    ;; Win10 file path has a length limit of 260 chars
+    (util/safe-subs s 0 200)))
 
 (defn create!
   ([title]
@@ -100,7 +102,9 @@
             file (db/entity (:db/id (:block/file page)))
             file-path (:file/path file)
             file-content (db/get-file file-path)
-            after-content (subs file-content (inc (count properties-content)))
+            after-content (if (empty? properties-content)
+                            file-content
+                            (subs file-content (inc (count properties-content))))
             new-properties-content (db/add-properties! page-format properties-content properties)
             full-content (str new-properties-content "\n\n" (string/trim after-content))]
         (file-handler/alter-file (state/get-current-repo)
@@ -430,27 +434,27 @@
 
 (defn get-page-ref-text
   [page]
-  (when-let [edit-block (state/get-edit-block)]
-    (let [page-name (string/lower-case page)
-          edit-block-file-path (-> (:db/id (:block/file edit-block))
-                                   (db/entity)
-                                   :file/path)]
-      (if (and edit-block-file-path
-               (state/org-mode-file-link? (state/get-current-repo)))
-        (if-let [ref-file-path (:file/path (:block/file (db/entity [:block/name page-name])))]
+  (let [edit-block-file-path (some-> (state/get-edit-block)
+                                     (get-in [:block/file :db/id])
+                                     db/entity
+                                     :file/path)
+        page-name (string/lower-case page)]
+    (if (and edit-block-file-path
+             (state/org-mode-file-link? (state/get-current-repo)))
+      (if-let [ref-file-path (:file/path (:file/file (db/entity [:file/name page-name])))]
+        (util/format "[[file:%s][%s]]"
+                     (util/get-relative-path edit-block-file-path ref-file-path)
+                     page)
+        (let [journal? (date/valid-journal-title? page)
+              ref-file-path (str (get-directory journal?)
+                                 "/"
+                                 (get-file-name journal? page)
+                                 ".org")]
+          (create! page {:redirect? false})
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
-                       page)
-          (let [journal? (date/valid-journal-title? page)
-                ref-file-path (str (get-directory journal?)
-                                   "/"
-                                   (get-file-name journal? page)
-                                   ".org")]
-            (create! page {:redirect? false})
-            (util/format "[[file:%s][%s]]"
-                         (util/get-relative-path edit-block-file-path ref-file-path)
-                         page)))
-        (util/format "[[%s]]" page)))))
+                       page)))
+      (util/format "[[%s]]" page))))
 
 (defn init-commands!
   []

@@ -321,6 +321,10 @@
     38 (editor-handler/keydown-up-down-handler input true)
     ;; down
     40 (editor-handler/keydown-up-down-handler input false)
+    ;; left
+    37 (editor-handler/keydown-arrow-handler input :left)
+    ;; right
+    39 (editor-handler/keydown-arrow-handler input :right)
     ;; backspace
     8 (editor-handler/keydown-backspace-handler repo input input-id)
     ;; tab

@@ -60,11 +60,11 @@
                (and (vector? block)
                     (= "Macro" (first block)))
                (let [{:keys [name arguments]} (second block)]
-                 (when (and (= name "embed")
-                            (string? (first arguments))
-                            (string/starts-with? (first arguments) "[[")
-                            (string/ends-with? (first arguments) "]]"))
-                   (subs (first arguments) 2 (- (count (first arguments)) 2))))
+                 (let [argument (string/join ", " arguments)]
+                   (when (and (= name "embed")
+                              (string? argument)
+                              (text/page-ref? argument))
+                     (text/page-ref-un-brackets! argument))))
                :else
                nil)]
     (when (and
@@ -234,8 +234,15 @@
            (swap! ref-pages conj tag)))
        form)
      (concat title body))
-    (let [ref-pages (remove string/blank? @ref-pages)]
-      (assoc block :ref-pages (vec ref-pages)))))
+    (let [ref-pages (remove string/blank? @ref-pages)
+          children-pages (->> (mapcat (fn [p]
+                                        (if (string/includes? p "/")
+                                          ;; Don't create the last page for now
+                                          (butlast (string/split p #"/"))))
+                                      ref-pages)
+                              (remove string/blank?))
+          ref-pages (distinct (concat ref-pages children-pages))]
+      (assoc block :ref-pages ref-pages))))
 
 (defn with-block-refs
   [{:keys [title body] :as block}]
