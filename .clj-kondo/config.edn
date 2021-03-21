@@ -1,0 +1,9 @@
+{:linters {:unresolved-symbol {:exclude [goog.DEBUG]}}
+ :hooks {:analyze-call {rum.core/defc hooks.rum/defc
+                        rum.core/defcs hooks.rum/defcs}}
+ :lint-as {promesa.core/let clojure.core/let
+           garden.def/defstyles clojure.core/def
+           garden.def/defkeyframes clojure.core/def
+           rum.core/defcc rum.core/defc
+           clojure.test.check.clojure-test/defspec clojure.core/def
+           clojure.test.check.properties/for-all clojure.core/for}}
