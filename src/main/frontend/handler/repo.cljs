@@ -371,7 +371,6 @@
          (state/set-state! :editor/last-edit-block {:block edit-block
                                                     :idx idx
                                                     :container (gobj/get container "id")})))
-
      ;; try catch so that if db transaction failed, it'll not write to the files
      (try
        (do

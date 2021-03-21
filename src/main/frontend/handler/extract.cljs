@@ -46,8 +46,7 @@
                                            :block/file [:file/path file]
                                            :block/format format
                                            :block/page [:block/name (string/lower-case page)]
-                                           :block/refs (mapv
-                                                             (fn [page]
+                                           :block/refs (mapv (fn [page]
                                                                (block/page-name->map page))
                                                              block-ref-pages)
                                            :block/path-refs block-path-ref-pages))))

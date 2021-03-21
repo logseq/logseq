@@ -273,7 +273,7 @@
                                    (db/transact! repo [{:block/name page-name
                                                         :block/original-name path-page-name}])
                                    (db/entity repo [:block/name page-name])))
-              properties (:block/properties page)
+              {:keys [title] :as properties} (:block/properties page)
               page-name (:block/name page)
               page-original-name (:block/original-name page)
               file (:block/file page)

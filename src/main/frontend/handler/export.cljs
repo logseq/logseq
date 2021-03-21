@@ -131,8 +131,8 @@
                [page-or-block]
                (db/get-page-blocks
                 repo page-or-block {:use-cache? false
-                                    :pull-keys '[:block/ref-pages :block/ref-blocks]}))
-             (filterv #(or (:block/ref-blocks %) (:block/ref-pages %)))
+                                    :pull-keys '[:block/refs]}))
+             (filterv :block/refs)
              (mapv (fn [b] [(:block/ref-blocks b), (:block/ref-pages b)]))
              (apply mapv vector)
              (mapv #(vec (distinct (flatten (remove nil? %))))))

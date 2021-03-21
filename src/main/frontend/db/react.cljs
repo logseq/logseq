@@ -233,16 +233,16 @@
 
                              (when current-page-id
                                [[:page/ref-pages current-page-id]
-                                [:page/refed-blocks current-page-id]
+                                [:block/refed-blocks current-page-id]
                                 [:page/mentioned-pages current-page-id]])
 
                              ;; refed-pages
                              (apply concat
-                                    (for [{:block/keys [ref-pages]} blocks]
+                                    (for [{:block/keys [refs]} blocks]
                                       (map (fn [page]
                                              (when-let [page (db-utils/entity [:block/name (:block/name page)])]
-                                               [:page/refed-blocks (:db/id page)]))
-                                           ref-pages)))
+                                               [:block/refed-blocks (:db/id page)]))
+                                        refs)))
 
                              ;; refed-blocks
                              (apply concat
@@ -253,7 +253,7 @@
                             (distinct))
               refed-pages (map
                            (fn [[k page-id]]
-                             (if (= k :page/refed-blocks)
+                             (if (= k :block/refed-blocks)
                                [:page/ref-pages page-id]))
                            handler-keys)
               custom-queries (some->>

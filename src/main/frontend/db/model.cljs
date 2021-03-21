@@ -964,7 +964,7 @@
                                           [(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
                                            [?block :block/refs ?ref-page]
                                            [(contains? ?pages ?ref-page)]]]]
-                              (react/q repo [:page/refed-blocks page-id] {}
+                              (react/q repo [:block/refed-blocks page-id] {}
                                        '[:find (pull ?block [*])
                                          :in $ % ?pages ?aliases
                                          :where
@@ -972,7 +972,7 @@
                                        rules
                                        pages
                                        aliases))
-                            (react/q repo [:page/refed-blocks page-id] {}
+                            (react/q repo [:block/refed-blocks page-id] {}
                                      '[:find (pull ?block [*])
                                        :in $ ?pages
                                        :where
