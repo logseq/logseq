@@ -178,11 +178,17 @@
         (db/pull-many repo '[*] block-ids)
         pages-name-and-content
         (->> page-ids
-             (d/q '[:find ?n (pull ?p [:file/path])
+             (d/q '[:find ?n ?n2 (pull ?p [:file/path])
                     :in $ [?e ...]
                     :where
                     [?e :page/file ?p]
-                    [?e :page/name ?n]] (db/get-conn repo))
+                    [?e :page/name ?n]
+                    [?e :page/original-name ?n2]] (db/get-conn repo))
+             (mapv (fn [[name origin-name file-path]]
+                    (if (= name origin-name)
+                      [[name file-path]]
+                      [[name file-path] [origin-name file-path]])))
+             (apply concat)
              (mapv (fn [[page-name file-path]] [page-name (:file/path file-path)]))
              (d/q '[:find ?n ?c
                     :in $ [[?n ?p] ...]
