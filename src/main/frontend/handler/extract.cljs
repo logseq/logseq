@@ -111,12 +111,8 @@
                   (fn [page]
                     {:block/original-name page
                      :block/name (string/lower-case page)})
-                  @ref-tags)
-                 (map
-                  (fn [page]
-                    {:block/original-name page
-                     :block/name (string/lower-case page)})
-                  @ref-pages))
+                   (concat @ref-tags @ref-pages)))
+          pages (util/distinct-by :block/name pages)
           block-ids (mapv (fn [block]
                             {:block/uuid (:block/uuid block)})
                           (remove nil? blocks))]
