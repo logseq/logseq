@@ -70,10 +70,6 @@
                      :me/email email
                      :me/avatar avatar}))
 
-(defn create-outliner-db [] (d/create-conn db-schema/outline-schema))
-(def outliner-db (create-outliner-db))
-(defn get-outliner-conn [] outliner-db)
-
 (defn start!
   ([me repo]
    (start! me repo {}))
