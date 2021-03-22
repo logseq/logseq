@@ -1219,8 +1219,8 @@
         (common-handler/copy-to-clipboard-without-id-property! content)))))
 
 (defn cut-selection-blocks
-  []
-  (copy-selection-blocks)
+  [copy?]
+  (when copy? (copy-selection-blocks))
   (when-let [blocks (seq (get-selected-blocks-with-children))]
     (let [repo (dom/attr (first blocks) "repo")
           ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
