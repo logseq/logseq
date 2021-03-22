@@ -237,31 +237,31 @@
         m))))
 
 (defn with-page-refs
-  [{:keys [title body tags ref-pages] :as block}]
-  (let [ref-pages (->> (concat tags ref-pages)
-                       (remove string/blank?)
-                       (distinct))
-        ref-pages (atom ref-pages)]
+  [{:keys [title body tags refs] :as block}]
+  (let [refs (->> (concat tags refs)
+                  (remove string/blank?)
+                  (distinct))
+        refs (atom refs)]
     (walk/postwalk
      (fn [form]
        (when-let [page (get-page-reference form)]
-         (swap! ref-pages conj page))
+         (swap! refs conj page))
        (when-let [tag (get-tag form)]
          (when (util/tag-valid? tag)
-           (swap! ref-pages conj tag)))
+           (swap! refs conj tag)))
        form)
      (concat title body))
-    (let [ref-pages (remove string/blank? @ref-pages)
+    (let [refs (remove string/blank? @refs)
           children-pages (->> (mapcat (fn [p]
                                         (if (string/includes? p "/")
                                           ;; Don't create the last page for now
                                           (butlast (string/split p #"/"))))
-                                      ref-pages)
+                                      refs)
                               (remove string/blank?))
-          ref-pages (->> (distinct (concat ref-pages children-pages))
+          refs (->> (distinct (concat refs children-pages))
                          (remove nil?))
-          ref-pages (map page-name->map ref-pages)]
-      (assoc block :refs ref-pages))))
+          refs (map page-name->map refs)]
+      (assoc block :refs refs))))
 
 (defn with-block-refs
   [{:keys [title body] :as block}]
@@ -396,7 +396,8 @@
                                  (when (util/uuid-string? custom-id)
                                    (uuid custom-id))))
                              (db/new-block-id))
-                      ref-pages-in-properties (:page-refs properties)
+                      ref-pages-in-properties (->> (:page-refs properties)
+                                                   (remove string/blank?))
                       block (second block)
                       level (:level block)
                       [children current-block-children]
@@ -417,7 +418,7 @@
                                        :uuid id
                                        :body (vec (reverse block-body))
                                        :properties (:properties properties)
-                                       :ref-pages ref-pages-in-properties
+                                       :refs ref-pages-in-properties
                                        :children (or current-block-children []))
                                 (assoc-in [:meta :start-pos] start_pos)
                                 (assoc-in [:meta :end-pos] last-pos))
