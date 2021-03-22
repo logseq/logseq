@@ -1,5 +1,6 @@
 (ns frontend.db.outliner
-  (:require [datascript.core :as d]))
+  (:require [datascript.core :as d]
+            [frontend.db.react :as react]))
 
 (defn get-by-id
   [conn id]
@@ -12,17 +13,16 @@
                  :where
                  [?a :block/left-id ?l]
                  [?a :block/parent-id ?p]]
-               @conn parent-id left-id)]
+            @conn parent-id left-id)]
     (ffirst r)))
 
-(defn get-by-parent-id
-  [conn id]
-  (let [r (d/q '[:find (pull ?a [*])
-                 :in $ ?id
-                 :where
-                 [?a :block/parent-id ?id]]
-               @conn id)]
-    (flatten r)))
+;; key [:block/children parent-id]
+
+(def get-by-parent-id
+  '[:find (pull ?a [*])
+    :in $ ?id
+    :where
+    [?a :block/parent-id ?id]])
 
 (defn save-block
   [conn block-m]

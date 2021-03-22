@@ -1,6 +1,6 @@
 (ns frontend.modules.outliner.generator
   (:require [nano-id.core :as nano]
-            [frontend.modules.outliner.tree-test :as tt]
+            [frontend.modules.outliner.core-test :as tt]
             [frontend.db.conn :as conn]
             [frontend.modules.outliner.tree :as tree]
             [datascript.core :as d]))
