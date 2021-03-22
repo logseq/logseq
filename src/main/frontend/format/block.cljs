@@ -339,11 +339,19 @@
                 [path-refs (conj parents block)]))
             path-ref-pages (->> path-refs
                                 (concat (:block/refs block))
+                                (map (fn [ref]
+                                       (cond
+                                         (map? ref)
+                                         (:block/name ref)
+
+                                         :else
+                                         ref)))
                                 (remove string/blank?)
-                                (map string/lower-case)
-                                (distinct)
-                                (map (fn [p]
-                                       {:block/name p})))]
+                                (map (fn [ref]
+                                       (if (string? ref)
+                                         {:block/name (string/lower-case ref)}
+                                         ref)))
+                                (distinct))]
         (recur (rest blocks)
                (conj acc (assoc block :block/path-refs path-ref-pages))
                parents)))))
