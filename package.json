@@ -81,6 +81,7 @@
         "react-textarea-autosize": "^8.0.1",
         "react-transition-group": "^4.3.0",
         "url": "^0.11.0",
-        "yargs-parser": "^20.2.4"
+        "yargs-parser": "^20.2.4",
+        "is-svg": "4.2.2"
     }
 }
