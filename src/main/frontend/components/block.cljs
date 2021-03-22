@@ -572,19 +572,21 @@
     ["Subscript" l]
     (->elem :sub (map-inline config l))
     ["Tag" s]
-    [:a.tag {:data-ref s
-             :href (rfe/href :page {:name s})
-             :on-click (fn [e]
-                         (let [repo (state/get-current-repo)
-                               page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
-                           (when (gobj/get e "shiftKey")
-                             (state/sidebar-add-block!
-                              repo
-                              (:db/id page)
-                              :page
-                              {:page page})
-                             (.preventDefault e))))}
-     (str "#" s)]
+    (when s
+      (let [s (text/page-ref-un-brackets! s)]
+        [:a.tag {:data-ref s
+                 :href (rfe/href :page {:name s})
+                 :on-click (fn [e]
+                             (let [repo (state/get-current-repo)
+                                   page (db/pull repo '[*] [:page/name (string/lower-case (util/url-decode s))])]
+                               (when (gobj/get e "shiftKey")
+                                 (state/sidebar-add-block!
+                                  repo
+                                  (:db/id page)
+                                  :page
+                                  {:page page})
+                                 (.preventDefault e))))}
+         (str "#" s)]))
     ["Emphasis" [[kind] data]]
     (let [elem (case kind
                  "Bold" :b
