@@ -250,6 +250,11 @@
 
      (get-in @state [:me :preferred_format] "markdown")))))
 
+(defn markdown?
+  []
+  (= (keyword (get-preferred-format))
+     :markdown))
+
 (defn get-pages-directory
   []
   (or
