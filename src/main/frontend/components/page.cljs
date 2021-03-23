@@ -16,6 +16,7 @@
             [frontend.components.editor :as editor]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
+            [frontend.components.export :as export]
             [frontend.extensions.graph-2d :as graph-2d]
             [frontend.ui :as ui]
             [frontend.components.content :as content]
@@ -312,6 +313,10 @@
                             (when-not contents?
                               {:title (t :page/delete)
                                :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+
+                            (when (state/get-current-page)
+                              {:title (t :export)
+                               :options {:on-click #(state/set-modal! export/export-page)}})
 
                             (when (util/electron?)
                               {:title  (t (if public? :page/make-private :page/make-public))
