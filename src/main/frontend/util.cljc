@@ -16,12 +16,12 @@
       #?(:cljs [goog.string.format])
       #?(:cljs [goog.userAgent])
       #?(:cljs [rum.core])
+      #?(:cljs [frontend.react-impls :as react-impls])
       [clojure.string :as string]
       [clojure.pprint :refer [pprint]]
       [clojure.walk :as walk]
       [frontend.regex :as regex]
-      [promesa.core :as p]
-      [frontend.react-impls :as react-impls]))
+      [promesa.core :as p]))
 
 #?(:cljs (goog-define NODETEST false)
    :clj (def NODETEST false))
