@@ -4,7 +4,6 @@
             [frontend.db.conn :as conn]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.state :as outliner-state]
-            [nano-id.core :as nano]
             [frontend.state :as state]))
 
 (defrecord Block [data])
@@ -20,10 +19,6 @@
     (when r (->Block r))))
 
 (def block-id-size 9)
-
-(defn gen-block-id
-  []
-  (nano/nano-id block-id-size))
 
 (defn- get-by-parent-&-left
   [parent-id left-id]
