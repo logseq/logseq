@@ -46,7 +46,8 @@
            :test
            {:extra-paths ["src/test/"]
             :extra-deps  {org.clojure/clojurescript {:mvn/version "1.10.764"}
-                          org.clojure/test.check {:mvn/version "RELEASE"}}
+                          org.clojure/test.check {:mvn/version "RELEASE"}
+                          org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
             :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            :test-clj
