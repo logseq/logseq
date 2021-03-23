@@ -271,6 +271,7 @@
       @conn)
      (into {}))))
 
+
 (defn get-files-full
   [repo]
   (when-let [conn (conn/get-files-conn repo)]
@@ -705,8 +706,10 @@
 
 (defn get-page-file
   [page-name]
-  (some-> (db-utils/entity [:page/name page-name])
+  (some-> (or (db-utils/entity [:page/name page-name])
+              (db-utils/entity [:page/original-name page-name]))
           :page/file))
+
 
 (defn get-block-file
   [block-id]

@@ -28,3 +28,17 @@
        [:a#download-as-html.hidden]
        [:a#download-as-zip.hidden]
        [:a#export-as-markdown.hidden]])))
+
+
+(rum/defc export-page
+  []
+  (when-let [current-repo (state/get-current-repo)]
+    (when-let [page (state/get-current-page)]
+      (rum/with-context [[t] i18n/*tongue-context*]
+        [:div.export.w-96
+         [:h1.title "Export"]
+         [:ul.mr-1
+          [:li.mb-4
+           [:a.font-medium {:on-click #(export/export-page-as-markdown! page)}
+            (t :export-markdown)]]]
+         [:a#export-page-as-markdown.hidden]]))))
