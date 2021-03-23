@@ -27,7 +27,7 @@
   [repo-url format ast properties file content utf8-content journal? pages-fn]
   (try
     (let [now (tc/to-long (t/now))
-          blocks (block/extract-blocks ast (utf8/length utf8-content) utf8-content)
+          blocks (block/extract-blocks ast (utf8/length utf8-content) utf8-content false)
           pages (pages-fn blocks ast)
           ref-pages (atom #{})
           ref-tags (atom #{})
@@ -114,8 +114,10 @@
           pages (util/distinct-by :block/name pages)
           block-ids (mapv (fn [block]
                             {:block/uuid (:block/uuid block)})
-                          (remove nil? blocks))]
-      [(remove nil? pages)
+                          (remove nil? blocks))
+          pages (remove nil? pages)
+          pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)]
+      [pages
        block-ids
        (remove nil? blocks)])
     (catch js/Error e
@@ -155,9 +157,8 @@
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
+              pages (util/distinct-by :block/name pages)
               block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
-              ;; To prevent "unique constraint" on datascript
-              pages-index (map #(select-keys % [:block/name]) pages)
               blocks (map (fn [b]
                             (update b :block/refs #(set/intersection (set %) block-ids-set))) blocks)]
-          (apply concat [pages-index pages block-ids blocks]))))))
+          (apply concat [pages block-ids blocks]))))))

@@ -28,6 +28,7 @@
 
    :recent/pages {}
 
+   :block/type {}
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent-id {:db/valueType :db.type/ref}
    :block/left-id {:db/valueType :db.type/ref}

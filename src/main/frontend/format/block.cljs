@@ -220,16 +220,16 @@
     (apply merge m)))
 
 (defn- page-name->map
-  [original-page-name]
+  [original-page-name with-id?]
   (when original-page-name
     (let [page-name (string/lower-case original-page-name)
-          id-m (if-let [block (db/entity [:block/name page-name])]
-                 {}
-                 {:block/uuid (db/new-block-id)})
           m (merge
              {:block/name page-name
               :block/original-name original-page-name}
-             id-m)]
+             (when with-id?
+               (if-let [block (db/entity [:block/name page-name])]
+                 {}
+                 {:block/uuid (db/new-block-id)})))]
       (if-let [d (date/journal-title->int page-name)]
         (merge m
                {:block/journal? true
@@ -237,7 +237,7 @@
         m))))
 
 (defn with-page-refs
-  [{:keys [title body tags refs] :as block}]
+  [{:keys [title body tags refs] :as block} with-id?]
   (let [refs (->> (concat tags refs)
                   (remove string/blank?)
                   (distinct))
@@ -260,7 +260,7 @@
                               (remove string/blank?))
           refs (->> (distinct (concat refs children-pages))
                          (remove nil?))
-          refs (map page-name->map refs)]
+          refs (map (fn [ref] (page-name->map ref with-id?)) refs)]
       (assoc block :refs refs))))
 
 (defn with-block-refs
@@ -272,7 +272,8 @@
          (swap! ref-blocks conj block))
        form)
      (concat title body))
-    (let [ref-blocks (remove string/blank? @ref-blocks)
+    (let [ref-blocks (->> @ref-blocks
+                          (filter util/uuid-string?))
           ref-blocks (map
                        (fn [id]
                          [:block/uuid (medley/uuid id)])
@@ -365,7 +366,7 @@
     block))
 
 (defn extract-blocks
-  [blocks last-pos encoded-content]
+  [blocks last-pos encoded-content with-id?]
   (let [blocks
         (loop [headings []
                block-body []
@@ -427,7 +428,7 @@
                               (merge block (timestamps->scheduled-and-deadline timestamps))
                               block)
                       block (-> block
-                                with-page-refs
+                                (with-page-refs with-id?)
                                 with-block-refs
                                 block-tags->pages
                                 update-src-pos-meta!)
@@ -466,13 +467,14 @@
 (defn parse-block
   ([block format]
    (parse-block block format nil))
-  ([{:block/keys [uuid content meta file page pre-block?] :as block} format ast]
+  ([{:block/keys [uuid content meta file page pre-block?] :as block} format {:keys [with-id?]
+                                                                             :or {with-id? true}}]
    (when-not (string/blank? content)
-     (let [ast (or ast (format/to-edn content format nil))
+     (let [ast (format/to-edn content format nil)
            start-pos (:start-pos meta)
            encoded-content (utf8/encode content)
            content-length (utf8/length encoded-content)
-           blocks (extract-blocks ast content-length encoded-content)
+           blocks (extract-blocks ast content-length encoded-content with-id?)
            ref-pages-atom (atom [])
            parent-ref-pages (->> (db/get-block-parent (state/get-current-repo) uuid)
                                  :block/path-refs
