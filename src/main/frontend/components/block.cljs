@@ -735,6 +735,12 @@
      (-> (safe-read-string s)
          (security/remove-javascript-links-in-href)))
 
+    ["Inline_Html" s]
+    (when (not html-export?)
+      ;; TODO: how to remove span and only export the content of `s`?
+      [:span {:dangerouslySetInnerHTML
+              {:__html s}}])
+
     ["Break_Line"]
     [:br]
     ["Hard_Break_Line"]
