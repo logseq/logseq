@@ -1165,6 +1165,8 @@
      []
      (contains? (set (system-locales)) "zh-CN")))
 
+(defn keyname [key] (str (namespace key) "/" (name key)))
+
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
      "../pages/grant_ideas.org")

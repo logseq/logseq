@@ -3,7 +3,7 @@
             [goog.dom :as dom]
             [goog.object :as gobj]
             [frontend.keyboard :as keyboard]
-            [frontend.util :refer-macros [profile]])
+            [frontend.util :refer-macros [profile] :refer [keyname]])
   (:import [goog.events EventHandler]))
 
 (defn detach
@@ -163,6 +163,19 @@
   {:will-mount (fn [state]
                  (handler (:rum/args state))
                  state)})
+
+(defn shortcuts
+  [listener dispatcher]
+  {:did-mount
+   (fn [state]
+     (assoc state (keyname listener)
+            (keyboard/install-shortcuts! state dispatcher)))
+   :will-unmount
+   (fn [state]
+     (let [k (keyname listener)]
+       (when-let [f (get state k)]
+         (f))
+       (dissoc state k)))})
 
 (defn keyboard-mixin
   "Triggers f when key is pressed while the component is mounted.

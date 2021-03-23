@@ -1,5 +1,7 @@
 (ns frontend.keyboard
   (:require [goog.events :as events]
+            [lambdaisland.glogi :as log]
+            [frontend.util :refer [keyname]]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType])
   (:import  [goog.ui KeyboardShortcutHandler]))
 
@@ -29,3 +31,37 @@
        (fn []
          (.unregisterShortcut handler key)
          (unlisten-fn))))))
+
+(defn shortcut-binding [id]
+  (get
+   {:auto-complete/prev "alt+p"
+    :auto-complete/next "alt+n"
+    :auto-complete/complete "alt+a"
+    :test/test "alt+g"}
+   id))
+
+
+(comment
+  ; dispatcher example
+  (def dispatcher {:test/test (fn [_ e] (println "trigger test"))})
+  (def f (install-shortcuts! nil dispatcher)))
+
+(defn install-shortcuts!
+  [state dispatcher]
+  (let [handler (new KeyboardShortcutHandler js/window)]
+
+    ;; register shortcuts
+    (doseq [[id _] dispatcher]
+      (log/info :keyboard/install-shortcut {:id id :shortcut (shortcut-binding id)})
+      (.registerShortcut handler (keyname id) (shortcut-binding id)))
+
+    (let [f (fn [e]
+              (let [dispatch-fn (get dispatcher (keyword (.-identifier e)))]
+                (dispatch-fn state e)))
+          unlisten-fn (fn [] (.dispose handler))]
+
+      (events/listen handler EventType/SHORTCUT_TRIGGERED f)
+
+      (fn []
+        (.unregisterShortcut handler key)
+        (unlisten-fn)))))
