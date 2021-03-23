@@ -180,12 +180,30 @@
    (create-contents-file repo-url)
    (create-custom-theme repo-url)))
 
+(defn- remove-non-exists-refs!
+  [data]
+  (let [block-ids (->> (map :block/uuid data)
+                       (remove nil?)
+                       (set))
+        keep-block-ref-f (fn [refs]
+                           (filter (fn [ref]
+                                     (if (and (vector? ref)
+                                              (= :block/uuid (first ref)))
+                                       (contains? block-ids (second ref))
+                                       ref)) refs))]
+    (map (fn [item]
+           (if (and (map? item)
+                    (:block/uuid item))
+             (update item :block/refs keep-block-ref-f)
+             item)) data)))
+
 (defn- reset-contents-and-blocks!
   [repo-url files blocks-pages delete-files delete-blocks]
   (db/transact-files-db! repo-url files)
   (let [files (map #(select-keys % [:file/path :file/last-modified-at]) files)
         all-data (-> (concat delete-files delete-blocks files blocks-pages)
-                     (util/remove-nils))]
+                     (util/remove-nils)
+                     (remove-non-exists-refs!))]
     (db/transact! repo-url all-data)))
 
 (defn- parse-files-and-create-default-files-inner!

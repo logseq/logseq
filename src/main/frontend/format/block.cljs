@@ -351,6 +351,7 @@
                                        (if (string? ref)
                                          {:block/name (string/lower-case ref)}
                                          ref)))
+                                (remove vector?)
                                 (distinct))]
         (recur (rest blocks)
                (conj acc (assoc block :block/path-refs path-ref-pages))
