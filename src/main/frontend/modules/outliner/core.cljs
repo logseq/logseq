@@ -30,8 +30,8 @@
   (some->
     (db-outliner/get-by-parent-&-left
       (conn/get-conn false)
-      [:block/id parent-id]
-      [:block/id left-id])
+      [:block/uuid parent-id]
+      [:block/uuid left-id])
     (block)))
 
 (defn- index-blocks-by-left-id
@@ -52,7 +52,7 @@
   [id]
   (let [repo (state/get-current-repo)]
    (some->>
-     (outliner-state/get-by-parent-id repo [:block/id id])
+     (outliner-state/get-by-parent-id repo [:block/uuid id])
      (mapv block))))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
@@ -61,7 +61,7 @@
 (extend-type Block
   tree/INode
   (-get-id [this]
-    (when-let [block-id (get-in this [:data :block/id])]
+    (when-let [block-id (get-in this [:data :block/uuid])]
       block-id))
 
   (-get-parent-id [this]
@@ -70,7 +70,7 @@
 
   (-set-parent-id [this parent-id]
     (outliner-u/check-block-id parent-id)
-    (update this :data assoc :block/parent-id [:block/id parent-id]))
+    (update this :data assoc :block/parent-id [:block/uuid parent-id]))
 
   (-get-left-id [this]
     (-> (get-in this [:data :block/left-id])
@@ -78,7 +78,7 @@
 
   (-set-left-id [this left-id]
     (outliner-u/check-block-id left-id)
-    (update this :data assoc :block/left-id [:block/id left-id]))
+    (update this :data assoc :block/left-id [:block/uuid left-id]))
 
   (-get-parent [this]
     (when-let [parent-id (tree/-get-parent-id this)]
@@ -106,7 +106,7 @@
   (-del [this]
     (let [conn (conn/get-conn false)
           block-id (tree/-get-id this)]
-      (db-outliner/del-block conn [:block/id block-id])))
+      (db-outliner/del-block conn [:block/uuid block-id])))
 
   (-get-children [this]
     (let [children (get-children (tree/-get-id this))
@@ -122,8 +122,8 @@
                       (count children)
                       (count sorted-children))]
                 (when-not should-equal
-                  (prn "children: " (mapv #(get-in % [:data :block/id]) children))
-                  (prn "sorted-children: " (mapv #(get-in % [:data :block/id]) sorted-children))
+                  (prn "children: " (mapv #(get-in % [:data :block/uuid]) children))
+                  (prn "sorted-children: " (mapv #(get-in % [:data :block/uuid]) sorted-children))
                   (throw (js/Error. "Number of children and sorted-children are not equal."))))
               sorted-children)))))))
 

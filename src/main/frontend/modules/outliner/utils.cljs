@@ -23,20 +23,20 @@
 
     (and
       (vector? id)
-      (= (first id) :block/id))
+      (= (first id) :block/uuid))
     (second id)
 
     (or (e/entity? id) (map? id))
     (let [conn (conn/get-conn false)]
       (-> (db-outliner/get-by-id conn (:db/id id))
-        (:block/id)))
+        (:block/uuid)))
 
     :else nil))
 
 (defn ->block-lookup-ref
   "
-  string? or number?  -> [:block/id x]
-  [:block/id x] -> [:block/id x]
+  string? or number?  -> [:block/uuid x]
+  [:block/uuid x] -> [:block/uuid x]
   {:db/id x} -> {:db/id x}
   :else -> nil
   "
@@ -44,11 +44,11 @@
   (cond
     (and
       (vector? id)
-      (= (first id) :block/id))
+      (= (first id) :block/uuid))
     id
 
     (block-id? id)
-    [:block/id id]
+    [:block/uuid id]
 
     (or (e/entity? id) (map? id))
     id

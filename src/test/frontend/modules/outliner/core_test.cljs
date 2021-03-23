@@ -18,7 +18,7 @@
   ([id]
    (build-block id nil nil))
   ([id parent-id left-id & [m]]
-   (let [m (->> (merge m {:block/id id
+   (let [m (->> (merge m {:block/uuid id
                           :block/parent-id
                           (outliner-u/->block-lookup-ref parent-id)
                           :block/left-id
@@ -72,7 +72,7 @@
   (build-db-records node-tree)
   (dotimes [i 18]
     (when-not (= i 0)
-      (prn (d/pull @(core-test/get-current-conn) '[*] [:block/id i])))))
+      (prn (d/pull @(core-test/get-current-conn) '[*] [:block/uuid i])))))
 
 (deftest test-insert-node-as-first-child
   "
@@ -95,7 +95,7 @@
     (outliner-core/insert-node-as-first-child new-node parent-node)
     (let [children-of-2 (->> (build-block 2 1 1)
                           (tree/-get-children)
-                          (mapv #(-> % :data :block/id)))]
+                          (mapv #(-> % :data :block/uuid)))]
       (is (= [18 3 6 9] children-of-2)))))
 
 (deftest test-insert-node-as-sibling
@@ -118,7 +118,7 @@
     (outliner-core/insert-node-as-sibling new-node left-node)
     (let [children-of-2 (->> (build-block 2 1 1)
                           (tree/-get-children)
-                          (mapv #(-> % :data :block/id)))]
+                          (mapv #(-> % :data :block/uuid)))]
       (is (= [3 6 18 9] children-of-2)))))
 
 (deftest test-delete-node
@@ -139,7 +139,7 @@
     (outliner-core/delete-node node)
     (let [children-of-2 (->> (build-block 2 1 1)
                           (tree/-get-children)
-                          (mapv #(-> % :data :block/id)))]
+                          (mapv #(-> % :data :block/uuid)))]
       (is (= [3 9] children-of-2)))))
 
 
@@ -163,10 +163,10 @@
     (outliner-core/move-subtree node new-parent new-left)
     (let [old-parent's-children (->> (build-block 2 1 1)
                                   (tree/-get-children)
-                                  (mapv #(-> % :data :block/id)))
+                                  (mapv #(-> % :data :block/uuid)))
           new-parent's-children (->> (build-block 12 1 2)
                                   (tree/-get-children)
-                                  (mapv #(-> % :data :block/id)))]
+                                  (mapv #(-> % :data :block/uuid)))]
       (is (= [6 9] old-parent's-children))
       (is (= [13 14 3 15] new-parent's-children)))))
 
