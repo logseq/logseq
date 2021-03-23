@@ -89,11 +89,11 @@
 
    ;; scheduled day
    :block/scheduled {}
-   :block/scheduled-ast {}
 
    ;; deadline day
    :block/deadline {}
-   :block/deadline-ast {}
+
+   ;; whether blocks is a repeated block (usually a task)
    :block/repeated? {}
 
    :block/created-at {}

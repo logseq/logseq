@@ -742,9 +742,10 @@
     [:br]
 
     ["Timestamp" ["Scheduled" t]]
-    (timestamp t "Scheduled")
+    nil
     ["Timestamp" ["Deadline" t]]
-    (timestamp t "Deadline")
+    nil
+
     ["Timestamp" ["Date" t]]
     (timestamp t "Date")
     ["Timestamp" ["Closed" t]]
@@ -1312,7 +1313,7 @@
           (datetime-comp/date-picker nil nil ts)]))]))
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid       (str uuid)
                ;; FIXME: Click to copy a selection instead of click first and then copy
@@ -1377,11 +1378,13 @@
       (when (and dragging? (not slide?) (not dummy?))
         (dnd-separator block 0 -4 false true))
 
-      (when (and deadline deadline-ast)
-        (timestamp-cp block "DEADLINE" deadline-ast))
+      (when deadline
+        (when-let [deadline-ast (block-handler/get-deadline-ast block)]
+          (timestamp-cp block "DEADLINE" deadline-ast)))
 
-      (when (and scheduled scheduled-ast)
-        (timestamp-cp block "SCHEDULED" scheduled-ast))
+      (when scheduled
+        (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
+          (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
       (when (and (seq properties)
                  (let [hidden? (text/properties-hidden? properties)]

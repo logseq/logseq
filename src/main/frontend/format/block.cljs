@@ -120,7 +120,7 @@
    (vector? block)
    (= "Hiccup" (first block))))
 
-(defn- timestamp-block?
+(defn timestamp-block?
   [block]
   (and
    (vector? block)
@@ -382,7 +382,7 @@
                 (paragraph-timestamp-block? block)
                 (let [timestamps (extract-timestamps block)
                       timestamps' (merge timestamps timestamps)
-                      other-body (->> (remove timestamp-block? (second block))
+                      other-body (->> (second block)
                                       (drop-while #(= ["Break_Line"] %)))]
                   (recur headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
 
@@ -462,8 +462,6 @@
                     blocks)
                    blocks)]
       (with-path-refs blocks))))
-
-
 
 (defn parse-block
   ([block format]

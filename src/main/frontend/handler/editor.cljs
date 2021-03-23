@@ -861,9 +861,11 @@
       :current-page (state/get-current-page)})))
 
 (defn update-timestamps-content!
-  [{:block/keys [repeated? scheduled-ast deadline-ast marker]} content]
+  [{:block/keys [repeated? marker] :as block} content]
   (if repeated?
-    (let [content (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
+    (let [scheduled-ast (block-handler/get-scheduled-ast block)
+          deadline-ast (block-handler/get-deadline-ast block)
+          content (some->> (filter repeated/repeated? [scheduled-ast deadline-ast])
                            (map (fn [ts]
                                   [(repeated/timestamp->text ts)
                                    (repeated/next-timestamp-text ts)]))
