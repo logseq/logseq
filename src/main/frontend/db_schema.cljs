@@ -32,6 +32,7 @@
    :block/parent-id {:db/valueType :db.type/ref}
    :block/left-id {:db/valueType :db.type/ref}
 
+   ;; :markdown, :org
    :block/format {}
 
    ;; mldoc parsed ast
@@ -51,24 +52,46 @@
    :block/tags {:db/valueType :db.type/ref
                 :db/cardinality :db.cardinality/many}
 
+   ;; for pages
    :block/alias {:db/valueType :db.type/ref
                  :db/cardinality :db.cardinality/many}
 
+   ;; full-text for current block
    :block/content {}
+
+   ;; todo keywords, e.g. "TODO", "DOING", "DONE"
    :block/marker {}
+
+   ;; "A", "B", "C"
    :block/priority {}
+
+   ;; 1, 2, 3, etc.
    :block/level {}
    ;; TODO: remove :block/meta, :start-pos :end-pos
    :block/meta {}
+
+   ;; block key value properties
    :block/properties {}
+
+   ;; parsed ast
    :block/body {}
+
+   ;; first block that's not a heading or unordered list
    :block/pre-block? {}
+
+   ;; whether block is collapsed
    :block/collapsed? {}
+
+   ;; block's children
    :block/children {:db/valueType :db.type/ref
                     :db/cardinality :db.cardinality/many
                     :db/unique :db.unique/identity}
+
+   ;; scheduled day
    :block/scheduled {}
    :block/scheduled-ast {}
+
+   ;; deadline day
    :block/deadline {}
    :block/deadline-ast {}
    :block/repeated? {}
@@ -77,11 +100,15 @@
    :block/updated-at {}
 
    ;; page additional attributes
+   ;; page's name, lowercase
    :block/name {:db/unique :db.unique/identity}
+   ;; page's original name
    :block/original-name {:db/unique :db.unique/identity}
+   ;; whether page's is a journal
    :block/journal? {}
    :block/journal-day {}
 
+   ;; block's file
    :block/file {:db/valueType :db.type/ref}
 
    ;; file
