@@ -326,7 +326,7 @@
 
 (declare page-reference)
 
-(defn page-cp
+(rum/defc page-cp
   [{:keys [html-export? label children contents-page?] :as config} page]
   (when-let [page-name (:page/name page)]
     (let [source-page (model/get-alias-source-page (state/get-current-repo)
@@ -741,9 +741,10 @@
     [:br]
 
     ["Timestamp" ["Scheduled" t]]
-    (timestamp t "Scheduled")
+    nil
     ["Timestamp" ["Deadline" t]]
-    (timestamp t "Deadline")
+    nil
+
     ["Timestamp" ["Date" t]]
     (timestamp t "Date")
     ["Timestamp" ["Closed" t]]
@@ -1255,26 +1256,36 @@
         [:div [:h1 (:page-name config)]]
         block-cp))))
 
+(rum/defc span-comma
+  []
+  [:span ", "])
+
+(rum/defc property-cp
+  [config block k v]
+  [:div.my-1
+   [:b k]
+   [:span.mr-1 ":"]
+   (if (coll? v)
+     (let [v (->> (remove string/blank? v)
+                  (filter string?))
+           vals (for [v-item v]
+                  (page-cp config {:page/name v-item}))
+           elems (interpose (span-comma) vals)]
+       (for [elem elems]
+         (rum/with-key elem (str (random-uuid)))))
+     (let [page-name (string/lower-case (str v))]
+       (if (db/entity [:page/name page-name])
+         (page-cp config {:page/name page-name})
+         (inline-text (:block/format block) (str v)))))])
+
 (rum/defc properties-cp
   [config block]
   (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
     (when (seq properties)
       [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
        (for [[k v] properties]
-         ^{:key (str (:block/uuid block) "-" k)}
-         [:div.my-1
-          [:b k]
-          [:span.mr-1 ":"]
-          (if (coll? v)
-            (let [v (->> (remove string/blank? v)
-                         (filter string?))
-                  vals (for [v-item v]
-                         (page-cp config {:page/name v-item}))]
-              (interpose [:span ", "] vals))
-            (let [page-name (string/lower-case (str v))]
-              (if (db/entity [:page/name page-name])
-                (page-cp config {:page/name page-name})
-                (inline-text (:block/format block) (str v)))))])])))
+         (rum/with-key (property-cp config block k v)
+           (str (:block/uuid block) "-" k)))])))
 
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)
