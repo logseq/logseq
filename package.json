@@ -66,11 +66,13 @@
         "diff": "5.0.0",
         "diff-match-patch": "^1.0.5",
         "electron": "^11.2.0",
+        "electron-window-state": "^5.0.3",
         "fs": "^0.0.1-security",
         "fs-extra": "^9.1.0",
         "fuse.js": "^6.4.6",
         "gulp-cached": "^1.1.1",
         "ignore": "^5.1.8",
+        "is-svg": "4.2.2",
         "jszip": "^3.5.0",
         "mldoc": "0.5.6",
         "mousetrap": "^1.6.5",
@@ -81,7 +83,6 @@
         "react-textarea-autosize": "^8.0.1",
         "react-transition-group": "^4.3.0",
         "url": "^0.11.0",
-        "yargs-parser": "^20.2.4",
-        "is-svg": "4.2.2"
+        "yargs-parser": "^20.2.4"
     }
 }
