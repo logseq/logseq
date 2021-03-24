@@ -10,6 +10,7 @@
             [frontend.format :as format]
             [frontend.handler.common :as common-handler]
             [frontend.handler.draw :as draw]
+            [frontend.handler.notification :as notification]
             [promesa.core :as p]))
 
 ;; TODO: move to frontend.handler.editor.commands
@@ -100,9 +101,9 @@
      ["B" (->priority "B")]
      ["C" (->priority "C")]
      ["Deadline" [[:editor/clear-current-slash]
-                  [:editor/show-date-picker]]]
+                  [:editor/show-date-picker :deadline]]]
      ["Scheduled" [[:editor/clear-current-slash]
-                   [:editor/show-date-picker]]]
+                   [:editor/show-date-picker :scheduled]]]
      ["Query" [[:editor/input "{{query }}" {:backward-pos 2}]]]
      ["Draw" (fn []
                (let [file (draw/file-name)
@@ -472,8 +473,15 @@
 (defmethod handle-step :editor/show-input [[_ option]]
   (state/set-editor-show-input! option))
 
-(defmethod handle-step :editor/show-date-picker [[_]]
-  (state/set-editor-show-date-picker! true))
+(defmethod handle-step :editor/show-date-picker [[_ type]]
+  (if (and
+       (contains? #{:scheduled :deadline} type)
+       (when-let [value (gobj/get (state/get-input) "value")]
+         (string/blank? value)))
+    (do
+      (notification/show! [:div "Please add some content first."] :warning)
+      (restore-state false))
+    (state/set-editor-show-date-picker! true)))
 
 (defmethod handle-step :editor/click-hidden-file-input [[_ input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
