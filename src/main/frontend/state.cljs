@@ -392,6 +392,11 @@
   []
   (ffirst (:editor/editing? @state)))
 
+(defn get-input
+  []
+  (when-let [id (get-edit-input-id)]
+    (gdom/getElement id)))
+
 (defn get-last-edit-input-id
   []
   (:editor/last-edit-block-id @state))
