@@ -246,12 +246,22 @@
         edit-content (gobj/get input "value")
         current-pos (:pos (util/get-caret-pos input))
         prefix (subs edit-content 0 current-pos)
+        space? (when last-pattern
+                 (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
+                           (util/safe-subs prefix 0 last-index))]
+                   (not (and (string/ends-with? s "(")
+                             (or (string/starts-with? last-pattern "((")
+                                 (string/starts-with? last-pattern "[["))))))
         prefix (if (string/blank? last-pattern)
-                 (util/concat-without-spaces prefix value)
-                 (util/replace-last last-pattern prefix value))
+                 (if space?
+                   (util/concat-without-spaces prefix value)
+                   (str prefix value))
+                 (util/replace-last last-pattern prefix value space?))
         postfix (subs edit-content current-pos)
         postfix (if postfix-fn (postfix-fn postfix) postfix)
-        new-value (util/concat-without-spaces prefix postfix)
+        new-value (if space?
+                    (util/concat-without-spaces prefix postfix)
+                    (str prefix postfix))
         new-pos (- (+ (count prefix)
                       (or forward-pos 0))
                    (or backward-pos 0))]
