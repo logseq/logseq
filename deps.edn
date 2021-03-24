@@ -7,8 +7,8 @@
   ;; persistent-sorted-set       {:mvn/version "0.1.2"}
   ;; FIXME: doesn't work on my archlinux laptop (tienson)
   ;; The required namespace "datascript.core" is not available, it was required by "frontend/db.cljs".
-  datascript/datascript       {:git/url "https://github.com/tiensonqin/datascript",
-                               :sha "efde8d389e6703b6f60ca3538f484a579b0d6de0"}
+  datascript/datascript       {:git/url "https://github.com/logseq/datascript",
+                               :sha "5c1983cdfbdaa4ba6f8410b54853ea3a78a0cd8c"}
   ;; datascript                  {:mvn/version "1.0.1"}
   datascript-transit/datascript-transit
   {:mvn/version "0.3.0"
