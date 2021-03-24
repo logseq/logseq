@@ -174,12 +174,24 @@
                      {})
           keyboard/install-shortcuts!
           (assoc state listener)))
+   :did-remount (fn [old-state new-state]
+
+                  ;; remove shortcuts and unlisten
+                  (when-let [f (get old-state listener)]
+                    (f))
+
+                  ;; update new states
+                  (->> dispatcher
+                       (reduce-kv (fn [result id handle-fn]
+                                    (assoc result id (partial handle-fn new-state)))
+                                  {})
+                       keyboard/install-shortcuts!
+                       (assoc new-state listener)))
    :will-unmount
    (fn [state]
-     (let [k listener]
-       (when-let [f (get state k)]
-         (f))
-       (dissoc state k)))})
+     (when-let [f (get state listener)]
+       (f))
+     (dissoc state listener))})
 
 (defn keyboard-mixin
   "Triggers f when key is pressed while the component is mounted.

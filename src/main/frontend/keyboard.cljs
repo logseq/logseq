@@ -40,28 +40,30 @@
     :test/test "alt+g"}
    id))
 
-
-
-
 (defn install-shortcuts!
-  [dispatcher]
-  (let [handler (new KeyboardShortcutHandler js/window)]
+  ([dispatcher]
+   (install-shortcuts! dispatcher js/window))
+  ([dispatcher target]
+   (let [handler (new KeyboardShortcutHandler target)]
 
-    ;; register shortcuts
-    (doseq [[id _] dispatcher]
-      (log/info :keyboard/install-shortcut {:id id :shortcut (shortcut-binding id)})
-      (.registerShortcut handler (keyname id) (shortcut-binding id)))
+     ;; register shortcuts
+     (doseq [[id _] dispatcher]
+       (log/info :keyboard/install-shortcut {:id id :shortcut (shortcut-binding id)})
+       (.registerShortcut handler (keyname id) (shortcut-binding id)))
 
-    (let [f (fn [e]
-              (let [dispatch-fn (get dispatcher (keyword (.-identifier e)))]
-                (dispatch-fn e)))
-          unlisten-fn (fn [] (.dispose handler))]
+     (let [f (fn [e]
+               (let [dispatch-fn (get dispatcher (keyword (.-identifier e)))]
+                 (dispatch-fn e)))
+           unlisten-fn (fn [] (.dispose handler))]
 
-      (events/listen handler EventType/SHORTCUT_TRIGGERED f)
+       (events/listen handler EventType/SHORTCUT_TRIGGERED f)
 
-      (fn []
-        (.unregisterShortcut handler key)
-        (unlisten-fn)))))
+       ;; deregister shortcuts
+       (fn []
+         (doseq [[id _] dispatcher]
+           (log/info :keyboard/remove-shortcut {:id id :shortcut (shortcut-binding id)})
+           (.unregisterShortcut handler (shortcut-binding id)))
+         (unlisten-fn))))))
 
 (comment
   ; dispatcher example

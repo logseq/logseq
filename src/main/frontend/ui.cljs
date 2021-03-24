@@ -312,12 +312,14 @@
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
-  (mixins/shortcuts :shortcut-listener/auto-complete
+  (mixins/shortcuts
+   :shortcut-listener/auto-complete
    {:auto-complete/prev
     (fn [state e]
       (let [current-idx (get state ::current-idx)
             matched (first (:rum/args state))]
         (util/stop e)
+        (js/console.log "go prev" current-idx)
         (cond
           (>= @current-idx 1)
           (swap! current-idx dec)
@@ -335,7 +337,7 @@
       (let [current-idx (get state ::current-idx)
             matched (first (:rum/args state))]
         (util/stop e)
-        (js/console.log "alt+j")
+        (js/console.log "go next" current-idx "##matched" matched)
         (let [total (count matched)]
           (if (>= @current-idx (dec total))
             (reset! current-idx 0)
@@ -413,6 +415,7 @@
                          class]}]
   (let [current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
+     (js/console.log "###inside auto" current-idx "match##" matched)
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
         (for [[idx item] (medley/indexed matched)]
