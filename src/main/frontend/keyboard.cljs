@@ -41,13 +41,10 @@
    id))
 
 
-(comment
-  ; dispatcher example
-  (def dispatcher {:test/test (fn [_ e] (println "trigger test"))})
-  (def f (install-shortcuts! nil dispatcher)))
+
 
 (defn install-shortcuts!
-  [state dispatcher]
+  [dispatcher]
   (let [handler (new KeyboardShortcutHandler js/window)]
 
     ;; register shortcuts
@@ -57,7 +54,7 @@
 
     (let [f (fn [e]
               (let [dispatch-fn (get dispatcher (keyword (.-identifier e)))]
-                (dispatch-fn state e)))
+                (dispatch-fn e)))
           unlisten-fn (fn [] (.dispose handler))]
 
       (events/listen handler EventType/SHORTCUT_TRIGGERED f)
@@ -65,3 +62,8 @@
       (fn []
         (.unregisterShortcut handler key)
         (unlisten-fn)))))
+
+(comment
+  ; dispatcher example
+  (def dispatcher {:test/test (fn [e] (println "trigger test"))})
+  (def f (install-shortcuts! dispatcher)))

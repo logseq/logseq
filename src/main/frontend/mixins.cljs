@@ -168,11 +168,15 @@
   [listener dispatcher]
   {:did-mount
    (fn [state]
-     (assoc state (keyname listener)
-            (keyboard/install-shortcuts! state dispatcher)))
+     (->> dispatcher
+          (reduce-kv (fn [result id handle-fn]
+                       (assoc result id (partial handle-fn state)))
+                     {})
+          keyboard/install-shortcuts!
+          (assoc state listener)))
    :will-unmount
    (fn [state]
-     (let [k (keyname listener)]
+     (let [k listener]
        (when-let [f (get state k)]
          (f))
        (dissoc state k)))})
