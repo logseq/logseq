@@ -12,7 +12,7 @@
   ;; datascript                  {:mvn/version "1.0.1"}
   datascript-transit/datascript-transit
   {:mvn/version "0.3.0"
-   :exclusions [datascript]}
+   :exclusions [datascript/datascript]}
   borkdude/rewrite-edn        {:git/url "https://github.com/borkdude/rewrite-edn"
                                :sha "edd87dc7f045f28d7afcbfc44bc0f0a2683dde62"}
   funcool/promesa             {:mvn/version "4.0.2"}
