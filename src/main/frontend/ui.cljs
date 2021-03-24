@@ -97,7 +97,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                       ;; [:div {:style {:position "absolute" :right "8px"}}
                       ;;  icon]
-]]
+                     ]]
           (rum/with-key
             (menu-link new-options child)
             title)))
@@ -280,35 +280,14 @@
         (.removeEventListener viewport "resize" handler)
         (.removeEventListener viewport "scroll" handler)))))
 
-;; FIXME: compute the right scroll position when scrolling back to the top
-(defn on-scroll
-  [on-load on-top-reached]
-  (let [node js/document.documentElement
-        full-height (gobj/get node "scrollHeight")
-        scroll-top (gobj/get node "scrollTop")
-        client-height (gobj/get node "clientHeight")
-        bottom-reached? (<= (- full-height scroll-top client-height) 100)
-        top-reached? (= scroll-top 0)]
-    (when (and bottom-reached? on-load)
-      (on-load))
-    (when (and top-reached? on-top-reached)
-      (on-top-reached))))
-
-(defn attach-listeners
-  "Attach scroll and resize listeners."
-  [state]
-  (let [opts (-> state :rum/args second)
-        debounced-on-scroll (util/debounce 500 #(on-scroll
-                                                 (:on-load opts) ; bottom reached
-                                                 (:on-top-reached opts)))]
-    (mixins/listen state js/document :scroll debounced-on-scroll)))
-
 (rum/defcs infinite-list <
-  (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state body {:keys [on-load on-top-reached]
-               :as   opts}]
-  body)
+  [state body {:keys [on-load has-more]}]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (rum/fragment
+     body
+     (when has-more [:button {:on-click on-load
+                              :class "infinite-list-load-more block w-full mt-8 text-sm border px-2 py-1"} (t :page/load-more-journals)]))))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
