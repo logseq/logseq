@@ -51,7 +51,7 @@
    [:div.py-1.rounded-md.bg-base-3.shadow-xs
     (ui/menu-link
      {:key "cut"
-      :on-click editor-handler/cut-selection-blocks}
+      :on-click #(editor-handler/cut-selection-blocks true)}
      "Cut")
     (ui/menu-link
      {:key "copy"
@@ -254,8 +254,8 @@
 
 
 (defn- cut-blocks-and-clear-selections!
-  [_]
-  (editor-handler/cut-selection-blocks)
+  [copy?]
+  (editor-handler/cut-selection-blocks copy?)
   (editor-handler/clear-selection! nil))
 
 (rum/defc hidden-selection < rum/reactive
@@ -264,11 +264,11 @@
                            (editor-handler/copy-selection-blocks)
                            (editor-handler/clear-selection! nil)))
   (mixins/keyboard-mixin (util/->system-modifier "ctrl+x")
-                         cut-blocks-and-clear-selections!)
+                         (fn [] (cut-blocks-and-clear-selections! true)))
   (mixins/keyboard-mixin "backspace"
-                         cut-blocks-and-clear-selections!)
+                         (fn [] (cut-blocks-and-clear-selections! false)))
   (mixins/keyboard-mixin "delete"
-                         cut-blocks-and-clear-selections!)
+                         (fn [] (cut-blocks-and-clear-selections! false)))
   []
   [:div#selection.hidden])
 

@@ -29,5 +29,5 @@ strings.csv
 
 .calva
 resources/electron.js
-.clj-kondo/
+.clj-kondo/.cache
 .lsp/

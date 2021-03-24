@@ -326,7 +326,7 @@
 
 (declare page-reference)
 
-(defn page-cp
+(rum/defc page-cp
   [{:keys [html-export? label children contents-page?] :as config} page]
   (when-let [page-name (:block/name page)]
     (let [source-page (model/get-alias-source-page (state/get-current-repo)
@@ -572,22 +572,22 @@
     ["Subscript" l]
     (->elem :sub (map-inline config l))
     ["Tag" s]
-    (if (and s (util/tag-valid? s))
-      [:a.tag {:data-ref s
-               :href (rfe/href :page {:name s})
-               :on-click (fn [e]
-                           (let [repo (state/get-current-repo)
-                                 page (db/pull repo '[*] [:block/name (string/lower-case (util/url-decode s))])]
-                             (when (gobj/get e "shiftKey")
-                               (state/sidebar-add-block!
-                                repo
-                                (:db/id page)
-                                :page
-                                {:page page})
-                               (.preventDefault e))))}
-       (str "#" s)]
-      [:span.warning.mr-1 {:title "Invalid tag, tags only accept alphanumeric characters, \"-\", \"_\", \"@\" and \"%\"."}
-       (str "#" s)])
+    (when s
+      (let [s (text/page-ref-un-brackets! s)]
+        [:a.tag {:data-ref s
+                 :href (rfe/href :page {:name s})
+                 :on-click (fn [e]
+                             (let [repo (state/get-current-repo)
+                                   page (db/pull repo '[*] [:block/name (string/lower-case (util/url-decode s))])]
+                               (when (gobj/get e "shiftKey")
+                                 (state/sidebar-add-block!
+                                  repo
+                                  (:db/id page)
+                                  :page
+                                  {:page page})
+                                 (.preventDefault e))))}
+         (str "#" s)]))
+
     ["Emphasis" [[kind] data]]
     (let [elem (case kind
                  "Bold" :b
@@ -735,6 +735,12 @@
      [:div.warning {:title "Invalid hiccup"} s]
      (-> (safe-read-string s)
          (security/remove-javascript-links-in-href)))
+
+    ["Inline_Html" s]
+    (when (not html-export?)
+      ;; TODO: how to remove span and only export the content of `s`?
+      [:span {:dangerouslySetInnerHTML
+              {:__html s}}])
 
     ["Break_Line"]
     [:br]
@@ -1257,26 +1263,36 @@
         [:div [:h1 (:page-name config)]]
         block-cp))))
 
+(rum/defc span-comma
+  []
+  [:span ", "])
+
+(rum/defc property-cp
+  [config block k v]
+  [:div.my-1
+   [:b k]
+   [:span.mr-1 ":"]
+   (if (coll? v)
+     (let [v (->> (remove string/blank? v)
+                  (filter string?))
+           vals (for [v-item v]
+                  (page-cp config {:block/name v-item}))
+           elems (interpose (span-comma) vals)]
+       (for [elem elems]
+         (rum/with-key elem (str (random-uuid)))))
+     (let [page-name (string/lower-case (str v))]
+       (if (db/entity [:block/name page-name])
+         (page-cp config {:block/name page-name})
+         (inline-text (:block/format block) (str v)))))])
+
 (rum/defc properties-cp
   [config block]
   (let [properties (apply dissoc (:block/properties block) text/hidden-properties)]
     (when (seq properties)
       [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
        (for [[k v] properties]
-         ^{:key (str (:block/uuid block) "-" k)}
-         [:div.my-1
-          [:b k]
-          [:span.mr-1 ":"]
-          (if (coll? v)
-            (let [v (->> (remove string/blank? v)
-                         (filter string?))
-                  vals (for [v-item v]
-                         (page-cp config {:block/name v-item}))]
-              (interpose [:span ", "] vals))
-            (let [page-name (string/lower-case (str v))]
-              (if (db/entity [:block/name page-name])
-                (page-cp config {:block/name page-name})
-                (inline-text (:block/format block) (str v)))))])])))
+         (rum/with-key (property-cp config block k v)
+           (str (:block/uuid block) "-" k)))])))
 
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)

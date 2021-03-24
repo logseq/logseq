@@ -147,6 +147,11 @@
      ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
                                                         :backward-pos 2}]]]
 
+     (when (state/markdown?)
+       ["Underline" [[:editor/input "<ins></ins>"
+                      {:last-pattern slash
+                       :backward-pos 6}]]])
+
      ["Html Inline " (->inline "html")]
 
      ;; TODO:
