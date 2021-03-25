@@ -26,6 +26,13 @@
       (= (first id) :block/uuid))
     (second id)
 
+    (and
+      (vector? id)
+      (= (first id) :block/name))
+    (let [conn (conn/get-conn false)]
+      (-> (db-outliner/get-by-id conn id)
+        (:block/uuid)))
+
     (or (e/entity? id) (map? id))
     (let [conn (conn/get-conn false)]
       (-> (db-outliner/get-by-id conn (:db/id id))
