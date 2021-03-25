@@ -21,11 +21,11 @@
   (let [conn (core-test/get-current-conn)
         data [{:block/uuid "1"}
               {:block/uuid "2"
-               :block/parent-id [:block/uuid "1"]
-               :block/left-id [:block/uuid "1"]}
+               :block/parent [:block/uuid "1"]
+               :block/left [:block/uuid "1"]}
               {:block/uuid "3"
-               :block/parent-id [:block/uuid "1"]
-               :block/left-id [:block/uuid "2"]}]
+               :block/parent [:block/uuid "1"]
+               :block/left [:block/uuid "2"]}]
         _ (d/transact! conn data)
         result (outliner/get-by-parent-&-left
                  conn [:block/uuid "1"] [:block/uuid "2"])]
@@ -35,11 +35,11 @@
   (let [conn (core-test/get-current-conn)
         data [{:block/uuid "1"}
               {:block/uuid "2"
-               :block/parent-id [:block/uuid "1"]
-               :block/left-id [:block/uuid "1"]}
+               :block/parent [:block/uuid "1"]
+               :block/left [:block/uuid "1"]}
               {:block/uuid "3"
-               :block/parent-id [:block/uuid "1"]
-               :block/left-id [:block/uuid "2"]}]
+               :block/parent [:block/uuid "1"]
+               :block/left [:block/uuid "2"]}]
         _ (d/transact! conn data)
         r (d/q outliner/get-by-parent-id @conn [:block/uuid "1"])
         result (flatten r)]
@@ -49,8 +49,8 @@
   (let [conn (core-test/get-current-conn)
         data [{:block/uuid "1"}
               {:block/uuid "2"
-               :block/parent-id [:block/uuid "1"]
-               :block/left-id [:block/uuid "1"]}]
+               :block/parent [:block/uuid "1"]
+               :block/left [:block/uuid "1"]}]
         _ (d/transact! conn data)
         _ (outliner/del-block conn [:block/uuid "2"])
         result (d/entity @conn [:block/uuid "2"])]
@@ -60,12 +60,12 @@
   (let [conn (core-test/get-current-conn)
         data [{:block/uuid "1"}
               {:block/uuid "2"
-               :block/parent-id [:block/uuid "1"]
-               :block/left-id [:block/uuid "1"]
+               :block/parent [:block/uuid "1"]
+               :block/left [:block/uuid "1"]
                :block/journal? true}
               {:block/uuid "3"
-               :block/parent-id [:block/uuid "1"]
-               :block/left-id [:block/uuid "2"]
+               :block/parent [:block/uuid "1"]
+               :block/left [:block/uuid "2"]
                :block/journal? true}]
         _ (d/transact! conn data)
         result (outliner/get-journals conn)]

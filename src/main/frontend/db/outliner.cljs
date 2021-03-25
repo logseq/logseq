@@ -11,8 +11,8 @@
   (let [r (d/q '[:find (pull ?a [*])
                  :in $ ?p ?l
                  :where
-                 [?a :block/left-id ?l]
-                 [?a :block/parent-id ?p]]
+                 [?a :block/left ?l]
+                 [?a :block/parent ?p]]
             @conn parent-id left-id)]
     (ffirst r)))
 
@@ -22,7 +22,7 @@
   '[:find (pull ?a [*])
     :in $ ?id
     :where
-    [?a :block/parent-id ?id]])
+    [?a :block/parent ?id]])
 
 (defn save-block
   [conn block-m]

@@ -140,8 +140,8 @@
 
    ;; block
    :block/id {:db/unique :db.unique/identity}
-   :block/parent-id {:db/valueType :db.type/ref}
-   :block/left-id {:db/valueType :db.type/ref}
+   :block/parent {:db/valueType :db.type/ref}
+   :block/left {:db/valueType :db.type/ref}
    :block/type {}
    :block/title {}
    :block/content {}

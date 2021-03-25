@@ -51,7 +51,7 @@
      (mapv block))))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
-;; the :block/parent-id, :block/left-id should be datascript lookup ref
+;; the :block/parent, :block/left should be datascript lookup ref
 
 (extend-type Block
   tree/INode
@@ -60,20 +60,20 @@
       block-id))
 
   (-get-parent-id [this]
-    (-> (get-in this [:data :block/parent-id])
+    (-> (get-in this [:data :block/parent])
       (outliner-u/->block-id)))
 
   (-set-parent-id [this parent-id]
     (outliner-u/check-block-id parent-id)
-    (update this :data assoc :block/parent-id [:block/uuid parent-id]))
+    (update this :data assoc :block/parent [:block/uuid parent-id]))
 
   (-get-left-id [this]
-    (-> (get-in this [:data :block/left-id])
+    (-> (get-in this [:data :block/left])
       (outliner-u/->block-id)))
 
   (-set-left-id [this left-id]
     (outliner-u/check-block-id left-id)
-    (update this :data assoc :block/left-id [:block/uuid left-id]))
+    (update this :data assoc :block/left [:block/uuid left-id]))
 
   (-get-parent [this]
     (when-let [parent-id (tree/-get-parent-id this)]

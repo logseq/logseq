@@ -19,9 +19,9 @@
    (build-block id nil nil))
   ([id parent-id left-id & [m]]
    (let [m (->> (merge m {:block/uuid id
-                          :block/parent-id
+                          :block/parent
                           (outliner-u/->block-lookup-ref parent-id)
-                          :block/left-id
+                          :block/left
                           (outliner-u/->block-lookup-ref left-id)
                           :block/content (str id)})
              (remove #(nil? (val %)))
