@@ -24,6 +24,7 @@
             [frontend.handler.export :as export]
             [frontend.config :as config]
             [frontend.keyboards :as keyboards]
+            [frontend.keyboard :as keyboard]
             [dommy.core :as d]
             [clojure.string :as string]
             [goog.object :as gobj]
@@ -268,19 +269,27 @@
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
-  ;; TODO: move this to keyboards
+
+  {:did-mount
+   (fn [state]
+     (keyboard/install-shortcuts! keyboards/global-bindings)
+     state)}
+
+  #_
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "click"
                     (fn [e]
                       ;; hide context menu
                       (state/hide-custom-context-menu!)
+                      (js/console.log "click still works!!!")
 
                       (if-not (state/get-selection-start-block)
                         (editor-handler/clear-selection! e)
                         (state/set-selection-start-block! nil))))
 
      ;; TODO: move to keyboards
+     #_
      (mixins/on-key-down
       state
       {;; esc
@@ -299,6 +308,7 @@
        191 (fn [state e]
              (when-not (util/input? (gobj/get e "target"))
                (ui-handler/toggle-help!)))})))
+  #_
   {:did-mount (fn [state]
                 (keyboards/bind-shortcuts!)
                 state)}

@@ -2,6 +2,7 @@
   (:require [goog.events :as events]
             [lambdaisland.glogi :as log]
             [frontend.util :refer [keyname]]
+            [frontend.keyboards.config :as kb-config]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType])
   (:import  [goog.ui KeyboardShortcutHandler]))
 
@@ -32,23 +33,29 @@
          (.unregisterShortcut handler key)
          (unlisten-fn))))))
 
-(defn shortcut-binding [id]
-  (get
-   {:auto-complete/prev "alt+p"
-    :auto-complete/next "alt+n"
-    :auto-complete/complete "alt+a"
-    :test/test "alt+g"}
-   id))
+(defn shortcut-binding
+  [id]
+  (get kb-config/default-shortcuts id))
+
+
+; each dispatcher key should be present in shortcut config
+(defn- valid-dispatcher? [dispatcher]
+  (->> dispatcher
+       keys
+       (every? (fn [k] (contains? kb-config/default-shortcuts k)))))
 
 (defn install-shortcuts!
   ([dispatcher]
    (install-shortcuts! dispatcher js/window))
   ([dispatcher target]
+   (assert (valid-dispatcher? dispatcher) "forget to register shortcut in config?")
    (let [handler (new KeyboardShortcutHandler target)]
 
      ;; register shortcuts
      (doseq [[id _] dispatcher]
        (log/info :keyboard/install-shortcut {:id id :shortcut (shortcut-binding id)})
+       ;; do i need this?
+       ;; (.unregisterShortcut handler (shortcut-binding id))
        (.registerShortcut handler (keyname id) (shortcut-binding id)))
 
      (let [f (fn [e]

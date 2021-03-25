@@ -1882,7 +1882,7 @@
       string/join))
 
 (defn move-up-down
-  [e up?]
+  [up? _]
   (when-let [block-id (:block/uuid (state/get-edit-block))]
     (let [block-parent-id (state/get-editing-block-dom-id)
           block (db/entity [:block/uuid block-id])
