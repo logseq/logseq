@@ -38,7 +38,7 @@
     :draw? false
     :db/restoring? nil
 
-    :journals-length 1
+    :journals-length 2
 
     :search/q ""
     :search/result nil

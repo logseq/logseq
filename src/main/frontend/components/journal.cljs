@@ -110,14 +110,15 @@
 
      (when intro? (onboarding/intro))]))
 
-(rum/defc journals
+(rum/defc journals < rum/reactive
   [latest-journals]
   [:div#journals
    (ui/infinite-list
     (for [[journal-name format] latest-journals]
       [:div.journal-item.content {:key journal-name}
        (journal-cp [journal-name format])])
-    {:on-load (fn []
+    {:has-more (page-handler/has-more-journals?)
+     :on-load (fn []
                 (page-handler/load-more-journals!))})])
 
 (rum/defc all-journals < rum/reactive db-mixins/query

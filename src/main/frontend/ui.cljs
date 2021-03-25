@@ -97,7 +97,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                       ;; [:div {:style {:position "absolute" :right "8px"}}
                       ;;  icon]
-]]
+                     ]]
           (rum/with-key
             (menu-link new-options child)
             title)))
@@ -280,7 +280,6 @@
         (.removeEventListener viewport "resize" handler)
         (.removeEventListener viewport "scroll" handler)))))
 
-;; FIXME: compute the right scroll position when scrolling back to the top
 (defn on-scroll
   [on-load on-top-reached]
   (let [node js/document.documentElement
@@ -306,9 +305,15 @@
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state body {:keys [on-load on-top-reached]
-               :as   opts}]
-  body)
+  [state body {:keys [on-load has-more]}]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (rum/fragment
+     body
+     [:a.fade-link.text-link.font-bold.text-4xl
+      {:on-click on-load
+       :disabled (not has-more)
+       :class (when (not has-more) "cursor-not-allowed ")}
+      (t (if has-more :page/earlier :page/no-more-journals))])))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)

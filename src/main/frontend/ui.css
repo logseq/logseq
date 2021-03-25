@@ -93,7 +93,7 @@
     align-items: center;
     font-size: 14px;
 
-    input[type=checkbox] {
+    input[type='checkbox'] {
       margin-right: 8px;
     }
   }
@@ -105,7 +105,7 @@
   focus:outline-none transition ease-in-out duration-150 mt-1;
 
   &:disabled {
-    opacity: .5;
+    opacity: 0.5;
   }
 
   &.is-link {
@@ -134,7 +134,7 @@
   width: 0;
   height: 0;
   vertical-align: middle;
-  content: "";
+  content: '';
   border-top-style: solid;
   border-top-width: 4px;
   border-right: 4px solid transparent;
