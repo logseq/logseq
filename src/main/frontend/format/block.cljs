@@ -491,7 +491,7 @@
               (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
                     block (assoc block
                                  :block/parent parent
-                                 :block/left parent)
+                                 :block/left nil)
                     parents' (conj parents block)
                     result' (conj result block)]
                 [others parents' result'])
