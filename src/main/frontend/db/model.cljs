@@ -617,6 +617,7 @@
            (apply concat)))))
 
 (defn get-block-immediate-children
+  "Doesn't include nested children."
   [repo block-uuid]
   (when-let [conn (conn/get-conn repo)]
     (d/q
@@ -629,6 +630,7 @@
       block-uuid)))
 
 (defn get-block-children
+  "Including nested children."
   [repo block-uuid]
   (when-let [conn (conn/get-conn repo)]
     (let [ids (get-block-children-ids repo block-uuid)
@@ -636,6 +638,7 @@
       (when (seq ids)
         (db-utils/pull-many repo '[*] ids)))))
 
+;; TODO: replace with get-block-children
 (defn get-block-and-children
   ([repo block-uuid]
    (get-block-and-children repo block-uuid true))

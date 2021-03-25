@@ -127,30 +127,3 @@
    :git/error {}
 
    })
-
-(def outline-schema
-  {:schema/version {}
-   :db/type {}
-   :db/ident {:db/unique :db.unique/identity}
-
-   ;; user
-   :me/name {}
-   :me/email {}
-   :me/avatar {}
-
-   ;; block
-   :block/id {:db/unique :db.unique/identity}
-   :block/parent {:db/valueType :db.type/ref}
-   :block/left {:db/valueType :db.type/ref}
-   :block/type {}
-   :block/title {}
-   :block/content {}
-   :block/properties {}
-   :block/refs {:db/valueType :db.type/ref
-                :db/cardinality :db.cardinality/many}
-   :block/embeds {:db/cardinality :db.cardinality/many}
-   :block/created-at {}
-   :block/updated-at {}
-   :block/alias {:db/cardinality :db.cardinality/many}
-   :block/tags {:db/cardinality :db.cardinality/many}
-   :block/journal? {}})
