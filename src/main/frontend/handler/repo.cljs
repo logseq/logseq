@@ -204,7 +204,6 @@
         all-data (-> (concat delete-files delete-blocks files blocks-pages)
                      (util/remove-nils)
                      (remove-non-exists-refs!))]
-    (prn "all-data:" all-data)
     (db/transact! repo-url all-data)))
 
 (defn- parse-files-and-create-default-files-inner!
