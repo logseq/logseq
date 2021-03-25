@@ -171,7 +171,3 @@
     @apply py-1.5 sm:leading-4 sm:text-xs;
   }
 }
-
-.infinite-list-load-more {
-  background-color: var(--ls-secondary-background-color);
-}
