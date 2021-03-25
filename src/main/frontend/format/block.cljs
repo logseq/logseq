@@ -366,8 +366,10 @@
     block))
 
 (defn extract-blocks
-  [blocks last-pos encoded-content with-id?]
-  (let [blocks
+  [blocks content with-id?]
+  (let [encoded-content (utf8/encode content)
+        last-pos (utf8/length encoded-content)
+        blocks
         (loop [headings []
                block-body []
                blocks (reverse blocks)
@@ -464,6 +466,41 @@
                    blocks)]
       (with-path-refs blocks))))
 
+(defn with-parent-and-left
+  [page-id blocks]
+  (loop [blocks blocks
+         parents [{:page/id page-id     ; db id or lookup ref [:block/name "xxx"]
+                   :block/level 0}]
+         result []]
+    (if (empty? blocks)
+      result
+      (let [[block & others] blocks
+            cur-level (:block/level block)
+            {:block/keys [uuid level parent] :as last-parent} (last parents)
+            [blocks parents result]
+            (cond
+              (= cur-level level)        ; sibling
+              (let [block (assoc block
+                                 :block/parent parent
+                                 :block/left [:block/uuid uuid])
+                    parents' (conj (vec (butlast parents)) block)
+                    result' (conj result block)]
+                [others parents' result'])
+
+              (> cur-level level)         ; child
+              (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
+                    block (assoc block
+                                 :block/parent parent
+                                 :block/left parent)
+                    parents' (conj parents block)
+                    result' (conj result block)]
+                [others parents' result'])
+
+              (< cur-level level)         ; outdent
+              (let [parents' (vec (filter (fn [p] (<= (:block/level p) cur-level)) parents))]
+                [blocks parents' result]))]
+        (recur blocks parents result)))))
+
 (defn parse-block
   ([block format]
    (parse-block block format nil))
@@ -474,7 +511,7 @@
            start-pos (:start-pos meta)
            encoded-content (utf8/encode content)
            content-length (utf8/length encoded-content)
-           blocks (extract-blocks ast content-length encoded-content with-id?)
+           blocks (extract-blocks ast content with-id?)
            ref-pages-atom (atom [])
            parent-ref-pages (->> (db/get-block-parent (state/get-current-repo) uuid)
                                  :block/path-refs

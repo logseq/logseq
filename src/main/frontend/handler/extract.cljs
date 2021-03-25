@@ -24,92 +24,84 @@
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
-  [repo-url format ast properties file content utf8-content journal? pages-fn]
+  [repo-url format ast properties file content utf8-content journal?]
   (try
     (let [now (tc/to-long (t/now))
-          blocks (block/extract-blocks ast (utf8/length utf8-content) utf8-content false)
-          pages (pages-fn blocks ast)
+          page (db/get-page-name file ast)
+          blocks (->> (block/extract-blocks ast content false)
+                      (block/with-parent-and-left [:block/name (string/lower-case page)]))
           ref-pages (atom #{})
           ref-tags (atom #{})
-          blocks (doall
-                  (mapcat
-                   (fn [[page blocks]]
-                     (if page
-                       (map (fn [block]
-                              (let [block-ref-pages (seq (:block/refs block))
-                                    block-path-ref-pages (seq (:block/path-refs block))]
-                                (when block-ref-pages
-                                  (swap! ref-pages set/union (set block-ref-pages)))
-                                (-> block
-                                    (dissoc :ref-pages)
-                                    (assoc :block/content (db/get-block-content utf8-content block)
-                                           :block/file [:file/path file]
-                                           :block/format format
-                                           :block/page [:block/name (string/lower-case page)]
-                                           :block/refs block-ref-pages
-                                           :block/path-refs block-path-ref-pages))))
-                         blocks)))
-                   (remove nil? pages)))
-          pages (doall
-                 (map
-                   (fn [page]
-                     (let [page-file? (= page (string/lower-case file))
-                           aliases (and (:alias properties)
-                                        (seq (remove #(= page %)
-                                                     (:alias properties))))
-                           journal-date-long (if journal?
-                                               (date/journal-title->long (string/capitalize page)))
-                           page-list (when-let [list-content (:list properties)]
-                                       (extract-page-list list-content))]
-                       (cond->
-                         (util/remove-nils
-                          {:block/name (string/lower-case page)
-                           :block/original-name page
-                           :block/file [:file/path file]
-                           :block/journal? journal?
-                           :block/journal-day (if journal?
-                                                (date/journal-title->int page)
-                                                0)})
-                         (seq properties)
-                         (assoc :block/properties properties)
+          blocks (map (fn [block]
+                        (let [block-ref-pages (seq (:block/refs block))
+                              block-path-ref-pages (seq (:block/path-refs block))]
+                          (when block-ref-pages
+                            (swap! ref-pages set/union (set block-ref-pages)))
+                          (-> block
+                              (dissoc :ref-pages)
+                              (assoc :block/content (db/get-block-content utf8-content block)
+                                     :block/file [:file/path file]
+                                     :block/format format
+                                     :block/page [:block/name (string/lower-case page)]
+                                     :block/refs block-ref-pages
+                                     :block/path-refs block-path-ref-pages))))
+                   blocks)
+          page-entity (let [page-file? (= page (string/lower-case file))
+                            aliases (and (:alias properties)
+                                         (seq (remove #(= page %)
+                                                      (:alias properties))))
+                            journal-date-long (if journal?
+                                                (date/journal-title->long (string/capitalize page)))
+                            page-list (when-let [list-content (:list properties)]
+                                        (extract-page-list list-content))]
+                        (cond->
+                          (util/remove-nils
+                           {:block/name (string/lower-case page)
+                            :block/original-name page
+                            :block/file [:file/path file]
+                            :block/journal? journal?
+                            :block/journal-day (if journal?
+                                                 (date/journal-title->int page)
+                                                 0)})
+                          (seq properties)
+                          (assoc :block/properties properties)
 
-                         aliases
-                         (assoc :block/alias
-                                (map
-                                  (fn [alias]
-                                    (let [page-name (string/lower-case alias)
-                                          aliases (distinct
-                                                   (conj
-                                                    (remove #{alias} aliases)
-                                                    page))
-                                          aliases (if (seq aliases)
-                                                    (map
-                                                      (fn [alias]
-                                                        {:block/name alias})
-                                                      aliases))]
-                                      (if (seq aliases)
-                                        {:block/name page-name
-                                         :block/alias aliases}
-                                        {:block/name page-name})))
-                                  aliases))
+                          aliases
+                          (assoc :block/alias
+                                 (map
+                                   (fn [alias]
+                                     (let [page-name (string/lower-case alias)
+                                           aliases (distinct
+                                                    (conj
+                                                     (remove #{alias} aliases)
+                                                     page))
+                                           aliases (if (seq aliases)
+                                                     (map
+                                                       (fn [alias]
+                                                         {:block/name alias})
+                                                       aliases))]
+                                       (if (seq aliases)
+                                         {:block/name page-name
+                                          :block/alias aliases}
+                                         {:block/name page-name})))
+                                   aliases))
 
-                         (:tags properties)
-                         (assoc :block/tags (let [tags (->> (:tags properties)
-                                                            (remove string/blank?))]
-                                              (swap! ref-tags set/union (set tags))
-                                              (map (fn [tag] {:block/name (string/lower-case tag)
-                                                              :block/original-name tag})
-                                                tags))))))
-                   (->> (map first pages)
-                        (remove string/blank?))))
+                          (:tags properties)
+                          (assoc :block/tags (let [tags (->> (:tags properties)
+                                                             (remove string/blank?))]
+                                               (swap! ref-tags set/union (set tags))
+                                               (map (fn [tag] {:block/name (string/lower-case tag)
+                                                               :block/original-name tag})
+                                                 tags)))))
           pages (->> (concat
-                      pages
+                      [page-entity]
                       @ref-pages
                       (map
                         (fn [page]
                           {:block/original-name page
                            :block/name (string/lower-case page)})
                         @ref-tags))
+                     ;; remove block references
                      (remove vector?))
           pages (util/distinct-by :block/name pages)
           block-ids (mapv (fn [block]
@@ -140,9 +132,7 @@
       (extract-pages-and-blocks
        repo-url
        format ast properties
-       file content utf8-content journal?
-       (fn [blocks ast]
-         [[(db/get-page-name file ast) blocks]])))))
+       file content utf8-content journal?))))
 
 (defn extract-all-blocks-pages
   [repo-url files]

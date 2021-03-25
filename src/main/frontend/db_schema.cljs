@@ -9,7 +9,7 @@
    :file/size {}
    :file/handle {}})
 
-;; A page is a special block, a page can corresponds to multiple files with the same ":page/name".
+;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def schema
   {:schema/version  {}
    :db/type         {}
@@ -30,8 +30,8 @@
 
    :block/type {}
    :block/uuid {:db/unique :db.unique/identity}
-   :block/parent-id {:db/valueType :db.type/ref}
-   :block/left-id {:db/valueType :db.type/ref}
+   :block/parent {:db/valueType :db.type/ref}
+   :block/left {:db/valueType :db.type/ref}
 
    ;; :markdown, :org
    :block/format {}
