@@ -802,3 +802,7 @@ a.tooltip-priority {
 .excalidraw hr {
     margin: 0;
 }
+
+.text-link {
+    color: var(--ls-primary-text-color);
+}

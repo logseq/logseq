@@ -429,11 +429,10 @@
   (let [current-length (:journals-length @state/state)]
     (< current-length (db/get-journals-length))))
 
-
 (defn load-more-journals!
   []
   (when (has-more-journals?)
-    (state/update-state! :journals-length #(+ % 3))))
+    (state/update-state! :journals-length inc)))
 
 (defn update-public-attribute!
   [page-name value]

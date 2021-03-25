@@ -309,12 +309,11 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     (rum/fragment
      body
-     [:button
+     [:a.fade-link.text-link.font-bold.text-4xl
       {:on-click on-load
        :disabled (not has-more)
-       :class (str (when (not has-more) "cursor-not-allowed ")
-                   "infinite-list-load-more block w-full mt-8 text-sm border px-2 py-1")}
-      (t (if has-more :page/load-more-journals :page/no-more-journals))])))
+       :class (when (not has-more) "cursor-not-allowed ")}
+      (t (if has-more :page/earlier :page/no-more-journals))])))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)

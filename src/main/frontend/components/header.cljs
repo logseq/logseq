@@ -27,7 +27,7 @@
    {:href     (rfe/href :home)
     :on-click (fn []
                 (util/scroll-to-top)
-                (state/set-journals-length! 1))}
+                (state/set-journals-length! 2))}
    (if-let [logo (and config/publishing?
                       (get-in (state/get-config) [:project :logo]))]
      [:img.cp__header-logo-img {:src logo}]
