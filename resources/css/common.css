@@ -553,7 +553,7 @@ h1.title {
   margin-bottom: 1.5rem;
   color: var(--ls-title-text-color, #222);
   font-size: var(--ls-page-title-size, 36px);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .block-highlight,

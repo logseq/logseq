@@ -7,6 +7,7 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
+            ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
             [electron.state :as state]))
 
@@ -22,8 +23,9 @@
 (defn create-main-window
   "Creates main app window"
   []
-  (let [win-opts {:width         980
-                  :height        700
+  (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
+        win-opts {:width         (.-width win-state)
+                  :height        (.-height win-state)
                   :frame         (not mac?)
                   :autoHideMenuBar (not mac?)
                   :titleBarStyle (if mac? "hidden" nil)
@@ -35,6 +37,7 @@
                    :preload                 (path/join js/__dirname "js/preload.js")}}
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
+    (.manage win-state win)
     (.loadURL win url)
     (when dev? (.. win -webContents (openDevTools)))
     win))

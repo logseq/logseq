@@ -11,6 +11,13 @@
    (string/starts-with? s "[[")
    (string/ends-with? s "]]")))
 
+(defn block-ref?
+  [s]
+  (and
+   (string? s)
+   (string/starts-with? s "((")
+   (string/ends-with? s "))")))
+
 (defonce page-ref-re #"\[\[(.*?)\]\]")
 
 (defonce page-ref-re-2 #"(\[\[.*?\]\])")
@@ -21,6 +28,13 @@
   [s]
   (when (string? s)
     (if (page-ref? s)
+      (subs s 2 (- (count s) 2))
+      s)))
+
+(defn block-ref-un-brackets!
+  [s]
+  (when (string? s)
+    (if (block-ref? s)
       (subs s 2 (- (count s) 2))
       s)))
 

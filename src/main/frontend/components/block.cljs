@@ -482,7 +482,7 @@
 
 (declare block-content)
 (rum/defc block-reference < rum/reactive
-  [config id]
+  [config id label]
   (when-not (string/blank? id)
     (let [block (and (util/uuid-string? id)
                      (db/pull-block (uuid id)))]
@@ -500,14 +500,22 @@
                          (route-handler/redirect! {:to          :page
                                                    :path-params {:name id}})))}
 
-          (let [title (:block/title block)]
-            (if (empty? title)
-              ;; display the content
-              [:div.block-ref
-               (block-content config block nil (:block/uuid block) (:slide? config))]
+          (let [title (let [title (:block/title block)]
+                        (if (empty? title)
+                          ;; display the content
+                          [:div.block-ref
+                           (block-content config block nil (:block/uuid block) (:slide? config))]
+                          (->elem
+                           :span.block-ref
+                           (map-inline config title))))]
+            (if label
               (->elem
-               :span.block-ref
-               (map-inline config title))))]]
+               :span.block-ref {:title (some->
+                                        (:block/content block)
+                                        (text/remove-level-spaces (:block/format block))
+                                        (text/remove-properties!))} ; TODO: replace with a popup
+               (map-inline config label))
+              title))]]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
@@ -623,7 +631,7 @@
 
     ["Block_reference" id]
     ;; FIXME: alert when self block reference
-    (block-reference config id)
+    (block-reference config id nil)
 
     ["Nested_link" link]
     (nested-link config html-export? link)
@@ -636,6 +644,14 @@
         (cond
           (string/blank? s)
           [:span.warning {:title "Invalid link"} full_text]
+
+          (text/block-ref? s)
+          (let [block-id (text/block-ref-un-brackets! s)]
+            (block-reference config block-id label))
+
+          (text/page-ref? s)
+          (let [page (text/page-ref-un-brackets! s)]
+            (page-reference (:html-export? config) page config label))
 
           ;; image
           (text/image-link? img-formats s)
@@ -673,7 +689,7 @@
                  (= protocol "id")
                  (string? (:link (second url)))
                  (util/uuid-string? (:link (second url)))) ; org mode id
-            (block-reference config (:link (second url)))
+            (block-reference config (:link (second url)) nil)
 
             (= protocol "file")
             (if (text/image-link? img-formats href)
@@ -734,6 +750,12 @@
      [:div.warning {:title "Invalid hiccup"} s]
      (-> (safe-read-string s)
          (security/remove-javascript-links-in-href)))
+
+    ["Inline_Html" s]
+    (when (not html-export?)
+      ;; TODO: how to remove span and only export the content of `s`?
+      [:span {:dangerouslySetInnerHTML
+              {:__html s}}])
 
     ["Break_Line"]
     [:br]

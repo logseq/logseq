@@ -250,6 +250,11 @@
 
      (get-in @state [:me :preferred_format] "markdown")))))
 
+(defn markdown?
+  []
+  (= (keyword (get-preferred-format))
+     :markdown))
+
 (defn get-pages-directory
   []
   (or
@@ -386,6 +391,11 @@
 (defn get-edit-input-id
   []
   (ffirst (:editor/editing? @state)))
+
+(defn get-input
+  []
+  (when-let [id (get-edit-input-id)]
+    (gdom/getElement id)))
 
 (defn get-last-edit-input-id
   []

@@ -71,8 +71,9 @@
         "fuse.js": "^6.4.6",
         "gulp-cached": "^1.1.1",
         "ignore": "^5.1.8",
+        "is-svg": "4.2.2",
         "jszip": "^3.5.0",
-        "mldoc": "0.5.6",
+        "mldoc": "0.5.9",
         "mousetrap": "^1.6.5",
         "path": "^0.12.7",
         "react": "^17.0.1",
@@ -81,7 +82,6 @@
         "react-textarea-autosize": "^8.0.1",
         "react-transition-group": "^4.3.0",
         "url": "^0.11.0",
-        "yargs-parser": "^20.2.4",
-        "is-svg": "4.2.2"
+        "yargs-parser": "^20.2.4"
     }
 }
