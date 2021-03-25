@@ -23,9 +23,9 @@
 
 (def rules
   '[[(parent ?p ?c)
-     [?p :block/children ?c]]
+     [?c :block/parent ?p]]
     [(parent ?p ?c)
-     [?t :block/children ?c]
+     [?c :block/parent ?t]
      (parent ?p ?t)]
 
     ;; from https://stackoverflow.com/questions/43784258/find-entities-whose-ref-to-many-attribute-contains-all-elements-of-input
@@ -511,7 +511,7 @@
   [repo block-id]
   (when-let [conn (conn/get-conn repo)]
     (when-let [block (d/entity conn [:block/uuid block-id])]
-      (d/entity conn [:block/children [:block/uuid block-id]]))))
+      (:block/parent block))))
 
 ;; non recursive query
 (defn get-block-parents
@@ -619,10 +619,14 @@
 (defn get-block-immediate-children
   [repo block-uuid]
   (when-let [conn (conn/get-conn repo)]
-    (let [ids (->> (:block/children (db-utils/entity repo [:block/uuid block-uuid]))
-                   (map :db/id))]
-      (when (seq ids)
-        (db-utils/pull-many repo '[*] ids)))))
+    (d/q
+      '[:find [(pull ?b [*]) ...]
+        :in $ ?parent-id
+        :where
+        [?b :block/parent ?parent]
+        [?parent :block/uuid ?parent-id]]
+      conn
+      block-uuid)))
 
 (defn get-block-children
   [repo block-uuid]
@@ -922,11 +926,11 @@
 
 (defn- remove-children!
   [blocks]
-  (let [childrens (->> (mapcat :block/children blocks)
-                       (map :db/id)
-                       (set))]
-    (if (seq childrens)
-      (remove (fn [block] (contains? childrens (:db/id block))) blocks)
+  (let [parents (->> (mapcat :block/parent blocks)
+                     (map :db/id)
+                     (set))]
+    (if (seq parents)
+      (filter (fn [block] (contains? parents (:db/id block))) blocks)
       blocks)))
 
 ;; TODO: improve perf
