@@ -11,7 +11,9 @@
             [medley.core :as medley]
             [frontend.format.block :as block]))
 
-(defn blocks->vec-tree [col]
+(defn blocks->vec-tree
+  "Deprecated: use blocks->vec-tree-by-parent instead."
+  [col]
   (let [col (map (fn [h] (cond->
                            h
                            (not (:block/dummy? h))
@@ -59,6 +61,56 @@
                                    :block/refs-with-children refs-with-children)
                             other-children)]
               (recur others children))))))))
+
+(defn- get-all-refs
+  [block]
+  (let [refs (if-let [refs (seq (:block/refs-with-children block))]
+               refs
+               (concat
+                 (:block/refs block)
+                 (:block/tags block)))]
+    (distinct refs)))
+
+(defn prepare-blocks
+  "Preparing blocks: reverse, update some keys"
+  [blocks]
+  (loop [[f & r] blocks
+         new (list)]
+    (if (nil? f)
+      new
+      (let [f (cond-> f
+                (not (:block/dummy? f))
+                (dissoc f :block/meta))]
+        (recur r (cons f new))))))
+
+(defn blocks->vec-tree-by-parent
+  [col]
+  (let [blocks (prepare-blocks col)]
+    (loop [[f & r] blocks
+           tree (list)
+           parent? false]
+      (if (nil? f)
+        tree
+        (let [{:block/keys [parent left]} f
+              f (assoc f :block/refs-with-children
+                         (->> (get-all-refs f) (remove nil?)))]
+          (cond
+            parent?
+            (let [refs-with-children (->> (mapcat get-all-refs (cons f tree))
+                                       (remove nil?)
+                                       distinct)
+                  new-ks {:block/children tree
+                          :block/refs-with-children refs-with-children}
+                  f (-> (merge f new-ks) (list))]
+              (if (not= parent left)
+               (recur r f false)
+               (recur r f true)))
+
+            (not= parent left)
+            (recur r (conj tree f) false)
+
+            (= parent left) ; first child of parent
+            (recur r (conj tree f) true)))))))
 
 ;; recursively with children content for tree
 (defn get-block-content-rec
