@@ -397,6 +397,7 @@
           tx
           transact-option)
 
+         ;; TODO: remove
          (when (seq pages)
            (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
              (when (seq children-tx)

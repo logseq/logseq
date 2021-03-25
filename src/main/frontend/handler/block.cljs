@@ -66,9 +66,7 @@
   [block]
   (let [refs (if-let [refs (seq (:block/refs-with-children block))]
                refs
-               (concat
-                 (:block/refs block)
-                 (:block/tags block)))]
+               (:block/refs block))]
     (distinct refs)))
 
 (defn prepare-blocks

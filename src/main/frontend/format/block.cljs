@@ -501,55 +501,39 @@
                 [blocks parents' result]))]
         (recur blocks parents result)))))
 
+;; TODO: remove meta, pos
 (defn parse-block
   ([block format]
    (parse-block block format nil))
-  ([{:block/keys [uuid content meta file page pre-block?] :as block} format {:keys [with-id?]
-                                                                             :or {with-id? true}}]
+  ([{:block/keys [uuid content meta file page pre-block? parent left] :as block}
+    format
+    {:keys [with-id?]
+     :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [ast (format/to-edn content format nil)
            start-pos (:start-pos meta)
            encoded-content (utf8/encode content)
            content-length (utf8/length encoded-content)
-           blocks (extract-blocks ast content with-id?)
+           new-block (first (extract-blocks ast content with-id?))
            ref-pages-atom (atom [])
            parent-ref-pages (->> (db/get-block-parent (state/get-current-repo) uuid)
                                  :block/path-refs
                                  (map :db/id))
-           blocks (doall
-                   (map-indexed
-                    (fn [idx {:block/keys [refs meta] :as block}]
-                      (let [ref-pages (filter :block/name refs)
-                            path-ref-pages (concat ref-pages parent-ref-pages)
-                            block (merge
-                                   block
-                                   {:block/meta meta
-                                    :block/marker (get block :block/marker "nil")
-                                    :block/properties (get block :block/properties {})
-                                    :block/file file
-                                    :block/format format
-                                    :block/page page
-                                    :block/content (utf8/substring encoded-content
-                                                                   (:start-pos meta)
-                                                                   (:end-pos meta))
-                                    :block/path-refs path-ref-pages}
-                                   ;; Preserve the original block id
-                                   (when (zero? idx)
-                                     {:block/uuid uuid})
-                                   (when (seq refs)
-                                     {:block/refs
-                                      (mapv
-                                       (fn [page]
-                                         (when (:block/name page)
-                                           (swap! ref-pages-atom conj page))
-                                         page)
-                                       refs)}))]
-                        (-> block
-                            (assoc-in [:block/meta :start-pos] (+ (:start-pos meta) start-pos))
-                            (assoc-in [:block/meta :end-pos] (+ (:end-pos meta) start-pos)))))
-                    blocks))
+           block (let [{:block/keys [refs]} new-block
+                       ref-pages (filter :block/name refs)
+                       path-ref-pages (concat ref-pages parent-ref-pages)
+                       block (merge
+                              block
+                              new-block
+                              {:block/path-refs path-ref-pages})]
+                   (-> block
+                       (assoc-in [:block/meta :start-pos] (+ (:start-pos meta) start-pos))
+                       (assoc-in [:block/meta :end-pos] (+ (:end-pos meta) start-pos))))
+           _ (doseq [page (:refs block)]
+               (when (:block/name page)
+                 (swap! ref-pages-atom conj page)))
            pages (vec (distinct @ref-pages-atom))]
-       {:blocks blocks
+       {:blocks [(dissoc block :db/id)]
         :pages pages
         :start-pos start-pos
         :end-pos (+ start-pos content-length)}))))
