@@ -198,8 +198,7 @@
                  [?block :block/meta ?meta]
                  [(?pred $ ?meta)]]
                (conn/get-conn repo-url) file-id pred)
-          db-utils/seq-flatten
-          db-utils/sort-by-pos))))
+          db-utils/seq-flatten))))
 
 (defn get-file-after-blocks-meta
   ([repo-url file-id end-pos]
@@ -212,9 +211,8 @@
               '[:block/uuid :block/meta :block/content :block/level]
               '[:block/uuid :block/meta])
          blocks (db-utils/pull-many repo-url ks eids)]
-     (->> (filter (fn [{:block/keys [meta]}]
-                    (>= (:start-pos meta) end-pos)) blocks)
-          db-utils/sort-by-pos))))
+     (filter (fn [{:block/keys [meta]}]
+               (>= (:start-pos meta) end-pos)) blocks))))
 
 (defn get-file-pages
   [repo-url path]
@@ -379,9 +377,8 @@
 
 (defn page-blocks-transform
   [repo-url result]
-  (let [result (db-utils/seq-flatten result)
-        sorted (db-utils/sort-by-pos result)]
-    (->> (db-utils/with-repo repo-url sorted)
+  (let [result (db-utils/seq-flatten result)]
+    (->> (db-utils/with-repo repo-url result)
          (with-block-refs-count repo-url))))
 
 (defn sort-blocks
@@ -394,7 +391,7 @@
                   (assoc block :block/page
                          (get pages-map (:db/id (:block/page block)))))
                 blocks)]
-    (db-utils/sort-by-pos blocks)))
+    blocks))
 
 (defn get-marker-blocks
   [repo-url marker]
@@ -410,7 +407,6 @@
               marker)
      react
      db-utils/seq-flatten
-     db-utils/sort-by-pos
      (db-utils/with-repo repo-url)
      (with-block-refs-count repo-url)
      (sort-blocks)
@@ -592,7 +588,6 @@
   [result repo-url block-uuid level]
   (some->> result
            db-utils/seq-flatten
-           db-utils/sort-by-pos
            (take-while (fn [h]
                          (or
                           (= (:block/uuid h)
@@ -616,18 +611,32 @@
             rules)
            (apply concat)))))
 
+(defn- sort-by-left
+  [blocks]
+  (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
+  (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)
+        start (get left->blocks nil)]
+    (if start
+      (loop [block start
+             result [start]]
+        (if-let [next (get left->blocks (:db/id block))]
+          (recur next (conj result next))
+          result))
+      (throw "Can't find the start block when sort-by-left"))))
+
 (defn get-block-immediate-children
   "Doesn't include nested children."
   [repo block-uuid]
   (when-let [conn (conn/get-conn repo)]
-    (d/q
-      '[:find [(pull ?b [*]) ...]
-        :in $ ?parent-id
-        :where
-        [?b :block/parent ?parent]
-        [?parent :block/uuid ?parent-id]]
-      conn
-      block-uuid)))
+    (-> (d/q
+          '[:find [(pull ?b [*]) ...]
+            :in $ ?parent-id
+            :where
+            [?b :block/parent ?parent]
+            [?parent :block/uuid ?parent-id]]
+          conn
+          block-uuid)
+        sort-by-left)))
 
 (defn get-block-children
   "Including nested children."

@@ -249,7 +249,7 @@
                                     (for [{:block/keys [ref-blocks]} blocks]
                                       (map (fn [ref-block]
                                              [:block/refed-blocks (last ref-block)])
-                                           ref-blocks))))
+                                        ref-blocks))))
                             (distinct))
               refed-pages (map
                            (fn [[k page-id]]
