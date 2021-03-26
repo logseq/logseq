@@ -1,7 +1,6 @@
-(ns frontend.keyboards.config)
+(ns frontend.keyboards.config
+  (:require [frontend.util :refer [mac?]]))
 
-;; TODO deal with MacOS/windows mod key, etc..
-;; TODO multiple keybindings for single action?
 (def default-shortcuts
   {:date-picker/complete "alt+a"
    :date-picker/prev-day "alt+h"
@@ -15,11 +14,11 @@
 
    :editor/clear-selection "esc"
    :editor/toggle-document-mode "t d"
-   :editor/toggle-settings "t s"
+   :editor/toggle-settings (if mac? "t s" ["t s" "mod+,"])
    :editor/undo "mod+z"
    :editor/redo ["shift+mod+z" "mod+y"]
-   :editor/zoom-in "alt+left"
-   :editor/zoom-out "alt+right"
+   :editor/zoom-in (if mac? "mod+." "alt+right")
+   :editor/zoom-out (if mac? "mod+," "alt+left")
    :editor/cycle-todo "mod+enter"
    :editor/expand-block-children "mod+down"
    :editor/collapse-block-children "mod+up"
@@ -30,8 +29,8 @@
    :editor/highlight "mod+h"
    :editor/insert-link "mod+k"
    :editor/select-all-blocks "mod+shift+a"
-   :editor/move-block-up "alt+shift+up"
-   :editor/move-block-down "alt+shift+down"
+   :editor/move-block-up (if mac? "mod+shift+up"  "alt+shift+up")
+   :editor/move-block-down (if mac? "mod+shift+down" "alt+shift+down")
    :editor/save "mod+s"
    :editor/next "down"
    :editor/prev "up"
@@ -51,7 +50,7 @@
    :ui/toggle-brackets "mod+c mod+b"
 
    :go/search "mod+u"
-   :go/journals "alt+j"
+   :go/journals (if mac? "mod+j" "alt+j")
 
    :git/commit "g c"
 
