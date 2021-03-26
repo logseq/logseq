@@ -127,7 +127,8 @@
 
        :right
        (let [{parent :block/parent db-id :db/id} node]
-         (if-let [new-node-db-id (get indexed-by-position [(->db-id parent) db-id])]
+         (if-let [new-node-db-id
+                  (get indexed-by-position [(->db-id parent) db-id])]
            (let [new-node (get indexed-by-id new-node-db-id)]
              (recur new-node :right))
            (recur node :down)))
@@ -155,7 +156,8 @@
 
 (defn blocks->vec-tree-by-parent
   [col]
-  (let [{:keys [ids parents indexed-by-position indexed-by-id]} (prepare-blocks col)
+  (let [{:keys [ids parents indexed-by-position indexed-by-id]}
+        (prepare-blocks col)
         root-id (first (set/difference parents ids))
         last-node (find-last-node root-id indexed-by-position indexed-by-id)
         last-node (wrap-refs-with-children last-node)]
@@ -165,7 +167,10 @@
            ;; direction :up :left
            direction (if (= parent left) :up :left)]
       (if-let [left-node (get indexed-by-id (->db-id left))]
-        (let [new-direction (if (= (:block/parent left-node) (:block/left left-node)) :up :left)
+        (let [new-direction
+              (if (= (:block/parent left-node)
+                    (:block/left left-node))
+                :up :left)
               left-node (wrap-refs-with-children left-node)]
           (case direction
             :left
