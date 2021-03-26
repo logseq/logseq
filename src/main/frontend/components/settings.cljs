@@ -194,6 +194,8 @@
                             (state/set-preferred-language! lang-val)
                             (ui-handler/re-render-root!)))}
             (for [language dicts/languages]
+              ;; TODO fix me
+              ;; Warning: Use the `defaultValue` or `value` props on <select> instead of setting `selected` on <option>.
               [:option (cond->
                         {:key (:value language)}
                          (= (name (:value language)) preferred-language)
