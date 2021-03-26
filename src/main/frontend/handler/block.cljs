@@ -80,7 +80,7 @@
   (loop [[f & r] blocks
          ids #{}
          parents #{}
-         ;; {[parent left] uuid}
+         ;; {[parent left] db-id}
          indexed-by-position {}
 
          ;; {db-id block}
@@ -107,6 +107,8 @@
 
 (defn- find-last-node
   [root-node-id indexed-by-position indexed-by-id]
+  "Root node is not in these blocks which be indexed. Tt should be the page
+  block's :db/id."
   (assert (some? root-node-id) "root-node-id should satisfy some?.")
   (assert (and (map? indexed-by-position) (seq indexed-by-position))
     "indexed-position's format is wrong.")

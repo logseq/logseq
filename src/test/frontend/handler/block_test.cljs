@@ -106,7 +106,7 @@
          :block/level 4,
          :block/refs-with-children ()})})}])
 
-(deftest test-blocks->vec-tree
+#_(deftest test-blocks->vec-tree
   (let [should-r (vec blocks->vec-tree-return)]
    (let [r (block/blocks->vec-tree blocks->vec-tree-sequential-block-args)]
      (is (= should-r (vec r))))
