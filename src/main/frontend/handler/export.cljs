@@ -3,6 +3,7 @@
             [frontend.db :as db]
             [frontend.format.protocol :as fp]
             [frontend.format :as f]
+            [frontend.config :as config]
             [datascript.core :as d]
             [frontend.util :as util]
             [cljs-bean.core :as bean]
@@ -88,7 +89,7 @@
           html-str     (str "data:text/html;charset=UTF-8,"
                             (js/encodeURIComponent raw-html-str))]
       (if (util/electron?)
-        (js/window.apis.exportPublishAssets raw-html-str)
+        (js/window.apis.exportPublishAssets raw-html-str (config/get-custom-css-path))
         (when-let [anchor (gdom/getElement "download-as-html")]
           (.setAttribute anchor "href" html-str)
           (.setAttribute anchor "download" "index.html")
@@ -185,9 +186,9 @@
                     [?e :page/name ?n]
                     [?e :page/original-name ?n2]] (db/get-conn repo))
              (mapv (fn [[name origin-name file-path]]
-                    (if (= name origin-name)
-                      [[name file-path]]
-                      [[name file-path] [origin-name file-path]])))
+                     (if (= name origin-name)
+                       [[name file-path]]
+                       [[name file-path] [origin-name file-path]])))
              (apply concat)
              (mapv (fn [[page-name file-path]] [page-name (:file/path file-path)]))
              (d/q '[:find ?n ?c
