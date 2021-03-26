@@ -435,8 +435,12 @@
 (defonce graph-ref (atom nil))
 (defonce show-journal? (atom false))
 (defonce dot-mode? (atom false))
-
 (rum/defcs global-graph < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/listen state js/window "resize"
+                    (fn [e]
+                      (reset! layout [js/window.outerWidth js/window.outerHeight])))))
   [state]
   (let [theme (state/sub :ui/theme)
         sidebar-open? (state/sub :ui/sidebar-open?)
