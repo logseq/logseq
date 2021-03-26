@@ -1057,7 +1057,7 @@
       (when (some? style)
         (let [parent-node (d/sel1 :head)
               id "logseq-custom-theme-id"
-              old-link-element (d/sel1 id)
+              old-link-element (d/sel1 (str "#" id))
               style (if (string/starts-with? style "http")
                       style
                       (str "data:text/css;charset=utf-8," (js/encodeURIComponent style)))]
