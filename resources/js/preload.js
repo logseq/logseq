@@ -67,8 +67,8 @@ contextBridge.exposeInMainWorld('apis', {
    *
    * @param {string} html html file with embedded state
    */
-  exportPublishAssets(html) {
-    ipcRenderer.invoke('export-publish-assets', html)
+  exportPublishAssets(html, customCSSPath) {
+    ipcRenderer.invoke('export-publish-assets', html, customCSSPath)
   },
 
   /**
