@@ -1656,8 +1656,7 @@
                 (:block/uuid child)))))])
 
      (when ref?
-       (let [children (-> (db/get-block-immediate-children repo uuid)
-                          db/sort-by-pos)
+       (let [children (db/get-block-immediate-children repo uuid)
              children (block-handler/filter-blocks repo children (:filters config) false)]
          (when (seq children)
            [:div.ref-children.ml-12
