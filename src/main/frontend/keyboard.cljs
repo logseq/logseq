@@ -66,6 +66,11 @@
    (install-shortcuts! dispatcher js/window))
   ([dispatcher target]
    (let [handler (new KeyboardShortcutHandler target)]
+     ;; default is false, set it to true to deal with arrow keys
+     (.setAllShortcutsAreGlobal handler true)
+     ;; default is true, set it to false here
+     (.setAlwaysPreventDefault handler false)
+     ; (.setAlwaysStopPropagation handler true)
 
      ;; register shortcuts
      (doseq [[id _] dispatcher]

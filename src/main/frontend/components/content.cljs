@@ -258,17 +258,18 @@
   (editor-handler/cut-selection-blocks copy?)
   (editor-handler/clear-selection! nil))
 
+;; TODO fix me
 (rum/defc hidden-selection < rum/reactive
-  (mixins/keyboard-mixin (util/->system-modifier "ctrl+c")
-                         (fn [_]
-                           (editor-handler/copy-selection-blocks)
-                           (editor-handler/clear-selection! nil)))
-  (mixins/keyboard-mixin (util/->system-modifier "ctrl+x")
-                         (fn [] (cut-blocks-and-clear-selections! true)))
-  (mixins/keyboard-mixin "backspace"
-                         (fn [] (cut-blocks-and-clear-selections! false)))
-  (mixins/keyboard-mixin "delete"
-                         (fn [] (cut-blocks-and-clear-selections! false)))
+  ;; (mixins/keyboard-mixin (util/->system-modifier "ctrl+c")
+  ;;                        (fn [_]
+  ;;                          (editor-handler/copy-selection-blocks)
+  ;;                          (editor-handler/clear-selection! nil)))
+  ;; (mixins/keyboard-mixin (util/->system-modifier "ctrl+x")
+  ;;                        (fn [] (cut-blocks-and-clear-selections! true)))
+  ;; (mixins/keyboard-mixin "backspace"
+  ;;                        (fn [] (cut-blocks-and-clear-selections! false)))
+  ;; (mixins/keyboard-mixin "delete"
+  ;;                        (fn [] (cut-blocks-and-clear-selections! false)))
   []
   [:div#selection.hidden])
 

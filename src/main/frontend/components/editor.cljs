@@ -6,6 +6,7 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.shortcut :as shortcut-handler]
             [frontend.handler.page :as page-handler]
             [frontend.components.datetime :as datetime-comp]
             [frontend.state :as state]
@@ -189,6 +190,7 @@
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
+  #_
   (mixins/event-mixin
    (fn [state]
      (mixins/on-key-down
@@ -316,15 +318,15 @@
   (mixins/on-key-down
    state
    {;; enter
-    13 (editor-handler/keydown-enter-handler state input)
-    ;; up
-    38 (editor-handler/keydown-up-down-handler input true)
-    ;; down
-    40 (editor-handler/keydown-up-down-handler input false)
-    ;; left
-    37 (editor-handler/keydown-arrow-handler input :left)
-    ;; right
-    39 (editor-handler/keydown-arrow-handler input :right)
+    ;; 13 (editor-handler/keydown-enter-handler state input)
+    ;; ;; up
+    ;; 38 (editor-handler/keydown-up-down-handler input true)
+    ;; ;; down
+    ;; 40 (editor-handler/keydown-up-down-handler input false)
+    ;; ;; left
+    ;; 37 (editor-handler/keydown-arrow-handler input :left)
+    ;; ;; right
+    ;; 39 (editor-handler/keydown-arrow-handler input :right)
     ;; backspace
     8 (editor-handler/keydown-backspace-handler repo input input-id)
     ;; tab
@@ -350,7 +352,19 @@
     (set-up-key-up! state input input-id search-timeout)))
 
 (rum/defcs box < rum/reactive
-  (mixins/event-mixin setup-key-listener!)
+  ;(mixins/event-mixin setup-key-listener!)
+  (mixins/shortcuts
+   :shortcut-listener/box-listener
+   {:editor.editing/enter
+    (partial shortcut-handler/editor-editing-apply editor-handler/keydown-enter-handler)
+    :editor.editing/up
+    (partial shortcut-handler/editor-editing-apply  #(editor-handler/keydown-up-down-handler % true))
+    :editor.editing/down
+    (partial shortcut-handler/editor-editing-apply  #(editor-handler/keydown-up-down-handler % false))
+    :editor.editing/left
+    (partial shortcut-handler/editor-editing-apply #(editor-handler/keydown-arrow-handler % :left))
+    :editor.editing/right
+    (partial shortcut-handler/editor-editing-apply #(editor-handler/keydown-arrow-handler % :right))})
   lifecycle/lifecycle
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or   {dummy? false}

@@ -1347,7 +1347,7 @@
       (exit-editing-and-set-selected-blocks! blocks))))
 
 (defn on-select-block
-  [state e up?]
+  [up? e]
   (when (and
          (gobj/get e "shiftKey")
          (not (gobj/get e "altKey"))
@@ -2126,34 +2126,33 @@
 
 (defn open-block!
   [first?]
-  (when-not (state/editing?)
-    (let [edit-id (state/get-last-edit-input-id)
-          block-id (when edit-id (subs edit-id (- (count edit-id) 36)))
-          last-edit-block (first (array-seq (js/document.getElementsByClassName block-id)))
-          nodes (array-seq (js/document.getElementsByClassName "ls-block"))
-          first-node (first nodes)
-          node (cond
-                 last-edit-block
-                 last-edit-block
-                 first?
-                 first-node
-                 :else
-                 (when-let [blocks-container (util/rec-get-blocks-container first-node)]
-                   (let [nodes (dom/by-class blocks-container "ls-block")]
-                     (last nodes))))]
-      (when node
-        (state/clear-selection!)
-        (unhighlight-block!)
-        (let [block-id (and node (d/attr node "blockid"))
-              edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")
-              block-id (medley/uuid block-id)]
-          (when-let [block (or (db/entity [:block/uuid block-id])
-                               {:block/uuid block-id})]
-            (edit-block! block
-                         :max
-                         (:block/format block)
-                         edit-block-id))))
-      false)))
+  (let [edit-id (state/get-last-edit-input-id)
+        block-id (when edit-id (subs edit-id (- (count edit-id) 36)))
+        last-edit-block (first (array-seq (js/document.getElementsByClassName block-id)))
+        nodes (array-seq (js/document.getElementsByClassName "ls-block"))
+        first-node (first nodes)
+        node (cond
+               last-edit-block
+               last-edit-block
+               first?
+               first-node
+               :else
+               (when-let [blocks-container (util/rec-get-blocks-container first-node)]
+                 (let [nodes (dom/by-class blocks-container "ls-block")]
+                   (last nodes))))]
+    (when node
+      (state/clear-selection!)
+      (unhighlight-block!)
+      (let [block-id (and node (d/attr node "blockid"))
+            edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")
+            block-id (medley/uuid block-id)]
+        (when-let [block (or (db/entity [:block/uuid block-id])
+                             {:block/uuid block-id})]
+          (edit-block! block
+                       :max
+                       (:block/format block)
+                       edit-block-id))))
+    false))
 
 (defn get-search-q
   []
@@ -2294,7 +2293,7 @@
       (.focus input))))
 
 (defn keydown-enter-handler
-  [state input]
+  [input]
   (fn [state e]
     (when (and (not (gobj/get e "ctrlKey"))
                (not (gobj/get e "metaKey"))

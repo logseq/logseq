@@ -8,9 +8,9 @@
    :date-picker/prev-week "alt+k"
    :date-picker/next-week "alt+j"
 
-   :auto-complete/prev "alt+p"
-   :auto-complete/next "alt+n"
-   :auto-complete/complete "alt+a"
+   :auto-complete/prev "up"
+   :auto-complete/next "down"
+   :auto-complete/complete "enter"
 
    :editor/clear-selection "esc"
    :editor/toggle-document-mode "t d"
@@ -34,6 +34,14 @@
    :editor/save "mod+s"
    :editor/next "down"
    :editor/prev "up"
+   :editor/select-block-up "shift+up"
+   :editor/select-block-down "shift+down"
+
+   :editor.editing/enter "enter"
+   :editor.editing/up "up"
+   :editor.editing/down "down"
+   :editor.editing/left "left"
+   :editor.editing/right "right"
 
    ;; '?' not in goog.events.KeyNames
    ;; actually keycode is deprecated, use e.code or e.key is recommended?
@@ -48,6 +56,7 @@
    :ui/fold "tab"
    :ui/un-fold "shift+tab"
    :ui/toggle-brackets "mod+c mod+b"
+   :ui/refresh ["f5" "mod+r" "mod+shift+r"]
 
    :go/search "mod+u"
    :go/journals (if mac? "mod+j" "alt+j")

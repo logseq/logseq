@@ -286,32 +286,7 @@
 
                       (if-not (state/get-selection-start-block)
                         (editor-handler/clear-selection! e)
-                        (state/set-selection-start-block! nil))))
-
-     ;; TODO: move to keyboards
-     #_
-     (mixins/on-key-down
-      state
-      {;; esc
-       27 (fn [_state e]
-            (editor-handler/clear-selection! e))
-
-       ;; shift+up
-       38 (fn [state e]
-            (editor-handler/on-select-block state e true))
-
-       ;; shift+down
-       40 (fn [state e]
-            (editor-handler/on-select-block state e false))
-
-       ;; ?
-       191 (fn [state e]
-             (when-not (util/input? (gobj/get e "target"))
-               (ui-handler/toggle-help!)))})))
-  #_
-  {:did-mount (fn [state]
-                (keyboards/bind-shortcuts!)
-                state)}
+                        (state/set-selection-start-block! nil))))))
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []

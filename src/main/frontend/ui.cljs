@@ -7,6 +7,7 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
+            [frontend.handler.shortcut :as shortcut-handler]
             [frontend.state :as state]
             [frontend.components.svg :as svg]
             [clojure.string :as string]
@@ -319,53 +320,11 @@
   (rum/local 0 ::current-idx)
   (mixins/shortcuts
    :shortcut-listener/auto-complete
-   {:auto-complete/prev
-    (fn [state e]
-      (let [current-idx (get state ::current-idx)
-            matched (first (:rum/args state))]
-        (util/stop e)
-        (js/console.log "go prev" current-idx)
-        (cond
-          (>= @current-idx 1)
-          (swap! current-idx dec)
-          (= @current-idx 0)
-          (reset! current-idx (dec (count matched)))
-          :else nil)
-        (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-          (let [ac-inner (gdom/getElement "ui__ac-inner")
-                element-top (gobj/get element "offsetTop")
-                scroll-top (- (gobj/get element "offsetTop") 360)]
-            (set! (.-scrollTop ac-inner) scroll-top)))))
-
-    :auto-complete/next
-    (fn [state e]
-      (let [current-idx (get state ::current-idx)
-            matched (first (:rum/args state))]
-        (util/stop e)
-        (js/console.log "go next" current-idx "##matched" matched)
-        (let [total (count matched)]
-          (if (>= @current-idx (dec total))
-            (reset! current-idx 0)
-            (swap! current-idx inc)))
-        (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-          (let [ac-inner (gdom/getElement "ui__ac-inner")
-                element-top (gobj/get element "offsetTop")
-                scroll-top (- (gobj/get element "offsetTop") 360)]
-            (set! (.-scrollTop ac-inner) scroll-top)))))
-
-    :auto-complete/complete
-    (fn [state e]
-      (util/stop e)
-      (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)]
-        (let [current-idx (get state ::current-idx)]
-          (if (and (seq matched)
-                   (> (count matched)
-                      @current-idx))
-            (on-chosen (nth matched @current-idx) false)
-            (and on-enter (on-enter state))))))})
+   {:auto-complete/prev shortcut-handler/auto-complete-prev
+    :auto-complete/next shortcut-handler/auto-complete-next
+    :auto-complete/complete shortcut-handler/auto-complete-complete})
   [state matched {:keys [on-chosen
                          on-shift-chosen
-                         on-enter
                          empty-div
                          item-render
                          class]}]
