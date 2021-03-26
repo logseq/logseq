@@ -156,7 +156,7 @@
      (remove nil?)
      distinct)))
 
-(defn blocks->vec-tree-by-parent
+(defn blocks->vec-tree-by-outliner
   [col]
   (let [{:keys [ids parents indexed-by-position indexed-by-id]}
         (prepare-blocks col)

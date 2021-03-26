@@ -111,10 +111,10 @@
    (let [r (block/blocks->vec-tree blocks->vec-tree-sequential-block-args)]
      (is (= should-r (vec r))))
 
-   (let [r (block/blocks->vec-tree-by-parent blocks->vec-tree-sequential-block-args)]
+   (let [r (block/blocks->vec-tree-by-outliner blocks->vec-tree-sequential-block-args)]
      (is (= should-r (vec r))))))
 
 (deftest test-blocks->vec-tree-random-block
   (let [should-r (vec blocks->vec-tree-return)
-        r (block/blocks->vec-tree-by-parent blocks->vec-tree-random-block-args)]
+        r (block/blocks->vec-tree-by-outliner blocks->vec-tree-random-block-args)]
     (is (= should-r (vec r)))))
