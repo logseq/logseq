@@ -1418,7 +1418,10 @@
        (when (and (if check-idle? (state/input-idle? repo) true)
                   (not (state/get-editor-show-page-search?))
                   (not (state/get-editor-show-page-search-hashtag?))
-                  (not (state/get-editor-show-block-search?)))
+                  (not (state/get-editor-show-block-search?))
+                  (not (state/get-editor-show-date-picker?))
+                  (not (state/get-editor-show-template-search?))
+                  (not (state/get-editor-show-input)))
          (state/set-editor-op! :auto-save)
          (try
            (let [input-id (state/get-edit-input-id)
