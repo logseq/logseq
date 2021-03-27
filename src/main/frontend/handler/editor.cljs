@@ -2369,8 +2369,9 @@
 
 (defn- on-arrow-move-to-boundray
   [state input e direction]
-  (when (or (and (= :left direction) (util/input-start? input))
-            (and (= :right direction) (util/input-end? input)))
+  (when (and (not (util/input-selected? input))
+             (or (and (= :left direction) (util/input-start? input))
+             (and (= :right direction) (util/input-end? input))))
     (move-to-block-when-cross-boundrary state e direction)))
 
 (defn keydown-arrow-handler
