@@ -110,7 +110,7 @@
                                (let [{:keys [block typ show?]} block-data
                                      block-id (or (:block/uuid (state/get-edit-block))
                                                   (:block/uuid block))
-                                     typ (or typ @commands/*current-command)]
+                                     typ (or @commands/*current-command typ)]
                                  (editor-handler/set-block-timestamp! block-id
                                                                       typ
                                                                       text)

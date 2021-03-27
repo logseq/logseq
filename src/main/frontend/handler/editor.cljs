@@ -1418,7 +1418,10 @@
        (when (and (if check-idle? (state/input-idle? repo) true)
                   (not (state/get-editor-show-page-search?))
                   (not (state/get-editor-show-page-search-hashtag?))
-                  (not (state/get-editor-show-block-search?)))
+                  (not (state/get-editor-show-block-search?))
+                  (not (state/get-editor-show-date-picker?))
+                  (not (state/get-editor-show-template-search?))
+                  (not (state/get-editor-show-input)))
          (state/set-editor-op! :auto-save)
          (try
            (let [input-id (state/get-edit-input-id)
@@ -2366,8 +2369,9 @@
 
 (defn- on-arrow-move-to-boundray
   [state input e direction]
-  (when (or (and (= :left direction) (util/input-start? input))
-            (and (= :right direction) (util/input-end? input)))
+  (when (and (not (util/input-selected? input))
+             (or (and (= :left direction) (util/input-start? input))
+             (and (= :right direction) (util/input-end? input))))
     (move-to-block-when-cross-boundrary state e direction)))
 
 (defn keydown-arrow-handler

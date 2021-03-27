@@ -766,6 +766,12 @@
              (.-selectionStart input)))))
 
 #?(:cljs
+   (defn input-selected?
+     [input]
+     (not= (.-selectionStart input)
+           (.-selectionEnd input))))
+
+#?(:cljs
     (defn get-selected-text
       []
       (utils/getSelectionText)))

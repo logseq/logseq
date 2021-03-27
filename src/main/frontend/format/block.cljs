@@ -171,7 +171,8 @@
                    (distinct))
         properties (->> properties
                         (medley/map-kv (fn [k v]
-                                         (let [v (string/trim v)]
+                                         (let [v (string/trim v)
+                                               k (string/replace k " " "_")]
                                            (cond
                                              (and (= "\"" (first v) (last v))) ; wrapped in ""
                                              [(string/lower-case k) (string/trim (subs v 1 (dec (count v))))]
