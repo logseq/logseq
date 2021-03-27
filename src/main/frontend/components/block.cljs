@@ -414,9 +414,10 @@
                   (not html-export?)
                   (not contents-page?))
          [:span.text-gray-500.bracket "[["])
-       (page-cp (assoc config
-                       :label (mldoc/plain->text label)
-                       :contents-page? contents-page?) {:page/name s})
+       (let [s (string/trim s)]
+         (page-cp (assoc config
+                        :label (mldoc/plain->text label)
+                        :contents-page? contents-page?) {:page/name s}))
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
@@ -444,7 +445,7 @@
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]
-  (let [page-name (string/lower-case page-name)
+  (let [page-name (string/trim (string/lower-case page-name))
         current-page (state/get-current-page)]
     [:div.color-level.embed.embed-page.bg-base-2
      {:class (if (:sidebar? config) "in-sidebar")}
