@@ -55,17 +55,27 @@
       (string/replace path "\\" "/")
       path)))
 
+;; TODO: ignore according to mime types
+(defn ignored-path?
+  [dir path]
+  (or
+   (some #(string/starts-with? path (str dir "/" %))
+         ["." "assets" "node_modules"])
+   (some #(string/ends-with? path (str dir "/" %))
+         [".swap" ".crswap" ".tmp"])))
+
 (defn- get-files
   [path]
-  (let [result (->> (map
-                      (fn [path]
-                        (let [stat (fs/statSync path)]
-                          (when-not (.isDirectory stat)
-                            {:path (fix-win-path! path)
-                             :content (read-file path)
-                             :stat stat})))
-                      (readdir path))
-                    (remove nil?))]
+  (let [result (->>
+                (readdir path)
+                (remove (partial ignored-path? path))
+                (map (fn [path]
+                       (let [stat (fs/statSync path)]
+                         (when-not (.isDirectory stat)
+                           {:path (fix-win-path! path)
+                            :content (read-file path)
+                            :stat stat}))))
+                (remove nil?))]
     (vec (cons {:path (fix-win-path! path)} result))))
 
 ;; TODO: Is it going to be slow if it's a huge directory
@@ -100,12 +110,7 @@
   (when (fs/existsSync dir)
     (let [watcher (.watch watcher dir
                           (clj->js
-                           {:ignored (fn [path]
-                                       (or
-                                        (some #(string/starts-with? path (str dir "/" %))
-                                              ["." "assets" "node_modules"])
-                                        (some #(string/ends-with? path (str dir "/" %))
-                                              [".swap" ".crswap" ".tmp"])))
+                           {:ignored (partial ignored-path? dir)
                             :ignoreInitial false
                             :persistent true
                             :awaitWriteFinish true}))]
