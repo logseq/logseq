@@ -65,6 +65,15 @@
                               (string? argument)
                               (text/page-ref? argument))
                      (text/page-ref-un-brackets! argument))))
+
+               (and (vector? block)
+                    (= "Tag" (first block)))
+               (let [text (second block)]
+                 (when (and
+                        (string? text)
+                        (text/page-ref? text))
+                   (text/page-ref-un-brackets! text)))
+
                :else
                nil)]
     (when (and
