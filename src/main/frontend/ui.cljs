@@ -9,12 +9,14 @@
             [frontend.handler.notification :as notification-handler]
             [frontend.state :as state]
             [frontend.components.svg :as svg]
-            [clojure.string :as string]
+            [cljs.core.match :refer-macros [match]]
+            [clojure.set :as set]
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [medley.core :as medley]
             [frontend.ui.date-picker]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n])
+  (:import (goog.events KeyCodes)))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -94,10 +96,10 @@
                                  (close-fn)))
               child [:div
                      {:style {:display "flex" :flex-direction "row"}}
-                     [:div {:style {:margin-right "8px"}} title]
+                     [:div {:style {:margin-right "8px"}} title]]]
                       ;; [:div {:style {:position "absolute" :right "8px"}}
                       ;;  icon]
-                     ]]
+
           (rum/with-key
             (menu-link new-options child)
             title)))
@@ -315,58 +317,73 @@
        :class (when (not has-more) "cursor-not-allowed ")}
       (t (if has-more :page/earlier :page/no-more-journals))])))
 
+(defmulti on-key-down identity)
+
+(defmethod on-key-down :up
+  [_]
+  (fn [state e]
+    (let [current-idx (get state ::current-idx)
+          matched (first (:rum/args state))]
+      (util/stop e)
+      (cond
+        (>= @current-idx 1)
+        (swap! current-idx dec)
+        (= @current-idx 0)
+        (reset! current-idx (dec (count matched)))
+
+        :else
+        nil)
+      (when-let [element (gdom/getElement (str "ac-" @current-idx))]
+        (let [ac-inner (gdom/getElement "ui__ac-inner")
+              scroll-top (- (gobj/get element "offsetTop") 360)]
+          (set! (.-scrollTop ac-inner) scroll-top))))))
+
+(defmethod on-key-down :down
+  [_]
+  (fn [state e]
+    (let [current-idx (get state ::current-idx)
+          matched (first (:rum/args state))]
+      (util/stop e)
+      (let [total (count matched)]
+        (if (>= @current-idx (dec total))
+          (reset! current-idx 0)
+          (swap! current-idx inc)))
+      (when-let [element (gdom/getElement (str "ac-" @current-idx))]
+        (let [ac-inner (gdom/getElement "ui__ac-inner")
+              scroll-top (- (gobj/get element "offsetTop") 360)]
+          (set! (.-scrollTop ac-inner) scroll-top))))))
+
+(defmethod on-key-down :enter
+  [_]
+  (fn [state e]
+    (util/stop e)
+    (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)
+          current-idx (get state ::current-idx)]
+        (if (and (seq matched)
+                 (> (count matched)
+                    @current-idx))
+          (on-chosen (nth matched @current-idx) false)
+          (and on-enter (on-enter state))))))
+
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
   (mixins/event-mixin
    (fn [state]
      (mixins/on-key-down
       state
-      {;; up
-       38 (fn [_ e]
-            (let [current-idx (get state ::current-idx)
-                  matched (first (:rum/args state))]
-              (util/stop e)
-              (cond
-                (>= @current-idx 1)
-                (swap! current-idx dec)
-                (= @current-idx 0)
-                (reset! current-idx (dec (count matched)))
-
-                :else
-                nil)
-              (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-                (let [ac-inner (gdom/getElement "ui__ac-inner")
-                      element-top (gobj/get element "offsetTop")
-                      scroll-top (- (gobj/get element "offsetTop") 360)]
-                  (set! (.-scrollTop ac-inner) scroll-top)))))
-         ;; down
-       40 (fn [state e]
-            (let [current-idx (get state ::current-idx)
-                  matched (first (:rum/args state))]
-              (util/stop e)
-              (let [total (count matched)]
-                (if (>= @current-idx (dec total))
-                  (reset! current-idx 0)
-                  (swap! current-idx inc)))
-              (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-                (let [ac-inner (gdom/getElement "ui__ac-inner")
-                      element-top (gobj/get element "offsetTop")
-                      scroll-top (- (gobj/get element "offsetTop") 360)]
-                  (set! (.-scrollTop ac-inner) scroll-top)))))
-
-         ;; enter
-       13 (fn [state e]
-            (util/stop e)
-            (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)]
-              (let [current-idx (get state ::current-idx)]
-                (if (and (seq matched)
-                         (> (count matched)
-                            @current-idx))
-                  (on-chosen (nth matched @current-idx) false)
-                  (and on-enter (on-enter state))))))})))
+      (fn [key-code e]
+        ;; https://stackoverflow.com/questions/24975999/how-do-i-use-core-match-in-clojurescript-with-goog-events-keycodes
+        (let [ctrl-key (.-ctrlKey e)
+              code-name (set/map-invert (js->clj KeyCodes))]
+          (match [ctrl-key (code-name key-code)]
+            [false "UP"] (on-key-down :up)
+            [true "P"] (on-key-down :up)
+            [false "DOWN"] (on-key-down :down)
+            [true "N"] (on-key-down :down)
+            [false "ENTER"] (on-key-down :enter)
+            :else nil))))))
   [state matched {:keys [on-chosen
                          on-shift-chosen
-                         on-enter
                          empty-div
                          item-render
                          class]}]
@@ -412,8 +429,8 @@
    [:div.Tooltip {:style {:display "inline"}}
     [:div (cond->
            {:class "Tooltip__label"}
-            label-style
-            (assoc :style label-style))
+           label-style
+           (assoc :style label-style))
      label]
     children]))
 
@@ -616,6 +633,6 @@
      [:option (cond->
                {:key   label
                 :value (or value label)}
-                selected
-                (assoc :selected selected))
+               selected
+               (assoc :selected selected))
       label])])

@@ -110,7 +110,9 @@
      (listen state js/window "keydown"
              (fn [e]
                (let [key-code (.-keyCode e)]
-                 (if-let [f (get keycode-map key-code)]
+                 (if-let [f (if (fn? keycode-map)
+                              (keycode-map key-code e)
+                              (get keycode-map key-code))]
                    (f state e)
                    (when (and not-matched-handler (fn? not-matched-handler))
                      (not-matched-handler e key-code)))
