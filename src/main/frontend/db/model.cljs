@@ -1012,6 +1012,8 @@
                          [?block :block/deadline ?d])
                         [(get-else $ ?block :block/marker "DONE") ?marker]
                         [(not= ?marker "DONE")]
+                        [(not= ?marker "CANCELED")]
+                        [(not= ?marker "CANCELLED")]
                         [(<= ?d ?day)]]
                       date)
              react
