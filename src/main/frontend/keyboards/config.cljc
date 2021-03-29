@@ -37,7 +37,8 @@
    :editor/select-block-up "shift+up"
    :editor/select-block-down "shift+down"
 
-   ;; :editor.editing/enter "enter"
+   ;; :editor.editing/new-block "enter"
+   ;; :editor.editing/new-line "shift+enter"
    ;; :editor.editing/up "up"
    ;; :editor.editing/down "down"
    ;; :editor.editing/left "left"
@@ -45,9 +46,10 @@
    ;; :editor.editing/delete "backspace"
    ;; :editor.editing/tab "tab"
 
-   :editor.editing/enter "enter"
-   :editor.editing/up "ctrl+j"
-   :editor.editing/down "ctrl+k"
+   :editor.editing/new-block "enter"
+   :editor.editing/new-line "ctrl+shift+l"
+   :editor.editing/up "ctrl+k"
+   :editor.editing/down "ctrl+j"
    :editor.editing/left "ctrl+h"
    :editor.editing/right "ctrl+l"
    :editor.editing/delete "ctrl+d"

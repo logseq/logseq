@@ -84,6 +84,9 @@
     :editor/block-dom-id nil
     :editor/set-timestamp-block nil
     :editor/last-input-time nil
+    ;; toggle new block/new line shortcut
+    :editor/new-block-toggle? false
+
     :db/last-transact-time {}
     :db/last-persist-transact-ids {}
     ;; whether database is persisted
@@ -966,36 +969,19 @@
   []
   (get @state :notification/contents))
 
-(defn get-new-block-shortcut
+(defn get-new-block-toggle?
   []
-  (let [shortcut (get-in @state [:shortcuts :editor/new-block])]
-    (if (and shortcut (contains? #{"enter" "alt+enter"} (string/lower-case shortcut)))
-      shortcut
-      "enter")))
-
-(defn set-new-block-shortcut!
-  [value]
-  (set-state! [:shortcuts :editor/new-block] value))
+  (get @state :editor/new-block-toggle?))
 
 (defn toggle-new-block-shortcut!
   []
-  (if-let [enter? (= "enter" (get-new-block-shortcut))]
-    (set-new-block-shortcut! "alt+enter")
-    (set-new-block-shortcut! "enter")))
+  (update-state! :editor/new-block-toggle? not))
 
 (defn set-config!
   [repo-url value]
-  (let [old-shortcuts (get-in @state [:config repo-url :shortcuts])]
-    (set-state! [:config repo-url] value)
-
-    ;; TODO: refactor. This seems useless as the default value has already been handled in
-    ;; `get-new-block-shortcut`.
-    (set-new-block-shortcut!
-     (or (get-shortcut repo-url :editor/new-block)
-         "enter"))
-
-    (let [shortcuts (or (:shortcuts value) {})]
-      (storage/set (str repo-url "-shortcuts") shortcuts))))
+  (set-state! [:config repo-url] value)
+  (let [shortcuts (or (:shortcuts value) {})]
+    (storage/set (str repo-url "-shortcuts") shortcuts)))
 
 (defn get-git-auto-push?
   ([]

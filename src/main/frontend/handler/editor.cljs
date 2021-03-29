@@ -2292,11 +2292,10 @@
     (when-let [input (gdom/getElement id)]
       (.focus input))))
 
-(defn keydown-enter-handler
+(defn- keydown-new-block
   [state e]
-  (when (and (not (gobj/get e "ctrlKey"))
-             (not (gobj/get e "metaKey"))
-             (not (in-auto-complete?)))
+  (util/stop e)
+  (when (not (in-auto-complete?))
     (let [{:keys [id block config]} (get-state state)
           input (gdom/getElement id)]
       (when (and block
@@ -2306,29 +2305,31 @@
           (if (and
                (> (:block/level block) 2)
                (string/blank? content))
-            (do
-              (util/stop e)
-              (adjust-block-level! state :left))
-            (let [shortcut (state/get-new-block-shortcut)
-                  insert? (cond
-                            config/mobile?
-                            true
+            (adjust-block-level! state :left)
+            (profile
+             "Insert block"
+             (insert-new-block! state))))))))
 
-                            (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
-                            false
+(defn- keydown-new-line
+  [state e]
+  (util/stop e)
+  (when (not (in-auto-complete?))
+    (let [{:keys [id]} (get-state state)
+          ^js input (gdom/getElement id)
+          selected-start (gobj/get input "selectionStart")
+          selected-end (gobj/get input "selectionEnd")]
+      ;; new line, is this the right way?
+      (.setRangeText input "\n" selected-start selected-end "end"))))
 
-                            (gobj/get e "shiftKey")
-                            false
+(defn keydown-new-block-handler [state e]
+  (if (state/get-new-block-toggle?)
+    (keydown-new-line state e)
+    (keydown-new-block state e)))
 
-                            :else
-                            true)]
-              (when (and
-                     insert?
-                     (not (in-auto-complete?)))
-                (util/stop e)
-                (profile
-                 "Insert block"
-                 (insert-new-block! state))))))))))
+(defn keydown-new-line-handler [state e]
+  (if (state/get-new-block-toggle?)
+    (keydown-new-block state e)
+    (keydown-new-line state e)))
 
 (defn keydown-up-down-handler
   [up?]
@@ -2433,7 +2434,6 @@
           (get delete-map deleted)))
 
       (do
-        (util/stop e)
         (commands/delete-pair! id)
         (cond
           (and (= deleted "[") (state/get-editor-show-page-search?))

@@ -342,7 +342,8 @@
   ;(mixins/event-mixin setup-key-listener!)
   (mixins/shortcuts
    :shortcut-listener/box-listener
-   {:editor.editing/enter editor-handler/keydown-enter-handler
+   {:editor.editing/new-block editor-handler/keydown-new-block-handler
+    :editor.editing/new-line editor-handler/keydown-new-line-handler
     :editor.editing/up (editor-handler/keydown-up-down-handler true)
     :editor.editing/down (editor-handler/keydown-up-down-handler false)
     :editor.editing/left (editor-handler/keydown-arrow-handler :left)

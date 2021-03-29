@@ -234,7 +234,7 @@
 
 (rum/defc new-block-mode < rum/reactive
   []
-  (when-let [alt-enter? (= "alt+enter" (state/sub [:shortcuts :editor/new-block]))]
+  (when (state/sub [:editor/new-block-toggle?])
     [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
      {:title "Click to switch to \"Enter\" for creating new block"
       :on-click state/toggle-new-block-shortcut!}
