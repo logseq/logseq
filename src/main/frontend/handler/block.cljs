@@ -81,14 +81,9 @@
          ids #{}
          parents #{}
          ;; {[parent left] db-id}
-         indexed-by-position {}
-
-         ;; {db-id block}
-         indexed-by-id {}]
+         indexed-by-position {}]
     (if (nil? f)
-      {:ids ids :parents parents
-       :indexed-by-position indexed-by-position
-       :indexed-by-id indexed-by-id}
+      {:ids ids :parents parents :indexed-by-position indexed-by-position}
       (let [f (cond-> f
                 (not (:block/dummy? f))
                 (dissoc f :block/meta))
@@ -99,43 +94,16 @@
             (let [position (mapv ->db-id [parent left])]
               (when (get indexed-by-position position)
                 (throw (js/Error. "Two block occupy the same position")))
-              (assoc indexed-by-position position db-id))
-            new-indexed-by-id
-            (assoc indexed-by-id db-id f)]
-        (recur r new-ids new-parents
-          new-indexed-by-position new-indexed-by-id)))))
+              (assoc indexed-by-position position f))]
+        (recur r new-ids new-parents new-indexed-by-position)))))
 
-(defn- find-last-node
-  [root-node-id indexed-by-position indexed-by-id]
-  "Root node is not in these blocks which be indexed. It should be the page
-  block's :db/id."
-  (assert (some? root-node-id) "root-node-id should satisfy some?.")
-  (assert (and (map? indexed-by-position) (seq indexed-by-position))
-    "indexed-position's format is wrong.")
-  (assert (and (map? indexed-by-id) (seq indexed-by-id))
-    "indexed-by-id's format is wrong.")
-  (let [init-node {:db/id root-node-id}]
-   (loop [node init-node
-          ;; from top to bottom
-          ;; direction :down :right
-          direction :down]
-     (case direction
-       :down
-       (let [id (:db/id node)]
-         (if-let [new-node-db-id (get indexed-by-position [id id])]
-           (let [new-node (get indexed-by-id new-node-db-id)]
-            (recur new-node :right))
-           node))
-
-       :right
-       (let [{parent :block/parent db-id :db/id} node]
-         (if-let [new-node-db-id
-                  (get indexed-by-position [(->db-id parent) db-id])]
-           (let [new-node (get indexed-by-id new-node-db-id)]
-             (recur new-node :right))
-           (recur node :down)))
-
-       (throw (js/Error. (util/format "Unknown direction: %s" direction)))))))
+(defn get-children
+  [parent-id indexed-by-position]
+  (loop [left parent-id
+         children []]
+    (if-let [{db-id :db/id :as child} (get indexed-by-position [parent-id left])]
+      (recur db-id (conj children child))
+      children)))
 
 (defn- get-all-refs
   [block]
@@ -154,36 +122,28 @@
      (cons block other-children)
      (mapcat get-all-refs)
      (remove nil?)
-     distinct)))
+     (distinct)
+     (assoc block :block/refs-with-children))))
 
 (defn blocks->vec-tree-by-outliner
   [col]
-  (let [{:keys [ids parents indexed-by-position indexed-by-id]}
+  (prn "col: " col)
+  (let [{:keys [ids parents indexed-by-position]}
         (prepare-blocks col)
-        root-id (first (set/difference parents ids))
-        last-node (find-last-node root-id indexed-by-position indexed-by-id)
-        last-node (wrap-refs-with-children last-node)]
-    (loop [{:block/keys [parent left] :as node} last-node
-           tree (list node)
-           ;; from bottom to top
-           ;; direction :up :left
-           direction (if (= parent left) :up :left)]
-      (if-let [left-node (get indexed-by-id (->db-id left))]
-        (let [new-direction
-              (if (= (:block/parent left-node)
-                    (:block/left left-node))
-                :up :left)
-              left-node (wrap-refs-with-children left-node)]
-          (case direction
-            :left
-            (recur left-node (conj tree left-node) new-direction)
-            :up
-            (let [refs-with-children (wrap-refs-with-children left-node tree)
-                  new-ks {:block/children tree
-                          :block/refs-with-children refs-with-children}
-                  tree (merge left-node new-ks)]
-             (recur left-node (list tree) new-direction))))
-        tree))))
+        root-id (first (set/difference parents ids))]
+    (letfn [(build-tree [root]
+              (let [root (wrap-refs-with-children root)
+                    children (->>
+                               (get-children (:db/id root) indexed-by-position)
+                               (map build-tree))]
+                (if (seq children)
+                 (->
+                   (assoc root :block/children children)
+                   (wrap-refs-with-children children))
+                 root)))]
+      (->>
+        (get-children root-id indexed-by-position)
+        (map build-tree)))))
 
 ;; recursively with children content for tree
 (defn get-block-content-rec
