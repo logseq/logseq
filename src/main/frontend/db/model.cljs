@@ -1005,17 +1005,21 @@
       (when-let [conn (conn/get-conn repo)]
         (->> (react/q repo [:custom :scheduled-deadline journal-title] {}
                       '[:find (pull ?block [*])
-                        :in $ ?day
+                        :in $ ?day ?future
                         :where
                         (or
                          [?block :block/scheduled ?d]
                          [?block :block/deadline ?d])
+                        [(get-else $ ?block :block/repeated? false) ?repeated]
                         [(get-else $ ?block :block/marker "DONE") ?marker]
                         [(not= ?marker "DONE")]
                         [(not= ?marker "CANCELED")]
                         [(not= ?marker "CANCELLED")]
-                        [(<= ?d ?day)]
-                        [(> ?d (- ?day 3))]]
+                        [(<= ?d ?future)]
+                        (or-join [?repeated ?d ?day]
+                                 [(true? ?repeated)]
+                                 [(= ?d ?day)])]
+               date
                (+ date 7))
              react
              db-utils/seq-flatten
