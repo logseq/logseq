@@ -317,20 +317,7 @@
   [repo state input input-id format]
   (mixins/on-key-down
    state
-   {;; enter
-    ;; 13 (editor-handler/keydown-enter-handler state input)
-    ;; ;; up
-    ;; 38 (editor-handler/keydown-up-down-handler input true)
-    ;; ;; down
-    ;; 40 (editor-handler/keydown-up-down-handler input false)
-    ;; ;; left
-    ;; 37 (editor-handler/keydown-arrow-handler input :left)
-    ;; ;; right
-    ;; 39 (editor-handler/keydown-arrow-handler input :right)
-    ;; backspace
-    8 (editor-handler/keydown-backspace-handler repo input input-id)
-    ;; tab
-    9 (editor-handler/keydown-tab-handler input input-id)}
+   {}
    {:not-matched-handler (editor-handler/keydown-not-matched-handler input input-id format)}))
 
 (defn- set-up-key-up!
@@ -355,16 +342,14 @@
   ;(mixins/event-mixin setup-key-listener!)
   (mixins/shortcuts
    :shortcut-listener/box-listener
-   {:editor.editing/enter
-    (partial shortcut-handler/editor-editing-apply editor-handler/keydown-enter-handler)
-    :editor.editing/up
-    (partial shortcut-handler/editor-editing-apply  #(editor-handler/keydown-up-down-handler % true))
-    :editor.editing/down
-    (partial shortcut-handler/editor-editing-apply  #(editor-handler/keydown-up-down-handler % false))
-    :editor.editing/left
-    (partial shortcut-handler/editor-editing-apply #(editor-handler/keydown-arrow-handler % :left))
-    :editor.editing/right
-    (partial shortcut-handler/editor-editing-apply #(editor-handler/keydown-arrow-handler % :right))})
+   {:editor.editing/enter editor-handler/keydown-enter-handler
+    :editor.editing/up (editor-handler/keydown-up-down-handler true)
+    :editor.editing/down (editor-handler/keydown-up-down-handler false)
+    :editor.editing/left (editor-handler/keydown-arrow-handler :left)
+    :editor.editing/right (editor-handler/keydown-arrow-handler :right)
+    :editor.editing/delete editor-handler/keydown-backspace-handler
+    :editor.editing/indent (editor-handler/keydown-tab-handler :right)
+    :editor.editing/unindent (editor-handler/keydown-tab-handler :left)})
   lifecycle/lifecycle
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or   {dummy? false}
@@ -374,7 +359,6 @@
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
-       :class             "mousetrap"
        :cacheMeasurements true
        :default-value     (or content "")
        :minRows           (if (state/enable-grammarly?) 2 1)

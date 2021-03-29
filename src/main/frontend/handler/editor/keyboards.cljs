@@ -25,7 +25,7 @@
               (or (= event :esc)
                   (= event :visibilitychange)
                   (and (= event :click)
-                       (not (editor-handler/in-auto-complete? (gobj/get target "id")))))
+                       (not (editor-handler/in-auto-complete?))))
                (state/clear-edit!))))))
      :node (gdom/getElement id)
     ;; :visibilitychange? true

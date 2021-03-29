@@ -46,11 +46,3 @@
                   @current-idx))
         (on-chosen (nth matched @current-idx) false)
         (and on-enter (on-enter state))))))
-
-(defn editor-editing-apply
-  [f state e]
-  (let [handler (-> (:rum/args state) :id
-                    gdom/getElement
-                    f)]
-    (js/console.log "core editing trigger" (str f))
-    (handler state e)))

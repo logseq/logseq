@@ -1785,7 +1785,7 @@
       nil)))
 
 (defn in-auto-complete?
-  [input]
+  []
   (or @*show-commands
       @*show-block-commands
       @*asset-uploading?
@@ -2293,50 +2293,51 @@
       (.focus input))))
 
 (defn keydown-enter-handler
-  [input]
-  (fn [state e]
-    (when (and (not (gobj/get e "ctrlKey"))
-               (not (gobj/get e "metaKey"))
-               (not (in-auto-complete? input)))
-      (let [{:keys [block config]} (get-state state)]
-        (when (and block
-                   (not (:ref? config))
-                   (not (:custom-query? config))) ; in reference section
-          (let [content (state/get-edit-content)]
-            (if (and
-                 (> (:block/level block) 2)
-                 (string/blank? content))
-              (do
+  [state e]
+  (when (and (not (gobj/get e "ctrlKey"))
+             (not (gobj/get e "metaKey"))
+             (not (in-auto-complete?)))
+    (let [{:keys [id block config]} (get-state state)
+          input (gdom/getElement id)]
+      (when (and block
+                 (not (:ref? config))
+                 (not (:custom-query? config))) ; in reference section
+        (let [content (state/get-edit-content)]
+          (if (and
+               (> (:block/level block) 2)
+               (string/blank? content))
+            (do
+              (util/stop e)
+              (adjust-block-level! state :left))
+            (let [shortcut (state/get-new-block-shortcut)
+                  insert? (cond
+                            config/mobile?
+                            true
+
+                            (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
+                            false
+
+                            (gobj/get e "shiftKey")
+                            false
+
+                            :else
+                            true)]
+              (when (and
+                     insert?
+                     (not (in-auto-complete?)))
                 (util/stop e)
-                (adjust-block-level! state :left))
-              (let [shortcut (state/get-new-block-shortcut)
-                    insert? (cond
-                              config/mobile?
-                              true
-
-                              (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
-                              false
-
-                              (gobj/get e "shiftKey")
-                              false
-
-                              :else
-                              true)]
-                (when (and
-                       insert?
-                       (not (in-auto-complete? input)))
-                  (util/stop e)
-                  (profile
-                   "Insert block"
-                   (insert-new-block! state)))))))))))
+                (profile
+                 "Insert block"
+                 (insert-new-block! state))))))))))
 
 (defn keydown-up-down-handler
-  [input up?]
+  [up?]
   (fn [state e]
+    (util/stop e)
     (when (and
            (not (gobj/get e "ctrlKey"))
            (not (gobj/get e "metaKey"))
-           (not (in-auto-complete? input)))
+           (not (in-auto-complete?)))
       (on-up-down state e up?))))
 
 (defn- move-to-block-when-cross-boundrary
@@ -2365,102 +2366,109 @@
 
 (defn- on-arrow-move-to-boundray
   [state input e direction]
-  (when (or (and (= :left direction) (util/input-start? input))
+  (if (or (and (= :left direction) (util/input-start? input))
             (and (= :right direction) (util/input-end? input)))
-    (move-to-block-when-cross-boundrary state e direction)))
+    (move-to-block-when-cross-boundrary state e direction)
+    (let [pos (:pos (util/get-caret-pos input))]
+      (if (= direction :left)
+        (util/set-caret-pos! input (dec pos))
+        (util/set-caret-pos! input (inc pos))))))
 
 (defn keydown-arrow-handler
-  [input direction]
+  [direction]
   (fn [state e]
-    (when (and
-           input
-           (not (gobj/get e "shiftKey"))
-           (not (gobj/get e "ctrlKey"))
-           (not (gobj/get e "metaKey"))
-           (not (in-auto-complete? input)))
-      (on-arrow-move-to-boundray state input e direction))))
+    (util/stop e)
+    (let [{:keys [id]} (get-state state)
+          input (gdom/getElement id)]
+      (when (and
+             input
+             (not (in-auto-complete?)))
+        (on-arrow-move-to-boundray state input e direction)))))
 
 (defn keydown-backspace-handler
-  [repo input id]
-  (fn [state e]
-    (let [current-pos (:pos (util/get-caret-pos input))
-          value (gobj/get input "value")
-          deleted (and (> current-pos 0)
-                       (util/nth-safe value (dec current-pos)))
-          selected-start (gobj/get input "selectionStart")
-          selected-end (gobj/get input "selectionEnd")
-          block-id (:block-id (first (:rum/args state)))
-          page (state/get-current-page)]
-      (cond
-        (not= selected-start selected-end)
-        nil
+  [state e]
+  (util/stop e)
+  (let [{:keys [id block]} (get-state state)
+        ^js input (gdom/getElement id)
+        repo (:block/repo block)
+        current-pos (:pos (util/get-caret-pos input))
+        value (gobj/get input "value")
+        deleted (and (> current-pos 0)
+                     (util/nth-safe value (dec current-pos)))
+        selected-start (gobj/get input "selectionStart")
+        selected-end (gobj/get input "selectionEnd")
+        block-id (:block-id (first (:rum/args state)))
+        page (state/get-current-page)]
+    (cond
+      (not= selected-start selected-end)
+      (.setRangeText input "" selected-start selected-end)
 
-        (and (zero? current-pos)
-             ;; not the top block in a block page
-             (not (and page
-                       (util/uuid-string? page)
-                       (= (medley/uuid page) block-id))))
-        (delete-block! state repo e)
+      (and (zero? current-pos)
+           ;; not the top block in a block page
+           (not (and page
+                     (util/uuid-string? page)
+                     (= (medley/uuid page) block-id))))
+      (delete-block! state repo e)
 
-        (and (> current-pos 1)
-             (= (util/nth-safe value (dec current-pos)) commands/slash))
-        (do
-          (reset! *slash-caret-pos nil)
-          (reset! *show-commands false))
+      (and (> current-pos 1)
+           (= (util/nth-safe value (dec current-pos)) commands/slash))
+      (do
+        (reset! *slash-caret-pos nil)
+        (reset! *show-commands false))
 
-        (and (> current-pos 1)
-             (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
-        (do
-          (reset! *angle-bracket-caret-pos nil)
-          (reset! *show-block-commands false))
+      (and (> current-pos 1)
+           (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
+      (do
+        (reset! *angle-bracket-caret-pos nil)
+        (reset! *show-block-commands false))
 
-        ;; pair
-        (and
-         deleted
-         (contains?
-          (set (keys delete-map))
-          deleted)
-         (>= (count value) (inc current-pos))
-         (= (util/nth-safe value current-pos)
-            (get delete-map deleted)))
+      ;; pair
+      (and
+       deleted
+       (contains?
+        (set (keys delete-map))
+        deleted)
+       (>= (count value) (inc current-pos))
+       (= (util/nth-safe value current-pos)
+          (get delete-map deleted)))
 
-        (do
-          (util/stop e)
-          (commands/delete-pair! id)
-          (cond
-            (and (= deleted "[") (state/get-editor-show-page-search?))
-            (state/set-editor-show-page-search! false)
+      (do
+        (util/stop e)
+        (commands/delete-pair! id)
+        (cond
+          (and (= deleted "[") (state/get-editor-show-page-search?))
+          (state/set-editor-show-page-search! false)
 
-            (and (= deleted "(") (state/get-editor-show-block-search?))
-            (state/set-editor-show-block-search! false)
+          (and (= deleted "(") (state/get-editor-show-block-search?))
+          (state/set-editor-show-block-search! false)
 
-            :else
-            nil))
+          :else
+          nil))
 
-        ;; deleting hashtag
-        (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
-        (state/set-editor-show-page-search-hashtag! false)
+      ;; deleting hashtag
+      (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
+      (state/set-editor-show-page-search-hashtag! false)
 
-        :else
-        nil))))
+      ;; just delete
+      :else
+      (.setRangeText input "" (dec current-pos) current-pos))))
 
 (defn keydown-tab-handler
-  [input input-id]
+  [direction]
   (fn [state e]
-    (let [pos (and input (:pos (util/get-caret-pos input)))]
+    (util/stop e)
+    (let [{:keys [id]} (get-state state)
+          input (gdom/getElement id)
+          pos (and input (:pos (util/get-caret-pos input)))]
       (when (and (not (state/get-editor-show-input))
                  (not (state/get-editor-show-date-picker?))
                  (not (state/get-editor-show-template-search?)))
-        (util/stop e)
-        (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
-                          :left
-                          :right)]
-          (p/let [_ (adjust-block-level! state direction)]
-            (and input pos
-                 (js/setTimeout
-                  #(when-let [input (gdom/getElement input-id)]
-                     (util/move-cursor-to input pos))
-                  0))))))))
+        (p/let [_ (adjust-block-level! state direction)]
+          (and input pos
+               (js/setTimeout
+                #(when-let [input (gdom/getElement id)]
+                   (util/move-cursor-to input pos))
+                0)))))))
 
 (defn keydown-not-matched-handler
   [input input-id format]

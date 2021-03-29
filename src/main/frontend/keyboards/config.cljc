@@ -26,8 +26,8 @@
    :editor/open-link-in-sidebar "mod+shift+o"
    :editor/bold "mod+b"
    :editor/italics "mod+i"
-   :editor/highlight "mod+h"
-   :editor/insert-link "mod+k"
+   :editor/highlight "mod+shift+h"
+   :editor/insert-link "mod+shift+i"
    :editor/select-all-blocks "mod+shift+a"
    :editor/move-block-up (if mac? "mod+shift+up"  "alt+shift+up")
    :editor/move-block-down (if mac? "mod+shift+down" "alt+shift+down")
@@ -37,11 +37,22 @@
    :editor/select-block-up "shift+up"
    :editor/select-block-down "shift+down"
 
+   ;; :editor.editing/enter "enter"
+   ;; :editor.editing/up "up"
+   ;; :editor.editing/down "down"
+   ;; :editor.editing/left "left"
+   ;; :editor.editing/right "right"
+   ;; :editor.editing/delete "backspace"
+   ;; :editor.editing/tab "tab"
+
    :editor.editing/enter "enter"
-   :editor.editing/up "up"
-   :editor.editing/down "down"
-   :editor.editing/left "left"
-   :editor.editing/right "right"
+   :editor.editing/up "ctrl+j"
+   :editor.editing/down "ctrl+k"
+   :editor.editing/left "ctrl+h"
+   :editor.editing/right "ctrl+l"
+   :editor.editing/delete "ctrl+d"
+   :editor.editing/indent "tab"
+   :editor.editing/unindent "shift+tab"
 
    ;; '?' not in goog.events.KeyNames
    ;; actually keycode is deprecated, use e.code or e.key is recommended?

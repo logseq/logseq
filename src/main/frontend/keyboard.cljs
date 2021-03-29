@@ -81,6 +81,7 @@
 
      (let [f (fn [e]
                (let [dispatch-fn (get dispatcher (keyword (.-identifier e)))]
+                 (js/console.log "going to trigger### " (.-identifier e))
                  (dispatch-fn e)))
            unlisten-fn (fn [] (.dispose handler))]
 
