@@ -111,7 +111,7 @@
     (let [watcher (.watch watcher dir
                           (clj->js
                            {:ignored (partial ignored-path? dir)
-                            :ignoreInitial false
+                            :ignoreInitial true
                             :persistent true
                             :awaitWriteFinish true}))]
       (.on watcher "add"
