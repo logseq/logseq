@@ -106,11 +106,11 @@
             [:a.opacity-50.hover:opacity-100
              {:title "Filter"
               :on-click #(state/set-modal! (filter-dialog references page-name))}
-              (svg/filter-icon (cond
-                                 (empty? filter-state) nil
-                                 (every? true? (vals filter-state)) "text-green-400"
-                                 (every? false? (vals filter-state)) "text-red-400"
-                                 :else "text-yellow-400"))]]
+             (svg/filter-icon (cond
+                                (empty? filter-state) nil
+                                (every? true? (vals filter-state)) "text-green-400"
+                                (every? false? (vals filter-state)) "text-red-400"
+                                :else "text-yellow-400"))]]
 
            [:div.references-blocks
             (let [ref-hiccup (block/->hiccup filtered-ref-blocks

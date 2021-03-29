@@ -79,7 +79,6 @@
           db-str       (db/db->string db)
           state        (select-keys @state/state
                                     [:ui/theme :ui/cycle-collapse
-                                     :ui/collapsed-blocks
                                      :ui/sidebar-collapsed-blocks
                                      :ui/show-recent?
                                      :config])

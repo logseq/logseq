@@ -329,20 +329,16 @@
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page?] :as config} page]
   (when-let [page-name (:page/name page)]
-    (let [source-page (model/get-alias-source-page (state/get-current-repo)
-                                                   (string/lower-case page-name))
-          original-page-name (get page :page/original-name page-name)
-          original-page-name (if (date/valid-journal-title? original-page-name)
-                               (string/capitalize original-page-name)
-                               original-page-name)
-          page (string/lower-case page-name)
+    (let [page (string/lower-case page-name)
           redirect-page-name (cond
                                (:page/alias? config)
                                page
 
-                               (db/page-empty? (state/get-current-repo) page-name)
-                               (or (when source-page (:page/name source-page))
-                                   page)
+                               (db/page-empty? (state/get-current-repo) page)
+                               (let [source-page (model/get-alias-source-page (state/get-current-repo)
+                                                                              (string/lower-case page-name))]
+                                 (or (when source-page (:page/name source-page))
+                                     page))
 
                                :else
                                page)
@@ -378,7 +374,7 @@
                   (string? label)
                   (not (string/blank? label))) ; alias
            label
-           original-page-name))])))
+           (get page :page/original-name page-name)))])))
 
 (rum/defc asset-reference
   [title path]
@@ -972,23 +968,14 @@
   [block]
   block)
 
-(defonce *control-show? (atom {}))
-
 (rum/defcs block-control < rum/reactive
-  {:will-mount (fn [state]
-                 (let [block (nth (:rum/args state) 1)
-                       collapsed? (:block/collapsed? block)]
-                   (state/set-collapsed-state! (:block/uuid block)
-                                               collapsed?))
-                 state)}
-  [state config block uuid block-id level start-level body children dummy?]
+  [state config block uuid block-id level start-level body children dummy? *control-show? *collapsed?]
   (let [has-child? (and
                     (not (:pre-block? block))
                     (or (seq children)
                         (seq body)))
-        collapsed? (state/sub [:ui/collapsed-blocks uuid])
-        collapsed? (and has-child? collapsed?)
-        control-show (util/react (rum/cursor *control-show? block-id))
+        collapsed? (rum/react *collapsed?)
+        control-show? (util/react *control-show?)
         dark? (= "dark" (state/sub :ui/theme))
         heading? (= (get (:block/properties block) "heading") "true")]
     [:div.mr-2.flex.flex-row.items-center
@@ -1013,13 +1000,12 @@
                    (if collapsed?
                      (expand/expand! block)
                      (expand/collapse! block))
-
-                   (state/set-collapsed-state! uuid (not collapsed?)))}
+                   (reset! *collapsed? (not collapsed?)))}
       (cond
-        (and control-show collapsed?)
+        (and control-show? collapsed?)
         (svg/caret-right)
 
-        (and control-show has-child?)
+        (and control-show? has-child?)
         (svg/caret-down)
 
         :else
@@ -1530,8 +1516,14 @@
          (when (or (seq @parents-atom) show-page?)
            component))))))
 
-(rum/defc block-container < rum/static
-  {:did-mount (fn [state]
+(rum/defcs block-container < rum/static
+  {:init (fn [state]
+           (let [block (last (:rum/args state))
+                 collapsed? (:block/collapsed? block)]
+             (assoc state
+                    ::control-show? (atom false)
+                    ::collapsed? (atom collapsed?))))
+   :did-mount (fn [state]
                 (let [block (nth (:rum/args state) 1)
                       collapsed? (:block/collapsed? block)]
                   (when collapsed?
@@ -1540,8 +1532,10 @@
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties refs-with-children] :as block}]
-  (let [ref? (boolean (:ref? config))
+  [state config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties refs-with-children] :as block}]
+  (let [*control-show? (get state ::control-show?)
+        *collapsed? (get state ::collapsed?)
+        ref? (boolean (:ref? config))
         breadcrumb-show? (:breadcrumb-show? config)
         sidebar? (boolean (:sidebar? config))
         slide? (boolean (:slide? config))
@@ -1600,13 +1594,13 @@
                :on-mouse-over (fn [e]
                                 (util/stop e)
                                 (when has-child?
-                                  (swap! *control-show? assoc block-id true))
+                                  (reset! *control-show? true))
                                 (when-let [parent (gdom/getElement block-id)]
                                   (let [node (.querySelector parent ".bullet-container")
                                         closed? (d/has-class? node "bullet-closed")]
-                                    (if closed?
-                                      (state/collapse-block! uuid)
-                                      (state/expand-block! uuid))
+                                    ;; (if closed?
+                                    ;;   (block-handler/collapse-block! uuid)
+                                    ;;   (block-handler/expand-block! uuid))
                                     (when doc-mode?
                                       (d/remove-class! node "hide-inner-bullet"))))
                                 (when (and
@@ -1617,12 +1611,12 @@
                :on-mouse-out (fn [e]
                                (util/stop e)
                                (when has-child?
-                                 (swap! *control-show?
-                                        assoc block-id false))
+                                 (reset! *control-show? false))
                                (when doc-mode?
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
                                      (d/add-class! node "hide-inner-bullet")))))}
+        [data-refs data-refs-self] nil
         data-refs (let [refs (model/get-page-names-by-ids
                               (->> (map :db/id refs-with-children)
                                    (remove nil?)))]
@@ -1656,7 +1650,7 @@
 
      [:div.flex-1.flex-row
       (when (not slide?)
-        (block-control config block uuid block-id level start-level body children dummy?))
+        (block-control config block uuid block-id level start-level body children dummy? *control-show? *collapsed?))
 
       (block-content-or-editor config block edit-input-id block-id slide?)]
 

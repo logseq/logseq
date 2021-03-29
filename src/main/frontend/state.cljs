@@ -57,7 +57,6 @@
     :ui/wide-mode? false
     ;; :show-all, :hide-block-body, :hide-block-children
     :ui/cycle-collapse :show-all
-    :ui/collapsed-blocks {}
     :ui/sidebar-collapsed-blocks {}
     :ui/root-component nil
     :ui/file-component nil
@@ -437,38 +436,9 @@
   [range]
   (set-state! :cursor-range range))
 
-                                        ; FIXME: unused function
-(defn get-cloning?
-  []
-  (:repo/cloning? @state))
-
 (defn set-cloning!
   [value]
   (set-state! :repo/cloning? value))
-
-(defn get-block-collapsed-state
-  [block-id]
-  (get-in @state [:ui/collapsed-blocks block-id]))
-
-(defn set-collapsed-state!
-  [block-id value]
-  (set-state! [:ui/collapsed-blocks block-id] value))
-
-(defn collapse-block!
-  [block-id]
-  (set-collapsed-state! block-id true))
-
-(defn expand-block!
-  [block-id]
-  (set-collapsed-state! block-id false))
-
-(defn collapsed?
-  [block-id]
-  (get-in @state [:ui/collapsed-blocks block-id]))
-
-(defn clear-collapsed-blocks!
-  []
-  (set-state! :ui/collapsed-blocks {}))
 
 (defn set-q!
   [value]

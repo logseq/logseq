@@ -1948,16 +1948,12 @@
 (defn expand!
   []
   (when-let [current-block (state/get-edit-block)]
-    (expand/expand! current-block)
-    (state/set-collapsed-state! (:block/uuid current-block)
-                                false)))
+    (expand/expand! current-block)))
 
 (defn collapse!
   []
   (when-let [current-block (state/get-edit-block)]
-    (expand/collapse! current-block)
-    (state/set-collapsed-state! (:block/uuid current-block)
-                                true)))
+    (expand/collapse! current-block)))
 
 (defn cycle-collapse!
   [e]
