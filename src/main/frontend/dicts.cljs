@@ -1050,7 +1050,7 @@ title: How to take dummy notes?
            :graph "图谱"
            :graph-view "全局图谱"
            :publishing "发布"
-           :export "导出公开页面"
+           :export "导出"
            :all-graphs "所有库"
            :all-pages "所有页面"
            :all-files "所有文件"
