@@ -806,3 +806,7 @@ a.tooltip-priority {
 .text-link {
     color: var(--ls-primary-text-color);
 }
+
+.katex * {
+    border-color: var(--ls-primary-text-color);
+}
