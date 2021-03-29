@@ -188,6 +188,11 @@
   (true? (:feature/enable-grammarly?
           (get (sub-config) (get-current-repo)))))
 
+(defn scheduled-deadlines-disabled?
+  []
+  (true? (:feature/disable-scheduled-and-deadline-query?
+          (get (sub-config) (get-current-repo)))))
+
 (defn enable-timetracking?
   []
   (not (false? (:feature/enable-timetracking?

@@ -67,7 +67,8 @@
                        (db/get-block-referenced-blocks block-id)
                        :else
                        (db/get-page-referenced-blocks page-name))
-          scheduled-or-deadlines (if journal?
+          scheduled-or-deadlines (if (and journal?
+                                          (not (true? (state/scheduled-deadlines-disabled?))))
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           references (db/get-page-linked-refs-refed-pages repo page-name)
