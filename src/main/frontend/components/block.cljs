@@ -1062,7 +1062,7 @@
                       :class (if heading? "bullet-heading" "")}]]]]))
 
 (defn- build-id
-  [config ref? sidebar? embed?]
+  [config]
   (let [k (pr-str config)
         n (or
            (get @container-ids k)
@@ -1547,7 +1547,7 @@
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
-        unique-dom-id (build-id (dissoc config :block/uuid) ref? sidebar? embed?)
+        unique-dom-id (build-id (dissoc config :block/uuid))
         edit-input-id (str "edit-block-" unique-dom-id uuid)
         block-id (str "ls-block-" unique-dom-id uuid)
         has-child? (boolean
