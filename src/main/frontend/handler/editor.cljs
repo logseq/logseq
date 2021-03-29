@@ -1503,7 +1503,7 @@
   [format url file-name image?]
   (case (keyword format)
     :markdown (util/format (str (when image? "!") "[%s](%s)") file-name url)
-    :org (util/format "[[%s]]" url)
+    :org (util/format "[[%s][%s]]" url file-name)
     nil))
 
 (defn- get-asset-link
