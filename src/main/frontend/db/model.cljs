@@ -1014,8 +1014,9 @@
                         [(not= ?marker "DONE")]
                         [(not= ?marker "CANCELED")]
                         [(not= ?marker "CANCELLED")]
-                        [(<= ?d ?day)]]
-                      date)
+                        [(<= ?d ?day)]
+                        [(> ?d (- ?day 3))]]
+               (+ date 7))
              react
              db-utils/seq-flatten
              sort-blocks
