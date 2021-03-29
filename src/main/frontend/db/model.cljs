@@ -1008,8 +1008,9 @@
                         :in $ ?day
                         :where
                         (or
-                         [?block :block/scheduled ?day]
-                         [?block :block/deadline ?day])]
+                         [?block :block/scheduled ?d]
+                         [?block :block/deadline ?d])
+                        [(<= ?d ?day)]]
                       date)
              react
              db-utils/seq-flatten
