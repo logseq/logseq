@@ -1011,14 +1011,14 @@
                          [?block :block/scheduled ?d]
                          [?block :block/deadline ?d])
                         [(get-else $ ?block :block/repeated? false) ?repeated]
-                        [(get-else $ ?block :block/marker "DONE") ?marker]
+                        [(get-else $ ?block :block/marker "NIL") ?marker]
                         [(not= ?marker "DONE")]
                         [(not= ?marker "CANCELED")]
                         [(not= ?marker "CANCELLED")]
                         [(<= ?d ?future)]
                         (or-join [?repeated ?d ?day]
                                  [(true? ?repeated)]
-                                 [(= ?d ?day)])]
+                                 [(>= ?d ?day)])]
                date
                (+ date 7))
              react
