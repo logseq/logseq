@@ -1010,6 +1010,8 @@
                         (or
                          [?block :block/scheduled ?d]
                          [?block :block/deadline ?d])
+                        [(get-else $ ?block :block/marker "DONE") ?marker]
+                        [(not= ?marker "DONE")]
                         [(<= ?d ?day)]]
                       date)
              react
