@@ -1,6 +1,8 @@
 (ns frontend.db.outliner
   (:require [datascript.core :as d]
-            [frontend.db.react :as react]))
+            [frontend.db.react :as react]
+            [frontend.util :as util]
+            [frontend.debug :as debug]))
 
 (defn get-by-id
   [conn id]
@@ -26,7 +28,9 @@
 
 (defn save-block
   [conn block-m]
-  (d/transact! conn [block-m]))
+  (let [tx (-> (dissoc block-m :block/children)
+             (util/remove-nils))]
+   (d/transact! conn [tx])))
 
 (defn del-block
   [conn id-or-look-ref]

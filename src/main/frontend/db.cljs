@@ -59,7 +59,7 @@
   get-current-marker get-current-page get-current-priority get-handler-keys set-key-value
   transact-react! remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   clear-query-state-without-refs-and-embeds! get-block-blocks-cache-atom get-page-blocks-cache-atom kv q
-  query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value]
+  query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value refresh]
 
  [frontend.db.query-custom
   custom-query]

@@ -9,7 +9,8 @@
             [datascript.core :as d]
             [clojure.set :as set]
             [medley.core :as medley]
-            [frontend.format.block :as block]))
+            [frontend.format.block :as block]
+            [frontend.debug :as debug]))
 
 (defn blocks->vec-tree
   "Deprecated: use blocks->vec-tree-by-parent instead."
@@ -72,7 +73,7 @@
     x
 
     :else
-    (throw (js/Error "Unknown db/id format"))))
+    (throw (js/Error. (util/format "Unknown db/id format: %s" x)))))
 
 (defn- prepare-blocks
   "Preparing blocks: index blocks,filter ids,and update some keys."
@@ -125,9 +126,16 @@
      (distinct)
      (assoc block :block/refs-with-children))))
 
+(comment
+  (defn- clip-block
+   "For debug. It's should be removed."
+   [x]
+   (let [ks [:block/parent :block/left :block/pre-block? :block/uuid
+             :block/level :block/title :db/id]]
+     (map #(select-keys % ks) x))))
+
 (defn blocks->vec-tree-by-outliner
   [col]
-  (prn "col: " col)
   (let [{:keys [ids parents indexed-by-position]}
         (prepare-blocks col)
         root-id (first (set/difference parents ids))]

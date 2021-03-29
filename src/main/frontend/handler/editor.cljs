@@ -46,7 +46,10 @@
             [frontend.template :as template]
             [clojure.core.async :as async]
             [lambdaisland.glogi :as log]
-            [cljs.core.match :refer-macros [match]]))
+            [cljs.core.match :refer-macros [match]]
+            [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.tree :as tree]
+            [frontend.debug :as debug]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -470,6 +473,17 @@
               (edit-last-block-for-new-page! last-block :max)
               (state/set-editor-op! nil))))))))
 
+(defn wrap-parse-block
+  [{format :block/format :as block}]
+  (let [ks (->
+             (format/to-edn (:block/content block) format nil)
+             ffirst
+             second
+             (select-keys [:title :meta :priority])
+             (util/remove-nils)
+             (block/block-keywordize))]
+    (merge block ks)))
+
 (defn- save-block-when-file-exists!
   [repo block e new-properties value {:keys [indent-left? rebuild-content? chan chan-callback]}]
   (let [{:block/keys [uuid file page  pre-block? ref-pages ref-blocks]} block
@@ -529,26 +543,33 @@
                         {:db/id page-id
                          :block/alias page-alias}]
                        [[:db/retract page-id :block/alias]]))]
-    (profile
-     "Save block: "
-     (repo-handler/transact-react-and-alter-file!
-      repo
-      (concat
-       pages
-       block-retracted-attrs
-       (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
-       blocks
-       retract-refs
-       page-properties
-       page-tags
-       page-alias
-       after-blocks)
-      {:key :block/change
-       :data (map (fn [block] (assoc block :block/page page)) blocks)}
-      (let [new-content (new-file-content-indent-outdent block file-content value block-children-content new-end-pos indent-left?)]
-        [[file-path new-content]])
-      (when chan {:chan chan
-                  :chan-callback chan-callback})))
+    (let [pre-block-ids (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
+          tx (concat pages block-retracted-attrs pre-block-ids blocks retract-refs
+               page-properties page-tags page-alias after-blocks)
+          tx-opts {:key :block/change
+                   :data (map (fn [block] (assoc block :block/page page)) blocks)}
+          new-content (new-file-content-indent-outdent
+                        block file-content value block-children-content new-end-pos indent-left?)
+          files [[file-path new-content]]
+          opts (when chan {:chan chan
+                           :chan-callback chan-callback})]
+
+      (profile
+        "Save block: "
+
+        (do
+          (->
+            (wrap-parse-block block)
+            (outliner-core/block)
+            (tree/-save))
+          (let [opts {:key :block/change
+                      :data [block]}]
+            (db/refresh repo opts))))
+
+     #_(profile
+       "Save block: "
+       (repo-handler/transact-react-and-alter-file!
+         repo tx tx-opts files opts)))
 
     ;; fix editing template with multiple headings
     (when (> (count blocks) 1)
@@ -573,6 +594,7 @@
           init-properties nil
           remove-properties nil}
      :as opts}]
+   (prn "save-block-if-changed!")
    (let [{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks]} block
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
@@ -675,19 +697,30 @@
         block-retracted-attrs (when-not pre-block?
                                 (when-let [id (:db/id block)]
                                   [[:db/retractEntity id]]))
-        transact-fn (fn []
-                      (repo-handler/transact-react-and-alter-file!
-                       repo
-                       (concat
-                        block-retracted-attrs
-                        pages
-                        (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
-                        blocks
-                        after-blocks)
-                       {:key :block/insert
-                        :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                       files)
-                      (state/set-editor-op! nil))]
+        _ (prn "transact-nf"
+            [block-retracted-attrs
+             pages
+             (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
+             blocks
+             after-blocks])
+        _ (prn " (first blocks) (first after-blocks)"  (first blocks) (first after-blocks))
+        transact-fn
+        (fn []
+          (let [tx (concat
+                     block-retracted-attrs
+                     pages
+                     (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
+                     blocks
+                     after-blocks)
+                opts {:key :block/insert
+                      :data (map (fn [block] (assoc block :block/page page)) blocks)}]
+            (do (repo-handler/update-last-edit-block)
+                #_(build-outliner-relation (first blocks) (first after-blocks))
+                (db/refresh repo opts)
+                (let [files (remove nil? files)]
+                  (when (seq files)
+                    (file-handler/alter-files repo files opts)))))
+          (state/set-editor-op! nil))]
 
     ;; Replace with batch transactions
     (state/add-tx! transact-fn)
@@ -730,8 +763,20 @@
                (reset! blocks-atom (->> (concat before-part blocks after-part)
                                         (remove nil?)))))))))
 
+(defn build-outliner-relation
+  [current-block new-block]
+  (let [[current-node new-node]
+        (mapv outliner-core/block [current-block new-block])
+        has-children? (seq (tree/-get-children current-node))
+        new-is-sibling? (not has-children?)]
+    (tree/-save current-node)
+    (outliner-core/insert-node new-node current-node new-is-sibling?)))
+
+
 (defn insert-new-block-aux!
-  [{:block/keys [uuid content meta file dummy? level repo page format properties collapsed? pre-block?] :as block}
+  [{:block/keys [uuid content meta file dummy? level repo page format properties collapsed? pre-block? parent]
+    db-id :db/id
+    :as block}
    value
    {:keys [create-new-block? ok-handler with-level? new-level current-page blocks-container-id]
     :as opts}]
@@ -748,19 +793,24 @@
         page (db/entity repo (:db/id page))
         file (db/entity repo (:db/id file))
         block-has-children? (seq (:block/children block))
-        [fst-block-text snd-block-text] (compute-fst-snd-block-text block format value pos level new-level block-self? block-has-children? with-level?)]
-    (cond
-      (and (not file) page)
-      (let [value (str value "\n" snd-block-text)]
-        (create-file-if-not-exists! repo format page value))
-
-      file
-      (let [file-path (:file/path file)
-            file-content (db/get-file repo file-path)]
-        (insert-block-to-existing-file! repo block file page file-path file-content value fst-block-text snd-block-text pos format input opts))
-
-      :else
-      nil)))
+        [fst-block-text snd-block-text]
+        (compute-fst-snd-block-text block format value pos level new-level block-self? block-has-children? with-level?)
+        current-block (-> (assoc block :block/content fst-block-text)
+                        (wrap-parse-block))
+        new-m {:block/uuid (db/new-block-id)
+               :block/content snd-block-text
+               :block/title snd-block-text}
+        next-block (-> (merge block new-m)
+                     (dissoc :db/id)
+                     (wrap-parse-block))]
+    (do
+      (repo-handler/update-last-edit-block)
+      (build-outliner-relation current-block next-block)
+      (let [opts {:key :block/insert
+                  :data [current-block next-block]}]
+          (db/refresh repo opts))
+      (ok-handler next-block)
+      (state/set-editor-op! nil))))
 
 (defn clear-when-saved!
   []
@@ -808,8 +858,8 @@
    (insert-new-block! state nil))
   ([state block-value]
    (when (and (not config/publishing?)
-              ;; skip this operation if it's inserting
-              (not= :insert (state/get-editor-op)))
+           ;; skip this operation if it's inserting
+            (not= :insert (state/get-editor-op)))
      (state/set-editor-op! :insert)
      (let [{:keys [block value format id config]} (get-state state)
            value (if (string? block-value) block-value value)
@@ -990,15 +1040,10 @@
               file-content (db/get-file repo file-path)
               after-blocks (rebuild-after-blocks repo file (:end-pos meta) (:start-pos meta))
               new-content (utf8/delete! file-content (:start-pos meta) (:end-pos meta))]
-          (repo-handler/transact-react-and-alter-file!
-           repo
-           (concat
-            [[:db.fn/retractEntity [:block/uuid uuid]]]
-            after-blocks)
-           {:key :block/change
-            :data [block]}
-           [[file-path new-content]])
-
+          (->
+            (outliner-core/block block)
+            (outliner-core/delete-node))
+          (db/refresh repo {:key :block/change :data [block]})
           (when (or (seq ref-pages) (seq ref-blocks))
             (ui-handler/re-render-root!)))))))
 
@@ -1009,9 +1054,8 @@
                (not= :block/delete (state/get-editor-op)))
       (state/set-editor-op! :block/delete)
       (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
-            page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))
-            page (and page-id (db/entity page-id))]
-        (if (> page-blocks-count 1)
+            page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
+        (when (> page-blocks-count 1)
           (do
             (util/stop e)
             ;; delete block, edit previous block
@@ -1026,13 +1070,13 @@
                           new-value (str original-content " " (string/triml value))
                           tail-len (count (string/triml value))
                           pos (max
-                               (if original-content
-                                 (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
-                                 0)
-                               0)]
+                                (if original-content
+                                  (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
+                                  0)
+                                0)]
                       (edit-block! block pos format id
-                                   {:custom-content new-value
-                                    :tail-len tail-len})))))))))
+                        {:custom-content new-value
+                         :tail-len tail-len})))))))))
       (state/set-editor-op! nil))))
 
 (defn delete-blocks!
@@ -2275,6 +2319,28 @@
     (when-let [input (gdom/getElement id)]
       (.focus input))))
 
+(defn parent-is-page?
+  [{{:block/keys [parent page]} :data :as node}]
+  {:pre [(tree/satisfied-inode? node)]}
+  (= parent page))
+
+(defn outdent-on-enter
+  ([node]
+   (outdent-on-enter node 100))
+  ([node retry-limit]
+   (if (= :insert (state/get-editor-op))
+     (if (> retry-limit 0)
+       (js/setTimeout #(outdent-on-enter node (dec retry-limit)) 20)
+       (log/error :editor/indent-outdent-retry-max-limit "Unknown Error."))
+     (do
+       (state/set-editor-op! :indent-outdent)
+       (when-not (parent-is-page? node)
+         (let [parent-node (tree/-get-parent node)]
+           (outliner-core/move-subtree node parent-node true)))
+       (let [repo (state/get-current-repo)]
+        (db/refresh repo {:key :block/change :data [(:data node)]}))
+       (state/set-editor-op! nil)))))
+
 (defn keydown-enter-handler
   [state input]
   (fn [state e]
@@ -2285,13 +2351,16 @@
         (when (and block
                    (not (:ref? config))
                    (not (:custom-query? config))) ; in reference section
-          (let [content (state/get-edit-content)]
+          (let [content (state/get-edit-content)
+                current-node (outliner-core/block block)
+                has-right? (-> (tree/-get-right current-node)
+                            (tree/satisfied-inode?))]
             (if (and
-                 (> (:block/level block) 2)
-                 (string/blank? content))
+                  (string/blank? content)
+                  (not has-right?))
               (do
                 (util/stop e)
-                (adjust-block-level! state :left))
+                (outdent-on-enter current-node))
               (let [shortcut (state/get-new-block-shortcut)
                     insert? (cond
                               config/mobile?
@@ -2427,6 +2496,55 @@
         :else
         nil))))
 
+(defn indent-on-tab
+  ([state]
+   (indent-on-tab state 100))
+  ([state retry-limit]
+   (if (= :insert (state/get-editor-op))
+     (if (> retry-limit 0)
+       (js/setTimeout #(indent-on-tab state (dec retry-limit)) 20)
+       (log/error :editor/indent-outdent-retry-max-limit "indent on hit tab."))
+     (do
+       (state/set-editor-op! :indent-outdent)
+       (let [{:keys [block block-parent-id value config]} (get-state state)
+             current-node (outliner-core/block block)
+             first-child? (=
+                            (tree/-get-left-id current-node)
+                            (tree/-get-parent-id current-node)) ]
+         (when-not first-child?
+           (let [left (tree/-get-left current-node)
+                 children-of-left (tree/-get-children left)]
+             (if (seq children-of-left)
+               (let [target-node (last children-of-left)]
+                 (outliner-core/move-subtree current-node target-node true))
+               (outliner-core/move-subtree current-node left false))
+             (let [repo (state/get-current-repo)]
+              (db/refresh repo
+                {:key :block/change :data [(:data current-node)]})))))
+       (state/set-editor-op! nil)))))
+
+(defn outdent-on-shift-tab
+  ([state]
+   (outdent-on-shift-tab state 100))
+  ([state retry-limit]
+   (if (= :insert (state/get-editor-op))
+     (if (> retry-limit 0)
+       (js/setTimeout #(outdent-on-shift-tab state (dec retry-limit)) 20)
+       (log/error :editor/indent-outdent-retry-max-limit "outdent on hit shift tab."))
+     (do
+       (state/set-editor-op! :indent-outdent)
+       (let [{:keys [block block-parent-id value config]} (get-state state)
+             {:block/keys [parent page]} block
+             current-node (outliner-core/block block)
+             parent-is-page? (= parent page)]
+         (when-not parent-is-page?
+           (let [parent (tree/-get-parent current-node)]
+             (outliner-core/move-subtree current-node parent true))
+           (let [repo (state/get-current-repo)]
+             (db/refresh repo
+               {:key :block/change :data [(:data current-node)]}))))
+       (state/set-editor-op! nil)))))
+
 (defn keydown-tab-handler
   [input input-id]
   (fn [state e]
@@ -2435,15 +2553,14 @@
                  (not (state/get-editor-show-date-picker?))
                  (not (state/get-editor-show-template-search?)))
         (util/stop e)
-        (let [direction (if (gobj/get e "shiftKey") ; shift+tab move to left
-                          :left
-                          :right)]
-          (p/let [_ (adjust-block-level! state direction)]
+        (do (if (gobj/get e "shiftKey")
+              (outdent-on-shift-tab state)
+              (indent-on-tab state))
             (and input pos
-                 (js/setTimeout
-                  #(when-let [input (gdom/getElement input-id)]
-                     (util/move-cursor-to input pos))
-                  0))))))))
+              (js/setTimeout
+                #(when-let [input (gdom/getElement input-id)]
+                   (util/move-cursor-to input pos))
+                0)))))))
 
 (defn keydown-not-matched-handler
   [input input-id format]

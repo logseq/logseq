@@ -4,7 +4,8 @@
             [frontend.db.conn :as conn]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.state :as outliner-state]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.debug :as debug]))
 
 (defrecord Block [data])
 
@@ -104,23 +105,24 @@
       (db-outliner/del-block conn [:block/uuid block-id])))
 
   (-get-children [this]
-    (let [children (get-children (tree/-get-id this))
-          left-id->block (index-blocks-by-left-id children)]
-      (loop [sorted-children []
-             current-node this]
-        (let [id (tree/-get-id current-node)]
-          (if-let [right (get left-id->block id)]
-            (recur (conj sorted-children right) right)
-            (do
-              (let [should-equal
-                    (=
-                      (count children)
-                      (count sorted-children))]
-                (when-not should-equal
-                  (prn "children: " (mapv #(get-in % [:data :block/uuid]) children))
-                  (prn "sorted-children: " (mapv #(get-in % [:data :block/uuid]) sorted-children))
-                  (throw (js/Error. "Number of children and sorted-children are not equal."))))
-              sorted-children)))))))
+    (let [children (get-children (tree/-get-id this))]
+      (when (seq children)
+        (let [left-id->block (index-blocks-by-left-id children)]
+          (loop [sorted-children []
+                 current-node this]
+            (let [id (tree/-get-id current-node)]
+              (if-let [right (get left-id->block id)]
+                (recur (conj sorted-children right) right)
+                (do
+                  (let [should-equal
+                        (=
+                          (count children)
+                          (count sorted-children))]
+                    (when-not should-equal
+                      (prn "children: " (mapv #(get-in % [:data :block/uuid]) children))
+                      (prn "sorted-children: " (mapv #(get-in % [:data :block/uuid]) sorted-children))
+                      (throw (js/Error. "Number of children and sorted-children are not equal."))))
+                  sorted-children)))))))))
 
 (defn insert-node-as-first-child
   "Insert a node as first child."
@@ -165,11 +167,12 @@
   "Delete node from the tree."
   [node]
   {:pre [(tree/satisfied-inode? node)]}
-  (let [right-node (tree/-get-right node)
-        left-node (tree/-get-left node)
-        new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
+  (let [right-node (tree/-get-right node)]
     (tree/-del node)
-    (tree/-save new-right-node)
+    (when (tree/satisfied-inode? right-node)
+      (let [left-node (tree/-get-left node)
+            new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
+        (tree/-save new-right-node)))
     (let [repo (state/get-current-repo)]
       (outliner-state/update-block-state repo node))))
 
@@ -177,18 +180,17 @@
   "Move subtree to a destination position in the relation tree.
   Args:
     root: root of subtree
-    left-node: left node of destination"
-  [root parent-node left-node]
-  {:pre [(every? tree/satisfied-inode? [root parent-node])
-         (or
-           (tree/satisfied-inode? left-node)
-           (nil? left-node))]}
+    target-node: the destination
+    sibling: as sibling of the target-node or child"
+  [root target-node sibling]
+  {:pre [(every? tree/satisfied-inode? [root target-node])
+         (boolean? sibling)]}
   (let [left-node-id (tree/-get-left-id root)
         right-node (tree/-get-right root)]
     (when (tree/satisfied-inode? right-node)
       (let [new-right-node (tree/-set-left-id right-node left-node-id)]
         (tree/-save new-right-node)))
-    (if (nil? left-node)
-      (insert-node-as-first-child root parent-node)
-      (insert-node-as-sibling root left-node))))
+    (if sibling
+      (insert-node-as-sibling root target-node)
+      (insert-node-as-first-child root target-node))))
 

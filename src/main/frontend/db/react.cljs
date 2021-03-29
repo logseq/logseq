@@ -320,6 +320,41 @@
                                       transform-fn)]
                       (set-new-result! handler-key new-result))))))))))))
 
+(defn refresh
+  [repo-url {:keys [key data files-db?] :as handler-opts
+             :or {files-db? false}}]
+  (let [handler-keys (get-handler-keys handler-opts)
+        get-conn (fn [] (if files-db?
+                          (conn/get-files-conn repo-url)
+                          (conn/get-conn repo-url false)))
+        db @(get-conn)]
+    (doseq [handler-key handler-keys]
+     (let [handler-key (vec (cons repo-url handler-key))]
+       (when-let [cache (get @query-state handler-key)]
+         (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
+           (when (or query query-fn)
+             (let [new-result (->
+                                (cond
+                                  query-fn
+                                  (profile
+                                    "Query:"
+                                    (doall (query-fn db)))
+
+                                  inputs-fn
+                                  (let [inputs (inputs-fn)]
+                                    (apply d/q query db inputs))
+
+                                  (keyword? query)
+                                  (db-utils/get-key-value repo-url query)
+
+                                  (seq inputs)
+                                  (apply d/q query db inputs)
+
+                                  :else
+                                  (d/q query db))
+                                transform-fn)]
+               (set-new-result! handler-key new-result)))))))))
+
 (defn set-key-value
   [repo-url key value]
   (if value

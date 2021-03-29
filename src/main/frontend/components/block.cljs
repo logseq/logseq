@@ -49,7 +49,8 @@
             [frontend.context.i18n :as i18n]
             [frontend.template :as template]
             [shadow.loader :as loader]
-            [frontend.search :as search]))
+            [frontend.search :as search]
+            [frontend.debug :as debug]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -1046,7 +1047,7 @@
                       :class (if heading? "bullet-heading" "")}]]]]))
 
 (defn- build-id
-  [config ref? sidebar? embed?]
+  [config]
   (let [k (pr-str config)
         n (or
            (get @container-ids k)
@@ -1369,7 +1370,6 @@
                                   (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
                                     (dnd/move-block @*dragging-block
                                                     block
-                                                    from-dom-id
                                                     false
                                                     true)))
                                 (reset! *dragging? false)
@@ -1533,7 +1533,7 @@
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
-        unique-dom-id (build-id (dissoc config :block/uuid) ref? sidebar? embed?)
+        unique-dom-id (build-id (dissoc config :block/uuid))
         edit-input-id (str "edit-block-" unique-dom-id uuid)
         block-id (str "ls-block-" unique-dom-id uuid)
         has-child? (boolean
@@ -1568,7 +1568,6 @@
                             (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
                               (dnd/move-block @*dragging-block
                                               block
-                                              from-dom-id
                                               @*move-to-top?
                                               false)))
                           (reset! *dragging? false)

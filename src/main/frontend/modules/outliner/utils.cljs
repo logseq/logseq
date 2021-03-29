@@ -8,7 +8,8 @@
   [id]
   (or
     (number? id)
-    (string? id)))
+    (string? id)
+    (uuid? id)))
 
 (defn check-block-id
   [id]

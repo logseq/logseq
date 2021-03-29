@@ -372,39 +372,37 @@
             (->> (concat delete-tx tx)
                  (remove nil?))))))))
 
+(defn- update-last-edit-block
+  []
+  (let [edit-block (state/get-edit-block)
+        edit-input-id (state/get-edit-input-id)
+        block-element (when edit-input-id (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block")))
+        {:keys [idx container]} (when block-element
+                                  (util/get-block-idx-inside-container block-element))]
+    (when (and idx container)
+      (let [m {:block edit-block
+               :idx idx
+               :container (gobj/get container "id")}]
+        (state/set-state! :editor/last-edit-block m)))))
+
 (defn transact-react-and-alter-file!
   ([repo tx transact-option files]
    (transact-react-and-alter-file! repo tx transact-option files {}))
   ([repo tx transact-option files opts]
    (spec/validate :repos/url repo)
-   (let [files (remove nil? files)
-         pages (->> (map db/get-file-page (map first files))
-                    (remove nil?))]
-     (let [edit-block (state/get-edit-block)
-           edit-input-id (state/get-edit-input-id)
-           block-element (when edit-input-id (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block")))
-           {:keys [idx container]} (when block-element
-                                     (util/get-block-idx-inside-container block-element))]
-       (when (and idx container)
-         (state/set-state! :editor/last-edit-block {:block edit-block
-                                                    :idx idx
-                                                    :container (gobj/get container "id")})))
+   (do
+     (update-last-edit-block)
      ;; try catch so that if db transaction failed, it'll not write to the files
      (try
        (do
          (db/transact-react!
-          repo
-          tx
-          transact-option)
+           repo
+           tx
+           transact-option)
 
-         ;; TODO: remove
-         (when (seq pages)
-           (let [children-tx (mapcat #(rebuild-page-blocks-children repo %) pages)]
-             (when (seq children-tx)
-               (db/transact! repo children-tx))))
-
-         (when (seq files)
-           (file-handler/alter-files repo files opts)))
+         (let [files (remove nil? files)]
+           (when (seq files)
+             (file-handler/alter-files repo files opts))))
        (catch js/Error e
          (log/error :transact-react/failed e))))))
 

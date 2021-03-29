@@ -199,7 +199,7 @@
     (is (= should-r (vec r)))))
 
 (comment
-  (defn clip-fn [x]
+  (defn clip-block [x]
     (map #(select-keys % [:block/parent :block/left :block/pre-block? :block/uuid :block/level
                           :block/title :db/id])
       x)))

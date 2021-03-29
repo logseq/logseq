@@ -10,7 +10,9 @@
             [clojure.string :as string]
             [frontend.utf8 :as utf8]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]))
+            [cljs-time.core :as t]
+            [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.tree :as tree]))
 
 (defn- remove-block-child!
   [target-block parent-block]
@@ -364,65 +366,23 @@
      we don't handle this now. TODO: transform between different formats in mldoc.
   2. Sometimes we might need to move a parent block to it's own child.
   "
-  [target-block to-block target-dom-id top? nested?]
-  (when (and
-         target-block
-         to-block
-         (:block/format target-block)
-         (:block/format to-block)
-         (not (:block/dummy? to-block))
-         (not (:block/dummy? target-block)))
+  [current-block target-block top? nested?]
+  (let [[current-node target-node]
+        (mapv outliner-core/block [current-block target-block])]
     (cond
-      (not= (:block/format target-block)
-            (:block/format to-block))
-      (notification/show!
-       (util/format "Sorry, you can't move a block of format %s to another file of format %s."
-                    (:block/format target-block)
-                    (:block/format to-block))
-       :error)
-
-      (= (:block/uuid target-block) (:block/uuid to-block))
-      nil
+      top?
+      (let [first-child?
+            (= (tree/-get-parent-id target-node)
+              (tree/-get-left-id target-node))]
+        (if first-child?
+          (let [parent (tree/-get-parent target-node)]
+            (outliner-core/move-subtree current-node parent false))
+          (outliner-core/move-subtree current-node target-node true)))
+      nested?
+      (outliner-core/move-subtree current-node target-node false)
 
       :else
-      (let [pattern (config/get-block-pattern (:block/format to-block))
-            target-block-repo (:block/repo target-block)
-            to-block-repo (:block/repo to-block)
-            target-block (assoc target-block
-                                :block/meta
-                                (:block/meta (db/entity target-block-repo [:block/uuid (:block/uuid target-block)])))
-            to-block (assoc to-block
-                            :block/meta
-                            (:block/meta (db/entity [:block/uuid (:block/uuid to-block)])))
-            same-repo? (= target-block-repo to-block-repo)
-            target-file (:block/file target-block)
-            same-file? (and
-                        same-repo?
-                        (= (:db/id target-file)
-                           (:db/id (:block/file to-block))))
-            [top-block bottom-block] (if same-file?
-                                       (if (< (get-start-pos target-block)
-                                              (get-start-pos to-block))
-                                         [target-block to-block]
-                                         [to-block target-block])
-                                       [nil nil])
-            target-child? (compute-target-child? target-block to-block)
-            direction (compute-direction target-block top-block nested? top? target-child?)
-            original-top-block-start-pos (get-start-pos top-block)
-            [target-content block-changes] (recompute-block-content-and-changes target-block to-block nested? same-repo? same-file?)]
-        (cond
-          same-file?
-          (move-block-in-same-file target-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes)
-
-          ;; same repo but different files
-          same-repo?
-          (move-block-in-different-files target-block-repo target-block to-block top-block bottom-block nested? top? target-child? direction target-content target-file original-top-block-start-pos block-changes)
-
-          ;; different repos
-          :else
-          nil)
-
-        (when (state/get-git-auto-push?)
-          (doseq [repo (->> #{target-block-repo to-block-repo}
-                            (remove nil?))]
-            (repo-handler/push repo nil)))))))
+      (outliner-core/move-subtree current-node target-node true))
+    (let [repo (state/get-current-repo)]
+      (db/refresh repo {:key :block/change
+                        :data [(:data current-node) (:data target-node)]}))))

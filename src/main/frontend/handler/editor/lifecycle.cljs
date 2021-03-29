@@ -13,7 +13,8 @@
             [frontend.db :as db]
             [frontend.date :as date]
             [frontend.handler.file :as file]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.debug :as debug]))
 
 (defn did-mount!
   [state]

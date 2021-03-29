@@ -13,12 +13,13 @@
       db-outliner/get-by-parent-id
       (u-outliner/->block-lookup-ref id))
     (util/react)
-    (flatten)))
+    (flatten)
+    (seq)))
 
 (defn update-block-state
   [repo node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (when-let [parent (tree/-get-parent node)]
+  ;; {:pre [(tree/satisfied-inode? node)]}
+  #_(when-let [parent (tree/-get-parent node)]
     (react/transact-react!
       repo
       [(:data parent)]
