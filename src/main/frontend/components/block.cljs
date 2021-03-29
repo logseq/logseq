@@ -953,11 +953,11 @@
                 macro-content (when macro-content
                                 (template/resolve-dynamic-template! macro-content))]
             (render-macro config name arguments macro-content format))
-          (when-let [macro-txt (macro->text name arguments)]
-            (let [macro-txt (when macro-txt
-                              (template/resolve-dynamic-template! macro-txt))
-                  format (get-in config [:block :block/format] :markdown)]
-              (render-macro config name arguments macro-txt format))))))
+          (let [macro-content (or
+                               (get (state/get-macros) name)
+                               (get (state/get-macros) (keyword name)))
+                format (get-in config [:block :block/format] :markdown)]
+            (render-macro config name arguments macro-content format)))))
 
     :else
     ""))
