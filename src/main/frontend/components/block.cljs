@@ -968,6 +968,41 @@
   [block]
   block)
 
+(defn- dnd-same-block?
+  [uuid]
+  (= (:block/uuid @*dragging-block) uuid))
+
+(defn- get-data-transfer-attr
+  [event attr]
+  (.getData (gobj/get event "dataTransfer") attr))
+
+(defn- bullet-drag-start
+  [event block uuid block-id]
+  (editor-handler/highlight-block! uuid)
+  (.setData (gobj/get event "dataTransfer")
+            "block-uuid"
+            uuid)
+  (.setData (gobj/get event "dataTransfer")
+            "block-dom-id"
+            block-id)
+  (state/clear-selection!)
+  (reset! *dragging? true)
+  (reset! *dragging-block block))
+
+(defn- bullet-on-click
+  [e block config uuid]
+  (if (gobj/get e "shiftKey")
+    (do
+      (state/sidebar-add-block!
+       (state/get-current-repo)
+       (:db/id block)
+       :block
+       block)
+      (util/stop e))
+    (when (:embed? config)
+      (route-handler/redirect! {:to :page
+                                :path-params {:name (str uuid)}}))))
+
 (rum/defcs block-control < rum/reactive
   [state config block uuid block-id level start-level body children dummy? *control-show? *collapsed?]
   (let [has-child? (and
@@ -1012,32 +1047,11 @@
         [:span ""])]
      [:a (if (not dummy?)
            {:href (rfe/href :page {:name uuid})
-            :on-click (fn [e]
-                        (if (gobj/get e "shiftKey")
-                          (do
-                            (state/sidebar-add-block!
-                             (state/get-current-repo)
-                             (:db/id block)
-                             :block
-                             block)
-                            (util/stop e))
-                          (when (:embed? config)
-                            (route-handler/redirect! {:to :page
-                                                      :path-params {:name (str uuid)}}))))})
+            :on-click (fn [e] (bullet-on-click e block config uuid))})
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true
-        :on-drag-start (fn [event]
-                         (editor-handler/highlight-block! uuid)
-                         (.setData (gobj/get event "dataTransfer")
-                                   "block-uuid"
-                                   uuid)
-                         (.setData (gobj/get event "dataTransfer")
-                                   "block-dom-id"
-                                   block-id)
-                         (state/clear-selection!)
-                         (reset! *dragging? true)
-                         (reset! *dragging-block block))
+        :on-drag-start (fn [event] (bullet-drag-start event block uuid block-id))
         :blockid (str uuid)
         :class (str (when collapsed? "bullet-closed")
                     " "
@@ -1223,10 +1237,6 @@
              [[:span.opacity-50 "Click here to start writing"]])
            [tags])))))))
 
-(defn dnd-same-block?
-  [uuid]
-  (= (:block/uuid @*dragging-block) uuid))
-
 (defn show-dnd-separator
   [element-id]
   (when-let [element (gdom/getElement element-id)]
@@ -1240,10 +1250,6 @@
     (when (d/has-class? element "dnd-separator-cur")
       (d/remove-class! element "dnd-separator-cur")
       (d/add-class! element "dnd-separator"))))
-
-(defn- get-data-transfer-attr
-  [event attr]
-  (.getData (gobj/get event "dataTransfer") attr))
 
 (defn- pre-block-cp
   [config content format]
@@ -1330,53 +1336,66 @@
          [:div.my-4
           (datetime-comp/date-picker nil nil ts)]))]))
 
+(defn- block-content-on-click
+  [e block block-id properties content format edit-input-id]
+  (when-not (selection-range-in-block?)
+    (let [target (gobj/get e "target")]
+      (when-not (or (util/link? target)
+                    (util/input? target)
+                    (util/details-or-summary? target)
+                    (and (util/sup? target)
+                         (d/has-class? target "fn")))
+        (editor-handler/clear-selection! nil)
+        (editor-handler/unhighlight-block!)
+        (let [cursor-range (util/caret-range (gdom/getElement block-id))
+              properties-hidden? (text/properties-hidden? properties)
+              content (text/remove-level-spaces content format)
+              content (if properties-hidden? (text/remove-properties! content) content)
+              block (db/pull [:block/uuid (:block/uuid block)])]
+          (state/set-editing!
+           edit-input-id
+           content
+           block
+           cursor-range))
+        (util/stop e)))))
+
+(defn- block-content-on-drag-over
+  [event uuid]
+  (util/stop event)
+  (when-not (dnd-same-block? uuid)
+    (show-dnd-separator (str uuid "-nested"))))
+
+(defn- block-content-on-drag-leave
+  [uuid]
+  (hide-dnd-separator (str uuid))
+  (hide-dnd-separator (str uuid "-nested"))
+  (hide-dnd-separator (str uuid "-top")))
+
+(defn- block-content-on-drop
+  [event block uuid]
+  (util/stop event)
+  (when (and (not (dnd-same-block? uuid))
+             (not (:block/dummy? block)))
+    (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
+      (dnd/move-block @*dragging-block
+                      block
+                      from-dom-id
+                      false
+                      true)))
+  (reset! *dragging? false)
+  (reset! *dragging-block nil)
+  (editor-handler/unhighlight-block!))
+
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid       (str uuid)
                ;; FIXME: Click to copy a selection instead of click first and then copy
                ;; It seems that `util/caret-range` can't get the correct range
-               :on-click      (fn [e]
-                                (when-not (selection-range-in-block?)
-                                  (let [target (gobj/get e "target")]
-                                    (when-not (or (util/link? target)
-                                                  (util/input? target)
-                                                  (util/details-or-summary? target)
-                                                  (and (util/sup? target)
-                                                       (d/has-class? target "fn")))
-                                      (editor-handler/clear-selection! nil)
-                                      (editor-handler/unhighlight-block!)
-                                      (let [cursor-range (util/caret-range (gdom/getElement block-id))
-                                            properties-hidden? (text/properties-hidden? properties)
-                                            content (text/remove-level-spaces content format)
-                                            content (if properties-hidden? (text/remove-properties! content) content)
-                                            block (db/pull [:block/uuid (:block/uuid block)])]
-                                        (state/set-editing!
-                                         edit-input-id
-                                         content
-                                         block
-                                         cursor-range))
-                                      (util/stop e)))))
-               :on-drag-over  (fn [event]
-                                (util/stop event)
-                                (when-not (dnd-same-block? uuid)
-                                  (show-dnd-separator (str uuid "-nested"))))
-               :on-drag-leave (fn [event]
-                                (hide-dnd-separator (str uuid))
-                                (hide-dnd-separator (str uuid "-nested"))
-                                (hide-dnd-separator (str uuid "-top")))
-               :on-drop       (fn [event]
-                                (util/stop event)
-                                (when-not (dnd-same-block? uuid)
-                                  (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
-                                    (dnd/move-block @*dragging-block
-                                                    block
-                                                    from-dom-id
-                                                    false
-                                                    true)))
-                                (reset! *dragging? false)
-                                (reset! *dragging-block nil)
-                                (editor-handler/unhighlight-block!))}]
+               :on-click      (fn [e] (block-content-on-click e block block-id properties content format edit-input-id))
+               :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
+               :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
+               :on-drop       (fn [event] (block-content-on-drop event block uuid))}]
     [:div.flex.relative
      [:div.flex-1.flex-col.relative.block-content
       (cond-> {:id (str "block-content-" uuid)}
@@ -1468,12 +1487,11 @@
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block slide? top?]
   (let [dragging? (rum/react *dragging?)]
-    (cond
-      (and dragging? (not slide?) (not (:block/dummy? block)))
-      (dnd-separator block 20 0 top? false)
-
-      :else
-      nil)))
+    (when (and dragging?
+               (not slide?)
+               (not (:block/dummy? block))
+               (not (:block/pre-block? block)))
+      (dnd-separator block 20 0 top? false))))
 
 (defn non-dragging?
   [e]
@@ -1517,10 +1535,10 @@
            component))))))
 
 (defn- block-drag-over
-  [event uuid idx block-id *move-to-top?]
+  [event uuid top? block-id *move-to-top?]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
-    (if (zero? idx)
+    (if top?
       (let [element-top (gobj/get (utils/getOffsetRect (gdom/getElement block-id)) "top")
             cursor-top (gobj/get event "clientY")]
         (if (<= (js/Math.abs (- cursor-top element-top)) 16)
@@ -1593,9 +1611,9 @@
         (d/add-class! node "hide-inner-bullet")))))
 
 (defn- on-drag-and-mouse-attrs
-  [block uuid idx block-id *move-to-top? has-child? *control-show? doc-mode?]
+  [block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?]
   {:on-drag-over (fn [event]
-                   (block-drag-over event uuid idx block-id *move-to-top?))
+                   (block-drag-over event uuid top? block-id *move-to-top?))
    :on-drag-leave (fn [event]
                     (block-drag-leave event uuid *move-to-top?))
    :on-drop (fn [event]
@@ -1636,7 +1654,7 @@
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [state config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? idx properties refs-with-children] :as block}]
+  [state config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? top? properties refs-with-children] :as block}]
   (let [*control-show? (get state ::control-show?)
         *collapsed? (get state ::collapsed?)
         ref? (boolean (:ref? config))
@@ -1653,7 +1671,7 @@
                      (or (seq children)
                          (seq body))))
         start-level (or (:start-level config) 1)
-        attrs (on-drag-and-mouse-attrs block uuid idx block-id *move-to-top? has-child? *control-show? doc-mode?)
+        attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?)
         [data-refs data-refs-self] (get-data-refs-and-self block refs-with-children)]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
@@ -1676,7 +1694,7 @@
        (when-let [comp (block-parents config repo uuid format false)]
          [:div.my-2.opacity-50.ml-4 comp]))
 
-     (dnd-separator-wrapper block slide? (zero? idx))
+     (dnd-separator-wrapper block slide? top?)
 
      [:div.flex-1.flex-row
       (when (not slide?)
@@ -2195,9 +2213,11 @@
                       blocks)
              first-id (:block/uuid (first blocks))]
          (for [[idx item] (medley/indexed blocks)]
-           (let [item (-> (if (:block/dummy? item)
-                            item
-                            (dissoc item :block/meta)))
+           (let [item (->
+                       (if (:block/dummy? item)
+                         item
+                         (dissoc item :block/meta))
+                       (assoc :block/top? (zero? idx)))
                  config (assoc config :block/uuid (:block/uuid item))]
              (rum/with-key
                (block-container config item)
