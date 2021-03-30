@@ -1516,6 +1516,110 @@
          (when (or (seq @parents-atom) show-page?)
            component))))))
 
+(defn- block-drag-over
+  [event uuid idx block-id *move-to-top?]
+  (util/stop event)
+  (when-not (dnd-same-block? uuid)
+    (if (zero? idx)
+      (let [element-top (gobj/get (utils/getOffsetRect (gdom/getElement block-id)) "top")
+            cursor-top (gobj/get event "clientY")]
+        (if (<= (js/Math.abs (- cursor-top element-top)) 16)
+          ;; top
+          (do
+            (hide-dnd-separator (str uuid))
+            (show-dnd-separator (str uuid "-top"))
+            (reset! *move-to-top? true))
+          (do
+            (hide-dnd-separator (str uuid "-top"))
+            (show-dnd-separator (str uuid)))))
+      (show-dnd-separator (str uuid)))))
+
+(defn- block-drag-leave
+  [event uuid *move-to-top?]
+  (hide-dnd-separator (str uuid))
+  (hide-dnd-separator (str uuid "-nested"))
+  (hide-dnd-separator (str uuid "-top"))
+  (reset! *move-to-top? false))
+
+(defn- block-drop
+  [event uuid block *move-to-top?]
+  (when-not (dnd-same-block? uuid)
+    (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
+      (dnd/move-block @*dragging-block
+                      block
+                      from-dom-id
+                      @*move-to-top?
+                      false)))
+  (reset! *dragging? false)
+  (reset! *dragging-block nil)
+  (editor-handler/unhighlight-block!))
+
+(defn- block-mouse-move
+  [e]
+  (when (and (non-dragging? e)
+             (not @*resizing-image?))
+    (state/into-selection-mode!)))
+
+(defn- block-mouse-down
+  [e block-id]
+  (when (and
+         (not (state/get-selection-start-block))
+         (= (gobj/get e "buttons") 1))
+    (when block-id (state/set-selection-start-block! block-id))))
+
+(defn- block-mouse-over
+  [e has-child? *control-show? block-id doc-mode?]
+  (util/stop e)
+  (when has-child?
+    (reset! *control-show? true))
+  (when-let [parent (gdom/getElement block-id)]
+    (let [node (.querySelector parent ".bullet-container")]
+      (when doc-mode?
+        (d/remove-class! node "hide-inner-bullet"))))
+  (when (and
+         (state/in-selection-mode?)
+         (non-dragging? e))
+    (util/stop e)
+    (editor-handler/highlight-selection-area! block-id)))
+
+(defn- block-mouse-out
+  [e has-child? *control-show? block-id doc-mode?]
+  (util/stop e)
+  (when has-child?
+    (reset! *control-show? false))
+  (when doc-mode?
+    (when-let [parent (gdom/getElement block-id)]
+      (when-let [node (.querySelector parent ".bullet-container")]
+        (d/add-class! node "hide-inner-bullet")))))
+
+(defn- on-drag-and-mouse-attrs
+  [block uuid idx block-id *move-to-top? has-child? *control-show? doc-mode?]
+  {:on-drag-over (fn [event]
+                   (block-drag-over event uuid idx block-id *move-to-top?))
+   :on-drag-leave (fn [event]
+                    (block-drag-leave event uuid *move-to-top?))
+   :on-drop (fn [event]
+              (block-drop event uuid block *move-to-top?))
+   :on-mouse-move block-mouse-move
+   :on-mouse-down (fn [e]
+                    (block-mouse-down e block-id))
+   :on-mouse-over (fn [e]
+                    (block-mouse-over e has-child? *control-show? block-id doc-mode?))
+   :on-mouse-out (fn [e]
+                   (block-mouse-out e has-child? *control-show? block-id doc-mode?))})
+
+(defn- get-data-refs-and-self
+  [block refs-with-children]
+  (let [refs (model/get-page-names-by-ids
+              (->> (map :db/id refs-with-children)
+                   (remove nil?)))
+        data-refs (text/build-data-value refs)
+        refs (model/get-page-names-by-ids
+              (->> (map :db/id (:block/ref-pages block))
+                   (remove nil?)))
+        data-refs-self (text/build-data-value refs)]
+    [data-refs data-refs-self]))
+
 (rum/defcs block-container < rum/static
   {:init (fn [state]
            (let [block (last (:rum/args state))
@@ -1542,7 +1646,6 @@
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         unique-dom-id (build-id (dissoc config :block/uuid))
-        edit-input-id (str "edit-block-" unique-dom-id uuid)
         block-id (str "ls-block-" unique-dom-id uuid)
         has-child? (boolean
                     (and
@@ -1550,80 +1653,8 @@
                      (or (seq children)
                          (seq body))))
         start-level (or (:start-level config) 1)
-        attrs {:on-drag-over (fn [event]
-                               (util/stop event)
-                               (when-not (dnd-same-block? uuid)
-                                 (if (zero? idx)
-                                   (let [element-top (gobj/get (utils/getOffsetRect (gdom/getElement block-id)) "top")
-                                         cursor-top (gobj/get event "clientY")]
-                                     (if (<= (js/Math.abs (- cursor-top element-top)) 16)
-                                       ;; top
-                                       (do
-                                         (hide-dnd-separator (str uuid))
-                                         (show-dnd-separator (str uuid "-top"))
-                                         (reset! *move-to-top? true))
-                                       (do
-                                         (hide-dnd-separator (str uuid "-top"))
-                                         (show-dnd-separator (str uuid)))))
-                                   (show-dnd-separator (str uuid)))))
-               :on-drag-leave (fn [event]
-                                (hide-dnd-separator (str uuid))
-                                (hide-dnd-separator (str uuid "-nested"))
-                                (hide-dnd-separator (str uuid "-top"))
-                                (reset! *move-to-top? false))
-               :on-drop (fn [event]
-                          (when-not (dnd-same-block? uuid)
-                            (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
-                              (dnd/move-block @*dragging-block
-                                              block
-                                              from-dom-id
-                                              @*move-to-top?
-                                              false)))
-                          (reset! *dragging? false)
-                          (reset! *dragging-block nil)
-                          (editor-handler/unhighlight-block!))
-               :on-mouse-move (fn [e]
-                                (when (and (non-dragging? e)
-                                           (not @*resizing-image?))
-                                  (state/into-selection-mode!)))
-               :on-mouse-down (fn [e]
-                                (when (and
-                                       (not (state/get-selection-start-block))
-                                       (= (gobj/get e "buttons") 1))
-                                  (when block-id (state/set-selection-start-block! block-id))))
-               :on-mouse-over (fn [e]
-                                (util/stop e)
-                                (when has-child?
-                                  (reset! *control-show? true))
-                                (when-let [parent (gdom/getElement block-id)]
-                                  (let [node (.querySelector parent ".bullet-container")
-                                        closed? (d/has-class? node "bullet-closed")]
-                                    ;; (if closed?
-                                    ;;   (block-handler/collapse-block! uuid)
-                                    ;;   (block-handler/expand-block! uuid))
-                                    (when doc-mode?
-                                      (d/remove-class! node "hide-inner-bullet"))))
-                                (when (and
-                                       (state/in-selection-mode?)
-                                       (non-dragging? e))
-                                  (util/stop e)
-                                  (editor-handler/highlight-selection-area! block-id)))
-               :on-mouse-out (fn [e]
-                               (util/stop e)
-                               (when has-child?
-                                 (reset! *control-show? false))
-                               (when doc-mode?
-                                 (when-let [parent (gdom/getElement block-id)]
-                                   (when-let [node (.querySelector parent ".bullet-container")]
-                                     (d/add-class! node "hide-inner-bullet")))))}
-        data-refs (let [refs (model/get-page-names-by-ids
-                              (->> (map :db/id refs-with-children)
-                                   (remove nil?)))]
-                    (text/build-data-value refs))
-        data-refs-self (let [refs  (model/get-page-names-by-ids
-                                    (->> (map :db/id (:block/ref-pages block))
-                                         (remove nil?)))]
-                         (text/build-data-value refs))]
+        attrs (on-drag-and-mouse-attrs block uuid idx block-id *move-to-top? has-child? *control-show? doc-mode?)
+        [data-refs data-refs-self] (get-data-refs-and-self block refs-with-children)]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
       {:id block-id
@@ -1651,7 +1682,8 @@
       (when (not slide?)
         (block-control config block uuid block-id level start-level body children dummy? *control-show? *collapsed?))
 
-      (block-content-or-editor config block edit-input-id block-id slide?)]
+      (let [edit-input-id (str "edit-block-" unique-dom-id uuid)]
+        (block-content-or-editor config block edit-input-id block-id slide?))]
 
      (when (seq children)
        [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
