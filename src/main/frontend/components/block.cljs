@@ -484,35 +484,35 @@
     (let [block (and (util/uuid-string? id)
                      (db/pull-block (uuid id)))]
       (if block
-        [:span
-         [:div.block-ref-wrap
-          {:on-click (fn [e]
-                       (util/stop e)
-                       (if (gobj/get e "shiftKey")
-                         (state/sidebar-add-block!
-                          (state/get-current-repo)
-                          (:db/id block)
-                          :block-ref
-                          {:block block})
-                         (route-handler/redirect! {:to          :page
-                                                   :path-params {:name id}})))}
+        [:div.block-ref-wrap
+         {:on-mouse-down
+          (fn [e]
+            (util/stop e)
+            (if (gobj/get e "shiftKey")
+              (state/sidebar-add-block!
+               (state/get-current-repo)
+               (:db/id block)
+               :block-ref
+               {:block block})
+              (route-handler/redirect! {:to          :page
+                                        :path-params {:name id}})))}
 
-          (let [title (let [title (:block/title block)]
-                        (if (empty? title)
-                          ;; display the content
-                          [:div.block-ref
-                           (block-content config block nil (:block/uuid block) (:slide? config))]
-                          (->elem
-                           :span.block-ref
-                           (map-inline config title))))]
-            (if label
-              (->elem
-               :span.block-ref {:title (some->
-                                        (:block/content block)
-                                        (text/remove-level-spaces (:block/format block))
-                                        (text/remove-properties!))} ; TODO: replace with a popup
-               (map-inline config label))
-              title))]]
+         (let [title (let [title (:block/title block)]
+                       (if (empty? title)
+                         ;; display the content
+                         [:div.block-ref
+                          (block-content config block nil (:block/uuid block) (:slide? config))]
+                         (->elem
+                          :span.block-ref
+                          (map-inline config title))))]
+           (if label
+             (->elem
+              :span.block-ref {:title (some->
+                                       (:block/content block)
+                                       (text/remove-level-spaces (:block/format block))
+                                       (text/remove-properties!))} ; TODO: replace with a popup
+              (map-inline config label))
+             title))]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 

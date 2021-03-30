@@ -4,7 +4,8 @@
             [frontend.util :as util]
             [frontend.date :as date]
             [frontend.state :as state]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [medley.core :as medley]))
 
 (defn- build-edges
   [edges]
@@ -28,16 +29,19 @@
      (mapv (fn [p]
              (when p
                (let [current-page? (= p current-page)
-                     color (case [dark? current-page?] ; FIXME: Put it into CSS
-                             [false false] "#222222"
-                             [false true]  "#045591"
-                             [true false]  "#8abbbb"
-                             [true true]   "#ffffff")
+                     block? (and p (util/uuid-string? p))
+                     color (if block?
+                             "#1a6376"
+                             (case [dark? current-page?] ; FIXME: Put it into CSS
+                              [false false] "#222222"
+                              [false true]  "#045591"
+                              [true false]  "#8abbbb"
+                              [true true]   "#ffffff"))
                      color (if (contains? tags (string/lower-case (str p)))
                              (if dark? "orange" "green")
                              color)]
                  {:id p
-                  :name p
+                  :name name
                   :val (get-connections p edges)
                   :autoColorBy "group"
                   :group (js/Math.ceil (* (js/Math.random) 12))

@@ -76,10 +76,19 @@
 
                :else
                nil)]
-    (when (and
-           (string? page)
-           (not (string/blank? page)))
-      (string/trim page))))
+    (cond
+      (and
+       (string? page)
+       (text/block-ref? page))
+      (text/block-ref-un-brackets! page)
+
+      (and
+       (string? page)
+       (not (string/blank? page)))
+      (string/trim page)
+
+      :else
+      nil)))
 
 (defn get-block-reference
   [block]
