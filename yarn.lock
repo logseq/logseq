@@ -3853,10 +3853,10 @@ mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@0.6.2:
-  version "0.6.2"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.6.2.tgz#74341aaa0eadf904deb386f843096a2e2ef3ba89"
-  integrity sha512-xHnAU3zYaR5i13E4rixvkR4ZgCoS2H9tmEdPyXX3FZSxgZw8NMmZ8ztSXTm8SNG09CaQXPEj5YuhFlUVMyeKMQ==
+mldoc@0.6.3:
+  version "0.6.3"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.6.3.tgz#8c642cadef203845170d581d9b6e758c928aa248"
+  integrity sha512-8/fdGlDx1OXwl8BKv7f8YF1fRVCtdcE/+H6G6McQMV4GrxjXhHesjfGlSZnElFjDnhqmqkOzy48K/J8PGUHCNQ==
   dependencies:
     yargs "^12.0.2"
 
