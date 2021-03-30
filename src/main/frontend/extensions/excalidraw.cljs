@@ -71,7 +71,7 @@
         *elements (get state ::elements)
         file (:file option)]
     (when data
-      [:div.overflow-hidden
+      [:div.overflow-hidden {:on-mouse-down (fn [e] (util/stop e))}
        [:div.my-1 {:style {:font-size 10}}
         [:a.mr-2 {:on-click ui-handler/toggle-wide-mode!}
          (util/format "Wide Mode (%s)" (if wide-mode? "ON" "OFF"))]
