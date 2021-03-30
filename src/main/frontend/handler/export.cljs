@@ -107,8 +107,6 @@
           (.setAttribute anchor "download" (.-name zipfile))
           (.click anchor))))))
 
-
-
 (defn- get-file-contents-with-suffix
   [repo]
   (let [conn (db/get-conn repo)]
@@ -125,56 +123,61 @@
                                                [?e2 :page/original-name ?n2]] conn path)
                                  :format (f/get-format path)})))))
 
-(defn- get-embed-and-refs-blocks-pages-aux
-  [repo page-or-block is-block? exclude-blocks exclude-pages]
-  (let [[ref-blocks ref-pages]
-        (->> (if is-block?
-               [page-or-block]
-               (db/get-page-blocks
-                repo page-or-block {:use-cache? false
-                                    :pull-keys '[:block/ref-pages :block/ref-blocks]}))
-             (filterv #(or (:block/ref-blocks %) (:block/ref-pages %)))
-             (mapv (fn [b] [(:block/ref-blocks b), (:block/ref-pages b)]))
-             (apply mapv vector)
-             (mapv #(vec (distinct (flatten (remove nil? %))))))
-        ref-block-ids
-        (->> ref-blocks
-             (#(remove (fn [b] (contains? exclude-blocks (:db/id b))) %))
-             (mapv #(:db/id %)))
-        ref-page-ids
-        (->> ref-pages
-             (#(remove (fn [b] (contains? exclude-pages (:db/id b))) %))
-             (mapv #(:db/id %)))
-        ref-blocks
-        (->> ref-block-ids
-             (db/pull-many repo '[*])
-             (flatten))
-        ref-pages
-        (->> ref-page-ids
-             (db/pull-many repo '[*])
-             (flatten))
-        [next-ref-blocks1 next-ref-pages1]
-        (->> ref-blocks
-             (mapv #(get-embed-and-refs-blocks-pages-aux repo % true
-                                                         (set (concat ref-block-ids exclude-blocks)) exclude-pages))
-             (apply mapv vector))
-        [next-ref-blocks2 next-ref-pages2]
-        (->> ref-pages
-             (mapv #(get-embed-and-refs-blocks-pages-aux repo (:page/name %) false
-                                                         exclude-blocks (set (concat ref-page-ids exclude-pages))))
-             (apply mapv vector))]
-    [(->> (concat ref-block-ids next-ref-blocks1 next-ref-blocks2)
-          (flatten)
-          (distinct))
-     (->> (concat ref-page-ids next-ref-pages1 next-ref-pages2)
-          (flatten)
-          (distinct))]))
-
+(defn- get-embed-and-refs-blocks-pages-aux []
+  (let [mem (atom {})]
+    (letfn [(f [repo page-or-block is-block? exclude-blocks exclude-pages]
+              (let [v (get @mem [repo page-or-block])]
+                (if v v
+                    (let [[ref-blocks ref-pages]
+                          (->> (if is-block?
+                                 [page-or-block]
+                                 (db/get-page-blocks
+                                  repo page-or-block {:use-cache? false
+                                                      :pull-keys '[:block/ref-pages :block/ref-blocks]}))
+                               (filterv #(or (:block/ref-blocks %) (:block/ref-pages %)))
+                               (mapv (fn [b] [(:block/ref-blocks b), (:block/ref-pages b)]))
+                               (apply mapv vector)
+                               (mapv #(vec (distinct (flatten (remove nil? %))))))
+                          ref-block-ids
+                          (->> ref-blocks
+                               (#(remove (fn [b] (contains? exclude-blocks (:db/id b))) %))
+                               (mapv #(:db/id %)))
+                          ref-page-ids
+                          (->> ref-pages
+                               (#(remove (fn [b] (contains? exclude-pages (:db/id b))) %))
+                               (mapv #(:db/id %)))
+                          ref-blocks
+                          (->> ref-block-ids
+                               (db/pull-many repo '[*])
+                               (flatten))
+                          ref-pages
+                          (->> ref-page-ids
+                               (db/pull-many repo '[*])
+                               (flatten))
+                          [next-ref-blocks1 next-ref-pages1]
+                          (->> ref-blocks
+                               (mapv #(f repo % true (set (concat ref-block-ids exclude-blocks)) exclude-pages))
+                               (apply mapv vector))
+                          [next-ref-blocks2 next-ref-pages2]
+                          (->> ref-pages
+                               (mapv #(f repo (:page/name %) false exclude-blocks (set (concat ref-page-ids exclude-pages))))
+                               (apply mapv vector))
+                          result
+                          [(->> (concat ref-block-ids next-ref-blocks1 next-ref-blocks2)
+                                (flatten)
+                                (distinct))
+                           (->> (concat ref-page-ids next-ref-pages1 next-ref-pages2)
+                                (flatten)
+                                (distinct))]]
+                      (when (and (empty? exclude-blocks) (empty? exclude-pages))
+                        (swap! mem assoc [repo page-or-block] result))
+                      result))))]
+      f)))
 
 (defn- get-embed-and-refs-blocks-pages
-  [repo page]
+  [repo page get-embed-and-refs-blocks-pages-aux-memoized]
   (let [[block-ids page-ids]
-        (get-embed-and-refs-blocks-pages-aux repo page false #{} #{})
+        (get-embed-and-refs-blocks-pages-aux-memoized repo page false #{} #{})
         blocks
         (db/pull-many repo '[*] block-ids)
         pages-name-and-content
@@ -208,14 +211,15 @@
 
 (defn- export-files-as-markdown
   [repo files heading-to-list?]
-  (->> files
-       (mapv (fn [{:keys [path content names format]}]
-               (when (first names)
-                 [path (fp/exportMarkdown f/mldoc-record content
-                                          (f/get-default-config format heading-to-list?)
-                                          (js/JSON.stringify
-                                           (clj->js (get-embed-and-refs-blocks-pages repo (first names)))))])))
-       (remove nil?)))
+  (let [get-embed-and-refs-blocks-pages-aux-memoized (get-embed-and-refs-blocks-pages-aux)]
+    (->> files
+         (mapv (fn [{:keys [path content names format]}]
+                 (when (first names)
+                   [path (fp/exportMarkdown f/mldoc-record content
+                                            (f/get-default-config format heading-to-list?)
+                                            (js/JSON.stringify
+                                             (clj->js (get-embed-and-refs-blocks-pages repo (first names) get-embed-and-refs-blocks-pages-aux-memoized))))])))
+         (remove nil?))))
 
 (defn export-repo-as-markdown!
   [repo]
