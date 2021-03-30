@@ -1,17 +1,17 @@
 (ns frontend.keyboards
-  (:require [frontend.handler.editor :as editor-handler]
+  (:require [frontend.components.commit :as commit]
+            [frontend.config :as config]
+            [frontend.handler.config :as config-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.git :as git-handler]
             [frontend.handler.history :as history-handler]
-            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
-            [frontend.handler.config :as config-handler]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.git :as git-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.components.commit :as commit]
             [frontend.state :as state]
-            [frontend.config :as config]
-            [clojure.string :as s]))
+            [goog.object :as gobj]))
 
 ;; Credits to roamresearch
 (defn prevent-default-behavior
@@ -23,11 +23,19 @@
     ;; and stop event from bubbling
     false))
 
+(defn- target-is-text?
+  [e]
+  (let [type (-> e
+                 (gobj/get "target")
+                 (gobj/get "type"))]
+    (contains? #{"text"} type)))
+
 (defn enable-when-not-editing-mode!
   [f]
   (fn [e]
     (js/console.log "enable when not editing")
-    (when-not (state/editing?)
+    (when-not (or (state/editing?)
+                  (target-is-text? e))
       (f e))
     true))
 
