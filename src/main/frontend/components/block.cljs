@@ -366,7 +366,7 @@
        (if (seq children)
          (for [child children]
            (if (= (first child) "Label")
-             [:span (last child)]
+             (last child)
              (let [{:keys [content children]} (last child)
                    page-name (subs content 2 (- (count content) 2))]
                (page-reference html-export? page-name (assoc config :children children) nil))))
