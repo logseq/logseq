@@ -1336,28 +1336,29 @@
          [:div.my-4
           (datetime-comp/date-picker nil nil ts)]))]))
 
-(defn- block-content-on-click
+(defn- block-content-on-mouse-down
   [e block block-id properties content format edit-input-id]
-  (when-not (selection-range-in-block?)
-    (let [target (gobj/get e "target")]
-      (when-not (or (util/link? target)
-                    (util/input? target)
-                    (util/details-or-summary? target)
-                    (and (util/sup? target)
-                         (d/has-class? target "fn")))
-        (editor-handler/clear-selection! nil)
-        (editor-handler/unhighlight-block!)
-        (let [cursor-range (util/caret-range (gdom/getElement block-id))
-              properties-hidden? (text/properties-hidden? properties)
-              content (text/remove-level-spaces content format)
-              content (if properties-hidden? (text/remove-properties! content) content)
-              block (db/pull [:block/uuid (:block/uuid block)])]
-          (state/set-editing!
-           edit-input-id
-           content
-           block
-           cursor-range))
-        (util/stop e)))))
+  (let [target (gobj/get e "target")]
+    (when-not (or (util/link? target)
+                  (util/input? target)
+                  (util/details-or-summary? target)
+                  (and (util/sup? target)
+                       (d/has-class? target "fn")))
+      (editor-handler/clear-selection! nil)
+      (editor-handler/unhighlight-block!)
+      (let [properties-hidden? (text/properties-hidden? properties)
+            content (text/remove-level-spaces content format)
+            content (if properties-hidden? (text/remove-properties! content) content)
+            block (db/pull [:block/uuid (:block/uuid block)])]
+        ;; wait a while for the value of the caret range
+        (js/setTimeout
+         #(let [cursor-range (util/caret-range (gdom/getElement block-id))]
+            (state/set-editing!
+             edit-input-id
+             content
+             block
+             cursor-range))
+         5)))))
 
 (defn- block-content-on-drag-over
   [event uuid]
@@ -1390,9 +1391,8 @@
   [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         attrs {:blockid       (str uuid)
-               ;; FIXME: Click to copy a selection instead of click first and then copy
-               ;; It seems that `util/caret-range` can't get the correct range
-               :on-click      (fn [e] (block-content-on-click e block block-id properties content format edit-input-id))
+               :on-mouse-down (fn [e]
+                                (block-content-on-mouse-down e block block-id properties content format edit-input-id))
                :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
                :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
                :on-drop       (fn [event] (block-content-on-drop event block uuid))}]
@@ -1572,11 +1572,11 @@
   (reset! *dragging-block nil)
   (editor-handler/unhighlight-block!))
 
-(defn- block-mouse-move
-  [e]
-  (when (and (non-dragging? e)
-             (not @*resizing-image?))
-    (state/into-selection-mode!)))
+;; (defn- block-mouse-move
+;;   [e]
+;;   (when (and (non-dragging? e)
+;;              (not @*resizing-image?))
+;;     (state/into-selection-mode!)))
 
 (defn- block-mouse-down
   [e block-id]
@@ -1600,7 +1600,7 @@
     (util/stop e)
     (editor-handler/highlight-selection-area! block-id)))
 
-(defn- block-mouse-out
+(defn- block-mouse-leave
   [e has-child? *control-show? block-id doc-mode?]
   (util/stop e)
   (when has-child?
@@ -1608,7 +1608,10 @@
   (when doc-mode?
     (when-let [parent (gdom/getElement block-id)]
       (when-let [node (.querySelector parent ".bullet-container")]
-        (d/add-class! node "hide-inner-bullet")))))
+        (d/add-class! node "hide-inner-bullet"))))
+  (when (and (non-dragging? e)
+             (not @*resizing-image?))
+    (state/into-selection-mode!)))
 
 (defn- on-drag-and-mouse-attrs
   [block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?]
@@ -1618,13 +1621,13 @@
                     (block-drag-leave event uuid *move-to-top?))
    :on-drop (fn [event]
               (block-drop event uuid block *move-to-top?))
-   :on-mouse-move block-mouse-move
+   ;; :on-mouse-move block-mouse-move
    :on-mouse-down (fn [e]
                     (block-mouse-down e block-id))
    :on-mouse-over (fn [e]
                     (block-mouse-over e has-child? *control-show? block-id doc-mode?))
-   :on-mouse-out (fn [e]
-                   (block-mouse-out e has-child? *control-show? block-id doc-mode?))})
+   :on-mouse-leave (fn [e]
+                     (block-mouse-leave e has-child? *control-show? block-id doc-mode?))})
 
 (defn- get-data-refs-and-self
   [block refs-with-children]
