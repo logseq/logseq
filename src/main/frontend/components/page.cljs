@@ -276,6 +276,7 @@
               {:keys [title] :as properties} (:page/properties page)
               page-name (:page/name page)
               page-original-name (:page/original-name page)
+              title (or title page-original-name page-name)
               file (:page/file page)
               file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
               today? (and

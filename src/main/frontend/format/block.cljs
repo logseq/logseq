@@ -313,7 +313,9 @@
 (defn safe-blocks
   [blocks]
   (map (fn [block]
-         (block-keywordize (util/remove-nils block)))
+         (if (map? block)
+           (block-keywordize (util/remove-nils block))
+           block))
        blocks))
 
 (defn with-path-refs
@@ -355,7 +357,8 @@
 
 (defn extract-blocks
   [blocks last-pos encoded-content]
-  (let [blocks
+  (let [pre-block-body (atom nil)
+        blocks
         (loop [headings []
                block-body []
                blocks (reverse blocks)
@@ -425,8 +428,11 @@
                 :else
                 (let [block-body' (conj block-body block)]
                   (recur headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
-            (-> (reverse headings)
-                safe-blocks)))]
+            (do
+              (when (seq block-body)
+                (reset! pre-block-body block-body))
+              (-> (reverse headings)
+                  safe-blocks))))]
     (let [first-block (first blocks)
           first-block-start-pos (get-in first-block [:block/meta :start-pos])
           blocks (if (and
@@ -445,7 +451,8 @@
                          :meta {:start-pos 0
                                 :end-pos (or first-block-start-pos
                                              (utf8/length encoded-content))}
-                         :body (take-while (fn [block] (not (heading-block? block))) blocks)
+                         :body @pre-block-body
+                         ;; (take-while (fn [block] (not (heading-block? block))) blocks)
                          :pre-block? true}
                         (block-keywordize)))
                      (select-keys first-block [:block/file :block/format :block/page]))
