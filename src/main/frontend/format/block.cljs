@@ -171,13 +171,16 @@
   (let [properties (into {} properties)
         page-refs (->>
                    (map (fn [v]
-                          (when v
-                            (->> (re-seq text/page-ref-re v)
-                                 (map second)
-                                 (map string/lower-case))))
+                          (when (string? v)
+                            (let [page-refs (->> (re-seq text/page-ref-re v)
+                                                 (map second))
+                                  tags (->> (string/split v #",")
+                                            (filter (fn [s] (= \# (first s))))
+                                            (map (fn [s] (subs s 1))))]
+                              (concat page-refs tags))))
                         (vals properties))
                    (apply concat)
-                   (distinct))
+                   (remove string/blank?))
         properties (->> properties
                         (medley/map-kv (fn [k v]
                                          (let [v (string/trim v)

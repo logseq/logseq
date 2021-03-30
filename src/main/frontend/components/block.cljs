@@ -2241,24 +2241,3 @@
                (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
               (blocks-container blocks config))])))]
      (blocks-container blocks config))])
-
-(comment
-  ;; timestamps
-  ;; [2020-02-10 Mon 13:22]
-  ;; repetition
-  (def r1 "<2005-10-01 Sat +1m>")
-  ;; TODO: mldoc add supports
-  (def r2 "<2005-10-01 Sat +1m -3d>")
-
-  (def l
-    "1. First item
-hello world
-2. Second item
-nice
-3. Third item")
-
-  (def t
-    "| Name  | Phone | Age |
-|-------+-------+-----|
-| Peter |  1234 |  17 |
-| Anna  |  4321 |  25 |"))
