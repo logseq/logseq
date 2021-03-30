@@ -175,7 +175,7 @@
       (ui/resize-provider
        (ui/resize-consumer
         (cond->
-         {:className "resize"
+         {:className "resize image-resize"
           :onSizeChanged (fn [value]
                            (when (and (not @*resizing-image?)
                                       (some? @size)
@@ -1338,27 +1338,34 @@
 
 (defn- block-content-on-mouse-down
   [e block block-id properties content format edit-input-id]
-  (let [target (gobj/get e "target")]
-    (when-not (or (util/link? target)
-                  (util/input? target)
-                  (util/details-or-summary? target)
-                  (and (util/sup? target)
-                       (d/has-class? target "fn")))
-      (editor-handler/clear-selection! nil)
-      (editor-handler/unhighlight-block!)
-      (let [properties-hidden? (text/properties-hidden? properties)
-            content (text/remove-level-spaces content format)
-            content (if properties-hidden? (text/remove-properties! content) content)
-            block (db/pull [:block/uuid (:block/uuid block)])]
-        ;; wait a while for the value of the caret range
-        (js/setTimeout
-         #(let [cursor-range (util/caret-range (gdom/getElement block-id))]
-            (state/set-editing!
-             edit-input-id
-             content
-             block
-             cursor-range))
-         5)))))
+  (.stopPropagation e)
+  (let [target (gobj/get e "target")
+        button (gobj/get e "buttons")]
+    (when (= button 1)
+      (when-not (or (util/link? target)
+                   (util/input? target)
+                   (util/details-or-summary? target)
+                   (and (util/sup? target)
+                        (d/has-class? target "fn"))
+                   (d/has-class? target "image-resize"))
+       (editor-handler/clear-selection! nil)
+       (editor-handler/unhighlight-block!)
+       (let [properties-hidden? (text/properties-hidden? properties)
+             content (text/remove-level-spaces content format)
+             content (if properties-hidden? (text/remove-properties! content) content)
+             block (db/pull [:block/uuid (:block/uuid block)])]
+         ;; wait a while for the value of the caret range
+         (js/setTimeout
+          #(let [cursor-range (util/caret-range (gdom/getElement block-id))]
+             (state/set-editing!
+              edit-input-id
+              content
+              block
+              cursor-range))
+          5))
+
+       (when-not (state/get-selection-start-block)
+         (when block-id (state/set-selection-start-block! block-id)))))))
 
 (defn- block-content-on-drag-over
   [event uuid]
@@ -1572,19 +1579,6 @@
   (reset! *dragging-block nil)
   (editor-handler/unhighlight-block!))
 
-;; (defn- block-mouse-move
-;;   [e]
-;;   (when (and (non-dragging? e)
-;;              (not @*resizing-image?))
-;;     (state/into-selection-mode!)))
-
-(defn- block-mouse-down
-  [e block-id]
-  (when (and
-         (not (state/get-selection-start-block))
-         (= (gobj/get e "buttons") 1))
-    (when block-id (state/set-selection-start-block! block-id))))
-
 (defn- block-mouse-over
   [e has-child? *control-show? block-id doc-mode?]
   (util/stop e)
@@ -1621,9 +1615,6 @@
                     (block-drag-leave event uuid *move-to-top?))
    :on-drop (fn [event]
               (block-drop event uuid block *move-to-top?))
-   ;; :on-mouse-move block-mouse-move
-   :on-mouse-down (fn [e]
-                    (block-mouse-down e block-id))
    :on-mouse-over (fn [e]
                     (block-mouse-over e has-child? *control-show? block-id doc-mode?))
    :on-mouse-leave (fn [e]

@@ -169,6 +169,7 @@
                   state)}
   [state config id attr code pos_meta]
   [:div.extensions__code
+   {:on-mouse-down (fn [e] (util/stop e))}
    [:div.extensions__code-lang
     (let [mode (string/lower-case (get attr :data-lang "javascript"))]
       (if (= mode "text/x-clojure")
