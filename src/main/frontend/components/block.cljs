@@ -1616,7 +1616,6 @@
                                  (when-let [parent (gdom/getElement block-id)]
                                    (when-let [node (.querySelector parent ".bullet-container")]
                                      (d/add-class! node "hide-inner-bullet")))))}
-        [data-refs data-refs-self] nil
         data-refs (let [refs (model/get-page-names-by-ids
                               (->> (map :db/id refs-with-children)
                                    (remove nil?)))]
