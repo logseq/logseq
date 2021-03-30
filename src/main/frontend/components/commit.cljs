@@ -39,8 +39,7 @@
         "Your commit message:"]]]
 
      [:input#commit-message.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-      {:style {:color "#000"}
-       :auto-focus true
+      {:auto-focus true
        :default-value ""}]
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse

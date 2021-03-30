@@ -341,50 +341,50 @@
 
 (defn rename!
   [old-name new-name]
-  (when (and old-name new-name
-             (not= (string/lower-case old-name) (string/lower-case new-name)))
-    (when-let [repo (state/get-current-repo)]
-      (if (db/entity [:page/name (string/lower-case new-name)])
-        (notification/show! "Page already exists!" :error)
-        (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
-          (let [old-original-name (:page/original-name page)
-                file (:page/file page)
-                journal? (:page/journal? page)]
-            (d/transact! (db/get-conn repo false)
-                         [{:db/id (:db/id page)
-                           :page/name (string/lower-case new-name)
-                           :page/original-name new-name}])
+  (let [new-name (string/trim new-name)]
+    (when-not (string/blank? new-name)
+      (when (and old-name new-name
+                 (not= (string/trim old-name) (string/trim new-name)))
+        (when-let [repo (state/get-current-repo)]
+          (when-let [page (db/entity [:page/name (string/lower-case old-name)])]
+            (let [old-original-name (:page/original-name page)
+                  file (:page/file page)
+                  journal? (:page/journal? page)]
+              (d/transact! (db/get-conn repo false)
+                [{:db/id (:db/id page)
+                  :page/name (string/lower-case new-name)
+                  :page/original-name new-name}])
 
-            (when (and file (not journal?))
-              (rename-file! file new-name
-                            (fn []
-                              (page-add-properties! (string/lower-case new-name) {:title new-name}))))
+              (when (and file (not journal?))
+                (rename-file! file new-name
+                              (fn []
+                                (page-add-properties! (string/lower-case new-name) {:title new-name}))))
 
-            ;; update all files which have references to this page
-            (let [files (db/get-files-that-referenced-page (:db/id page))]
-              (doseq [file-path files]
-                (let [file-content (db/get-file file-path)
-                      ;; FIXME: not safe
-                      new-content (string/replace file-content
-                                                  (util/format "[[%s]]" old-original-name)
-                                                  (util/format "[[%s]]" new-name))]
-                  (file-handler/alter-file repo
-                                           file-path
-                                           new-content
-                                           {:reset? true
-                                            :re-render-root? false})))))
+              ;; update all files which have references to this page
+              (let [files (db/get-files-that-referenced-page (:db/id page))]
+                (doseq [file-path files]
+                  (let [file-content (db/get-file file-path)
+                        ;; FIXME: not safe
+                        new-content (string/replace file-content
+                                                    (util/format "[[%s]]" old-original-name)
+                                                    (util/format "[[%s]]" new-name))]
+                    (file-handler/alter-file repo
+                                             file-path
+                                             new-content
+                                             {:reset? true
+                                              :re-render-root? false})))))
 
-          ;; TODO: update browser history, remove the current one
+            ;; TODO: update browser history, remove the current one
 
-          ;; Redirect to the new page
-          (route-handler/redirect! {:to :page
-                                    :path-params {:name (string/lower-case new-name)}})
+            ;; Redirect to the new page
+            (route-handler/redirect! {:to :page
+                                      :path-params {:name (string/lower-case new-name)}})
 
-          (notification/show! "Page renamed successfully!" :success)
+            (notification/show! "Page renamed successfully!" :success)
 
-          (repo-handler/push-if-auto-enabled! repo)
+            (repo-handler/push-if-auto-enabled! repo)
 
-          (ui-handler/re-render-root!))))))
+            (ui-handler/re-render-root!)))))))
 
 (defn rename-when-alter-title-property!
   [page path format original-content content]
