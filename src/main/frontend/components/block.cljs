@@ -1341,7 +1341,7 @@
   (.stopPropagation e)
   (let [target (gobj/get e "target")
         button (gobj/get e "buttons")]
-    (when (= button 1)
+    (when (contains? #{1 0} button)
       (when-not (or (util/link? target)
                    (util/input? target)
                    (util/details-or-summary? target)
@@ -1353,16 +1353,17 @@
        (let [properties-hidden? (text/properties-hidden? properties)
              content (text/remove-level-spaces content format)
              content (if properties-hidden? (text/remove-properties! content) content)
-             block (db/pull [:block/uuid (:block/uuid block)])]
+             block (db/pull [:block/uuid (:block/uuid block)])
+             f #(let [cursor-range (util/caret-range (gdom/getElement block-id))]
+                  (state/set-editing!
+                   edit-input-id
+                   content
+                   block
+                   cursor-range))]
          ;; wait a while for the value of the caret range
-         (js/setTimeout
-          #(let [cursor-range (util/caret-range (gdom/getElement block-id))]
-             (state/set-editing!
-              edit-input-id
-              content
-              block
-              cursor-range))
-          5))
+         (if (util/ios?)
+           (f)
+           (js/setTimeout f 5)))
 
        (when-not (state/get-selection-start-block)
          (when block-id (state/set-selection-start-block! block-id)))))))
@@ -1397,7 +1398,7 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
-        mouse-down-key (if (util/mobile?)
+        mouse-down-key (if (util/ios?)
                          :on-click
                          :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
                          )

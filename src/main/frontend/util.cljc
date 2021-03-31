@@ -37,7 +37,7 @@
 #?(:cljs
     (defn ios?
       []
-      (not (nil? (re-find #"iPad|iPhone|iPod" js/navigator.userAgent)))))
+      (utils/ios)))
 
 #?(:cljs
     (defn safari?
