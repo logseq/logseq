@@ -30,7 +30,8 @@
                   :autoHideMenuBar (not mac?)
                   :titleBarStyle (if mac? "hidden" nil)
                   :webPreferences
-                  {:nodeIntegration         false
+                  {:plugins                 true ; pdf
+                   :nodeIntegration         false
                    :nodeIntegrationInWorker false
                    :contextIsolation        true
                    :spellcheck              true

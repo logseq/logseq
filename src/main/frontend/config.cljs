@@ -69,7 +69,7 @@
        :excalidraw})))
 
 (def markup-formats
-  #{:org :md :markdown :asciidoc :rst})
+  #{:org :md :markdown :asciidoc :adoc :rst})
 
 (defn img-formats
   []

@@ -64,11 +64,21 @@
    (some #(string/ends-with? path (str dir "/" %))
          [".swap" ".crswap" ".tmp"])))
 
+(defonce allowed-formats
+  #{:org :markdown :md :edn :json :css :excalidraw})
+
+(defn get-ext
+  [p]
+  (-> (.extname path p)
+      (subs 1)
+      keyword))
+
 (defn- get-files
   [path]
   (let [result (->>
                 (readdir path)
                 (remove (partial ignored-path? path))
+                (filter #(contains? allowed-formats (get-ext %)))
                 (map (fn [path]
                        (let [stat (fs/statSync path)]
                          (when-not (.isDirectory stat)

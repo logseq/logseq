@@ -380,7 +380,16 @@
   [title path]
   (let [repo-path (config/get-repo-dir (state/get-current-repo))
         full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))]
-    [:a.asset-ref {:target "_blank" :href full-path} (or title path)]))
+    [:div
+     [:a.asset-ref {:target "_blank" :href full-path} (or title path)]
+
+     (case (util/get-file-ext full-path)
+       "pdf"
+       [:iframe {:src full-path
+                 :fullscreen true
+                 :height 800}]
+
+       nil)]))
 
 (defonce excalidraw-loaded? (atom false))
 (rum/defc excalidraw < rum/reactive
