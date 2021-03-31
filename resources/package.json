@@ -4,6 +4,7 @@
   "main": "electron.js",
   "author": "Logseq",
   "description": "A privacy-first, open-source platform for knowledge sharing and management.",
+  "repository": "https://github.com/logseq/logseq",
   "scripts": {
     "electron:dev": "electron-forge start",
     "electron:debug": "electron-forge start --inspect-electron",
