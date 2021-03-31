@@ -594,7 +594,6 @@
           init-properties nil
           remove-properties nil}
      :as opts}]
-   (prn "save-block-if-changed!")
    (let [{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks]} block
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
