@@ -47,7 +47,6 @@
   ;; auto updater
   (when mac?
     (when-let [f (js/require "update-electron-app")]
-      (logger.info "load auto updater")
       (f #js{})))
 
   ;; manual updater
