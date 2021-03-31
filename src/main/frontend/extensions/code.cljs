@@ -59,7 +59,12 @@
              format (:block/format block)
              content (:block/content block)
              {:keys [start_pos end_pos]} @pos-meta
-             value (if (= \n (last value)) value (str value "\n"))
+             prev-content (utf8/substring (utf8/encode content)
+                                          0 start_pos)
+             value (str (if (not= "\n" (last prev-content))
+                          "\n")
+                        (string/trimr value)
+                        "\n")
              content' (utf8/insert! content start_pos end_pos value)]
          (state/set-editor-op! :code-editor)
          (editor-handler/save-block-if-changed! block content')
