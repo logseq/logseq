@@ -43,6 +43,12 @@
     win))
 
 (defn setup-updater! [^js win]
+  ;; auto updater
+  (when mac?
+    (when-let [f (js/require "update-electron-app")]
+      (logger.info "load auto updater")
+      (f #js{})))
+
   ;; manual updater
   (init-updater {:repo   "logseq/logseq"
                  :logger logger
@@ -139,7 +145,6 @@
          (.removeHandler ipcMain call-app-channel))))
 
 (defonce *win (atom nil))
-
 
 (defn- destroy-window!
   [^js win]
