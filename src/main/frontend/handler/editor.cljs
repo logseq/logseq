@@ -379,6 +379,7 @@
              content (if (and (seq properties) (text/properties-hidden? properties))
                        (text/remove-properties! content)
                        content)
+             content (text/remove-level-spaces content format true)
              content-length (count content)
              text-range (cond
                           (and (> tail-len 0) (>= (count content) tail-len))
