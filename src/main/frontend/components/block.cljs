@@ -1397,8 +1397,12 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled scheduled-ast deadline deadline-ast repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
+        mouse-down-key (if (util/mobile?)
+                         :on-click
+                         :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
+                         )
         attrs {:blockid       (str uuid)
-               :on-mouse-down (fn [e]
+               mouse-down-key (fn [e]
                                 (block-content-on-mouse-down e block block-id properties content format edit-input-id))
                :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
                :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
