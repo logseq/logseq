@@ -1001,30 +1001,31 @@
 (defn get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
-    (when-let [repo (state/get-current-repo)]
-      (when-let [conn (conn/get-conn repo)]
-        (->> (react/q repo [:custom :scheduled-deadline journal-title] {}
-                      '[:find (pull ?block [*])
-                        :in $ ?day ?future
-                        :where
-                        (or
-                         [?block :block/scheduled ?d]
-                         [?block :block/deadline ?d])
-                        [(get-else $ ?block :block/repeated? false) ?repeated]
-                        [(get-else $ ?block :block/marker "NIL") ?marker]
-                        [(not= ?marker "DONE")]
-                        [(not= ?marker "CANCELED")]
-                        [(not= ?marker "CANCELLED")]
-                        [(<= ?d ?future)]
-                        (or-join [?repeated ?d ?day]
-                                 [(true? ?repeated)]
-                                 [(>= ?d ?day)])]
-               date
-               (+ date 7))
-             react
-             db-utils/seq-flatten
-             sort-blocks
-             db-utils/group-by-page)))))
+    (let [future-days (state/get-scheduled-future-days)]
+      (when-let [repo (state/get-current-repo)]
+       (when-let [conn (conn/get-conn repo)]
+         (->> (react/q repo [:custom :scheduled-deadline journal-title] {}
+                '[:find (pull ?block [*])
+                  :in $ ?day ?future
+                  :where
+                  (or
+                   [?block :block/scheduled ?d]
+                   [?block :block/deadline ?d])
+                  [(get-else $ ?block :block/repeated? false) ?repeated]
+                  [(get-else $ ?block :block/marker "NIL") ?marker]
+                  [(not= ?marker "DONE")]
+                  [(not= ?marker "CANCELED")]
+                  [(not= ?marker "CANCELLED")]
+                  [(<= ?d ?future)]
+                  (or-join [?repeated ?d ?day]
+                           [(true? ?repeated)]
+                           [(>= ?d ?day)])]
+                date
+                (+ date future-days))
+              react
+              db-utils/seq-flatten
+              sort-blocks
+              db-utils/group-by-page))))))
 
 (defn get-files-that-referenced-page
   [page-id]

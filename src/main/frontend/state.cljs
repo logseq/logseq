@@ -1006,6 +1006,11 @@
   []
   (:commands (get-config)))
 
+(defn get-scheduled-future-days
+  []
+  (let [days (:scheduled/future-days (get-config))]
+    (or (when (int? days) days) 0)))
+
 (defn set-graph-syncing?
   [value]
   (set-state! :graph/syncing? value))
