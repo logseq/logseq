@@ -649,13 +649,32 @@
       (let [pos (count (gobj/get input "value"))]
         (move-cursor-to input pos))))
 
+#?(:cljs
+   (defn move-cursor-up
+     "Move cursor up. If EOL, always move cursor to previous EOL."
+     [input]
+     (let [val (gobj/get input "value")
+           {:keys [pos]} (get-caret-pos input)
+           prev-idx (string/last-index-of val \newline pos)
+           pprev-idx (or (string/last-index-of val \newline (dec prev-idx)) -1)
+           cal-idx (+ pprev-idx pos (- prev-idx))]
+       (if (or (== pos (count val))
+               (> (- pos prev-idx) (- prev-idx pprev-idx)))
+         (move-cursor-to input prev-idx)
+         (move-cursor-to input cal-idx)))))
 
 #?(:cljs
    (defn move-cursor-down
+     "Move cursor down by calculating current cursor line pos.
+  If EOL, always move cursor to next EOL."
      [input]
-     ;;TODO not implemented, move cursor line down inside textarea, like press arrowdown key
-     nil
-     ))
+     (let [val (gobj/get input "value")
+           {:keys [pos]} (get-caret-pos input)
+           prev-idx (or (string/last-index-of val \newline pos) -1)
+           next-idx (or (string/index-of val \newline (inc pos))
+                        (count val))
+           cal-idx (+ next-idx pos (- prev-idx))]
+       (move-cursor-to input cal-idx))))
 
 ;; copied from re_com
 #?(:cljs

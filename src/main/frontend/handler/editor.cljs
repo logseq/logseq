@@ -1465,19 +1465,15 @@
                               (string/trim value))
                     (save-block! state (:value state))))
                 (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
+                  ;; TODO fix me, edit block pos should be the pos of last line or first line
+                  ;; if the target is multiline block, shall open edit
+                  ;; 1. if up, edit last line
+                  ;; 2. if down, edit first line
                   (edit-block! block pos format id))))))
-        (do
-          ;;just up and down
-          ;; TODO fixme
-            (let [e (js/KeyboardEvent. "keydown" (js-obj "code" "ArrowDown"))]
-            ;; (.dispatchEvent element (new js/Event "focus"))
-              (js/console.log "inside up down")
-              (js/console.log e)
-              ;; tried to simulate keydown, did not work
-              (.dispatchEvent element e)
-            ))
-
-        ))))
+        ;;just up and down
+        (if up?
+          (util/move-cursor-up element)
+          (util/move-cursor-down element))))))
 
 (defn insert-command!
   [id command-output format {:keys [restore?]
