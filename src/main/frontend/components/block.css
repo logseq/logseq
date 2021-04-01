@@ -73,7 +73,7 @@
   }
 
   .resize {
-    display: flex;
+    display: inline-flex;
   }
 
   .draw [aria-labelledby="shapes-title"] {
