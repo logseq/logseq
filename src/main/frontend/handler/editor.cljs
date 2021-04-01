@@ -1533,7 +1533,6 @@
              prefix (and prefix (subs prefix 0 (string/last-index-of prefix ".")))]
          (save-assets! repo repo-dir assets-dir files
                        (fn [index file-base]
-                         (prn {:file-base file-base})
                          (str (string/replace file-base " " "_") "_" (.now js/Date) "_" index)))))))
   ([repo dir path files gen-filename]
    (p/all
