@@ -629,20 +629,19 @@
 
 #?(:cljs
     (defn cursor-move-back [input n]
-      (let [{:keys [pos]} (get-caret-pos input)]
-        (set! (.-selectionStart input) (- pos n))
-        (set! (.-selectionEnd input) (- pos n)))))
+      (let [{:keys [pos]} (get-caret-pos input)
+            pos (- pos n)]
+        (.setSelectionRange input pos pos))))
 
 #?(:cljs
     (defn cursor-move-forward [input n]
-      (let [{:keys [pos]} (get-caret-pos input)]
-        (set! (.-selectionStart input) (+ pos n))
-        (set! (.-selectionEnd input) (+ pos n)))))
+      (let [{:keys [pos]} (get-caret-pos input)
+            pos (+ pos n)]
+        (.setSelectionRange input pos pos))))
 
 #?(:cljs
     (defn move-cursor-to [input n]
-      (set! (.-selectionStart input) n)
-      (set! (.-selectionEnd input) n)))
+      (.setSelectionRange input n n)))
 
 #?(:cljs
     (defn move-cursor-to-end
