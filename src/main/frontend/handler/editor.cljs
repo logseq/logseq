@@ -77,15 +77,18 @@
     (let [{:keys [selection-start selection-end format value block edit-id input]} m
           empty-selection? (= selection-start selection-end)
           pattern (pattern-fn format)
-          new-value (str
-                     (subs value 0 selection-start)
-                     pattern
-                     (subs value selection-start selection-end)
-                     pattern
-                     (subs value selection-end))]
+          pattern-count (count pattern)
+          prefix (subs value 0 selection-start)
+          wrapped-value (str pattern
+                             (subs value selection-start selection-end)
+                             pattern)
+          postfix (subs value selection-end)
+          new-value (str prefix wrapped-value postfix)]
       (state/set-edit-content! edit-id new-value)
-      (when empty-selection?
-        (util/cursor-move-back input (count pattern))))))
+      (if empty-selection?
+        (util/cursor-move-back input (count pattern))
+        (let [new-pos (count (str prefix wrapped-value))]
+          (util/move-cursor-to input new-pos))))))
 
 (defn bold-format! []
   (format-text! config/get-bold))
