@@ -7,7 +7,8 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.fixtures :as fixtures]
             [cljs-run-test :refer [run-test]]
-            [frontend.core-test :as core-test]))
+            [frontend.core-test :as core-test]
+            [frontend.handler.block :as block]))
 
 (use-fixtures :each
   fixtures/react-impl

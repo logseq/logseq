@@ -13,7 +13,7 @@
             [frontend.debug :as debug]))
 
 (defn blocks->vec-tree
-  "Deprecated: use blocks->vec-tree-by-parent instead."
+  "Deprecated: use frontend.modules.outliner.core/blocks->vec-tree instead."
   [col]
   (let [col (map (fn [h] (cond->
                            h
@@ -63,95 +63,6 @@
                             other-children)]
               (recur others children))))))))
 
-(defn ->db-id
-  [x]
-  (cond
-    (map? x)
-    (:db/id x)
-
-    (number? x)
-    x
-
-    :else
-    (throw (js/Error. (util/format "Unknown db/id format: %s" x)))))
-
-(defn- prepare-blocks
-  "Preparing blocks: index blocks,filter ids,and update some keys."
-  [blocks]
-  (loop [[f & r] blocks
-         ids #{}
-         parents #{}
-         ;; {[parent left] db-id}
-         indexed-by-position {}]
-    (if (nil? f)
-      {:ids ids :parents parents :indexed-by-position indexed-by-position}
-      (let [f (cond-> f
-                (not (:block/dummy? f))
-                (dissoc f :block/meta))
-            {:block/keys [parent left] db-id :db/id} f
-            new-ids (conj ids db-id)
-            new-parents (conj parents (->db-id parent))
-            new-indexed-by-position
-            (let [position (mapv ->db-id [parent left])]
-              (when (get indexed-by-position position)
-                (throw (js/Error. "Two block occupy the same position")))
-              (assoc indexed-by-position position f))]
-        (recur r new-ids new-parents new-indexed-by-position)))))
-
-(defn get-children
-  [parent-id indexed-by-position]
-  (loop [left parent-id
-         children []]
-    (if-let [{db-id :db/id :as child} (get indexed-by-position [parent-id left])]
-      (recur db-id (conj children child))
-      children)))
-
-(defn- get-all-refs
-  [block]
-  (let [refs (if-let [refs (seq (:block/refs-with-children block))]
-               refs
-               (:block/refs block))]
-    (distinct refs)))
-
-(defn- wrap-refs-with-children
-  ([block]
-   (->> (get-all-refs block)
-     (remove nil?)
-     (assoc block :block/refs-with-children)))
-  ([block other-children]
-   (->>
-     (cons block other-children)
-     (mapcat get-all-refs)
-     (remove nil?)
-     (distinct)
-     (assoc block :block/refs-with-children))))
-
-(comment
-  (defn- clip-block
-   "For debug. It's should be removed."
-   [x]
-   (let [ks [:block/parent :block/left :block/pre-block? :block/uuid
-             :block/level :block/title :db/id]]
-     (map #(select-keys % ks) x))))
-
-(defn blocks->vec-tree-by-outliner
-  [col]
-  (let [{:keys [ids parents indexed-by-position]}
-        (prepare-blocks col)
-        root-id (first (set/difference parents ids))]
-    (letfn [(build-tree [root]
-              (let [root (wrap-refs-with-children root)
-                    children (->>
-                               (get-children (:db/id root) indexed-by-position)
-                               (map build-tree))]
-                (if (seq children)
-                 (->
-                   (assoc root :block/children children)
-                   (wrap-refs-with-children children))
-                 root)))]
-      (->>
-        (get-children root-id indexed-by-position)
-        (map build-tree)))))
 
 ;; recursively with children content for tree
 (defn get-block-content-rec

@@ -50,7 +50,8 @@
             [frontend.template :as template]
             [shadow.loader :as loader]
             [frontend.search :as search]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [frontend.modules.outliner.tree :as tree]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -2137,7 +2138,7 @@
         sidebar? (:sidebar? config)
         ref? (:ref? config)
         custom-query? (:custom-query? config)
-        blocks->vec-tree #(if (or custom-query? ref?) % (block-handler/blocks->vec-tree-by-outliner %))
+        blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree %))
         blocks (blocks->vec-tree blocks)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
