@@ -7,12 +7,15 @@
             [frontend.modules.outliner.ref :as outliner-ref]
             [frontend.state :as state]
             [frontend.debug :as debug]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.modules.outliner.file :as outliner-file]
+            [frontend.util :as util]))
 
 (defrecord Block [data])
 
 (defn block
   [m]
+  (assert (map? m) (util/format "block data must be map,got: %s %s" (type m) m))
   (->Block m))
 
 (defn get-block-by-id
@@ -97,9 +100,9 @@
 
   (-save [this]
     (let [conn (conn/get-conn false)
-          data (:data this)]
-      (db-outliner/save-block conn data)
-      this))
+          data (:data this)
+          new-data (db-outliner/save-block conn data)]
+      (assoc this :data new-data)))
 
   (-del [this]
     (let [conn (conn/get-conn false)
@@ -126,44 +129,51 @@
                       (throw (js/Error. "Number of children and sorted-children are not equal."))))
                   sorted-children)))))))))
 
+
+(defn save-node
+  [node]
+  {:pre [(tree/satisfied-inode? node)]}
+  (let [saved-node (tree/-save node)]
+    (outliner-file/sync-to-file saved-node)))
+
 (defn insert-node-as-first-child
   "Insert a node as first child."
   [new-node parent-node]
-  (:pre [(every? tree/satisfied-inode? [new-node parent-node])])
+  {:pre [(every? tree/satisfied-inode? [new-node parent-node])]}
   (let [parent-id (tree/-get-id parent-node)
         node (-> (tree/-set-left-id new-node parent-id)
                (tree/-set-parent-id parent-id))
         right-node (tree/-get-down parent-node)]
     (do
       (if (tree/satisfied-inode? right-node)
-        (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))]
-          (tree/-save node)
-          (tree/-save new-right-node))
-        (tree/-save node))
-      (let [repo (state/get-current-repo)]
-        (outliner-state/update-block-state repo node)))))
+        (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
+              saved-new-node (tree/-save node)]
+          (tree/-save new-right-node)
+          saved-new-node)
+        (tree/-save node)))))
 
 (defn insert-node-as-sibling
   "Insert a node as sibling."
   [new-node left-node]
-  (:pre [(every? tree/satisfied-inode? [new-node left-node])])
+  {:pre [(every? tree/satisfied-inode? [new-node left-node])]}
   (let [node (-> (tree/-set-left-id new-node (tree/-get-id left-node))
                (tree/-set-parent-id (tree/-get-parent-id left-node)))
         right-node (tree/-get-right left-node)]
     (do
       (if (tree/satisfied-inode? right-node)
-        (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))]
-          (tree/-save node)
-          (tree/-save new-right-node))
-        (tree/-save node))
-      (let [repo (state/get-current-repo)]
-        (outliner-state/update-block-state repo node)))))
+        (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
+              saved-new-node (tree/-save node)]
+          (tree/-save new-right-node)
+          saved-new-node)
+        (tree/-save node)))))
 
 (defn insert-node
   [new-node target-node sibling?]
-  (if sibling?
-    (insert-node-as-sibling new-node target-node)
-    (insert-node-as-first-child new-node target-node)))
+  (let [saved-node
+        (if sibling?
+          (insert-node-as-sibling new-node target-node)
+          (insert-node-as-first-child new-node target-node))]
+    (outliner-file/sync-to-file saved-node)))
 
 (defn delete-node
   "Delete node from the tree."
@@ -175,8 +185,7 @@
       (let [left-node (tree/-get-left node)
             new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
         (tree/-save new-right-node)))
-    (let [repo (state/get-current-repo)]
-      (outliner-state/update-block-state repo node))))
+    (outliner-file/sync-to-file node)))
 
 (defn move-subtree
   "Move subtree to a destination position in the relation tree.
@@ -194,4 +203,10 @@
         (tree/-save new-right-node)))
     (if sibling
       (insert-node-as-sibling root target-node)
-      (insert-node-as-first-child root target-node))))
+      (insert-node-as-first-child root target-node))
+    (do
+
+      (outliner-file/sync-to-file root)
+      ;; TODO Should sync to file where the target-node located when the
+      ;; target-node is in another file.
+      )))

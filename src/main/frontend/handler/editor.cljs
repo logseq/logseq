@@ -561,7 +561,7 @@
           (->
             (wrap-parse-block block)
             (outliner-core/block)
-            (tree/-save))
+            (outliner-core/save-node))
           (let [opts {:key :block/change
                       :data [block]}]
             (db/refresh repo opts))))
@@ -768,7 +768,7 @@
         (mapv outliner-core/block [current-block new-block])
         has-children? (seq (tree/-get-children current-node))
         new-is-sibling? (not has-children?)]
-    (tree/-save current-node)
+    (outliner-core/save-node current-node)
     (outliner-core/insert-node new-node current-node new-is-sibling?)))
 
 

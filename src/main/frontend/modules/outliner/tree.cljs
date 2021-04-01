@@ -1,7 +1,8 @@
 (ns frontend.modules.outliner.tree
   (:require [frontend.modules.outliner.ref :as outliner-ref]
             [clojure.set :as set]
-            [frontend.modules.outliner.utils :as outliner-u]))
+            [frontend.modules.outliner.utils :as outliner-u]
+            [frontend.debug :as debug]))
 
 (defprotocol INode
   (-get-id [this])
@@ -54,16 +55,16 @@
       (recur db-id (conj children child))
       children)))
 
-(comment
-  (defn- clip-block
-    "For debug. It's should be removed."
-    [x]
-    (let [ks [:block/parent :block/left :block/pre-block? :block/uuid
-              :block/level :block/title :db/id]]
-      (map #(select-keys % ks) x))))
+(defn- clip-block
+  "For debug. It's should be removed."
+  [x]
+  (let [ks [:block/parent :block/left :block/pre-block? :block/uuid
+            :block/level :block/title :db/id :block/page]]
+    (map #(select-keys % ks) x)))
 
 (defn blocks->vec-tree
   [blocks]
+  ;; (debug/pprint "blocks->vec-tree" blocks)
   (let [{:keys [ids parents indexed-by-position]}
         (prepare-blocks blocks)
         root-id (first (set/difference parents ids))]

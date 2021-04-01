@@ -281,6 +281,12 @@
       @conn)
      (flatten))))
 
+(defn get-file-by-path
+  [file-path]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [conn (conn/get-files-conn repo)]
+      (d/pull @conn '[*] [:file/path file-path]))))
+
 (defn get-custom-css
   []
   (when-let [repo (state/get-current-repo)]
@@ -637,6 +643,18 @@
           conn
           block-uuid)
         sort-by-left)))
+
+(defn get-blocks-by-page
+  [id-or-lookup-ref]
+  (when-let [conn (conn/get-conn)]
+    (->
+      (d/q
+       '[:find (pull ?block [*])
+         :in $ ?page
+         :where
+         [?block :block/page ?page]]
+       conn id-or-lookup-ref)
+      flatten)))
 
 (defn get-block-children
   "Including nested children."
