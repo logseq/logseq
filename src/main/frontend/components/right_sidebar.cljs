@@ -54,7 +54,7 @@
       [:div.sidebar-item.flex-col.flex-1
        (graph-2d/graph
         (graph/build-graph-opts
-         graph dark? false
+         graph dark?
          {:width  600
           :height 600}))])))
 

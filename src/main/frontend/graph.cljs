@@ -54,23 +54,6 @@
                (.toString 16)
                (.padStart 6 "0"))))
 
-(defn- dot-mode
-  [node ctx global-scale dark?]
-  (let [label (gobj/get node "id")
-        val (gobj/get node "val")
-        font-size (/ 15 global-scale)
-        arc-radius (/ 3 global-scale)
-        x (gobj/get node "x")
-        y (gobj/get node "y")
-        color (gobj/get node "color")]
-    (set! (.-fillStyle ctx) color)
-    (.beginPath ctx)
-    (.arc ctx x y (if (zero? val)
-                    arc-radius
-                    (* arc-radius (js/Math.sqrt (js/Math.sqrt val)))) 0 (* 2 js/Math.PI) false)
-    (set! (.-fillStyle ctx) (if dark? "#aaa" "#222"))
-    (.fill ctx)))
-
 (defn- dot-text-mode
   [node ctx global-scale dark?]
   (let [label (gobj/get node "id")
@@ -124,7 +107,7 @@
      :nodes nodes}))
 
 (defn- build-graph-opts
-  [graph dark? dot-mode? option]
+  [graph dark? option]
   (let [nodes-count (count (:nodes graph))
         graph-data (build-graph-data graph)]
     (merge
@@ -149,7 +132,7 @@
                 (let [k (:k (bean/->clj z))]
                   (reset! graph-mode
                           (cond
-                            (or dot-mode? (< k 0.4))
+                            (< k 0.4)
                             :dot
 
                             :else
@@ -172,8 +155,5 @@
       ;;                   (.zoomToFit @ref 400)))
       :nodeCanvasObject
       (fn [node ^CanvasRenderingContext2D ctx global-scale]
-        (case @graph-mode
-          :dot-text
-          (dot-text-mode node ctx global-scale dark?)
-          (dot-mode node ctx global-scale dark?)))}
+        (dot-text-mode node ctx global-scale dark?))}
      option)))

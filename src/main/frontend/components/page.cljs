@@ -434,7 +434,6 @@
 
 (defonce graph-ref (atom nil))
 (defonce show-journal? (atom false))
-(defonce dot-mode? (atom false))
 (rum/defcs global-graph < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -446,8 +445,7 @@
         sidebar-open? (state/sub :ui/sidebar-open?)
         [width height] (rum/react layout)
         dark? (= theme "dark")
-        graph (graph-handler/build-global-graph theme (rum/react show-journal?))
-        dot-mode-value? (rum/react dot-mode?)]
+        graph (graph-handler/build-global-graph theme (rum/react show-journal?))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.relative#global-graph
        (if (seq (:nodes graph))
@@ -455,7 +453,6 @@
           (graph/build-graph-opts
            graph
            dark?
-           dot-mode-value?
            {:width (if (and (> width 1280) sidebar-open?)
                      (- width 24 600)
                      (- width 24))
@@ -470,15 +467,7 @@
           {:on-click (fn [_e]
                        (swap! show-journal? not))}
           (str (t :page/show-journals)
-               (if @show-journal? " (ON)"))]
-         [:a.text-sm.font-medium.mt-4
-          {:title (if @dot-mode?
-                    (t :page/show-name)
-                    (t :page/hide-name))
-           :on-click (fn [_e]
-                       (swap! dot-mode? not))}
-          (str (t :dot-mode)
-               (if @dot-mode? " (ON)"))]]]])))
+               (if @show-journal? " (ON)"))]]]])))
 
 (rum/defc all-pages < rum/reactive
   ;; {:did-mount (fn [state]
