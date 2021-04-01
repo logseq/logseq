@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
+            ["semver" :as semver]
             ["os" :as os]
             ["fs" :as fs]
             ["path" :as path]
@@ -30,7 +31,7 @@
   [repo]
   (let [;endpoint "https://update.electronjs.org/xyhp915/cljs-todo/darwin-x64/0.0.4"
         endpoint (str "https://update.electronjs.org/" repo "/" js/process.platform "-" js/process.arch "/" electron-version)]
-    (debug "[updater]" endpoint)
+    (debug "checking" endpoint)
     (p/catch
      (p/let [res (fetch endpoint)
              status (.-status res)
@@ -103,8 +104,26 @@
              (fn []
                (emit "completed" nil))))))))
 
+(defn init-auto-updater
+  [repo]
+  (when (.valid semver electron-version)
+    (p/let [info (get-latest-artifact-info repo)]
+      (when-let [remote-version (and info (re-find #"\d+.\d+.\d+" (:url info)))]
+        (if (and (. semver valid remote-version)
+                 (. semver lt electron-version remote-version))
+
+           ;; start auto updater
+          (do
+            (debug "Found remote version" remote-version)
+            (when mac?
+              (when-let [f (js/require "update-electron-app")]
+                (f #js{}))))
+
+          (debug "Skip remote version [ahead of pre-release]" remote-version))))))
+
 (defn init-updater
   [{:keys [repo logger ^js win] :as opts}]
+  (and prod? (init-auto-updater repo))
   (let [check-channel "check-for-updates"
         install-channel "install-updates"
         check-listener (fn [e & args]
