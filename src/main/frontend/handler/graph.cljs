@@ -28,7 +28,8 @@
     (->>
      (mapv (fn [p]
              (when p
-               (let [current-page? (= p current-page)
+               (let [p (str p)
+                     current-page? (= p current-page)
                      block? (and p (util/uuid-string? p))
                      color (if block?
                              "#1a6376"
