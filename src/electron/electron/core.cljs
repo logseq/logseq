@@ -44,12 +44,7 @@
     win))
 
 (defn setup-updater! [^js win]
-  ;; auto updater
-  (when mac?
-    (when-let [f (js/require "update-electron-app")]
-      (f #js{})))
-
-  ;; manual updater
+  ;; manual/auto updater
   (init-updater {:repo   "logseq/logseq"
                  :logger logger
                  :win    win}))
