@@ -329,7 +329,8 @@
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page?] :as config} page]
   (when-let [page-name (:page/name page)]
-    (let [page (string/lower-case page-name)
+    (let [page-entity page
+          page (string/lower-case page-name)
           redirect-page-name (cond
                                (:page/alias? config)
                                page
@@ -374,7 +375,7 @@
                   (string? label)
                   (not (string/blank? label))) ; alias
            label
-           (get page :page/original-name page-name)))])))
+           (get page-entity :page/original-name page-name)))])))
 
 (rum/defc asset-reference
   [title path]
