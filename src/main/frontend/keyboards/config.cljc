@@ -2,15 +2,19 @@
   (:require [frontend.util :refer [mac?]]))
 
 (def default-shortcuts
-  {:date-picker/complete "alt+a"
-   :date-picker/prev-day "alt+h"
-   :date-picker/next-day "alt+l"
-   :date-picker/prev-week "alt+k"
-   :date-picker/next-week "alt+j"
+  {:date-picker/complete "enter"
+   :date-picker/prev-day "left"
+   :date-picker/next-day "right"
+   :date-picker/prev-week "up"
+   :date-picker/next-week "down"
 
    :auto-complete/prev "up"
    :auto-complete/next "down"
    :auto-complete/complete "enter"
+
+   :block-selection/copy "mod+c"
+   :block-selection/cut "mod+x"
+   :block-selection/delete ["backspace" "delete"]
 
    :editor/clear-selection "esc"
    :editor/toggle-document-mode "t d"
@@ -32,33 +36,21 @@
    :editor/move-block-up (if mac? "mod+shift+up"  "alt+shift+up")
    :editor/move-block-down (if mac? "mod+shift+down" "alt+shift+down")
    :editor/save "mod+s"
-   :editor/next "down"
-   :editor/prev "up"
+   :editor/open-block-next "down"
+   :editor/open-block-prev "up"
    :editor/select-block-up "shift+up"
    :editor/select-block-down "shift+down"
 
-   ;; :editor.editing/new-block "enter"
-   ;; :editor.editing/new-line "shift+enter"
-   ;; :editor.editing/up "up"
-   ;; :editor.editing/down "down"
-   ;; :editor.editing/left "left"
-   ;; :editor.editing/right "right"
-   ;; :editor.editing/delete "backspace"
-   ;; :editor.editing/tab "tab"
+   :editor/new-block "enter"
+   :editor/new-line "shift+enter"
+   :editor/up "up"
+   :editor/down "down"
+   :editor/left "left"
+   :editor/right "right"
+   :editor/delete "backspace"
+   :editor/indent "tab"
+   :editor/unindent "shift+tab"
 
-   :editor.editing/new-block "enter"
-   :editor.editing/new-line "ctrl+shift+l"
-   :editor.editing/up "ctrl+k"
-   :editor.editing/down "ctrl+j"
-   :editor.editing/left "ctrl+h"
-   :editor.editing/right "ctrl+l"
-   :editor.editing/delete "ctrl+d"
-   :editor.editing/indent "tab"
-   :editor.editing/unindent "shift+tab"
-
-   ;; '?' not in goog.events.KeyNames
-   ;; actually keycode is deprecated, use e.code or e.key is recommended?
-   ;; did not find ways to use that with closure library
    :ui/toggle-help "shift+/"
    :ui/toggle-theme "t t"
    :ui/toggle-right-sidebar "t r"
@@ -79,3 +71,22 @@
    :search/re-index "mod+c mod+s"
    :graph/re-index "mod+c mod+r"
    })
+
+(def custom-bindings-for-test
+  {:editor/new-block "enter"
+   :editor/new-line "shift+enter"
+   :editor/up ["ctrl+k" ]
+   :editor/down ["ctrl+j" ]
+   :editor/left ["ctrl+h" ]
+   :editor/right ["ctrl+l" ]
+   :editor/delete ["ctrl+d" "backspace"]
+
+   :date-picker/complete "enter"
+   :date-picker/prev-day ["ctrl+h" "left"]
+   :date-picker/next-day ["ctrl+l" "right"]
+   :date-picker/prev-week ["ctrl+k" "up"]
+   :date-picker/next-week ["ctrl+j" "down"]
+
+   :auto-complete/prev ["ctrl+k" "up"]
+   :auto-complete/next ["ctrl+j" "down"]
+   :auto-complete/complete ["ctrl+l" "enter"]})

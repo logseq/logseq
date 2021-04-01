@@ -6,7 +6,6 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.shortcut :as shortcut-handler]
             [frontend.handler.page :as page-handler]
             [frontend.components.datetime :as datetime-comp]
             [frontend.state :as state]
@@ -339,18 +338,8 @@
     (set-up-key-up! state input input-id search-timeout)))
 
 (rum/defcs box < rum/reactive
-  ;(mixins/event-mixin setup-key-listener!)
-  (mixins/shortcuts
-   :shortcut-listener/box-listener
-   {:editor.editing/new-block editor-handler/keydown-new-block-handler
-    :editor.editing/new-line editor-handler/keydown-new-line-handler
-    :editor.editing/up (editor-handler/keydown-up-down-handler true)
-    :editor.editing/down (editor-handler/keydown-up-down-handler false)
-    :editor.editing/left (editor-handler/keydown-arrow-handler :left)
-    :editor.editing/right (editor-handler/keydown-arrow-handler :right)
-    :editor.editing/delete editor-handler/keydown-backspace-handler
-    :editor.editing/indent (editor-handler/keydown-tab-handler :right)
-    :editor.editing/unindent (editor-handler/keydown-tab-handler :left)})
+  (mixins/event-mixin setup-key-listener!)
+  (mixins/shortcut :component/box)
   lifecycle/lifecycle
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or   {dummy? false}

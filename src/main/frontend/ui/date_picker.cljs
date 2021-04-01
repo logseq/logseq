@@ -201,36 +201,41 @@
          (when-let [id (gobj/get elem "id")]
            (string/starts-with? id "edit-block-")))))
 
+(defn shortcut-complete
+  [e]
+  (when-let [state (:component/date-picker @state/shortcut-state)]
+    (let [{:keys [on-change deadline-or-schedule?]} (last (:rum/args state))]
+      (when (and on-change
+                 (not (input-or-select?)))
+        (when-not deadline-or-schedule?
+          (on-change e @*internal-model))))))
+
+(defn shortcut-prev-day
+  [e]
+  (when (:component/date-picker @state/shortcut-state)
+    (when-not (input-or-select?)
+      (swap! *internal-model inc-date -1))))
+
+(defn shortcut-next-day
+  [e]
+  (when (:component/date-picker @state/shortcut-state)
+    (when-not (input-or-select?)
+      (swap! *internal-model inc-date 1))))
+
+(defn shortcut-prev-week
+  [e]
+  (when (:component/date-picker @state/shortcut-state)
+    (when-not (input-or-select?)
+      (swap! *internal-model inc-week -1))))
+
+(defn shortcut-next-week
+  [e]
+  (when (:component/date-picker @state/shortcut-state)
+    (when-not (input-or-select?)
+      (swap! *internal-model inc-week 1))))
+
 (rum/defc date-picker < rum/reactive
-  (mixins/shortcuts
-   :shortcut-listener/data-picker
-   {:date-picker/complete
-    (fn [state e]
-      (let [{:keys [on-change deadline-or-schedule?]} (last (:rum/args state))]
-        (when (and on-change
-                   (not (input-or-select?)))
-          (when-not deadline-or-schedule?
-            (on-change e @*internal-model)))))
-
-    :date-picker/prev-day
-    (fn [state e]
-      (when-not (input-or-select?)
-        (swap! *internal-model inc-date -1)))
-
-    :date-picker/next-day
-    (fn [state e]
-      (when-not (input-or-select?)
-        (swap! *internal-model inc-date 1)))
-
-    :date-picker/prev-week
-    (fn [state e]
-      (when-not (input-or-select?)
-        (swap! *internal-model inc-week -1)))
-
-    :date-picker/next-week
-    (fn [state e]
-      (when-not (input-or-select?)
-        (swap! *internal-model inc-week 1)))})
+  (mixins/shortcut :component/date-picker)
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))
            state)}

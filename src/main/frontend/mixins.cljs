@@ -2,7 +2,9 @@
   (:require [rum.core :as rum]
             [goog.dom :as dom]
             [goog.object :as gobj]
+            [frontend.state :refer [shortcut-state]]
             [frontend.keyboard :as keyboard]
+            [lambdaisland.glogi :as log]
             [frontend.util :refer-macros [profile] :refer [keyname]])
   (:import [goog.events EventHandler]))
 
@@ -202,3 +204,25 @@
        (profile
         (str "Render " desc)
         (render-fn state))))})
+
+(defn shortcut [k]
+  {:after-render
+   (fn [state]
+     (js/setTimeout
+      (fn []
+        (swap! shortcut-state assoc k state)
+        (log/info :shortcut/mount state))
+      100)
+
+
+     state)
+   :did-remount
+   (fn [_ new-state]
+     (swap! shortcut-state assoc k new-state)
+     (log/info :shortcut/remount new-state)
+     new-state)
+   :will-unmount
+   (fn [state]
+     (swap! shortcut-state dissoc k)
+     (log/info :shortcut/unmount state)
+     state)})

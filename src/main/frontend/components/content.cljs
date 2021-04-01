@@ -248,31 +248,6 @@
                              false)))}
              "(Dev) Show block data"))]]))))
 
-;; TODO: content could be changed
-;; Also, keyboard bindings should only be activated after
-;; blocks were already selected.
-
-
-(defn- cut-blocks-and-clear-selections!
-  [copy?]
-  (editor-handler/cut-selection-blocks copy?)
-  (editor-handler/clear-selection! nil))
-
-;; TODO fix me
-(rum/defc hidden-selection < rum/reactive
-  ;; (mixins/keyboard-mixin (util/->system-modifier "ctrl+c")
-  ;;                        (fn [_]
-  ;;                          (editor-handler/copy-selection-blocks)
-  ;;                          (editor-handler/clear-selection! nil)))
-  ;; (mixins/keyboard-mixin (util/->system-modifier "ctrl+x")
-  ;;                        (fn [] (cut-blocks-and-clear-selections! true)))
-  ;; (mixins/keyboard-mixin "backspace"
-  ;;                        (fn [] (cut-blocks-and-clear-selections! false)))
-  ;; (mixins/keyboard-mixin "delete"
-  ;;                        (fn [] (cut-blocks-and-clear-selections! false)))
-  []
-  [:div#selection.hidden])
-
 (rum/defc hiccup-content < rum/static
   (mixins/event-mixin
    (fn [state]
@@ -396,8 +371,6 @@
         selected-blocks (state/sub :selection/blocks)]
     (if hiccup
       [:div
-       (hiccup-content id option)
-       (when (and in-selection-mode? (seq selected-blocks))
-         (hidden-selection))]
+       (hiccup-content id option)]
       (let [format (format/normalize format)]
         (non-hiccup-content id content on-click on-hide config format)))))

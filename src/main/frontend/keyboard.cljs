@@ -10,6 +10,7 @@
 
 ;; Copy from https://github.com/tonsky/rum/blob/gh-pages/doc/useful-mixins.md#keyboard-shortcut
 
+#_
 (defn install-shortcut!
   "Installs a Keyboard Shortcut handler.
    The key is a string the trigger is a function that will receive the keyboard event as the
@@ -42,7 +43,7 @@
 (defn shortcut-binding
   [id]
   (let [shortcut (or (state/get-shortcut id)
-                     (get kb-config/default-shortcuts id))]
+                     (get (merge kb-config/default-shortcuts kb-config/custom-bindings-for-test) id))]
     (when-not shortcut
       (log/error :keyboard/shorcut-binding-notfound {:id id}))
     (->>
@@ -61,42 +62,38 @@
   (doseq [k (shortcut-binding id)]
     (.unregisterShortcut handler k)))
 
+(defn install-shortcut!
+  [shortcut-map]
+  (let [handler (new KeyboardShortcutHandler js/window)]
+    ;; default is false, set it to true to deal with arrow keys
+    (.setAllShortcutsAreGlobal handler true)
+    ;; default is true, set it to false here
+    (.setAlwaysPreventDefault handler false)
+    ;;(.setAlwaysStopPropagation handler true)
+
+    ;; register shortcuts
+    (doseq [[id _] shortcut-map]
+      (log/info :keyboard/install-shortcut {:id id :shortcut (shortcut-binding id)})
+      ;; do i need this?
+      ;; (.unregisterShortcut handler (shortcut-binding id))
+      (register-shortcuts handler id))
+
+    (let [f (fn [e]
+              (let [dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
+                (js/console.log "going to trigger### " (.-identifier e))
+                (dispatch-fn e)))
+          unlisten-fn (fn [] (.dispose handler))]
+
+      (events/listen handler EventType/SHORTCUT_TRIGGERED f)
+
+      ;; return deregister fn
+      (fn []
+        (doseq [[id _] shortcut-map]
+          (log/info :keyboard/remove-shortcut {:id id :shortcut (shortcut-binding id)})
+          (unregister-shortcuts handler id))
+        (unlisten-fn)))))
+
 (defn install-shortcuts!
-  ([dispatcher]
-   (install-shortcuts! dispatcher js/window))
-  ([dispatcher target]
-   (let [handler (new KeyboardShortcutHandler target)]
-     ;; default is false, set it to true to deal with arrow keys
-     (.setAllShortcutsAreGlobal handler true)
-     ;; default is true, set it to false here
-     (.setAlwaysPreventDefault handler false)
-     ; (.setAlwaysStopPropagation handler true)
-
-     ;; register shortcuts
-     (doseq [[id _] dispatcher]
-       (log/info :keyboard/install-shortcut {:id id :shortcut (shortcut-binding id)})
-       ;; do i need this?
-       ;; (.unregisterShortcut handler (shortcut-binding id))
-       (register-shortcuts handler id))
-
-     (let [f (fn [e]
-               (let [dispatch-fn (get dispatcher (keyword (.-identifier e)))]
-                 (js/console.log "going to trigger### " (.-identifier e))
-                 (dispatch-fn e)))
-           unlisten-fn (fn [] (.dispose handler))]
-
-       (events/listen handler EventType/SHORTCUT_TRIGGERED f)
-
-       ;; deregister shortcuts
-       (fn []
-         (doseq [[id _] dispatcher]
-           (log/info :keyboard/remove-shortcut {:id id :shortcut (shortcut-binding id)})
-           (unregister-shortcuts handler id))
-         (unlisten-fn))))))
-
-
-(comment
-  ; dispatcher example
-  (def dispatcher {:test/test (fn [e] (println "trigger test"))})
-
-  (def f (install-shortcuts! dispatcher)))
+  [shortcut-maps]
+  (doseq [m shortcut-maps]
+    (install-shortcut! m)))

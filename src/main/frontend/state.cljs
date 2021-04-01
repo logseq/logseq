@@ -564,6 +564,11 @@
   []
   (:selection/mode @state))
 
+;; hack, need to think about this later...
+(defn in-real-selection?
+  []
+  (and (in-selection-mode?) (seq (get-selection-blocks))))
+
 (defn conj-selection-block!
   [block up?]
   (dom/add-class! block "selected noselect")
@@ -1149,3 +1154,7 @@
    6))
 
 (defonce diffs (atom nil))
+
+
+;; store component state argument consumed by shortcut handler
+(defonce shortcut-state (atom {}))

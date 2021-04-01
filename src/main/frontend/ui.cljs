@@ -7,7 +7,6 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
-            [frontend.handler.shortcut :as shortcut-handler]
             [frontend.state :as state]
             [frontend.components.svg :as svg]
             [clojure.string :as string]
@@ -318,11 +317,7 @@
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
-  (mixins/shortcuts
-   :shortcut-listener/auto-complete
-   {:auto-complete/prev shortcut-handler/auto-complete-prev
-    :auto-complete/next shortcut-handler/auto-complete-next
-    :auto-complete/complete shortcut-handler/auto-complete-complete})
+  (mixins/shortcut :component/auto-complete)
   [state matched {:keys [on-chosen
                          on-shift-chosen
                          empty-div

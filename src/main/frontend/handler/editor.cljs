@@ -32,6 +32,7 @@
             [promesa.core :as p]
             [dommy.core :as d]
             [frontend.diff :as diff]
+            [rum.core :as rum]
             [frontend.search :as search]
             [frontend.handler.image :as image-handler]
             [frontend.commands :as commands
@@ -1346,16 +1347,16 @@
         (dom/add-class! block "selected noselect"))
       (exit-editing-and-set-selected-blocks! blocks))))
 
+;; TODO fixme
 (defn on-select-block
   [up? e]
-  (when (and
-         (gobj/get e "shiftKey")
-         (not (gobj/get e "altKey"))
-         (or (state/in-selection-mode?)
-             (when-let [input-id (state/get-edit-input-id)]
-               (when-let [input (gdom/getElement input-id)]
-                 (input-start-or-end? input up?)))))
-    (state/clear-edit!)
+  (js/console.log "on-select-block not implemented")
+  (when (or (state/in-selection-mode?)
+            (when-let [input (state/get-input)]
+              (reset! select-start-block-state (get-state (:component/box @state/shortcut-state)))
+              (js/console.log @select-start-block-state)
+              (state/clear-edit!)
+              true))
     (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} @select-start-block-state
           element (gdom/getElement block-parent-id)
           selected-blocks (state/get-selection-blocks)
@@ -1443,13 +1444,12 @@
 (defn on-up-down
   [state e up?]
   (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} (get-state state)]
-    (if (gobj/get e "shiftKey")
-      (reset! select-start-block-state block-state)
-      (let [element (gdom/getElement id)
-            line-height (util/get-textarea-line-height element)]
-        (when (and block-id
-                   (or (and up? (util/textarea-cursor-first-row? element line-height))
-                       (and (not up?) (util/textarea-cursor-end-row? element line-height))))
+    (let [element (gdom/getElement id)
+          line-height (util/get-textarea-line-height element)]
+      (if (and block-id
+                 (or (and up? (util/textarea-cursor-first-row? element line-height))
+                     (and (not up?) (util/textarea-cursor-end-row? element line-height))))
+        (do
           (util/stop e)
           (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
                 sibling-block (f (gdom/getElement block-parent-id))]
@@ -1465,7 +1465,19 @@
                               (string/trim value))
                     (save-block! state (:value state))))
                 (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
-                  (edit-block! block pos format id))))))))))
+                  (edit-block! block pos format id))))))
+        (do
+          ;;just up and down
+          ;; TODO fixme
+            (let [e (js/KeyboardEvent. "keydown" (js-obj "code" "ArrowDown"))]
+            ;; (.dispatchEvent element (new js/Event "focus"))
+              (js/console.log "inside up down")
+              (js/console.log e)
+              ;; tried to simulate keydown, did not work
+              (.dispatchEvent element e)
+            ))
+
+        ))))
 
 (defn insert-command!
   [id command-output format {:keys [restore?]
@@ -2321,25 +2333,24 @@
       ;; new line, is this the right way?
       (.setRangeText input "\n" selected-start selected-end "end"))))
 
-(defn keydown-new-block-handler [state e]
-  (if (state/get-new-block-toggle?)
-    (keydown-new-line state e)
-    (keydown-new-block state e)))
+(defn keydown-new-block-handler [e]
+  (when-let [state (:component/box @state/shortcut-state)]
+    (if (state/get-new-block-toggle?)
+      (keydown-new-line state e)
+      (keydown-new-block state e))))
 
-(defn keydown-new-line-handler [state e]
-  (if (state/get-new-block-toggle?)
-    (keydown-new-block state e)
-    (keydown-new-line state e)))
+(defn keydown-new-line-handler [e]
+  (when-let [state (:component/box @state/shortcut-state)]
+    (if (state/get-new-block-toggle?)
+      (keydown-new-block state e)
+      (keydown-new-line state e))))
 
 (defn keydown-up-down-handler
   [up?]
-  (fn [state e]
-    (util/stop e)
-    (when (and
-           (not (gobj/get e "ctrlKey"))
-           (not (gobj/get e "metaKey"))
-           (not (in-auto-complete?)))
-      (on-up-down state e up?))))
+  (fn [e]
+    (when-let [state (:component/box @state/shortcut-state)]
+      (when (not (in-auto-complete?))
+        (on-up-down state e up?)))))
 
 (defn- move-to-block-when-cross-boundrary
   [state e direction]
@@ -2370,105 +2381,108 @@
   (if (or (and (= :left direction) (util/input-start? input))
             (and (= :right direction) (util/input-end? input)))
     (move-to-block-when-cross-boundrary state e direction)
-    (let [pos (:pos (util/get-caret-pos input))]
-      (if (= direction :left)
-        (util/set-caret-pos! input (dec pos))
-        (util/set-caret-pos! input (inc pos))))))
+    ;; move left or right
+    (if (= direction :left)
+      (util/cursor-move-back input 1)
+      (util/cursor-move-forward input 1))))
 
 (defn keydown-arrow-handler
   [direction]
-  (fn [state e]
-    (util/stop e)
-    (let [{:keys [id]} (get-state state)
-          input (gdom/getElement id)]
-      (when (and
-             input
-             (not (in-auto-complete?)))
-        (on-arrow-move-to-boundray state input e direction)))))
+  (fn [e]
+    (when-let [state (:component/box @state/shortcut-state)]
+      (util/stop e)
+      (let [{:keys [id]} (get-state state)
+            input (gdom/getElement id)]
+        (when (and
+               input
+               (not (in-auto-complete?)))
+          (on-arrow-move-to-boundray state input e direction))))))
 
 (defn keydown-backspace-handler
-  [state e]
-  (util/stop e)
-  (let [{:keys [id block]} (get-state state)
-        ^js input (gdom/getElement id)
-        repo (:block/repo block)
-        current-pos (:pos (util/get-caret-pos input))
-        value (gobj/get input "value")
-        deleted (and (> current-pos 0)
-                     (util/nth-safe value (dec current-pos)))
-        selected-start (gobj/get input "selectionStart")
-        selected-end (gobj/get input "selectionEnd")
-        block-id (:block-id (first (:rum/args state)))
-        page (state/get-current-page)]
-    (cond
-      (not= selected-start selected-end)
-      (.setRangeText input "" selected-start selected-end)
+  [e]
+  (when-let [state (:component/box @state/shortcut-state)]
+    (util/stop e)
+    (let [{:keys [id block]} (get-state state)
+          ^js input (gdom/getElement id)
+          repo (:block/repo block)
+          current-pos (:pos (util/get-caret-pos input))
+          value (gobj/get input "value")
+          deleted (and (> current-pos 0)
+                       (util/nth-safe value (dec current-pos)))
+          selected-start (gobj/get input "selectionStart")
+          selected-end (gobj/get input "selectionEnd")
+          block-id (:block-id (first (:rum/args state)))
+          page (state/get-current-page)]
+      (cond
+        (not= selected-start selected-end)
+        (.setRangeText input "" selected-start selected-end)
 
-      (and (zero? current-pos)
-           ;; not the top block in a block page
-           (not (and page
-                     (util/uuid-string? page)
-                     (= (medley/uuid page) block-id))))
-      (delete-block! state repo e)
+        (and (zero? current-pos)
+             ;; not the top block in a block page
+             (not (and page
+                       (util/uuid-string? page)
+                       (= (medley/uuid page) block-id))))
+        (delete-block! state repo e)
 
-      (and (> current-pos 1)
-           (= (util/nth-safe value (dec current-pos)) commands/slash))
-      (do
-        (reset! *slash-caret-pos nil)
-        (reset! *show-commands false))
+        (and (> current-pos 1)
+             (= (util/nth-safe value (dec current-pos)) commands/slash))
+        (do
+          (reset! *slash-caret-pos nil)
+          (reset! *show-commands false))
 
-      (and (> current-pos 1)
-           (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
-      (do
-        (reset! *angle-bracket-caret-pos nil)
-        (reset! *show-block-commands false))
+        (and (> current-pos 1)
+             (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
+        (do
+          (reset! *angle-bracket-caret-pos nil)
+          (reset! *show-block-commands false))
 
-      ;; pair
-      (and
-       deleted
-       (contains?
-        (set (keys delete-map))
-        deleted)
-       (>= (count value) (inc current-pos))
-       (= (util/nth-safe value current-pos)
-          (get delete-map deleted)))
+        ;; pair
+        (and
+         deleted
+         (contains?
+          (set (keys delete-map))
+          deleted)
+         (>= (count value) (inc current-pos))
+         (= (util/nth-safe value current-pos)
+            (get delete-map deleted)))
 
-      (do
-        (commands/delete-pair! id)
-        (cond
-          (and (= deleted "[") (state/get-editor-show-page-search?))
-          (state/set-editor-show-page-search! false)
+        (do
+          (commands/delete-pair! id)
+          (cond
+            (and (= deleted "[") (state/get-editor-show-page-search?))
+            (state/set-editor-show-page-search! false)
 
-          (and (= deleted "(") (state/get-editor-show-block-search?))
-          (state/set-editor-show-block-search! false)
+            (and (= deleted "(") (state/get-editor-show-block-search?))
+            (state/set-editor-show-block-search! false)
 
-          :else
-          nil))
+            :else
+            nil))
 
-      ;; deleting hashtag
-      (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
-      (state/set-editor-show-page-search-hashtag! false)
+        ;; deleting hashtag
+        (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
+        (state/set-editor-show-page-search-hashtag! false)
 
-      ;; just delete
-      :else
-      (.setRangeText input "" (dec current-pos) current-pos))))
+        ;; just delete
+        :else
+        (.setRangeText input "" (dec current-pos) current-pos)))))
 
 (defn keydown-tab-handler
   [direction]
-  (fn [state e]
-    (util/stop e)
-    (let [{:keys [id]} (get-state state)
-          input (gdom/getElement id)
-          pos (and input (:pos (util/get-caret-pos input)))]
-      (when (and (not (state/get-editor-show-input))
-                 (not (state/get-editor-show-date-picker?))
-                 (not (state/get-editor-show-template-search?)))
-        (p/let [_ (adjust-block-level! state direction)]
-          (and input pos
-               (js/setTimeout
-                #(when-let [input (gdom/getElement id)]
-                   (util/move-cursor-to input pos))
-                0)))))))
+  (fn [e]
+    (when-let [state (:component/box @state/shortcut-state)]
+      (util/stop e)
+      (let [{:keys [id]} (get-state state)
+            input (gdom/getElement id)
+            pos (and input (:pos (util/get-caret-pos input)))]
+        (when (and (not (state/get-editor-show-input))
+                   (not (state/get-editor-show-date-picker?))
+                   (not (state/get-editor-show-template-search?)))
+          (p/let [_ (adjust-block-level! state direction)]
+            (and input pos
+                 (js/setTimeout
+                  #(when-let [input (gdom/getElement id)]
+                     (util/move-cursor-to input pos))
+                  0))))))))
 
 (defn keydown-not-matched-handler
   [input input-id format]
@@ -2641,3 +2655,29 @@
                    (match picked
                      [:asset file] (set-asset-pending-file file))))]
       (util/stop e))))
+
+
+
+(defn- cut-blocks-and-clear-selections!
+  [copy?]
+  (cut-selection-blocks copy?)
+  (clear-selection! nil))
+
+(defn shortcut-copy-selection
+  [e]
+  (when (state/in-real-selection?)
+    (util/stop e)
+    (copy-selection-blocks)
+    (clear-selection! nil)))
+
+(defn shortcut-cut-selection
+  [e]
+  (when (state/in-real-selection?)
+    (util/stop e)
+    (cut-blocks-and-clear-selections! true)))
+
+(defn shortcut-delete-selection
+  [e]
+  (when (state/in-real-selection?)
+    (util/stop e)
+    (cut-blocks-and-clear-selections! false)))

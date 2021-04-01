@@ -650,6 +650,14 @@
       (let [pos (count (gobj/get input "value"))]
         (move-cursor-to input pos))))
 
+
+#?(:cljs
+   (defn move-cursor-down
+     [input]
+     ;;TODO not implemented, move cursor line down inside textarea, like press arrowdown key
+     nil
+     ))
+
 ;; copied from re_com
 #?(:cljs
     (defn deref-or-value

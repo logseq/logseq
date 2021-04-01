@@ -272,10 +272,9 @@
 
   {:did-mount
    (fn [state]
-     (keyboard/install-shortcuts! keyboards/global-bindings)
+     (keyboard/install-shortcuts! keyboards/shortcuts)
      state)}
 
-  #_
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "click"
