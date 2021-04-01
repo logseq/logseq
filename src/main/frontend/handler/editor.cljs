@@ -1532,22 +1532,29 @@
                                    prefix) "/" "_"))
              prefix (and prefix (subs prefix 0 (string/last-index-of prefix ".")))]
          (save-assets! repo repo-dir assets-dir files
-                       (fn [index]
-                         (str prefix "_" (.now js/Date) "_" index)))))))
+                       (fn [index file-base]
+                         (prn {:file-base file-base})
+                         (str (string/replace file-base " " "_") "_" (.now js/Date) "_" index)))))))
   ([repo dir path files gen-filename]
    (p/all
     (for [[index ^js file] (map-indexed vector files)]
-      (let [ext (.-name file)
-            ext (if ext (subs ext (string/last-index-of ext ".")) "")
-            filename (str (gen-filename index file) ext)
-            filename (str path "/" filename)]
+      (do
+        (js/console.dir file)
+        (let [file-name (.-name file)
+              [file-base ext] (if file-name
+                                (let [last-dot-index (string/last-index-of file-name ".")]
+                                  [(subs file-name 0 last-dot-index)
+                                   (subs file-name last-dot-index)])
+                                ["" ""])
+              filename (str (gen-filename index file-base) ext)
+              filename (str path "/" filename)]
                                         ;(js/console.debug "Write asset #" dir filename file)
-        (if (util/electron?)
-          (let [from (.-path file)]
-            (p/then (js/window.apis.copyFileToAssets dir filename from)
-                    #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
-          (p/then (fs/write-file! repo dir filename (.stream file) nil)
-                  #(p/resolved [filename file]))))))))
+         (if (util/electron?)
+           (let [from (.-path file)]
+             (p/then (js/window.apis.copyFileToAssets dir filename from)
+                     #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
+           (p/then (fs/write-file! repo dir filename (.stream file) nil)
+                   #(p/resolved [filename file])))))))))
 
 (defonce *assets-url-cache (atom {}))
 
