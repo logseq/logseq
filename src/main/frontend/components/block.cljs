@@ -389,6 +389,10 @@
        [:iframe {:src full-path
                  :fullscreen true
                  :height 800}]
+       ;; https://en.wikipedia.org/wiki/HTML5_video
+       ("mp4" "ogg" "webm")
+       [:video {:src full-path
+                :controls true}]
 
        nil)]))
 
