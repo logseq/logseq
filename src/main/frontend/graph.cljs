@@ -56,7 +56,8 @@
 
 (defn- dot-text-mode
   [node ctx global-scale dark?]
-  (let [label (gobj/get node "id")
+  (let [hide-text? (< global-scale 0.45)
+        label (gobj/get node "id")
         val (gobj/get node "val")
         val (if (zero? val) 1 val)
         font-size (min
@@ -72,9 +73,10 @@
     (set! (.-filltextAlign ctx) "center")
     (set! (.-textBaseLine ctx) "middle")
     (set! (.-fillStyle ctx) color)
-    (.fillText ctx label
-               (- x (/ text-width 2))
-               (- y (/ 9 global-scale)))
+    (when-not hide-text?
+      (.fillText ctx label
+                 (- x (/ text-width 2))
+                 (- y (/ 9 global-scale))))
 
     (.beginPath ctx)
     (.arc ctx x y (if (zero? val)
