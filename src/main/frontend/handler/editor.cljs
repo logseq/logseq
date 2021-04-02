@@ -2319,11 +2319,10 @@
              (insert-new-block! state))))))))
 
 (defn- keydown-new-line
-  [state e]
+  [e]
   (util/stop e)
   (when (not (in-auto-complete?))
-    (let [{:keys [id]} (get-state state)
-          ^js input (gdom/getElement id)
+    (let [^js input (state/get-input)
           selected-start (gobj/get input "selectionStart")
           selected-end (gobj/get input "selectionEnd")]
       ;; new line, is this the right way?
@@ -2332,14 +2331,14 @@
 (defn keydown-new-block-handler [e]
   (when-let [state (:component/box @state/shortcut-state)]
     (if (state/get-new-block-toggle?)
-      (keydown-new-line state e)
+      (keydown-new-line e)
       (keydown-new-block state e))))
 
 (defn keydown-new-line-handler [e]
   (when-let [state (:component/box @state/shortcut-state)]
     (if (state/get-new-block-toggle?)
       (keydown-new-block state e)
-      (keydown-new-line state e))))
+      (keydown-new-line e))))
 
 (defn keydown-up-down-handler
   [up?]
