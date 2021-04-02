@@ -1318,13 +1318,11 @@
       (common-handler/copy-to-clipboard-without-id-property! content)
       (delete-block-aux! block false))))
 
-(defonce select-start-block-state (atom nil))
-
 (defn clear-last-selected-block!
   []
-  (let [first-block (state/pop-selection-block!)]
-    (dom/remove-class! first-block "selected")
-    (dom/remove-class! first-block "noselect")))
+  (let [block (state/drop-last-selection-block!)]
+    (dom/remove-class! block "selected")
+    (dom/remove-class! block "noselect")))
 
 (defn input-start-or-end?
   ([input]
@@ -1347,41 +1345,36 @@
         (dom/add-class! block "selected noselect"))
       (exit-editing-and-set-selected-blocks! blocks))))
 
-;; TODO fixme
 (defn on-select-block
   [up? e]
-  (js/console.log "on-select-block not implemented")
-  (when (or (state/in-selection-mode?)
-            (when-let [input (state/get-input)]
-              (reset! select-start-block-state (get-state (:component/box @state/shortcut-state)))
-              (js/console.log @select-start-block-state)
-              (state/clear-edit!)
-              true))
-    (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} @select-start-block-state
-          element (gdom/getElement block-parent-id)
-          selected-blocks (state/get-selection-blocks)
-          selected-blocks-count (count selected-blocks)
-          first-block (first selected-blocks)
-          selection-up? (state/selection-up?)]
-      (when block-id
-        (util/stop e)
-        (when-let [element (if-not (state/in-selection-mode?)
-                             element
-                             (let [f (if up? util/get-prev-block util/get-next-block)]
-                               (f first-block)))]
-          (if (and (not (nil? selection-up?)) (not= up? selection-up?))
-            (cond
-              (>= selected-blocks-count 2) ; back to the start block
-              (do
-                (when (= 2 selected-blocks-count) (state/set-selection-up! nil))
-                (clear-last-selected-block!))
+  (cond
+    ;; when editing, quit editing and select current block
+    (state/editing?)
+    (do
+      (util/stop e)
+      (state/set-selection-start-block! (state/get-editing-block-dom-id))
+      (exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
+      (dom/add-class! (gdom/getElement (state/get-editing-block-dom-id)) "selected noselect"))
 
-              :else
-              nil)
-            (do
-              (util/clear-selection!)
-              (state/clear-edit!)
-              (state/conj-selection-block! element up?))))))))
+    ;; when selection and one block selected, select next block
+    (and (state/in-selection-mode?) (== 1 (count (state/get-selection-blocks))))
+    (let [f (if up? util/get-prev-block util/get-next-block)
+          element (f (first (state/get-selection-blocks)))]
+      (util/stop e)
+      (state/conj-selection-block! element up?))
+
+    ;; if same direction, keep conj on same direction
+    (and (state/in-selection-mode?) (= up? (state/selection-up?)))
+    (let [f (if up? util/get-prev-block util/get-next-block)
+          element (f (last (state/get-selection-blocks)))]
+      (util/stop e)
+      (state/conj-selection-block! element up?))
+
+    ;; if different direction, keep clear until one left
+    (and (state/in-selection-mode?) (not= up? (state/selection-up?)))
+    (do
+      (util/stop e)
+      (clear-last-selected-block!))))
 
 (defn save-block-aux!
   [block value format opts]

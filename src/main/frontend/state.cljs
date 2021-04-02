@@ -577,6 +577,15 @@
          :selection/blocks (conj (:selection/blocks @state) block)
          :selection/up? up?))
 
+
+(defn drop-last-selection-block!
+  []
+  (let [last-block (last (:selection/blocks @state))]
+    (swap! state assoc
+           :selection/mode true
+           :selection/blocks (vec (drop-last (:selection/blocks @state))))
+    last-block))
+
 (defn pop-selection-block!
   []
   (let [[first-block & others] (:selection/blocks @state)]
