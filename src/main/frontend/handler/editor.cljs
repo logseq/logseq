@@ -1541,8 +1541,8 @@
    (p/all
     (for [[index ^js file] (map-indexed vector files)]
       (do
-        (js/console.dir file)
-        (let [file-name (.-name file)
+        ;; WARN file name maybe fully qualified path when paste file
+        (let [file-name (util/node-path.basename (.-name file))
               [file-base ext] (if file-name
                                 (let [last-dot-index (string/last-index-of file-name ".")]
                                   [(subs file-name 0 last-dot-index)
