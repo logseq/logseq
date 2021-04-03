@@ -93,7 +93,8 @@
 (defn block-search
   [repo q option]
   (when-let [engine (get-engine repo)]
-    (let [q (escape-str (string/lower-case q))]
+    (let [q (string/lower-case q)
+          q (if (util/electron?) q (escape-str q))]
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
 

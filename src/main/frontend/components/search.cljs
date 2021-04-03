@@ -246,7 +246,7 @@
         blocks-count (or (db/blocks-count) 0)
         timeout (cond
                   (util/electron?)
-                  150
+                  180
 
                   (> blocks-count 2000)
                   500
