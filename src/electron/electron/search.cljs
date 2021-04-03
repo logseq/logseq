@@ -59,7 +59,6 @@
 
 (defn open-db!
   []
-  ;; TODO: where to store the search database
   (let [path (.getPath ^object app "userData")
         db-path (str path "/search.db")
         _ (prn {:db-path db-path})
