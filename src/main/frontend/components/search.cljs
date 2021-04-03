@@ -244,7 +244,15 @@
         search-q (state/sub :search/q)
         show-result? (boolean (seq search-result))
         blocks-count (or (db/blocks-count) 0)
-        timeout (if (> blocks-count 2000) 500 300)]
+        timeout (cond
+                  (util/electron?)
+                  150
+
+                  (> blocks-count 2000)
+                  500
+
+                  :else
+                  300)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#search.flex-1.flex
        [:div.inner
