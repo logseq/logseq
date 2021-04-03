@@ -106,23 +106,23 @@
   true)
 
 (defmethod handle :search-blocks [window [_ repo q limit]]
-  (search/search-blocks q limit))
+  (search/search-blocks repo q limit))
 
 (defmethod handle :rebuild-blocks-indice [window [_ repo data]]
-  (search/truncate-blocks-table!)
+  (search/truncate-blocks-table! repo)
   ;; unneeded serialization
-  (search/upsert-blocks! (bean/->js data)))
+  (search/upsert-blocks! repo (bean/->js data)))
 
 (defmethod handle :transact-blocks [window [_ repo data]]
   (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
     (when (seq blocks-to-remove-set)
-      (search/delete-blocks! blocks-to-remove-set))
+      (search/delete-blocks! repo blocks-to-remove-set))
     (when (seq blocks-to-add)
       ;; unneeded serialization
-      (search/upsert-blocks! (bean/->js blocks-to-add)))))
+      (search/upsert-blocks! repo (bean/->js blocks-to-add)))))
 
 (defmethod handle :truncate-blocks [window [_ repo]]
-  (search/truncate-blocks-table!))
+  (search/truncate-blocks-table! repo))
 
 (defn- get-file-ext
   [file]

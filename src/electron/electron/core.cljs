@@ -169,7 +169,8 @@
                    *quitting? (atom false)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
-               (search/open-db!)
+               (search/ensure-search-dir!)
+               (search/open-dbs!)
 
                (vreset! *setup-fn
                         (fn []
