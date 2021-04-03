@@ -76,7 +76,7 @@
 
 (defn ensure-search-dir!
   []
-  (fs/ensureDir (get-search-dir)))
+  (fs/ensureDirSync (get-search-dir)))
 
 (defn open-db!
   [db-name]
