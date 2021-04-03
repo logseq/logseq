@@ -13,6 +13,7 @@
             ["codemirror" :as cm]
             ["codemirror/addon/edit/matchbrackets"]
             ["codemirror/addon/edit/closebrackets"]
+            ["codemirror/addon/selection/active-line"]
             ["codemirror/mode/clojure/clojure"]
             ["codemirror/mode/powershell/powershell"]
             ["codemirror/mode/javascript/javascript"]
@@ -22,6 +23,7 @@
             ["codemirror/mode/commonlisp/commonlisp"]
             ["codemirror/mode/coffeescript/coffeescript"]
             ["codemirror/mode/css/css"]
+            ["codemirror/mode/sass/sass"]
             ["codemirror/mode/dart/dart"]
             ["codemirror/mode/dockerfile/dockerfile"]
             ["codemirror/mode/elm/elm"]
@@ -105,6 +107,8 @@
         "typescript" "text/typescript"
         "ts" "text/typescript"
         "tsx" "text/typescript-jsx"
+        "scss" "text/x-scss"
+        "less" "text/x-less"
         mode))))
 
 (defn render!
@@ -129,6 +133,7 @@
                                           :matchBrackets lisp?
                                           :autoCloseBrackets true
                                           :lineNumbers true
+                                          :styleActiveLine true
                                           :extraKeys #js {"Esc" (fn [cm]
                                                                   (let [save! #(save-file-or-block-when-blur-or-esc! cm textarea config state)]
                                                                     (if-let [block-id (:block/uuid config)]

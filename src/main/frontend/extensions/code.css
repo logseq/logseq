@@ -14,5 +14,10 @@
     padding: 6px 0 0 0;
     font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
     max-width: 86vw;
+    &:not(.CodeMirror-focused) {
+      .CodeMirror-activeline-background {
+        background: unset;
+      }
+    }
   }
 }
