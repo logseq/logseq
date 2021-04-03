@@ -1,5 +1,6 @@
 (ns electron.core
   (:require [electron.handler :as handler]
+            [electron.search :as search]
             [electron.updater :refer [init-updater]]
             [electron.utils :refer [mac? win32? prod? dev? logger open]]
             [clojure.string :as string]
@@ -148,7 +149,9 @@
 (defn main
   []
   (if-not (.requestSingleInstanceLock app)
-    (.quit app)
+    (do
+      (search/close!)
+      (.quit app))
     (do
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
@@ -156,13 +159,17 @@
                (when (.isMinimized ^object win)
                  (.restore win))
                (.focus win))))
-      (.on app "window-all-closed" (fn [] (.quit app)))
+      (.on app "window-all-closed" (fn []
+                                     (search/close!)
+                                     (.quit app)))
       (.on app "ready"
            (fn []
              (let [^js win (create-main-window)
                    _ (reset! *win win)
                    *quitting? (atom false)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
+
+               (search/open-db!)
 
                (vreset! *setup-fn
                         (fn []

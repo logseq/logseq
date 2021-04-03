@@ -8,6 +8,12 @@
 
 (defonce database (atom nil))
 
+(defn close!
+  []
+  (when @database
+    (.close @database)
+    (reset! database nil)))
+
 (defn prepare
   [^object db sql]
   (.prepare db sql))
@@ -38,14 +44,15 @@
 
 (defn create-blocks-table!
   [db]
-  (let [stmt (prepare db "CREATE TABLE blocks (
-                        id TEXT PRIMARY KEY,
-                        text TEXT NOT NULL)")]
+  (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS blocks (
+                        id INTEGER PRIMARY KEY,
+                        uuid TEXT NOT NULL,
+                        content TEXT NOT NULL)")]
     (.run ^object stmt)))
 
 (defn create-blocks-fts-table!
   [db]
-  (let [stmt (prepare db "CREATE VIRTUAL TABLE blocks_fts USING fts5(id, text)")]
+  (let [stmt (prepare db "CREATE VIRTUAL TABLE blocks_fts USING fts5(id, uuid, content)")]
     (.run ^object stmt)))
 
 (defn open-db!
@@ -66,14 +73,16 @@
     (reset! database db)
     db))
 
+(defonce debug-blocks (atom nil))
 (defn upsert-blocks!
   [blocks]
+  (reset! debug-blocks blocks)
   (when-let [db @database]
-    (let [insert (prepare db "INSERT INTO blocks (id, text) VALUES (@id, @text) ON CONFLICT (id) DO UPDATE SET text = @text")
+    ;; TODO: what if a CONFLICT on uuid
+    (let [insert (prepare db "INSERT INTO blocks (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET content = @content")
           insert-many (.transaction ^object db
                                     (fn [blocks]
                                       (doseq [block blocks]
-                                        (prn {:block block})
                                         (.run ^object insert block))))]
       (insert-many blocks))))
 
@@ -83,7 +92,6 @@
     (let [sql (utils/format "DELETE from blocks WHERE id IN (%s)"
                             (->> (map (fn [id] (str "'" id "'")) ids)
                                  (string/join ", ")))
-          _ (prn {:sql sql})
           stmt (prepare db sql)]
       (.run ^object stmt))))
 
@@ -97,15 +105,15 @@
 ;;   [q]
 ;;   (when-not (string/blank? q)
 ;;     (let [stmt (prepare @database
-;;                          "select id, text from blocks_fts where text match ? ORDER BY rank")]
+;;                          "select id, uuid, content from blocks_fts where content match ? ORDER BY rank")]
 ;;       (js->clj (.all ^object stmt q) :keywordize-keys true))))
 
 (defn search-blocks
-  [q]
+  [q limit]
   (when-not (string/blank? q)
     (let [stmt (prepare @database
-                         "select id, text from blocks_fts where text like ?")]
-      (js->clj (.all ^object stmt (str "%" q "%")) :keywordize-keys true))))
+                        "select id, uuid, content from blocks where content like ? limit ?")]
+      (js->clj (.all ^object stmt (str "%" q "%") limit) :keywordize-keys true))))
 
 (defn truncate-blocks-table!
   []
@@ -129,17 +137,24 @@
   (open-db!)
 
   (add-blocks! (clj->js [{:id "a"
-                          :text "hello world"}
+                          :uuid ""
+                          :content "hello world"}
                          {:id "b"
-                          :text "foo bar"}]))
+                          :uuid ""
+                          :content "foo bar"}]))
 
   (time
     (let [blocks (for [i (range 10000)]
                    {:id (str i)
-                    :text (rand-nth ["hello" "world" "nice"])})]
+                    :uuid ""
+                    :content (rand-nth ["hello" "world" "nice"])})]
       (add-blocks! (clj->js blocks))))
 
   (get-all-blocks)
 
   (search-blocks "hello")
+
+  (def block {:id 16, :uuid "5f713e91-8a3c-4b04-a33a-c39482428e2d", :content "Hello, I'm a block!"})
+
+  (add-blocks! (clj->js [block]))
   )
