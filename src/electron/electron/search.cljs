@@ -16,7 +16,8 @@
 
 (defn prepare
   [^object db sql]
-  (.prepare db sql))
+  (when db
+    (.prepare db sql)))
 
 ;; (defn add-triggers!
 ;;   [db]
@@ -97,7 +98,7 @@
 
 (defn get-all-blocks
   []
-  (let [stmt (prepare @database
+  (when-let [stmt (prepare @database
                        "select * from blocks")]
     (js->clj (.all ^object stmt) :keywordize-keys true)))
 
@@ -111,7 +112,7 @@
 (defn search-blocks
   [q limit]
   (when-not (string/blank? q)
-    (let [stmt (prepare @database
+    (when-let [stmt (prepare @database
                         "select id, uuid, content from blocks where content like ? limit ?")]
       (js->clj (.all ^object stmt (str "%" q "%") limit) :keywordize-keys true))))
 
