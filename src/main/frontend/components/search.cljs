@@ -273,7 +273,7 @@
                               (state/set-q! value)
                               (reset! search-timeout
                                       (js/setTimeout
-                                       #(search-handler/search value)
+                                       #(search-handler/search (state/get-current-repo) value)
                                        timeout))))))}]
          (when-not (string/blank? search-q)
            (ui/css-transition

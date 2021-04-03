@@ -8,77 +8,20 @@
             [clojure.string :as string]
             [clojure.set :as set]
             [frontend.regex :as regex]
-            [frontend.text :as text]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
-            ["fuse.js" :as fuse]
             [medley.core :as medley]
             [promesa.core :as p]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [frontend.search.protocol :as protocol]
+            [frontend.search.browser :as search-browser]
+            [frontend.search.node :as search-node]))
 
-(defn go
-  [q indice opts]
-  (.search indice q opts))
-
-(defn block->index
-  [{:block/keys [uuid content format] :as block}]
-  (when-let [result (->> (text/remove-level-spaces content format)
-                         (text/remove-properties!))]
-    {:id (:db/id block)
-     :uuid (str uuid)
-     :content result}))
-
-(defn make-blocks-indice!
-  []
-  (when-let [repo (state/get-current-repo)]
-    (let [blocks (->> (db/get-all-block-contents)
-                      (map block->index)
-                      (remove nil?)
-                      (bean/->js))
-          indice (fuse. blocks
-                        (clj->js {:keys ["uuid" "content"]
-                                  :shouldSort true
-                                  :tokenize true
-                                  :minMatchCharLength 2
-                                  :distance 1000
-                                  :threshold 0.35}))]
-      (swap! indices assoc-in [repo :blocks] indice)
-      indice)))
-
-(defn make-pages-indice!
-  []
-  (when-let [repo (state/get-current-repo)]
-    (let [pages (->> (db/get-pages (state/get-current-repo))
-                     (remove string/blank?)
-                     (map (fn [p] {:name p}))
-                     (bean/->js))
-          indice (fuse. pages
-                        (clj->js {:keys ["name"]
-                                  :shouldSort true
-                                  :tokenize true
-                                  :minMatchCharLength 2
-                                  :distance 1000
-                                  :threshold 0.35
-                                  }))]
-      (swap! indices assoc-in [repo :pages] indice)
-      indice)))
-
-;; TODO: persist indices to indexeddb, it'll be better if the future db
-;; can has the direct fuzzy search support.
-(defn rebuild-indices!
-  ([]
-   (rebuild-indices! (state/get-current-repo)))
-  ([repo]
-   (when repo
-     (let [result {:pages (make-pages-indice!)
-                   :blocks (make-blocks-indice!)}]
-       (swap! indices assoc repo result)
-       result))))
-
-(defn reset-indice!
+(defn get-engine
   [repo]
-  (swap! indices assoc repo {:pages nil
-                             :blocks nil}))
+  (if (util/electron?)
+    (search-node/->Node repo)
+    (search-browser/->Browser repo)))
 
 ;; Copied from https://gist.github.com/vaughnd/5099299
 (defn str-len-distance
@@ -148,28 +91,16 @@
          (map :data))))
 
 (defn block-search
-  ([q]
-   (block-search q 10))
-  ([q limit]
-   (when-let [repo (state/get-current-repo)]
-     (when-not (string/blank? q)
-       (let [q (string/lower-case q)
-             q (escape-str q)]
-         (when-not (string/blank? q)
-           (let [indice (or (get-in @indices [repo :blocks])
-                            (make-blocks-indice!))]
-             (let [result (go q indice (clj->js {:limit limit}))
-                   result (bean/->clj result)]
-               (->>
-                (map
-                  (fn [{:keys [item matches] :as block}]
-                    (let [{:keys [content uuid]} item]
-                      {:block/uuid uuid
-                       :block/content content
-                       :block/page (:block/page (db/entity [:block/uuid (medley/uuid (str uuid))]))
-                       :search/matches matches}))
-                 result)
-                (remove nil?))))))))))
+  [repo q option]
+  (when-let [engine (get-engine repo)]
+    (let [q (escape-str (string/lower-case q))]
+      (when-not (string/blank? q)
+        (protocol/query engine q option)))))
+
+(defn transact-blocks!
+  [repo data]
+  (when-let [engine (get-engine repo)]
+    (protocol/transact-blocks! engine data)))
 
 (defn page-search
   ([q]
@@ -180,8 +111,8 @@
            q (clean-str q)]
        (when-not (string/blank? q)
          (let [indice (or (get-in @indices [repo :pages])
-                          (make-pages-indice!))
-               result (->> (go q indice (clj->js {:limit limit}))
+                          (search-db/make-pages-indice!))
+               result (->> (.search indice q (clj->js {:limit limit}))
                            (bean/->clj))]
            ;; TODO: add indexes for highlights
            (->> (map
@@ -251,18 +182,29 @@
                 blocks-to-add (->> (filter (fn [block]
                                              (contains? blocks-to-add-set (:db/id block)))
                                            blocks-result)
-                                   (map block->index))
+                                   (map search-db/block->index))
                 blocks-to-remove-set (->> (remove :added blocks)
                                           (map :e)
                                           (set))]
-            (swap! search-db/indices update-in [repo :blocks]
-                   (fn [indice]
-                     (when indice
-                       (doseq [block-id blocks-to-remove-set]
-                         (.remove indice
-                                  (fn [block]
-                                    (= block-id (gobj/get block "id")))))
-                       (when (seq blocks-to-add)
-                         (doseq [block blocks-to-add]
-                           (.add indice (bean/->js block)))))
-                     indice))))))))
+            (transact-blocks! repo
+                              {:blocks-to-remove-set blocks-to-remove-set
+                               :blocks-to-add blocks-to-add})))))))
+
+(defn rebuild-indices!
+  ([]
+   (rebuild-indices! (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (when-let [engine (get-engine repo)]
+       (let [pages (search-db/make-pages-indice!)]
+        (p/let [blocks (protocol/rebuild-blocks-indice! engine)]
+          (let [result {:pages pages
+                        :blocks blocks}]
+            (swap! indices assoc repo result)
+            indices)))))))
+
+(defn reset-indice!
+  [repo]
+  (when-let [engine (get-engine repo)]
+    (protocol/truncate-blocks! engine))
+  (swap! indices assoc-in [repo :pages] nil))

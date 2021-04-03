@@ -110,10 +110,13 @@
   (search/search-blocks q))
 
 (defmethod handle :upsert-blocks [window [_ blocks]]
-  (search/add-blocks! blocks))
+  (search/upsert-blocks! blocks))
 
 (defmethod handle :delete-blocks [window [_ block-ids]]
   (search/delete-blocks! block-ids))
+
+(defmethod handle :truncate-blocks [window _]
+  (search/truncate-blocks-table!))
 
 (defn- get-file-ext
   [file]

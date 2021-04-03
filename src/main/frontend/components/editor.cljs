@@ -105,20 +105,20 @@
           q (or
              @editor-handler/*selected-text
              (when (> (count edit-content) current-pos)
-               (subs edit-content pos current-pos)))
-          matched-blocks (when-not (string/blank? q)
-                           (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
-      (when input
-        (let [chosen-handler (editor-handler/block-on-chosen-handler input id q format)
-              non-exist-block-handler (editor-handler/block-non-exist-handler input)]
-          (ui/auto-complete
-           matched-blocks
-           {:on-chosen   chosen-handler
-            :on-enter    non-exist-block-handler
-            :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
-            :item-render (fn [{:block/keys [content]}]
-                           (subs content 0 64))
-            :class       "black"}))))))
+               (subs edit-content pos current-pos)))]
+      (p/let [matched-blocks (when-not (string/blank? q)
+                               (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+        (when input
+          (let [chosen-handler (editor-handler/block-on-chosen-handler input id q format)
+                non-exist-block-handler (editor-handler/block-non-exist-handler input)]
+            (ui/auto-complete
+             matched-blocks
+             {:on-chosen   chosen-handler
+              :on-enter    non-exist-block-handler
+              :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+              :item-render (fn [{:block/keys [content]}]
+                             (subs content 0 64))
+              :class       "black"})))))))
 
 (rum/defc template-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
