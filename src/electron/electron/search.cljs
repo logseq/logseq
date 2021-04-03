@@ -2,7 +2,8 @@
   (:require ["path" :as path]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
-            [electron.utils :refer [logger] :as utils]))
+            [electron.utils :refer [logger] :as utils]
+            ["electron" :refer [app]]))
 
 (def error (partial (.-error logger) "[Search]"))
 
@@ -59,7 +60,9 @@
 (defn open-db!
   []
   ;; TODO: where to store the search database
-  (let [db-path (.join path "/tmp/logseq_search.db")
+  (let [path (.getPath ^object app "userData")
+        db-path (str path "/search.db")
+        _ (prn {:db-path db-path})
         db (sqlite3 db-path #js {:verbose js/console.log})
         _ (try (create-blocks-table! db)
                (catch js/Error e
