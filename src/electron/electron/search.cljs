@@ -12,29 +12,29 @@
   [^object db sql]
   (.prepare db sql))
 
-(defn add-triggers!
-  [db]
-  (let [triggers ["CREATE TRIGGER blocks_ai AFTER INSERT ON blocks
-    BEGIN
-        INSERT INTO blocks_fts (id, text)
-        VALUES (new.id, new.text);
-    END;
-"
-                  "CREATE TRIGGER blocks_ad AFTER DELETE ON blocks
-    BEGIN
-        INSERT INTO blocks_fts (blocks_fts, id, text)
-        VALUES ('delete', old.id, old.text);
-    END;"
-                  "CREATE TRIGGER blocks_au AFTER UPDATE ON blocks
-    BEGIN
-        INSERT INTO blocks_fts (blocks_fts, id, text)
-        VALUES ('delete', old.id, old.text);
-        INSERT INTO blocks_fts (id, text)
-        VALUES (new.id, new.text);
-    END;"]]
-    (doseq [trigger triggers]
-     (let [stmt (prepare db trigger)]
-       (.run ^object stmt)))))
+;; (defn add-triggers!
+;;   [db]
+;;   (let [triggers ["CREATE TRIGGER blocks_ai AFTER INSERT ON blocks
+;;     BEGIN
+;;         INSERT INTO blocks_fts (id, text)
+;;         VALUES (new.id, new.text);
+;;     END;
+;; "
+;;                   "CREATE TRIGGER blocks_ad AFTER DELETE ON blocks
+;;     BEGIN
+;;         INSERT INTO blocks_fts (blocks_fts, id, text)
+;;         VALUES ('delete', old.id, old.text);
+;;     END;"
+;;                   "CREATE TRIGGER blocks_au AFTER UPDATE ON blocks
+;;     BEGIN
+;;         INSERT INTO blocks_fts (blocks_fts, id, text)
+;;         VALUES ('delete', old.id, old.text);
+;;         INSERT INTO blocks_fts (id, text)
+;;         VALUES (new.id, new.text);
+;;     END;"]]
+;;     (doseq [trigger triggers]
+;;      (let [stmt (prepare db trigger)]
+;;        (.run ^object stmt)))))
 
 (defn create-blocks-table!
   [db]
@@ -55,32 +55,35 @@
         _ (try (create-blocks-table! db)
                (catch js/Error e
                  (error e)))
-        _ (try (create-blocks-fts-table! db)
-               (catch js/Error e
-                 (error e)))
-        _ (try (add-triggers! db)
-               (catch js/Error e
-                 (error e)))
+        ;; _ (try (create-blocks-fts-table! db)
+        ;;        (catch js/Error e
+        ;;          (error e)))
+        ;; _ (try (add-triggers! db)
+        ;;        (catch js/Error e
+        ;;          (error e)))
         ]
     (reset! database db)
     db))
 
-(defn add-blocks!
+(defn upsert-blocks!
   [blocks]
   (when-let [db @database]
-    (let [insert (prepare db "INSERT INTO blocks (id, text) VALUES (@id, @text)")
+    (let [insert (prepare db "INSERT INTO blocks (id, text) VALUES (@id, @text) ON CONFLICT (id) DO UPDATE SET text = @text")
           insert-many (.transaction ^object db
                                     (fn [blocks]
                                       (doseq [block blocks]
+                                        (prn {:block block})
                                         (.run ^object insert block))))]
       (insert-many blocks))))
 
 (defn delete-blocks!
   [ids]
   (when-let [db @database]
-    (let [stmt (prepare db
-                        (utils/format "DELETE from blocks WHERE ids IN (%s)"
-                                      (string/join ", " ids)))]
+    (let [sql (utils/format "DELETE from blocks WHERE id IN (%s)"
+                            (->> (map (fn [id] (str "'" id "'")) ids)
+                                 (string/join ", ")))
+          _ (prn {:sql sql})
+          stmt (prepare db sql)]
       (.run ^object stmt))))
 
 (defn get-all-blocks
@@ -89,12 +92,12 @@
                        "select * from blocks")]
     (js->clj (.all ^object stmt) :keywordize-keys true)))
 
-(defn search-blocks-fts
-  [q]
-  (when-not (string/blank? q)
-    (let [stmt (prepare @database
-                         "select id, text from blocks_fts where text match ? ORDER BY rank")]
-      (js->clj (.all ^object stmt q) :keywordize-keys true))))
+;; (defn search-blocks-fts
+;;   [q]
+;;   (when-not (string/blank? q)
+;;     (let [stmt (prepare @database
+;;                          "select id, text from blocks_fts where text match ? ORDER BY rank")]
+;;       (js->clj (.all ^object stmt q) :keywordize-keys true))))
 
 (defn search-blocks
   [q]
@@ -108,9 +111,11 @@
   (let [stmt (prepare @database
                        "drop table blocks;")
         _ (.run ^object stmt)
-        stmt (prepare @database
-                       "drop table blocks_fts;")]
-    (.run ^object stmt)))
+        ;; stmt (prepare @database
+        ;;               "drop table blocks_fts;")
+        ]
+    ;; (.run ^object stmt)
+    ))
 
 
 (comment
