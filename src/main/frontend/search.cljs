@@ -209,3 +209,8 @@
   (when-let [engine (get-engine repo)]
     (protocol/truncate-blocks! engine))
   (swap! indices assoc-in [repo :pages] nil))
+
+(defn remove-db!
+  [repo]
+  (when-let [engine (get-engine repo)]
+    (protocol/remove-db! engine)))

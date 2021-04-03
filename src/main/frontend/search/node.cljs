@@ -23,4 +23,6 @@
   (transact-blocks! [this data]
     (ipc/ipc "transact-blocks" repo (bean/->js data)))
   (truncate-blocks! [this]
-    (ipc/ipc "truncate-blocks" repo)))
+    (ipc/ipc "truncate-blocks" repo))
+  (remove-db! [this]
+    (ipc/ipc "remove-db" repo)))

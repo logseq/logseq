@@ -4,4 +4,5 @@
   (query [this q option])
   (rebuild-blocks-indice! [this])
   (transact-blocks! [this data])
-  (truncate-blocks! [this]))
+  (truncate-blocks! [this])
+  (remove-db! [this]))
