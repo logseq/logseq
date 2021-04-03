@@ -41,7 +41,7 @@
                      (when (and (not (util/starts-with? page "http:"))
                                 (not (util/starts-with? page "https:"))
                                 (not (util/starts-with? page "file:"))
-                                (not (contains? (config/supported-formats) ext)))
+                                (or (= ext :excalidraw) (not (contains? (config/supported-formats) ext))))
                        page)))
 
                   (and
