@@ -97,7 +97,10 @@
     :selection/mode false
     :selection/blocks []
     :selection/start-block nil
-    :custom-context-menu/show? false
+    ;; either :up or :down, defaults to down
+    ;; used to determine selection direction when two or more blocks are selected
+    :selection/direction :down
+    :custom-context-menunil/show? false
     :custom-context-menu/links nil
 
     ;; pages or blocks in the right sidebar
@@ -534,13 +537,16 @@
   []
   (get @state :selection/start-block))
 
-(defn set-selection-blocks!
-  [blocks]
-  (when (seq blocks)
-    (swap! state assoc
-           :selection/mode true
-           :selection/blocks blocks)))
 
+(defn set-selection-blocks!
+  ([blocks]
+   (set-selection-blocks! blocks :down))
+  ([blocks direction]
+   (when (seq blocks)
+     (swap! state assoc
+            :selection/mode true
+            :selection/blocks blocks
+            :selection/direction direction))))
 (defn into-selection-mode!
   []
   (swap! state assoc :selection/mode true))
@@ -550,7 +556,7 @@
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/up? nil))
+         :selection/direction :down))
 
 (defn clear-selection-blocks!
   []
@@ -570,13 +576,12 @@
   (and (in-selection-mode?) (seq (get-selection-blocks))))
 
 (defn conj-selection-block!
-  [block up?]
+  [block direction]
   (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
          :selection/blocks (conj (:selection/blocks @state) block)
-         :selection/up? up?))
-
+         :selection/direction direction))
 
 (defn drop-last-selection-block!
   []
@@ -586,21 +591,9 @@
            :selection/blocks (vec (drop-last (:selection/blocks @state))))
     last-block))
 
-(defn pop-selection-block!
+(defn get-selection-direction
   []
-  (let [[first-block & others] (:selection/blocks @state)]
-    (swap! state assoc
-           :selection/mode true
-           :selection/blocks others)
-    first-block))
-
-(defn selection-up?
-  []
-  (:selection/up? @state))
-
-(defn set-selection-up!
-  [value]
-  (swap! state assoc :selection/up? value))
+  (:selection/direction @state))
 
 (defn show-custom-context-menu!
   [links]

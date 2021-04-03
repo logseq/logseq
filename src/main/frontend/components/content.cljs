@@ -258,8 +258,7 @@
                           (let [blocks (remove nil? blocks)
                                 blocks (remove #(d/has-class? % "dummy") blocks)]
                             (when (seq blocks)
-                              (doseq [block blocks]
-                                (d/add-class! block "selected noselect"))
+                              (util/select-highlight! blocks)
                               ;; TODO: We delay this so the following "click" event won't clear the selections.
                               ;; Needs more thinking.
                               (js/setTimeout #(state/set-selection-blocks! blocks)

@@ -83,8 +83,8 @@
  (amend
   prevent-default-behavior
   {;; TODO select up/down did not work
-   :editor/select-block-up (partial editor-handler/on-select-block true)
-   :editor/select-block-down (partial editor-handler/on-select-block false)
+   :editor/select-block-up (partial editor-handler/on-select-block :up)
+   :editor/select-block-down (partial editor-handler/on-select-block :down)
 
    :editor/save editor-handler/save!
 

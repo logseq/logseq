@@ -350,6 +350,13 @@
      (let [fragment (get-fragment)]
        (str "#" fragment "?anchor=" anchor))))
 
+
+#?(:cljs
+   (defn select-highlight!
+     [blocks]
+     (doseq [block blocks]
+       (d/add-class! block "selected noselect"))))
+
 ;; (defn scroll-into-view
 ;;   [element]
 ;;   (let [scroll-top (gobj/get element "offsetTop")
@@ -726,6 +733,18 @@
               start (min idx-1 idx-2)
               end (inc (max idx-1 idx-2))]
           (safe-subvec (vec nodes) start end)))))
+
+#?(:cljs
+   (defn get-direction-between-two-nodes
+     [id1 id2 class]
+     (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
+       (let [node-1 (gdom/getElement id1)
+             node-2 (gdom/getElement id2)
+             idx-1 (.indexOf nodes node-1)
+             idx-2 (.indexOf nodes node-2)]
+         (if (>= idx-1 idx-2)
+           :up
+           :down)))))
 
 #?(:cljs
     (defn rec-get-block-node

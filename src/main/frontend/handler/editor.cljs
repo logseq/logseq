@@ -1172,19 +1172,14 @@
       (dom/remove-class! block "noselect"))
     (state/clear-selection!)))
 
-(defn clear-selection-blocks!
-  []
-  (when (state/in-selection-mode?)
-    (doseq [block (state/get-selection-blocks)]
-      (dom/remove-class! block "selected")
-      (dom/remove-class! block "noselect"))
-    (state/clear-selection-blocks!)))
-
 (defn exit-editing-and-set-selected-blocks!
-  [blocks]
-  (util/clear-selection!)
-  (state/clear-edit!)
-  (state/set-selection-blocks! blocks))
+  ([blocks]
+   (exit-editing-and-set-selected-blocks! blocks :down))
+  ([blocks direction]
+   (util/clear-selection!)
+   (state/clear-edit!)
+   (state/set-selection-blocks! blocks direction)
+   (util/select-highlight! blocks)))
 
 (defn select-all-blocks!
   []
@@ -1192,8 +1187,6 @@
     (let [input (gdom/getElement current-input-id)
           blocks-container (util/rec-get-blocks-container input)
           blocks (dom/by-class blocks-container "ls-block")]
-      (doseq [block blocks]
-        (dom/add-class! block "selected noselect"))
       (exit-editing-and-set-selected-blocks! blocks))))
 
 (defn- get-selected-blocks-with-children
@@ -1211,10 +1204,8 @@
           ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))
-          up? (state/selection-up?)
           content (some->> (db/get-blocks-contents repo ids)
                            (map :block/content))
-          content (if (false? up?) (reverse content) content)
           content (string/join "" content)]
       (when-not (string/blank? content)
         (common-handler/copy-to-clipboard-without-id-property! content)))))
@@ -1339,39 +1330,37 @@
 (defn highlight-selection-area!
   [end-block]
   (when-let [start-block (:selection/start-block @state/state)]
-    (clear-selection-blocks!)
-    (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")]
-      (doseq [block blocks]
-        (dom/add-class! block "selected noselect"))
-      (exit-editing-and-set-selected-blocks! blocks))))
+    (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
+          direction  (util/get-direction-between-two-nodes start-block end-block "ls-block")]
+      (exit-editing-and-set-selected-blocks! blocks direction))))
 
 (defn on-select-block
-  [up? e]
+  [direction e]
   (cond
     ;; when editing, quit editing and select current block
     (state/editing?)
     (do
       (util/stop e)
-      (state/set-selection-start-block! (state/get-editing-block-dom-id))
-      (exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
-      (dom/add-class! (gdom/getElement (state/get-editing-block-dom-id)) "selected noselect"))
+      (exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))]))
 
     ;; when selection and one block selected, select next block
     (and (state/in-selection-mode?) (== 1 (count (state/get-selection-blocks))))
-    (let [f (if up? util/get-prev-block util/get-next-block)
+    (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
           element (f (first (state/get-selection-blocks)))]
-      (util/stop e)
-      (state/conj-selection-block! element up?))
+      (when element
+        (util/stop e)
+        (state/conj-selection-block! element direction)))
 
     ;; if same direction, keep conj on same direction
-    (and (state/in-selection-mode?) (= up? (state/selection-up?)))
-    (let [f (if up? util/get-prev-block util/get-next-block)
+    (and (state/in-selection-mode?) (= direction (state/get-selection-direction)))
+    (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
           element (f (last (state/get-selection-blocks)))]
-      (util/stop e)
-      (state/conj-selection-block! element up?))
+      (when element
+        (util/stop e)
+        (state/conj-selection-block! element direction)))
 
     ;; if different direction, keep clear until one left
-    (and (state/in-selection-mode?) (not= up? (state/selection-up?)))
+    (state/in-selection-mode?)
     (do
       (util/stop e)
       (clear-last-selected-block!))))
