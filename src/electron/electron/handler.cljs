@@ -9,7 +9,8 @@
             [clojure.string :as string]
             [electron.utils :as utils]
             [electron.state :as state]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [electron.search :as search]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -104,6 +105,15 @@
 (defmethod handle :persistent-dbs-saved [window _]
   (async/put! state/persistent-dbs-chan true )
   true)
+
+(defmethod handle :search [window [_ q]]
+  (search/search-blocks q))
+
+(defmethod handle :upsert-blocks [window [_ blocks]]
+  (search/add-blocks! blocks))
+
+(defmethod handle :delete-blocks [window [_ block-ids]]
+  (search/delete-blocks! block-ids))
 
 (defn- get-file-ext
   [file]

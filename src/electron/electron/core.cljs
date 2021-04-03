@@ -153,7 +153,7 @@
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
              (when-let [win @*win]
-               (when (.isMinimized win)
+               (when (.isMinimized ^object win)
                  (.restore win))
                (.focus win))))
       (.on app "window-all-closed" (fn [] (.quit app)))
