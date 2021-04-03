@@ -1,5 +1,6 @@
 (ns electron.search
   (:require ["path" :as path]
+            ["fs-extra" :as fs]
             ["better-sqlite3" :as sqlite3]
             [clojure.string :as string]
             [electron.utils :refer [logger] :as utils]
@@ -7,13 +8,24 @@
 
 (def error (partial (.-error logger) "[Search]"))
 
-(defonce database (atom nil))
+(defonce databases (atom nil))
 
 (defn close!
   []
-  (when @database
-    (.close @database)
-    (reset! database nil)))
+  (when @databases
+    (doseq [database @databases]
+      (.close databases))
+    (reset! databases nil)))
+
+(defn normalize-db-name
+  [db-name]
+  (-> db-name
+      (string/replace "/" "_")
+      (string/replace "\\" "_")))
+
+(defn get-db
+  [repo]
+  (get @databases (normalize-db-name repo)))
 
 (defn prepare
   [^object db sql]
@@ -57,50 +69,54 @@
   (let [stmt (prepare db "CREATE VIRTUAL TABLE blocks_fts USING fts5(id, uuid, content)")]
     (.run ^object stmt)))
 
-(defn open-db!
+(defn get-search-dir
   []
-  (let [path (.getPath ^object app "userData")
-        db-path (str path "/search.db")
-        _ (prn {:db-path db-path})
-        db (sqlite3 db-path #js {:verbose js/console.log})
-        _ (try (create-blocks-table! db)
-               (catch js/Error e
-                 (error e)))
-        ;; _ (try (create-blocks-fts-table! db)
-        ;;        (catch js/Error e
-        ;;          (error e)))
-        ;; _ (try (add-triggers! db)
-        ;;        (catch js/Error e
-        ;;          (error e)))
-        ]
-    (reset! database db)
-    db))
+  (let [path (.getPath ^object app "userData")]
+    (path/join path "search")))
+
+(defn ensure-search-dir!
+  []
+  (fs/ensureDir (get-search-dir)))
+
+(defn open-db!
+  [db-name]
+  (let [db-name (normalize-db-name db-name)
+        search-dir (get-search-dir)
+        db-full-path (path/join search-dir db-name)
+        db (sqlite3 db-full-path nil)
+        _ (create-blocks-table! db)]
+    (swap! databases assoc db-name db)))
+
+(defn open-dbs!
+  []
+  (let [search-dir (get-search-dir)
+        dbs (fs/readdirSync search-dir)]
+    (when (seq dbs)
+      (doseq [db-name dbs]
+        (open-db! db-name)))))
 
 (defn upsert-blocks!
-  [blocks]
-  (when-let [db @database]
+  [repo blocks]
+  (if-let [db (get-db repo)]
     ;; TODO: what if a CONFLICT on uuid
     (let [insert (prepare db "INSERT INTO blocks (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET content = @content")
           insert-many (.transaction ^object db
                                     (fn [blocks]
                                       (doseq [block blocks]
                                         (.run ^object insert block))))]
-      (insert-many blocks))))
+      (insert-many blocks))
+    (do
+      (open-db! repo)
+      (upsert-blocks! repo blocks))))
 
 (defn delete-blocks!
-  [ids]
-  (when-let [db @database]
+  [repo ids]
+  (when-let [db (get-db repo)]
     (let [sql (utils/format "DELETE from blocks WHERE id IN (%s)"
                             (->> (map (fn [id] (str "'" id "'")) ids)
                                  (string/join ", ")))
           stmt (prepare db sql)]
       (.run ^object stmt))))
-
-(defn get-all-blocks
-  []
-  (when-let [stmt (prepare @database
-                       "select * from blocks")]
-    (js->clj (.all ^object stmt) :keywordize-keys true)))
 
 ;; (defn search-blocks-fts
 ;;   [q]
@@ -110,28 +126,31 @@
 ;;       (js->clj (.all ^object stmt q) :keywordize-keys true))))
 
 (defn search-blocks
-  [q limit]
-  (when-not (string/blank? q)
-    (when-let [stmt (prepare @database
-                        "select id, uuid, content from blocks where content like ? limit ?")]
-      (js->clj (.all ^object stmt (str "%" q "%") limit) :keywordize-keys true))))
+  [repo q limit]
+  (when-let [database (get-db repo)]
+    (when-not (string/blank? q)
+     (when-let [stmt (prepare database
+                              "select id, uuid, content from blocks where content like ? limit ?")]
+       (js->clj (.all ^object stmt (str "%" q "%") limit) :keywordize-keys true)))))
 
 (defn truncate-blocks-table!
-  []
-  (let [stmt (prepare @database
-                      "delete from blocks;")]
-    (.run ^object stmt)))
+  [repo]
+  (when-let [database (get-db repo)]
+    (let [stmt (prepare database
+                       "delete from blocks;")]
+     (.run ^object stmt))))
 
 (defn drop-blocks-table!
-  []
-  (let [stmt (prepare @database
+  [repo]
+  (when-let [database (get-db repo)]
+    (let [stmt (prepare database
                        "drop table blocks;")
-        _ (.run ^object stmt)
-        ;; stmt (prepare @database
-        ;;               "drop table blocks_fts;")
-        ]
-    ;; (.run ^object stmt)
-    ))
+         _ (.run ^object stmt)
+         ;; stmt (prepare @database
+         ;;               "drop table blocks_fts;")
+         ]
+     ;; (.run ^object stmt)
+     )))
 
 
 (comment
