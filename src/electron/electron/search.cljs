@@ -13,8 +13,8 @@
 (defn close!
   []
   (when @databases
-    (doseq [database @databases]
-      (.close databases))
+    (doseq [[_ database] @databases]
+      (.close database))
     (reset! databases nil)))
 
 (defn normalize-db-name
@@ -78,11 +78,15 @@
   []
   (fs/ensureDirSync (get-search-dir)))
 
-(defn open-db!
+(defn get-db-full-path
   [db-name]
   (let [db-name (normalize-db-name db-name)
-        search-dir (get-search-dir)
-        db-full-path (path/join search-dir db-name)
+        search-dir (get-search-dir)]
+    [db-name (path/join search-dir db-name)]))
+
+(defn open-db!
+  [db-name]
+  (let [[db-name db-full-path] (get-db-full-path db-name)
         db (sqlite3 db-full-path nil)
         _ (create-blocks-table! db)]
     (swap! databases assoc db-name db)))
@@ -150,7 +154,15 @@
          ;;               "drop table blocks_fts;")
          ]
      ;; (.run ^object stmt)
-     )))
+      )))
+
+(defn delete-db!
+  [repo]
+  (when-let [database (get-db repo)]
+    (.close database)
+    (let [[_ db-full-path] (get-db-full-path repo)]
+      (println "Delete search indice: " db-full-path)
+      (fs/unlinkSync db-full-path))))
 
 
 (comment

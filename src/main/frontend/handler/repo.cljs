@@ -593,6 +593,7 @@
                       (db/remove-conn! url)
                       (db/remove-db! url)
                       (db/remove-files-db! url)
+                      (search/remove-db! url)
                       (fs/rmdir! (config/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (config/local-db? url)

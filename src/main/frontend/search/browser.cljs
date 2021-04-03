@@ -51,4 +51,6 @@
                    (.add indice (bean/->js block)))))
              indice)))
   (truncate-blocks! [this]
-    (swap! indices assoc-in [repo :blocks] nil)))
+    (swap! indices assoc-in [repo :blocks] nil))
+  (remove-db! [this]
+    nil))

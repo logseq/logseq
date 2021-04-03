@@ -124,6 +124,9 @@
 (defmethod handle :truncate-blocks [window [_ repo]]
   (search/truncate-blocks-table! repo))
 
+(defmethod handle :remove-db [window [_ repo]]
+  (search/delete-db! repo))
+
 (defn- get-file-ext
   [file]
   (last (string/split file #"\.")))
