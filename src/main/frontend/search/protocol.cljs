@@ -1,7 +1,7 @@
 (ns frontend.search.protocol)
 
 (defprotocol Engine
-  (query [this q])
-  (rebuild-blocks-indice [this])
-  (add-blocks [this blocks])
-  (remove-blocks [this blocks]))
+  (query [this q option])
+  (rebuild-blocks-indice! [this])
+  (transact-blocks! [this data])
+  (truncate-blocks! [this]))

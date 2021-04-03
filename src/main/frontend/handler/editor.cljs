@@ -1756,7 +1756,7 @@
                                                       99)
                                 (map (comp str :block/uuid))))
         current-and-parents (set/union #{(str (:block/uuid current-block))} block-parents)]
-    (let [result (search/block-search q 10)]
+    (p/let [result (search/block-search (state/get-current-repo) q {:limit 10})]
       (remove
        (fn [h]
          (contains? current-and-parents (:block/uuid h)))

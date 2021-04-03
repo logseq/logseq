@@ -3,15 +3,17 @@
             [frontend.state :as state]
             [goog.dom :as gdom]
             [frontend.search :as search]
+            [frontend.search.db :as search-db]
             [frontend.handler.notification :as notification-handler]
             [promesa.core :as p]))
 
 (defn search
-  [q]
-  (swap! state/state assoc :search/result
-         {:pages (search/page-search q)
-          :files (search/file-search q)
-          :blocks (search/block-search q 10)}))
+  [repo q]
+  (p/let [blocks (search/block-search repo q nil)]
+    (swap! state/state assoc :search/result
+          {:pages (search/page-search q)
+           :files (search/file-search q)
+           :blocks blocks})))
 
 (defn clear-search!
   []
@@ -24,7 +26,7 @@
 (defn rebuild-indices!
   []
   (println "Starting to rebuild search indices!")
-  (search/rebuild-indices!)
-  (notification-handler/show!
-   "Search indices rebuilt successfully!"
-   :success))
+  (p/let [_ (search/rebuild-indices!)]
+    (notification-handler/show!
+     "Search indices rebuilt successfully!"
+     :success)))

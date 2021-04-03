@@ -50,6 +50,7 @@
 
 (defn open-db!
   []
+  ;; TODO: where to store the search database
   (let [db-path (.join path "/tmp/logseq_search.db")
         db (sqlite3 db-path #js {:verbose js/console.log})
         _ (try (create-blocks-table! db)
@@ -105,6 +106,12 @@
     (let [stmt (prepare @database
                          "select id, text from blocks_fts where text like ?")]
       (js->clj (.all ^object stmt (str "%" q "%")) :keywordize-keys true))))
+
+(defn truncate-blocks-table!
+  []
+  (let [stmt (prepare @database
+                      "delete from blocks;")]
+    (.run ^object stmt)))
 
 (defn drop-blocks-table!
   []

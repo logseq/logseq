@@ -96,7 +96,6 @@
        (or (shortcut :editor/prev) "up") (fn [state e] (editor-handler/open-block! false))
 
        (or (shortcut :search/re-index) "mod+c mod+s") [search-handler/rebuild-indices! true]
-
        (or (shortcut :graph/re-index) "mod+c mod+r") [re-index! true]
 
        (or (shortcut :ui/toggle-brackets) "mod+c mod+b") [config-handler/toggle-ui-show-brackets! true]}
