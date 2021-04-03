@@ -76,10 +76,8 @@
     (reset! database db)
     db))
 
-(defonce debug-blocks (atom nil))
 (defn upsert-blocks!
   [blocks]
-  (reset! debug-blocks blocks)
   (when-let [db @database]
     ;; TODO: what if a CONFLICT on uuid
     (let [insert (prepare db "INSERT INTO blocks (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET content = @content")
