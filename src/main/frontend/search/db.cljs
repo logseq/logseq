@@ -21,12 +21,16 @@
      :uuid (str uuid)
      :content result}))
 
+(defn build-blocks-indice
+  [repo]
+  (->> (db/get-all-block-contents)
+       (map block->index)
+       (remove nil?)
+       (bean/->js)))
+
 (defn make-blocks-indice!
   [repo]
-  (let [blocks (->> (db/get-all-block-contents)
-                    (map block->index)
-                    (remove nil?)
-                    (bean/->js))
+  (let [blocks (build-blocks-indice repo)
         indice (fuse. blocks
                       (clj->js {:keys ["uuid" "content"]
                                 :shouldSort true

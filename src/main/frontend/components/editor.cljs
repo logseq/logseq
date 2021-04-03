@@ -16,6 +16,7 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [clojure.string :as string]
+            [promesa.core :as p]
             [frontend.commands :as commands
              :refer [*show-commands
                      *matched-commands
@@ -89,6 +90,30 @@
             :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
             :class     "black"}))))))
 
+(rum/defcs block-search-auto-complete < rum/reactive
+  {:init (fn [state]
+           (assoc state ::result (atom nil)))
+   :did-update (fn [state]
+                 (let [result (::result state)
+                       [edit-block _ _ q] (:rum/args state)]
+                   (p/let [matched-blocks (when-not (string/blank? q)
+                                            (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+                     (reset! result matched-blocks)))
+                 state)}
+  [state edit-block input id q format content]
+  (let [result (rum/react (get state ::result))
+        chosen-handler (editor-handler/block-on-chosen-handler input id q format)
+        non-exist-block-handler (editor-handler/block-non-exist-handler input)]
+    (when result
+      (ui/auto-complete
+       result
+       {:on-chosen   chosen-handler
+        :on-enter    non-exist-block-handler
+        :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+        :item-render (fn [{:block/keys [content]}]
+                       content)
+        :class       "black"}))))
+
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
                    (reset! editor-handler/*selected-text nil)
@@ -106,19 +131,8 @@
              @editor-handler/*selected-text
              (when (> (count edit-content) current-pos)
                (subs edit-content pos current-pos)))]
-      (p/let [matched-blocks (when-not (string/blank? q)
-                               (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
-        (when input
-          (let [chosen-handler (editor-handler/block-on-chosen-handler input id q format)
-                non-exist-block-handler (editor-handler/block-non-exist-handler input)]
-            (ui/auto-complete
-             matched-blocks
-             {:on-chosen   chosen-handler
-              :on-enter    non-exist-block-handler
-              :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
-              :item-render (fn [{:block/keys [content]}]
-                             (subs content 0 64))
-              :class       "black"})))))))
+      (when input
+        (block-search-auto-complete edit-block input id q format)))))
 
 (rum/defc template-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}

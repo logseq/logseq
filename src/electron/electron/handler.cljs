@@ -89,7 +89,6 @@
                 (remove nil?))]
     (vec (cons {:path (fix-win-path! path)} result))))
 
-;; TODO: Is it going to be slow if it's a huge directory
 (defmethod handle :openDir [^js window _messages]
   (let [result (.showOpenDialogSync dialog (bean/->js
                                             {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
@@ -106,16 +105,23 @@
   (async/put! state/persistent-dbs-chan true )
   true)
 
-(defmethod handle :search [window [_ q]]
-  (search/search-blocks q))
+(defmethod handle :search-blocks [window [_ repo q limit]]
+  (search/search-blocks q limit))
 
-(defmethod handle :upsert-blocks [window [_ blocks]]
-  (search/upsert-blocks! blocks))
+(defmethod handle :rebuild-blocks-indice [window [_ repo data]]
+  (search/truncate-blocks-table!)
+  ;; unneeded serialization
+  (search/upsert-blocks! (bean/->js data)))
 
-(defmethod handle :delete-blocks [window [_ block-ids]]
-  (search/delete-blocks! block-ids))
+(defmethod handle :transact-blocks [window [_ repo data]]
+  (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
+    (when (seq blocks-to-remove-set)
+      (search/delete-blocks! blocks-to-remove-set))
+    (when (seq blocks-to-add)
+      ;; unneeded serialization
+      (search/upsert-blocks! (bean/->js blocks-to-add)))))
 
-(defmethod handle :truncate-blocks [window _]
+(defmethod handle :truncate-blocks [window [_ repo]]
   (search/truncate-blocks-table!))
 
 (defn- get-file-ext
