@@ -310,6 +310,7 @@
                       after-blocks)]
     [after-blocks @block-and-children-content @last-child-end-pos]))
 
+;; FIXME: children' :block/path-ref-pages
 (defn compute-retract-refs
   "Computes old references to be retracted."
   [eid {:block/keys [ref-pages ref-blocks]} old-ref-pages old-ref-blocks]
@@ -507,7 +508,8 @@
                                    [:db/retract id :block/scheduled]
                                    [:db/retract id :block/scheduled-ast]
                                    [:db/retract id :block/marker]
-                                   [:db/retract id :block/repeated?]]))
+                                   [:db/retract id :block/repeated?]
+                                   [:db/retract id :block/path-ref-pages]]))
         [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
         retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
         page-id (:db/id page)
@@ -698,7 +700,8 @@
                                    [:db/retract id :block/scheduled]
                                    [:db/retract id :block/scheduled-ast]
                                    [:db/retract id :block/marker]
-                                   [:db/retract id :block/repeated?]]))
+                                   [:db/retract id :block/repeated?]
+                                   [:db/retract id :block/path-ref-pages]]))
         transact-fn (fn []
                       (repo-handler/transact-react-and-alter-file!
                        repo
