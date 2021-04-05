@@ -525,29 +525,13 @@
                nil))))))))
 
 (defn- compute-fst-snd-block-text
-  [block format value pos level new-level block-self? block-has-children? with-level?]
+  [value pos]
   (let [fst-block-text (subs value 0 pos)
-        snd-block-text (string/triml (subs value pos))
-        fst-block-text (string/trim (if with-level? fst-block-text (block/with-levels fst-block-text format block)))
-        snd-block-text-level (cond
-                               new-level
-                               new-level
-                               (or block-self?
-                                   (and block-has-children?
-                                        (not (zero? pos))))
-                               (inc level)
-                               :else
-                               level)
-        snd-block-text (if (and snd-block-text
-                                (re-find (re-pattern (util/format "^[%s]+\\s+" (config/get-block-pattern format))) snd-block-text))
-                         snd-block-text
-                         (rebuild-block-content
-                          (str (config/default-empty-block format snd-block-text-level) " " snd-block-text)
-                          format))]
+        snd-block-text (string/triml (subs value pos))]
     [fst-block-text snd-block-text]))
 
 (defn insert-block-to-existing-file!
-  [repo block file page file-path file-content value fst-block-text snd-block-text pos format input {:keys [create-new-block? ok-handler with-level? new-level current-page blocks-container-id]}]
+  [repo block file page file-path file-content value fst-block-text snd-block-text pos format input {:keys [create-new-block? ok-handler new-level current-page blocks-container-id]}]
   (let [{:block/keys [meta pre-block?]} block
         original-id (:block/uuid block)
         block-has-children? (seq (:block/children block))
@@ -665,32 +649,24 @@
 
 
 (defn insert-new-block-aux!
-  [{:block/keys [uuid content meta file dummy? level repo page format properties collapsed? pre-block? parent]
+  [{:block/keys [uuid content repo format]
     db-id :db/id
     :as block}
    value
-   {:keys [create-new-block? ok-handler with-level? new-level current-page blocks-container-id]
+   {:keys [ok-handler new-level current-page]
     :as opts}]
-  (let [value (or value "")
-        block-page? (and current-page (util/uuid-string? current-page))
+  (let [block-page? (and current-page (util/uuid-string? current-page))
         block-self? (= uuid (and block-page? (medley/uuid current-page)))
         input (gdom/getElement (state/get-edit-input-id))
         pos (if new-level
               (dec (count value))
               (util/get-input-pos input))
         repo (or repo (state/get-current-repo))
-        block (with-block-meta repo block)
-        format (:block/format block)
-        page (db/entity repo (:db/id page))
-        file (db/entity repo (:db/id file))
-        block-has-children? (seq (:block/children block))
-        [fst-block-text snd-block-text]
-        (compute-fst-snd-block-text block format value pos level new-level block-self? block-has-children? with-level?)
+        [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
         current-block (-> (assoc block :block/content fst-block-text)
                         (wrap-parse-block))
         new-m {:block/uuid (db/new-block-id)
-               :block/content snd-block-text
-               :block/title snd-block-text}
+               :block/content snd-block-text}
         next-block (-> (merge block new-m)
                      (dissoc :db/id)
                      (wrap-parse-block))]
@@ -777,7 +753,6 @@
            (let [last-id (:block/uuid last-block)]
              (edit-block! last-block 0 format id)
              (clear-when-saved!)))
-         :with-level? (if last-child true false)
          :new-level (and last-child (:block/level block))
          :blocks-container-id (:id config)
          :current-page (state/get-current-page)})))))
@@ -796,7 +771,6 @@
       :ok-handler
       (fn [last-block]
         (js/setTimeout #(edit-last-block-for-new-page! last-block :max) 50))
-      :with-level? true
       :new-level new-level
       :blocks-container-id (:id config)
       :current-page (state/get-current-page)})))
