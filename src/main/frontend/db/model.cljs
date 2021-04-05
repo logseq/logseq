@@ -806,16 +806,6 @@
       (or (:block/original-name page)
           (:block/name page)))))
 
-(defn get-block-content
-  [utf8-content block]
-  (let [meta (:block/meta block)]
-    (if-let [end-pos (:end-pos meta)]
-      (utf8/substring utf8-content
-                      (:start-pos meta)
-                      end-pos)
-      (utf8/substring utf8-content
-                      (:start-pos meta)))))
-
 (defn get-journals-length
   []
   (let [today (db-utils/date->int (js/Date.))]

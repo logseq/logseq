@@ -41,7 +41,7 @@
   delete-file! delete-file-blocks! delete-file-pages! delete-file-tx delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-and-children-no-cache get-block-by-uuid get-block-children
-  get-block-children-ids get-block-content get-block-file get-block-immediate-children get-block-page
+  get-block-children-ids get-block-file get-block-immediate-children get-block-page
   get-block-page-end-pos get-block-parent get-block-parents get-block-referenced-blocks get-block-refs-count
   get-blocks-by-priority get-blocks-contents get-collapsed-blocks get-custom-css
   get-date-scheduled-or-deadlines get-db-type get-empty-pages get-file get-file-after-blocks get-file-after-blocks-meta

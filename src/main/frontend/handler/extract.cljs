@@ -6,6 +6,7 @@
             [clojure.set :as set]
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
+            [frontend.text :as text]
             [clojure.string :as string]
             [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
@@ -21,6 +22,18 @@
          (remove nil?)
          (map string/lower-case)
          (distinct))))
+
+(defn- get-block-content
+  [utf8-content block format]
+  (let [meta (:block/meta block)
+        content (if-let [end-pos (:end-pos meta)]
+                  (utf8/substring utf8-content
+                                  (:start-pos meta)
+                                  end-pos)
+                  (utf8/substring utf8-content
+                                  (:start-pos meta)))]
+    (when content
+      (text/remove-level-spaces content format true))))
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
@@ -39,7 +52,7 @@
                             (swap! ref-pages set/union (set block-ref-pages)))
                           (-> block
                               (dissoc :ref-pages)
-                              (assoc :block/content (db/get-block-content utf8-content block)
+                              (assoc :block/content (get-block-content utf8-content block format)
                                      :block/file [:file/path file]
                                      :block/format format
                                      :block/page [:block/name (string/lower-case page)]
