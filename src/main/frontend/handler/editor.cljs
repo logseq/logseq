@@ -639,7 +639,6 @@
                                         (remove nil?)))))))))
 
 ;; TODO: fix for
-;; 1. collapsed parent
 ;; 2. block as a container instead of a page
 (defn build-outliner-relation
   [current-block new-block]
@@ -647,7 +646,12 @@
         (mapv outliner-core/block [current-block new-block])
         has-children? (db/has-children? (state/get-current-repo)
                                         (tree/-get-id current-node))
-        sibling? (not has-children?)]
+        sibling? (cond
+                   (:block/collapsed? current-block)
+                   true
+
+                   :else
+                   (not has-children?))]
     ;; perf: multiple file writes
     (outliner-core/save-node current-node)
     (outliner-core/insert-node new-node current-node sibling?)))
@@ -657,14 +661,13 @@
     db-id :db/id
     :as block}
    value
-   {:keys [ok-handler new-level current-page]
+   {:keys [ok-handler]
     :as opts}]
-  (let [block-page? (and current-page (util/uuid-string? current-page))
+  (let [current-page (state/get-current-page)
+        block-page? (and current-page (util/uuid-string? current-page))
         block-self? (= uuid (and block-page? (medley/uuid current-page)))
         input (gdom/getElement (state/get-edit-input-id))
-        pos (if new-level
-              (dec (count value))
-              (util/get-input-pos input))
+        pos (util/get-input-pos input)
         repo (or repo (state/get-current-repo))
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
         current-block (-> (assoc block :block/content fst-block-text)
@@ -737,29 +740,17 @@
            block-id (:block/uuid block)
            block (or (db/pull [:block/uuid block-id])
                      block)
-           collapsed? (:block/collapsed? block)
            repo (or (:block/repo block) (state/get-current-repo))
-           last-child (and collapsed?
-                           (last (db/get-block-and-children-no-cache repo (:block/uuid block))))
-           last-child (when (not= (:block/uuid last-child)
-                                  (:block/uuid block))
-                        last-child)
-           new-block (or last-child block)
-           new-value (if last-child (:block/content last-child) value)
-           properties (with-timetracking-properties new-block new-value)]
+           properties (with-timetracking-properties block value)]
        ;; save the current block and insert a new block
        (insert-new-block-aux!
-        (assoc new-block :block/properties properties)
-        new-value
-        {:create-new-block? true
-         :ok-handler
+        (assoc block :block/properties properties)
+        value
+        {:ok-handler
          (fn [last-block]
            (let [last-id (:block/uuid last-block)]
              (edit-block! last-block 0 format id)
-             (clear-when-saved!)))
-         :new-level (and last-child (:block/level block))
-         :blocks-container-id (:id config)
-         :current-page (state/get-current-page)})))))
+             (clear-when-saved!)))})))))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker] :as block} content]
@@ -1770,64 +1761,65 @@
 
 (defn move-up-down
   [e up?]
-  (when-let [block-id (:block/uuid (state/get-edit-block))]
-    (let [block-parent-id (state/get-editing-block-dom-id)
-          block (db/entity [:block/uuid block-id])
-          meta (:block/meta block)
-          page (:block/page block)
-          block-dom-node (gdom/getElement block-parent-id)
-          prev-block (get-prev-block-non-collapsed block-dom-node)
-          next-block (get-next-block-non-collapsed block-dom-node)
-          repo (state/get-current-repo)
-          move-upwards-to-parent? (and up? prev-block (< (d/attr prev-block "level") (:block/level block)))
-          move-down-to-higher-level? (and (not up?) next-block (< (d/attr next-block "level") (:block/level block)))]
-      (when-let [sibling-block (cond
-                                 move-upwards-to-parent?
-                                 prev-block
-                                 move-down-to-higher-level?
-                                 next-block
-                                 :else
-                                 (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
-                                   (f block-dom-node)))]
-        (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-          (when-let [sibling-block (db/pull-block (medley/uuid sibling-block-id))]
-            (let [sibling-meta (:block/meta sibling-block)
-                  hc1 (db/get-block-and-children-no-cache repo (:block/uuid block))
-                  hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
-                        [sibling-block]
-                        (db/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
-              ;; Same page and next to the other
-              (when (and
-                     (= (:db/id (:block/page block))
-                        (:db/id (:block/page sibling-block)))
-                     (or
-                      (and up? (= (:end-pos (:block/meta (last hc2))) (:start-pos (:block/meta (first hc1)))))
-                      (and (not up?) (= (:end-pos (:block/meta (last hc1))) (:start-pos (:block/meta (first hc2)))))))
-                (let [hc1-content (block-and-children-content hc1)
-                      hc2-content (block-and-children-content hc2)
-                      file (db/get-block-file (:block/uuid block))
-                      file-path (:file/path file)
-                      old-file-content (db/get-file file-path)
-                      [start-pos end-pos new-content blocks] (if up?
-                                                               [(:start-pos sibling-meta)
-                                                                (get-in (last hc1) [:block/meta :end-pos])
-                                                                (str hc1-content hc2-content)
-                                                                (concat hc1 hc2)]
-                                                               [(:start-pos meta)
-                                                                (get-in (last hc2) [:block/meta :end-pos])
-                                                                (str hc2-content hc1-content)
-                                                                (concat hc2 hc1)])]
-                  (when (and start-pos end-pos)
-                    (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
-                          blocks-meta (rebuild-blocks-meta start-pos blocks)]
-                      (profile
-                       (str "Move block " (if up? "up: " "down: "))
-                       (repo-handler/transact-react-and-alter-file!
-                        repo
-                        blocks-meta
-                        {:key :block/change
-                         :data (map (fn [block] (assoc block :block/page page)) blocks)}
-                        [[file-path new-file-content]])))))))))))))
+  ;; (when-let [block-id (:block/uuid (state/get-edit-block))]
+  ;;   (let [block-parent-id (state/get-editing-block-dom-id)
+  ;;         block (db/entity [:block/uuid block-id])
+  ;;         meta (:block/meta block)
+  ;;         page (:block/page block)
+  ;;         block-dom-node (gdom/getElement block-parent-id)
+  ;;         prev-block (get-prev-block-non-collapsed block-dom-node)
+  ;;         next-block (get-next-block-non-collapsed block-dom-node)
+  ;;         repo (state/get-current-repo)
+  ;;         move-upwards-to-parent? (and up? prev-block (< (d/attr prev-block "level") (:block/level block)))
+  ;;         move-down-to-higher-level? (and (not up?) next-block (< (d/attr next-block "level") (:block/level block)))]
+  ;;     (when-let [sibling-block (cond
+  ;;                                move-upwards-to-parent?
+  ;;                                prev-block
+  ;;                                move-down-to-higher-level?
+  ;;                                next-block
+  ;;                                :else
+  ;;                                (let [f (if up? util/get-prev-block-with-same-level util/get-next-block-with-same-level)]
+  ;;                                  (f block-dom-node)))]
+  ;;       (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+  ;;         (when-let [sibling-block (db/pull-block (medley/uuid sibling-block-id))]
+  ;;           (let [sibling-meta (:block/meta sibling-block)
+  ;;                 hc1 (db/get-block-and-children-no-cache repo (:block/uuid block))
+  ;;                 hc2 (if (or move-upwards-to-parent? move-down-to-higher-level?)
+  ;;                       [sibling-block]
+  ;;                       (db/get-block-and-children-no-cache repo (:block/uuid sibling-block)))]
+  ;;             ;; Same page and next to the other
+  ;;             (when (and
+  ;;                    (= (:db/id (:block/page block))
+  ;;                       (:db/id (:block/page sibling-block)))
+  ;;                    (or
+  ;;                     (and up? (= (:end-pos (:block/meta (last hc2))) (:start-pos (:block/meta (first hc1)))))
+  ;;                     (and (not up?) (= (:end-pos (:block/meta (last hc1))) (:start-pos (:block/meta (first hc2)))))))
+  ;;               (let [hc1-content (block-and-children-content hc1)
+  ;;                     hc2-content (block-and-children-content hc2)
+  ;;                     file (db/get-block-file (:block/uuid block))
+  ;;                     file-path (:file/path file)
+  ;;                     old-file-content (db/get-file file-path)
+  ;;                     [start-pos end-pos new-content blocks] (if up?
+  ;;                                                              [(:start-pos sibling-meta)
+  ;;                                                               (get-in (last hc1) [:block/meta :end-pos])
+  ;;                                                               (str hc1-content hc2-content)
+  ;;                                                               (concat hc1 hc2)]
+  ;;                                                              [(:start-pos meta)
+  ;;                                                               (get-in (last hc2) [:block/meta :end-pos])
+  ;;                                                               (str hc2-content hc1-content)
+  ;;                                                               (concat hc2 hc1)])]
+  ;;                 (when (and start-pos end-pos)
+  ;;                   (let [new-file-content (utf8/insert! old-file-content start-pos end-pos new-content)
+  ;;                         blocks-meta (rebuild-blocks-meta start-pos blocks)]
+  ;;                     (profile
+  ;;                      (str "Move block " (if up? "up: " "down: "))
+  ;;                      (repo-handler/transact-react-and-alter-file!
+  ;;                       repo
+  ;;                       blocks-meta
+  ;;                       {:key :block/change
+  ;;                        :data (map (fn [block] (assoc block :block/page page)) blocks)}
+  ;;                       [[file-path new-file-content]]))))))))))))
+  )
 
 (defn expand!
   []
@@ -2140,40 +2132,11 @@
     (state/set-editor-show-block-search! false)
     (util/cursor-move-forward input 2)))
 
+;; TODO: re-implement
 (defn template-on-chosen-handler
   [input id q format edit-block edit-content]
   (fn [[template db-id] _click?]
-    (if-let [block (db/entity db-id)]
-      (let [new-level (:block/level edit-block)
-            properties (:block/properties block)
-            block-uuid (:block/uuid block)
-            including-parent? (not= (get properties "including-parent") "false")
-            template-parent-level (:block/level block)
-            pattern (config/get-block-pattern format)
-            content
-            (block-handler/get-block-full-content
-             (state/get-current-repo)
-             (:block/uuid block)
-             (fn [{:block/keys [uuid level content properties] :as block}]
-               (let [parent? (= uuid block-uuid)
-                     ignore-parent? (and parent? (not including-parent?))]
-                 (if ignore-parent?
-                   ""
-                   (let [new-level (+ new-level
-                                      (- level template-parent-level
-                                         (if (not including-parent?) 1 0)))
-                         properties' (dissoc (into {} properties) "id" "custom_id" "template" "including-parent")]
-                     (-> content
-                         (string/replace-first (apply str (repeat level pattern))
-                                               (apply str (repeat new-level pattern)))
-                         text/remove-properties!
-                         (text/rejoin-properties properties')))))))
-            content (if (string/includes? (string/trim edit-content) "\n")
-                      content
-                      (text/remove-level-spaces content format))
-            content (template/resolve-dynamic-template! content)]
-        (state/set-editor-show-template-search! false)
-        (insert-command! id content format {})))
+
     (when-let [input (gdom/getElement id)]
       (.focus input))))
 

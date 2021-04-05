@@ -2206,7 +2206,9 @@
         ref? (:ref? config)
         custom-query? (:custom-query? config)
         blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree %))
-        blocks (blocks->vec-tree blocks)]
+        ;; FIXME: blocks->vec-tree not working for the block container (zoom view)
+        blocks' (blocks->vec-tree blocks)
+        blocks (if (seq blocks') blocks' blocks)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:style {:margin-left (cond
@@ -2229,9 +2231,7 @@
                  config (assoc config :block/uuid (:block/uuid item))]
              (rum/with-key
                (block-container config item)
-               (:block/uuid item)))))
-       ;; (add-button config ref? custom-query? blocks)
-])))
+               (:block/uuid item)))))])))
 
 ;; headers to hiccup
 (defn ->hiccup

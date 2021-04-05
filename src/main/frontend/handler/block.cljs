@@ -79,16 +79,6 @@
             block)]
      (apply util/join-newline @contents))))
 
-;; with children content
-(defn get-block-full-content
-  ([repo block-id]
-   (get-block-full-content repo block-id (fn [block] (:block/content block))))
-  ([repo block-id transform-fn]
-   (let [blocks (db/get-block-and-children-no-cache repo block-id)]
-     (->> blocks
-          (map transform-fn)
-          (apply util/join-newline)))))
-
 (defn get-block-end-pos-rec
   [repo block]
   (let [children (:block/children block)]

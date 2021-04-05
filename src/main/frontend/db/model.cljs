@@ -591,14 +591,9 @@
         content))))
 
 (defn block-and-children-transform
-  [result repo-url block-uuid level]
+  [result repo-url block-uuid]
   (some->> result
            db-utils/seq-flatten
-           (take-while (fn [h]
-                         (or
-                          (= (:block/uuid h)
-                             block-uuid)
-                          (> (:block/level h) level))))
            (db-utils/with-repo repo-url)
            (with-block-refs-count repo-url)))
 
@@ -665,53 +660,25 @@
       (when (seq ids)
         (db-utils/pull-many repo '[*] ids)))))
 
-;; TODO: replace with get-block-children
 (defn get-block-and-children
   ([repo block-uuid]
    (get-block-and-children repo block-uuid true))
   ([repo block-uuid use-cache?]
-   (let [block (db-utils/entity repo [:block/uuid block-uuid])
-         page (:db/id (:block/page block))
-         pos (:start-pos (:block/meta block))
-         level (:block/level block)
-         pred (fn []
-                (let [block (db-utils/entity repo [:block/uuid block-uuid])
-                      pos (:start-pos (:block/meta block))]
-                  (fn [data meta]
-                    (>= (:start-pos meta) pos))))]
+   (let [block (db-utils/entity repo [:block/uuid block-uuid])]
      (some-> (react/q repo [:block/block block-uuid]
                       {:use-cache? use-cache?
-                       :transform-fn #(block-and-children-transform % repo block-uuid level)
-                       :inputs-fn (fn []
-                                    [page (pred)])}
-                      '[:find (pull ?block [*])
-                        :in $ ?page ?pred
-                        :where
-                        [?block :block/page ?page]
-                        [?block :block/meta ?meta]
-                        [(?pred $ ?meta)]])
-             react))))
 
-;; TODO: performance
-(defn get-block-and-children-no-cache
-  [repo block-uuid]
-  (let [block (db-utils/entity repo [:block/uuid block-uuid])
-        page (:db/id (:block/page block))
-        pos (:start-pos (:block/meta block))
-        level (:block/level block)
-        pred (fn [data meta]
-               (>= (:start-pos meta) pos))]
-    (-> (d/q
-         '[:find (pull ?block [*])
-           :in $ ?page ?pred
-           :where
-           [?block :block/page ?page]
-           [?block :block/meta ?meta]
-           [(?pred $ ?meta)]]
-         (conn/get-conn repo)
-         page
-         pred)
-        (block-and-children-transform repo block-uuid level))))
+                       :transform-fn #(block-and-children-transform % repo block-uuid)}
+               '[:find (pull ?c [*])
+                        :in $ ?id %
+                        :where
+                        [?b :block/uuid ?id]
+                        (or-join [?b ?c ?id]
+                                 (parent ?b ?c)
+                                 [?c :block/uuid ?id])]
+               block-uuid
+               rules)
+             react))))
 
 (defn get-file-page
   ([file-path]
