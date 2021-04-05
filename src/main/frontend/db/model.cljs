@@ -667,7 +667,6 @@
    (let [block (db-utils/entity repo [:block/uuid block-uuid])]
      (some-> (react/q repo [:block/block block-uuid]
                       {:use-cache? use-cache?
-
                        :transform-fn #(block-and-children-transform % repo block-uuid)}
                '[:find (pull ?c [*])
                         :in $ ?id %
