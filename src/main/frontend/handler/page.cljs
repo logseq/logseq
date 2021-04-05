@@ -419,6 +419,7 @@
                            "\n"
                            pre-str " [[" page-name "]]"))]
     (editor-handler/insert-new-block-aux!
+     {}
      last-block
      new-content
      {:create-new-block? false

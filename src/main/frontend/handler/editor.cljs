@@ -530,6 +530,7 @@
         snd-block-text (string/triml (subs value pos))]
     [fst-block-text snd-block-text]))
 
+;; TODO: remove later
 (defn insert-block-to-existing-file!
   [repo block file page file-path file-content value fst-block-text snd-block-text pos format input {:keys [create-new-block? ok-handler new-level current-page blocks-container-id]}]
   (let [{:block/keys [meta pre-block?]} block
@@ -638,15 +639,16 @@
                (reset! blocks-atom (->> (concat before-part blocks after-part)
                                         (remove nil?)))))))))
 
-;; TODO: fix for
-;; 2. block as a container instead of a page
-(defn build-outliner-relation
-  [current-block new-block]
+(defn outliner-insert-block!
+  [current-block new-block child?]
   (let [[current-node new-node]
         (mapv outliner-core/block [current-block new-block])
         has-children? (db/has-children? (state/get-current-repo)
                                         (tree/-get-id current-node))
         sibling? (cond
+                   child?
+                   false
+
                    (:block/collapsed? current-block)
                    true
 
@@ -656,16 +658,27 @@
     (outliner-core/save-node current-node)
     (outliner-core/insert-node new-node current-node sibling?)))
 
+(defn- block-self-alone-when-insert?
+  [config uuid]
+  (let [current-page (state/get-current-page)
+        block-id (or
+                  (and (:id config)
+                       (util/uuid-string? (:id config))
+                       (:id config))
+                  (and current-page
+                       (util/uuid-string? current-page)
+                       current-page))]
+    (= uuid (and block-id (medley/uuid block-id)))))
+
 (defn insert-new-block-aux!
-  [{:block/keys [uuid content repo format]
+  [config
+   {:block/keys [uuid content repo format]
     db-id :db/id
     :as block}
    value
    {:keys [ok-handler]
     :as opts}]
-  (let [current-page (state/get-current-page)
-        block-page? (and current-page (util/uuid-string? current-page))
-        block-self? (= uuid (and block-page? (medley/uuid current-page)))
+  (let [block-self? (block-self-alone-when-insert? config uuid)
         input (gdom/getElement (state/get-edit-input-id))
         pos (util/get-input-pos input)
         repo (or repo (state/get-current-repo))
@@ -679,7 +692,7 @@
                      (wrap-parse-block))]
     (do
       (repo-handler/update-last-edit-block)
-      (build-outliner-relation current-block next-block)
+      (outliner-insert-block! current-block next-block block-self?)
       (let [opts {:key :block/insert
                   :data [current-block next-block]}]
           (db/refresh repo opts))
@@ -744,6 +757,7 @@
            properties (with-timetracking-properties block value)]
        ;; save the current block and insert a new block
        (insert-new-block-aux!
+        config
         (assoc block :block/properties properties)
         value
         {:ok-handler
