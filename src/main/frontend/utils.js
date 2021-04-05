@@ -204,3 +204,16 @@ export const win32 = path => {
   // UNC paths are always absolute
   return Boolean(result[2] || isUnc);
 };
+
+export const ios = function () {
+  return [
+    'iPad Simulator',
+    'iPhone Simulator',
+    'iPod Simulator',
+    'iPad',
+    'iPhone',
+    'iPod'
+  ].includes(navigator.platform)
+  // iPad on iOS 13 detection
+    || (navigator.userAgent.includes("Mac") && "ontouchend" in document)
+}

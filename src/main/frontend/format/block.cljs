@@ -41,7 +41,7 @@
                      (when (and (not (util/starts-with? page "http:"))
                                 (not (util/starts-with? page "https:"))
                                 (not (util/starts-with? page "file:"))
-                                (not (contains? (config/supported-formats) ext)))
+                                (or (= ext :excalidraw) (not (contains? (config/supported-formats) ext))))
                        page)))
 
                   (and
@@ -65,12 +65,30 @@
                               (string? argument)
                               (text/page-ref? argument))
                      (text/page-ref-un-brackets! argument))))
+
+               (and (vector? block)
+                    (= "Tag" (first block)))
+               (let [text (second block)]
+                 (when (and
+                        (string? text)
+                        (text/page-ref? text))
+                   (text/page-ref-un-brackets! text)))
+
                :else
                nil)]
-    (when (and
-           (string? page)
-           (not (string/blank? page)))
-      (string/trim page))))
+    (cond
+      (and
+       (string? page)
+       (text/block-ref? page))
+      (text/block-ref-un-brackets! page)
+
+      (and
+       (string? page)
+       (not (string/blank? page)))
+      (string/trim page)
+
+      :else
+      nil)))
 
 (defn get-block-reference
   [block]
@@ -153,16 +171,20 @@
   (let [properties (into {} properties)
         page-refs (->>
                    (map (fn [v]
-                          (when v
-                            (->> (re-seq text/page-ref-re v)
-                                 (map second)
-                                 (map string/lower-case))))
+                          (when (string? v)
+                            (let [page-refs (->> (re-seq text/page-ref-re v)
+                                                 (map second))
+                                  tags (->> (string/split v #",")
+                                            (filter (fn [s] (= \# (first s))))
+                                            (map (fn [s] (subs s 1))))]
+                              (concat page-refs tags))))
                         (vals properties))
                    (apply concat)
-                   (distinct))
+                   (remove string/blank?))
         properties (->> properties
                         (medley/map-kv (fn [k v]
-                                         (let [v (string/trim v)]
+                                         (let [v (string/trim v)
+                                               k (string/replace k " " "_")]
                                            (cond
                                              (and (= "\"" (first v) (last v))) ; wrapped in ""
                                              [(string/lower-case k) (string/trim (subs v 1 (dec (count v))))]
@@ -309,7 +331,9 @@
 (defn safe-blocks
   [blocks]
   (map (fn [block]
-         (block-keywordize (util/remove-nils block)))
+         (if (map? block)
+           (block-keywordize (util/remove-nils block))
+           block))
        blocks))
 
 (defn with-path-refs
@@ -369,6 +393,7 @@
   [blocks content with-id?]
   (let [encoded-content (utf8/encode content)
         last-pos (utf8/length encoded-content)
+        pre-block-body (atom nil)
         blocks
         (loop [headings []
                block-body []
@@ -440,8 +465,11 @@
                 :else
                 (let [block-body' (conj block-body block)]
                   (recur headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
-            (-> (reverse headings)
-                safe-blocks)))]
+            (do
+              (when (seq block-body)
+                (reset! pre-block-body block-body))
+              (-> (reverse headings)
+                  safe-blocks))))]
     (let [first-block (first blocks)
           first-block-start-pos (get-in first-block [:block/meta :start-pos])
           blocks (if (and
@@ -458,7 +486,8 @@
                          :meta {:start-pos 0
                                 :end-pos (or first-block-start-pos
                                              (utf8/length encoded-content))}
-                         :body (take-while (fn [block] (not (heading-block? block))) blocks)
+                         :body @pre-block-body
+                         ;; (take-while (fn [block] (not (heading-block? block))) blocks)
                          :pre-block? true}
                         (block-keywordize)))
                      (select-keys first-block [:block/file :block/format :block/page]))

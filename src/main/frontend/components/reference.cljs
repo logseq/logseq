@@ -67,7 +67,8 @@
                        (db/get-block-referenced-blocks block-id)
                        :else
                        (db/get-page-referenced-blocks page-name))
-          scheduled-or-deadlines (if journal?
+          scheduled-or-deadlines (if (and journal?
+                                          (not (true? (state/scheduled-deadlines-disabled?))))
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           references (db/get-page-linked-refs-refed-pages repo page-name)
@@ -105,11 +106,11 @@
             [:a.opacity-50.hover:opacity-100
              {:title "Filter"
               :on-click #(state/set-modal! (filter-dialog references page-name))}
-              (svg/filter-icon (cond
-                                 (empty? filter-state) nil
-                                 (every? true? (vals filter-state)) "text-green-400"
-                                 (every? false? (vals filter-state)) "text-red-400"
-                                 :else "text-yellow-400"))]]
+             (svg/filter-icon (cond
+                                (empty? filter-state) nil
+                                (every? true? (vals filter-state)) "text-green-400"
+                                (every? false? (vals filter-state)) "text-red-400"
+                                :else "text-yellow-400"))]]
 
            [:div.references-blocks
             (let [ref-hiccup (block/->hiccup filtered-ref-blocks

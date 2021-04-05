@@ -30,7 +30,8 @@
                   :autoHideMenuBar (not mac?)
                   :titleBarStyle (if mac? "hidden" nil)
                   :webPreferences
-                  {:nodeIntegration         false
+                  {:plugins                 true ; pdf
+                   :nodeIntegration         false
                    :nodeIntegrationInWorker false
                    :contextIsolation        true
                    :spellcheck              true
@@ -43,7 +44,7 @@
     win))
 
 (defn setup-updater! [^js win]
-  ;; manual updater
+  ;; manual/auto updater
   (init-updater {:repo   "logseq/logseq"
                  :logger logger
                  :win    win}))
@@ -58,37 +59,40 @@
        (callback #js {:path path}))))
   #(.unregisterProtocol protocol "assets"))
 
-(defn- handle-export-publish-assets [_event html]
+(defn- handle-export-publish-assets [_event html custom-css-path]
   (let [app-path (. app getAppPath)
         paths (js->clj (. dialog showOpenDialogSync (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]})))]
     (when (seq paths)
       (let [root-dir (first paths)
             static-dir (path/join root-dir "static")
-            path (path/join root-dir "index.html")]
+            index-html-path (path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (p/all  (concat
-                           [(. fs writeFile path html)
+                           [(. fs writeFile index-html-path html)
+
                             (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
 
                            (map
-                             (fn [part]
-                               (. fs copy (path/join app-path part) (path/join static-dir part)))
-                             ["css" "fonts" "icons" "img" "js"])))
+                            (fn [part]
+                              (. fs copy (path/join app-path part) (path/join static-dir part)))
+                            ["css" "fonts" "icons" "img" "js"])))
+                custom-css (. fs readFile custom-css-path)
+                _ (. fs appendFile (path/join static-dir "css" "style.css") custom-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js"]
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" file)))
-                           js-files))
+                              js-files))
                 _ (p/all (map (fn [file]
                                 (. fs moveSync
                                    (path/join static-dir "js" "publishing" file)
                                    (path/join static-dir "js" file)))
-                           js-files))
+                              js-files))
                 _ (. fs removeSync (path/join static-dir "js" "publishing"))
                 ;; remove source map files
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                           ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
           (. dialog showMessageBox (clj->js {:message (str "Export publish assets to " root-dir " successfully")})))))))
 
 (defn setup-app-manager!
@@ -137,51 +141,59 @@
 
 (defonce *win (atom nil))
 
-
 (defn- destroy-window!
   [^js win]
   (.destroy win))
 
 (defn main
   []
-  (.on app "window-all-closed" (fn [] (.quit app)))
-  (.on app "ready"
-       (fn []
-         (let [^js win (create-main-window)
-               _ (reset! *win win)
-               *quitting? (atom false)]
-           (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
+  (if-not (.requestSingleInstanceLock app)
+    (.quit app)
+    (do
+      (.on app "second-instance"
+           (fn [_event _commandLine _workingDirectory]
+             (when-let [win @*win]
+               (when (.isMinimized ^object win)
+                 (.restore win))
+               (.focus win))))
+      (.on app "window-all-closed" (fn [] (.quit app)))
+      (.on app "ready"
+           (fn []
+             (let [^js win (create-main-window)
+                   _ (reset! *win win)
+                   *quitting? (atom false)]
+               (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
-           (vreset! *setup-fn
-                    (fn []
-                      (let [t0 (setup-updater! win)
-                            t1 (setup-interceptor!)
-                            t2 (setup-app-manager! win)
-                            tt (handler/set-ipc-handler! win)]
+               (vreset! *setup-fn
+                        (fn []
+                          (let [t0 (setup-updater! win)
+                                t1 (setup-interceptor!)
+                                t2 (setup-app-manager! win)
+                                tt (handler/set-ipc-handler! win)]
 
-                        (vreset! *teardown-fn
-                                 #(doseq [f [t0 t1 t2 tt]]
-                                    (and f (f)))))))
+                            (vreset! *teardown-fn
+                                     #(doseq [f [t0 t1 t2 tt]]
+                                        (and f (f)))))))
 
-           ;; setup effects
-           (@*setup-fn)
+               ;; setup effects
+               (@*setup-fn)
 
-           ;; main window events
-           (.on win "close" (fn [e]
-                              (.preventDefault e)
-                              (let [web-contents (. win -webContents)]
-                                (.send web-contents "persistent-dbs"))
-                              (async/go
-                                ;; FIXME: What if persistence failed?
-                                (let [_ (async/<! state/persistent-dbs-chan)]
-                                  (if (or @*quitting? (not mac?))
-                                    (when-let [win @*win]
-                                      (destroy-window! win)
-                                      (reset! *win nil))
-                                    (do (.preventDefault ^js/Event e)
-                                        (.hide win)))))))
-           (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
-           (.on app "activate" #(if @*win (.show win)))))))
+               ;; main window events
+               (.on win "close" (fn [e]
+                                  (.preventDefault e)
+                                  (let [web-contents (. win -webContents)]
+                                    (.send web-contents "persistent-dbs"))
+                                  (async/go
+                                    ;; FIXME: What if persistence failed?
+                                    (let [_ (async/<! state/persistent-dbs-chan)]
+                                      (if (or @*quitting? (not mac?))
+                                        (when-let [win @*win]
+                                          (destroy-window! win)
+                                          (reset! *win nil))
+                                        (do (.preventDefault ^js/Event e)
+                                            (.hide win)))))))
+               (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
+               (.on app "activate" #(if @*win (.show win)))))))))
 
 (defn start []
   (js/console.log "Main - start")

@@ -152,11 +152,13 @@
           property-names (keys properties)]
       (and (every? #(contains? #{:title :filters} %) property-names)
            (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
-             (or
-              (empty? (rest ast))
-              (every? (fn [[[typ break-lines]] _]
-                        (and (= typ "Paragraph")
-                             (every? #(= % ["Break_Line"]) break-lines))) (rest ast))))))))
+             (and
+              (= "Properties" (ffirst (first ast)))
+              (or
+               (empty? (rest ast))
+               (every? (fn [[[typ break-lines]] _]
+                         (and (= typ "Paragraph")
+                              (every? #(= % ["Break_Line"]) break-lines))) (rest ast)))))))))
 
 (defn with-dummy-block
   ([blocks format]

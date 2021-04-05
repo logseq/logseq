@@ -39,9 +39,13 @@
               :sidebar?   true
               :repo       repo}))
 
-(rum/defc page-graph < db-mixins/query
-  [page]
-  (let [theme (:ui/theme @state/state)
+(rum/defc page-graph < db-mixins/query rum/reactive
+  []
+  (let [page (or
+              (and (= :page (state/sub [:route-match :data :name]))
+                   (state/sub [:route-match :path-params :name]))
+              (date/today))
+        theme (:ui/theme @state/state)
         dark? (= theme "dark")
         graph (if (util/uuid-string? page)
                 (graph-handler/build-block-graph (uuid page) theme)
@@ -50,7 +54,7 @@
       [:div.sidebar-item.flex-col.flex-1
        (graph-2d/graph
         (graph/build-graph-opts
-         graph dark? false
+         graph dark?
          {:width  600
           :height 600}))])))
 
@@ -100,8 +104,8 @@
     [(t :right-side-bar/help) (onboarding/help)]
 
     :page-graph
-    [(str (t :right-side-bar/graph-ref) (db-model/get-page-original-name block-data))
-     (page-graph block-data)]
+    [(str (t :right-side-bar/page-graph))
+     (page-graph)]
 
     :block-ref
     (when-let [block (db/entity repo [:block/uuid (:block/uuid (:block block-data))])]
@@ -183,7 +187,7 @@
                (if collapse?
                  (svg/caret-right)
                  (svg/caret-down))]
-              [:div.ml-1
+              [:div.ml-1.font-medium
                title]]
              (close #(state/sidebar-remove-block! idx))]
             [:div {:class (if collapse? "hidden" "initial")}

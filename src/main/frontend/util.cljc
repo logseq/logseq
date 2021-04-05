@@ -39,7 +39,7 @@
 #?(:cljs
     (defn ios?
       []
-      (not (nil? (re-find #"iPad|iPhone|iPod" js/navigator.userAgent)))))
+      (utils/ios)))
 
 #?(:cljs
     (defn safari?
@@ -610,11 +610,15 @@
   (when-let [first-index (string/index-of s pattern)]
     (str new-value (subs s (+ first-index (count pattern))))))
 
-(defn replace-last [pattern s new-value]
-  (when-let [last-index (string/last-index-of s pattern)]
-    (concat-without-spaces
-     (subs s 0 last-index)
-     new-value)))
+(defn replace-last
+  ([pattern s new-value]
+   (replace-last pattern s new-value true))
+  ([pattern s new-value space?]
+   (when-let [last-index (string/last-index-of s pattern)]
+     (let [prefix (subs s 0 last-index)]
+       (if space?
+         (concat-without-spaces prefix new-value)
+         (str prefix new-value))))))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
@@ -762,6 +766,12 @@
      (and input
           (= (count (.-value input))
              (.-selectionStart input)))))
+
+#?(:cljs
+   (defn input-selected?
+     [input]
+     (not= (.-selectionStart input)
+           (.-selectionEnd input))))
 
 #?(:cljs
     (defn get-selected-text
@@ -1052,7 +1062,7 @@
       (when (some? style)
         (let [parent-node (d/sel1 :head)
               id "logseq-custom-theme-id"
-              old-link-element (d/sel1 id)
+              old-link-element (d/sel1 (str "#" id))
               style (if (string/starts-with? style "http")
                       style
                       (str "data:text/css;charset=utf-8," (js/encodeURIComponent style)))]

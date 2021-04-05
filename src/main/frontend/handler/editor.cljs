@@ -79,15 +79,18 @@
     (let [{:keys [selection-start selection-end format value block edit-id input]} m
           empty-selection? (= selection-start selection-end)
           pattern (pattern-fn format)
-          new-value (str
-                     (subs value 0 selection-start)
-                     pattern
-                     (subs value selection-start selection-end)
-                     pattern
-                     (subs value selection-end))]
+          pattern-count (count pattern)
+          prefix (subs value 0 selection-start)
+          wrapped-value (str pattern
+                             (subs value selection-start selection-end)
+                             pattern)
+          postfix (subs value selection-end)
+          new-value (str prefix wrapped-value postfix)]
       (state/set-edit-content! edit-id new-value)
-      (when empty-selection?
-        (util/cursor-move-back input (count pattern))))))
+      (if empty-selection?
+        (util/cursor-move-back input (count pattern))
+        (let [new-pos (count (str prefix wrapped-value))]
+          (util/move-cursor-to input new-pos))))))
 
 (defn bold-format! []
   (format-text! config/get-bold))
@@ -309,6 +312,7 @@
                       after-blocks)]
     [after-blocks @block-and-children-content @last-child-end-pos]))
 
+;; FIXME: children' :block/path-ref-pages
 (defn compute-retract-refs
   "Computes old references to be retracted."
   [eid {:block/keys [ref-pages ref-blocks]} old-ref-pages old-ref-blocks]
@@ -379,6 +383,7 @@
              content (if (and (seq properties) (text/properties-hidden? properties))
                        (text/remove-properties! content)
                        content)
+             content (text/remove-level-spaces content format true)
              content-length (count content)
              text-range (cond
                           (and (> tail-len 0) (>= (count content) tail-len))
@@ -720,7 +725,6 @@
                   (when (seq files)
                     (file-handler/alter-files repo files opts)))))
           (state/set-editor-op! nil))]
-
     ;; Replace with batch transactions
     (state/add-tx! transact-fn)
 
@@ -1443,7 +1447,10 @@
        (when (and (if check-idle? (state/input-idle? repo) true)
                   (not (state/get-editor-show-page-search?))
                   (not (state/get-editor-show-page-search-hashtag?))
-                  (not (state/get-editor-show-block-search?)))
+                  (not (state/get-editor-show-block-search?))
+                  (not (state/get-editor-show-date-picker?))
+                  (not (state/get-editor-show-template-search?))
+                  (not (state/get-editor-show-input)))
          (state/set-editor-op! :auto-save)
          (try
            (let [input-id (state/get-edit-input-id)
@@ -1525,7 +1532,9 @@
   [format url file-name image?]
   (case (keyword format)
     :markdown (util/format (str (when image? "!") "[%s](%s)") file-name url)
-    :org (util/format "[[%s]]" url)
+    :org (if image?
+           (util/format "[[%s]]" url)
+           (util/format "[[%s][%s]]" url file-name))
     nil))
 
 (defn- get-asset-link
@@ -1551,22 +1560,28 @@
                                    prefix) "/" "_"))
              prefix (and prefix (subs prefix 0 (string/last-index-of prefix ".")))]
          (save-assets! repo repo-dir assets-dir files
-                       (fn [index]
-                         (str prefix "_" (.now js/Date) "_" index)))))))
+                       (fn [index file-base]
+                         (str (string/replace file-base " " "_") "_" (.now js/Date) "_" index)))))))
   ([repo dir path files gen-filename]
    (p/all
     (for [[index ^js file] (map-indexed vector files)]
-      (let [ext (.-name file)
-            ext (if ext (subs ext (string/last-index-of ext ".")) "")
-            filename (str (gen-filename index file) ext)
-            filename (str path "/" filename)]
+      (do
+        ;; WARN file name maybe fully qualified path when paste file
+        (let [file-name (util/node-path.basename (.-name file))
+              [file-base ext] (if file-name
+                                (let [last-dot-index (string/last-index-of file-name ".")]
+                                  [(subs file-name 0 last-dot-index)
+                                   (subs file-name last-dot-index)])
+                                ["" ""])
+              filename (str (gen-filename index file-base) ext)
+              filename (str path "/" filename)]
                                         ;(js/console.debug "Write asset #" dir filename file)
-        (if (util/electron?)
-          (let [from (.-path file)]
-            (p/then (js/window.apis.copyFileToAssets dir filename from)
-                    #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
-          (p/then (fs/write-file! repo dir filename (.stream file) nil)
-                  #(p/resolved [filename file]))))))))
+         (if (util/electron?)
+           (let [from (.-path file)]
+             (p/then (js/window.apis.copyFileToAssets dir filename from)
+                     #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
+           (p/then (fs/write-file! repo dir filename (.stream file) nil)
+                   #(p/resolved [filename file])))))))))
 
 (defonce *assets-url-cache (atom {}))
 
@@ -1970,16 +1985,12 @@
 (defn expand!
   []
   (when-let [current-block (state/get-edit-block)]
-    (expand/expand! current-block)
-    (state/set-collapsed-state! (:block/uuid current-block)
-                                false)))
+    (expand/expand! current-block)))
 
 (defn collapse!
   []
   (when-let [current-block (state/get-edit-block)]
-    (expand/collapse! current-block)
-    (state/set-collapsed-state! (:block/uuid current-block)
-                                true)))
+    (expand/collapse! current-block)))
 
 (defn cycle-collapse!
   [e]
@@ -2416,8 +2427,9 @@
 
 (defn- on-arrow-move-to-boundray
   [state input e direction]
-  (when (or (and (= :left direction) (util/input-start? input))
-            (and (= :right direction) (util/input-end? input)))
+  (when (and (not (util/input-selected? input))
+             (or (and (= :left direction) (util/input-start? input))
+             (and (= :right direction) (util/input-end? input))))
     (move-to-block-when-cross-boundrary state e direction)))
 
 (defn keydown-arrow-handler

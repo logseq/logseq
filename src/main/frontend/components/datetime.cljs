@@ -110,7 +110,7 @@
                                (let [{:keys [block typ show?]} block-data
                                      block-id (or (:block/uuid (state/get-edit-block))
                                                   (:block/uuid block))
-                                     typ (or typ @commands/*current-command)]
+                                     typ (or @commands/*current-command typ)]
                                  (editor-handler/set-block-timestamp! block-id
                                                                       typ
                                                                       text)
@@ -141,8 +141,8 @@
                                               (string/lower-case current-command)))
         date (get @*timestamp :date)]
     (when (state/sub :editor/show-date-picker?)
-      [:div#date-time-picker.flex.flex-row {:on-click (fn [e]
-                                                        (util/stop e))}
+      [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
+                                            :on-mouse-down (fn [e] (util/stop e))}
        (ui/datepicker
         date
         {:deadline-or-schedule? deadline-or-schedule?

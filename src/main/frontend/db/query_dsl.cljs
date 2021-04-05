@@ -387,7 +387,7 @@
     (let [query-string (template/resolve-dynamic-template! query-string)]
       (when-not (string/blank? query-string)
         (let [{:keys [query sort-by blocks?] :as result} (parse repo query-string)]
-          (if (string? result)
+          (if (and (string? result) (not (string/includes? result " ")))
             (if (= "\"" (first result) (last result))
               (subs result 1 (dec (count result)))
               result)

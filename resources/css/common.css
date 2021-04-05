@@ -553,7 +553,7 @@ h1.title {
   margin-bottom: 1.5rem;
   color: var(--ls-title-text-color, #222);
   font-size: var(--ls-page-title-size, 36px);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .block-highlight,
@@ -733,7 +733,6 @@ mark {
     color: #262626;
     padding: 2px 4px;
     border-radius: 3px;
-    font-size: 14px;
 }
 
 /* search results */
@@ -801,4 +800,12 @@ a.tooltip-priority {
 
 .excalidraw hr {
     margin: 0;
+}
+
+.text-link {
+    color: var(--ls-primary-text-color);
+}
+
+.katex * {
+    border-color: var(--ls-primary-text-color);
 }
