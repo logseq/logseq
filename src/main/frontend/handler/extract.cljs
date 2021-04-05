@@ -33,7 +33,7 @@
                   (utf8/substring utf8-content
                                   (:start-pos meta)))]
     (when content
-      (text/remove-level-spaces content format true))))
+      (text/remove-level-spaces content format))))
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks

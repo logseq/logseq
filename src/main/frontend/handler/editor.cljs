@@ -315,21 +315,9 @@
 ;; FIXME: children' :block/path-ref-pages
 (defn compute-retract-refs
   "Computes old references to be retracted."
-  [eid {:block/keys [ref-pages ref-blocks]} old-ref-pages old-ref-blocks]
-  (let [ref-pages-id    (map #(:db/id (db/get-page (:block/name %))) ref-pages)
-        retracted-pages (reduce (fn [done current]
-                                  (if (some #(= (:db/id current) %) ref-pages-id)
-                                    done
-                                    (conj done (:db/id current))))
-                                [] old-ref-pages)
-        ref-blocks-id    (map #(:db/id (db/get-page (str (last %)))) ref-blocks)
-        retracted-blocks (reduce (fn [done current]
-                                   (if (some #(= (:db/id current) %) ref-blocks-id)
-                                     done
-                                     (conj done (:db/id current))))
-                                 [] old-ref-blocks)]
-    ;; removes refs
-    (mapv (fn [ref] [:db/retract eid :block/refs ref]) retracted-pages)))
+  [eid {:block/keys [refs]} old-refs]
+  ;; TODO:
+  )
 
 (defn- block-with-title
   [content format]
@@ -463,8 +451,7 @@
            :error)
           (state/set-editor-op! nil))
         ;; create the file
-        (let [value (re-build-block-value nil format value)
-              content (str (util/default-content-with-title format
+        (let [content (str (util/default-content-with-title format
                              (or (:block/original-name page)
                                  (:block/name page)))
                            value)]
@@ -478,114 +465,28 @@
               (edit-last-block-for-new-page! last-block :max)
               (state/set-editor-op! nil))))))))
 
-(defn wrap-parse-block
-  [{format :block/format :as block}]
-  (let [ks (->
-             (format/to-edn (:block/content block) format nil)
-             ffirst
-             second
-             (select-keys [:title :meta :priority])
-             (util/remove-nils)
-             (block/block-keywordize))]
-    (merge block ks)))
+(defn- wrap-parse-block
+  [{:block/keys [content format] :as block}]
+  (let [content' (str (config/get-block-pattern format) " "
+                      (string/triml content))]
+    (-> (block/parse-block (assoc block :block/content content'))
+       (dissoc :block/top?
+               :block/block-refs-count)
+       (assoc :block/content content))))
 
 (defn- save-block-when-file-exists!
-  [repo block e new-properties value {:keys [indent-left? rebuild-content? chan chan-callback]}]
-  (let [{:block/keys [uuid file page  pre-block? ref-pages ref-blocks]} block
-        file (db/entity repo (:db/id file))
-        file-path (:file/path file)
-        format (format/get-format file-path)
-        file-content (db/get-file repo file-path)
-        value (get-block-new-value block file-content value)
-        value (if rebuild-content?
-                (rebuild-block-content value format)
-                value)
-        block (assoc block :block/content value)
-        {:keys [blocks pages start-pos end-pos]} (if pre-block?
-                                                   (let [new-end-pos (utf8/length (utf8/encode value))]
-                                                     {:blocks [(assoc-in block [:block/meta :end-pos] new-end-pos)]
-                                                      :pages []
-                                                      :start-pos 0
-                                                      :end-pos new-end-pos})
-                                                   (block/parse-block block format))
-        block-retracted-attrs (when-not pre-block?
-                                (when-let [id (:db/id block)]
-                                  [[:db/retractEntity id]]))
-        [after-blocks block-children-content new-end-pos] (rebuild-after-blocks-indent-outdent repo file block (:end-pos (:block/meta block)) end-pos indent-left?)
-        retract-refs (compute-retract-refs (:db/id e) (first blocks) ref-pages ref-blocks)
-        page-id (:db/id page)
-        page-properties (when pre-block?
-                          (if (seq new-properties)
-                            [[:db/retract page-id :block/properties]
-                             {:db/id page-id
-                              :block/properties new-properties}]
-                            [[:db/retract page-id :block/properties]]))
-        page-tags (when-let [tags (:tags new-properties)]
-                    (mapv (fn [tag] {:block/name (string/lower-case tag)
-                                     :block/original-name tag}) tags))
-        page-alias (when-let [alias (:alias new-properties)]
-                     (map
-                      (fn [alias]
-                        {:block/original-name alias
-                         :block/name (string/lower-case alias)})
-                      (remove #{(:block/name page)} alias)))
-        pages (if (seq page-tags)
-                (concat pages page-tags)
-                pages)
-        pages (remove
-               (fn [page]
-                 (string/blank? (:block/name page)))
-               pages)
-        page-tags (when (and pre-block? (seq page-tags))
-                    (if (seq page-tags)
-                      [[:db/retract page-id :block/tags]
-                       {:db/id page-id
-                        :block/tags page-tags}]
-                      [[:db/retract page-id :block/tags]]))
-        page-alias (when (and pre-block? (seq page-alias))
-                     (if (seq page-alias)
-                       [[:db/retract page-id :block/alias]
-                        {:db/id page-id
-                         :block/alias page-alias}]
-                       [[:db/retract page-id :block/alias]]))]
-    (let [pre-block-ids (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
-          tx (concat pages block-retracted-attrs pre-block-ids blocks retract-refs
-               page-properties page-tags page-alias after-blocks)
-          tx-opts {:key :block/change
-                   :data (map (fn [block] (assoc block :block/page page)) blocks)}
-          new-content (new-file-content-indent-outdent
-                        block file-content value block-children-content new-end-pos indent-left?)
-          files [[file-path new-content]]
-          opts (when chan {:chan chan
-                           :chan-callback chan-callback})]
-
-      (profile
-        "Save block: "
-
-        (do
-          (->
-            (wrap-parse-block block)
-            (outliner-core/block)
-            (outliner-core/save-node))
-          (let [opts {:key :block/change
-                      :data [block]}]
-            (db/refresh repo opts))))
-
-     #_(profile
-       "Save block: "
-       (repo-handler/transact-react-and-alter-file!
-         repo tx tx-opts files opts)))
-
-    ;; fix editing template with multiple headings
-    (when (> (count blocks) 1)
-      (let [new-value (-> (text/remove-level-spaces (:block/content (first blocks)) (:block/format (first blocks)))
-                          (string/trim-newline))
-            edit-input-id (state/get-edit-input-id)]
-        (when edit-input-id
-          (state/set-edit-content! edit-input-id new-value))))
-
-    (when (or (seq retract-refs) pre-block?)
-      (ui-handler/re-render-root!))
+  [repo block e value opts]
+  (let [block (assoc block :block/content value)]
+    (profile
+     "Save block: "
+     (do
+       (->
+        (wrap-parse-block block)
+        (outliner-core/block)
+        (outliner-core/save-node))
+       (let [opts {:key :block/change
+                   :data [block]}]
+         (db/refresh repo opts))))
 
     (repo-handler/push-if-auto-enabled! repo)))
 
@@ -593,27 +494,14 @@
   ([block value]
    (save-block-if-changed! block value nil))
   ([block value
-    {:keys [indent-left? init-properties custom-properties remove-properties rebuild-content? chan chan-callback]
-     :or {rebuild-content? true
-          custom-properties nil
-          init-properties nil
-          remove-properties nil}
+    {:keys [indent-left? chan chan-callback]
      :as opts}]
-   (let [{:block/keys [uuid content meta file page dummy? format repo pre-block? content ref-pages ref-blocks]} block
+   (let [{:block/keys [uuid content file page format repo content properties]} block
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
-         block (assoc (with-block-meta repo block)
-                      :block/properties (into {} (:block/properties e)))
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
-         [old-properties new-properties] (when pre-block?
-                                           [(:block/properties (db/entity (:db/id page)))
-                                            (mldoc/parse-properties value format)])
-         properties (compute-new-properties block new-properties value
-                                            {:init-properties init-properties
-                                             :custom-properties custom-properties
-                                             :remove-properties remove-properties})
-         block-id (get properties "id")]
+         block-id (when (map? properties) (get properties "id"))]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
@@ -622,8 +510,7 @@
         :error)
 
        :else
-       (let [value (re-build-block-value block format value properties)
-             content-changed? (not= (string/trim content) (string/trim value))]
+       (let [content-changed? (not= (string/trim content) (string/trim value))]
          (when content-changed?
            (let [file (db/entity repo (:db/id file))]
              (cond
@@ -632,7 +519,7 @@
                (create-file-if-not-exists! repo format page value)
 
                (and file page)
-               (save-block-when-file-exists! repo block e new-properties value opts)
+               (save-block-when-file-exists! repo block e value opts)
 
                :else
                nil))))))))
@@ -686,16 +573,17 @@
                 (re-build-block-value block format value properties))
         value (rebuild-block-content value format)
         [new-content value] (new-file-content block file-content value)
-        parse-result (block/parse-block (assoc block :block/content value) format)
-        id-conflict? (some #(= original-id (:block/uuid %)) (next (:blocks parse-result)))
-        {:keys [blocks pages start-pos end-pos]}
+        parse-result (block/parse-block (assoc block :block/content value))
+        id-conflict? (= original-id (:block/uuid (:block parse-result)))
+        {:keys [block pages start-pos end-pos]}
         (if id-conflict?
           (let [new-value (string/replace
                            value
                            (re-pattern (str "(?i):(custom_)?id: " original-id))
                            "")]
-            (block/parse-block (assoc block :block/content new-value) format))
+            (block/parse-block (assoc block :block/content new-value)))
           parse-result)
+        blocks [block]
         after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
         files [[file-path new-content]]
         block-retracted-attrs (when-not pre-block?
@@ -1413,12 +1301,11 @@
 
 (defn save-block-aux!
   [block value format opts]
-  (let [value (text/remove-level-spaces value format true)
-        new-value (block/with-levels value format block)
+  (let [value (string/trim value)
         properties (with-timetracking-properties block value)]
     ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
     ;; maybe we shouldn't save the block/file in "will-unmount" event?
-    (save-block-if-changed! block new-value
+    (save-block-if-changed! block value
                             (merge
                              {:init-properties properties}
                              opts))))
@@ -2226,6 +2113,7 @@
   []
   (when-let [repo (state/get-current-repo)]
     (save-current-block-when-idle! {:check-idle? false})
+
     (when (string/starts-with? repo "https://") ; git repo
       (repo-handler/auto-push!))))
 

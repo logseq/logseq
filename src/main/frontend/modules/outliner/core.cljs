@@ -134,6 +134,7 @@
   [node]
   {:pre [(tree/satisfied-inode? node)]}
   (let [saved-node (tree/-save node)]
+    ;; Should it be async?
     (outliner-file/sync-to-file saved-node)))
 
 (defn insert-node-as-first-child
