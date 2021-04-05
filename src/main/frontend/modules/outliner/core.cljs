@@ -4,7 +4,6 @@
             [frontend.db.conn :as conn]
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.state :as outliner-state]
-            [frontend.modules.outliner.ref :as outliner-ref]
             [frontend.state :as state]
             [frontend.debug :as debug]
             [clojure.set :as set]
