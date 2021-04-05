@@ -56,11 +56,7 @@
     (ui/menu-link
      {:key "copy"
       :on-click editor-handler/copy-selection-blocks}
-     "Copy")
-    (ui/menu-link
-     {:key "make-todos"
-      :on-click editor-handler/bulk-make-todos}
-     (str "Make " (state/get-preferred-todo) "s"))]])
+     "Copy")]])
 
 ;; FIXME: Make it configurable
 (def block-background-colors

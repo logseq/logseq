@@ -39,6 +39,12 @@
   [conn id-or-look-ref]
   (d/transact! conn [[:db.fn/retractEntity id-or-look-ref]]))
 
+(defn del-blocks
+  [conn ids-or-look-refs]
+  (d/transact! conn
+    (map (fn [id-or-look-ref] [:db.fn/retractEntity id-or-look-ref])
+      ids-or-look-refs)))
+
 (defn get-journals
   [conn]
   (let [r (d/q '[:find (pull ?a [*])

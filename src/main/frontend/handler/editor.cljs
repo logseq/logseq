@@ -518,113 +518,113 @@
     [fst-block-text snd-block-text]))
 
 ;; TODO: remove later
-(defn insert-block-to-existing-file!
-  [repo block file page file-path file-content value fst-block-text snd-block-text pos format input {:keys [create-new-block? ok-handler new-level current-page blocks-container-id]}]
-  (let [{:block/keys [meta pre-block?]} block
-        original-id (:block/uuid block)
-        block-has-children? (seq (:block/children block))
-        edit-self? (and block-has-children? (zero? pos))
-        ;; Compute the new value, remove id property from the second block if exists
-        value (if create-new-block?
-                (str fst-block-text "\n" snd-block-text)
-                value)
-        snd-block-text (text/remove-id-property snd-block-text)
-        text-properties (if (zero? pos)
-                          {}
-                          (text/extract-properties fst-block-text))
-        old-hidden-properties (select-keys (:block/properties block) text/hidden-properties)
-        properties (merge old-hidden-properties
-                          text-properties)
-        value (if create-new-block?
-                (str
-                 (->
-                  (re-build-block-value block format fst-block-text properties)
-                  (string/trimr))
-                 "\n"
-                 (string/triml snd-block-text))
-                (re-build-block-value block format value properties))
-        value (rebuild-block-content value format)
-        [new-content value] (new-file-content block file-content value)
-        parse-result (block/parse-block (assoc block :block/content value))
-        id-conflict? (= original-id (:block/uuid (:block parse-result)))
-        {:keys [block pages start-pos end-pos]}
-        (if id-conflict?
-          (let [new-value (string/replace
-                           value
-                           (re-pattern (str "(?i):(custom_)?id: " original-id))
-                           "")]
-            (block/parse-block (assoc block :block/content new-value)))
-          parse-result)
-        blocks [block]
-        after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
-        files [[file-path new-content]]
-        block-retracted-attrs (when-not pre-block?
-                                (when-let [id (:db/id block)]
-                                  [[:db/retractEntity id]]))
-        _ (prn "transact-nf"
-            [block-retracted-attrs
-             pages
-             (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
-             blocks
-             after-blocks])
-        _ (prn " (first blocks) (first after-blocks)"  (first blocks) (first after-blocks))
-        transact-fn
-        (fn []
-          (let [tx (concat
-                     block-retracted-attrs
-                     pages
-                     (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
-                     blocks
-                     after-blocks)
-                opts {:key :block/insert
-                      :data (map (fn [block] (assoc block :block/page page)) blocks)}]
-            (do (repo-handler/update-last-edit-block)
-                #_(build-outliner-relation (first blocks) (first after-blocks))
-                (db/refresh repo opts)
-                (let [files (remove nil? files)]
-                  (when (seq files)
-                    (file-handler/alter-files repo files opts)))))
-          (state/set-editor-op! nil))]
-    ;; Replace with batch transactions
-    (state/add-tx! transact-fn)
+;; (defn insert-block-to-existing-file!
+;;   [repo block file page file-path file-content value fst-block-text snd-block-text pos format input {:keys [create-new-block? ok-handler new-level current-page blocks-container-id]}]
+;;   (let [{:block/keys [meta pre-block?]} block
+;;         original-id (:block/uuid block)
+;;         block-has-children? (seq (:block/children block))
+;;         edit-self? (and block-has-children? (zero? pos))
+;;         ;; Compute the new value, remove id property from the second block if exists
+;;         value (if create-new-block?
+;;                 (str fst-block-text "\n" snd-block-text)
+;;                 value)
+;;         snd-block-text (text/remove-id-property snd-block-text)
+;;         text-properties (if (zero? pos)
+;;                           {}
+;;                           (text/extract-properties fst-block-text))
+;;         old-hidden-properties (select-keys (:block/properties block) text/hidden-properties)
+;;         properties (merge old-hidden-properties
+;;                           text-properties)
+;;         value (if create-new-block?
+;;                 (str
+;;                  (->
+;;                   (re-build-block-value block format fst-block-text properties)
+;;                   (string/trimr))
+;;                  "\n"
+;;                  (string/triml snd-block-text))
+;;                 (re-build-block-value block format value properties))
+;;         value (rebuild-block-content value format)
+;;         [new-content value] (new-file-content block file-content value)
+;;         parse-result (block/parse-block (assoc block :block/content value))
+;;         id-conflict? (= original-id (:block/uuid (:block parse-result)))
+;;         {:keys [block pages start-pos end-pos]}
+;;         (if id-conflict?
+;;           (let [new-value (string/replace
+;;                            value
+;;                            (re-pattern (str "(?i):(custom_)?id: " original-id))
+;;                            "")]
+;;             (block/parse-block (assoc block :block/content new-value)))
+;;           parse-result)
+;;         blocks [block]
+;;         after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
+;;         files [[file-path new-content]]
+;;         block-retracted-attrs (when-not pre-block?
+;;                                 (when-let [id (:db/id block)]
+;;                                   [[:db/retractEntity id]]))
+;;         _ (prn "transact-nf"
+;;             [block-retracted-attrs
+;;              pages
+;;              (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
+;;              blocks
+;;              after-blocks])
+;;         _ (prn " (first blocks) (first after-blocks)"  (first blocks) (first after-blocks))
+;;         transact-fn
+;;         (fn []
+;;           (let [tx (concat
+;;                      block-retracted-attrs
+;;                      pages
+;;                      (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
+;;                      blocks
+;;                      after-blocks)
+;;                 opts {:key :block/insert
+;;                       :data (map (fn [block] (assoc block :block/page page)) blocks)}]
+;;             (do (repo-handler/update-last-edit-block)
+;;                 #_(build-outliner-relation (first blocks) (first after-blocks))
+;;                 (db/refresh repo opts)
+;;                 (let [files (remove nil? files)]
+;;                   (when (seq files)
+;;                     (file-handler/alter-files repo files opts)))))
+;;           (state/set-editor-op! nil))]
+;;     ;; Replace with batch transactions
+;;     (state/add-tx! transact-fn)
 
-    (let [blocks (remove (fn [block]
-                           (nil? (:block/content block))) blocks)
-          page-blocks-atom (db/get-page-blocks-cache-atom repo (:db/id page))
-          first-block-id (:block/uuid (first blocks))
-          [before-part after-part] (and page-blocks-atom
-                                        (split-with
-                                         #(not= first-block-id (:block/uuid %))
-                                         @page-blocks-atom))
-          after-part (rest after-part)
-          blocks-container-id (and blocks-container-id
-                                   (util/uuid-string? blocks-container-id)
-                                   (medley/uuid blocks-container-id))]
+;;     (let [blocks (remove (fn [block]
+;;                            (nil? (:block/content block))) blocks)
+;;           page-blocks-atom (db/get-page-blocks-cache-atom repo (:db/id page))
+;;           first-block-id (:block/uuid (first blocks))
+;;           [before-part after-part] (and page-blocks-atom
+;;                                         (split-with
+;;                                          #(not= first-block-id (:block/uuid %))
+;;                                          @page-blocks-atom))
+;;           after-part (rest after-part)
+;;           blocks-container-id (and blocks-container-id
+;;                                    (util/uuid-string? blocks-container-id)
+;;                                    (medley/uuid blocks-container-id))]
 
-      ;; WORKAROUND: The block won't refresh itself even if the content is empty.
-      (when edit-self?
-        (gobj/set input "value" ""))
+;;       ;; WORKAROUND: The block won't refresh itself even if the content is empty.
+;;       (when edit-self?
+;;         (gobj/set input "value" ""))
 
-      (when ok-handler
-        (ok-handler
-         (if edit-self? (first blocks) (last blocks))))
+;;       (when ok-handler
+;;         (ok-handler
+;;          (if edit-self? (first blocks) (last blocks))))
 
-      ;; update page blocks cache if exists
-      (when page-blocks-atom
-        (reset! page-blocks-atom (->> (concat before-part blocks after-part)
-                                      (remove nil?))))
+;;       ;; update page blocks cache if exists
+;;       (when page-blocks-atom
+;;         (reset! page-blocks-atom (->> (concat before-part blocks after-part)
+;;                                       (remove nil?))))
 
-      ;; update block children cache if exists
-      (when blocks-container-id
-        (let [blocks-atom (db/get-block-blocks-cache-atom repo blocks-container-id)
-              [before-part after-part] (and blocks-atom
-                                            (split-with
-                                             #(not= first-block-id (:block/uuid %))
-                                             @blocks-atom))
-              after-part (rest after-part)]
-          (and blocks-atom
-               (reset! blocks-atom (->> (concat before-part blocks after-part)
-                                        (remove nil?)))))))))
+;;       ;; update block children cache if exists
+;;       (when blocks-container-id
+;;         (let [blocks-atom (db/get-block-blocks-cache-atom repo blocks-container-id)
+;;               [before-part after-part] (and blocks-atom
+;;                                             (split-with
+;;                                              #(not= first-block-id (:block/uuid %))
+;;                                              @blocks-atom))
+;;               after-part (rest after-part)]
+;;           (and blocks-atom
+;;                (reset! blocks-atom (->> (concat before-part blocks after-part)
+;;                                         (remove nil?)))))))))
 
 (defn outliner-insert-block!
   [current-block new-block child?]
@@ -884,16 +884,12 @@
     (let [repo (or repo (state/get-current-repo))
           block (db/pull repo '[*] [:block/uuid uuid])]
       (when block
-        (let [file-path (:file/path (db/entity repo (:db/id file)))
-              file-content (db/get-file repo file-path)
-              after-blocks (rebuild-after-blocks repo file (:end-pos meta) (:start-pos meta))
-              new-content (utf8/delete! file-content (:start-pos meta) (:end-pos meta))]
-          (->
-            (outliner-core/block block)
-            (outliner-core/delete-node))
-          (db/refresh repo {:key :block/change :data [block]})
-          (when (or (seq ref-pages) (seq ref-blocks))
-            (ui-handler/re-render-root!)))))))
+        (->
+         (outliner-core/block block)
+         (outliner-core/delete-node))
+        (db/refresh repo {:key :block/change :data [block]})
+        (when (or (seq ref-pages) (seq ref-blocks))
+          (ui-handler/re-render-root!))))))
 
 (defn delete-block!
   [state repo e]
@@ -906,68 +902,27 @@
         (when (> page-blocks-count 1)
           (do
             (util/stop e)
-            ;; delete block, edit previous block
-            (let [block (db/pull [:block/uuid block-id])
-                  block-parent (gdom/getElement block-parent-id)
-                  sibling-block (get-prev-block-non-collapsed block-parent)]
-              (delete-block-aux! block dummy?)
-              (when (and repo sibling-block)
-                (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-                  (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
-                    (let [original-content (util/trim-safe (:block/content block))
-                          new-value (str original-content " " (string/triml value))
-                          tail-len (count (string/triml value))
-                          pos (max
-                                (if original-content
-                                  (utf8/length (utf8/encode (text/remove-level-spaces original-content format)))
-                                  0)
-                                0)]
-                      (edit-block! block pos format id
-                        {:custom-content new-value
-                         :tail-len tail-len})))))))))
+            (let [block (db/pull [:block/uuid block-id])]
+              (delete-block-aux! block dummy?)))))
       (state/set-editor-op! nil))))
 
+;; Must be siblings?
 (defn delete-blocks!
   [repo block-uuids]
   (when (seq block-uuids)
-    (let [current-page (state/get-current-page)
-          top-block-id (and current-page
-                            (util/uuid-string? current-page)
-                            (medley/uuid current-page))
-          top-block? (and top-block-id
-                          (= top-block-id (first block-uuids)))]
-      (let [blocks (db/pull-many repo '[*] (mapv (fn [id]
-                                                   [:block/uuid id])
-                                                 block-uuids))
-            page (db/entity repo (:db/id (:block/page (first blocks))))
-            first-block (first blocks)
-            last-block (last blocks)
-            file (db/entity repo (:db/id (:block/file first-block)))
-            file-path (:file/path file)
-            file-content (db/get-file repo file-path)
-            start-pos (:start-pos (:block/meta first-block))
-            end-pos (:end-pos (:block/meta last-block))
-            after-blocks (rebuild-after-blocks repo file end-pos start-pos)
-            new-content (utf8/delete! file-content start-pos end-pos)
-            retract-blocks-tx (mapv
-                               (fn [uuid]
-                                 [:db.fn/retractEntity [:block/uuid uuid]])
-                               block-uuids)
-            tx-data (concat
-                     retract-blocks-tx
-                     after-blocks
-                     [{:file/path file-path}])]
-        (repo-handler/transact-react-and-alter-file!
-         repo
-         tx-data
-         {:key :block/change
-          :data blocks}
-         [[file-path new-content]])
-        (when top-block?
-          (route-handler/redirect! {:to :page
-                                    :path-params {:name (:block/name page)}})
-          (ui-handler/re-render-root!))
-        (repo-handler/push-if-auto-enabled! repo)))))
+    (let [lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
+          blocks (db/pull-many repo '[*] lookup-refs)
+          parent (:block/parent (first blocks))
+          top-level-blocks (filter #(= parent (:block/parent %)) blocks)]
+      (if (= 1 (count top-level-blocks))
+        (delete-block-aux! (first blocks) false)
+        (let [start-node (outliner-core/block (first top-level-blocks))
+              end-node (outliner-core/block (last top-level-blocks))]
+          (outliner-core/delete-nodes start-node end-node lookup-refs)
+          (let [opts {:key :block/change
+                      :data blocks}]
+            (db/refresh repo opts))
+          (repo-handler/push-if-auto-enabled! repo))))))
 
 (defn remove-block-property!
   [block-id key]
@@ -1848,6 +1803,7 @@
     (expand/cycle!)))
 
 (defn on-tab
+  "direction = :left|:right, only indent when blocks are siblings"
   [direction]
   (fn [e]
     (when-let [repo (state/get-current-repo)]
@@ -1855,121 +1811,23 @@
         (cond
           (seq blocks)
           (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                       (medley/uuid id))) blocks)
-                ids (->> (mapcat #(let [children (vec (db/get-block-children-ids repo %))]
-                                    (cons % children)) ids)
-                         (distinct))
-                blocks (db/pull-many '[*] (map (fn [id] [:block/uuid id]) ids))
-                block (first blocks)
-                format (:block/format block)
-                start-pos (get-in block [:block/meta :start-pos])
-                old-end-pos (get-in (last blocks) [:block/meta :end-pos])
-                pattern (config/get-block-pattern format)
-                last-start-pos (atom start-pos)
-                blocks (doall
-                        (map (fn [block]
-                               (let [content (:block/content block)
-                                     level (:block/level block)
-                                     content' (if (= :left direction)
-                                                (subs content 1)
-                                                (str pattern content))
-                                     end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
-                                     block (assoc block
-                                                  :block/content content'
-                                                  :block/level (if (= direction :left)
-                                                                 (dec level)
-                                                                 (inc level))
-                                                  :block/meta (merge
-                                                               (:block/meta block)
-                                                               {:start-pos @last-start-pos
-                                                                :end-pos end-pos}))]
-                                 (reset! last-start-pos end-pos)
-                                 block))
-                             blocks))
-                file-id (:db/id (:block/file block))
-                file (db/entity file-id)
-                page (:block/page block)
-                after-blocks (rebuild-after-blocks repo file old-end-pos @last-start-pos)
-                ;; _ (prn {:blocks (map (fn [h] (select-keys h [:block/content :block/meta])) blocks)
-                ;;         :after-blocks after-blocks
-                ;;         :last-start-pos @last-start-pos})
-                file-path (:file/path file)
-                file-content (db/get-file file-path)
-                new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))
-                blocks (map (fn [b] (dissoc b :block/children)) blocks)]
-            (repo-handler/transact-react-and-alter-file!
-             repo
-             (concat
-              blocks
-              after-blocks)
-             {:key :block/change
-              :data (map (fn [block] (assoc block :block/page page)) blocks)}
-             [[file-path new-content]]))
+                                       (medley/uuid id))) blocks)]
+
+            ;; (repo-handler/transact-react-and-alter-file!
+            ;;  repo
+            ;;  (concat
+            ;;   blocks
+            ;;   after-blocks)
+            ;;  {:key :block/change
+            ;;   :data (map (fn [block] (assoc block :block/page page)) blocks)}
+            ;;  [[file-path new-content]])
+            )
 
           (gdom/getElement "date-time-picker")
           nil
 
           :else
           (cycle-collapse! e))))))
-
-(defn bulk-make-todos
-  [state e]
-  (when-let [repo (state/get-current-repo)]
-    (let [blocks (seq (state/get-selection-blocks))]
-      (if (seq blocks)
-        (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                     (medley/uuid id))) blocks)
-              ids (->> (mapcat #(let [children (vec (db/get-block-children-ids repo %))]
-                                  (cons % children)) ids)
-                       (distinct))
-              blocks (db/pull-many '[*] (map (fn [id] [:block/uuid id]) ids))
-              block (first blocks)
-              format (:block/format block)
-              start-pos (get-in block [:block/meta :start-pos])
-              old-end-pos (get-in (last blocks) [:block/meta :end-pos])
-              pattern (config/get-block-pattern format)
-              last-start-pos (atom start-pos)
-              blocks (doall
-                      (map (fn [block]
-                             (let [content (:block/content block)
-                                   [prefix content] (if-let [col (util/split-first " " content)]
-                                                      col
-                                                      [content ""])
-                                   level (:block/level block)
-                                   new-marker (state/get-preferred-todo)
-                                   content' (string/replace-first content
-                                                                  format/marker-pattern
-                                                                  (str new-marker " "))
-                                   content' (str prefix " " content')
-                                   end-pos (+ @last-start-pos (utf8/length (utf8/encode content')))
-                                   block (assoc block
-                                                :block/marker new-marker
-                                                :block/content content'
-                                                :block/meta (merge
-                                                             (:block/meta block)
-                                                             {:start-pos @last-start-pos
-                                                              :end-pos end-pos}))]
-                               (reset! last-start-pos end-pos)
-                               block))
-                           blocks))
-              file-id (:db/id (:block/file block))
-              file (db/entity file-id)
-              page (:block/page block)
-              after-blocks (rebuild-after-blocks repo file old-end-pos @last-start-pos)
-              file-path (:file/path file)
-              file-content (db/get-file file-path)
-              new-content (utf8/insert! file-content start-pos old-end-pos (apply str (map :block/content blocks)))]
-          (profile
-           "Indent/outdent: "
-           (repo-handler/transact-react-and-alter-file!
-            repo
-            (concat
-             blocks
-             after-blocks)
-            {:key :block/change
-             :data (map (fn [block] (assoc block :block/page page)) blocks)}
-            [[file-path new-content]])))
-        (cycle-collapse! e)))))
 
 (defn- get-link
   [format link label]

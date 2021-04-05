@@ -187,6 +187,22 @@
         (tree/-save new-right-node)))
     (outliner-file/sync-to-file node)))
 
+(defn delete-nodes
+  "Delete nodes from the tree, start-node and end-node must be siblings."
+  [start-node end-node block-ids]
+  {:pre [(tree/satisfied-inode? start-node)
+         (tree/satisfied-inode? end-node)]}
+  (when (= (tree/-get-parent-id start-node)
+           (tree/-get-parent-id end-node))
+    (let [right-node (tree/-get-right end-node)
+          conn (conn/get-conn false)]
+      (db-outliner/del-blocks conn block-ids)
+      (when (tree/satisfied-inode? right-node)
+        (let [left-node (tree/-get-left start-node)
+              new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
+          (tree/-save new-right-node)))
+      (outliner-file/sync-to-file start-node))))
+
 (defn move-subtree
   "Move subtree to a destination position in the relation tree.
   Args:
