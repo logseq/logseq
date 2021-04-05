@@ -157,79 +157,6 @@
          (let [pos (diff/find-position markup range)]
            (util/set-caret-pos! node pos)))))))
 
-(defn block-content-join-newlines
-  [prefix value postfix]
-  (str
-   (if (or (= "" prefix)
-           (= "\n" (last prefix)))
-     ""
-     "\n")
-   (string/trim value)
-   (if (= "\n" (first postfix))
-     ""
-     "\n")))
-
-(defn get-current-input-node
-  []
-  (let [edit-input-id (state/get-edit-input-id)]
-    (and edit-input-id (gdom/getElement edit-input-id))))
-
-(defn get-current-input-value
-  []
-  (let [edit-input-id (state/get-edit-input-id)
-        input (and edit-input-id (gdom/getElement edit-input-id))]
-    (when input
-      (gobj/get input "value"))))
-
-(defn new-file-content
-  [{:block/keys [content meta dummy?] :as block} file-content value]
-  (let [utf8-content (utf8/encode file-content)
-        prefix (utf8/substring utf8-content 0 (:start-pos meta))
-        postfix (let [end-pos (if dummy?
-                                (:start-pos meta)
-                                (:end-pos meta))]
-                  (utf8/substring utf8-content end-pos))
-        value (block-content-join-newlines prefix value postfix)]
-    [(str prefix value postfix)
-     value]))
-
-(defn get-block-new-value
-  [{:block/keys [content meta dummy?] :as block} file-content value]
-  (let [utf8-content (utf8/encode file-content)
-        prefix (utf8/substring utf8-content 0 (:start-pos meta))
-        postfix (let [end-pos (if dummy?
-                                (:start-pos meta)
-                                (:end-pos meta))]
-                  (utf8/substring utf8-content end-pos))]
-    (block-content-join-newlines prefix value postfix)))
-
-(defn new-file-content-indent-outdent
-  [{:block/keys [content meta dummy?] :as block} file-content value block-with-children-content last-child-end-pos indent-left?]
-  (let [utf8-content (utf8/encode file-content)
-        prefix (utf8/substring utf8-content 0 (:start-pos meta))
-        last-child-end-pos (if (some? indent-left?) last-child-end-pos nil)
-        end-pos (or
-                 last-child-end-pos
-                 (if dummy?
-                   (:start-pos meta)
-                   (:end-pos meta)))
-        postfix (utf8/substring utf8-content end-pos)
-        block-children-value (block-content-join-newlines prefix block-with-children-content postfix)]
-    (str prefix block-children-value postfix)))
-
-(defn- with-block-meta
-  [repo block]
-  (if (:block/dummy? block)
-    (if-let [page-id (:db/id (:block/page block))]
-      (let [page-name (:block/name (db/entity repo page-id))
-            end-pos (db/get-block-page-end-pos repo page-name)]
-        (assoc block :block/meta {:start-pos end-pos
-                                  :end-pos end-pos}))
-      block)
-    (if-let [meta (:block/meta (db/entity repo [:block/uuid (:block/uuid block)]))]
-      (assoc block :block/meta meta)
-      block)))
-
 (defn highlight-block!
   [block-uuid]
   (let [blocks (array-seq (js/document.getElementsByClassName (str block-uuid)))]
@@ -244,101 +171,12 @@
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
-(defn rebuild-blocks-meta
-  [start-pos blocks]
-  (let [last-start-pos (atom start-pos)]
-    (mapv
-     (fn [{:block/keys [uuid meta] :as block}]
-       (let [old-start-pos (:start-pos meta)
-             old-end-pos (:end-pos meta)
-             new-end-pos (if old-end-pos
-                           (+ @last-start-pos (- old-end-pos old-start-pos)))
-             new-meta {:start-pos @last-start-pos
-                       :end-pos new-end-pos}]
-         (reset! last-start-pos new-end-pos)
-         {:block/uuid uuid
-          :block/meta new-meta}))
-     blocks)))
-
-(defn rebuild-after-blocks
-  [repo file before-end-pos new-end-pos]
-  (let [file-id (:db/id file)
-        after-blocks (db/get-file-after-blocks-meta repo file-id before-end-pos)]
-    (rebuild-blocks-meta new-end-pos after-blocks)))
-
-(defn rebuild-after-blocks-indent-outdent
-  [repo file block before-end-pos new-end-pos indent-left?]
-  (let [file-id (:db/id file)
-        after-blocks (db/get-file-after-blocks-meta repo file-id before-end-pos true)
-        last-start-pos (atom new-end-pos)
-        block-level (:block/level block)
-        next-leq-level? (atom false)
-        format (:block/format block)
-        block-and-children-content (atom (:block/content block))
-        last-child-end-pos (atom before-end-pos)
-        after-blocks (mapv
-                      (fn [{:block/keys [uuid meta level content] :as block}]
-                        (let [old-start-pos (:start-pos meta)
-                              old-end-pos (:end-pos meta)]
-                          (when (<= level block-level)
-                            (reset! next-leq-level? true))
-
-                          (let [[new-content offset] (cond
-                                                       (and (not @next-leq-level?) (true? indent-left?))
-                                                       [(subs content 1) -1]
-                                                       (and (not @next-leq-level?) (false? indent-left?))
-                                                       [(str (config/get-block-pattern format) content) 1]
-                                                       :else
-                                                       [nil 0])
-                                new-end-pos (if old-end-pos
-                                              (+ @last-start-pos
-                                                 (- old-end-pos old-start-pos)
-                                                 offset))
-                                new-meta {:start-pos @last-start-pos
-                                          :end-pos new-end-pos}]
-                            (reset! last-start-pos new-end-pos)
-                            (when-not @next-leq-level?
-                              (do
-                                (reset! block-and-children-content (str @block-and-children-content new-content))
-                                (reset! last-child-end-pos old-end-pos)))
-
-                            (cond->
-                             {:block/uuid uuid
-                              :block/meta new-meta}
-                              (and (some? indent-left?) (not @next-leq-level?))
-                              (assoc :block/level (if indent-left? (dec level) (inc level)))
-                              (and new-content (not @next-leq-level?))
-                              (assoc :block/content new-content)))))
-                      after-blocks)]
-    [after-blocks @block-and-children-content @last-child-end-pos]))
-
 ;; FIXME: children' :block/path-ref-pages
 (defn compute-retract-refs
   "Computes old references to be retracted."
   [eid {:block/keys [refs]} old-refs]
   ;; TODO:
   )
-
-(defn- block-with-title
-  [content format]
-  (let [content-without-level-spaces (-> (text/remove-level-spaces content format))
-        content-without-level-spaces (str (when (= \n (first content-without-level-spaces))
-                                            "\n")
-                                          (string/trim content-without-level-spaces))
-        first-block (-> content-without-level-spaces
-                        (format/to-edn format)
-                        ffirst)]
-    (or (block/heading-block? first-block)
-        (block/paragraph-block? first-block)
-        (block/hiccup-block? first-block)
-        (block/definition-list-block? first-block))))
-
-(defn- rebuild-block-content
-  "We'll create an empty heading if the first parsed ast element is not a paragraph, definition list or some hiccup."
-  [content format]
-  (if (block-with-title content format)
-    content
-    (text/append-newline-after-level-spaces content format)))
 
 (defn- get-edit-input-id-with-block-id
   [block-id]
@@ -381,29 +219,6 @@
      (string/replace (gobj/get first-block "id")
                      "ls-block"
                      "edit-block"))))
-
-(defn- re-build-block-value
-  ([block format value]
-   (re-build-block-value block format value {}))
-  ([block format value properties]
-   (let [block-with-title? (boolean (block-with-title value format))]
-     (text/re-construct-block-properties format value properties
-                                         block-with-title?))))
-
-(defn- compute-new-properties
-  [block new-properties value {:keys [init-properties custom-properties remove-properties]}]
-  (let [text-properties (text/extract-properties value)
-        old-hidden-properties (select-keys (:block/properties block) text/hidden-properties)
-        properties (merge old-hidden-properties
-                          init-properties
-                          text-properties
-                          custom-properties)
-        remove-properties (->
-                           (set/difference (set (keys (:block/properties block)))
-                                           (set (keys text-properties))
-                                           text/hidden-properties)
-                           (set/union (set remove-properties)))]
-    (medley/remove-keys (fn [k] (contains? remove-properties k)) properties)))
 
 (defn- another-block-with-same-id-exists?
   [current-id block-id]
@@ -786,7 +601,7 @@
     {}))
 
 (defn check
-  [{:block/keys [uuid marker content meta file dummy? repeated?] :as block}]
+  [{:block/keys [uuid marker content file dummy? repeated?] :as block}]
   (let [new-content (string/replace-first content marker "DONE")
         new-content (if repeated?
                       (update-timestamps-content! block content)
@@ -795,7 +610,7 @@
                             {:custom-properties (with-marker-time block "DONE")})))
 
 (defn uncheck
-  [{:block/keys [uuid marker content meta file dummy?] :as block}]
+  [{:block/keys [uuid marker content file dummy?] :as block}]
   (let [marker (if (= :now (state/get-preferred-workflow))
                  "LATER"
                  "TODO")
@@ -832,13 +647,13 @@
         (util/set-caret-pos! current-input new-pos)))))
 
 (defn set-marker
-  [{:block/keys [uuid marker content meta file dummy? properties] :as block} new-marker]
+  [{:block/keys [uuid marker content file dummy? properties] :as block} new-marker]
   (let [new-content (string/replace-first content marker new-marker)]
     (save-block-if-changed! block new-content
                             {:custom-properties (with-marker-time block new-marker)})))
 
 (defn set-priority
-  [{:block/keys [uuid marker priority content meta file dummy?] :as block} new-priority]
+  [{:block/keys [uuid marker priority content file dummy?] :as block} new-priority]
   (let [new-content (string/replace-first content
                                           (util/format "[#%s]" priority)
                                           (util/format "[#%s]" new-priority))]
@@ -879,7 +694,7 @@
                   block)))))))))
 
 (defn delete-block-aux!
-  [{:block/keys [uuid meta content file repo ref-pages ref-blocks] :as block} dummy?]
+  [{:block/keys [uuid content file repo ref-pages ref-blocks] :as block} dummy?]
   (when-not dummy?
     (let [repo (or repo (state/get-current-repo))
           block (db/pull repo '[*] [:block/uuid uuid])]
@@ -902,8 +717,24 @@
         (when (> page-blocks-count 1)
           (do
             (util/stop e)
-            (let [block (db/pull [:block/uuid block-id])]
-              (delete-block-aux! block dummy?)))))
+            (let [block (db/pull [:block/uuid block-id])
+                  block-parent (gdom/getElement block-parent-id)
+                  sibling-block (get-prev-block-non-collapsed block-parent)]
+              (delete-block-aux! block dummy?)
+              (when (and repo sibling-block)
+                (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+                  (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+                    (let [original-content (util/trim-safe (:block/content block))
+                          new-value (str original-content " " (string/triml value))
+                          tail-len (count (string/triml value))
+                          pos (max
+                               (if original-content
+                                 (utf8/length (utf8/encode original-content))
+                                 0)
+                               0)]
+                      (edit-block! block pos format id
+                                   {:custom-content new-value
+                                    :tail-len tail-len})))))))))
       (state/set-editor-op! nil))))
 
 ;; Must be siblings?
