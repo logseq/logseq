@@ -53,7 +53,7 @@
   get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
   set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages page-empty? get-alias-source-page
-  set-file-content!]
+  set-file-content! has-children?]
 
  [frontend.db.react
   get-current-marker get-current-page get-current-priority get-handler-keys set-key-value

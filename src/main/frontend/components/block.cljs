@@ -2199,17 +2199,6 @@
                      blocks)]
        sections))))
 
-(rum/defc add-button < rum/reactive
-  [config ref? custom-query? blocks]
-  (let [editing (state/sub [:editor/editing?])]
-    (when-not (or ref? custom-query?
-                  (:block/dummy? (last blocks))
-                  (second (first editing)))
-      (when-let [last-block (last blocks)]
-        [:a.add-button-link {:on-click (fn []
-                                         (editor-handler/insert-new-block-without-save-previous! config last-block))}
-         svg/plus-circle]))))
-
 (defn blocks-container
   [blocks config]
   (let [blocks (map #(dissoc % :block/children) blocks)

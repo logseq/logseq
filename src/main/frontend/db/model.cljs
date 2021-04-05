@@ -953,6 +953,14 @@
       (filter (fn [block] (contains? parents (:db/id block))) blocks)
       blocks)))
 
+(defn has-children?
+  [repo block-id]
+  (let [db (conn/get-conn repo)]
+    (when-let [block (db-utils/entity [:block/uuid block-id])]
+      ;; perf: early stop
+      (let [result (d/datoms db :avet :block/parent (:db/id block))]
+        (boolean (seq result))))))
+
 ;; TODO: improve perf
 (defn with-children-refs
   [repo blocks]

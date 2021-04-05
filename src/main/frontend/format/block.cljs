@@ -539,11 +539,12 @@
                             (map :db/id))
            {:block/keys [refs]} new-block
            ref-pages (filter :block/name refs)
-           path-ref-pages (concat ref-pages parent-refs)]
-       (merge
-        block
-        new-block
-        {:block/path-refs path-ref-pages})))))
+           path-ref-pages (concat ref-pages parent-refs)
+           block (merge
+                  block
+                  new-block
+                  {:block/path-refs path-ref-pages})]
+       (if uuid (assoc block :block/uuid uuid) block)))))
 
 (defn with-levels
   [text format {:block/keys [level pre-block?]}]

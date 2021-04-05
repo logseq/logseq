@@ -638,15 +638,19 @@
                (reset! blocks-atom (->> (concat before-part blocks after-part)
                                         (remove nil?)))))))))
 
+;; TODO: fix for
+;; 1. collapsed parent
+;; 2. block as a container instead of a page
 (defn build-outliner-relation
   [current-block new-block]
   (let [[current-node new-node]
         (mapv outliner-core/block [current-block new-block])
-        has-children? (seq (tree/-get-children current-node))
-        new-is-sibling? (not has-children?)]
+        has-children? (db/has-children? (state/get-current-repo)
+                                        (tree/-get-id current-node))
+        sibling? (not has-children?)]
+    ;; perf: multiple file writes
     (outliner-core/save-node current-node)
-    (outliner-core/insert-node new-node current-node new-is-sibling?)))
-
+    (outliner-core/insert-node new-node current-node sibling?)))
 
 (defn insert-new-block-aux!
   [{:block/keys [uuid content repo format]
@@ -664,11 +668,11 @@
         repo (or repo (state/get-current-repo))
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
         current-block (-> (assoc block :block/content fst-block-text)
-                        (wrap-parse-block))
+                          (wrap-parse-block))
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge block new-m)
-                     (dissoc :db/id)
+                     (dissoc :db/id :block/collapsed?)
                      (wrap-parse-block))]
     (do
       (repo-handler/update-last-edit-block)
@@ -756,24 +760,6 @@
          :new-level (and last-child (:block/level block))
          :blocks-container-id (:id config)
          :current-page (state/get-current-page)})))))
-
-(defn insert-new-block-without-save-previous!
-  [config last-block]
-  (let [format (:block/format last-block)
-        id (:id config)
-        new-level (if (util/uuid-string? id)
-                    (inc (:block/level (db/entity [:block/uuid (medley/uuid id)])))
-                    2)]
-    (insert-new-block-aux!
-     last-block
-     (:block/content last-block)
-     {:create-new-block? true
-      :ok-handler
-      (fn [last-block]
-        (js/setTimeout #(edit-last-block-for-new-page! last-block :max) 50))
-      :new-level new-level
-      :blocks-container-id (:id config)
-      :current-page (state/get-current-page)})))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker] :as block} content]
