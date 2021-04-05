@@ -1,8 +1,9 @@
 (ns frontend.modules.outliner.tree
-  (:require [frontend.modules.outliner.ref :as outliner-ref]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [frontend.modules.outliner.utils :as outliner-u]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [frontend.util :as util]
+            [frontend.db :as db]))
 
 (defprotocol INode
   (-get-id [this])
@@ -24,60 +25,52 @@
   [node]
   (satisfies? INode node))
 
-(defn- prepare-blocks
-  "Preparing blocks: index blocks,filter ids,and update some keys."
-  [blocks]
-  (loop [[f & r] blocks
-         ids #{}
-         parents #{}
-         ;; {[parent left] db-id}
-         indexed-by-position {}]
-    (if (nil? f)
-      {:ids ids :parents parents :indexed-by-position indexed-by-position}
-      (let [f (cond-> f
-                (not (:block/dummy? f))
-                (dissoc f :block/meta))
-            {:block/keys [parent left] db-id :db/id} f
-            new-ids (conj ids db-id)
-            new-parents (conj parents (outliner-u/->db-id parent))
-            new-indexed-by-position
-            (let [position (mapv outliner-u/->db-id [parent left])]
-              (when (get indexed-by-position position)
-                (throw (js/Error. "Two block occupy the same position")))
-              (assoc indexed-by-position position f))]
-        (recur r new-ids new-parents new-indexed-by-position)))))
+(defn- get-children
+  [blocks parent]
+  (let [children (doall
+                  (-> (filter #(= (:block/parent %) {:db/id (:db/id parent)}) @blocks)
+                      (db/sort-by-left parent)))]
+    (reset! blocks (remove (set children) @blocks))
+    children))
 
-(defn get-children-from-memory
-  [parent-id indexed-by-position]
-  (loop [left parent-id
-         children []]
-    (if-let [{db-id :db/id :as child} (get indexed-by-position [parent-id left])]
-      (recur db-id (conj children child))
-      children)))
+(defn- with-children-and-refs
+  [block children]
+  (let [all-refs (->> (mapcat :block/refs children)
+                      (distinct))]
+    (assoc block
+           :block/children children
+           :block/refs-with-children all-refs)))
 
-(defn- clip-block
-  "For debug. It's should be removed."
-  [x]
-  (let [ks [:block/parent :block/left :block/pre-block? :block/uuid
-            :block/level :block/title :db/id :block/page]]
-    (map #(select-keys % ks) x)))
+(defn- blocks->vec-tree-aux
+  [blocks root]
+  (some->>
+   (get-children blocks root)
+   (map (fn [block]
+          (let [children (blocks->vec-tree-aux blocks block)]
+            (with-children-and-refs block children))))))
+
+(defn- get-root-and-page
+  [root-id]
+  (if (string? root-id)
+    (if (util/uuid-string? root-id)
+      [false (db/entity [:block/uuid (uuid root-id)])]
+      [true (db/entity [:block/name root-id])])
+    [false root-id]))
 
 (defn blocks->vec-tree
-  [blocks]
-  ;; (debug/pprint "blocks->vec-tree" blocks)
-  (let [{:keys [ids parents indexed-by-position]}
-        (prepare-blocks blocks)
-        root-id (first (set/difference parents ids))]
-    (letfn [(build-tree [root]
-              (let [root (outliner-ref/wrap-refs-with-children root)
-                    children (->>
-                               (get-children-from-memory (:db/id root) indexed-by-position)
-                               (map build-tree))]
-                (if (seq children)
-                  (->
-                    (assoc root :block/children children)
-                    (outliner-ref/wrap-refs-with-children children))
-                  root)))]
-      (->>
-        (get-children-from-memory root-id indexed-by-position)
-        (map build-tree)))))
+  [blocks root-id]
+  (let [original-blocks blocks
+        blocks (atom blocks)
+        [page? root] (get-root-and-page root-id)
+        result (blocks->vec-tree-aux blocks root)]
+    (cond
+      (not root)                        ; custom query
+      original-blocks
+
+      page?
+      result
+
+      :else                             ; include root block
+      (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) @blocks)
+            root-block (with-children-and-refs root-block result)]
+        [root-block]))))

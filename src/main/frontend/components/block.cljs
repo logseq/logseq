@@ -2205,7 +2205,7 @@
         sidebar? (:sidebar? config)
         ref? (:ref? config)
         custom-query? (:custom-query? config)
-        blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree %))
+        blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree % (:id config)))
         ;; FIXME: blocks->vec-tree not working for the block container (zoom view)
         blocks' (blocks->vec-tree blocks)
         blocks (if (seq blocks') blocks' blocks)]

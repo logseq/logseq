@@ -612,18 +612,15 @@
             rules)
            (apply concat)))))
 
-(defn- sort-by-left
-  [blocks]
+(defn sort-by-left
+  [blocks parent]
   (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
-  (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)
-        start (get left->blocks nil)]
-    (if start
-      (loop [block start
-             result [start]]
-        (if-let [next (get left->blocks (:db/id block))]
-          (recur next (conj result next))
-          result))
-      (throw "Can't find the start block when sort-by-left"))))
+  (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
+    (loop [block parent
+           result []]
+      (if-let [next (get left->blocks (:db/id block))]
+        (recur next (conj result next))
+        (vec result)))))
 
 (defn get-block-immediate-children
   "Doesn't include nested children."
@@ -637,7 +634,7 @@
             [?parent :block/uuid ?parent-id]]
           conn
           block-uuid)
-        sort-by-left)))
+        (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
 
 (defn get-blocks-by-page
   [id-or-lookup-ref]
@@ -664,20 +661,20 @@
   ([repo block-uuid]
    (get-block-and-children repo block-uuid true))
   ([repo block-uuid use-cache?]
-   (let [block (db-utils/entity repo [:block/uuid block-uuid])]
-     (some-> (react/q repo [:block/block block-uuid]
-                      {:use-cache? use-cache?
-                       :transform-fn #(block-and-children-transform % repo block-uuid)}
-               '[:find (pull ?c [*])
-                        :in $ ?id %
-                        :where
-                        [?b :block/uuid ?id]
-                        (or-join [?b ?c ?id]
-                                 (parent ?b ?c)
-                                 [?c :block/uuid ?id])]
-               block-uuid
-               rules)
-             react))))
+   (some-> (react/q repo [:block/block block-uuid]
+             {:use-cache? use-cache?
+              :transform-fn #(block-and-children-transform % repo block-uuid)}
+             '[:find (pull ?c [*])
+               :in $ ?id %
+               :where
+               [?b :block/uuid ?id]
+               (or-join [?b ?c ?id]
+                        ;; including the parent
+                        [?c :block/uuid ?id]
+                        (parent ?b ?c))]
+             block-uuid
+             rules)
+           react)))
 
 (defn get-file-page
   ([file-path]

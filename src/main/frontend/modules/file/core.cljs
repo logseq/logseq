@@ -17,13 +17,14 @@
 
 (defn transform-content
   [pre-block? content level]
-  (if pre-block?
-    (clip-content content)
-    (let [prefix (->>
+  (let [content (or content "")]
+    (if pre-block?
+     (clip-content content)
+     (let [prefix (->>
                    (repeat level "#")
                    (apply str))
-          new-content (clip-content content)]
-      (str prefix " " new-content))))
+           new-content (clip-content content)]
+       (str prefix " " new-content)))))
 
 (defn tree->file-content
   [tree init-level]
