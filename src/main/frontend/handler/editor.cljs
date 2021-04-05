@@ -351,27 +351,14 @@
 (defn edit-block!
   ([block pos format id]
    (edit-block! block pos format id nil))
-  ([block pos format id {:keys [custom-content custom-properties tail-len]
+  ([block pos format id {:keys [custom-content tail-len]
                          :or {tail-len 0}}]
    (when-not config/publishing?
      (when-let [block-id (:block/uuid block)]
        (let [edit-input-id (if (uuid? id)
                              (get-edit-input-id-with-block-id id)
                              (str (subs id 0 (- (count id) 36)) block-id))
-             block (or
-                    (db/pull [:block/uuid block-id])
-                    block
-                    ;; dummy?
-                    {:block/uuid block-id
-                     :block/content ""})
-             {:block/keys [content properties]} block
-             content (or custom-content content)
-             content (string/trim (text/remove-level-spaces content format))
-             properties (or custom-properties properties)
-             content (if (and (seq properties) (text/properties-hidden? properties))
-                       (text/remove-properties! content)
-                       content)
-             content (text/remove-level-spaces content format true)
+             content (or custom-content (:block/content block) "")
              content-length (count content)
              text-range (cond
                           (and (> tail-len 0) (>= (count content) tail-len))
@@ -692,10 +679,14 @@
                      (wrap-parse-block))]
     (do
       (repo-handler/update-last-edit-block)
-      (outliner-insert-block! current-block next-block block-self?)
-      (let [opts {:key :block/insert
-                  :data [current-block next-block]}]
-          (db/refresh repo opts))
+      (profile
+       "outliner insert block"
+       (outliner-insert-block! current-block next-block block-self?))
+      (profile
+       "db refresh"
+       (let [opts {:key :block/insert
+                   :data [current-block next-block]}]
+         (db/refresh repo opts)))
       (ok-handler next-block)
       (state/set-editor-op! nil))))
 
@@ -763,6 +754,7 @@
         {:ok-handler
          (fn [last-block]
            (let [last-id (:block/uuid last-block)]
+             ;; perf: improvement
              (edit-block! last-block 0 format id)
              (clear-when-saved!)))})))))
 
@@ -2176,6 +2168,14 @@
         (db/refresh repo {:key :block/change :data [(:data node)]}))
        (state/set-editor-op! nil)))))
 
+(defn- last-top-level-child?
+  [{:keys [id config]} current-node]
+  (when id
+    (when-let [entity (if (util/uuid-string? (str id))
+                        (db/entity [:block/uuid (uuid id)])
+                        (db/entity [:block/name (string/lower-case id)]))]
+      (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
+
 (defn keydown-enter-handler
   [state input]
   (fn [state e]
@@ -2192,7 +2192,8 @@
                             (tree/satisfied-inode?))]
             (if (and
                   (string/blank? content)
-                  (not has-right?))
+                  (not has-right?)
+                  (not (last-top-level-child? config current-node)))
               (do
                 (util/stop e)
                 (outdent-on-enter current-node))
