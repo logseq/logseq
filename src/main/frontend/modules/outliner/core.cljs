@@ -294,14 +294,10 @@
                                                                               first-node-left-id)
                                              last
                                              :block/uuid)
-                                         first-node-left-id)]
-         ;; (prn {:parent-or-last-child-id parent-or-last-child-id
-         ;;       :parent-content (:block/content (db/pull [:block/uuid parent-or-last-child-id]))
-         ;;       :last-node-right last-node-right
-         ;;       :content (:block/content (db/pull (get-in last-node-right [:data :db/id])))})
-         (-> (tree/-set-left-id first-node parent-or-last-child-id)
-             (tree/-save))
-         (doseq [node nodes]
+                                         first-node-left-id)
+             first-node (-> (tree/-set-left-id first-node parent-or-last-child-id)
+                            (tree/-save))]
+         (doseq [node (cons first-node (rest nodes))]
            (-> (tree/-set-parent-id node first-node-left-id)
                (tree/-save)))
          (some-> last-node-right
