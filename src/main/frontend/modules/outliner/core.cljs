@@ -1,5 +1,6 @@
 (ns frontend.modules.outliner.core
   (:require [frontend.modules.outliner.tree :as tree]
+            [frontend.db :as db]
             [frontend.db.outliner :as db-outliner]
             [frontend.db.conn :as conn]
             [frontend.modules.outliner.utils :as outliner-u]
@@ -270,23 +271,69 @@
      (db-outliner/del-blocks conn block-ids)
      (outliner-file/sync-to-file start-node))))
 
+(defn first-child?
+  [node]
+  (=
+   (tree/-get-left-id node)
+   (tree/-get-parent-id node)))
+
+(defn first-level?
+  "Can't be outdented."
+  [node]
+  (nil? (tree/-get-parent (tree/-get-parent node))))
+
+(defn indent-outdent-nodes
+  [nodes indent?]
+  (let [first-node (first nodes)
+        last-node (last nodes)]
+    (if indent?
+     (when-not (first-child? first-node)
+       (let [first-node-left-id (tree/-get-left-id first-node)
+             last-node-right (tree/-get-right last-node)
+             parent-or-last-child-id (or (-> (db/get-block-immediate-children (state/get-current-repo)
+                                                                              first-node-left-id)
+                                             last
+                                             :block/uuid)
+                                         first-node-left-id)]
+         ;; (prn {:parent-or-last-child-id parent-or-last-child-id
+         ;;       :parent-content (:block/content (db/pull [:block/uuid parent-or-last-child-id]))
+         ;;       :last-node-right last-node-right
+         ;;       :content (:block/content (db/pull (get-in last-node-right [:data :db/id])))})
+         (-> (tree/-set-left-id first-node parent-or-last-child-id)
+             (tree/-save))
+         (doseq [node nodes]
+           (-> (tree/-set-parent-id node first-node-left-id)
+               (tree/-save)))
+         (some-> last-node-right
+                 (tree/-set-left-id first-node-left-id)
+                 (tree/-save))
+         (outliner-file/sync-to-file first-node)))
+     (when-not (first-level? first-node)
+       (let [parent (tree/-get-parent first-node)
+             parent-parent-id (tree/-get-parent-id parent)
+             parent-right (tree/-get-right parent)]
+         (doseq [node nodes]
+           (-> (tree/-set-parent-id node parent-parent-id)
+               (tree/-save)))
+         (some-> parent-right
+                 (tree/-set-left-id (tree/-get-id last-node))
+                 (tree/-save)))))))
+
 (defn move-subtree*
   "Move subtree to a destination position in the relation tree.
   Args:
     root: root of subtree
     target-node: the destination
-    sibling: as sibling of the target-node or child"
-  [root target-node sibling]
+    sibling?: as sibling of the target-node or child"
+  [root target-node sibling?]
   {:pre [(every? tree/satisfied-inode? [root target-node])
-         (boolean? sibling)]}
+         (boolean? sibling?)]}
   (let [left-node-id (tree/-get-left-id root)
         right-node (tree/-get-right root)]
     (when (tree/satisfied-inode? right-node)
       (let [new-right-node (tree/-set-left-id right-node left-node-id)]
         (tree/-save new-right-node)))
-    (if sibling
-      (insert-node-as-sibling root target-node)
-      (insert-node-as-first-child root target-node))))
+    (insert-node root target-node sibling?)))
 
 (defn move-subtree
   "Move subtree to a destination position in the relation tree.

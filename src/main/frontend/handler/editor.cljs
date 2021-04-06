@@ -227,6 +227,7 @@
        (not= current-id (cljs.core/uuid block-id))
        (db/entity [:block/uuid (cljs.core/uuid block-id)])))
 
+;; TODO:
 (defn- create-file-if-not-exists!
   [repo format page value]
   (let [format (name format)
@@ -744,20 +745,23 @@
     (recur parent blocks)
     end-block))
 
+(defn- get-top-level-end-node
+  [blocks]
+  (let [end-block (last blocks)
+        end-block-parent (get-end-block-parent end-block blocks)]
+    (outliner-core/block end-block-parent)))
+
 (defn delete-blocks!
   [repo block-uuids]
   (when (seq block-uuids)
     (let [lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
           blocks (db/pull-many repo '[*] lookup-refs)]
       (let [start-node (outliner-core/block (first blocks))
-            end-block (last blocks)
-            end-block-parent (get-end-block-parent end-block blocks)
-            end-node (outliner-core/block end-block-parent)]
+            end-node (get-top-level-end-node blocks)]
         (outliner-core/delete-nodes start-node end-node lookup-refs)
         (let [opts {:key :block/change
                     :data blocks}]
-          (db/refresh repo opts))
-        (repo-handler/push-if-auto-enabled! repo)))))
+          (db/refresh repo opts))))))
 
 (defn remove-block-property!
   [block-id key]
@@ -1544,25 +1548,26 @@
     (expand/cycle!)))
 
 (defn on-tab
-  "direction = :left|:right, only indent when blocks are siblings"
+  "direction = :left|:right, only indent or outdent when blocks are siblings"
   [direction]
   (fn [e]
     (when-let [repo (state/get-current-repo)]
       (let [blocks (seq (state/get-selection-blocks))]
         (cond
           (seq blocks)
-          (let [ids (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                       (medley/uuid id))) blocks)]
-
-            ;; (repo-handler/transact-react-and-alter-file!
-            ;;  repo
-            ;;  (concat
-            ;;   blocks
-            ;;   after-blocks)
-            ;;  {:key :block/change
-            ;;   :data (map (fn [block] (assoc block :block/page page)) blocks)}
-            ;;  [[file-path new-content]])
-            )
+          (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
+                                                    [:block/uuid (medley/uuid id)])) blocks)
+                                 (remove nil?))
+                blocks (db/pull-many repo '[*] lookup-refs)
+                end-node (get-top-level-end-node blocks)
+                end-node-parent (tree/-get-parent end-node)
+                top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
+                                                 (get-in % [:block/parent :db/id])) blocks)
+                                     (map outliner-core/block))]
+            (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+            (let [opts {:key :block/change
+                        :data blocks}]
+              (db/refresh repo opts)))
 
           (gdom/getElement "date-time-picker")
           nil
@@ -1932,6 +1937,7 @@
         :else
         nil))))
 
+;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
 (defn indent-on-tab
   ([state]
    (indent-on-tab state 100))
@@ -1944,9 +1950,7 @@
        (state/set-editor-op! :indent-outdent)
        (let [{:keys [block block-parent-id value config]} (get-state state)
              current-node (outliner-core/block block)
-             first-child? (=
-                            (tree/-get-left-id current-node)
-                            (tree/-get-parent-id current-node)) ]
+             first-child? (outliner-core/first-child? current-node)]
          (when-not first-child?
            (let [left (tree/-get-left current-node)
                  children-of-left (tree/-get-children left)]
