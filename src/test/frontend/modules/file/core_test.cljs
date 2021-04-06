@@ -6,8 +6,11 @@
 
 (deftest test-transform-content
   (let [s "#### abc\n\n"
-        r "abc"]
+        r " abc"]
     (is (= r (file/clip-content s)))))
+
+(comment
+  (run-test test-transform-content))
 
 (def tree
   '({:block/pre-block? true,
@@ -124,7 +127,7 @@
   (str/replace s #"\n\s+" "\n"))
 
 (deftest test-tree->file-content
-  (let [r "---\ntitle: Mar 31th, 2021\n---\n## level 1\n### level 1-1\n#### level 1-1-1\n## level 2"
+  (let [r "---\ntitle: Mar 31th, 2021\n---\n##  level 1\n###  level 1-1\n####  level 1-1-1\n##  level 2"
         r (clip-first-space r)]
     (is (= r (file/tree->file-content tree 2)))))
 
