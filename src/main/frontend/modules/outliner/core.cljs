@@ -129,10 +129,14 @@
                   sorted-children)))))))))
 
 
-(defn save-node
+(defn save-node*
   [node]
   {:pre [(tree/satisfied-inode? node)]}
-  (let [saved-node (tree/-save node)]
+  (tree/-save node))
+
+(defn save-node
+  [node]
+  (let [saved-node (save-node* node)]
     ;; Should it be async?
     (outliner-file/sync-to-file saved-node)))
 
@@ -167,15 +171,19 @@
           saved-new-node)
         (tree/-save node)))))
 
+(defn insert-node*
+  [new-node target-node sibling?]
+  (if sibling?
+    (insert-node-as-sibling new-node target-node)
+    (insert-node-as-first-child new-node target-node)))
+
 (defn insert-node
   [new-node target-node sibling?]
-  (let [saved-node
-        (if sibling?
-          (insert-node-as-sibling new-node target-node)
-          (insert-node-as-first-child new-node target-node))]
+  (let [saved-node (insert-node* new-node target-node sibling?)]
+    ;; Pipeline after outliner operation
     (outliner-file/sync-to-file saved-node)))
 
-(defn delete-node
+(defn delete-node*
   "Delete node from the tree."
   [node]
   {:pre [(tree/satisfied-inode? node)]}
@@ -184,8 +192,15 @@
     (when (tree/satisfied-inode? right-node)
       (let [left-node (tree/-get-left node)
             new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
-        (tree/-save new-right-node)))
-    (outliner-file/sync-to-file node)))
+        (tree/-save new-right-node)))))
+
+(defn delete-node
+  "Delete node from the tree."
+  [node]
+  {:pre [(tree/satisfied-inode? node)]}
+  (do (delete-node* node)
+      ;; Pipeline after outliner operation
+      (outliner-file/sync-to-file node)))
 
 (defn delete-nodes
   "Delete nodes from the tree, start-node and end-node must be siblings."
@@ -203,7 +218,7 @@
           (tree/-save new-right-node)))
       (outliner-file/sync-to-file start-node))))
 
-(defn move-subtree
+(defn move-subtree*
   "Move subtree to a destination position in the relation tree.
   Args:
     root: root of subtree
@@ -219,10 +234,20 @@
         (tree/-save new-right-node)))
     (if sibling
       (insert-node-as-sibling root target-node)
-      (insert-node-as-first-child root target-node))
-    (do
+      (insert-node-as-first-child root target-node))))
 
-      (outliner-file/sync-to-file root)
-      ;; TODO Should sync to file where the target-node located when the
-      ;; target-node is in another file.
-      )))
+(defn move-subtree
+  "Move subtree to a destination position in the relation tree.
+  Args:
+    root: root of subtree
+    target-node: the destination
+    sibling: as sibling of the target-node or child"
+  [root target-node sibling]
+  (do
+    (move-subtree* root target-node sibling)
+
+    ;; Pipeline after outliner operation
+    (outliner-file/sync-to-file root)
+    ;; TODO Should sync to file where the target-node located when the
+    ;; target-node is in another file.
+    ))

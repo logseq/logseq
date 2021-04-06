@@ -137,7 +137,7 @@
    "
   (build-db-records node-tree)
   (let [node (build-block 6 2 3)]
-    (outliner-core/delete-node node)
+    (outliner-core/delete-node* node)
     (let [children-of-2 (->> (build-block 2 1 1)
                           (tree/-get-children)
                           (mapv #(-> % :data :block/uuid)))]
@@ -160,7 +160,7 @@
   (build-db-records node-tree)
   (let [node (build-block 3 2 2)
         target-node (build-block 14 12 13)]
-    (outliner-core/move-subtree node target-node true)
+    (outliner-core/move-subtree* node target-node true)
     (let [old-parent's-children (->> (build-block 2 1 1)
                                   (tree/-get-children)
                                   (mapv #(-> % :data :block/uuid)))
@@ -187,7 +187,7 @@
   (build-db-records node-tree)
   (let [node (build-block 3 2 2)
         target-node (build-block 12 1 2)]
-    (outliner-core/move-subtree node target-node false)
+    (outliner-core/move-subtree* node target-node false)
     (let [old-parent's-children (->> (build-block 2 1 1)
                                   (tree/-get-children)
                                   (mapv #(-> % :data :block/uuid)))
