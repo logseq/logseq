@@ -150,10 +150,10 @@
   [parent-state parent-id]
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
    [:button.bottom-action
-    {:on-click #(editor-handler/adjust-block-level! parent-state :right)}
+    {:on-click #(editor-handler/indent-on-tab parent-state)}
     svg/indent-block]
    [:button.bottom-action
-    {:on-click #(editor-handler/adjust-block-level! parent-state :left)}
+    {:on-click #(editor-handler/outdent-on-shift-tab parent-state)}
     svg/outdent-block]
    [:button.bottom-action
     {:on-click #(editor-handler/move-up-down % true)}
