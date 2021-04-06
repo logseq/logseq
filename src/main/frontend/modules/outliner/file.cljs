@@ -12,5 +12,5 @@
   (let [page-db-id (-> updated-block :data :block/page :db/id)
         page-block (db-utils/pull page-db-id)
         blocks (model/get-blocks-by-page page-db-id)
-        tree (tree/blocks->vec-tree blocks (:page/name page-block))]
+        tree (tree/blocks->vec-tree blocks (:block/name page-block))]
     (file/save-tree page-block tree)))
