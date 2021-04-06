@@ -279,9 +279,6 @@
           ;; delete file
           (when-not (string/blank? file-path)
             (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
-            (when-let [files-conn (db/get-files-conn repo)]
-              (d/transact! files-conn [[:db.fn/retractEntity [:file/path file-path]]]))
-
             (let [blocks (db/get-page-blocks page-name)
                   tx-data (mapv
                            (fn [block]
@@ -318,12 +315,6 @@
     ;; update db
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
-
-    ;; update files db
-    (let [conn (db/get-files-conn repo)]
-      (when-let [file (d/entity (d/db conn) [:file/path old-path])]
-        (d/transact! conn [{:db/id (:db/id file)
-                            :file/path new-path}])))
 
     (->
      (p/let [_ (fs/rename! repo

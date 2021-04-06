@@ -18,12 +18,9 @@
 
 (defn- reset-datascript
   [repo]
-  (let [files-db-name (conn/datascript-files-db repo)
-        files-db-conn (d/create-conn db-schema/files-db-schema)
-        db-name (conn/datascript-db repo)
+  (let [db-name (conn/datascript-db repo)
         db-conn (d/create-conn db-schema/schema)]
     (conn/reset-conn! conn/conns {})
-    (swap! conn/conns assoc files-db-name files-db-conn)
     (swap! conn/conns assoc db-name db-conn)))
 
 (defn reset-db
@@ -39,5 +36,3 @@
   (let [r (f)]
     (reset! react-impls/react react-impls/react)
     r))
-
-

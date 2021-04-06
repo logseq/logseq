@@ -119,16 +119,12 @@
          (add-q! k nil nil result-atom identity identity identity))))))
 
 (defn q
-  [repo k {:keys [use-cache? files-db? transform-fn query-fn inputs-fn]
+  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn]
            :or {use-cache? true
-                files-db? false
                 transform-fn identity}} query & inputs]
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))]
-    (when-let [conn (if files-db?
-                      (when-let [files-conn (conn/get-files-conn repo)]
-                        (deref files-conn))
-                      (conn/get-conn repo))]
+    (when-let [conn (conn/get-conn repo)]
       (let [result-atom (:result (get @query-state k))]
         (when-let [component *query-component*]
           (add-query-component! k component))
@@ -280,15 +276,12 @@
       [[key]])))
 
 (defn transact-react!
-  [repo-url tx-data {:keys [key data files-db?] :as handler-opts
-                     :or {files-db? false}}]
+  [repo-url tx-data {:keys [key data] :as handler-opts}]
   (when-not config/publishing?
     (let [repo-url (or repo-url (state/get-current-repo))
           tx-data (->> (util/remove-nils tx-data)
                        (remove nil?))
-          get-conn (fn [] (if files-db?
-                            (conn/get-files-conn repo-url)
-                            (conn/get-conn repo-url false)))]
+          get-conn (fn [] (conn/get-conn repo-url false))]
       (when (and (seq tx-data) (get-conn))
         (let [tx-result (d/transact! (get-conn) (vec tx-data))
               db (:db-after tx-result)
@@ -321,13 +314,9 @@
                       (set-new-result! handler-key new-result))))))))))))
 
 (defn refresh
-  [repo-url {:keys [key data files-db?] :as handler-opts
-             :or {files-db? false}}]
+  [repo-url {:keys [key data] :as handler-opts}]
   (let [handler-keys (get-handler-keys handler-opts)
-        get-conn (fn [] (if files-db?
-                          (conn/get-files-conn repo-url)
-                          (conn/get-conn repo-url false)))
-        db @(get-conn)]
+        db (conn/get-conn repo-url)]
     (doseq [handler-key handler-keys]
      (let [handler-key (vec (cons repo-url handler-key))]
        (when-let [cache (get @query-state handler-key)]

@@ -2,13 +2,6 @@
 
 (defonce version "0.0.1")
 
-;; TODO: remove files db schema
-(def files-db-schema
-  {:file/path {:db/unique :db.unique/identity}
-   :file/content {}
-   :file/size {}
-   :file/handle {}})
-
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def schema
   {:schema/version  {}
@@ -114,6 +107,9 @@
 
    ;; file
    :file/path {:db/unique :db.unique/identity}
+   ;; only store the content of logseq's files
+   :file/content {}
+   :file/handle {}
    ;; :file/created-at {}
    ;; :file/last-modified-at {}
    ;; :file/size {}

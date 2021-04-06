@@ -21,11 +21,8 @@
   conns
   get-repo-path
   datascript-db
-  datascript-files-db
   remove-db!
-  remove-files-db!
   get-conn
-  get-files-conn
   me-tx
   remove-conn!]
 
@@ -70,18 +67,12 @@
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]
-  (let [file-key (datascript-files-db repo)
-        non-file-key (datascript-db repo)
-        files-conn (get-files-conn repo)
-        file-db (when files-conn (d/db files-conn))
-        non-file-conn (get-conn repo false)
-        non-file-db (d/db non-file-conn)
-        file-db-str (if file-db (db->string file-db) "")
-        non-file-db-str (if non-file-db (db->string non-file-db) "")]
-    (p/let [_ (idb/set-batch! [{:key file-key :value file-db-str}
-                               {:key non-file-key :value non-file-db-str}])]
-      (state/set-last-persist-transact-id! repo true (get-max-tx-id file-db))
-      (state/set-last-persist-transact-id! repo false (get-max-tx-id non-file-db)))))
+  (let [key (datascript-db repo)
+        conn (get-conn repo false)
+        db (d/db conn)
+        db-str (if db (db->string db) "")]
+    (p/let [_ (idb/set-batch! [{:key key :value db-str}])]
+      (state/set-last-persist-transact-id! repo false (get-max-tx-id db)))))
 
 (defonce persistent-jobs (atom {}))
 
@@ -110,31 +101,27 @@
 ;; TODO: pass as a parameter
 (defonce *sync-search-indice-f (atom nil))
 (defn- repo-listen-to-tx!
-  [repo conn files-db?]
+  [repo conn]
   (d/listen! conn :persistence
              (fn [tx-report]
                (when-not (util/electron?)
                 (let [tx-id (get-tx-id tx-report)]
                   (state/set-last-transact-time! repo (util/time-ms))
-                  ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
                   (persist-if-idle! repo)))
 
                ;; rebuild search indices
-               (when-not files-db?
-                 (let [data (:tx-data tx-report)
-                       datoms (filter
-                               (fn [datom]
-                                 (contains? #{:block/name :block/content} (:a datom)))
-                               data)]
-                   (when-let [f @*sync-search-indice-f]
-                     (f datoms)))))))
+               (let [data (:tx-data tx-report)
+                     datoms (filter
+                             (fn [datom]
+                               (contains? #{:block/name :block/content} (:a datom)))
+                             data)]
+                 (when-let [f @*sync-search-indice-f]
+                   (f datoms))))))
 
 (defn- listen-and-persist!
   [repo]
-  (when-let [conn (get-files-conn repo)]
-    (repo-listen-to-tx! repo conn true))
   (when-let [conn (get-conn repo false)]
-    (repo-listen-to-tx! repo conn false)))
+    (repo-listen-to-tx! repo conn)))
 
 (defn start-db-conn!
   ([me repo]
@@ -149,17 +136,8 @@
   (let [logged? (:name me)]
     (doall
      (for [{:keys [url]} repos]
-       (let [repo url
-             db-name (datascript-files-db repo)
-             db-conn (d/create-conn db-schema/files-db-schema)]
-         (swap! conns assoc db-name db-conn)
-         (p/let [stored (idb/get-item db-name)
-                 _ (when stored
-                     (let [stored-db (string->db stored)
-                           attached-db (d/db-with stored-db
-                                                  [(me-tx stored-db me)])]
-                       (conn/reset-conn! db-conn attached-db)))
-                 db-name (datascript-db repo)
+       (let [repo url]
+         (p/let [db-name (datascript-db repo)
                  db-conn (d/create-conn db-schema/schema)
                  _ (d/transact! db-conn [{:schema/version db-schema/version}])
                  _ (swap! conns assoc db-name db-conn)

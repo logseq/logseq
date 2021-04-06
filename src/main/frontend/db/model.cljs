@@ -55,7 +55,7 @@
                         (remove nil?)
                         (map #(dissoc % :file/handle :file/type)))]
        (when (seq tx-data)
-         (when-let [conn (conn/get-files-conn repo-url)]
+         (when-let [conn (conn/get-conn repo-url false)]
            (d/transact! conn (vec tx-data))))))))
 
 (defn pull-block
@@ -246,8 +246,7 @@
    (when (and repo path)
      (->
       (react/q repo [:file/content path]
-               {:files-db? true
-                :use-cache? true}
+        {:use-cache? true}
                '[:find ?content
                  :in $ ?path
                  :where
@@ -259,33 +258,33 @@
 
 (defn get-file-contents
   [repo]
-  (when-let [conn (conn/get-files-conn repo)]
+  (when-let [conn (conn/get-conn repo)]
     (->>
      (d/q
       '[:find ?path ?content
         :where
         [?file :file/path ?path]
         [?file :file/content ?content]]
-      @conn)
+       conn)
      (into {}))))
 
 
 (defn get-files-full
   [repo]
-  (when-let [conn (conn/get-files-conn repo)]
+  (when-let [conn (conn/get-conn repo)]
     (->>
      (d/q
       '[:find (pull ?file [*])
         :where
         [?file :file/path]]
-      @conn)
+      conn)
      (flatten))))
 
 (defn get-file-by-path
   [file-path]
   (when-let [repo (state/get-current-repo)]
-    (when-let [conn (conn/get-files-conn repo)]
-      (d/pull @conn '[*] [:file/path file-path]))))
+    (when-let [conn (conn/get-conn repo)]
+      (d/pull conn '[*] [:file/path file-path]))))
 
 (defn get-custom-css
   []
@@ -297,8 +296,8 @@
    (get-file-no-sub (state/get-current-repo) path))
   ([repo path]
    (when (and repo path)
-     (when-let [conn (conn/get-files-conn repo)]
-       (:file/content (d/entity (d/db conn) [:file/path path]))))))
+     (when-let [conn (conn/get-conn repo)]
+       (:file/content (d/entity conn [:file/path path]))))))
 
 (defn get-block-by-uuid
   [id]
@@ -1291,8 +1290,7 @@
       (react/transact-react!
        repo
        [tx-data]
-       {:key [:file/content path]
-        :files-db? true}))))
+       {:key [:file/content path]}))))
 
 (comment
   (def page-names ["foo" "bar"])

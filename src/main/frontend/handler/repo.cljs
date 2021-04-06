@@ -385,27 +385,6 @@
                :container (gobj/get container "id")}]
         (state/set-state! :editor/last-edit-block m)))))
 
-(defn transact-react-and-alter-file!
-  ([repo tx transact-option files]
-   (transact-react-and-alter-file! repo tx transact-option files {}))
-  ([repo tx transact-option files opts]
-   (spec/validate :repos/url repo)
-   (do
-     (update-last-edit-block)
-     ;; try catch so that if db transaction failed, it'll not write to the files
-     (try
-       (do
-         (db/transact-react!
-           repo
-           tx
-           transact-option)
-
-         (let [files (remove nil? files)]
-           (when (seq files)
-             (file-handler/alter-files repo files opts))))
-       (catch js/Error e
-         (log/error :transact-react/failed e))))))
-
 (declare push)
 
 (defn get-diff-result
@@ -605,7 +584,6 @@
   (let [delete-db-f (fn []
                       (db/remove-conn! url)
                       (db/remove-db! url)
-                      (db/remove-files-db! url)
                       (fs/rmdir! (config/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (config/local-db? url)
@@ -707,7 +685,6 @@
     (db/remove-conn! url)
     (db/clear-query-state!)
     (-> (p/do! (db/remove-db! url)
-               (db/remove-files-db! url)
                (fs/rmdir! (config/get-repo-dir url))
                (clone-and-load-db url))
         (p/catch (fn [error]

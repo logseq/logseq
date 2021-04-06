@@ -196,7 +196,7 @@
                     :in $ [[?n ?p] ...]
                     :where
                     [?e :file/path ?p]
-                    [?e :file/content ?c]] @(db/get-files-conn repo)))
+                    [?e :file/content ?c]] (db/get-conn repo)))
         embed-blocks
         (mapv (fn [b] [(str (:block/uuid b))
                        [(apply str
@@ -251,7 +251,7 @@
                     :in $ [[?pn ?pon ?rpn ?rpon ?fp ?be] ...]
                     :where
                     [?e :file/path ?fp]
-                    [?e :file/content ?fc]] @(db/get-files-conn repo)))
+                    [?e :file/content ?fc]] (db/get-conn repo)))
         page-page-refs
         (->>
          page-refs
