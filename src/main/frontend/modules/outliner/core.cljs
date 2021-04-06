@@ -183,6 +183,27 @@
     ;; Pipeline after outliner operation
     (outliner-file/sync-to-file saved-node)))
 
+(defn move-node
+  [node up?]
+  {:pre [(tree/satisfied-inode? node)]}
+  (let [[up-node down-node] (if up?
+                              (let [left (tree/-get-left node)
+                                    parent? (= left (tree/-get-parent node))]
+                                [(when-not parent? left) node])
+                              [node (tree/-get-right node)])]
+    (when (and up-node down-node)
+      (let [down-node-right (tree/-get-right down-node)
+            up-node-left (tree/-get-left-id up-node)
+            ;; swap up-node and down-node
+            down-node (tree/-set-left-id down-node up-node-left)
+            up-node (tree/-set-left-id up-node (tree/-get-id down-node))]
+        (tree/-save down-node)
+        (tree/-save up-node)
+        (when down-node-right
+          (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id up-node))]
+            (tree/-save down-node-right)))
+        (outliner-file/sync-to-file node)))))
+
 (defn delete-node*
   "Delete node from the tree."
   [node]
