@@ -737,23 +737,27 @@
                                     :tail-len tail-len})))))))))
       (state/set-editor-op! nil))))
 
-;; Must be siblings?
+(defn- get-end-block-parent
+  [end-block blocks]
+  (if-let [parent (let [id (:db/id (:block/parent end-block))]
+                    (some (fn [block] (when (= (:db/id block) id) block)) blocks))]
+    (recur parent blocks)
+    end-block))
+
 (defn delete-blocks!
   [repo block-uuids]
   (when (seq block-uuids)
     (let [lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-          blocks (db/pull-many repo '[*] lookup-refs)
-          parent (:block/parent (first blocks))
-          top-level-blocks (filter #(= parent (:block/parent %)) blocks)]
-      (if (= 1 (count top-level-blocks))
-        (delete-block-aux! (first blocks) false)
-        (let [start-node (outliner-core/block (first top-level-blocks))
-              end-node (outliner-core/block (last top-level-blocks))]
-          (outliner-core/delete-nodes start-node end-node lookup-refs)
-          (let [opts {:key :block/change
-                      :data blocks}]
-            (db/refresh repo opts))
-          (repo-handler/push-if-auto-enabled! repo))))))
+          blocks (db/pull-many repo '[*] lookup-refs)]
+      (let [start-node (outliner-core/block (first blocks))
+            end-block (last blocks)
+            end-block-parent (get-end-block-parent end-block blocks)
+            end-node (outliner-core/block end-block-parent)]
+        (outliner-core/delete-nodes start-node end-node lookup-refs)
+        (let [opts {:key :block/change
+                    :data blocks}]
+          (db/refresh repo opts))
+        (repo-handler/push-if-auto-enabled! repo)))))
 
 (defn remove-block-property!
   [block-id key]

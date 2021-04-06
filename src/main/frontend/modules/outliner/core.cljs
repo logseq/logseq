@@ -223,21 +223,52 @@
       ;; Pipeline after outliner operation
       (outliner-file/sync-to-file node)))
 
+(defn get-left-nodes
+  [node limit]
+  (let [parent (tree/-get-parent node)]
+    (loop [node node
+           limit limit
+           result []]
+     (if (zero? limit)
+       result
+       (if-let [left (tree/-get-left node)]
+         (if-not (= left parent)
+           (recur left (dec limit) (conj result (tree/-get-id left)))
+           result)
+         result)))))
+
+(defn get-node-parents
+  [node limit]
+  (loop [node node
+         limit limit
+         result []]
+    (if (zero? limit)
+      result
+      (if-let [parent (tree/-get-parent node)]
+        (recur parent (dec limit) (conj result (tree/-get-id parent)))
+        result))))
+
 (defn delete-nodes
   "Delete nodes from the tree, start-node and end-node must be siblings."
   [start-node end-node block-ids]
   {:pre [(tree/satisfied-inode? start-node)
          (tree/satisfied-inode? end-node)]}
-  (when (= (tree/-get-parent-id start-node)
-           (tree/-get-parent-id end-node))
+  (if (= start-node end-node)
+    (delete-node start-node)
     (let [right-node (tree/-get-right end-node)
-          conn (conn/get-conn false)]
-      (db-outliner/del-blocks conn block-ids)
-      (when (tree/satisfied-inode? right-node)
-        (let [left-node (tree/-get-left start-node)
-              new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
-          (tree/-save new-right-node)))
-      (outliner-file/sync-to-file start-node))))
+          conn (conn/get-conn false)
+          end-node-left-nodes (get-left-nodes end-node (count block-ids))
+          start-node-parents-with-self (conj (get-node-parents start-node 1000) (tree/-get-id start-node))]
+     (when (tree/satisfied-inode? right-node)
+       (let [cross-node-id (first (set/intersection (set end-node-left-nodes) (set start-node-parents-with-self)))
+             cross-node (get-block-by-id cross-node-id)
+             new-left-id (if (= cross-node start-node)
+                           (tree/-get-left-id cross-node)
+                           cross-node-id)
+             new-right-node (tree/-set-left-id right-node new-left-id)]
+         (tree/-save new-right-node)))
+     (db-outliner/del-blocks conn block-ids)
+     (outliner-file/sync-to-file start-node))))
 
 (defn move-subtree*
   "Move subtree to a destination position in the relation tree.
