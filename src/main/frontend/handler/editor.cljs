@@ -1424,34 +1424,33 @@
          (state/set-editor-op! nil))))))
 
 (defn on-up-down
-  [state e up?]
-  (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} (get-state state)]
-    (let [element (gdom/getElement id)
-          line-height (util/get-textarea-line-height element)]
-      (if (and block-id
-                 (or (and up? (util/textarea-cursor-first-row? element line-height))
-                     (and (not up?) (util/textarea-cursor-end-row? element line-height))))
+  [up?]
+  (when (state/editing?)
+    (let [edit-block (state/get-edit-block)
+          {:block/keys [uuid content format]} edit-block
+          element (state/get-input)
+          line-height (util/get-textarea-line-height element)
+          repo (state/get-current-repo)]
+      (if (or (and up? (util/textarea-cursor-first-row? element line-height))
+              (and (not up?) (util/textarea-cursor-end-row? element line-height)))
         (do
-          (util/stop e)
           (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
-                sibling-block (f (gdom/getElement block-parent-id))]
+                sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
             (when sibling-block
               (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-                (let [state (get-state state)
-                      content (:block/content block)
-                      value (:value state)]
+                (let [value (state/get-edit-content)]
                   (when (not= (-> content
                                   (text/remove-level-spaces format)
                                   text/remove-properties!
                                   string/trim)
                               (string/trim value))
-                    (save-block! state (:value state))))
-                (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
+                    (save-block! repo uuid value)))
+                (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
                   ;; TODO fix me, edit block pos should be the pos of last line or first line
                   ;; if the target is multiline block, shall open edit
                   ;; 1. if up, edit last line
                   ;; 2. if down, edit first line
-                  (edit-block! block pos format id))))))
+                  (edit-block! block (state/get-edit-pos) format (state/get-edit-input-id)))))))
         ;;just up and down
         (if up?
           (util/move-cursor-up element)
@@ -2324,10 +2323,9 @@
 
 (defn keydown-up-down-handler
   [up?]
-  (fn [e]
-    (when-let [state (:component/box @state/shortcut-state)]
-      (when (not (in-auto-complete?))
-        (on-up-down state e up?)))))
+  (fn [_]
+    (when (not (in-auto-complete?))
+      (on-up-down up?))))
 
 (defn- move-to-block-when-cross-boundrary
   [state e direction]
