@@ -1339,16 +1339,13 @@
   (cond
     ;; when editing, quit editing and select current block
     (state/editing?)
-    (do
-      (util/stop e)
-      (exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))]))
+    (exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
 
     ;; when selection and one block selected, select next block
     (and (state/in-selection-mode?) (== 1 (count (state/get-selection-blocks))))
     (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
           element (f (first (state/get-selection-blocks)))]
       (when element
-        (util/stop e)
         (state/conj-selection-block! element direction)))
 
     ;; if same direction, keep conj on same direction
@@ -1356,14 +1353,11 @@
     (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
           element (f (last (state/get-selection-blocks)))]
       (when element
-        (util/stop e)
         (state/conj-selection-block! element direction)))
 
     ;; if different direction, keep clear until one left
     (state/in-selection-mode?)
-    (do
-      (util/stop e)
-      (clear-last-selected-block!))))
+    (clear-last-selected-block!)))
 
 (defn save-block-aux!
   [block value format opts]
