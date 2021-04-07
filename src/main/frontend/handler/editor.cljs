@@ -1555,19 +1555,21 @@
       (let [blocks (seq (state/get-selection-blocks))]
         (cond
           (seq blocks)
-          (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                                    [:block/uuid (medley/uuid id)])) blocks)
-                                 (remove nil?))
-                blocks (db/pull-many repo '[*] lookup-refs)
-                end-node (get-top-level-end-node blocks)
-                end-node-parent (tree/-get-parent end-node)
-                top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
-                                                 (get-in % [:block/parent :db/id])) blocks)
-                                     (map outliner-core/block))]
-            (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
-            (let [opts {:key :block/change
-                        :data blocks}]
-              (db/refresh repo opts)))
+          (do
+            (util/stop e)
+            (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
+                                                     [:block/uuid (medley/uuid id)])) blocks)
+                                  (remove nil?))
+                 blocks (db/pull-many repo '[*] lookup-refs)
+                 end-node (get-top-level-end-node blocks)
+                 end-node-parent (tree/-get-parent end-node)
+                 top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
+                                                  (get-in % [:block/parent :db/id])) blocks)
+                                      (map outliner-core/block))]
+             (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+             (let [opts {:key :block/change
+                         :data blocks}]
+               (db/refresh repo opts))))
 
           (gdom/getElement "date-time-picker")
           nil
