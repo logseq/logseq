@@ -585,10 +585,10 @@
 
 (defn drop-last-selection-block!
   []
-  (let [last-block (last (:selection/blocks @state))]
+  (let [last-block (peek (:selection/blocks @state))]
     (swap! state assoc
            :selection/mode true
-           :selection/blocks (vec (drop-last (:selection/blocks @state))))
+           :selection/blocks (vec (pop (:selection/blocks @state))))
     last-block))
 
 (defn get-selection-direction
