@@ -85,3 +85,14 @@
     align-items: center;
   }
 }
+
+
+#repo-name {
+    @apply md:max-w-none;
+    vertical-align: middle;
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 7ch;
+}

@@ -183,16 +183,14 @@
                      (t :git/version) (str " " version/version)]]])))]))))))
 
 (rum/defc repos-dropdown < rum/reactive
-  [head? on-click]
+  [on-click]
   (when-let [current-repo (state/sub :git/current-repo)]
     (let [logged? (state/logged?)
           local-repo? (= current-repo config/local-repo)
           get-repo-name (fn [repo]
                           (if (config/local-db? repo)
                             (config/get-local-dir repo)
-                            (if head?
-                              (db/get-repo-path repo)
-                              (util/take-at-most (repo-handler/get-repo-name repo) 20))))]
+                            (db/get-repo-path repo)))]
       (let [repos (->> (state/sub [:me :repos])
                        (remove (fn [r] (= config/local-repo (:url r)))))]
         (cond
@@ -204,7 +202,7 @@
                     repo-name (if (util/electron?)
                                 (last (string/split repo-name #"/"))
                                 repo-name)]
-                [:span repo-name])
+                [:span#repo-name repo-name])
               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
            (mapv
             (fn [{:keys [id url]}]
@@ -226,11 +224,11 @@
           (and current-repo (not local-repo?))
           (let [repo-name (get-repo-name current-repo)]
             (if (config/local-db? current-repo)
-              [:span.fade-link
+              [:span.fade-link#repo-name
                (if (util/electron?)
                  (last (string/split repo-name #"/"))
                  repo-name)]
-              [:a.fade-link
+              [:a.fade-link#repo-name
                {:href current-repo
                 :target "_blank"}
                repo-name]))

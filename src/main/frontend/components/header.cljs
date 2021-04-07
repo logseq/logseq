@@ -191,8 +191,8 @@
 
        (repo/sync-status current-repo)
 
-       [:div.repos.hidden.md:block
-        (repo/repos-dropdown true nil)]
+       [:div.repos
+        (repo/repos-dropdown nil)]
 
        (when (and (nfs/supported?) (empty? repos)
                   (not config/publishing?))
