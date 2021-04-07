@@ -66,34 +66,20 @@
   ([blocks format default-option {:keys [journal? page-name]
                                   :or {journal? false}}]
    (let [format (or format (state/get-preferred-format) :markdown)
-         blocks (if (and journal?
-                         (seq blocks)
-                         (when-let [title (second (first (:block/title (first blocks))))]
-                           (date/valid-journal-title? title)))
-                  (rest blocks)
-                  blocks)
          blocks (vec blocks)]
-     (cond
-       (and (seq blocks)
-            (or (and (> (count blocks) 1)
-                     (:block/pre-block? (first blocks)))
-                (and (>= (count blocks) 1)
-                     (not (:block/pre-block? (first blocks))))))
+     (if (seq blocks)
        blocks
-
-       :else
-       (let [last-block (last blocks)
-             page-block (db/entity [:block/name (string/lower-case page-name)])
+       (let [page-block (when page-name (db/entity [:block/name (string/lower-case page-name)]))
              page-id {:db/id (:db/id page-block)}
-             dummy (merge last-block
-                          {:block/uuid (db/new-block-id)
+             dummy (merge {:block/uuid (db/new-block-id)
                            :block/left page-id
                            :block/parent page-id
                            :block/title ""
                            :block/content ""
-                           :block/format format}
+                           :block/format format
+                           :block/dummy? true}
                           default-option)]
-         (conj blocks dummy))))))
+         [dummy])))))
 
 (defn filter-blocks
   [repo ref-blocks filters group-by-page?]

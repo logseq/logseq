@@ -1520,13 +1520,14 @@
              (let [opts {:key :block/change
                          :data blocks}]
                (db/refresh repo opts)
-               (let [blocks (map
-                              (fn [block]
-                                (when-let [id (gobj/get block "id")]
-                                  (when-let [block (gdom/getElement id)]
-                                    (dom/add-class! block "selected noselect")
-                                    block)))
-                              blocks-dom-nodes)]
+               (let [blocks (doall
+                             (map
+                               (fn [block]
+                                 (when-let [id (gobj/get block "id")]
+                                   (when-let [block (gdom/getElement id)]
+                                     (dom/add-class! block "selected noselect")
+                                     block)))
+                               blocks-dom-nodes))]
                  (state/set-selection-blocks! blocks)))))
 
           (gdom/getElement "date-time-picker")
