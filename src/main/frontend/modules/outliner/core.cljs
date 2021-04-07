@@ -295,8 +295,7 @@
                                              last
                                              :block/uuid)
                                          first-node-left-id)
-             first-node (-> (tree/-set-left-id first-node parent-or-last-child-id)
-                            (tree/-save))]
+             first-node (tree/-set-left-id first-node parent-or-last-child-id)]
          (doseq [node (cons first-node (rest nodes))]
            (-> (tree/-set-parent-id node first-node-left-id)
                (tree/-save)))
@@ -307,8 +306,9 @@
      (when-not (first-level? first-node)
        (let [parent (tree/-get-parent first-node)
              parent-parent-id (tree/-get-parent-id parent)
-             parent-right (tree/-get-right parent)]
-         (doseq [node nodes]
+             parent-right (tree/-get-right parent)
+             first-node (tree/-set-left-id first-node (tree/-get-id parent))]
+         (doseq [node (cons first-node (rest nodes))]
            (-> (tree/-set-parent-id node parent-parent-id)
                (tree/-save)))
          (some-> parent-right
