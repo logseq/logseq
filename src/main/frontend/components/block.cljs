@@ -523,10 +523,7 @@
                           (map-inline config title))))]
            (if label
              (->elem
-              :span.block-ref {:title (some->
-                                       (:block/content block)
-                                       (text/remove-level-spaces (:block/format block))
-                                       (text/remove-properties!))} ; TODO: replace with a popup
+              :span.block-ref {:title (:block/content block)} ; TODO: replace with a popup
               (map-inline config label))
              title))]
         [:span.warning.mr-1 {:title "Block ref invalid"}
@@ -1021,7 +1018,7 @@
                                 :path-params {:name (str uuid)}}))))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id level start-level body children dummy? *control-show? *collapsed?]
+  [state config block uuid block-id body children dummy? *control-show? *collapsed?]
   (let [has-child? (and
                     (not (:pre-block? block))
                     (or (seq children)
@@ -1032,14 +1029,7 @@
         heading? (= (get (:block/properties block) "heading") "true")]
     [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
-              :margin-top (if (and heading? (<= level 6))
-                            (case level
-                              1
-                              32
-                              2
-                              22
-                              18)
-                            0)
+              :margin-top 0
               :float "left"}}
 
      [:a.block-control.opacity-50.hover:opacity-100
@@ -1208,7 +1198,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker level priority anchor meta format content pre-block? dummy? block-refs-count page properties]
+  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority anchor meta format content pre-block? dummy? block-refs-count page properties]
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1225,34 +1215,30 @@
         contents? (= (:id config) "contents")
         heading? (= (get properties "heading") "true")
         bg-color (get properties "background_color")]
-    (when level
-      (let [element (if (and (<= level 6) heading?)
-                      (keyword (str "h" level))
-                      :div)]
-        (->elem
-         element
-         (merge
-          {:id anchor}
-          (when (and marker
-                     (not (string/blank? marker))
-                     (not= "nil" marker))
-            {:class (str (string/lower-case marker))})
-          (when bg-color
-            {:style {:background-color bg-color
-                     :padding-left 6
-                     :padding-right 6
-                     :color "#FFFFFF"}
-             :class "with-bg-color"}))
-         (remove-nils
-          (concat
-           [(when-not slide? checkbox)
-            (when-not slide? marker-switch)
-            marker-cp
-            priority]
-           (if title
-             (map-inline config title)
-             [[:span.opacity-50 "Click here to start writing"]])
-           [tags])))))))
+    (->elem
+     :div
+     (merge
+      {:id anchor}
+      (when (and marker
+                 (not (string/blank? marker))
+                 (not= "nil" marker))
+        {:class (str (string/lower-case marker))})
+      (when bg-color
+        {:style {:background-color bg-color
+                 :padding-left 6
+                 :padding-right 6
+                 :color "#FFFFFF"}
+         :class "with-bg-color"}))
+     (remove-nils
+      (concat
+       [(when-not slide? checkbox)
+        (when-not slide? marker-switch)
+        marker-cp
+        priority]
+       (if title
+         (map-inline config title)
+         [[:span.opacity-50 "Click here to start writing"]])
+       [tags])))))
 
 (defn show-dnd-separator
   [element-id]
@@ -1366,9 +1352,8 @@
                         (d/has-class? target "fn"))
                    (d/has-class? target "image-resize"))
        (editor-handler/clear-selection! nil)
-       (editor-handler/unhighlight-block!)
+       (editor-handler/unhighlight-blocks!)
        (let [properties-hidden? (text/properties-hidden? properties)
-             content (text/remove-level-spaces content format)
              content (if properties-hidden? (text/remove-properties! content) content)
              block (db/pull [:block/uuid (:block/uuid block)])
              f #(let [cursor-range (util/caret-range (gdom/getElement block-id))]
@@ -1409,10 +1394,10 @@
                       true)))
   (reset! *dragging? false)
   (reset! *dragging-block nil)
-  (editor-handler/unhighlight-block!))
+  (editor-handler/unhighlight-blocks!))
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
         mouse-down-key (if (util/ios?)
                          :on-click
@@ -1497,7 +1482,7 @@
              (utils/timeConversion (- finish-time start-time))]])))]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid title level body meta content dummy? page format repo children pre-block? collapsed? idx] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? collapsed? idx] :as block} edit-input-id block-id slide?]
   (let [edit? (state/sub [:editor/editing? edit-input-id])
         editor-box (get config :editor-box)]
     (if (and edit? editor-box)
@@ -1599,7 +1584,7 @@
                       false)))
   (reset! *dragging? false)
   (reset! *dragging-block nil)
-  (editor-handler/unhighlight-block!))
+  (editor-handler/unhighlight-blocks!))
 
 (defn- block-mouse-over
   [e has-child? *control-show? block-id doc-mode?]
@@ -1670,7 +1655,7 @@
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [state config {:block/keys [uuid title level body meta content dummy? page format repo children collapsed? pre-block? top? properties refs-with-children] :as block}]
+  [state config {:block/keys [uuid title body meta content dummy? page format repo children collapsed? pre-block? top? properties refs-with-children] :as block}]
   (let [*control-show? (get state ::control-show?)
         *collapsed? (get state ::collapsed?)
         ref? (boolean (:ref? config))
@@ -1686,7 +1671,6 @@
                      (not pre-block?)
                      (or (seq children)
                          (seq body))))
-        start-level (or (:start-level config) 1)
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?)
         [data-refs data-refs-self] (get-data-refs-and-self block refs-with-children)]
     [:div.ls-block.flex.flex-col.rounded-sm
@@ -1701,7 +1685,6 @@
                    (when pre-block? " pre-block"))
        :blockid (str uuid)
        :repo repo
-       :level level
        :haschild (str has-child?)}
        (not slide?)
        (merge attrs))
@@ -1714,7 +1697,7 @@
 
      [:div.flex-1.flex-row
       (when (not slide?)
-        (block-control config block uuid block-id level start-level body children dummy? *control-show? *collapsed?))
+        (block-control config block uuid block-id body children dummy? *control-show? *collapsed?))
 
       (let [edit-input-id (str "edit-block-" unique-dom-id uuid)]
         (block-content-or-editor config block edit-input-id block-id slide?))]
@@ -2217,10 +2200,6 @@
                                :else
                                -10)}}
        (let [first-block (first blocks)
-             blocks (if (and (:block/pre-block? first-block)
-                             (block-handler/pre-block-with-only-title? (:block/repo first-block) (:block/uuid first-block)))
-                      (rest blocks)
-                      blocks)
              first-id (:block/uuid (first blocks))]
          (for [[idx item] (medley/indexed blocks)]
            (let [item (->

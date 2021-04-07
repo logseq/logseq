@@ -163,7 +163,7 @@
     (doseq [block blocks]
       (dom/add-class! block "block-highlight"))))
 
-(defn unhighlight-block!
+(defn unhighlight-blocks!
   []
   (let [blocks (some->> (array-seq (js/document.getElementsByClassName "block-highlight"))
                         (repeat 2)
@@ -185,6 +185,13 @@
                     "ls-block"
                     "edit-block")))
 
+(defn clear-selection!
+  [_e]
+  (doseq [block (dom/by-class "selected")]
+    (dom/remove-class! block "selected")
+    (dom/remove-class! block "noselect"))
+  (state/clear-selection!))
+
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn edit-block!
   ([block pos format id]
@@ -193,7 +200,8 @@
                          :or {tail-len 0}}]
    (when-not config/publishing?
      (when-let [block-id (:block/uuid block)]
-       (let [edit-input-id (if (uuid? id)
+       (let [block (db/pull [:block/uuid block-id])
+             edit-input-id (if (uuid? id)
                              (get-edit-input-id-with-block-id id)
                              (str (subs id 0 (- (count id) 36)) block-id))
              content (or custom-content (:block/content block) "")
@@ -207,7 +215,9 @@
 
                           :else
                           (subs content 0 pos))]
-         (state/set-editing! edit-input-id content block text-range))))))
+         (do
+           (clear-selection! nil)
+           (state/set-editing! edit-input-id content block text-range)))))))
 
 (defn edit-last-block-for-new-page!
   [last-block pos]
@@ -227,57 +237,22 @@
        (not= current-id (cljs.core/uuid block-id))
        (db/entity [:block/uuid (cljs.core/uuid block-id)])))
 
-;; TODO:
-(defn- create-file-if-not-exists!
-  [repo format page value]
-  (let [format (name format)
-        title (string/capitalize (:block/name page))
-        journal-page? (date/valid-journal-title? title)
-        path (str
-              (if journal-page?
-                config/default-journals-directory
-                (config/get-pages-directory))
-              "/"
-              (if journal-page?
-                (date/journal-title->default title)
-                (-> (:block/name page)
-                    (util/page-name-sanity))) "."
-              (if (= format "markdown") "md" format))
-        file-path (str "/" path)
-        dir (config/get-repo-dir repo)]
-    (p/let [exists? (fs/file-exists? dir file-path)]
-      (if exists?
-        (do
-          (notification/show!
-           [:p.content
-            (util/format "File %s already exists!" file-path)]
-           :error)
-          (state/set-editor-op! nil))
-        ;; create the file
-        (let [content (str (util/default-content-with-title format
-                             (or (:block/original-name page)
-                                 (:block/name page)))
-                           value)]
-          (p/let [_ (fs/create-if-not-exists repo dir file-path content)]
-            (file-handler/reset-file! repo path content)
-            (ui-handler/re-render-root!)
-
-            ;; Continue to edit the last block
-            (let [blocks (db/get-page-blocks repo (:block/name page))
-                  last-block (last blocks)]
-              (edit-last-block-for-new-page! last-block :max)
-              (state/set-editor-op! nil))))))))
-
 (defn- wrap-parse-block
   [{:block/keys [content format] :as block}]
-  (let [content' (str (config/get-block-pattern format) " "
-                      (string/triml content))]
+  (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
+        properties? (contains? #{"properties" "property_drawer"}
+                               (when-let [type (first (ffirst ast))]
+                                 (string/lower-case type)))
+        content' (if properties?
+                   (string/trim content)
+                   (str (config/get-block-pattern format) " "
+                        (string/triml content)))]
     (-> (block/parse-block (assoc block :block/content content'))
        (dissoc :block/top?
                :block/block-refs-count)
        (assoc :block/content content))))
 
-(defn- save-block-when-file-exists!
+(defn- save-block-inner!
   [repo block e value opts]
   (let [block (assoc block :block/content value)]
     (profile
@@ -297,7 +272,7 @@
   ([block value]
    (save-block-if-changed! block value nil))
   ([block value
-    {:keys [indent-left? chan chan-callback]
+    {:keys []
      :as opts}]
    (let [{:block/keys [uuid content file page format repo content properties]} block
          repo (or repo (state/get-current-repo))
@@ -314,18 +289,8 @@
 
        :else
        (let [content-changed? (not= (string/trim content) (string/trim value))]
-         (when content-changed?
-           (let [file (db/entity repo (:db/id file))]
-             (cond
-               ;; Page was referenced but no related file
-               (and page (not file))
-               (create-file-if-not-exists! repo format page value)
-
-               (and file page)
-               (save-block-when-file-exists! repo block e value opts)
-
-               :else
-               nil))))))))
+         (when (and content-changed? page)
+           (save-block-inner! repo block e value opts)))))))
 
 (defn- compute-fst-snd-block-text
   [value pos]
@@ -602,7 +567,7 @@
     {}))
 
 (defn check
-  [{:block/keys [uuid marker content file dummy? repeated?] :as block}]
+  [{:block/keys [uuid marker content dummy? repeated?] :as block}]
   (let [new-content (string/replace-first content marker "DONE")
         new-content (if repeated?
                       (update-timestamps-content! block content)
@@ -611,7 +576,7 @@
                             {:custom-properties (with-marker-time block "DONE")})))
 
 (defn uncheck
-  [{:block/keys [uuid marker content file dummy?] :as block}]
+  [{:block/keys [uuid marker content dummy?] :as block}]
   (let [marker (if (= :now (state/get-preferred-workflow))
                  "LATER"
                  "TODO")
@@ -648,13 +613,13 @@
         (util/set-caret-pos! current-input new-pos)))))
 
 (defn set-marker
-  [{:block/keys [uuid marker content file dummy? properties] :as block} new-marker]
+  [{:block/keys [uuid marker content dummy? properties] :as block} new-marker]
   (let [new-content (string/replace-first content marker new-marker)]
     (save-block-if-changed! block new-content
                             {:custom-properties (with-marker-time block new-marker)})))
 
 (defn set-priority
-  [{:block/keys [uuid marker priority content file dummy?] :as block} new-priority]
+  [{:block/keys [uuid marker priority content dummy?] :as block} new-priority]
   (let [new-content (string/replace-first content
                                           (util/format "[#%s]" priority)
                                           (util/format "[#%s]" new-priority))]
@@ -695,7 +660,7 @@
                   block)))))))))
 
 (defn delete-block-aux!
-  [{:block/keys [uuid content file repo ref-pages ref-blocks] :as block} dummy?]
+  [{:block/keys [uuid content repo ref-pages ref-blocks] :as block} dummy?]
   (when-not dummy?
     (let [repo (or repo (state/get-current-repo))
           block (db/pull repo '[*] [:block/uuid uuid])]
@@ -830,22 +795,6 @@
      (when-not (:block/pre-block? block)
        (set-block-property! block-id "id" (str block-id))))
    (util/copy-to-clipboard! (tap-clipboard block-id))))
-
-(defn clear-selection!
-  [_e]
-  (when (state/in-selection-mode?)
-    (doseq [block (state/get-selection-blocks)]
-      (dom/remove-class! block "selected")
-      (dom/remove-class! block "noselect"))
-    (state/clear-selection!)))
-
-(defn clear-selection-blocks!
-  []
-  (when (state/in-selection-mode?)
-    (doseq [block (state/get-selection-blocks)]
-      (dom/remove-class! block "selected")
-      (dom/remove-class! block "noselect"))
-    (state/clear-selection-blocks!)))
 
 (defn exit-editing-and-set-selected-blocks!
   [blocks]
@@ -1008,7 +957,7 @@
 (defn highlight-selection-area!
   [end-block]
   (when-let [start-block (:selection/start-block @state/state)]
-    (clear-selection-blocks!)
+    (clear-selection! nil)
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")]
       (doseq [block blocks]
         (dom/add-class! block "selected noselect"))
@@ -1552,22 +1501,33 @@
   [direction]
   (fn [e]
     (when-let [repo (state/get-current-repo)]
-      (let [blocks (seq (state/get-selection-blocks))]
+      (let [blocks-dom-nodes (state/get-selection-blocks)
+            blocks (seq blocks-dom-nodes)]
         (cond
           (seq blocks)
-          (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                                    [:block/uuid (medley/uuid id)])) blocks)
-                                 (remove nil?))
-                blocks (db/pull-many repo '[*] lookup-refs)
-                end-node (get-top-level-end-node blocks)
-                end-node-parent (tree/-get-parent end-node)
-                top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
-                                                 (get-in % [:block/parent :db/id])) blocks)
-                                     (map outliner-core/block))]
-            (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
-            (let [opts {:key :block/change
-                        :data blocks}]
-              (db/refresh repo opts)))
+          (do
+            (util/stop e)
+            (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
+                                                     [:block/uuid (medley/uuid id)])) blocks)
+                                  (remove nil?))
+                 blocks (db/pull-many repo '[*] lookup-refs)
+                 end-node (get-top-level-end-node blocks)
+                 end-node-parent (tree/-get-parent end-node)
+                 top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
+                                                  (get-in % [:block/parent :db/id])) blocks)
+                                      (map outliner-core/block))]
+             (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+             (let [opts {:key :block/change
+                         :data blocks}]
+               (db/refresh repo opts)
+               (let [blocks (map
+                              (fn [block]
+                                (when-let [id (gobj/get block "id")]
+                                  (when-let [block (gdom/getElement id)]
+                                    (dom/add-class! block "selected noselect")
+                                    block)))
+                              blocks-dom-nodes)]
+                 (state/set-selection-blocks! blocks)))))
 
           (gdom/getElement "date-time-picker")
           nil
@@ -1628,7 +1588,7 @@
                      (last nodes))))]
       (when node
         (state/clear-selection!)
-        (unhighlight-block!)
+        (unhighlight-blocks!)
         (let [block-id (and node (d/attr node "blockid"))
               edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")
               block-id (medley/uuid block-id)]

@@ -241,7 +241,7 @@
                               (assoc :repeated? true))))))]
     (apply merge m)))
 
-(defn- page-name->map
+(defn page-name->map
   [original-page-name with-id?]
   (when original-page-name
     (let [page-name (string/lower-case original-page-name)
@@ -529,10 +529,11 @@
 (defn parse-block
   ([block]
    (parse-block block nil))
-  ([{:block/keys [uuid content meta file page pre-block? parent left format] :as block} {:keys [with-id?]
-                                                                                         :or {with-id? true}}]
+  ([{:block/keys [uuid content meta file page parent left format] :as block} {:keys [with-id?]
+                                                                              :or {with-id? true}}]
    (when-not (string/blank? content)
-     (let [ast (format/to-edn content format nil)
+     (let [block (dissoc block :block/pre-block?)
+           ast (format/to-edn content format nil)
            new-block (first (extract-blocks ast content with-id?))
            parent-refs (->> (db/get-block-parent (state/get-current-repo) uuid)
                             :block/path-refs

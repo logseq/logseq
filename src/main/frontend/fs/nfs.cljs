@@ -135,25 +135,32 @@
                              (config/get-file-format))
                   pending-writes (state/get-write-chan-length)
                   draw? (and path (string/ends-with? path ".excalidraw"))]
-            (if (and local-content (or old-content
-                                       ;; temporally fix
-                                       draw?) new?
-                     (or
-                      draw?
-                      ;; Writing not finished
-                      (> pending-writes 0)
-                      ;; not changed by other editors
-                      not-changed?
-                      new-created?))
-              (do
-                (p/let [_ (verify-permission repo file-handle true)
-                        _ (utils/writeFile file-handle content)
-                        file (.getFile file-handle)]
-                  (when file
-                    (nfs-saved-handler repo path file))))
-              (do
-                (js/alert (str "The file has been modified on your local disk! File path: " path
-                               ", please save your changes and click the refresh button to reload it.")))))
+            (do
+              (p/let [_ (verify-permission repo file-handle true)
+                      _ (utils/writeFile file-handle content)
+                      file (.getFile file-handle)]
+                (when file
+                  (nfs-saved-handler repo path file))))
+            ;; (if (and local-content (or old-content
+            ;;                            ;; temporally fix
+            ;;                            draw?) new?
+            ;;          (or
+            ;;           draw?
+            ;;           ;; Writing not finished
+            ;;           (> pending-writes 0)
+            ;;           ;; not changed by other editors
+            ;;           not-changed?
+            ;;           new-created?))
+            ;;   (do
+            ;;     (p/let [_ (verify-permission repo file-handle true)
+            ;;             _ (utils/writeFile file-handle content)
+            ;;             file (.getFile file-handle)]
+            ;;       (when file
+            ;;         (nfs-saved-handler repo path file))))
+            ;;   (do
+            ;;     (js/alert (str "The file has been modified on your local disk! File path: " path
+            ;;                    ", please save your changes and click the refresh button to reload it."))))
+            )
            ;; create file handle
           (->
            (p/let [handle (idb/get-item handle-path)]

@@ -300,7 +300,11 @@
           (let [parent (tree/-get-parent first-node)
                 parent-parent-id (tree/-get-parent-id parent)
                 parent-right (tree/-get-right parent)
+                last-node-right (tree/-get-right last-node)
                 first-node (tree/-set-left-id first-node (tree/-get-id parent))]
+            (some-> last-node-right
+              (tree/-set-left-id (tree/-get-left-id first-node))
+              (tree/-save txs-state))
             (doseq [node (cons first-node (rest nodes))]
               (-> (tree/-set-parent-id node parent-parent-id)
                 (tree/-save txs-state)))
@@ -308,7 +312,7 @@
               (tree/-set-left-id (tree/-get-id last-node))
               (tree/-save txs-state))))))))
 
-(defn move-subtree
+(defn move-subtree*
   "Move subtree to a destination position in the relation tree.
   Args:
     root: root of subtree

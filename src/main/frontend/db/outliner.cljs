@@ -29,11 +29,11 @@
 
 (defn save-block
   [conn block-m]
-  (let [tx (-> (dissoc block-m :block/children)
+  (let [tx (-> (dissoc block-m :block/children :block/dummy? :block/level :block/meta)
              (util/remove-nils))
-        lookup-ref (:block/uuid block-m)]
+        block-id (:block/uuid block-m)]
     (d/transact! conn [tx])
-    (db-utils/pull [:block/uuid lookup-ref])))
+    (db-utils/pull [:block/uuid block-id])))
 
 (defn del-block
   [conn id-or-look-ref]
