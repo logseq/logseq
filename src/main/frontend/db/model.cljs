@@ -613,7 +613,7 @@
 
 (defn sort-by-left
   [blocks parent]
-  ;; (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
+  (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
   (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
     (loop [block parent
            result []]

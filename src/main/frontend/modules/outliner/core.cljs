@@ -275,39 +275,40 @@
 (defn indent-outdent-nodes
   [nodes indent?]
   (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
-    (let [first-node (first nodes)
-          last-node (last nodes)]
-      (if indent?
-        (when-not (first-child? first-node)
-          (let [first-node-left-id (tree/-get-left-id first-node)
-                last-node-right (tree/-get-right last-node)
-                parent-or-last-child-id (or (-> (db/get-block-immediate-children (state/get-current-repo)
-                                                  first-node-left-id)
-                                              last
-                                              :block/uuid)
-                                          first-node-left-id)
-                first-node (tree/-set-left-id first-node parent-or-last-child-id)]
-            (doseq [node (cons first-node (rest nodes))]
-              (-> (tree/-set-parent-id node first-node-left-id)
-                (tree/-save txs-state)))
-            (some-> last-node-right
-              (tree/-set-left-id first-node-left-id)
-              (tree/-save txs-state))))
-        (when-not (first-level? first-node)
-          (let [parent (tree/-get-parent first-node)
-                parent-parent-id (tree/-get-parent-id parent)
-                parent-right (tree/-get-right parent)
-                last-node-right (tree/-get-right last-node)
-                first-node (tree/-set-left-id first-node (tree/-get-id parent))]
-            (some-> last-node-right
-              (tree/-set-left-id (tree/-get-left-id first-node))
-              (tree/-save txs-state))
-            (doseq [node (cons first-node (rest nodes))]
-              (-> (tree/-set-parent-id node parent-parent-id)
-                (tree/-save txs-state)))
-            (some-> parent-right
-              (tree/-set-left-id (tree/-get-id last-node))
-              (tree/-save txs-state))))))))
+   (let [first-node (first nodes)
+         last-node (last nodes)]
+     (if indent?
+       (when-not (first-child? first-node)
+         (let [first-node-left-id (tree/-get-left-id first-node)
+               last-node-right (tree/-get-right last-node)
+               parent-or-last-child-id (or (-> (db/get-block-immediate-children (state/get-current-repo)
+                                                 first-node-left-id)
+                                             last
+                                             :block/uuid)
+                                         first-node-left-id)
+               first-node (tree/-set-left-id first-node parent-or-last-child-id)]
+           (doseq [node (cons first-node (rest nodes))]
+             (-> (tree/-set-parent-id node first-node-left-id)
+               (tree/-save txs-state)))
+           (some-> last-node-right
+             (tree/-set-left-id first-node-left-id)
+             (tree/-save txs-state))
+           (outliner-file/sync-to-file first-node)))
+       (when-not (first-level? first-node)
+         (let [parent (tree/-get-parent first-node)
+               parent-parent-id (tree/-get-parent-id parent)
+               parent-right (tree/-get-right parent)
+               last-node-right (tree/-get-right last-node)]
+           (some-> last-node-right
+             (tree/-set-left-id (tree/-get-left-id first-node))
+             (tree/-save txs-state))
+           (let [first-node (tree/-set-left-id first-node (tree/-get-id parent))]
+             (doseq [node (cons first-node (rest nodes))]
+               (-> (tree/-set-parent-id node parent-parent-id)
+                 (tree/-save txs-state))))
+           (some-> parent-right
+             (tree/-set-left-id (tree/-get-id last-node))
+             (tree/-save txs-state))))))))
 
 (defn move-subtree
   "Move subtree to a destination position in the relation tree.
