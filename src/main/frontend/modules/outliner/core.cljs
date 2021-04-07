@@ -9,7 +9,9 @@
             [frontend.debug :as debug]
             [clojure.set :as set]
             [frontend.modules.outliner.file :as outliner-file]
-            [frontend.util :as util]))
+            [frontend.modules.outliner.datascript :as ds]
+            [frontend.util :as util]
+            [datascript.core :as d]))
 
 (defrecord Block [data])
 
@@ -98,16 +100,21 @@
     (let [parent-id (tree/-get-id this)]
       (get-by-parent-&-left parent-id parent-id)))
 
-  (-save [this]
-    (let [conn (conn/get-conn false)
-          data (:data this)
-          new-data (db-outliner/save-block conn data)]
-      (assoc this :data new-data)))
+  (-save [this txs-state]
+    (assert (ds/outliner-txs-state? txs-state)
+      "db should be satisfied outliner-tx-state?")
+    (let [m (-> (:data this)
+              (dissoc :block/children)
+              (util/remove-nils))]
+     (swap! txs-state conj m)
+     m))
 
-  (-del [this]
-    (let [conn (conn/get-conn false)
-          block-id (tree/-get-id this)]
-      (db-outliner/del-block conn [:block/uuid block-id])))
+  (-del [this txs-state]
+    (assert (ds/outliner-txs-state? txs-state)
+      "db should be satisfied outliner-tx-state?")
+    (let [block-id (tree/-get-id this)]
+      (swap! txs-state conj [:db.fn/retractEntity [:block/uuid block-id]])
+      block-id))
 
   (-get-children [this]
     (let [children (get-children (tree/-get-id this))]
@@ -129,21 +136,15 @@
                       (throw (js/Error. "Number of children and sorted-children are not equal."))))
                   sorted-children)))))))))
 
-
-(defn save-node*
-  [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (tree/-save node))
-
 (defn save-node
   [node]
-  (let [saved-node (save-node* node)]
-    ;; Should it be async?
-    (outliner-file/sync-to-file saved-node)))
+  {:pre [(tree/satisfied-inode? node)]}
+  (ds/auto-transact! [db (ds/new-outliner-txs-state)]
+    (tree/-save node db)))
 
 (defn insert-node-as-first-child
   "Insert a node as first child."
-  [new-node parent-node]
+  [txs-state new-node parent-node]
   {:pre [(every? tree/satisfied-inode? [new-node parent-node])]}
   (let [parent-id (tree/-get-id parent-node)
         node (-> (tree/-set-left-id new-node parent-id)
@@ -152,14 +153,14 @@
     (do
       (if (tree/satisfied-inode? right-node)
         (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
-              saved-new-node (tree/-save node)]
-          (tree/-save new-right-node)
+              saved-new-node (tree/-save node txs-state)]
+          (tree/-save new-right-node txs-state)
           saved-new-node)
-        (tree/-save node)))))
+        (tree/-save node txs-state)))))
 
 (defn insert-node-as-sibling
   "Insert a node as sibling."
-  [new-node left-node]
+  [txs-state new-node left-node]
   {:pre [(every? tree/satisfied-inode? [new-node left-node])]}
   (let [node (-> (tree/-set-left-id new-node (tree/-get-id left-node))
                (tree/-set-parent-id (tree/-get-parent-id left-node)))
@@ -167,62 +168,51 @@
     (do
       (if (tree/satisfied-inode? right-node)
         (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
-              saved-new-node (tree/-save node)]
-          (tree/-save new-right-node)
+              saved-new-node (tree/-save node txs-state)]
+          (tree/-save new-right-node txs-state)
           saved-new-node)
-        (tree/-save node)))))
-
-(defn insert-node*
-  [new-node target-node sibling?]
-  (if sibling?
-    (insert-node-as-sibling new-node target-node)
-    (insert-node-as-first-child new-node target-node)))
+        (tree/-save node txs-state)))))
 
 (defn insert-node
   [new-node target-node sibling?]
-  (let [saved-node (insert-node* new-node target-node sibling?)]
-    ;; Pipeline after outliner operation
-    (outliner-file/sync-to-file saved-node)))
+  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+    (if sibling?
+      (insert-node-as-sibling txs-state new-node target-node)
+      (insert-node-as-first-child txs-state new-node target-node))))
 
 (defn move-node
   [node up?]
   {:pre [(tree/satisfied-inode? node)]}
-  (let [[up-node down-node] (if up?
-                              (let [left (tree/-get-left node)
-                                    parent? (= left (tree/-get-parent node))]
-                                [(when-not parent? left) node])
-                              [node (tree/-get-right node)])]
-    (when (and up-node down-node)
-      (let [down-node-right (tree/-get-right down-node)
-            up-node-left (tree/-get-left-id up-node)
-            ;; swap up-node and down-node
-            down-node (tree/-set-left-id down-node up-node-left)
-            up-node (tree/-set-left-id up-node (tree/-get-id down-node))]
-        (tree/-save down-node)
-        (tree/-save up-node)
-        (when down-node-right
-          (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id up-node))]
-            (tree/-save down-node-right)))
-        (outliner-file/sync-to-file node)))))
-
-(defn delete-node*
-  "Delete node from the tree."
-  [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (let [right-node (tree/-get-right node)]
-    (tree/-del node)
-    (when (tree/satisfied-inode? right-node)
-      (let [left-node (tree/-get-left node)
-            new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
-        (tree/-save new-right-node)))))
+  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+    (let [[up-node down-node] (if up?
+                                (let [left (tree/-get-left node)
+                                      parent? (= left (tree/-get-parent node))]
+                                  [(when-not parent? left) node])
+                                [node (tree/-get-right node)])]
+      (when (and up-node down-node)
+        (let [down-node-right (tree/-get-right down-node)
+              up-node-left (tree/-get-left-id up-node)
+              ;; swap up-node and down-node
+              down-node (tree/-set-left-id down-node up-node-left)
+              up-node (tree/-set-left-id up-node (tree/-get-id down-node))]
+          (tree/-save down-node txs-state)
+          (tree/-save up-node txs-state)
+          (when down-node-right
+            (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id up-node))]
+              (tree/-save down-node-right txs-state)))
+          (outliner-file/sync-to-file node))))))
 
 (defn delete-node
   "Delete node from the tree."
   [node]
   {:pre [(tree/satisfied-inode? node)]}
-  (do (delete-node* node)
-      ;; Pipeline after outliner operation
-      (outliner-file/sync-to-file node)))
+  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+    (let [right-node (tree/-get-right node)]
+      (tree/-del node txs-state)
+      (when (tree/satisfied-inode? right-node)
+        (let [left-node (tree/-get-left node)
+              new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
+          (tree/-save new-right-node txs-state))))))
 
 (defn get-left-nodes
   [node limit]
@@ -254,22 +244,24 @@
   [start-node end-node block-ids]
   {:pre [(tree/satisfied-inode? start-node)
          (tree/satisfied-inode? end-node)]}
-  (if (= start-node end-node)
-    (delete-node start-node)
-    (let [right-node (tree/-get-right end-node)
-          conn (conn/get-conn false)
-          end-node-left-nodes (get-left-nodes end-node (count block-ids))
-          start-node-parents-with-self (conj (get-node-parents start-node 1000) (tree/-get-id start-node))]
-     (when (tree/satisfied-inode? right-node)
-       (let [cross-node-id (first (set/intersection (set end-node-left-nodes) (set start-node-parents-with-self)))
-             cross-node (get-block-by-id cross-node-id)
-             new-left-id (if (= cross-node start-node)
-                           (tree/-get-left-id cross-node)
-                           cross-node-id)
-             new-right-node (tree/-set-left-id right-node new-left-id)]
-         (tree/-save new-right-node)))
-     (db-outliner/del-blocks conn block-ids)
-     (outliner-file/sync-to-file start-node))))
+  (do (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+        (if (= start-node end-node)
+          (delete-node start-node)
+          (let [right-node (tree/-get-right end-node)
+                conn (conn/get-conn false)
+                end-node-left-nodes (get-left-nodes end-node (count block-ids))
+                start-node-parents-with-self (conj (get-node-parents start-node 1000) (tree/-get-id start-node))]
+            (when (tree/satisfied-inode? right-node)
+              (let [cross-node-id (first (set/intersection (set end-node-left-nodes) (set start-node-parents-with-self)))
+                    cross-node (get-block-by-id cross-node-id)
+                    new-left-id (if (= cross-node start-node)
+                                  (tree/-get-left-id cross-node)
+                                  cross-node-id)
+                    new-right-node (tree/-set-left-id right-node new-left-id)]
+                (tree/-save new-right-node txs-state)))
+            (let [txs (db-outliner/del-blocks block-ids)]
+              (ds/add-txs txs-state txs)))))
+      (outliner-file/sync-to-file start-node)))
 
 (defn first-child?
   [node]
@@ -284,38 +276,39 @@
 
 (defn indent-outdent-nodes
   [nodes indent?]
-  (let [first-node (first nodes)
-        last-node (last nodes)]
-    (if indent?
-     (when-not (first-child? first-node)
-       (let [first-node-left-id (tree/-get-left-id first-node)
-             last-node-right (tree/-get-right last-node)
-             parent-or-last-child-id (or (-> (db/get-block-immediate-children (state/get-current-repo)
-                                                                              first-node-left-id)
-                                             last
-                                             :block/uuid)
-                                         first-node-left-id)
-             first-node (tree/-set-left-id first-node parent-or-last-child-id)]
-         (doseq [node (cons first-node (rest nodes))]
-           (-> (tree/-set-parent-id node first-node-left-id)
-               (tree/-save)))
-         (some-> last-node-right
-                 (tree/-set-left-id first-node-left-id)
-                 (tree/-save))
-         (outliner-file/sync-to-file first-node)))
-     (when-not (first-level? first-node)
-       (let [parent (tree/-get-parent first-node)
-             parent-parent-id (tree/-get-parent-id parent)
-             parent-right (tree/-get-right parent)
-             first-node (tree/-set-left-id first-node (tree/-get-id parent))]
-         (doseq [node (cons first-node (rest nodes))]
-           (-> (tree/-set-parent-id node parent-parent-id)
-               (tree/-save)))
-         (some-> parent-right
-                 (tree/-set-left-id (tree/-get-id last-node))
-                 (tree/-save)))))))
+  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+    (let [first-node (first nodes)
+          last-node (last nodes)]
+      (if indent?
+        (when-not (first-child? first-node)
+          (let [first-node-left-id (tree/-get-left-id first-node)
+                last-node-right (tree/-get-right last-node)
+                parent-or-last-child-id (or (-> (db/get-block-immediate-children (state/get-current-repo)
+                                                  first-node-left-id)
+                                              last
+                                              :block/uuid)
+                                          first-node-left-id)
+                first-node (tree/-set-left-id first-node parent-or-last-child-id)]
+            (doseq [node (cons first-node (rest nodes))]
+              (-> (tree/-set-parent-id node first-node-left-id)
+                (tree/-save txs-state)))
+            (some-> last-node-right
+              (tree/-set-left-id first-node-left-id)
+              (tree/-save txs-state))
+            (outliner-file/sync-to-file first-node)))
+        (when-not (first-level? first-node)
+          (let [parent (tree/-get-parent first-node)
+                parent-parent-id (tree/-get-parent-id parent)
+                parent-right (tree/-get-right parent)
+                first-node (tree/-set-left-id first-node (tree/-get-id parent))]
+            (doseq [node (cons first-node (rest nodes))]
+              (-> (tree/-set-parent-id node parent-parent-id)
+                (tree/-save txs-state)))
+            (some-> parent-right
+              (tree/-set-left-id (tree/-get-id last-node))
+              (tree/-save txs-state))))))))
 
-(defn move-subtree*
+(defn move-subtree
   "Move subtree to a destination position in the relation tree.
   Args:
     root: root of subtree
@@ -324,25 +317,12 @@
   [root target-node sibling?]
   {:pre [(every? tree/satisfied-inode? [root target-node])
          (boolean? sibling?)]}
-  (let [left-node-id (tree/-get-left-id root)
-        right-node (tree/-get-right root)]
-    (when (tree/satisfied-inode? right-node)
-      (let [new-right-node (tree/-set-left-id right-node left-node-id)]
-        (tree/-save new-right-node)))
-    (insert-node root target-node sibling?)))
-
-(defn move-subtree
-  "Move subtree to a destination position in the relation tree.
-  Args:
-    root: root of subtree
-    target-node: the destination
-    sibling: as sibling of the target-node or child"
-  [root target-node sibling]
-  (do
-    (move-subtree* root target-node sibling)
-
-    ;; Pipeline after outliner operation
-    (outliner-file/sync-to-file root)
-    ;; TODO Should sync to file where the target-node located when the
-    ;; target-node is in another file.
-    ))
+  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+    (let [left-node-id (tree/-get-left-id root)
+         right-node (tree/-get-right root)]
+      (when (tree/satisfied-inode? right-node)
+        (let [new-right-node (tree/-set-left-id right-node left-node-id)]
+          (tree/-save new-right-node txs-state)))
+      (if sibling?
+        (insert-node-as-sibling txs-state root target-node)
+        (insert-node-as-first-child txs-state root target-node)))))
