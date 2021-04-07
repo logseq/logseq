@@ -237,57 +237,22 @@
        (not= current-id (cljs.core/uuid block-id))
        (db/entity [:block/uuid (cljs.core/uuid block-id)])))
 
-;; TODO:
-(defn- create-file-if-not-exists!
-  [repo format page value]
-  (let [format (name format)
-        title (string/capitalize (:block/name page))
-        journal-page? (date/valid-journal-title? title)
-        path (str
-              (if journal-page?
-                config/default-journals-directory
-                (config/get-pages-directory))
-              "/"
-              (if journal-page?
-                (date/journal-title->default title)
-                (-> (:block/name page)
-                    (util/page-name-sanity))) "."
-              (if (= format "markdown") "md" format))
-        file-path (str "/" path)
-        dir (config/get-repo-dir repo)]
-    (p/let [exists? (fs/file-exists? dir file-path)]
-      (if exists?
-        (do
-          (notification/show!
-           [:p.content
-            (util/format "File %s already exists!" file-path)]
-           :error)
-          (state/set-editor-op! nil))
-        ;; create the file
-        (let [content (str (util/default-content-with-title format
-                             (or (:block/original-name page)
-                                 (:block/name page)))
-                           value)]
-          (p/let [_ (fs/create-if-not-exists repo dir file-path content)]
-            (file-handler/reset-file! repo path content)
-            (ui-handler/re-render-root!)
-
-            ;; Continue to edit the last block
-            (let [blocks (db/get-page-blocks repo (:block/name page))
-                  last-block (last blocks)]
-              (edit-last-block-for-new-page! last-block :max)
-              (state/set-editor-op! nil))))))))
-
 (defn- wrap-parse-block
   [{:block/keys [content format] :as block}]
-  (let [content' (str (config/get-block-pattern format) " "
-                      (string/triml content))]
+  (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
+        properties? (contains? #{"properties" "property_drawer"}
+                               (when-let [type (first (ffirst ast))]
+                                 (string/lower-case type)))
+        content' (if properties?
+                   (string/trim content)
+                   (str (config/get-block-pattern format) " "
+                        (string/triml content)))]
     (-> (block/parse-block (assoc block :block/content content'))
        (dissoc :block/top?
                :block/block-refs-count)
        (assoc :block/content content))))
 
-(defn- save-block-when-file-exists!
+(defn- save-block-inner!
   [repo block e value opts]
   (let [block (assoc block :block/content value)]
     (profile
@@ -307,7 +272,7 @@
   ([block value]
    (save-block-if-changed! block value nil))
   ([block value
-    {:keys [indent-left? chan chan-callback]
+    {:keys []
      :as opts}]
    (let [{:block/keys [uuid content file page format repo content properties]} block
          repo (or repo (state/get-current-repo))
@@ -324,18 +289,8 @@
 
        :else
        (let [content-changed? (not= (string/trim content) (string/trim value))]
-         (when content-changed?
-           (let [file (db/entity repo (:db/id file))]
-             (cond
-               ;; Page was referenced but no related file
-               (and page (not file))
-               (create-file-if-not-exists! repo format page value)
-
-               (and file page)
-               (save-block-when-file-exists! repo block e value opts)
-
-               :else
-               nil))))))))
+         (when (and content-changed? page)
+           (save-block-inner! repo block e value opts)))))))
 
 (defn- compute-fst-snd-block-text
   [value pos]
@@ -612,7 +567,7 @@
     {}))
 
 (defn check
-  [{:block/keys [uuid marker content file dummy? repeated?] :as block}]
+  [{:block/keys [uuid marker content dummy? repeated?] :as block}]
   (let [new-content (string/replace-first content marker "DONE")
         new-content (if repeated?
                       (update-timestamps-content! block content)
@@ -621,7 +576,7 @@
                             {:custom-properties (with-marker-time block "DONE")})))
 
 (defn uncheck
-  [{:block/keys [uuid marker content file dummy?] :as block}]
+  [{:block/keys [uuid marker content dummy?] :as block}]
   (let [marker (if (= :now (state/get-preferred-workflow))
                  "LATER"
                  "TODO")
@@ -658,13 +613,13 @@
         (util/set-caret-pos! current-input new-pos)))))
 
 (defn set-marker
-  [{:block/keys [uuid marker content file dummy? properties] :as block} new-marker]
+  [{:block/keys [uuid marker content dummy? properties] :as block} new-marker]
   (let [new-content (string/replace-first content marker new-marker)]
     (save-block-if-changed! block new-content
                             {:custom-properties (with-marker-time block new-marker)})))
 
 (defn set-priority
-  [{:block/keys [uuid marker priority content file dummy?] :as block} new-priority]
+  [{:block/keys [uuid marker priority content dummy?] :as block} new-priority]
   (let [new-content (string/replace-first content
                                           (util/format "[#%s]" priority)
                                           (util/format "[#%s]" new-priority))]
@@ -705,7 +660,7 @@
                   block)))))))))
 
 (defn delete-block-aux!
-  [{:block/keys [uuid content file repo ref-pages ref-blocks] :as block} dummy?]
+  [{:block/keys [uuid content repo ref-pages ref-blocks] :as block} dummy?]
   (when-not dummy?
     (let [repo (or repo (state/get-current-repo))
           block (db/pull repo '[*] [:block/uuid uuid])]

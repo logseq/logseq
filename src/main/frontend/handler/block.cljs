@@ -10,7 +10,8 @@
             [clojure.set :as set]
             [medley.core :as medley]
             [frontend.format.block :as block]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [clojure.string :as string]))
 
 (defn get-block-ids
   [block]
@@ -58,21 +59,7 @@
            :block/collapsed? false})
         block-ids))))
 
-(defn pre-block-with-only-title?
-  [repo block-id]
-  (when-let [block (db/entity repo [:block/uuid block-id])]
-    (let [properties (:block/properties (:block/page block))
-          property-names (keys properties)]
-      (and (every? #(contains? #{:title :filters} %) property-names)
-           (let [ast (mldoc/->edn (:block/content block) (mldoc/default-config (:block/format block)))]
-             (and
-              (= "Properties" (ffirst (first ast)))
-              (or
-               (empty? (rest ast))
-               (every? (fn [[[typ break-lines]] _]
-                         (and (= typ "Paragraph")
-                              (every? #(= % ["Break_Line"]) break-lines))) (rest ast)))))))))
-
+;; TODO: should we remove this dummy block and use the page's root block instead?
 (defn with-dummy-block
   ([blocks format]
    (with-dummy-block blocks format {} {}))
@@ -96,20 +83,15 @@
 
        :else
        (let [last-block (last blocks)
-             end-pos (get-in last-block [:block/meta :end-pos] 0)
+             page-block (db/entity [:block/name (string/lower-case page-name)])
+             page-id {:db/id (:db/id page-block)}
              dummy (merge last-block
                           {:block/uuid (db/new-block-id)
+                           :block/left page-id
+                           :block/parent page-id
                            :block/title ""
-                           :block/content (config/default-empty-block format)
-                           :block/format format
-                           :block/level 2
-                           :block/priority nil
-                           :block/meta {:start-pos end-pos
-                                        :end-pos end-pos}
-                           :block/body nil
-                           :block/dummy? true
-                           :block/marker nil
-                           :block/pre-block? false}
+                           :block/content ""
+                           :block/format format}
                           default-option)]
          (conj blocks dummy))))))
 

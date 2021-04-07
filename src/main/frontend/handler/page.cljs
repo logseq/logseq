@@ -23,6 +23,7 @@
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.format.mldoc :as mldoc]
+            [frontend.format.block :as block]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [cljs.reader :as reader]
@@ -47,46 +48,12 @@
    (create! title {}))
   ([title {:keys [redirect?]
            :or {redirect? true}}]
-   (let [title (and title (string/trim title))
-         repo (state/get-current-repo)
-         dir (config/get-repo-dir repo)
-         journal-page? (date/valid-journal-title? title)
-         directory (get-directory journal-page?)]
-     (when dir
-       (p/let [_ (-> (fs/mkdir! (str dir "/" directory))
-                     (p/catch (fn [_e])))]
-         (let [format (name (state/get-preferred-format))
-               page (string/lower-case title)
-               path (str (get-file-name journal-page? title)
-                         "."
-                         (if (= format "markdown") "md" format))
-               path (str directory "/" path)
-               file-path (str "/" path)]
-           (p/let [exists? (fs/file-exists? dir file-path)]
-             (if exists?
-               (notification/show!
-                [:p.content
-                 (util/format "File %s already exists!" file-path)]
-                :error)
-               ;; Create the file
-               (let [content (util/default-content-with-title format title)]
-                 ;; Write to the db first, then write to the filesystem,
-                 ;; otherwise, the main electron ipc will notify that there's
-                 ;; a new file created.
-                 ;; Question: what if the fs write failed?
-                 (p/let [_ (file-handler/reset-file! repo path content)
-                         _ (fs/create-if-not-exists repo dir file-path content)]
-                   (when redirect?
-                     (route-handler/redirect! {:to :page
-                                               :path-params {:name page}})
-
-                     ;; Edit the first block
-                     (let [blocks (db/get-page-blocks page)
-                           last-block (last blocks)]
-                       (when last-block
-                         (js/setTimeout
-                          #(editor-handler/edit-last-block-for-new-page! last-block 0)
-                          100))))))))))))))
+   (let [page (string/lower-case title)]
+     (let [tx (block/page-name->map title true)]
+       (db/transact! [tx]))
+     (when redirect?
+      (route-handler/redirect! {:to :page
+                                :path-params {:name page}})))))
 
 (defn page-add-properties!
   [page-name properties]

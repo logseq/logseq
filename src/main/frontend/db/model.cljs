@@ -613,7 +613,7 @@
 
 (defn sort-by-left
   [blocks parent]
-  (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
+  ;; (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
   (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
     (loop [block parent
            result []]
@@ -757,9 +757,9 @@
             file-name (when-let [file-name (last (string/split file #"/"))]
                         (first (util/split-last "." file-name)))]
         (or property-name
-            (if (= (state/page-name-order) "file")
-              (or file-name first-block-name)
-              (or first-block-name file-name)))))))
+            (if (= (state/page-name-order) "heading")
+              (or first-block-name file-name)
+              (or file-name first-block-name)))))))
 
 (defn get-page-original-name
   [page-name]
