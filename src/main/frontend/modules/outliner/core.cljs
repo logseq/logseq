@@ -309,7 +309,7 @@
               (tree/-set-left-id (tree/-get-id last-node))
               (tree/-save txs-state))))))))
 
-(defn move-subtree*
+(defn move-subtree
   "Move subtree to a destination position in the relation tree.
   Args:
     root: root of subtree
