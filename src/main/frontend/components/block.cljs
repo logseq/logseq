@@ -1366,7 +1366,7 @@
                         (d/has-class? target "fn"))
                    (d/has-class? target "image-resize"))
        (editor-handler/clear-selection! nil)
-       (editor-handler/unhighlight-block!)
+       (editor-handler/unhighlight-blocks!)
        (let [properties-hidden? (text/properties-hidden? properties)
              content (text/remove-level-spaces content format)
              content (if properties-hidden? (text/remove-properties! content) content)
@@ -1409,7 +1409,7 @@
                       true)))
   (reset! *dragging? false)
   (reset! *dragging-block nil)
-  (editor-handler/unhighlight-block!))
+  (editor-handler/unhighlight-blocks!))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title level body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
@@ -1599,7 +1599,7 @@
                       false)))
   (reset! *dragging? false)
   (reset! *dragging-block nil)
-  (editor-handler/unhighlight-block!))
+  (editor-handler/unhighlight-blocks!))
 
 (defn- block-mouse-over
   [e has-child? *control-show? block-id doc-mode?]

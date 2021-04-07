@@ -330,7 +330,7 @@
         :route         route-match
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
-        :on-click      editor-handler/unhighlight-block!}
+        :on-click      editor-handler/unhighlight-blocks!}
 
        [:div.theme-inner
         (sidebar-mobile-sidebar

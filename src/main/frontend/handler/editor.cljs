@@ -163,7 +163,7 @@
     (doseq [block blocks]
       (dom/add-class! block "block-highlight"))))
 
-(defn unhighlight-block!
+(defn unhighlight-blocks!
   []
   (let [blocks (some->> (array-seq (js/document.getElementsByClassName "block-highlight"))
                         (repeat 2)
@@ -185,6 +185,13 @@
                     "ls-block"
                     "edit-block")))
 
+(defn clear-selection!
+  [_e]
+  (doseq [block (dom/by-class "selected")]
+    (dom/remove-class! block "selected")
+    (dom/remove-class! block "noselect"))
+  (state/clear-selection!))
+
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn edit-block!
   ([block pos format id]
@@ -193,7 +200,8 @@
                          :or {tail-len 0}}]
    (when-not config/publishing?
      (when-let [block-id (:block/uuid block)]
-       (let [edit-input-id (if (uuid? id)
+       (let [block (db/pull [:block/uuid block-id])
+             edit-input-id (if (uuid? id)
                              (get-edit-input-id-with-block-id id)
                              (str (subs id 0 (- (count id) 36)) block-id))
              content (or custom-content (:block/content block) "")
@@ -207,7 +215,9 @@
 
                           :else
                           (subs content 0 pos))]
-         (state/set-editing! edit-input-id content block text-range))))))
+         (do
+           (clear-selection! nil)
+           (state/set-editing! edit-input-id content block text-range)))))))
 
 (defn edit-last-block-for-new-page!
   [last-block pos]
@@ -831,22 +841,6 @@
        (set-block-property! block-id "id" (str block-id))))
    (util/copy-to-clipboard! (tap-clipboard block-id))))
 
-(defn clear-selection!
-  [_e]
-  (when (state/in-selection-mode?)
-    (doseq [block (state/get-selection-blocks)]
-      (dom/remove-class! block "selected")
-      (dom/remove-class! block "noselect"))
-    (state/clear-selection!)))
-
-(defn clear-selection-blocks!
-  []
-  (when (state/in-selection-mode?)
-    (doseq [block (state/get-selection-blocks)]
-      (dom/remove-class! block "selected")
-      (dom/remove-class! block "noselect"))
-    (state/clear-selection-blocks!)))
-
 (defn exit-editing-and-set-selected-blocks!
   [blocks]
   (util/clear-selection!)
@@ -1008,7 +1002,7 @@
 (defn highlight-selection-area!
   [end-block]
   (when-let [start-block (:selection/start-block @state/state)]
-    (clear-selection-blocks!)
+    (clear-selection! nil)
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")]
       (doseq [block blocks]
         (dom/add-class! block "selected noselect"))
@@ -1552,7 +1546,8 @@
   [direction]
   (fn [e]
     (when-let [repo (state/get-current-repo)]
-      (let [blocks (seq (state/get-selection-blocks))]
+      (let [blocks-dom-nodes (state/get-selection-blocks)
+            blocks (seq blocks-dom-nodes)]
         (cond
           (seq blocks)
           (do
@@ -1569,7 +1564,15 @@
              (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
              (let [opts {:key :block/change
                          :data blocks}]
-               (db/refresh repo opts))))
+               (db/refresh repo opts)
+               (let [blocks (map
+                              (fn [block]
+                                (when-let [id (gobj/get block "id")]
+                                  (when-let [block (gdom/getElement id)]
+                                    (dom/add-class! block "selected noselect")
+                                    block)))
+                              blocks-dom-nodes)]
+                 (state/set-selection-blocks! blocks)))))
 
           (gdom/getElement "date-time-picker")
           nil
@@ -1630,7 +1633,7 @@
                      (last nodes))))]
       (when node
         (state/clear-selection!)
-        (unhighlight-block!)
+        (unhighlight-blocks!)
         (let [block-id (and node (d/attr node "blockid"))
               edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")
               block-id (medley/uuid block-id)]
