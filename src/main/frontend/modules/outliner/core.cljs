@@ -102,12 +102,12 @@
 
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
-      "db should be satisfied outliner-tx-state?")
+            "db should be satisfied outliner-tx-state?")
     (let [m (-> (:data this)
-              (dissoc :block/children)
-              (util/remove-nils))]
-     (swap! txs-state conj m)
-     m))
+                (dissoc :block/children :block/dummy? :block/level :block/meta)
+                (util/remove-nils))]
+      (swap! txs-state conj m)
+      m))
 
   (-del [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
