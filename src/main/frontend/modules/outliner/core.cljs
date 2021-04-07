@@ -199,8 +199,7 @@
           (tree/-save up-node txs-state)
           (when down-node-right
             (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id up-node))]
-              (tree/-save down-node-right txs-state)))
-          (outliner-file/sync-to-file node))))))
+              (tree/-save down-node-right txs-state))))))))
 
 (defn delete-node
   "Delete node from the tree."
@@ -260,8 +259,7 @@
                     new-right-node (tree/-set-left-id right-node new-left-id)]
                 (tree/-save new-right-node txs-state)))
             (let [txs (db-outliner/del-blocks block-ids)]
-              (ds/add-txs txs-state txs)))))
-      (outliner-file/sync-to-file start-node)))
+              (ds/add-txs txs-state txs)))))))
 
 (defn first-child?
   [node]
@@ -294,8 +292,7 @@
                 (tree/-save txs-state)))
             (some-> last-node-right
               (tree/-set-left-id first-node-left-id)
-              (tree/-save txs-state))
-            (outliner-file/sync-to-file first-node)))
+              (tree/-save txs-state))))
         (when-not (first-level? first-node)
           (let [parent (tree/-get-parent first-node)
                 parent-parent-id (tree/-get-parent-id parent)
