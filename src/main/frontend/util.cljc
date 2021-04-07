@@ -1025,12 +1025,9 @@
                       "")
          new-block (case (name text-format)
                      "org"
-                     "** "
+                     "* "
 
-                     "markdown"
-                     "## "
-
-                     "")]
+                     "- ")]
      (if contents?
        new-block
        (str properties "\n\n" (if new-block? new-block))))))

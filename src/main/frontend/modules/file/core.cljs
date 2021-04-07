@@ -15,23 +15,27 @@
             [frontend.modules.outliner.tree :as tree]
             [promesa.core :as p]))
 
-(defn clip-content
-  [content]
-  (->
-    (string/replace content #"^\n+" "")
-    (string/replace #"^#+" "")
-    (string/replace #"\n+$" "")))
-
 (defn transform-content
-  [pre-block? content level]
+  [{:block/keys [format pre-block? content unordered]} level]
   (let [content (or content "")]
     (if pre-block?
-     (clip-content content)
-     (let [prefix (->>
-                   (repeat level "#")
-                   (apply str))
-           new-content (clip-content content)]
-       (str prefix " " new-content)))))
+      (string/trim content)
+      (let [prefix (cond
+                     (= format :org)
+                     (->>
+                      (repeat level "*")
+                      (apply str))
+
+                     (and (= format :markdown) (not unordered)) ; heading
+                     ""
+
+                     :else
+                     (str (->>
+                           (repeat (dec level) "  ")
+                           (apply str))
+                          "-"))         ; TODO:
+            new-content (string/trim content)]
+        (str prefix " " new-content)))))
 
 (defn tree->file-content
   [tree init-level]
@@ -40,8 +44,7 @@
          level init-level]
     (if (nil? f)
       (string/join "\n" block-contents)
-      (let [content (transform-content
-                      (:block/pre-block? f) (:block/content f) level)
+      (let [content (transform-content f level)
             new-content
             (if-let [children (seq (:block/children f))]
               [content (tree->file-content children (inc level))]

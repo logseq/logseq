@@ -109,10 +109,8 @@
     (case format
       :org
       "*"
-      :markdown
-      "#"
 
-      "")))
+      "-")))
 
 (defn get-hr
   [format]

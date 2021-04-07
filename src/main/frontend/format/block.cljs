@@ -479,7 +479,7 @@
                        (->
                         {:uuid (db/new-block-id)
                          :content content
-                         :level 2
+                         :level 1
                          :meta {:start-pos 0
                                 :end-pos (or first-block-start-pos
                                              (utf8/length encoded-content))}

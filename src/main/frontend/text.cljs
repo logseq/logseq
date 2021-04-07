@@ -84,14 +84,21 @@
   ([text format]
    (remove-level-spaces text format false))
   ([text format space?]
-   (if-not (string/blank? text)
+   (cond
+     (string/blank? text)
+     ""
+
+     (and (= "markdown" (name format))
+          (string/starts-with? text "---"))
+     text
+
+     :else
      (let [pattern (util/format
                     (if space?
                       "^[%s]+\\s+"
                       "^[%s]+\\s?")
                     (config/get-block-pattern format))]
-       (string/replace-first text (re-pattern pattern) ""))
-     "")))
+       (string/replace-first (string/triml text) (re-pattern pattern) "")))))
 
 (defn append-newline-after-level-spaces
   [text format]
