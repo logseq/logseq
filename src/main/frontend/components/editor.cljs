@@ -6,6 +6,8 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.block :as block-handler]
+            [frontend.components.block :as block]
+            [frontend.components.search :as search]
             [frontend.handler.page :as page-handler]
             [frontend.components.datetime :as datetime-comp]
             [frontend.state :as state]
@@ -110,8 +112,13 @@
        {:on-chosen   chosen-handler
         :on-enter    non-exist-block-handler
         :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
-        :item-render (fn [{:block/keys [content]}]
-                       content)
+        :item-render (fn [{:block/keys [content page uuid] :as item}]
+                       (let [page (or (:page/original-name page)
+                                      (:page/name page))
+                             repo (state/sub :git/current-repo)
+                             format (db/get-page-format page)]
+
+                         (search/block-search-result-item repo uuid format content q)))
         :class       "black"}))))
 
 (rum/defcs block-search < rum/reactive
