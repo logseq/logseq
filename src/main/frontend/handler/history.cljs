@@ -11,7 +11,8 @@
             [goog.object :as gobj]
             [dommy.core :as d]
             [frontend.util :as util]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.modules.editor.undo-redo :as undo-redo]))
 
 (defn- default-undo
   []
@@ -43,32 +44,12 @@
 
 (defn undo!
   []
-  (when-not (state/get-editor-op)
-    (let [route (get-in (:route-match @state/state) [:data :name])]
-      (if (and (contains? #{:home :page :file} route)
-               (state/get-current-repo))
-        (let [repo (state/get-current-repo)
-              chan (async/promise-chan)
-              save-commited? (atom nil)
-              undo-fn (fn []
-                        (history/undo! repo file/alter-file restore-cursor!))]
-          (editor/save-current-block-when-idle! {:check-idle? false
-                                                 :chan chan
-                                                 :chan-callback (fn []
-                                                                  (reset! save-commited? true))})
-          (if @save-commited?
-            (async/go
-              (let [_ (async/<! chan)]
-                (undo-fn)))
-            (undo-fn)))
-        (default-undo)))))
+  (do
+    (editor/save-current-block-when-idle! {:check-idle? false})
+    (let [{:keys [editor-cursor]} (undo-redo/undo)]
+      (restore-cursor! editor-cursor))))
 
 (defn redo!
   []
-  (when-not (state/get-editor-op)
-    (let [route (get-in (:route-match @state/state) [:data :name])]
-     (if (and (contains? #{:home :page :file} route)
-              (state/get-current-repo))
-       (let [repo (state/get-current-repo)]
-         (history/redo! repo file/alter-file restore-cursor!))
-       (default-redo)))))
+  (let [{:keys [editor-cursor]} (undo-redo/redo)]
+    (restore-cursor! editor-cursor)))

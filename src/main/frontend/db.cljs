@@ -13,8 +13,7 @@
             [frontend.db-schema :as db-schema]
             [frontend.db.default :as default-db]
             [clojure.core.async :as async]
-            [frontend.idb :as idb]
-            [frontend.modules.undo-redo.core :as undo-redo]))
+            [frontend.idb :as idb]))
 
 (import-vars
  [frontend.db.conn

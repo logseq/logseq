@@ -1399,6 +1399,7 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
   (let [dragging? (rum/react *dragging?)
+        content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
@@ -1417,7 +1418,7 @@
 
       (cond
         pre-block?
-        (pre-block-cp config (string/trim content) format)
+        (pre-block-cp config content format)
 
         dummy?
         [:span.opacity-50 "Click here to start writing"]
