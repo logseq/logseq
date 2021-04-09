@@ -7,7 +7,8 @@
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
             [lambdaisland.glogi :as log])
-  (:import [goog.ui KeyboardShortcutHandler]))
+  (:import [goog.ui KeyboardShortcutHandler]
+           [goog.events KeyCodes]))
 
 (def installed (atom []))
 (def binding-profile (atom [binding/default binding/custom]))
@@ -27,11 +28,15 @@
        shortcut)
      (mapv mod-key))))
 
+(def global-keys #js
+  [KeyCodes/ENTER KeyCodes/TAB
+   KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
+
 (defn install-shortcut!
   [shortcut-map]
   (let [handler (new KeyboardShortcutHandler js/window)]
-    ;; default is false, set it to true to deal with arrow keys, etc
-    (.setAllShortcutsAreGlobal handler true)
+    ;; set arrows enter, tab to global
+    (.setGlobalKeys handler global-keys)
     ;; default is true, set it to false here
     (.setAlwaysPreventDefault handler false)
 
