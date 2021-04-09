@@ -1137,7 +1137,7 @@
         [:a.marker-switch
          {:title "Change from NOW to LATER"
           :on-click (set-marker-fn "LATER")}
-         [:span "N"]]
+         "N"]
         "LATER"
         [:a.marker-switch
          {:title "Change from LATER to NOW"
@@ -1367,8 +1367,7 @@
            (f)
            (js/setTimeout f 5)))
 
-       (when-not (state/get-selection-start-block)
-         (when block-id (state/set-selection-start-block! block-id)))))))
+       (when block-id (state/set-selection-start-block! block-id))))))
 
 (defn- block-content-on-drag-over
   [event uuid]
