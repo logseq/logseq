@@ -6,15 +6,10 @@
   flex: 0 0 auto;
   background-color: var(--ls-primary-background-color, #fff);
 
-  position: fixed;
-  width: 100%;
-  top: 0;
-  left: 0;
-
   user-select: none;
 
   .it svg {
-      transform: scale(0.8);
+    transform: scale(0.8);
   }
 
   .repos {
@@ -50,7 +45,7 @@
 }
 
 .cp__header-logo {
-    display: none;
+  display: none;
 }
 
 .cp__header-logo:hover,
@@ -68,7 +63,7 @@
 }
 
 .cp__right-menu-button {
-    display: block;
+  display: block;
 }
 
 @screen sm {
@@ -86,13 +81,12 @@
   }
 }
 
-
 #repo-name {
-    @apply md:max-w-none;
-    vertical-align: middle;
-    display: inline-block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 7ch;
+  @apply md:max-w-none;
+  vertical-align: middle;
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 7ch;
 }
