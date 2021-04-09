@@ -254,7 +254,7 @@
         theme (state/sub :ui/theme)
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#right-sidebar.cp__right-sidebar
+      [:div#right-sidebar.cp__right-sidebar.h-screen.overflow-y-auto.overflow-x-hidden
        {:class (if sidebar-open? "is-open")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner
