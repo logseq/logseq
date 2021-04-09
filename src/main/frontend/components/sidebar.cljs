@@ -23,7 +23,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export]
             [frontend.config :as config]
-            [frontend.keyboards :as keyboards]
+            [frontend.modules.shortcut.core :as shortcut]
             [dommy.core :as d]
             [clojure.string :as string]
             [goog.object :as gobj]
@@ -268,7 +268,6 @@
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
-  ;; TODO: move this to keyboards
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "click"
@@ -280,30 +279,13 @@
      (mixins/listen state js/window "mouseup"
                     (fn [e]
                       (when (state/get-selection-start-block)
-                        (state/set-selection-start-block! nil))))
-
-     ;; TODO: move to keyboards
-     (mixins/on-key-down
-      state
-      {;; esc
-       27 (fn [_state e]
-            (editor-handler/clear-selection! e))
-
-       ;; shift+up
-       38 (fn [state e]
-            (editor-handler/on-select-block state e true))
-
-       ;; shift+down
-       40 (fn [state e]
-            (editor-handler/on-select-block state e false))
-
-       ;; ?
-       191 (fn [state e]
-             (when-not (util/input? (gobj/get e "target"))
-               (ui-handler/toggle-help!)))})))
+                        (state/set-selection-start-block! nil))))))
   {:did-mount (fn [state]
-                (keyboards/bind-shortcuts!)
-                state)}
+                (shortcut/install-shortcuts!)
+                state)
+   :will-unmount (fn [state]
+                   (shortcut/uninstall-shortcuts!)
+                   state)}
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
