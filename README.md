@@ -28,7 +28,7 @@ In the unlikely event that the website is down or cannot be maintained, your dat
 
 Our top sponsors are shown below! [[Become a sponsor](https://opencollective.com/logseq#sponsor)]
 
-<a href="https://deta.space/" target="_blank"><img width=200 height=100 src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg" /></a>
+<a href="https://www.deta.sh/" target="_blank"><img width=200 height=100 src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg" /></a>
 
 
 ## Feature requests
