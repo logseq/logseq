@@ -7,6 +7,7 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
+            [frontend.modules.shortcut.mixin :refer [bind-state]]
             [frontend.state :as state]
             [frontend.components.svg :as svg]
             [clojure.string :as string]
@@ -317,53 +318,7 @@
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/on-key-down
-      state
-      {;; up
-       38 (fn [_ e]
-            (let [current-idx (get state ::current-idx)
-                  matched (first (:rum/args state))]
-              (util/stop e)
-              (cond
-                (>= @current-idx 1)
-                (swap! current-idx dec)
-                (= @current-idx 0)
-                (reset! current-idx (dec (count matched)))
-
-                :else
-                nil)
-              (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-                (let [ac-inner (gdom/getElement "ui__ac-inner")
-                      element-top (gobj/get element "offsetTop")
-                      scroll-top (- (gobj/get element "offsetTop") 360)]
-                  (set! (.-scrollTop ac-inner) scroll-top)))))
-         ;; down
-       40 (fn [state e]
-            (let [current-idx (get state ::current-idx)
-                  matched (first (:rum/args state))]
-              (util/stop e)
-              (let [total (count matched)]
-                (if (>= @current-idx (dec total))
-                  (reset! current-idx 0)
-                  (swap! current-idx inc)))
-              (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-                (let [ac-inner (gdom/getElement "ui__ac-inner")
-                      element-top (gobj/get element "offsetTop")
-                      scroll-top (- (gobj/get element "offsetTop") 360)]
-                  (set! (.-scrollTop ac-inner) scroll-top)))))
-
-         ;; enter
-       13 (fn [state e]
-            (util/stop e)
-            (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)]
-              (let [current-idx (get state ::current-idx)]
-                (if (and (seq matched)
-                         (> (count matched)
-                            @current-idx))
-                  (on-chosen (nth matched @current-idx) false)
-                  (and on-enter (on-enter state))))))})))
+  (bind-state :component/auto-complete)
   [state matched {:keys [on-chosen
                          on-shift-chosen
                          on-enter
