@@ -2,17 +2,8 @@
   (:require [tongue.core :as tongue]
             [frontend.config :as config]))
 
-;; TODO
-;; - [ ] Localizing Number Formats
-;; - [ ] Localizing Dates
-
-
 (def dicts
-  {:en {:tutorial/text "---
-title: $today
----
-
-# Hi, welcome to Logseq!
+  {:en {:tutorial/text "# Hi, welcome to Logseq!
 :PROPERTIES:
 :heading: true
 :END:
@@ -218,7 +209,7 @@ title: How to take dummy notes?
         :project/location "All published pages will be located under"
         :project/sync-settings "Sync project settings"
         :page/presentation-mode "Presentation mode (Powered by Reveal.js)"
-        :page/edit-properties-placeholder "Page properties"
+        :page/edit-properties-placeholder "Properties"
         :page/delete-success "Page {1} was deleted successfully!"
         :page/delete-confirmation "Are you sure you want to delete this page and its file?"
         :page/rename-to "Rename \"{1}\" to:"

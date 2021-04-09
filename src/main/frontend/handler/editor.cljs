@@ -7,7 +7,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.expand :as expand]
             [frontend.handler.block :as block-handler]

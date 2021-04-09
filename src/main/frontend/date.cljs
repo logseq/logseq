@@ -170,6 +170,11 @@
     (let [journal-title (util/capitalize-all journal-title)]
       (journal-title-> journal-title #(util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") %))))))
 
+(defn int->journal-title
+  [day]
+  (when day
+    (format (tf/parse (tf/formatter "yyyyMMdd") (str day)))))
+
 (defn journal-title->long
   [journal-title]
   (journal-title-> journal-title #(tc/to-long %)))
