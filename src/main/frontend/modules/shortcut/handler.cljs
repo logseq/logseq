@@ -8,14 +8,14 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.modules.shortcut.mixin :refer :all]
+            [frontend.modules.shortcut.mixin :refer [before state-f] :as m]
             [frontend.state :as state]
             [frontend.ui.date-picker :as date-picker]))
 
 (def handler
 [;; editing only
  (before
-  enable-when-block-editing!
+  m/enable-when-block-editing!
   (let [state-fn (state-f :component/box)]
     {:editor/new-block (editor-handler/keydown-new-block-handler state-fn)
      :editor/new-line (editor-handler/keydown-new-line-handler state-fn)
@@ -43,7 +43,7 @@
 
  ;; global
  (before
-  prevent-default-behavior
+  m/prevent-default-behavior
   {:editor/select-block-up (editor-handler/on-select-block :up)
    :editor/select-block-down (editor-handler/on-select-block :down)
 
@@ -58,7 +58,7 @@
 
  ;; non-editing only
  (before
-  enable-when-not-editing-mode!
+  m/enable-when-not-editing-mode!
   {:editor/toggle-document-mode state/toggle-document-mode!
    :editor/toggle-settings ui-handler/toggle-settings-modal!
 
@@ -78,20 +78,20 @@
    :git/commit (git-handler/show-commit-modal! commit/add-commit-message)})
 
  (before
-  (enable-when-component! :component/auto-complete)
+  (m/enable-when-component! :component/auto-complete)
   (let [state-fn (state-f :component/auto-complete)]
     {:auto-complete/prev (ui-handler/auto-complete-prev state-fn)
      :auto-complete/next (ui-handler/auto-complete-next state-fn)
      :auto-complete/complete (ui-handler/auto-complete-complete state-fn)}))
 
  (before
-  enable-when-selection!
+  m/enable-when-selection!
   {:block-selection/copy editor-handler/shortcut-copy-selection
    :block-selection/cut editor-handler/shortcut-cut-selection
    :block-selection/delete editor-handler/shortcut-delete-selection})
 
  (before
-  (enable-when-component! :component/date-picker)
+  (m/enable-when-component! :component/date-picker)
   {:date-picker/complete (date-picker/shortcut-complete (state-f :component/date-picker))
    :date-picker/prev-day date-picker/shortcut-prev-day
    :date-picker/next-day date-picker/shortcut-next-day
