@@ -89,6 +89,7 @@
            matched-pages
            {:on-chosen (page-handler/on-chosen-handler input id q pos format)
             :on-enter #(page-handler/page-not-exists-handler input id q current-pos)
+            :item-render (fn [item] [:div.py-2 (search/highlight-exact-query item q)])
             :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
             :class     "black"}))))))
 
@@ -118,7 +119,7 @@
                              repo (state/sub :git/current-repo)
                              format (db/get-page-format page)]
 
-                         (search/block-search-result-item repo uuid format content q)))
+                         [:.py-2 (search/block-search-result-item repo uuid format content q)]))
         :class       "black"}))))
 
 (rum/defcs block-search < rum/reactive
@@ -286,6 +287,7 @@
       :style (merge
               {:top        (+ top offset-top)
                :max-height to-max-height
+               :max-width 700
                :z-index    11}
               (if set-default-width?
                 {:width max-width})
@@ -408,7 +410,7 @@
 
      (transition-cp
       (block-search id format)
-      true
+      false
       *slash-caret-pos)
 
      (transition-cp
