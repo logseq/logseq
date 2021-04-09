@@ -1760,9 +1760,14 @@
   (when (not (in-auto-complete? nil))
     (let [^js input (state/get-input)
           selected-start (gobj/get input "selectionStart")
-          selected-end (gobj/get input "selectionEnd")]
-      ;; new line, is this the right way?
-      (.setRangeText input "\n" selected-start selected-end "end"))))
+          selected-end (gobj/get input "selectionEnd")
+          value (.-value input)
+          s1 (subs value 0 selected-start)
+          s2 (subs value selected-end)
+          ]
+      (state/set-edit-content! (state/get-edit-input-id)
+                               (str s1 "\n" s2))
+      (util/move-cursor-to input (inc selected-start)))))
 
 (defn keydown-new-block-handler [get-state-fn]
   (fn [e]
