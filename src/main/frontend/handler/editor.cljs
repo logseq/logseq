@@ -2130,3 +2130,21 @@
                    (match picked
                      [:asset file] (set-asset-pending-file file))))]
       (util/stop e))))
+
+(defn- cut-blocks-and-clear-selections!
+  [copy?]
+  (cut-selection-blocks copy?)
+  (clear-selection! nil))
+
+(defn shortcut-copy-selection
+  [e]
+  (copy-selection-blocks)
+  (clear-selection! nil))
+
+(defn shortcut-cut-selection
+  [e]
+  (cut-blocks-and-clear-selections! true))
+
+(defn shortcut-delete-selection
+  [e]
+  (cut-blocks-and-clear-selections! false))
