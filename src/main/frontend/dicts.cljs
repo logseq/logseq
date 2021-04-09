@@ -12,31 +12,31 @@
 title: $today
 ---
 
-## Hi, welcome to Logseq!
+# Hi, welcome to Logseq!
 :PROPERTIES:
 :heading: true
 :END:
-## Logseq is a _privacy-first_, _open-source_ platform for _knowledge_ sharing and management.
-## This is a 3 minute tutorial on how to use Logseq. Let's get started!
-## (Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the **top-right** corner of the screen to connect Logseq to either Github or local directory.)
-## Here are some tips might be useful.
+# Logseq is a _privacy-first_, _open-source_ platform for _knowledge_ sharing and management.
+# This is a 3 minute tutorial on how to use Logseq. Let's get started!
+# (Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the **top-right** corner of the screen to connect Logseq to either Github or local directory.)
+# Here are some tips might be useful.
 #+BEGIN_TIP
 Click to edit any block.
 Type `Enter` to create a new block.
 Type `Shift+Enter` to create a new line.
 Type `/` to show all the commands.
 #+END_TIP
-## 1. Let's create a page called [[How to take dummy notes?]]. You can click it to go to that page, or you can `Shift+Click` to open it in the right sidebar! Now you should see both _Linked References_ and _Unlinked References_.
-## 2. Let's reference some blocks on [[How to take dummy notes?]], you can `Shift+Click` any block reference to open it in the right sidebar. Try making
+# 1. Let's create a page called [[How to take dummy notes?]]. You can click it to go to that page, or you can `Shift+Click` to open it in the right sidebar! Now you should see both _Linked References_ and _Unlinked References_.
+# 2. Let's reference some blocks on [[How to take dummy notes?]], you can `Shift+Click` any block reference to open it in the right sidebar. Try making
 some changes on the right sidebar, those referenced blocks will be changed too!
-### ((5f713e91-8a3c-4b04-a33a-c39482428e2d)) : This is a block reference.
-### ((5f713ea8-8cba-403d-ac00-9964b1ec7190)) : This is another block reference.
-## 3. Do you support tags?
-### Of course, this is a #dummy tag.
-## 4. Do you support tasks like todo/doing/done and priorities?
-### Yes, type `/` and pick your favorite todo keyword or priority (A/B/C).
-### NOW [#A] A dummy tutorial on \"How to take dummy notes?\"
-### LATER [#A] Check out this awesome video by [:a {:href \"https://twitter.com/EdTravelling\" :target \"_blank\"} \"@EdTravelling\"], which shows how to use logseq to open your local directory.
+## ((5f713e91-8a3c-4b04-a33a-c39482428e2d)) : This is a block reference.
+## ((5f713ea8-8cba-403d-ac00-9964b1ec7190)) : This is another block reference.
+# 3. Do you support tags?
+## Of course, this is a #dummy tag.
+# 4. Do you support tasks like todo/doing/done and priorities?
+## Yes, type `/` and pick your favorite todo keyword or priority (A/B/C).
+## NOW [#A] A dummy tutorial on \"How to take dummy notes?\"
+## LATER [#A] Check out this awesome video by [:a {:href \"https://twitter.com/EdTravelling\" :target \"_blank\"} \"@EdTravelling\"], which shows how to use logseq to open your local directory.
 
 [:div.video-wrapper.mb-4
         [:iframe
@@ -47,22 +47,22 @@ some changes on the right sidebar, those referenced blocks will be changed too!
         :src \"https://www.youtube.com/embed/Afmqowr0qEQ\"
         :height \"367\"
         :width \"653\"}]]
-### DONE Create a page
-### CANCELED [#C] Write a page with more than 1000 blocks
-## That's it! You can create more bullets or open a local directory to import some notes now!
-## You can also download our desktop app at https://github.com/logseq/logseq/releases
+## DONE Create a page
+## CANCELED [#C] Write a page with more than 1000 blocks
+# That's it! You can create more bullets or open a local directory to import some notes now!
+# You can also download our desktop app at https://github.com/logseq/logseq/releases
 "
         :tutorial/dummy-notes "---
 title: How to take dummy notes?
 ---
 
-## Hello, I'm a block!
+# Hello, I'm a block!
 :PROPERTIES:
 :id: 5f713e91-8a3c-4b04-a33a-c39482428e2d
 :END:
-### I'm a child block!
-### I'm another child block!
-## Hey, I'm another block!
+## I'm a child block!
+## I'm another child block!
+# Hey, I'm another block!
 :PROPERTIES:
 :id: 5f713ea8-8cba-403d-ac00-9964b1ec7190
 :END:
