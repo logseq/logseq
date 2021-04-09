@@ -1047,31 +1047,38 @@
          (state/set-editor-op! nil))))))
 
 (defn on-up-down
-  [state e up?]
-  (let [{:keys [id block-id block block-parent-id dummy? value pos format] :as block-state} (get-state state)]
-    (if (gobj/get e "shiftKey")
-      (reset! select-start-block-state block-state)
-      (let [element (gdom/getElement id)
-            line-height (util/get-textarea-line-height element)]
-        (when (and block-id
-                   (or (and up? (util/textarea-cursor-first-row? element line-height))
-                       (and (not up?) (util/textarea-cursor-end-row? element line-height))))
-          (util/stop e)
+  [direction]
+  (when (state/editing?)
+    (let [edit-block (state/get-edit-block)
+          {:block/keys [uuid content format]} edit-block
+          element (state/get-input)
+          line-height (util/get-textarea-line-height element)
+          repo (state/get-current-repo)
+          up? (= :up direction)]
+      (if (or (and up? (util/textarea-cursor-first-row? element line-height))
+              (and (not up?) (util/textarea-cursor-end-row? element line-height)))
+        (do
           (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
-                sibling-block (f (gdom/getElement block-parent-id))]
+                sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
             (when sibling-block
               (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-                (let [state (get-state state)
-                      content (:block/content block)
-                      value (:value state)]
+                (let [value (state/get-edit-content)]
                   (when (not= (-> content
                                   (text/remove-level-spaces format)
                                   text/remove-properties!
                                   string/trim)
                               (string/trim value))
-                    (save-block! state (:value state))))
-                (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
-                  (edit-block! block pos format id))))))))))
+                    (save-block! repo uuid value)))
+                (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
+                  ;; TODO fix me, edit block pos should be the pos of last line or first line
+                  ;; if the target is multiline block, shall open edit
+                  ;; 1. if up, edit last line
+                  ;; 2. if down, edit first line
+                  (edit-block! block (state/get-edit-pos) format (state/get-edit-input-id)))))))
+        ;;just up and down
+        (if up?
+          (util/move-cursor-up element)
+          (util/move-cursor-down element))))))
 
 (defn insert-command!
   [id command-output format {:keys [restore?]
@@ -1454,14 +1461,15 @@
       string/join))
 
 (defn move-up-down
-  [e up?]
-  (when-let [block-id (:block/uuid (state/get-edit-block))]
-    (when-let [block (db/pull [:block/uuid block-id])]
-      (outliner-core/move-node (outliner-core/block block) up?)
-      (when-let [repo (state/get-current-repo)]
-        (let [opts {:key :block/change
-                    :data [block]}]
-          (db/refresh repo opts))))))
+  [up?]
+  (fn [e]
+    (when-let [block-id (:block/uuid (state/get-edit-block))]
+      (when-let [block (db/pull [:block/uuid block-id])]
+        (outliner-core/move-node (outliner-core/block block) up?)
+        (when-let [repo (state/get-current-repo)]
+          (let [opts {:key :block/change
+                      :data [block]}]
+            (db/refresh repo opts)))))))
 
 (defn expand!
   []
@@ -1559,7 +1567,7 @@
 
 (defn open-block!
   [first?]
-  (when-not (state/editing?)
+  (fn [e]
     (let [edit-id (state/get-last-edit-input-id)
           block-id (when edit-id (subs edit-id (- (count edit-id) 36)))
           last-edit-block (first (array-seq (js/document.getElementsByClassName block-id)))
@@ -1585,8 +1593,7 @@
             (edit-block! block
                          :max
                          (:block/format block)
-                         edit-block-id))))
-      false)))
+                         edit-block-id)))))))
 
 (defn get-search-q
   []
@@ -1728,162 +1735,163 @@
                         (db/entity [:block/name (string/lower-case id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
-(defn keydown-enter-handler
-  [state input]
-  (fn [state e]
-    (when (and (not (gobj/get e "ctrlKey"))
-               (not (gobj/get e "metaKey"))
-               (not (in-auto-complete? input)))
-      (let [{:keys [block config]} (get-state state)]
-        (when (and block
-                   (not (:ref? config))
-                   (not (:custom-query? config))) ; in reference section
-          (let [content (state/get-edit-content)
-                current-node (outliner-core/block block)
-                has-right? (-> (tree/-get-right current-node)
-                            (tree/satisfied-inode?))]
-            (if (and
-                  (string/blank? content)
-                  (not has-right?)
-                  (not (last-top-level-child? config current-node)))
-              (do
-                (util/stop e)
-                (outdent-on-enter current-node))
-              (let [shortcut (state/get-new-block-shortcut)
-                    insert? (cond
-                              config/mobile?
-                              true
+(defn- keydown-new-block
+  [state]
+  (when-not (in-auto-complete? nil)
+    (let [{:keys [block config]} (get-state state)]
+      (when (and block
+                 (not (:ref? config))
+                 (not (:custom-query? config)))
+        (let [content (state/get-edit-content)
+              current-node (outliner-core/block block)
+              has-right? (-> (tree/-get-right current-node)
+                             (tree/satisfied-inode?))]
+          (if (and
+               (string/blank? content)
+               (not has-right?)
+               (not (last-top-level-child? config current-node)))
+            (outdent-on-enter current-node)
+            (profile
+             "Insert block"
+             (insert-new-block! state))))))))
 
-                              (and (= shortcut "alt+enter") (not (gobj/get e "altKey")))
-                              false
+(defn- keydown-new-line
+  []
+  (when (not (in-auto-complete? nil))
+    (let [^js input (state/get-input)
+          selected-start (gobj/get input "selectionStart")
+          selected-end (gobj/get input "selectionEnd")]
+      ;; new line, is this the right way?
+      (.setRangeText input "\n" selected-start selected-end "end"))))
 
-                              (gobj/get e "shiftKey")
-                              false
+(defn keydown-new-block-handler [get-state-fn]
+  (fn [e]
+    (when-let [state (get-state-fn)]
+      (if (state/get-new-block-toggle?)
+        (keydown-new-line)
+        (keydown-new-block state)))))
 
-                              :else
-                              true)]
-                (when (and
-                       insert?
-                       (not (in-auto-complete? input)))
-                  (util/stop e)
-                  (profile
-                   "Insert block"
-                   (insert-new-block! state)))))))))))
+(defn keydown-new-line-handler [get-state-fn]
+  (fn [e]
+    (when-let [state (get-state-fn)]
+      (if (state/get-new-block-toggle?)
+        (keydown-new-block state)
+        (keydown-new-line)))))
+
 
 (defn keydown-up-down-handler
-  [input up?]
-  (fn [state e]
-    (when (and
-           (not (gobj/get e "ctrlKey"))
-           (not (gobj/get e "metaKey"))
-           (not (in-auto-complete? input)))
-      (on-up-down state e up?))))
+  [direction]
+  (fn [_]
+    (when-not (in-auto-complete? nil)
+      (on-up-down direction))))
 
 (defn- move-to-block-when-cross-boundrary
-  [state e direction]
+  [_ direction]
   (let [up? (= :left direction)
         pos (if up? :max 0)
-        {:keys [id block-id block block-parent-id dummy? value format] :as block-state} (get-state state)
-        element (gdom/getElement id)]
-    (when block-id
-      (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
-            sibling-block (f (gdom/getElement block-parent-id))]
-        (when sibling-block
-          (when-let [sibling-block-id (d/attr sibling-block "blockid")]
-            (let [state (get-state state)
-                  content (:block/content block)
-                  value (:value state)]
-              (when (not= (-> content
-                              (text/remove-level-spaces format)
-                              text/remove-properties!
-                              string/trim)
-                          (string/trim value))
-                (save-block! state (:value state))))
-            (let [block (db/pull (state/get-current-repo) '[*] [:block/uuid (uuid sibling-block-id)])]
-              (edit-block! block pos format id)
-              (util/stop e))))))))
+        {:block/keys [format uuid] :as block} (state/get-edit-block)
+        id (state/get-edit-input-id)
+        repo (state/get-current-repo)]
+    (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
+          sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
+      (when sibling-block
+        (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+          (let [content (:block/content block)
+                value (state/get-edit-content)]
+            (when (not= (-> content
+                            (text/remove-level-spaces format)
+                            text/remove-properties!
+                            string/trim)
+                        (string/trim value))
+              (save-block! repo uuid value)))
+          (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
+            (edit-block! block pos format id)))))))
 
 (defn- on-arrow-move-to-boundray
-  [state input e direction]
-  (when (and (not (util/input-selected? input))
-             (or (and (= :left direction) (util/input-start? input))
-             (and (= :right direction) (util/input-end? input))))
-    (move-to-block-when-cross-boundrary state e direction)))
+  [input e direction]
+  (if (or (and (= :left direction) (util/input-start? input))
+          (and (= :right direction) (util/input-end? input)))
+    (move-to-block-when-cross-boundrary e direction)
+    ;; move left or right
+    (if (= direction :left)
+      (util/cursor-move-back input 1)
+      (util/cursor-move-forward input 1))))
 
 (defn keydown-arrow-handler
-  [input direction]
-  (fn [state e]
-    (when (and
-           input
-           (not (gobj/get e "shiftKey"))
-           (not (gobj/get e "ctrlKey"))
-           (not (gobj/get e "metaKey"))
-           (not (in-auto-complete? input)))
-      (on-arrow-move-to-boundray state input e direction))))
+  [direction]
+  (fn [e]
+    (let [input (state/get-input)]
+      (when-not (in-auto-complete? nil)
+        (on-arrow-move-to-boundray input e direction)))))
 
 (defn keydown-backspace-handler
-  [repo input id]
-  (fn [state e]
-    (let [current-pos (:pos (util/get-caret-pos input))
-          value (gobj/get input "value")
-          deleted (and (> current-pos 0)
-                       (util/nth-safe value (dec current-pos)))
-          selected-start (gobj/get input "selectionStart")
-          selected-end (gobj/get input "selectionEnd")
-          block-id (:block-id (first (:rum/args state)))
-          page (state/get-current-page)]
-      (cond
-        (not= selected-start selected-end)
-        nil
+  [get-state-fn]
+  (fn [e]
+    (when-let [state (get-state-fn)]
+      (let [^js input (state/get-input)
+            id (state/get-edit-input-id)
+            current-pos (:pos (util/get-caret-pos input))
+            value (gobj/get input "value")
+            deleted (and (> current-pos 0)
+                         (util/nth-safe value (dec current-pos)))
+            selected-start (gobj/get input "selectionStart")
+            selected-end (gobj/get input "selectionEnd")
+            block-id (:block-id (first (:rum/args state)))
+            page (state/get-current-page)
+            repo (state/get-current-repo)]
+        (util/stop e)
+        (cond
+          (not= selected-start selected-end)
+          (.setRangeText input "" selected-start selected-end)
 
-        (and (zero? current-pos)
-             ;; not the top block in a block page
-             (not (and page
-                       (util/uuid-string? page)
-                       (= (medley/uuid page) block-id))))
-        (delete-block! state repo e)
+          (and (zero? current-pos)
+               ;; not the top block in a block page
+               (not (and page
+                         (util/uuid-string? page)
+                         (= (medley/uuid page) block-id))))
+          (delete-block! state repo e)
 
-        (and (> current-pos 1)
-             (= (util/nth-safe value (dec current-pos)) commands/slash))
-        (do
-          (reset! *slash-caret-pos nil)
-          (reset! *show-commands false))
+          (and (> current-pos 1)
+               (= (util/nth-safe value (dec current-pos)) commands/slash))
+          (do
+            (reset! *slash-caret-pos nil)
+            (reset! *show-commands false))
 
-        (and (> current-pos 1)
-             (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
-        (do
-          (reset! *angle-bracket-caret-pos nil)
-          (reset! *show-block-commands false))
+          (and (> current-pos 1)
+               (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
+          (do
+            (reset! *angle-bracket-caret-pos nil)
+            (reset! *show-block-commands false))
 
-        ;; pair
-        (and
-         deleted
-         (contains?
-          (set (keys delete-map))
-          deleted)
-         (>= (count value) (inc current-pos))
-         (= (util/nth-safe value current-pos)
-            (get delete-map deleted)))
+          ;; pair
+          (and
+           deleted
+           (contains?
+            (set (keys delete-map))
+            deleted)
+           (>= (count value) (inc current-pos))
+           (= (util/nth-safe value current-pos)
+              (get delete-map deleted)))
 
-        (do
-          (util/stop e)
-          (commands/delete-pair! id)
-          (cond
-            (and (= deleted "[") (state/get-editor-show-page-search?))
-            (state/set-editor-show-page-search! false)
+          (do
+            (commands/delete-pair! id)
+            (cond
+              (and (= deleted "[") (state/get-editor-show-page-search?))
+              (state/set-editor-show-page-search! false)
 
-            (and (= deleted "(") (state/get-editor-show-block-search?))
-            (state/set-editor-show-block-search! false)
+              (and (= deleted "(") (state/get-editor-show-block-search?))
+              (state/set-editor-show-block-search! false)
 
-            :else
-            nil))
+              :else
+              nil))
 
-        ;; deleting hashtag
-        (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
-        (state/set-editor-show-page-search-hashtag! false)
+          ;; deleting hashtag
+          (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
+          (state/set-editor-show-page-search-hashtag! false)
 
-        :else
-        nil))))
+          ;; just delete
+          :else
+          (.setRangeText input "" (dec current-pos) current-pos))))))
 
 ;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
 (defn indent-on-tab
@@ -1930,25 +1938,26 @@
              (outliner-core/move-subtree current-node parent true))
            (let [repo (state/get-current-repo)]
              (db/refresh repo
-               {:key :block/change :data [(:data current-node)]}))))
+                         {:key :block/change :data [(:data current-node)]}))))
        (state/set-editor-op! nil)))))
 
 (defn keydown-tab-handler
-  [input input-id]
-  (fn [state e]
-    (let [pos (and input (:pos (util/get-caret-pos input)))]
-      (when (and (not (state/get-editor-show-input))
-                 (not (state/get-editor-show-date-picker?))
-                 (not (state/get-editor-show-template-search?)))
-        (util/stop e)
-        (do (if (gobj/get e "shiftKey")
-              (outdent-on-shift-tab state)
-              (indent-on-tab state))
-            (and input pos
-              (js/setTimeout
-                #(when-let [input (gdom/getElement input-id)]
-                   (util/move-cursor-to input pos))
-                0)))))))
+  [get-state-fn direction]
+  (fn [e]
+    (when-let [state (get-state-fn)]
+      (let [input (state/get-input)
+            pos (:pos (util/get-caret-pos input))]
+        (when (and (not (state/get-editor-show-input))
+                   (not (state/get-editor-show-date-picker?))
+                   (not (state/get-editor-show-template-search?)))
+          (do (if (= :left direction)
+                (outdent-on-shift-tab state)
+                (indent-on-tab state))
+              (and input pos
+                   (js/setTimeout
+                    #(when-let [input (state/get-input)]
+                       (util/move-cursor-to input pos))
+                    0))))))))
 
 (defn keydown-not-matched-handler
   [input input-id format]
