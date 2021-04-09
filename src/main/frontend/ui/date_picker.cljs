@@ -8,6 +8,7 @@
    [frontend.mixins :as mixins]
    [frontend.util :as util]
    [frontend.state :as state]
+   [frontend.modules.shortcut.mixin :refer [bind-state]]
    [goog.object :as gobj]
    [clojure.string :as string]))
 
@@ -194,14 +195,39 @@
     (or (non-edit-input?)
         (util/select? elem))))
 
-(defn- edit-input?
-  []
-  (when-let [elem js/document.activeElement]
-    (and (util/input? elem)
-         (when-let [id (gobj/get elem "id")]
-           (string/starts-with? id "edit-block-")))))
+(defn shortcut-complete
+  [get-state-fn]
+  (fn [e]
+    (when-let [state (get-state-fn)]
+      (let [{:keys [on-change deadline-or-schedule?]} (last (:rum/args state))]
+        (when (and on-change
+                   (not (input-or-select?)))
+          (when-not deadline-or-schedule?
+            (on-change e @*internal-model)))))))
+
+(defn shortcut-prev-day
+  [e]
+  (when-not (input-or-select?)
+    (swap! *internal-model inc-date -1)))
+
+(defn shortcut-next-day
+  [e]
+  (when-not (input-or-select?)
+    (swap! *internal-model inc-date 1)))
+
+(defn shortcut-prev-week
+  [e]
+  (when-not (input-or-select?)
+    (swap! *internal-model inc-week -1)))
+
+(defn shortcut-next-week
+  [e]
+  (when-not (input-or-select?)
+    (swap! *internal-model inc-week 1)))
 
 (rum/defc date-picker < rum/reactive
+  (bind-state :component/date-picker)
+  #_
   (mixins/event-mixin
    (fn [state]
      (let [{:keys [on-change on-switch deadline-or-schedule?]} (last (:rum/args state))]
