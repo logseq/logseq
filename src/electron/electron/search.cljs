@@ -116,9 +116,9 @@
 (defn delete-blocks!
   [repo ids]
   (when-let [db (get-db repo)]
-    (let [sql (utils/format "DELETE from blocks WHERE id IN (%s)"
-                            (->> (map (fn [id] (str "'" id "'")) ids)
-                                 (string/join ", ")))
+    (let [ids (->> (map (fn [id] (str "'" id "'")) ids)
+               (string/join ", "))
+          sql (str "DELETE from blocks WHERE id IN (" ids ")")
           stmt (prepare db sql)]
       (.run ^object stmt))))
 
