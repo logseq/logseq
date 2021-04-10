@@ -49,9 +49,10 @@
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
-  (init-updater {:repo   "logseq/logseq"
-                 :logger logger
-                 :win    win}))
+  (when-not linux?
+    (init-updater {:repo   "logseq/logseq"
+                   :logger logger
+                   :win    win})))
 
 (defn setup-interceptor! []
   (.registerFileProtocol
