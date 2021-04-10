@@ -299,7 +299,7 @@ title: How to take dummy notes?
         :settings-page/developer-mode "Developer mode"
         :settings-page/enable-developer-mode "Enable developer mode"
         :settings-page/disable-developer-mode "Disable developer mode"
-        :settings-page/developer-mode-desc "Developer mode helps contributors and extension developers test their integration with Logseq more efficiently."
+        :settings-page/developer-mode-desc "Developer mode helps contributors and extension developers test their integrations with Logseq more efficiently."
         :settings-page/current-version "Current version"
         :logseq "Logseq"
         :on "ON"
