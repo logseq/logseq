@@ -404,7 +404,8 @@
             (.scroll (app-scroll-container-node)
                      #js {:top (let [top (element-top elem 0)]
                                  (if (< top 256)
-                                   0 top))
+                                   0
+                                   (- top 80)))
                           :behavior "smooth"}))))))
 
 #?(:cljs

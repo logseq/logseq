@@ -80,7 +80,7 @@
 (defn jump-to-anchor!
   [anchor-text]
   (when anchor-text
-    (ui-handler/highlight-element! anchor-text)))
+    (js/setTimeout #(ui-handler/highlight-element! anchor-text) 200)))
 
 (defn set-route-match!
   [route]
