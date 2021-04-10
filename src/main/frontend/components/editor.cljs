@@ -288,6 +288,8 @@
               {:top        (+ top offset-top)
                :max-height to-max-height
                :max-width 700
+               ;; TODO: auto responsive fixed size
+               :min-width 300
                :z-index    11}
               (if set-default-width?
                 {:width max-width})
