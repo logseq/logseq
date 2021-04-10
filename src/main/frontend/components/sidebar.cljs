@@ -277,10 +277,6 @@
                       (state/hide-custom-context-menu!)
 
                       (editor-handler/clear-selection! e)))
-     (mixins/listen state js/window "mouseup"
-                    (fn [e]
-                      (when (state/get-selection-start-block)
-                        (state/set-selection-start-block! nil))))
 
      ;; TODO: move to keyboards
      (mixins/on-key-down
