@@ -1061,7 +1061,8 @@
         [:span ""])]
      [:a (if (not dummy?)
            {:href (rfe/href :page {:name uuid})
-            :on-click (fn [e] (bullet-on-click e block config uuid))})
+            :on-click (fn [e] (bullet-on-click e block config uuid))
+            :on-mouse-down (fn [e] (util/stop e))})
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true

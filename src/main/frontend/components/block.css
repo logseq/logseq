@@ -316,11 +316,6 @@
   }
 }
 
-a > .bullet-container {
-  /* fix the bullet element sometimes becomes a click event */
-  pointer-events: none;
-}
-
 a:hover > .bullet-container .bullet {
   transform: scale(1.2);
 }
@@ -367,4 +362,3 @@ a:hover > .bullet-container .bullet {
 .embed-header {
   font-weight: 600;
 }
-
