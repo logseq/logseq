@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [mac? win32? prod? dev? logger open]]
+            [electron.utils :refer [mac? win32? linux? prod? dev? logger open]]
             [clojure.string :as string]
             [promesa.core :as p]
             ["fs-extra" :as fs]
@@ -25,18 +25,21 @@
   "Creates main app window"
   []
   (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
-        win-opts {:width         (.-width win-state)
-                  :height        (.-height win-state)
-                  :frame         (not mac?)
-                  :autoHideMenuBar (not mac?)
-                  :titleBarStyle (if mac? "hidden" nil)
-                  :webPreferences
-                  {:plugins                 true ; pdf
-                   :nodeIntegration         false
-                   :nodeIntegrationInWorker false
-                   :contextIsolation        true
-                   :spellcheck              true
-                   :preload                 (path/join js/__dirname "js/preload.js")}}
+        win-opts (cond->
+                   {:width         (.-width win-state)
+                    :height        (.-height win-state)
+                    :frame         (not mac?)
+                    :autoHideMenuBar (not mac?)
+                    :titleBarStyle (if mac? "hidden" nil)
+                    :webPreferences
+                    {:plugins                 true ; pdf
+                     :nodeIntegration         false
+                     :nodeIntegrationInWorker false
+                     :contextIsolation        true
+                     :spellcheck              true
+                     :preload                 (path/join js/__dirname "js/preload.js")}}
+                   linux?
+                   (assoc :icon (path/join js/__dirname "icons/logseq.png")))
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
     (.manage win-state win)
