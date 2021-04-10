@@ -29,7 +29,7 @@
      (mapv mod-key))))
 
 (def global-keys #js
-  [KeyCodes/ENTER KeyCodes/TAB
+  [KeyCodes/ENTER KeyCodes/TAB KeyCodes/BACKSPACE KeyCodes/DELETE
    KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (defn install-shortcut!
