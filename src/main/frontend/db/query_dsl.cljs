@@ -363,8 +363,14 @@
                   result (when form (build-query repo form {:sort-by sort-by
                                                             :blocks? blocks?
                                                             :counter counter}))]
-              (if (string? result)
+              (cond
+                (and (nil? result) (string? form))
+                form
+
+                (string? result)
                 result
+
+                :else
                 (let [result (when (seq result)
                               (let [key (if (coll? (first result))
                                           (keyword (ffirst result))

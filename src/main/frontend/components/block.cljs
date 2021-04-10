@@ -1873,18 +1873,28 @@
 (defn- trigger-custom-query!
   [state]
   (let [[config query] (:rum/args state)
+        repo (state/get-current-repo)
+        result-atom (atom nil)
         query-atom (if (:dsl-query? config)
                      (let [result (query-dsl/query (state/get-current-repo) (:query query))]
-                       (if (string? result) ; full-text search
+                       (cond
+                         (and (util/electron?) (string? result)) ; full-text search
+                         (if (string/blank? result)
+                           (atom [])
+                           (p/let [blocks (search/block-search repo result {})]
+                             (when (seq blocks)
+                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                                 (reset! result-atom result)))))
+
+                         (string? result)
                          (atom nil)
-                         ;; (atom
-                         ;;  (if (string/blank? result)
-                         ;;    []
-                         ;;    (let [blocks (search/block-search result 50)]
-                         ;;      (when (seq blocks)
-                         ;;        (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))))))
+
+                         :else
                          result))
-                     (db/custom-query query))]
+                     (db/custom-query query))
+        query-atom (if (instance? Atom query-atom)
+                     query-atom
+                     result-atom)]
     (assoc state :query-atom query-atom)))
 
 (rum/defcs custom-query < rum/reactive
