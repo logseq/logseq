@@ -1061,8 +1061,7 @@
         [:span ""])]
      [:a (if (not dummy?)
            {:href (rfe/href :page {:name uuid})
-            :on-click (fn [e] (bullet-on-click e block config uuid))
-            :on-mouse-down (fn [e] (util/stop e))})
+            :on-click (fn [e] (bullet-on-click e block config uuid))})
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true
@@ -1357,12 +1356,14 @@
   (let [target (gobj/get e "target")
         button (gobj/get e "buttons")]
     (when (contains? #{1 0} button)
-      (when-not (or (util/link? target)
-                   (util/input? target)
-                   (util/details-or-summary? target)
-                   (and (util/sup? target)
-                        (d/has-class? target "fn"))
-                   (d/has-class? target "image-resize"))
+      (when-not (or
+                 (d/has-class? target "bullet")
+                 (util/link? target)
+                 (util/input? target)
+                 (util/details-or-summary? target)
+                 (and (util/sup? target)
+                      (d/has-class? target "fn"))
+                 (d/has-class? target "image-resize"))
        (editor-handler/clear-selection! nil)
        (editor-handler/unhighlight-block!)
        (let [properties-hidden? (text/properties-hidden? properties)
