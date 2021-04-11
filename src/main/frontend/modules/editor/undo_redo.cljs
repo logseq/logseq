@@ -7,32 +7,55 @@
 
 ;;;; APIs
 
-(def undo-stack (atom []))
-(def redo-stack (atom []))
+(def ^:private undo-redo-states (atom {}))
+
+(defn- get-state
+  []
+  (let [repo (state/get-current-repo)]
+    (assert (string? repo) "Repo should satisfy string?")
+    (if-let [state (get @undo-redo-states repo)]
+      state
+      (let [new-state {:undo-stack (atom [])
+                       :redo-stack (atom [])}]
+        (swap! undo-redo-states assoc repo new-state)
+        new-state))))
+
+(defn- get-undo-stack
+  []
+  (-> (get-state) :undo-stack))
+
+(defn- get-redo-stack
+  []
+  (-> (get-state) :redo-stack))
 
 (defn push-undo
   [txs]
-  (swap! undo-stack conj txs))
+  (let [undo-stack (get-undo-stack)]
+    (swap! undo-stack conj txs)))
 
 (defn pop-undo
   []
-  (when-let [removed-e (peek @undo-stack)]
-    (swap! undo-stack pop)
-    removed-e))
+  (let [undo-stack (get-undo-stack)]
+   (when-let [removed-e (peek @undo-stack)]
+     (swap! undo-stack pop)
+     removed-e)))
 
 (defn push-redo
   [txs]
-  (swap! redo-stack conj txs))
+  (let [redo-stack (get-redo-stack)]
+   (swap! redo-stack conj txs)))
 
 (defn pop-redo
   []
-  (when-let [removed-e (peek @redo-stack)]
-    (swap! redo-stack pop)
-    removed-e))
+  (let [redo-stack (get-redo-stack)]
+   (when-let [removed-e (peek @redo-stack)]
+     (swap! redo-stack pop)
+     removed-e)))
 
 (defn reset-redo
   []
-  (reset! redo-stack []))
+  (let [redo-stack (get-redo-stack)]
+    (reset! redo-stack [])))
 
 (defn get-txs
   [redo? txs]
