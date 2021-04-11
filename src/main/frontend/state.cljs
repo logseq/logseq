@@ -41,6 +41,7 @@
     :journals-length 2
 
     :search/q ""
+    :search/mode :global
     :search/result nil
 
     ;; custom shortcuts
@@ -443,6 +444,10 @@
 (defn set-q!
   [value]
   (set-state! :search/q value))
+
+(defn set-search-mode!
+  [value]
+  (set-state! :search/mode value))
 
 (defn set-editor-show-page-search!
   [value]
@@ -1115,6 +1120,10 @@
 (defn clear-search-result!
   []
   (set-search-result! nil))
+
+(defn get-search-mode
+  []
+  (:search/mode @state))
 
 (defn toggle!
   [path]

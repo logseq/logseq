@@ -92,7 +92,9 @@
       (util/scroll-to-top))))
 
 (defn go-to-search!
-  []
+  [search-mode]
+  (when search-mode
+    (state/set-search-mode! search-mode))
   (when-let [element (gdom/getElement "search-field")]
     (.focus element)))
 

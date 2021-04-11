@@ -156,6 +156,7 @@ title: How to take dummy notes?
         :help/toggle "Toggle help"
         :help/git-commit-message "Git commit message"
         :help/full-text-search "Full Text Search"
+        :help/page-search "Search in the current page"
         :help/context-menu "Context Menu"
         :help/fold-unfold "Fold/Unfold blocks (when not in edit mode)"
         :help/toggle-doc-mode "Toggle document mode"
@@ -316,6 +317,7 @@ title: How to take dummy notes?
         :search (if config/publishing?
                   "Search"
                   "Search or Create Page")
+        :page-search "Search in the current page"
         :new-page "New page"
         :new-file "New file"
         :graph "Graph"
@@ -884,6 +886,7 @@ title: How to take dummy notes?
            :help/toggle "显示/关闭帮助"
            :help/git-commit-message "提交消息"
            :help/full-text-search "全文搜索"
+           :help/page-search "在当前页面搜索"
            :help/context-menu "右键菜单"
            :help/fold-unfold "折叠/展开方块(不在编辑模式中)"
            :help/toggle-doc-mode "切换文档模式"
@@ -1041,6 +1044,7 @@ title: How to take dummy notes?
            :search (if config/publishing?
                      "搜索"
                      "搜索或者创建新页面")
+           :page-search "在当前页面搜索"
            :new-page "新页面"
            :new-file "新文件"
            :graph "图谱"

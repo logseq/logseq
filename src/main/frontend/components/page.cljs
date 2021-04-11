@@ -108,8 +108,9 @@
 
 (defn presentation
   [repo page]
-  [:a.opacity-50.hover:opacity-100
+  [:a.opacity-30.hover:opacity-100.page-op
    {:title "Presentation mode (Powered by Reveal.js)"
+    :style {:margin-top -2}
     :on-click (fn []
                 (state/sidebar-add-block!
                  repo
@@ -347,20 +348,26 @@
                                                         false)))}})]
                            (flatten)
                            (remove nil?))]
-                (when (seq links)
-                  (ui/dropdown-with-links
-                   (fn [{:keys [toggle-fn]}]
-                     [:a.opacity-70.hover:opacity-100
-                      {:style {:position "absolute"
+                [:div {:style {:position "absolute"
                                :right 0
-                               :top 20}
-                       :title "More options"
-                       :on-click toggle-fn}
-                      (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100.h-5.w-5")})])
-                   links
-                   {:modal-class (util/hiccup->class
-                                  "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
-                    :z-index 1}))))
+                               :top 20}}
+                 [:div.flex.flex-row
+                  [:a.opacity-30.hover:opacity-100.page-op.mr-2
+                   {:on-click #(route-handler/go-to-search! :page)}
+                   svg/search]
+                  (when (not config/mobile?)
+                    (presentation repo page))
+                  (when (seq links)
+                    (ui/dropdown-with-links
+                     (fn [{:keys [toggle-fn]}]
+                       [:a.opacity-30.hover:opacity-100
+                        {:title "More options"
+                         :on-click toggle-fn}
+                        (svg/vertical-dots {:class (util/hiccup->class "opacity-30.hover:opacity-100.h-5.w-5")})])
+                     links
+                     {:modal-class (util/hiccup->class
+                                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
+                      :z-index 1}))]]))
             (when (and (not sidebar?)
                        (not block?))
               [:a {:on-click (fn [e]
@@ -395,10 +402,7 @@
                  [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4
                                                        :word-break    "break-word"}
                                                :href  (rfe/href :file {:path file-path})}
-                  file-path]
-
-                 (when (not config/mobile?)
-                   (presentation repo page))])]
+                  file-path]])]
 
              (when (and repo (not block?))
                (let [alias (db/get-page-alias-names repo page-name)]
