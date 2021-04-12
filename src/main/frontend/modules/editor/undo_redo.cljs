@@ -3,7 +3,8 @@
             [frontend.db.conn :as conn]
             [frontend.modules.datascript-report.core :as db-report]
             [frontend.db :as db]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.debug :as debug]))
 
 ;;;; APIs
 
@@ -32,6 +33,22 @@
   [txs]
   (let [undo-stack (get-undo-stack)]
     (swap! undo-stack conj txs)))
+
+(comment
+  (defn get-content-from-entity
+    "For test."
+    [entity]
+    (filterv (fn [[_ a & y]]
+               (= :block/content a))
+      (:txs entity)))
+
+  (defn get-content-from-stack
+    "For test."
+    [stack]
+    (mapv #(get-content-from-entity %) stack))
+
+  (debug/pprint "pop entity" (get-content-from-entity removed-e))
+  (debug/pprint "undo-stack" (get-content-from-stack @undo-stack)))
 
 (defn pop-undo
   []
@@ -102,6 +119,7 @@
 (defn listen-outliner-operation
   [{:keys [tx-data tx-meta] :as tx-report}]
   (when-not (empty? tx-data)
+    (debug/pprint "tx-data" tx-data)
     (reset-redo)
     (let [updated-blocks (db-report/get-blocks tx-report)
           entity {:blocks updated-blocks :txs tx-data
