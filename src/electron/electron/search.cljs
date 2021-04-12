@@ -130,10 +130,10 @@
 ;;       (js->clj (.all ^object stmt q) :keywordize-keys true))))
 
 (defn search-blocks
-  [repo q]
+  [repo q limit]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
-      (let [limit (or limit 100)
+      (let [limit (or limit 20)
             stmt (prepare database
                           "select id, uuid, content from blocks where content like ? limit ?")]
        (js->clj (.all ^object stmt (str "%" q "%") limit) :keywordize-keys true)))))

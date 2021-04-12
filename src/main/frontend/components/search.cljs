@@ -303,7 +303,10 @@
                               (state/set-q! value)
                               (reset! search-timeout
                                       (js/setTimeout
-                                       #(search-handler/search (state/get-current-repo) value opts)
+                                       (fn []
+                                         (if (= :page search-mode)
+                                           (search-handler/search (state/get-current-repo) value opts)
+                                           (search-handler/search (state/get-current-repo) value)))
                                        timeout))))))}]
          (when-not (string/blank? search-q)
            (ui/css-transition
@@ -319,7 +322,8 @@
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#search.flex-1.flex
        [:div.inner
-        [:h1.title "Search result for " [:i search-q]]
+        [:h1.title (t :search/result-for) [:i search-q]]
+        [:p.font-medium.tx-sm (str (count (:blocks search-result)) " " (t :search/items))]
         [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
          (when-not (string/blank? search-q)
            (search-auto-complete search-result search-q true))]]])))
