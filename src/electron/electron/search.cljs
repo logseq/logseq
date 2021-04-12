@@ -133,8 +133,9 @@
   [repo q limit]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
-     (when-let [stmt (prepare database
-                              "select id, uuid, content from blocks where content like ? limit ?")]
+      (let [limit (or limit 100)
+            stmt (prepare database
+                          "select id, uuid, content from blocks where content like ? limit ?")]
        (js->clj (.all ^object stmt (str "%" q "%") limit) :keywordize-keys true)))))
 
 (defn truncate-blocks-table!
