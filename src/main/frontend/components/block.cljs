@@ -1882,7 +1882,7 @@
                          (and (util/electron?) (string? result)) ; full-text search
                          (if (string/blank? result)
                            (atom [])
-                           (p/let [blocks (search/block-search repo result {})]
+                           (p/let [blocks (search/block-search repo result {:limit 30})]
                              (when (seq blocks)
                                (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
                                  (reset! result-atom result)))))
