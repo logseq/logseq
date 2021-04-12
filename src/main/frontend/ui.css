@@ -12,6 +12,10 @@
   }
 }
 
+.search-all #ui__ac-inner {
+    max-height: none;
+}
+
 .ui__notifications {
   position: fixed;
   z-index: 99;

@@ -12,10 +12,12 @@
 (defn search
   ([repo q]
    (search repo q nil))
-  ([repo q {:keys [page-db-id]
-            :or {page-db-id nil}
+  ([repo q {:keys [page-db-id limit more?]
+            :or {page-db-id nil
+                 limit 20}
             :as opts}]
-   (let [page-db-id (if (string? page-db-id)
+   (let [limit (:limit opts)
+         page-db-id (if (string? page-db-id)
                       (:db/id (db/entity repo [:page/name (string/lower-case page-db-id)]))
                       page-db-id)]
      (p/let [blocks (search/block-search repo q opts)]
@@ -23,11 +25,13 @@
                      (filter (fn [block] (= (get-in block [:block/page :db/id]) page-db-id)) blocks)
                      blocks)
             result (merge
-                    {:blocks blocks}
+                    {:blocks blocks
+                     :has-more? (= limit (count blocks))}
                     (when-not page-db-id
                       {:pages (search/page-search q)
-                       :files (search/file-search q)}))]
-        (swap! state/state assoc :search/result result))))))
+                       :files (search/file-search q)}))
+            search-key (if more? :search/more-result :search/result)]
+        (swap! state/state assoc search-key result))))))
 
 (defn clear-search!
   []

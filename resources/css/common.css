@@ -816,3 +816,7 @@ a.page-op {
         transform: scale(0.9);
     }
 }
+
+.search-more {
+    background: var(--ls-a-chosen-bg);
+}

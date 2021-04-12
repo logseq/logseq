@@ -130,7 +130,7 @@
 ;;       (js->clj (.all ^object stmt q) :keywordize-keys true))))
 
 (defn search-blocks
-  [repo q limit]
+  [repo q]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
       (let [limit (or limit 100)

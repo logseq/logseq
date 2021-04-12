@@ -353,7 +353,8 @@
                                :top 20}}
                  [:div.flex.flex-row
                   [:a.opacity-30.hover:opacity-100.page-op.mr-2
-                   {:on-click #(route-handler/go-to-search! :page)}
+                   {:title "Search in current page"
+                    :on-click #(route-handler/go-to-search! :page)}
                    svg/search]
                   (when (not config/mobile?)
                     (presentation repo page))
