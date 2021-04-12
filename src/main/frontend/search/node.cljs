@@ -10,7 +10,6 @@
 (defrecord Node [repo]
   protocol/Engine
   (query [this q {:keys [limit]}]
-    (prn {:limit limit})
     (p/let [result (ipc/ipc "search-blocks" repo q limit)
             result (bean/->clj result)]
       (map (fn [{:keys [content id uuid]}]
