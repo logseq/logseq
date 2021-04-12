@@ -11,13 +11,12 @@
 
 (defn search
   ([repo q]
-   (search repo q nil))
+   (search repo q {:limit 20}))
   ([repo q {:keys [page-db-id limit more?]
             :or {page-db-id nil
                  limit 20}
             :as opts}]
-   (let [limit (:limit opts)
-         page-db-id (if (string? page-db-id)
+   (let [page-db-id (if (string? page-db-id)
                       (:db/id (db/entity repo [:page/name (string/lower-case page-db-id)]))
                       page-db-id)]
      (p/let [blocks (search/block-search repo q opts)]
