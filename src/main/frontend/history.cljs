@@ -11,11 +11,8 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.date :as date]))
 
-;; Undo && Redo that works with files
-
 ;; TODO:
-;; 1. undo-tree
-;; 2. db-only version, store transactions instead of file patches
+;; undo-tree
 
 ;; repo file -> contents transactions sequence
 (defonce history (atom {}))

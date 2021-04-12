@@ -28,7 +28,7 @@
      []
      (when-let [last-edit-block (get @state/state :editor/last-edit-block)]
        {:pos (state/get-edit-pos)
-        :block-idx (:idx last-edit-block)
+        :last-edit-block last-edit-block
         :block-container (:container last-edit-block)})))
 
 #?(:cljs
