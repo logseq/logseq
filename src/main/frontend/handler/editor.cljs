@@ -481,21 +481,22 @@
 (defn get-state
   [state]
   (let [[{:keys [on-hide block block-id block-parent-id dummy? format sidebar?]} id config] (:rum/args state)
-        node (gdom/getElement id)
-        value (gobj/get node "value")
-        pos (gobj/get node "selectionStart")]
-    {:config config
-     :on-hide on-hide
-     :dummy? dummy?
-     :sidebar? sidebar?
-     :format format
-     :id id
-     :block block
-     :block-id block-id
-     :block-parent-id block-parent-id
-     :node node
-     :value value
-     :pos pos}))
+        node (gdom/getElement id)]
+    (when node
+      (let [value (gobj/get node "value")
+            pos (gobj/get node "selectionStart")]
+        {:config config
+         :on-hide on-hide
+         :dummy? dummy?
+         :sidebar? sidebar?
+         :format format
+         :id id
+         :block block
+         :block-id block-id
+         :block-parent-id block-parent-id
+         :node node
+         :value value
+         :pos pos}))))
 
 (defn- with-timetracking-properties
   [block value]
@@ -518,24 +519,25 @@
            ;; skip this operation if it's inserting
             (not= :insert (state/get-editor-op)))
      (state/set-editor-op! :insert)
-     (let [{:keys [block value format id config]} (get-state state)
-           value (if (string? block-value) block-value value)
-           block-id (:block/uuid block)
-           block (or (db/pull [:block/uuid block-id])
-                     block)
-           repo (or (:block/repo block) (state/get-current-repo))
-           properties (with-timetracking-properties block value)]
-       ;; save the current block and insert a new block
-       (insert-new-block-aux!
-        config
-        (assoc block :block/properties properties)
-        value
-        {:ok-handler
-         (fn [last-block]
-           (let [last-id (:block/uuid last-block)]
-             ;; perf: improvement
-             (edit-block! last-block 0 format id)
-             (clear-when-saved!)))})))))
+     (when-let [state (get-state state)]
+       (let [{:keys [block value format id config]} state
+             value (if (string? block-value) block-value value)
+             block-id (:block/uuid block)
+             block (or (db/pull [:block/uuid block-id])
+                       block)
+             repo (or (:block/repo block) (state/get-current-repo))
+             properties (with-timetracking-properties block value)]
+         ;; save the current block and insert a new block
+         (insert-new-block-aux!
+          config
+          (assoc block :block/properties properties)
+          value
+          {:ok-handler
+           (fn [last-block]
+             (let [last-id (:block/uuid last-block)]
+               ;; perf: improvement
+               (edit-block! last-block 0 format id)
+               (clear-when-saved!)))}))))))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker] :as block} content]
