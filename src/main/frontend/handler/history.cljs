@@ -30,7 +30,8 @@
         (when-let [block (db/pull [:block/uuid block-uuid])]
           (editor/edit-block! block pos
                               (:block/format block)
-                              (:block/uuid block)))))))
+                              (:block/uuid block)
+                              {:custom-content (:block/content block)}))))))
 
 (defn undo!
   []

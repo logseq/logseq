@@ -8,6 +8,7 @@
             [cljs-drag-n-drop.core :as dnd]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.notification :as notification]
             [frontend.db :as db]
@@ -18,6 +19,7 @@
 
 (defn did-mount!
   [state]
+  (repo-handler/update-last-edit-block)
   (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
         content (get-in @state/state [:editor/content id])
         input (gdom/getElement id)]

@@ -458,7 +458,6 @@
                      (dissoc :db/id :block/collapsed?)
                      (wrap-parse-block))]
     (do
-      (repo-handler/update-last-edit-block)
       (profile
        "outliner insert block"
        (outliner-insert-block! current-block next-block block-self?))
