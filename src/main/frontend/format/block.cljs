@@ -241,10 +241,20 @@
                               (assoc :repeated? true))))))]
     (apply merge m)))
 
+(defn convert-page-if-journal
+  "Convert journal file name to user' custom date format"
+  [original-page-name]
+  (let [page-name (string/lower-case original-page-name)
+        day (date/journal-title->int page-name)]
+    (if day
+      (let [original-page-name (date/int->journal-title day)]
+        [original-page-name (string/lower-case original-page-name) day])
+      [original-page-name page-name day])))
+
 (defn page-name->map
   [original-page-name with-id?]
   (when original-page-name
-    (let [page-name (string/lower-case original-page-name)
+    (let [[original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
           m (merge
              {:block/name page-name
               :block/original-name original-page-name}
@@ -252,10 +262,10 @@
                (if-let [block (db/entity [:block/name page-name])]
                  {}
                  {:block/uuid (db/new-block-id)})))]
-      (if-let [d (date/journal-title->int page-name)]
+      (if journal-day
         (merge m
                {:block/journal? true
-                :block/journal-day d})
+                :block/journal-day journal-day})
         m))))
 
 (defn with-page-refs

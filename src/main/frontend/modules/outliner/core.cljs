@@ -20,6 +20,10 @@
   (assert (map? m) (util/format "block data must be map,got: %s %s" (type m) m))
   (->Block m))
 
+(defn get-data
+  [block]
+  (:data block))
+
 (defn get-block-by-id
   [id]
   (let [c (conn/get-conn false)
@@ -293,7 +297,7 @@
            (some-> last-node-right
              (tree/-set-left-id first-node-left-id)
              (tree/-save txs-state))
-           (outliner-file/sync-to-file first-node)))
+           (outliner-file/sync-to-file (get-data first-node))))
        (when-not (first-level? first-node)
          (let [parent (tree/-get-parent first-node)
                parent-parent-id (tree/-get-parent-id parent)

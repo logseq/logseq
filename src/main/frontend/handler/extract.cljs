@@ -41,6 +41,7 @@
   (try
     (let [now (tc/to-long (t/now))
           page (db/get-page-name file ast)
+          [page page-name journal-day] (block/convert-page-if-journal page)
           blocks (->> (block/extract-blocks ast content false)
                       (block/with-parent-and-left [:block/name (string/lower-case page)]))
           ref-pages (atom #{})
@@ -63,19 +64,13 @@
                             aliases (and (:alias properties)
                                          (seq (remove #(= page %)
                                                       (:alias properties))))
-                            journal-date-long (if journal?
-                                                (date/journal-title->long (string/capitalize page)))
                             page-list (when-let [list-content (:list properties)]
                                         (extract-page-list list-content))]
                         (cond->
                           (util/remove-nils
-                           {:block/name (string/lower-case page)
-                            :block/original-name page
-                            :block/file [:file/path file]
-                            :block/journal? journal?
-                            :block/journal-day (if journal?
-                                                 (date/journal-title->int page)
-                                                 0)})
+                           (assoc
+                            (block/page-name->map page false)
+                            :block/file [:file/path file]))
                           (seq properties)
                           (assoc :block/properties properties)
 

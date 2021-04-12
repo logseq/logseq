@@ -83,6 +83,7 @@
     :editor/block-dom-id nil
     :editor/set-timestamp-block nil
     :editor/last-input-time nil
+    :editor/new-block-toggle? false
     :db/last-transact-time {}
     :db/last-persist-transact-ids {}
     ;; whether database is persisted
@@ -93,6 +94,9 @@
     :selection/mode false
     :selection/blocks []
     :selection/start-block nil
+    ;; either :up or :down, defaults to down
+    ;; used to determine selection direction when two or more blocks are selected
+    :selection/direction :down
     :custom-context-menu/show? false
     :custom-context-menu/links nil
 
@@ -507,12 +511,14 @@
   (get @state :selection/start-block))
 
 (defn set-selection-blocks!
-  [blocks]
-  (when (seq blocks)
-    (swap! state assoc
-           :selection/mode true
-           :selection/blocks blocks)))
-
+  ([blocks]
+   (set-selection-blocks! blocks :down))
+  ([blocks direction]
+   (when (seq blocks)
+     (swap! state assoc
+            :selection/mode true
+            :selection/blocks blocks
+            :selection/direction direction))))
 (defn into-selection-mode!
   []
   (swap! state assoc :selection/mode true))
@@ -522,7 +528,7 @@
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/up? nil))
+         :selection/direction :down))
 
 (defn clear-selection-blocks!
   []
@@ -537,28 +543,24 @@
   (:selection/mode @state))
 
 (defn conj-selection-block!
-  [block up?]
+  [block direction]
   (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
          :selection/blocks (conj (:selection/blocks @state) block)
-         :selection/up? up?))
+         :selection/direction direction))
 
-(defn pop-selection-block!
+(defn drop-last-selection-block!
   []
-  (let [[first-block & others] (:selection/blocks @state)]
+  (let [last-block (peek (:selection/blocks @state))]
     (swap! state assoc
            :selection/mode true
-           :selection/blocks others)
-    first-block))
+           :selection/blocks (vec (pop (:selection/blocks @state))))
+    last-block))
 
-(defn selection-up?
+(defn get-selection-direction
   []
-  (:selection/up? @state))
-
-(defn set-selection-up!
-  [value]
-  (swap! state assoc :selection/up? value))
+  (:selection/direction @state))
 
 (defn show-custom-context-menu!
   [links]
@@ -941,36 +943,19 @@
   []
   (get @state :notification/contents))
 
-(defn get-new-block-shortcut
+(defn get-new-block-toggle?
   []
-  (let [shortcut (get-in @state [:shortcuts :editor/new-block])]
-    (if (and shortcut (contains? #{"enter" "alt+enter"} (string/lower-case shortcut)))
-      shortcut
-      "enter")))
-
-(defn set-new-block-shortcut!
-  [value]
-  (set-state! [:shortcuts :editor/new-block] value))
+  (get @state :editor/new-block-toggle?))
 
 (defn toggle-new-block-shortcut!
   []
-  (if-let [enter? (= "enter" (get-new-block-shortcut))]
-    (set-new-block-shortcut! "alt+enter")
-    (set-new-block-shortcut! "enter")))
+  (update-state! :editor/new-block-toggle? not))
 
 (defn set-config!
   [repo-url value]
-  (let [old-shortcuts (get-in @state [:config repo-url :shortcuts])]
-    (set-state! [:config repo-url] value)
-
-    ;; TODO: refactor. This seems useless as the default value has already been handled in
-    ;; `get-new-block-shortcut`.
-    (set-new-block-shortcut!
-     (or (get-shortcut repo-url :editor/new-block)
-         "enter"))
-
-    (let [shortcuts (or (:shortcuts value) {})]
-      (storage/set (str repo-url "-shortcuts") shortcuts))))
+  (set-state! [:config repo-url] value)
+  (let [shortcuts (or (:shortcuts value) {})]
+    (storage/set (str repo-url "-shortcuts") shortcuts)))
 
 (defn get-git-auto-push?
   ([]

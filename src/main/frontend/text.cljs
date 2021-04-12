@@ -80,6 +80,15 @@
       (re-find (re-pattern pattern) text))
     ""))
 
+(defn- remove-level-space-aux!
+  [text pattern space?]
+  (let [pattern (util/format
+                 (if space?
+                   "^[%s]+\\s+"
+                   "^[%s]+\\s?")
+                 pattern)]
+    (string/replace-first (string/triml text) (re-pattern pattern) "")))
+
 (defn remove-level-spaces
   ([text format]
    (remove-level-spaces text format false))
@@ -93,12 +102,10 @@
      text
 
      :else
-     (let [pattern (util/format
-                    (if space?
-                      "^[%s]+\\s+"
-                      "^[%s]+\\s?")
-                    (config/get-block-pattern format))]
-       (string/replace-first (string/triml text) (re-pattern pattern) "")))))
+     (let [text' (remove-level-space-aux! text (config/get-block-pattern format) space?)]
+       (if (and (= format :markdown) (= text text') )
+         (remove-level-space-aux! text "#" space?)
+         text')))))
 
 (defn append-newline-after-level-spaces
   [text format]

@@ -12,6 +12,7 @@
             [frontend.mixins :as mixins]
             [frontend.ui :as ui]
             [frontend.db :as db]
+            [frontend.modules.shortcut.mixin :refer [bind-state]]
             [dommy.core :as d]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -156,10 +157,10 @@
     {:on-click #(editor-handler/outdent-on-shift-tab parent-state)}
     svg/outdent-block]
    [:button.bottom-action
-    {:on-click #(editor-handler/move-up-down % true)}
+    {:on-click (editor-handler/move-up-down true)}
     svg/move-up-block]
    [:button.bottom-action
-    {:on-click #(editor-handler/move-up-down % false)}
+    {:on-click (editor-handler/move-up-down false)}
     svg/move-down-block]
    [:button.bottom-action
     {:on-click #(commands/simple-insert! parent-id "\n" {})}
@@ -315,20 +316,7 @@
   [repo state input input-id format]
   (mixins/on-key-down
    state
-   {;; enter
-    13 (editor-handler/keydown-enter-handler state input)
-    ;; up
-    38 (editor-handler/keydown-up-down-handler input true)
-    ;; down
-    40 (editor-handler/keydown-up-down-handler input false)
-    ;; left
-    37 (editor-handler/keydown-arrow-handler input :left)
-    ;; right
-    39 (editor-handler/keydown-arrow-handler input :right)
-    ;; backspace
-    8 (editor-handler/keydown-backspace-handler repo input input-id)
-    ;; tab
-    9 (editor-handler/keydown-tab-handler input input-id)}
+   {}
    {:not-matched-handler (editor-handler/keydown-not-matched-handler input input-id format)}))
 
 (defn- set-up-key-up!
@@ -351,6 +339,7 @@
 
 (rum/defcs box < rum/reactive
   (mixins/event-mixin setup-key-listener!)
+  (bind-state :component/box)
   lifecycle/lifecycle
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or   {dummy? false}
@@ -360,7 +349,6 @@
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
-       :class             "mousetrap"
        :cacheMeasurements true
        :default-value     (or content "")
        :minRows           (if (state/enable-grammarly?) 2 1)
