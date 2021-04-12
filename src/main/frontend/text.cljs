@@ -47,16 +47,32 @@
      (remove string/blank?)
      (map string/trim))))
 
+(defn- concat-nested-pages
+  [coll]
+  (loop [coll coll
+         result []]
+    (if (seq coll)
+      (let [item (first coll)]
+        (if (= item "]]")
+          (recur (rest coll)
+                 (conj
+                  (vec (butlast result))
+                  (str (last result) item)))
+          (recur (rest coll) (conj result item))))
+      result)))
+
 (defn split-page-refs-without-brackets
   ([s]
    (split-page-refs-without-brackets s false))
   ([s comma?]
-   (if (and (string? s)
+   (cond
+     (and (string? s)
             ;; Either a page ref, a tag or a comma separated collection
             (or (re-find page-ref-re s)
                 (re-find (if comma? #"[\,|，|#]+" #"#") s)))
      (let [result (->> (string/split s page-ref-re-2)
                        (remove string/blank?)
+                       concat-nested-pages
                        (mapcat (fn [s]
                                  (if (page-ref? s)
                                    [(page-ref-un-brackets! s)]
@@ -69,6 +85,8 @@
                result (map (fn [s] (string/replace s #"^#+" "")) result)]
            (set result))
          (first result)))
+
+     :else
      s)))
 
 (defn extract-level-spaces
