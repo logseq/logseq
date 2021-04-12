@@ -106,6 +106,7 @@
   true)
 
 (defmethod handle :search-blocks [window [_ repo q limit]]
+  (prn {:limit limti})
   (search/search-blocks repo q limit))
 
 (defmethod handle :rebuild-blocks-indice [window [_ repo data]]

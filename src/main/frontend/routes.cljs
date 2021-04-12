@@ -5,6 +5,7 @@
             [frontend.components.page :as page]
             [frontend.components.diff :as diff]
             [frontend.components.journal :as journal]
+            [frontend.components.search :as search]
             [frontend.components.settings :as settings]
             [frontend.components.external :as external]
             [frontend.components.publishing :as publishing]))
@@ -30,6 +31,10 @@
    ["/file/:path"
     {:name :file
      :view file/file}]
+
+   ["/search/:q"
+    {:name :search
+     :view search/more}]
 
    ["/new-page"
     {:name :new-page

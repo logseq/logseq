@@ -17,7 +17,8 @@
             [goog.dom :as gdom]
             [medley.core :as medley]
             [frontend.context.i18n :as i18n]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [reitit.frontend.easy :as rfe]))
 
 (defn- partition-between
   "Split `coll` at positions where `pred?` is true."
@@ -138,13 +139,13 @@
 (defonce search-timeout (atom nil))
 
 (rum/defc search-auto-complete
-  [{:keys [pages files blocks] :as result} search-q]
+  [{:keys [pages files blocks has-more?] :as result} search-q all?]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [new-file (when-let [ext (util/get-file-ext search-q)]
                      (when (contains? config/mldoc-support-formats (keyword (string/lower-case ext)))
                        [{:type :new-file}]))
-          pages (map (fn [page] {:type :page :data page}) pages)
-          files (map (fn [file] {:type :file :data file}) files)
+          pages (when-not all? (map (fn [page] {:type :page :data page}) pages))
+          files (when-not all? (map (fn [file] {:type :file :data file}) files))
           blocks (map (fn [block] {:type :block :data block}) blocks)
           search-mode (state/get-search-mode)
           new-page (if (or
@@ -152,17 +153,19 @@
                              (= (string/lower-case search-q)
                                 (string/lower-case (:data (first pages)))))
                         (nil? result)
-                        (not= :global search-mode))
+                        (not= :global search-mode)
+                        all?)
                      []
                      [{:type :new-page}])
           result (if config/publishing?
                    (concat pages files blocks)
                    (concat new-page pages new-file files blocks))]
-      [:div.absolute.rounded-md.shadow-lg
+      [:div.rounded-md.shadow-lg
        {:style (merge
                 {:top 48
                  :left 32
-                 :width 700})}
+                 :width 700})
+        :class (if all? "search-all" "absolute")}
        (ui/auto-complete
         result
         {:class "search-results"
@@ -214,29 +217,38 @@
          :item-render (fn [{:keys [type data]}]
                         (let [search-mode (state/get-search-mode)]
                           [:div {:class "py-2"} (case type
-                                                 :new-page
-                                                 [:div.text.font-bold (str (t :new-page) ": ")
-                                                  [:span.ml-1 (str "\"" search-q "\"")]]
+                                                  :new-page
+                                                  [:div.text.font-bold (str (t :new-page) ": ")
+                                                   [:span.ml-1 (str "\"" search-q "\"")]]
 
-                                                 :new-file
-                                                 [:div.text.font-bold (str (t :new-file) ": ")
-                                                  [:span.ml-1 (str "\"" search-q "\"")]]
+                                                  :new-file
+                                                  [:div.text.font-bold (str (t :new-file) ": ")
+                                                   [:span.ml-1 (str "\"" search-q "\"")]]
 
-                                                 :page
-                                                 (search-result-item "Page" (highlight-exact-query data search-q))
+                                                  :page
+                                                  (search-result-item "Page" (highlight-exact-query data search-q))
 
-                                                 :file
-                                                 (search-result-item "File" (highlight-exact-query data search-q))
+                                                  :file
+                                                  (search-result-item "File" (highlight-exact-query data search-q))
 
-                                                 :block
-                                                 (let [{:block/keys [page content uuid]} data
-                                                       page (or (:page/original-name page)
-                                                                (:page/name page))
-                                                       repo (state/sub :git/current-repo)
-                                                       format (db/get-page-format page)]
-                                                   (search-result-item "Block" (block-search-result-item repo uuid format content search-q search-mode)))
+                                                  :block
+                                                  (let [{:block/keys [page content uuid]} data
+                                                        page (or (:page/original-name page)
+                                                                 (:page/name page))
+                                                        repo (state/sub :git/current-repo)
+                                                        format (db/get-page-format page)]
+                                                    (search-result-item "Block" (block-search-result-item repo uuid format content search-q search-mode)))
 
-                                                 nil)]))})])))
+                                                  nil)]))})
+       (when (and has-more? (util/electron?) (not all?))
+         [:div.px-2.py-4.search-more
+          [:a.text-sm.font-medium {:href (rfe/href :search {:q search-q})
+                                   :on-click (fn []
+                                               (when-not (string/blank? search-q)
+                                                 (search-handler/search (state/get-current-repo) search-q {:limit 1000
+                                                                                                           :more? true})
+                                                 (search-handler/clear-search!)))}
+           (t :more)]])])))
 
 (rum/defcs search < rum/reactive
   (rum/local false ::inside-box?)
@@ -298,4 +310,16 @@
             {:class-names "fade"
              :timeout {:enter 500
                        :exit 300}}
-            (search-auto-complete search-result search-q)))]]])))
+            (search-auto-complete search-result search-q false)))]]])))
+
+(rum/defc more < rum/reactive
+  [route]
+  (let [search-q (get-in route [:path-params :q])
+        search-result (state/sub :search/more-result)]
+    (rum/with-context [[t] i18n/*tongue-context*]
+      [:div#search.flex-1.flex
+       [:div.inner
+        [:h1.title "Search result for " [:i search-q]]
+        [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
+         (when-not (string/blank? search-q)
+           (search-auto-complete search-result search-q true))]]])))
