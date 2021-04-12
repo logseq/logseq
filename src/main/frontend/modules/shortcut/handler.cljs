@@ -52,6 +52,10 @@
    :editor/undo history/undo!
    :editor/redo history/redo!
 
+   :editor/undo history/undo!
+
+   :editor/redo history/redo!
+
    :ui/toggle-brackets config-handler/toggle-ui-show-brackets!
    :go/search route-handler/go-to-search!
    :go/journals route-handler/go-to-journals!

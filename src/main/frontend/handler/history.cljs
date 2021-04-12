@@ -44,10 +44,9 @@
 
 (defn undo!
   []
-  (do
-    (editor/save-current-block-when-idle! {:check-idle? false})
-    (let [{:keys [editor-cursor]} (undo-redo/undo)]
-      (restore-cursor! editor-cursor))))
+  (editor/save-current-block-when-idle! {:check-idle? false})
+  (let [{:keys [editor-cursor]} (undo-redo/undo)]
+    (restore-cursor! editor-cursor)))
 
 (defn redo!
   []
