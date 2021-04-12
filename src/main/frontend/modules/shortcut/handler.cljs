@@ -10,7 +10,8 @@
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.modules.shortcut.mixin :refer [before state-f] :as m]
             [frontend.state :as state]
-            [frontend.ui.date-picker :as date-picker]))
+            [frontend.ui.date-picker :as date-picker]
+            [frontend.handler.history :as history]))
 
 (def handler
 [;; editing only
@@ -48,6 +49,8 @@
    :editor/select-block-down (editor-handler/on-select-block :down)
 
    :editor/save editor-handler/save!
+   :editor/undo history/undo!
+   :editor/redo history/redo!
 
    :ui/toggle-brackets config-handler/toggle-ui-show-brackets!
    :go/search route-handler/go-to-search!

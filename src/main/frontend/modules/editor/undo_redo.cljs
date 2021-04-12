@@ -4,7 +4,8 @@
             [frontend.modules.datascript-report.core :as db-report]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [frontend.db.outliner :as db-outliner]))
 
 ;;;; APIs
 
@@ -35,19 +36,19 @@
     (swap! undo-stack conj txs)))
 
 (comment
-  (defn get-content-from-entity
+  (defn get-content-from-txs
     "For test."
-    [entity]
+    [txs]
     (filterv (fn [[_ a & y]]
                (= :block/content a))
-      (:txs entity)))
+      txs))
 
   (defn get-content-from-stack
     "For test."
     [stack]
-    (mapv #(get-content-from-entity %) stack))
+    (mapv #(get-content-from-txs (:txs %)) stack))
 
-  (debug/pprint "pop entity" (get-content-from-entity removed-e))
+  (debug/pprint "pop entity" (get-content-from-txs (:txs removed-e)))
   (debug/pprint "undo-stack" (get-content-from-stack @undo-stack)))
 
 (defn pop-undo
@@ -88,6 +89,11 @@
 
 ;;;; Invokes
 
+(defn get-by-id
+  [id]
+  (let [conn (conn/get-conn false)]
+    (db-outliner/get-by-id conn id)))
+
 (defn- transact!
   [txs]
   (let [conn (conn/get-conn false)]
@@ -104,7 +110,9 @@
     (let [new-txs (get-txs false txs)]
       (push-redo e)
       (transact! new-txs)
-      (refresh {:key :block/change :data blocks})
+      (let [blocks
+            (map (fn [x] (get-by-id [:block/uuid (:block/uuid x)])) blocks)]
+        (refresh {:key :block/change :data (vec blocks)}))
       (assoc e :txs-op new-txs))))
 
 (defn redo
@@ -113,13 +121,13 @@
     (let [new-txs (get-txs true txs)]
       (push-undo e)
       (transact! new-txs)
-      (refresh {:key :block/change :data blocks})
+      (let [blocks (map (fn [x] (get-by-id [:block/uuid (:block/uuid x)])) blocks)]
+        (refresh {:key :block/change :data (vec blocks)}))
       (assoc e :txs-op new-txs))))
 
 (defn listen-outliner-operation
   [{:keys [tx-data tx-meta] :as tx-report}]
   (when-not (empty? tx-data)
-    (debug/pprint "tx-data" tx-data)
     (reset-redo)
     (let [updated-blocks (db-report/get-blocks tx-report)
           entity {:blocks updated-blocks :txs tx-data

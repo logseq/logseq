@@ -33,11 +33,11 @@
 
 #?(:cljs
    (defn transact!
-     [txs]
+     [txs opts]
      (when (seq txs)
        (let [conn (conn/get-conn false)
              editor-cursor (get-cursor)
-             meta {:editor-cursor editor-cursor}
+             meta (merge opts {:editor-cursor editor-cursor})
              rs (d/transact! conn txs meta)]
          (pipelines/after-transact-pipelines rs)
          rs))))
@@ -46,7 +46,7 @@
    (defmacro auto-transact!
      "Copy from with-open.
      Automatically transact! after executing the body."
-     [bindings & body]
+     [bindings opts & body]
      (#'core/assert-args
        (vector? bindings) "a vector for its binding"
        (even? (count bindings)) "an even number of forms in binding vector")
@@ -54,7 +54,7 @@
        (= (count bindings) 0) `(do ~@body)
        (symbol? (bindings 0)) `(let ~(subvec bindings 0 2)
                                  (try
-                                   (auto-transact! ~(subvec bindings 2) ~@body)
-                                   (transact! (deref ~(bindings 0)))))
+                                   (auto-transact! ~(subvec bindings 2) ~opts ~@body)
+                                   (transact! (deref ~(bindings 0)) ~opts)))
        :else (throw (IllegalArgumentException.
                       "with-db only allows Symbols in bindings")))))

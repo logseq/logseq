@@ -7,7 +7,9 @@
 
 (defn get-by-id
   [conn id]
-  (d/pull @conn '[*] id))
+  (try
+    (d/pull @conn '[*] id)
+    (catch js/Error e nil)))
 
 (defn get-by-parent-&-left
   [conn parent-id left-id]

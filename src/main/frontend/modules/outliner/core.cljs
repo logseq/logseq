@@ -143,7 +143,8 @@
 (defn save-node
   [node]
   {:pre [(tree/satisfied-inode? node)]}
-  (ds/auto-transact! [db (ds/new-outliner-txs-state)]
+  (ds/auto-transact!
+    [db (ds/new-outliner-txs-state)] {:outliner-op :save-node}
     (tree/-save node db)))
 
 (defn insert-node-as-first-child
@@ -179,7 +180,8 @@
 
 (defn insert-node
   [new-node target-node sibling?]
-  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+  (ds/auto-transact!
+    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-node}
     (if sibling?
       (insert-node-as-sibling txs-state new-node target-node)
       (insert-node-as-first-child txs-state new-node target-node))))
@@ -187,7 +189,8 @@
 (defn move-node
   [node up?]
   {:pre [(tree/satisfied-inode? node)]}
-  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+  (ds/auto-transact!
+    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :move-node}
     (let [[up-node down-node] (if up?
                                 (let [left (tree/-get-left node)
                                       parent? (= left (tree/-get-parent node))]
@@ -209,7 +212,8 @@
   "Delete node from the tree."
   [node]
   {:pre [(tree/satisfied-inode? node)]}
-  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+  (ds/auto-transact!
+    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :delete-node}
     (let [right-node (tree/-get-right node)]
       (tree/-del node txs-state)
       (when (tree/satisfied-inode? right-node)
@@ -247,7 +251,8 @@
   [start-node end-node block-ids]
   {:pre [(tree/satisfied-inode? start-node)
          (tree/satisfied-inode? end-node)]}
-  (do (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+  (do (ds/auto-transact!
+        [txs-state (ds/new-outliner-txs-state)] {:outliner-op :delete-nodes}
         (if (= start-node end-node)
           (delete-node start-node)
           (let [right-node (tree/-get-right end-node)
@@ -278,7 +283,8 @@
 
 (defn indent-outdent-nodes
   [nodes indent?]
-  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+  (ds/auto-transact!
+    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :indent-outdent-nodes}
    (let [first-node (first nodes)
          last-node (last nodes)]
      (if indent?
@@ -323,7 +329,8 @@
   [root target-node sibling?]
   {:pre [(every? tree/satisfied-inode? [root target-node])
          (boolean? sibling?)]}
-  (ds/auto-transact! [txs-state (ds/new-outliner-txs-state)]
+  (ds/auto-transact!
+    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :move-subtree}
     (let [left-node-id (tree/-get-left-id root)
          right-node (tree/-get-right root)]
       (when (tree/satisfied-inode? right-node)
