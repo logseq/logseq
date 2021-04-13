@@ -152,7 +152,7 @@
   ([id markup dummy?]
    (when-let [node (gdom/getElement (str id))]
      (when-let [cursor-range (state/get-cursor-range)]
-       (when-let [range (string/trim cursor-range)]
+       (when-let [range cursor-range]
          (let [pos (diff/find-position markup range)]
            (util/set-caret-pos! node pos)))))))
 
@@ -191,6 +191,17 @@
     (dom/remove-class! block "noselect"))
   (state/clear-selection!))
 
+(defn- text-range-by-lst-fst-line [content [direction pos]]
+  (case direction
+        :up
+        (let [last-new-line (or (string/last-index-of content \newline) -1)
+              end (+ last-new-line pos 1)]
+          (subs content 0 end))
+        :down
+        (-> (string/split-lines content)
+            first
+            (subs 0 pos))))
+
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn edit-block!
   ([block pos format id]
@@ -206,6 +217,9 @@
              content (or custom-content (:block/content block) "")
              content-length (count content)
              text-range (cond
+                          (vector? pos)
+                          (text-range-by-lst-fst-line content pos)
+
                           (and (> tail-len 0) (>= (count content) tail-len))
                           (subs content 0 (- (count content) tail-len))
 
@@ -1074,11 +1088,7 @@
                               (string/trim value))
                     (save-block! repo uuid value)))
                 (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
-                  ;; TODO fix me, edit block pos should be the pos of last line or first line
-                  ;; if the target is multiline block, shall open edit
-                  ;; 1. if up, edit last line
-                  ;; 2. if down, edit first line
-                  (edit-block! block (state/get-edit-pos) format (state/get-edit-input-id)))))))
+                  (edit-block! block [direction (util/get-first-or-last-line-pos element)] format (state/get-edit-input-id)))))))
         ;;just up and down
         (if up?
           (util/move-cursor-up element)
