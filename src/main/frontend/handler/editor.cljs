@@ -1822,22 +1822,29 @@
           (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
             (edit-block! block pos format id)))))))
 
-(defn- on-arrow-move-to-boundray
-  [input e direction]
-  (if (or (and (= :left direction) (util/input-start? input))
-          (and (= :right direction) (util/input-end? input)))
-    (move-to-block-when-cross-boundrary e direction)
-    ;; move left or right
-    (if (= direction :left)
-      (util/cursor-move-back input 1)
-      (util/cursor-move-forward input 1))))
-
 (defn keydown-arrow-handler
   [direction]
   (fn [e]
-    (let [input (state/get-input)]
-      (when-not (in-auto-complete? nil)
-        (on-arrow-move-to-boundray input e direction)))))
+    (when-not (in-auto-complete? nil)
+      (let [input (state/get-input)
+            selected-start (.-selectionStart input)
+            selected-end (.-selectionEnd input)
+            left? (= direction :left)
+            right? (= direction :right)]
+        (cond
+          (not= selected-start selected-end)
+          (if left?
+            (util/set-caret-pos! input selected-start)
+            (util/set-caret-pos! input selected-end))
+
+          (or (and left? (util/input-start? input))
+              (and right? (util/input-end? input)))
+          (move-to-block-when-cross-boundrary e direction)
+
+          :else
+          (if left?
+            (util/cursor-move-back input 1)
+            (util/cursor-move-forward input 1)))))))
 
 (defn keydown-backspace-handler
   [get-state-fn]
