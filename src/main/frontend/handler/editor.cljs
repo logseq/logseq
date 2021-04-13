@@ -1794,11 +1794,56 @@
         (keydown-new-line)))))
 
 
+(defn- move-cross-boundrary-up-down
+  [direction]
+  (let [input (state/get-input)
+        line-pos (util/get-first-or-last-line-pos input)
+        repo (state/get-current-repo)
+        f (case direction
+                :up get-prev-block-non-collapsed
+                :down get-next-block-non-collapsed)
+        sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
+        {:block/keys [uuid content format]} (state/get-edit-block)]
+    (when sibling-block
+      (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+        (let [value (state/get-edit-content)]
+          (when (not= (-> content
+                          (text/remove-level-spaces format)
+                          text/remove-properties!
+                          string/trim)
+                      (string/trim value))
+            (save-block! repo uuid value)))
+
+        (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
+          (edit-block! block
+                       [direction line-pos]
+                       format
+                       (state/get-edit-input-id)))))))
+
 (defn keydown-up-down-handler
   [direction]
   (fn [_]
     (when-not (in-auto-complete? nil)
-      (on-up-down direction))))
+      (let [input (state/get-input)
+            line-height (util/get-textarea-line-height input)
+            selected-start (.-selectionStart input)
+            selected-end (.-selectionEnd input)
+            up? (= direction :up)
+            down? (= direction :down)]
+        (cond
+          (not= selected-start selected-end)
+          (if up?
+            (util/set-caret-pos! input selected-start)
+            (util/set-caret-pos! input selected-end))
+
+          (or (and up? (util/textarea-cursor-first-row? input line-height))
+              (and down? (util/textarea-cursor-end-row? input line-height)))
+          (move-cross-boundrary-up-down direction)
+
+          :else
+          (if up?
+            (util/move-cursor-up input)
+            (util/move-cursor-down input)))))))
 
 (defn- move-to-block-when-cross-boundrary
   [_ direction]
