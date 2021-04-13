@@ -455,7 +455,7 @@
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge block new-m)
-                     (dissoc :db/id :block/collapsed?)
+                       (dissoc :db/id :block/collapsed? :block/properties :block/pre-block? :block/meta)
                      (wrap-parse-block))]
     (do
       (profile
@@ -728,33 +728,37 @@
                     :data blocks}]
           (db/refresh repo opts))))))
 
+(defn- block-property-aux!
+  [block-id key value]
+  (let [block-id (if (string? block-id) (uuid block-id) block-id)
+        key (keyword (string/lower-case (name key)))
+        repo (state/get-current-repo)]
+    (when repo
+      (when-let [block (db/entity [:block/uuid block-id])]
+        (let [properties (:block/properties block)
+              properties (if value        ; add
+                           (assoc properties key value)
+                           (dissoc properties key))
+              block (outliner-core/block {:block/uuid block-id
+                                          :block/properties properties})]
+          (outliner-core/save-node block)
+          (let [opts {:key :block/change
+                      :data [block]}]
+            (db/refresh repo opts)))))))
+
 (defn remove-block-property!
   [block-id key]
-  (let [block-id (if (string? block-id) (uuid block-id) block-id)
-        key (string/lower-case (str key))]
-    (when-let [block (db/pull [:block/uuid block-id])]
-      (let [{:block/keys [content properties]} block]
-        (when (get properties key)
-          (save-block-if-changed! block content
-                                  {:remove-properties [key]}))))))
+  (block-property-aux! block-id key nil)
+  (db/refresh (state/get-current-repo)
+              {:key :block/change
+               :data [(db/pull [:block/uuid block-id])]}))
 
 (defn set-block-property!
   [block-id key value]
-  (let [block-id (if (string? block-id) (uuid block-id) block-id)
-        key (string/lower-case (str key))
-        value (str value)]
-    (when-let [block (db/pull [:block/uuid block-id])]
-      (when-not (:block/pre-block? block)
-        (let [{:block/keys [content properties]} block]
-          (cond
-            (and (string? (get properties key))
-                 (= (string/trim (get properties key)) value))
-            nil
-
-            :else
-            (save-block-if-changed! block content
-                                    {:custom-properties {key value}
-                                     :rebuild-content? false})))))))
+  (block-property-aux! block-id key value)
+  (db/refresh (state/get-current-repo)
+              {:key :block/change
+               :data [(db/pull [:block/uuid block-id])]}))
 
 (defn set-block-timestamp!
   [block-id key value]
@@ -1560,10 +1564,6 @@
     (when-let [input (gdom/getElement id)]
       (.focus input)
       (util/move-cursor-to input saved-cursor))))
-
-(defn set-block-as-a-heading!
-  [block-id value]
-  (set-block-property! block-id "heading" value))
 
 (defn open-block!
   [first?]

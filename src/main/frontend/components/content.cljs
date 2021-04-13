@@ -128,9 +128,7 @@
   [target block-id]
   (rum/with-context [[t] i18n/*tongue-context*]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [properties (:block/properties block)
-            heading (get properties "heading")
-            heading? (= heading "true")]
+      (let [properties (:block/properties block)]
         [:div#custom-context-menu
          [:div.py-1.rounded-md.bg-base-3.shadow-xs
           [:div.flex-row.flex.justify-between.py-4.pl-2
@@ -138,25 +136,15 @@
             (for [color block-background-colors]
               [:a.m-2.shadow-sm
                {:on-click (fn [_e]
-                            (editor-handler/set-block-property! block-id "background_color" color))}
+                            (editor-handler/set-block-property! block-id :background-color color))}
                [:div.heading-bg {:style {:background-color color}}]])]
            [:a.text-sm
             {:title (t :remove-background)
              :style {:margin-right 14
                      :margin-top 4}
              :on-click (fn [_e]
-                         (editor-handler/remove-block-property! block-id "background_color"))}
+                         (editor-handler/remove-block-property! block-id :background-color))}
             "Clear"]]
-          (ui/menu-link
-           {:key "Convert heading"
-            :on-click (fn [_e]
-                        (if heading?
-                          (editor-handler/remove-block-property! block-id "heading")
-                          (editor-handler/set-block-as-a-heading! block-id true)))}
-           (if heading?
-             "Convert back to a block"
-             "Convert to a heading"))
-
           (let [empty-properties? (not (text/contains-properties? (:block/content block)))
                 all-hidden? (text/properties-hidden? (:block/properties block))]
             (when (or empty-properties? all-hidden?)

@@ -24,6 +24,7 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.utf8 :as utf8]
+            [borkdude.rewrite-edn :as rewrite]
             ["/frontend/utils" :as utils]))
 
 ;; TODO: extract all git ops using a channel
@@ -326,3 +327,20 @@
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
       (when-not file-exists?
         (reset-file! repo-url path default-content)))))
+
+(defn edn-file-set-key-value
+  [path k v ok-handler]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [content (db/get-file-no-sub path)]
+      (let [result (try
+                     (rewrite/parse-string content)
+                     (catch js/Error e
+                       (println "Parsing config file failed: ")
+                       (js/console.dir e)
+                       {}))
+            ks (if (vector? k) k [k])
+            new-result (rewrite/assoc-in result ks v)]
+        (when ok-handler (ok-handler repo new-result))
+        (state/set-config! repo new-result)
+        (let [new-content (str new-result)]
+          (set-file-content! repo path new-content))))))

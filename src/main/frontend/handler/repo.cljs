@@ -207,14 +207,14 @@
     (db/transact! repo-url all-data)))
 
 (defn- parse-files-and-create-default-files-inner!
-  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts]
+  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata]
   (let [parsed-files (filter
                       (fn [file]
                         (let [format (format/get-format (:file/path file))]
                           (contains? config/mldoc-support-formats format)))
                       files)
         blocks-pages (if (seq parsed-files)
-                       (extract-handler/extract-all-blocks-pages repo-url parsed-files)
+                       (extract-handler/extract-all-blocks-pages repo-url parsed-files metadata)
                        [])]
     (let [config-file (config/get-config-path)]
       (when (contains? (set file-paths) config-file)
@@ -234,15 +234,15 @@
     (state/set-importing-to-db! false)))
 
 (defn- parse-files-and-create-default-files!
-  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts]
+  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata]
   (if db-encrypted?
     (p/let [files (p/all
                    (map (fn [file]
                           (p/let [content (encrypt/decrypt (:file/content file))]
                             (assoc file :file/content content)))
                         files))]
-      (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts))
-    (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts)))
+      (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata))
+    (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)))
 
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
@@ -262,8 +262,8 @@
          (encryption/encryption-input-secret-dialog
           repo-url
           db-encrypted-secret
-          #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts)))
-        (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts)))))
+          #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)))
+        (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)))))
 
 (defn load-repo-to-db!
   [repo-url {:keys [first-clone? diffs nfs-files]

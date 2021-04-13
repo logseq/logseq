@@ -143,7 +143,7 @@
        file content utf8-content journal?))))
 
 (defn extract-all-blocks-pages
-  [repo-url files]
+  [repo-url files metadata]
   (when (seq files)
     (let [result (->> files
                       (map
@@ -155,6 +155,11 @@
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
+              blocks (map (fn [block]
+                            (let [id (:block/uuid block)
+                                  properties (get-in metadata [:block/properties id])]
+                              (update block :block/properties merge properties)))
+                       blocks)
               pages (util/distinct-by :block/name pages)
               block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
               blocks (map (fn [b]

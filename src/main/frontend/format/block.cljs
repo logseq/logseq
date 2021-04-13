@@ -157,14 +157,8 @@
    (= "List" (first block))
    (:name (first (second block)))))
 
-(defn- ->schema-properties
-  [properties]
-  (-> properties
-      (update "created_at" util/safe-parse-int)
-      (update "last_modified_at" util/safe-parse-int)))
-
 (defonce non-parsing-properties
-  (atom #{"background_color"}))
+  (atom #{:background-color}))
 
 (defn extract-properties
   [[_ properties] _start-pos _end-pos]
@@ -184,7 +178,8 @@
         properties (->> properties
                         (medley/map-kv (fn [k v]
                                          (let [v (string/trim v)
-                                               k (string/replace k " " "_")]
+                                               k (string/replace k " " "-")
+                                               k (string/replace k "_" "-")]
                                            (cond
                                              (and (= "\"" (first v) (last v))) ; wrapped in ""
                                              [(string/lower-case k) (string/trim (subs v 1 (dec (count v))))]
@@ -202,8 +197,7 @@
                                                                (util/safe-parse-int v'))
                                                         (util/safe-parse-int v')
                                                         (text/split-page-refs-without-brackets v' comma?))]
-                                               [k' v'])))))
-                        (->schema-properties))]
+                                               [k' v']))))))]
     {:properties properties
      :page-refs page-refs}))
 

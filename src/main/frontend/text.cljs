@@ -122,14 +122,14 @@
 
 (def hidden-properties
   (set/union
-   #{"id" "custom_id" "heading" "background_color"
-     "created_at" "last_modified_at"}
+   #{:id :custom-id :background-color
+     :created-at :updated-at}
    config/markers))
 
 (defn properties-hidden?
   [properties]
   (and (seq properties)
-       (let [ks (map string/lower-case (keys properties))]
+       (let [ks (map (comp keyword string/lower-case name) (keys properties))]
          (every? hidden-properties ks))))
 
 (defn remove-properties!

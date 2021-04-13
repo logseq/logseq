@@ -62,6 +62,34 @@
      (outliner-state/get-by-parent-id repo [:block/uuid id])
      (mapv block))))
 
+;; TODO: we might need to store created-at and updated-at as datom attributes
+;; instead of being attributes of properties.
+;; which might improve the db performance, we can improve it later
+(defn- with-timestamp
+  [data]
+  (prn {:data data})
+  (let [updated-at (util/time-ms)
+        m (-> data
+              (dissoc :block/children :block/dummy? :block/level :block/meta)
+              (util/remove-nils))
+        properties (assoc (:block/properties m)
+                          :id (:block/uuid data)
+                          :updated-at updated-at)
+        properties (if-let [created-at (get properties :created-at)]
+                     properties
+                     (assoc properties :created-at updated-at))
+        m (assoc m :block/properties properties)
+        page-id (or (get-in data [:block/page :db/id])
+                    (:db/id (:block/page (db/entity (:db/id data)))))
+        page (db/entity page-id)
+        page-properties (:block/properties page)
+        page-tx {:db/id page-id
+                 :block/properties (assoc page-properties
+                                          :id (:block/uuid page)
+                                          :updated-at updated-at
+                                          :created-at (get page-properties :created-at updated-at))}]
+    [m page-tx]))
+
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
 
@@ -107,10 +135,8 @@
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [m (-> (:data this)
-                (dissoc :block/children :block/dummy? :block/level :block/meta)
-                (util/remove-nils))]
-      (swap! txs-state conj m)
+    (let [[m page-tx] (with-timestamp (:data this))]
+      (swap! txs-state conj m page-tx)
       m))
 
   (-del [this txs-state]
