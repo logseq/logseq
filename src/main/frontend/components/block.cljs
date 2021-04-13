@@ -498,7 +498,7 @@
     (let [block (and (util/uuid-string? id)
                      (db/pull-block (uuid id)))]
       (if block
-        [:div.block-ref-wrap
+        [:span.block-ref-wrap
          {:on-mouse-down
           (fn [e]
             (util/stop e)
