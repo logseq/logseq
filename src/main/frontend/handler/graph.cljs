@@ -42,7 +42,7 @@
                              (if dark? "orange" "green")
                              color)]
                  {:id p
-                  :name name
+                  :name p
                   :val (get-connections p edges)
                   :autoColorBy "group"
                   :group (js/Math.ceil (* (js/Math.random) 12))
