@@ -281,9 +281,8 @@
         (.removeEventListener viewport "scroll" handler)))))
 
 (defn on-scroll
-  [on-load on-top-reached]
-  (let [node js/document.documentElement
-        full-height (gobj/get node "scrollHeight")
+  [node on-load on-top-reached]
+  (let [full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
         bottom-reached? (<= (- full-height scroll-top client-height) 100)
@@ -296,16 +295,20 @@
 (defn attach-listeners
   "Attach scroll and resize listeners."
   [state]
-  (let [opts (-> state :rum/args second)
+
+  (let [list-element-id (first (:rum/args state))
+        opts (-> state :rum/args (nth 2))
+        node (js/document.getElementById list-element-id)
         debounced-on-scroll (util/debounce 500 #(on-scroll
+                                                 node
                                                  (:on-load opts) ; bottom reached
                                                  (:on-top-reached opts)))]
-    (mixins/listen state js/document :scroll debounced-on-scroll)))
+    (mixins/listen state node :scroll debounced-on-scroll)))
 
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state body {:keys [on-load has-more]}]
+  [state list-element-id body {:keys [on-load has-more]}]
   (rum/with-context [[t] i18n/*tongue-context*]
     (rum/fragment
      body
