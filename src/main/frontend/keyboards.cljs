@@ -89,6 +89,7 @@
        (or (shortcut :editor/highlight) "mod+h") [editor-handler/highlight-format! true]
        (or (shortcut :editor/insert-link) "mod+k") [editor-handler/html-link-format! true]
        (or (shortcut :editor/select-all-blocks) "mod+shift+a") [editor-handler/select-all-blocks! true]
+       (or (shortcut :editor/copy-current-block-ref) "mod+shift+y") [editor-handler/copy-current-block-ref! true]
        (or (shortcut :editor/move-block-up) (if util/mac? "mod+shift+up" "alt+shift+up")) [(fn [state e] (editor-handler/move-up-down e true)) true]
        (or (shortcut :editor/move-block-down) (if util/mac? "mod+shift+down" "alt+shift+down")) [(fn [state e] (editor-handler/move-up-down e false)) true]
        (or (shortcut :editor/save) "mod+s") [editor-handler/save! true]

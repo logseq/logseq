@@ -1170,6 +1170,19 @@
        (set-block-property! block-id "id" (str block-id))))
    (util/copy-to-clipboard! (tap-clipboard block-id))))
 
+(defn copy-current-block-ref!
+  ([_e]
+   (when-let [current-block (state/get-edit-block)]
+     (let [block-id (:block/uuid current-block)]
+       (copy-block-ref! block-id #(str "((" % "))"))
+       (notification/show!
+        [:div
+         [:span.mb-1.5 "Block ref copied!"]
+         [:div [:code.whitespace-nowrap (str block-id)]]]
+        :success true
+        ;; use uuid to make sure there is only one toast a time
+        (str "copied-block-ref:" block-id))))))
+
 (defn clear-selection!
   [_e]
   (when (state/in-selection-mode?)
@@ -2382,7 +2395,7 @@
   [state input e direction]
   (when (and (not (util/input-selected? input))
              (or (and (= :left direction) (util/input-start? input))
-             (and (= :right direction) (util/input-end? input))))
+                 (and (= :right direction) (util/input-end? input))))
     (move-to-block-when-cross-boundrary state e direction)))
 
 (defn keydown-arrow-handler

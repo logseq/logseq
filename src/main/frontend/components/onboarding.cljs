@@ -249,7 +249,8 @@
          [:tr [:td (t :collapse)] [:td (util/->platform-shortcut "Ctrl-Up")]]
          [:tr [:td (t :select-block-above)] [:td "Shift-Up"]]
          [:tr [:td (t :select-block-below)] [:td "Shift-Down"]]
-         [:tr [:td (t :select-all-blocks)] [:td (util/->platform-shortcut "Ctrl-Shift-a")]]]]
+         [:tr [:td (t :select-all-blocks)] [:td (util/->platform-shortcut "Ctrl-Shift-a")]]
+         [:tr [:td (t :content/copy-current-block-ref)] [:td (util/->platform-shortcut "Ctrl-Shift-y")]]]]
        [:table
         [:thead
          [:tr
