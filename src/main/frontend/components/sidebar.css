@@ -61,10 +61,7 @@
 }
 
 .cp__sidebar-main-content {
-  padding: 5rem 1.5rem;
   max-width: var(--ls-main-content-max-width);
-  min-height: 100vh;
-  flex: 1;
 
   h1.title {
     padding-right: 15px;
@@ -99,7 +96,6 @@
 .cp__right-sidebar {
   z-index: var(--ls-z-index-level-1);
   transition: width 0.3s;
-  border-radius: var(--ls-border-radius-low) 0 0 0;
   background-color: var(--ls-secondary-background-color, #d8e1e8);
 
   &.closed {

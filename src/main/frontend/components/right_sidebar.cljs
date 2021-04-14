@@ -51,7 +51,7 @@
                 (graph-handler/build-block-graph (uuid page) theme)
                 (graph-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
-      [:div.sidebar-item.flex-col.flex-1
+      [:div.sidebar-item.flex-col
        (graph-2d/graph
         (graph/build-graph-opts
          graph dark?
@@ -177,7 +177,7 @@
           (build-sidebar-item repo idx db-id block-type block-data t))]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content.color-level.flex-1.overflow-y-auto.px-4
+        [:div.sidebar-item.content.color-level.px-4
          (let [[title component] item]
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
@@ -292,8 +292,8 @@
               (t :right-side-bar/help)]]]
            [:a.close-arrow.opacity-50.hover:opacity-100 {:on-click state/toggle-sidebar-open?!}
             (svg/big-arrow-right)]]
-
-          (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
-            (rum/with-key
-              (sidebar-item repo idx db-id block-type block-data t)
-              (str "sidebar-block-" idx)))])])))
+          [:.sidebar-item-list.overflow-y-auto.flex-1
+           (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
+             (rum/with-key
+               (sidebar-item repo idx db-id block-type block-data t)
+               (str "sidebar-block-" idx)))]])])))
