@@ -289,9 +289,7 @@
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                              (state/sidebar-add-block! repo "help" :help nil))}
-              (t :right-side-bar/help)]]]
-           [:a.close-arrow.opacity-50.hover:opacity-100 {:on-click state/toggle-sidebar-open?!}
-            (svg/big-arrow-right)]]
+              (t :right-side-bar/help)]]]]
           [:.sidebar-item-list.overflow-y-auto.flex-1
            (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
              (rum/with-key
