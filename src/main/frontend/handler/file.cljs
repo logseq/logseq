@@ -15,7 +15,6 @@
             [frontend.config :as config]
             [frontend.format :as format]
             [clojure.string :as string]
-            [frontend.history :as history]
             [frontend.handler.project :as project-handler]
             [lambdaisland.glogi :as log]
             [clojure.core.async :as async]
@@ -190,8 +189,9 @@
                      (when (= path (config/get-custom-css-path repo))
                        (ui-handler/add-style-if-exists!))
                      (when re-render-root? (ui-handler/re-render-root!))
-                     (when (and add-history? original-content)
-                       (history/add-history! repo [[path original-content content]])))
+                     ;; (when (and add-history? original-content)
+                     ;;   (history/add-history! repo [[path original-content content]]))
+                     )
                    (fn [error]
                      (println "Write file failed, path: " path ", content: " content)
                      (log/error :write/failed error)))))
@@ -255,11 +255,12 @@
                          (when finish-handler
                            (finish-handler))
                          (ui-handler/re-render-file!)
-                         (when add-history?
-                           (let [files-tx (mapv (fn [[path content]]
-                                                  (let [original-content (get file->content path)]
-                                                    [path original-content content])) files)]
-                             (history/add-history! repo files-tx))))]
+                         ;; (when add-history?
+                         ;;   (let [files-tx (mapv (fn [[path content]]
+                         ;;                          (let [original-content (get file->content path)]
+                         ;;                            [path original-content content])) files)]
+                         ;;     (history/add-history! repo files-tx)))
+                         )]
     (-> (p/all (map write-file-f files))
         (p/then (fn []
                   (finish-handler)

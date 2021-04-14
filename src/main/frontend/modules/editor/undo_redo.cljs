@@ -54,9 +54,13 @@
 (defn pop-undo
   []
   (let [undo-stack (get-undo-stack)]
-   (when-let [removed-e (peek @undo-stack)]
-     (swap! undo-stack pop)
-     removed-e)))
+    (when-let [stack @undo-stack]
+      (when (seq stack)
+        (let [removed-e (peek stack)
+              popped-stack (pop stack)
+              prev-e (peek popped-stack)]
+          (reset! undo-stack popped-stack)
+          [removed-e prev-e])))))
 
 (defn push-redo
   [txs]
@@ -106,14 +110,22 @@
 
 (defn undo
   []
-  (when-let [{:keys [blocks txs] :as e} (pop-undo)]
-    (let [new-txs (get-txs false txs)]
-      (push-redo e)
-      (transact! new-txs)
-      (let [blocks
-            (map (fn [x] (get-by-id [:block/uuid (:block/uuid x)])) blocks)]
-        (refresh {:key :block/change :data (vec blocks)}))
-      (assoc e :txs-op new-txs))))
+  (let [[e prev-e] (pop-undo)]
+    (when e
+      (let [{:keys [blocks txs]} e
+            new-txs (get-txs false txs)
+            editor-cursor (if (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
+                                 (get-in prev-e [:editor-cursor :last-edit-block :block/uuid])) ; same block
+                            (:editor-cursor prev-e)
+                            (:editor-cursor e))]
+        (push-redo e)
+        (transact! new-txs)
+        (let [blocks
+              (map (fn [x] (get-by-id [:block/uuid (:block/uuid x)])) blocks)]
+          (refresh {:key :block/change :data (vec blocks)}))
+        (assoc e
+               :txs-op new-txs
+               :editor-cursor editor-cursor)))))
 
 (defn redo
   []

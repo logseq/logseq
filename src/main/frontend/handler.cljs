@@ -179,6 +179,5 @@
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
-    (editor-handler/periodically-save!)
     (when (util/electron?)
       (el/listen!))))

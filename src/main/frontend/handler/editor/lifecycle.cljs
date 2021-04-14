@@ -19,17 +19,12 @@
 
 (defn did-mount!
   [state]
-  (repo-handler/update-last-edit-block)
   (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
         content (get-in @state/state [:editor/content id])
         input (gdom/getElement id)]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
-    (if (= :indent-outdent (state/get-editor-op))
-      (when input
-        (when-let [pos (state/get-edit-pos)]
-          (util/set-caret-pos! input pos)))
-      (editor-handler/restore-cursor-pos! id content dummy?))
+    (editor-handler/restore-cursor-pos! id content dummy?)
 
     (when input
       (dnd/subscribe!

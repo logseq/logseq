@@ -4,7 +4,8 @@
   #?(:cljs (:require [datascript.core :as d]
                      [frontend.db.conn :as conn]
                      [frontend.modules.outliner.pipeline :as pipelines]
-                     [frontend.state :as state])))
+                     [frontend.state :as state]
+                     [frontend.util :as util])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -24,19 +25,11 @@
      (swap! state into txs)))
 
 #?(:cljs
-   (defn- get-cursor
-     []
-     (when-let [last-edit-block (get @state/state :editor/last-edit-block)]
-       {:pos (state/get-edit-pos)
-        :last-edit-block last-edit-block
-        :block-container (:container last-edit-block)})))
-
-#?(:cljs
    (defn transact!
      [txs opts]
      (when (seq txs)
        (let [conn (conn/get-conn false)
-             editor-cursor (get-cursor)
+             editor-cursor (state/get-last-edit-block)
              meta (merge opts {:editor-cursor editor-cursor})
              rs (d/transact! conn txs meta)]
          (pipelines/after-transact-pipelines rs)

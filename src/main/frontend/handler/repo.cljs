@@ -372,19 +372,6 @@
             (->> (concat delete-tx tx)
                  (remove nil?))))))))
 
-(defn- update-last-edit-block
-  []
-  (let [edit-block (state/get-edit-block)
-        edit-input-id (state/get-edit-input-id)
-        block-element (when edit-input-id (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block")))
-        {:keys [idx container]} (when block-element
-                                  (util/get-block-idx-inside-container block-element))]
-    (when (and idx container)
-      (let [m {:block edit-block
-               :idx idx
-               :container (gobj/get container "id")}]
-        (state/set-state! :editor/last-edit-block m)))))
-
 (declare push)
 
 (defn get-diff-result

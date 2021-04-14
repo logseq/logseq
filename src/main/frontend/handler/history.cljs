@@ -22,11 +22,11 @@
   (js/document.execCommand "redo" false nil))
 
 (defn restore-cursor!
-  [{:keys [block-container last-edit-block pos] :as state}]
+  [{:keys [last-edit-block container pos] :as state}]
   (ui-handler/re-render-root!)
-  (when (and block-container last-edit-block pos)
-    (when-let [container (gdom/getElement block-container)]
-      (when-let [block-uuid (:block/uuid (:block last-edit-block))]
+  (when (and container last-edit-block)
+    (when-let [container (gdom/getElement container)]
+      (when-let [block-uuid (:block/uuid last-edit-block)]
         (when-let [block (db/pull [:block/uuid block-uuid])]
           (editor/edit-block! block pos
                               (:block/format block)
@@ -34,12 +34,14 @@
                               {:custom-content (:block/content block)}))))))
 
 (defn undo!
-  []
-  (editor/save-current-block-when-idle! {:check-idle? false})
+  [e]
+  (util/stop e)
+  (editor/save-current-block!)
   (let [{:keys [editor-cursor]} (undo-redo/undo)]
     (restore-cursor! editor-cursor)))
 
 (defn redo!
-  []
+  [e]
+  (util/stop e)
   (let [{:keys [editor-cursor]} (undo-redo/redo)]
     (restore-cursor! editor-cursor)))

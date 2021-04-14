@@ -368,7 +368,7 @@
 ;;                      after-blocks)
 ;;                 opts {:key :block/insert
 ;;                       :data (map (fn [block] (assoc block :block/page page)) blocks)}]
-;;             (do (repo-handler/update-last-edit-block)
+;;             (do (state/update-last-edit-block)
 ;;                 #_(build-outliner-relation (first blocks) (first after-blocks))
 ;;                 (db/refresh repo opts)
 ;;                 (let [files (remove nil? files)]
@@ -1030,42 +1030,37 @@
              dummy?)
      (save-block-aux! block value format {}))))
 
-(defn save-current-block-when-idle!
-  ([]
-   (save-current-block-when-idle! {}))
-  ([{:keys [check-idle? chan chan-callback]
-     :or {check-idle? true}}]
-   (when (and (nil? (state/get-editor-op))
-              ;; non English input method
-              (not (state/editor-in-composition?)))
-     (when-let [repo (state/get-current-repo)]
-       (when (and (if check-idle? (state/input-idle? repo) true)
-                  (not (state/get-editor-show-page-search?))
-                  (not (state/get-editor-show-page-search-hashtag?))
-                  (not (state/get-editor-show-block-search?))
-                  (not (state/get-editor-show-date-picker?))
-                  (not (state/get-editor-show-template-search?))
-                  (not (state/get-editor-show-input)))
-         (state/set-editor-op! :auto-save)
-         (try
-           (let [input-id (state/get-edit-input-id)
-                 block (state/get-edit-block)
-                 db-block (when-let [block-id (:block/uuid block)]
-                            (db/pull [:block/uuid block-id]))
-                 elem (and input-id (gdom/getElement input-id))
-                 db-content (:block/content db-block)
-                 db-content-without-heading (and db-content
-                                                 (util/safe-subs db-content (:block/level db-block)))
-                 value (and elem (gobj/get elem "value"))]
-             (when (and block value db-content-without-heading
-                        (or
-                         (not= (string/trim db-content-without-heading)
-                               (string/trim value))))
-               (save-block-aux! db-block value (:block/format db-block) {:chan chan
-                                                                         :chan-callback chan-callback})))
-           (catch js/Error error
-             (log/error :save-block-failed error)))
-         (state/set-editor-op! nil))))))
+(defn save-current-block!
+  []
+  (when (and (nil? (state/get-editor-op))
+             ;; non English input method
+             (not (state/editor-in-composition?)))
+    (when-let [repo (state/get-current-repo)]
+      (when (and (not (state/get-editor-show-page-search?))
+                 (not (state/get-editor-show-page-search-hashtag?))
+                 (not (state/get-editor-show-block-search?))
+                 (not (state/get-editor-show-date-picker?))
+                 (not (state/get-editor-show-template-search?))
+                 (not (state/get-editor-show-input)))
+        (state/set-editor-op! :auto-save)
+        (try
+          (let [input-id (state/get-edit-input-id)
+                block (state/get-edit-block)
+                db-block (when-let [block-id (:block/uuid block)]
+                           (db/pull [:block/uuid block-id]))
+                elem (and input-id (gdom/getElement input-id))
+                db-content (:block/content db-block)
+                db-content-without-heading (and db-content
+                                                (util/safe-subs db-content (:block/level db-block)))
+                value (and elem (gobj/get elem "value"))]
+            (when (and block value db-content-without-heading
+                       (or
+                        (not= (string/trim db-content-without-heading)
+                              (string/trim value))))
+              (save-block-aux! db-block value (:block/format db-block) {})))
+          (catch js/Error error
+            (log/error :save-block-failed error)))
+        (state/set-editor-op! nil)))))
 
 (defn on-up-down
   [direction]
@@ -1635,14 +1630,10 @@
           (state/set-editor-show-page-search! false)
           (state/set-editor-show-page-search-hashtag! false))))))
 
-(defn periodically-save!
-  []
-  (js/setInterval save-current-block-when-idle! 500))
-
 (defn save!
   []
   (when-let [repo (state/get-current-repo)]
-    (save-current-block-when-idle! {:check-idle? false})
+    (save-current-block!)
 
     (when (string/starts-with? repo "https://") ; git repo
       (repo-handler/auto-push!))))
@@ -1657,12 +1648,16 @@
         new-value (string/replace value full_text new-full-text)]
     (save-block-aux! block new-value (:block/format block) {})))
 
+(defonce *auto-save-timeout (atom nil))
 (defn edit-box-on-change!
   [e block id]
   (let [value (util/evalue e)
-        current-pos (:pos (util/get-caret-pos (gdom/getElement id)))]
+        current-pos (util/get-input-pos (gdom/getElement id))]
     (state/set-edit-content! id value false)
-    (state/set-edit-pos! current-pos)
+    (when @*auto-save-timeout
+      (js/clearTimeout @*auto-save-timeout))
+    (reset! *auto-save-timeout
+            (js/setTimeout save-current-block! 300))
     (when-let [repo (or (:block/repo block)
                         (state/get-current-repo))]
       (state/set-editor-last-input-time! repo (util/time-ms))
@@ -2024,10 +2019,8 @@
                 (outdent-on-shift-tab state)
                 (indent-on-tab state))
               (and input pos
-                   (js/setTimeout
-                    #(when-let [input (state/get-input)]
-                       (util/move-cursor-to input pos))
-                    0))))))))
+                   (when-let [input (state/get-input)]
+                     (util/move-cursor-to input pos)))))))))
 
 (defn keydown-not-matched-handler
   [input input-id format]
@@ -2147,9 +2140,7 @@
 (defn editor-on-click!
   [id]
   (fn [_e]
-    (let [input (gdom/getElement id)
-          current-pos (:pos (util/get-caret-pos input))]
-      (state/set-edit-pos! current-pos)
+    (let [input (gdom/getElement id)]
       (close-autocomplete-if-outside input))))
 
 (defn editor-on-change!

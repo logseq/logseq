@@ -943,16 +943,13 @@
                   nil))))))))
 
 #?(:cljs
-    (defn get-block-idx-inside-container
+   (defn get-block-container
       [block-element]
       (when block-element
         (when-let [section (some-> (rec-get-blocks-content-section block-element)
                               (d/parent))]
-          (let [blocks (d/by-class section "ls-block")
-                idx (when (seq blocks) (.indexOf (array-seq blocks) block-element))]
-            (when (and idx section)
-             {:idx idx
-              :container (gdom/getElement section "id")}))))))
+          (when section
+            (gdom/getElement section "id"))))))
 
 (defn nth-safe [c i]
   (if (or (< i 0) (>= i (count c)))
