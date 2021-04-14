@@ -254,9 +254,13 @@
 (defn- wrap-parse-block
   [{:block/keys [content format] :as block}]
   (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
-        heading? (= "Paragraph" (first (ffirst ast)))
-        content' (str (config/get-block-pattern format) (if heading? " " "\n")
-                      (string/triml content))]
+        first-elem-type (first (ffirst ast))
+        properties? (= "Properties" first-elem-type)
+        heading? (= "Paragraph" first-elem-type)
+        content (string/triml content)
+        content' (if properties?
+                   content
+                   (str (config/get-block-pattern format) (if heading? " " "\n") content))]
     (-> (block/parse-block (assoc block :block/content content'))
        (dissoc :block/top?
                :block/block-refs-count)
