@@ -212,4 +212,7 @@
        (dropdown-menu {:me me
                        :t t
                        :current-repo current-repo
-                       :default-home default-home})])))
+                       :default-home default-home})
+
+       [:a.close-arrow.opacity-50.hover:opacity-100.ml-4 {:on-click state/toggle-sidebar-open?!}
+        (svg/big-arrow-right)]])))
