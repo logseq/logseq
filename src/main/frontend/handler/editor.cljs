@@ -2225,8 +2225,7 @@
                  (db/entity [:block/original-name (state/get-current-page)]))
         file (:block/file page)
         copied-blocks (state/get-copied-blocks)
-        copied-block-tree (:copy/block-tree copied-blocks)
-        _ (def aaa [text (:copy/content copied-blocks)])]
+        copied-block-tree (:copy/block-tree copied-blocks)]
     (when (and (not (string/blank? text))
                (= (string/trim text) (string/trim (:copy/content copied-blocks))))
       ;; copy from logseq internally
