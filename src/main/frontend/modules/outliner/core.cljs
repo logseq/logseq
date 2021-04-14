@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.debug :as debug]
             [clojure.set :as set]
+            [clojure.zip :as zip]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.datascript :as ds]
             [frontend.util :as util]
@@ -213,6 +214,44 @@
     (if sibling?
       (insert-node-as-sibling txs-state new-node target-node)
       (insert-node-as-first-child txs-state new-node target-node))))
+
+
+(defn- walk-&-insert-nodes
+  [loc target-node sibling?]
+  (let [update-node-fn
+        (fn [node] (block
+                    (db/pull (or (:block/repo node)
+                                 (state/get-current-repo))
+                             '[*]
+                             [:block/uuid (tree/-get-id node)])))]
+    (when-not (zip/end? loc)
+      (if (vector? (zip/node loc))
+        (recur (zip/next loc) target-node sibling?)
+        (let [left1 (zip/left loc)
+              left2 (zip/left (zip/left loc))]
+          (if-let [left (or (and left1 (not (vector? (zip/node left1))) left1)
+                            (and left2 (not (vector? (zip/node left2))) left2))]
+            ;; found left sibling loc
+            (do
+              (insert-node (zip/node loc) (zip/node left) true)
+              (recur (zip/next (zip/edit loc update-node-fn)) target-node sibling?))
+            ;; else: need to find parent loc
+            (if-let [parent (-> loc zip/up zip/left)]
+              (do
+                (insert-node (zip/node loc) (zip/node parent) false)
+                (recur (zip/next (zip/edit loc update-node-fn)) target-node sibling?))
+              ;; else: not found parent, it should be the root node
+              (do
+                (insert-node (zip/node loc) target-node sibling?)
+                (recur (zip/next (zip/edit loc update-node-fn)) target-node sibling?)))))))))
+
+(defn insert-nodes
+  "Insert nodes as children(or siblings) of target-node.
+  new-nodes-tree is an vector of blocks, e.g [1 [2 3] 4 [5 [6 7]]]"
+  [new-nodes-tree target-node sibling?]
+  (let [loc (zip/vector-zip new-nodes-tree)]
+    ;; TODO: validate new-nodes-tree structure
+    (walk-&-insert-nodes loc target-node sibling?)))
 
 (defn move-node
   [node up?]

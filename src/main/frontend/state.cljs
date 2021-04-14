@@ -111,7 +111,10 @@
 
     ;; all notification contents as k-v pairs
     :notification/contents {}
-    :graph/syncing? false}))
+    :graph/syncing? false
+
+    ;; copied blocks
+    :copy/blocks {:copy/content nil :copy/block-tree nil}}))
 
 (defn get-route-match
   []
@@ -1148,3 +1151,11 @@
    6))
 
 (defonce diffs (atom nil))
+
+(defn get-copied-blocks
+  []
+  (:copy/blocks @state))
+
+(defn set-copied-blocks
+  [content ids]
+  (set-state! :copy/blocks {:copy/content content :copy/block-tree ids}))

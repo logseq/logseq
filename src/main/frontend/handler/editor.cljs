@@ -22,6 +22,7 @@
             [goog.dom.classes :as gdom-classes]
             [clojure.string :as string]
             [clojure.set :as set]
+            [clojure.zip :as zip]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.config :as config]
             [dommy.core :as dom]
@@ -842,6 +843,62 @@
                     (array-seq (dom/by-class block "ls-block"))))
             blocks)))
 
+(defn- compose-copied-blocks-contents-&-block-tree
+  [repo block-ids]
+  (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
+        unordered? (:block/unordered (first blocks))
+        format (:block/format (first blocks))
+        level-blocks (mapv #(assoc % :level 0) blocks)
+        level-blocks-map (into {} (mapv (fn [b] [(:db/id b) b]) level-blocks))
+        [level-blocks-map _]
+        (reduce (fn [[r state] [id block]]
+                  (if-let [parent-level (get-in state [(:db/id (:block/parent block)) :level])]
+                    [(conj r [id (assoc block :level (inc parent-level))])
+                     (assoc-in state [(:db/id block) :level] (inc parent-level))]
+                    [(conj r [id block])
+                     state])) [{} level-blocks-map] level-blocks-map)
+        loc (reduce (fn [loc [_ {:keys [level] :as block}]]
+                      (let [loc*
+                            (loop [loc (zip/vector-zip (zip/root loc))
+                                   level level]
+                              (if (> level 0)
+                                (if-let [down (zip/rightmost (zip/down loc))]
+                                  (recur down (dec level))
+                                  loc)
+                                loc))
+                            loc**
+                            (if (vector? (zip/node loc*))
+                              (zip/append-child loc* block)
+                              (-> loc*
+                                  zip/up
+                                  (zip/append-child [block])))]
+                        loc**)) (zip/vector-zip []) level-blocks-map)
+        tree (zip/root loc)
+        contents
+        (mapv (fn [[id block]]
+                (let [header
+                      (if (and unordered? (= format :markdown))
+                        (str (string/join (repeat (:level block) "  ")) "-")
+                        (let [header-char (if (= format :markdown) "#" "*")
+                              init-char (if (= format :markdown) "##" "*")]
+                          (str (string/join (repeat (:level block) header-char)) init-char)))]
+                  (str header " " (:block/content block) "\n")))
+              level-blocks-map)
+        content-without-properties
+        (mapv
+         (fn [content]
+           (let [ast (mldoc/->edn content (mldoc/default-config format))
+                 properties-loc
+                 (->> ast
+                      (filterv (fn [[[type _] loc]] (= type "Property_Drawer")))
+                      (mapv second)
+                      first)]
+             (if properties-loc
+               (utf8/delete! content (:start_pos properties-loc) (:end_pos properties-loc))
+               content)))
+         contents)]
+    [(string/join content-without-properties) tree]))
+
 (defn copy-selection-blocks
   []
   (when-let [blocks (seq (get-selected-blocks-with-children))]
@@ -849,11 +906,9 @@
           ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))
-          content (some->> (db/get-blocks-contents repo ids)
-                           (map :block/content))
-          content (string/join "" content)]
-      (when-not (string/blank? content)
-        (common-handler/copy-to-clipboard-without-id-property! content)))))
+          [content tree] (compose-copied-blocks-contents-&-block-tree repo ids)]
+      (common-handler/copy-to-clipboard-without-id-property! content)
+      (state/set-copied-blocks content tree))))
 
 (defn cut-selection-blocks
   [copy?]
@@ -2157,10 +2212,64 @@
                  timeout)))
       (edit-box-on-change! e block id))))
 
+
+(defn- get-current-page-format
+  []
+  (when-let [page (state/get-current-page)]
+    (db/get-page-format page)))
+
+(defn- paste-text
+  [text e]
+  (let [repo (state/get-current-repo)
+        page (or (db/entity [:block/name (state/get-current-page)])
+                 (db/entity [:block/original-name (state/get-current-page)]))
+        file (:block/file page)
+        copied-blocks (state/get-copied-blocks)
+        copied-block-tree (:copy/block-tree copied-blocks)
+        _ (def aaa [text (:copy/content copied-blocks)])]
+    (when (and (not (string/blank? text))
+               (= (string/trim text) (string/trim (:copy/content copied-blocks))))
+      ;; copy from logseq internally
+      (let [editing-block (state/get-edit-block)
+            parent (:block/parent editing-block)
+            left (:block/left editing-block)
+            sibling? (not= parent left)
+            target-block (outliner-core/block (db/pull (if sibling? (:db/id left) (:db/id parent))))
+            format (or (:block/format target-block) (state/get-preferred-format))
+            new-block-uuids (atom #{})
+            metadata-replaced-copied-blocks
+            (zip/root
+             (loop [loc (zip/vector-zip copied-block-tree)]
+               (if (zip/end? loc)
+                 loc
+                 (if (vector? (zip/node loc))
+                   (recur (zip/next loc))
+                   (let [uuid (random-uuid)]
+                     (swap! new-block-uuids (fn [acc uuid] (conj acc uuid)) uuid)
+                     (recur (zip/next (zip/edit
+                                       loc
+                                       #(outliner-core/block
+                                         (conj {:block/uuid uuid
+                                                :block/page (select-keys page [:db/id])
+                                                :block/file (select-keys file [:db/id])
+                                                :block/format format}
+                                               (dissoc %
+                                                       :block/uuid
+                                                       :block/page
+                                                       :block/file
+                                                       :db/id
+                                                       :block/left
+                                                       :block/parent
+                                                       :block/format)))))))))))
+            _ (outliner-core/insert-nodes metadata-replaced-copied-blocks target-block sibling?)
+            new-blocks (db/pull-many repo '[*] (map (fn [id] [:block/uuid id]) @new-block-uuids))]
+        (db/refresh repo {:key :block/insert :data new-blocks})
+        (util/stop e)))))
+
 (defn editor-on-paste!
   [id]
   (fn [e]
-    (when-let [handled
+    (if-let [handled
                (let [pick-one-allowed-item
                      (fn [items]
                        (if (util/electron?)
@@ -2190,7 +2299,8 @@
                  (if (get picked 1)
                    (match picked
                      [:asset file] (set-asset-pending-file file))))]
-      (util/stop e))))
+      (util/stop e)
+      (paste-text (.getData (gobj/get e "clipboardData") "text") e))))
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]
