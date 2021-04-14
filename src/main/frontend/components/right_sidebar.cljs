@@ -232,15 +232,12 @@
                                           (< right-el-ratio 0.2) 0.2
                                           (> right-el-ratio 0.7) 0.7
                                           :else right-el-ratio)
-                         left-el (js/document.getElementById "left-main")
                          right-el (js/document.getElementById "right-sidebar")]
-                     (when (and left-el right-el)
-                       (.setProperty (.-style left-el)
-                                     "flex"
-                                     (str (- 1 right-el-ratio)))
+                     (when right-el
+
                        (.setProperty (.-style right-el)
-                                     "flex"
-                                     (str right-el-ratio)))))}}))
+                                     "width"
+                                     (str (* right-el-ratio 100) "%")))))}}))
              (.styleCursor false)
              (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
              (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
@@ -261,7 +258,7 @@
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#right-sidebar.cp__right-sidebar.h-screen.overflow-x-hidden
-       {:class (if sidebar-open? "is-open")}
+       {:class (if sidebar-open? "open" "closed")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner.flex.flex-col.h-full
 
