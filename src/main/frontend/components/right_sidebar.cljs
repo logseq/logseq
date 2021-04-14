@@ -177,7 +177,7 @@
           (build-sidebar-item repo idx db-id block-type block-data t))]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content.color-level
+        [:div.sidebar-item.content.color-level.flex-1.overflow-y-auto.px-4
          (let [[title component] item]
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
@@ -227,14 +227,20 @@
                  (fn [^js/MouseEvent e]
                    (let [width js/document.documentElement.clientWidth
                          offset (.-left (.-rect e))
-                         to-val (- 1 (.toFixed (/ offset width) 6))
-                         to-val (cond
-                                  (< to-val 0.2) 0.2
-                                  (> to-val 0.7) 0.7
-                                  :else to-val)]
-                     (.setProperty (.-style js/document.documentElement)
-                                   "--ls-right-sidebar-width"
-                                   (str (* to-val 100) "%"))))}}))
+                         right-el-ratio (- 1 (.toFixed (/ offset width) 6))
+                         right-el-ratio (cond
+                                          (< right-el-ratio 0.2) 0.2
+                                          (> right-el-ratio 0.7) 0.7
+                                          :else right-el-ratio)
+                         left-el (js/document.getElementById "left-main")
+                         right-el (js/document.getElementById "right-sidebar")]
+                     (when (and left-el right-el)
+                       (.setProperty (.-style left-el)
+                                     "flex"
+                                     (str (- 1 right-el-ratio)))
+                       (.setProperty (.-style right-el)
+                                     "flex"
+                                     (str right-el-ratio)))))}}))
              (.styleCursor false)
              (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
              (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
@@ -254,12 +260,13 @@
         theme (state/sub :ui/theme)
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#right-sidebar.cp__right-sidebar.h-screen.overflow-y-auto.overflow-x-hidden
+      [:div#right-sidebar.cp__right-sidebar.h-screen.overflow-x-hidden
        {:class (if sidebar-open? "is-open")}
        (if sidebar-open?
-         [:div.cp__right-sidebar-inner
+         [:div.cp__right-sidebar-inner.flex.flex-col.h-full
+
           (sidebar-resizer)
-          [:div.flex.flex-row.justify-between.items-center
+          [:div.flex.flex-row.justify-between.items-center.px-4
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
