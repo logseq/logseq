@@ -66,26 +66,21 @@
 ;; instead of being attributes of properties.
 ;; which might improve the db performance, we can improve it later
 (defn- with-timestamp
-  [data]
-  (prn {:data data})
+  [m]
   (let [updated-at (util/time-ms)
-        m (-> data
-              (dissoc :block/children :block/dummy? :block/level :block/meta)
-              (util/remove-nils))
         properties (assoc (:block/properties m)
-                          :id (:block/uuid data)
+                          :id (:block/uuid m)
                           :updated-at updated-at)
         properties (if-let [created-at (get properties :created-at)]
                      properties
                      (assoc properties :created-at updated-at))
         m (assoc m :block/properties properties)
-        page-id (or (get-in data [:block/page :db/id])
-                    (:db/id (:block/page (db/entity (:db/id data)))))
+        page-id (or (get-in m [:block/page :db/id])
+                    (:db/id (:block/page (db/entity (:db/id m)))))
         page (db/entity page-id)
         page-properties (:block/properties page)
         page-tx {:db/id page-id
                  :block/properties (assoc page-properties
-                                          :id (:block/uuid page)
                                           :updated-at updated-at
                                           :created-at (get page-properties :created-at updated-at))}]
     [m page-tx]))
@@ -135,9 +130,16 @@
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [[m page-tx] (with-timestamp (:data this))]
-      (swap! txs-state conj m page-tx)
-      m))
+    (let [m (-> (:data this)
+                (dissoc :block/children :block/dummy? :block/level :block/meta)
+                (util/remove-nils))]
+      (swap! txs-state conj m)
+      ;; TODO: enable for the database-only version
+      ;; (let [[m page-tx] (with-timestamp (:data this))]
+      ;;  (swap! txs-state conj m page-tx)
+      ;;  m)
+      )
+    )
 
   (-del [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)

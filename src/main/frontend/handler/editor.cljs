@@ -253,13 +253,9 @@
 (defn- wrap-parse-block
   [{:block/keys [content format] :as block}]
   (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
-        properties? (contains? #{"properties" "property_drawer"}
-                               (when-let [type (first (ffirst ast))]
-                                 (string/lower-case type)))
-        content' (if properties?
-                   (string/trim content)
-                   (str (config/get-block-pattern format) " "
-                        (string/triml content)))]
+        heading? (= "Paragraph" (first (ffirst ast)))
+        content' (str (config/get-block-pattern format) (if heading? " " "\n")
+                      (string/triml content))]
     (-> (block/parse-block (assoc block :block/content content'))
        (dissoc :block/top?
                :block/block-refs-count)
@@ -749,12 +745,19 @@
         repo (state/get-current-repo)]
     (when repo
       (when-let [block (db/entity [:block/uuid block-id])]
-        (let [properties (:block/properties block)
+        (let [format (:block/format block)
+              content (:block/content block)
+              markdown? (= format :markdown)
+              properties (:block/properties block)
               properties (if value        ; add
                            (assoc properties key value)
                            (dissoc properties key))
+              content (if value
+                        (text/insert-property content key value)
+                        (text/remove-property content key))
               block (outliner-core/block {:block/uuid block-id
-                                          :block/properties properties})]
+                                          :block/properties properties
+                                          :block/content content})]
           (outliner-core/save-node block)
           (let [opts {:key :block/change
                       :data [block]}]

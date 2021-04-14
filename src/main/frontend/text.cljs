@@ -122,8 +122,7 @@
 
 (def hidden-properties
   (set/union
-   #{:id :custom-id :background-color
-     :created-at :updated-at}
+   #{:id :custom-id :background-color :heading}
    config/markers))
 
 (defn properties-hidden?
@@ -239,9 +238,10 @@
 
 (defn insert-property
   [content key value]
-  (when (and (not (string/blank? key))
-             (not (string/blank? value)))
-    (let [key (string/lower-case key)
+  (when (and (not (string/blank? (name key)))
+             (not (string/blank? (str value))))
+    (let [key (string/lower-case (name key))
+          value (str value)
           [title body] (util/safe-split-first "\n" content)]
       (if-not (contains-properties? content)
         (let [properties (build-properties-str {key value})]
@@ -254,7 +254,6 @@
                              (string/starts-with? (string/upper-case (string/triml l)) ":end:")))
               properties (take-while properties? properties-and-body)
               exists? (atom false)
-              new-line (util/format ":%s: %s" key value)
               new-properties (doall
                               (map (fn [l]
                                      (if (string/starts-with? (string/triml l) (str ":" key ":"))
@@ -268,6 +267,30 @@
                                 (drop-last new-properties)
                                 [(util/format ":%s: %s" key value)
                                  (last new-properties)]))
+              body (drop-while properties? properties-and-body)]
+          (->> (concat title-lines new-properties body)
+               (string/join "\n")))))))
+
+(defn remove-property
+  [content key]
+  (when (not (string/blank? (name key)))
+    (let [key (string/lower-case (name key))
+          [title body] (util/safe-split-first "\n" content)]
+      (if-not (contains-properties? content)
+        content
+        (let [lines (string/split-lines content)
+              [title-lines properties-and-body] (split-with (fn [l] (not (string/starts-with? (string/upper-case (string/triml l)) ":PROPERTIES:"))) lines)
+              properties? (fn [l]
+                            (or
+                             (string/starts-with? (string/triml l) ":") ; kv
+                             (string/starts-with? (string/upper-case (string/triml l)) ":end:")))
+              properties (take-while properties? properties-and-body)
+              exists? (atom false)
+              new-properties (->> (map (fn [l]
+                                     (if (string/starts-with? (string/triml l) (str ":" key ":"))
+                                       nil
+                                       l)) properties)
+                                  (remove nil?))
               body (drop-while properties? properties-and-body)]
           (->> (concat title-lines new-properties body)
                (string/join "\n")))))))

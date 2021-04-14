@@ -317,14 +317,15 @@
       (.setSelectionRange input pos pos)))
 
 #?(:cljs
-    (defn get-caret-pos
-      [input]
-      (try
-        (let [pos ((gobj/get caret-pos "position") input)]
-          (set! pos -rect (.. input (getBoundingClientRect) (toJSON)))
-          (bean/->clj pos))
-        (catch js/Error e
-          (js/console.error e)))))
+   (defn get-caret-pos
+     [input]
+     (when input
+       (try
+         (let [pos ((gobj/get caret-pos "position") input)]
+           (set! pos -rect (.. input (getBoundingClientRect) (toJSON)))
+           (bean/->clj pos))
+         (catch js/Error e
+           (js/console.error e))))))
 
 (defn get-first-or-last-line-pos
   [input]
