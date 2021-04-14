@@ -686,30 +686,33 @@
        :pos (util/get-input-pos (gdom/getElement edit-input-id))})))
 
 (defn set-editing!
-  [edit-input-id content block cursor-range]
-  (when edit-input-id
-    (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-          container (util/get-block-container block-element)
-          block (if container
-                  (assoc block
-                         :block/container (gobj/get container "id"))
-                  block)
-          content (or content "")]
+  ([edit-input-id content block cursor-range]
+   (set-editing! edit-input-id content block cursor-range true))
+  ([edit-input-id content block cursor-range move-cursor?]
+   (when edit-input-id
+     (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+           container (util/get-block-container block-element)
+           block (if container
+                   (assoc block
+                          :block/container (gobj/get container "id"))
+                   block)
+           content (or content "")]
 
-      (swap! state
-             (fn [state]
-               (-> state
-                   (assoc-in [:editor/content edit-input-id] (string/trim content))
-                   (assoc
-                    :editor/block block
-                    :editor/editing? {edit-input-id true}
-                    :editor/last-edit-block-id edit-input-id
-                    :cursor-range cursor-range))))
+       (swap! state
+              (fn [state]
+                (-> state
+                    (assoc-in [:editor/content edit-input-id] (string/trim content))
+                    (assoc
+                     :editor/block block
+                     :editor/editing? {edit-input-id true}
+                     :editor/last-edit-block-id edit-input-id
+                     :cursor-range cursor-range))))
 
-      (let [input (gdom/getElement edit-input-id)
-            pos (count cursor-range)]
-        (set! (.-value input) (string/trim content))
-        (util/move-cursor-to input pos)))))
+       (let [input (gdom/getElement edit-input-id)
+             pos (count cursor-range)]
+         (set! (.-value input) (string/trim content))
+         (when move-cursor?
+           (util/move-cursor-to input pos)))))))
 
 (defn clear-edit!
   []

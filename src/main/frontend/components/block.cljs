@@ -1366,7 +1366,8 @@
                    edit-input-id
                    content
                    block
-                   cursor-range))]
+                   cursor-range
+                   false))]
          ;; wait a while for the value of the caret range
          (if (util/ios?)
            (f)
