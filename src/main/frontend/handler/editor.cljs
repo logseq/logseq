@@ -1178,7 +1178,7 @@
        (notification/show!
         [:div
          [:span.mb-1.5 "Block ref copied!"]
-         [:div [:code.whitespace-nowrap (str block-id)]]]
+         [:div [:code.whitespace-nowrap (str "((" block-id "))")]]]
         :success true
         ;; use uuid to make sure there is only one toast a time
         (str "copied-block-ref:" block-id))))))
