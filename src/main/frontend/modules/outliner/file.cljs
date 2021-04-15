@@ -32,19 +32,3 @@
   (async/put! write-chan page-db-id))
 
 (util/batch write-chan batch-write-interval write-files!)
-
-(defn batch [in max-time handler]
-  (async/go-loop [buf [] t (async/timeout max-time)]
-    (let [[v p] (async/alts! [in t])]
-      (cond
-        (= p t)
-        (do
-          (handler buf)
-          (recur [] (async/timeout max-time)))
-
-        (nil? v)                        ; stop
-        (when (seq buf)
-          (handler buf))
-
-        :else
-        (recur (conj buf v) t)))))
