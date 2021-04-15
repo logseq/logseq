@@ -209,8 +209,9 @@
               {:title (get-repo-name url)
                :options {:on-click (fn []
                                      (repo-handler/push-if-auto-enabled! (state/get-current-repo))
-
                                      (state/set-current-repo! url)
+                                     ;; load config
+                                     (common-handler/reset-config! url nil)
                                      (when-not (= :draw (state/get-current-route))
                                        (route-handler/redirect-to-home!))
                                      (when on-click
