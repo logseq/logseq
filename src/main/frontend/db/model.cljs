@@ -980,7 +980,7 @@
                          db-utils/seq-flatten
                          (remove (fn [block]
                                    (= page-id (:db/id (:block/page block)))))
-                         (remove-children!)
+                         ;; (remove-children!)
                          (with-children-refs repo)
                          sort-blocks
                          db-utils/group-by-page
@@ -1061,8 +1061,9 @@
                                 pages))))))
              sort-blocks
              db-utils/group-by-page
-             (map (fn [[k blocks]]
-                    [k (remove-children! blocks)])))))))
+             ;; (map (fn [[k blocks]]
+             ;;        [k (remove-children! blocks)]))
+             )))))
 
 (defn get-block-referenced-blocks
   [block-uuid]
