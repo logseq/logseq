@@ -75,7 +75,7 @@
         files-conn (get-files-conn repo)
         file-db (when files-conn (d/db files-conn))
         non-file-conn (get-conn repo false)
-        non-file-db (d/db non-file-conn)
+        non-file-db (when non-file-conn (d/db non-file-conn))
         file-db-str (if file-db (db->string file-db) "")
         non-file-db-str (if non-file-db (db->string non-file-db) "")]
     (p/let [_ (idb/set-batch! [{:key file-key :value file-db-str}
