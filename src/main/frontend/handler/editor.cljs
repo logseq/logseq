@@ -2264,8 +2264,10 @@
         file (:block/file page)
         copied-blocks (state/get-copied-blocks)
         copied-block-tree (:copy/block-tree copied-blocks)]
-    (when (and (not (string/blank? text))
-               (= (string/trim text) (string/trim (:copy/content copied-blocks))))
+    (when (and
+           copied-blocks
+           (not (string/blank? text))
+           (= (string/trim text) (string/trim (:copy/content copied-blocks))))
       ;; copy from logseq internally
       (let [editing-block (state/get-edit-block)
             parent (:block/parent editing-block)
