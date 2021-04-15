@@ -2014,13 +2014,15 @@
              (= (util/nth-safe value (dec current-pos)) commands/slash))
         (do
           (reset! *slash-caret-pos nil)
-          (reset! *show-commands false))
+          (reset! *show-commands false)
+          (.setRangeText input "" (dec current-pos) current-pos))
 
         (and (> current-pos 1)
              (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
         (do
           (reset! *angle-bracket-caret-pos nil)
-          (reset! *show-block-commands false))
+          (reset! *show-block-commands false)
+          (.setRangeText input "" (dec current-pos) current-pos))
 
         ;; pair
         (and
