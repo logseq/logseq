@@ -24,7 +24,6 @@
      :editor/down (editor-handler/keydown-up-down-handler :down)
      :editor/left (editor-handler/keydown-arrow-handler :left)
      :editor/right (editor-handler/keydown-arrow-handler :right)
-     :editor/delete (editor-handler/keydown-backspace-handler state-fn)
      :editor/indent (editor-handler/keydown-tab-handler state-fn :right)
      :editor/outindent (editor-handler/keydown-tab-handler state-fn :left)
      :editor/zoom-in  editor-handler/zoom-in!
@@ -42,15 +41,20 @@
      :editor/move-block-up (editor-handler/move-up-down true)
      :editor/move-block-down (editor-handler/move-up-down false)}))
 
+ ;; global editor shortcut
+ (let [state-fn (state-f :component/box)]
+   {:editor/copy editor-handler/shortcut-copy
+    :editor/cut (editor-handler/shortcut-cut state-fn)
+    :editor/delete (editor-handler/shortcut-delete state-fn)
+    :editor/save editor-handler/save!
+    :editor/undo history/undo!
+    :editor/redo history/redo!})
+
  ;; global
  (before
   m/prevent-default-behavior
   {:editor/select-block-up (editor-handler/on-select-block :up)
    :editor/select-block-down (editor-handler/on-select-block :down)
-
-   :editor/save editor-handler/save!
-   :editor/undo history/undo!
-   :editor/redo history/redo!
 
    :ui/toggle-brackets config-handler/toggle-ui-show-brackets!
    :go/search route-handler/go-to-search!
@@ -86,12 +90,6 @@
     {:auto-complete/prev (ui-handler/auto-complete-prev state-fn)
      :auto-complete/next (ui-handler/auto-complete-next state-fn)
      :auto-complete/complete (ui-handler/auto-complete-complete state-fn)}))
-
- (before
-  m/enable-when-selection!
-  {:block-selection/copy editor-handler/shortcut-copy-selection
-   :block-selection/cut editor-handler/shortcut-cut-selection
-   :block-selection/delete editor-handler/shortcut-delete-selection})
 
  (before
   (m/enable-when-component! :component/date-picker)

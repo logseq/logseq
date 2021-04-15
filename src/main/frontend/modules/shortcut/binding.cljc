@@ -12,10 +12,6 @@
    :auto-complete/next "down"
    :auto-complete/complete "enter"
 
-   :block-selection/copy "mod+c"
-   :block-selection/cut "mod+x"
-   :block-selection/delete ["backspace" "delete"]
-
    :editor/clear-selection "esc"
    :editor/toggle-document-mode "t d"
    :editor/toggle-settings (if mac? "t s" ["t s" "mod+,"])
@@ -47,9 +43,12 @@
    :editor/down "down"
    :editor/left "left"
    :editor/right "right"
-   :editor/delete "backspace"
    :editor/indent "tab"
    :editor/outindent "shift+tab"
+
+   :editor/copy "mod+c"
+   :editor/cut "mod+x"
+   :editor/delete ["backspace" "delete"]
 
    :ui/toggle-help "shift+/"
    :ui/toggle-theme "t t"

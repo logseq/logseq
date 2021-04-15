@@ -18,6 +18,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.fs.watcher-handler :as fs-watcher-handler]
             [frontend.ui :as ui]
             [goog.object :as gobj]
@@ -179,5 +180,9 @@
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
+    (shortcut/install-shortcuts!)
     (when (util/electron?)
       (el/listen!))))
+
+(defn stop! []
+  (shortcut/uninstall-shortcuts!))
