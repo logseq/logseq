@@ -417,7 +417,8 @@
 
 (defn editing?
   []
-  (some? (get-edit-input-id)))
+  (let [input (get-input)]
+    (and input (= input (.-activeElement js/document)))))
 
 (defn get-edit-content
   []
