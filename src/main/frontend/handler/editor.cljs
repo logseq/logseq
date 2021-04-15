@@ -2056,7 +2056,7 @@
 (defn indent-on-tab
   ([state]
    (indent-on-tab state 100))
-  ([state]
+  ([state retry-limit]
    (if (= :insert (state/get-editor-op))
      (if (> retry-limit 0)
        (js/setTimeout #(indent-on-tab state (dec retry-limit)) 20)
