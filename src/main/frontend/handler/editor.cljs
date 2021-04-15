@@ -1171,7 +1171,7 @@
    (util/copy-to-clipboard! (tap-clipboard block-id))))
 
 (defn copy-current-block-ref!
-  ([_e]
+  [_e]
    (when-let [current-block (state/get-edit-block)]
      (let [block-id (:block/uuid current-block)]
        (copy-block-ref! block-id #(str "((" % "))"))
@@ -1181,7 +1181,7 @@
          [:div [:code.whitespace-nowrap (str "((" block-id "))")]]]
         :success true
         ;; use uuid to make sure there is only one toast a time
-        (str "copied-block-ref:" block-id))))))
+        (str "copied-block-ref:" block-id)))))
 
 (defn clear-selection!
   [_e]
