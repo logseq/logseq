@@ -2259,7 +2259,8 @@
   [text e]
   (let [repo (state/get-current-repo)
         page (or (db/entity [:block/name (state/get-current-page)])
-                 (db/entity [:block/original-name (state/get-current-page)]))
+                 (db/entity [:block/original-name (state/get-current-page)])
+                 (:block/page (state/get-edit-block)))
         file (:block/file page)
         copied-blocks (state/get-copied-blocks)
         copied-block-tree (:copy/block-tree copied-blocks)]
