@@ -380,8 +380,7 @@
                (tree/-save txs-state)))
            (some-> last-node-right
              (tree/-set-left-id first-node-left-id)
-             (tree/-save txs-state))
-           (outliner-file/sync-to-file (get-data first-node))))
+             (tree/-save txs-state))))
        (when-not (first-level? first-node)
          (let [parent (tree/-get-parent first-node)
                parent-parent-id (tree/-get-parent-id parent)

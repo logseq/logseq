@@ -2363,6 +2363,7 @@
   [e]
   (cut-blocks-and-clear-selections! false))
 
+;; credits to @pengx17
 (defn- copy-current-block-ref
   []
   (when-let [current-block (state/get-edit-block)]
