@@ -28,6 +28,7 @@
               (doseq [i (set page-db-ids)]
                 (try (do-write-file i)
                      (catch js/Error e
+                       (.log js/console (.-stack e))
                        (log/error :file/write-file-error {:error e})))))
             (js/setTimeout poll-and-write batch-write-interval))))))
 
