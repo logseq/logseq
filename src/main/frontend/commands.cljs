@@ -247,7 +247,7 @@
         edit-content (gobj/get input "value")
         current-pos (:pos (util/get-caret-pos input))
         prefix (subs edit-content 0 current-pos)
-        space? (when last-pattern
+        space? (when (and last-pattern prefix)
                  (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
                            (util/safe-subs prefix 0 last-index))]
                    (not (and (string/ends-with? s "(")
