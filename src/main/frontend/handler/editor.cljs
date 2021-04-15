@@ -1982,73 +1982,75 @@
             (util/cursor-move-forward input 1)))))))
 
 (defn keydown-backspace-handler
-  [get-state-fn]
-  (fn [e]
-    (when-let [state (get-state-fn)]
-      (let [^js input (state/get-input)
-            id (state/get-edit-input-id)
-            current-pos (:pos (util/get-caret-pos input))
-            value (gobj/get input "value")
-            deleted (and (> current-pos 0)
-                         (util/nth-safe value (dec current-pos)))
-            selected-start (gobj/get input "selectionStart")
-            selected-end (gobj/get input "selectionEnd")
-            block-id (:block-id (first (:rum/args state)))
-            page (state/get-current-page)
-            repo (state/get-current-repo)]
-        (util/stop e)
-        (cond
-          (not= selected-start selected-end)
-          (.setRangeText input "" selected-start selected-end)
+  [get-state-fn cut? e]
+  (when-let [state (get-state-fn)]
+    (let [^js input (state/get-input)
+          id (state/get-edit-input-id)
+          current-pos (:pos (util/get-caret-pos input))
+          value (gobj/get input "value")
+          deleted (and (> current-pos 0)
+                       (util/nth-safe value (dec current-pos)))
+          selected-start (gobj/get input "selectionStart")
+          selected-end (gobj/get input "selectionEnd")
+          block-id (:block-id (first (:rum/args state)))
+          page (state/get-current-page)
+          repo (state/get-current-repo)]
+      (util/stop e)
+      (cond
+        (not= selected-start selected-end)
+        (do
+          (when cut?
+            (js/document.execCommand "copy"))
+          (.setRangeText input "" selected-start selected-end))
 
-          (and (zero? current-pos)
-               ;; not the top block in a block page
-               (not (and page
-                         (util/uuid-string? page)
-                         (= (medley/uuid page) block-id))))
-          (delete-block! state repo e)
+        (and (zero? current-pos)
+             ;; not the top block in a block page
+             (not (and page
+                       (util/uuid-string? page)
+                       (= (medley/uuid page) block-id))))
+        (delete-block! state repo e)
 
-          (and (> current-pos 1)
-               (= (util/nth-safe value (dec current-pos)) commands/slash))
-          (do
-            (reset! *slash-caret-pos nil)
-            (reset! *show-commands false))
+        (and (> current-pos 1)
+             (= (util/nth-safe value (dec current-pos)) commands/slash))
+        (do
+          (reset! *slash-caret-pos nil)
+          (reset! *show-commands false))
 
-          (and (> current-pos 1)
-               (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
-          (do
-            (reset! *angle-bracket-caret-pos nil)
-            (reset! *show-block-commands false))
+        (and (> current-pos 1)
+             (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
+        (do
+          (reset! *angle-bracket-caret-pos nil)
+          (reset! *show-block-commands false))
 
-          ;; pair
-          (and
-           deleted
-           (contains?
-            (set (keys delete-map))
-            deleted)
-           (>= (count value) (inc current-pos))
-           (= (util/nth-safe value current-pos)
-              (get delete-map deleted)))
+        ;; pair
+        (and
+         deleted
+         (contains?
+          (set (keys delete-map))
+          deleted)
+         (>= (count value) (inc current-pos))
+         (= (util/nth-safe value current-pos)
+            (get delete-map deleted)))
 
-          (do
-            (commands/delete-pair! id)
-            (cond
-              (and (= deleted "[") (state/get-editor-show-page-search?))
-              (state/set-editor-show-page-search! false)
+        (do
+          (commands/delete-pair! id)
+          (cond
+            (and (= deleted "[") (state/get-editor-show-page-search?))
+            (state/set-editor-show-page-search! false)
 
-              (and (= deleted "(") (state/get-editor-show-block-search?))
-              (state/set-editor-show-block-search! false)
+            (and (= deleted "(") (state/get-editor-show-block-search?))
+            (state/set-editor-show-block-search! false)
 
-              :else
-              nil))
+            :else
+            nil))
 
-          ;; deleting hashtag
-          (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
-          (state/set-editor-show-page-search-hashtag! false)
+        ;; deleting hashtag
+        (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
+        (state/set-editor-show-page-search-hashtag! false)
 
-          ;; just delete
-          :else
-          (.setRangeText input "" (dec current-pos) current-pos))))))
+        ;; just delete
+        :else
+        (.setRangeText input "" (dec current-pos) current-pos)))))
 
 ;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
 (defn indent-on-tab
@@ -2265,7 +2267,7 @@
         copied-blocks (state/get-copied-blocks)
         copied-block-tree (:copy/block-tree copied-blocks)]
     (when (and
-           copied-blocks
+           (:copy/content copied-blocks)
            (not (string/blank? text))
            (= (string/trim text) (string/trim (:copy/content copied-blocks))))
       ;; copy from logseq internally
@@ -2358,3 +2360,59 @@
 (defn shortcut-delete-selection
   [e]
   (cut-blocks-and-clear-selections! false))
+
+(defn- copy-current-block-ref
+  []
+  (when-let [current-block (state/get-edit-block)]
+    (let [block-id (:block/uuid current-block)]
+      (copy-block-ref! block-id #(str "((" % "))"))
+      (notification/show!
+       [:div
+        [:span.mb-1.5 "Block ref copied!"]
+        [:div [:code.whitespace-nowrap (str "((" block-id "))")]]]
+       :success true
+       ;; use uuid to make sure there is only one toast a time
+       (str "copied-block-ref:" block-id)))))
+
+(defn shortcut-copy
+  "shortcut copy action:
+  * when in selection mode, copy selected blocks
+  * when in edit mode but no text selected, copy current block ref
+  * when in edit mode with text selected, copy selected text as normal"
+  [e]
+  (cond
+    (and (state/in-selection-mode?) (seq (state/get-selection-blocks)))
+    (shortcut-copy-selection e)
+
+    (state/editing?)
+    (let [input (state/get-input)
+          selected-start (.-selectionStart input)
+          selected-end (.-selectionEnd input)]
+      (if (= selected-start selected-end)
+        (copy-current-block-ref)
+        (js/document.execCommand "copy")))))
+
+
+(defn shortcut-cut
+  "shortcut cut action:
+  * when in selection mode, cut selected blocks
+  * when in edit mode with text selected, cut selected text
+  * otherwise same as delete shortcut"
+  [state-fn]
+  (fn [e]
+    (cond
+      (and (state/in-selection-mode?) (seq (state/get-selection-blocks)))
+      (shortcut-cut-selection e)
+
+      (state/editing?)
+      (keydown-backspace-handler state-fn true e))))
+
+(defn shortcut-delete
+  [state-fn]
+  (fn [e]
+    (cond
+      (and (state/in-selection-mode?) (seq (state/get-selection-blocks)))
+      (shortcut-delete-selection e)
+
+      (state/editing?)
+      (keydown-backspace-handler state-fn false e))))
