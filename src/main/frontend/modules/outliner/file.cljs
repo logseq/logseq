@@ -5,7 +5,9 @@
             [frontend.modules.file.core :as file]
             [lambdaisland.glogi :as log]
             [clojure.core.async :as async]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.handler.notification :as notification]
+            [goog.object :as gobj]))
 
 (def write-chan (async/chan))
 
@@ -25,6 +27,10 @@
   (doseq [page pages]
     (try (do-write-file! page)
          (catch js/Error e
+           (notification/show!
+            "Write file failed, please copy the changes to other editors in case of losing data."
+            [:div "Error: " (str (gobj/get e "stack"))]
+            :error)
            (log/error :file/write-file-error {:error e})))))
 
 (defn sync-to-file
