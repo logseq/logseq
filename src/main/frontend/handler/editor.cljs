@@ -251,6 +251,37 @@
        (not= current-id (cljs.core/uuid block-id))
        (db/entity [:block/uuid (cljs.core/uuid block-id)])))
 
+(defn- attach-page-properties-if-exists!
+  [block]
+  (if (and (:block/pre-block? block)
+           (= "Properties" (ffirst (:block/body block)))) ; page properties
+    (let [page-properties (second (first (:block/body block)))
+          str->page (fn [n] {:block/name (string/lower-case n) :block/original-name n})
+          refs (->> page-properties
+                    (filter (fn [[_ v]] (coll? v)))
+                    (vals)
+                    (apply concat)
+                    (set)
+                    (map str->page)
+                    (concat (:block/refs block))
+                    (util/distinct-by :block/name))
+          {:keys [tags alias]} page-properties
+          page-tx (let [id (:db/id (:block/page block))
+                        retract-attributes (mapv (fn [attribute]
+                                                   [:db/retract id attribute])
+                                                 [:block/properties :block/tags :block/alias])
+                        tx (cond-> {:db/id id
+                                    :block/properties page-properties}
+                             (seq tags)
+                             (assoc :block/tags (map str->page tags))
+                             (seq alias)
+                             (assoc :block/alias (map str->page alias)))]
+                    (conj retract-attributes tx))]
+      (assoc block
+             :block/refs refs
+             :db/other-tx page-tx))
+    block))
+
 (defn- wrap-parse-block
   [{:block/keys [content format] :as block}]
   (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
@@ -260,8 +291,10 @@
         content (string/triml content)
         content' (if properties?
                    content
-                   (str (config/get-block-pattern format) (if heading? " " "\n") content))]
-    (-> (block/parse-block (assoc block :block/content content'))
+                   (str (config/get-block-pattern format) (if heading? " " "\n") content))
+        block (block/parse-block (assoc block :block/content content'))
+        block (attach-page-properties-if-exists! block)]
+    (-> block
        (dissoc :block/top?
                :block/block-refs-count)
        (assoc :block/content content))))

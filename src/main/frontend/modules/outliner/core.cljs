@@ -1,6 +1,7 @@
 (ns frontend.modules.outliner.core
   (:require [frontend.modules.outliner.tree :as tree]
             [frontend.db :as db]
+            [frontend.db-schema :as db-schema]
             [frontend.db.outliner :as db-outliner]
             [frontend.db.conn :as conn]
             [frontend.modules.outliner.utils :as outliner-u]
@@ -30,8 +31,6 @@
   (let [c (conn/get-conn false)
         r (db-outliner/get-by-id c (outliner-u/->block-lookup-ref id))]
     (when r (->Block r))))
-
-(def block-id-size 9)
 
 (defn- get-by-parent-&-left
   [parent-id left-id]
@@ -133,8 +132,20 @@
             "db should be satisfied outliner-tx-state?")
     (let [m (-> (:data this)
                 (dissoc :block/children :block/dummy? :block/level :block/meta)
-                (util/remove-nils))]
-      (swap! txs-state conj m)
+                (util/remove-nils))
+          other-tx (:db/other-tx m)]
+      (when (seq other-tx)
+        (swap! txs-state (fn [txs]
+                           (vec (concat txs other-tx)))))
+
+      (when-let [id (:db/id (:data this))]
+        (swap! txs-state (fn [txs]
+                           (vec
+                            (concat txs
+                                    (map (fn [attribute]
+                                           [:db/retract id attribute])
+                                      db-schema/retract-attributes))))))
+      (swap! txs-state conj (dissoc m :db/other-tx))
       ;; TODO: enable for the database-only version
       ;; (let [[m page-tx] (with-timestamp (:data this))]
       ;;  (swap! txs-state conj m page-tx)

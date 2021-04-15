@@ -471,7 +471,7 @@
                   (recur headings block-body' (rest blocks) timestamps properties last-pos last-level children))))
             (do
               (when (seq block-body)
-                (reset! pre-block-body block-body))
+                (reset! pre-block-body (reverse block-body)))
               (-> (reverse headings)
                   safe-blocks))))]
     (let [first-block (first blocks)

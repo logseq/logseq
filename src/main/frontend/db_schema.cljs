@@ -76,11 +76,6 @@
    ;; whether block is collapsed
    :block/collapsed? {}
 
-   ;; block's children
-   :block/children {:db/valueType :db.type/ref
-                    :db/cardinality :db.cardinality/many
-                    :db/unique :db.unique/identity}
-
    ;; scheduled day
    :block/scheduled {}
 
@@ -123,3 +118,17 @@
    :git/error {}
 
    })
+
+(def retract-attributes
+  #{
+    :block/refs
+    :block/path-refs
+    :block/tags
+    :block/alias
+    :block/marker
+    :block/priority
+    :block/scheduled
+    :block/deadline
+    :block/repeated?
+    }
+  )
