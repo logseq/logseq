@@ -276,12 +276,6 @@
                       (state/hide-custom-context-menu!)
 
                       (editor-handler/clear-selection! e)))))
-  {:did-mount (fn [state]
-                (shortcut/install-shortcuts!)
-                state)
-   :will-unmount (fn [state]
-                   (shortcut/uninstall-shortcuts!)
-                   state)}
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
