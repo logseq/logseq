@@ -4,6 +4,7 @@
   #?(:cljs (:require [datascript.core :as d]
                      [frontend.db.conn :as conn]
                      [frontend.modules.outliner.pipeline :as pipelines]
+                     [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
                      [frontend.util :as util])))
 
@@ -25,6 +26,12 @@
      (swap! state into txs)))
 
 #?(:cljs
+   (defn after-transact-pipelines
+     [{:keys [_db-before _db-after _tx-data _tempids _tx-meta] :as tx-report}]
+     (pipelines/invoke-hooks tx-report)
+     (undo-redo/listen-outliner-operation tx-report)))
+
+#?(:cljs
    (defn transact!
      [txs opts]
      (when (seq txs)
@@ -32,7 +39,7 @@
              editor-cursor (state/get-last-edit-block)
              meta (merge opts {:editor-cursor editor-cursor})
              rs (d/transact! conn txs meta)]
-         (pipelines/after-transact-pipelines rs)
+         (after-transact-pipelines rs)
          rs))))
 
 #?(:clj

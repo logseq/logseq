@@ -5,7 +5,8 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.debug :as debug]
-            [frontend.db.outliner :as db-outliner]))
+            [frontend.db.outliner :as db-outliner]
+            [frontend.modules.outliner.pipeline :as pipelines]))
 
 ;;;; APIs
 
@@ -100,8 +101,9 @@
 
 (defn- transact!
   [txs]
-  (let [conn (conn/get-conn false)]
-    (d/transact! conn txs)))
+  (let [conn (conn/get-conn false)
+        db-report (d/transact! conn txs)]
+    (do (pipelines/invoke-hooks db-report))))
 
 (defn- refresh
   [opts]
