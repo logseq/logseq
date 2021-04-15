@@ -99,6 +99,7 @@
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)
         _ (assert (string? file-path) "File path should satisfy string?")
+        ;; FIXME: name conflicts between multiple graphs
         files [[file-path new-content]]]
     (push-to-write-chan files)))
 

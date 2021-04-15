@@ -3,12 +3,16 @@
             [frontend.db :as db]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.file.core :as file]
+            [lambdaisland.glogi :as log]
             [clojure.core.async :as async]
-            [lambdaisland.glogi :as log]))
+            [frontend.util :as util]))
 
 (def write-chan (async/chan))
 
-(defn do-write-file
+(def batch-write-interval 2000)
+
+;; FIXME name conflicts between multiple graphs
+(defn do-write-file!
   [page-db-id]
   (let [page-block (db/pull page-db-id)
         page-db-id (:db/id page-block)
@@ -16,23 +20,15 @@
         tree (tree/blocks->vec-tree blocks (:block/name page-block))]
     (file/save-tree page-block tree)))
 
-(def batch-write-interval 1000)
-
-(defn poll-and-write
-  []
-  (loop [page-db-ids []]
-    (let [i (async/poll! write-chan)]
-      (if (some? i)
-        (recur (conj page-db-ids i))
-        (do (when (seq page-db-ids)
-              (doseq [i (set page-db-ids)]
-                (try (do-write-file i)
-                     (catch js/Error e
-                       (log/error :file/write-file-error {:error e})))))
-            (js/setTimeout poll-and-write batch-write-interval))))))
-
-(poll-and-write)
+(defn write-files!
+  [pages]
+  (doseq [page pages]
+    (try (do-write-file! page)
+         (catch js/Error e
+           (log/error :file/write-file-error {:error e})))))
 
 (defn sync-to-file
   [{page-db-id :db/id :as page-block}]
   (async/put! write-chan page-db-id))
+
+(util/batch write-chan batch-write-interval write-files!)

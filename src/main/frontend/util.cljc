@@ -18,6 +18,7 @@
       #?(:cljs [rum.core])
       #?(:cljs [frontend.react-impls :as react-impls])
       [clojure.string :as string]
+      [clojure.core.async :as async]
       [clojure.pprint :refer [pprint]]
       [clojure.walk :as walk]
       [frontend.regex :as regex]
@@ -1231,3 +1232,19 @@
        (d/add-class! block "selected noselect"))))
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
+
+(defn batch [in max-time handler]
+  (async/go-loop [buf [] t (async/timeout max-time)]
+    (let [[v p] (async/alts! [in t])]
+      (cond
+        (= p t)
+        (do
+          (handler buf)
+          (recur [] (async/timeout max-time)))
+
+        (nil? v)                        ; stop
+        (when (seq buf)
+          (handler buf))
+
+        :else
+        (recur (conj buf v) t)))))
