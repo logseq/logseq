@@ -1890,7 +1890,6 @@
                    (filter util/node-in-viewpoint?)
                    (f))]
     (when block
-      (js/console.log "select first last")
       (exit-editing-and-set-selected-blocks! [block]))))
 
 (defn- select-up-down [direction]
