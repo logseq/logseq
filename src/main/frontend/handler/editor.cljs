@@ -345,115 +345,6 @@
         snd-block-text (string/triml (subs value pos))]
     [fst-block-text snd-block-text]))
 
-;; TODO: remove later
-;; (defn insert-block-to-existing-file!
-;;   [repo block file page file-path file-content value fst-block-text snd-block-text pos format input {:keys [create-new-block? ok-handler new-level current-page blocks-container-id]}]
-;;   (let [{:block/keys [meta pre-block?]} block
-;;         original-id (:block/uuid block)
-;;         block-has-children? (seq (:block/children block))
-;;         edit-self? (and block-has-children? (zero? pos))
-;;         ;; Compute the new value, remove id property from the second block if exists
-;;         value (if create-new-block?
-;;                 (str fst-block-text "\n" snd-block-text)
-;;                 value)
-;;         snd-block-text (text/remove-id-property snd-block-text)
-;;         text-properties (if (zero? pos)
-;;                           {}
-;;                           (text/extract-properties fst-block-text))
-;;         old-hidden-properties (select-keys (:block/properties block) text/hidden-properties)
-;;         properties (merge old-hidden-properties
-;;                           text-properties)
-;;         value (if create-new-block?
-;;                 (str
-;;                  (->
-;;                   (re-build-block-value block format fst-block-text properties)
-;;                   (string/trimr))
-;;                  "\n"
-;;                  (string/triml snd-block-text))
-;;                 (re-build-block-value block format value properties))
-;;         value (rebuild-block-content value format)
-;;         [new-content value] (new-file-content block file-content value)
-;;         parse-result (block/parse-block (assoc block :block/content value))
-;;         id-conflict? (= original-id (:block/uuid (:block parse-result)))
-;;         {:keys [block pages start-pos end-pos]}
-;;         (if id-conflict?
-;;           (let [new-value (string/replace
-;;                            value
-;;                            (re-pattern (str "(?i):(custom_)?id: " original-id))
-;;                            "")]
-;;             (block/parse-block (assoc block :block/content new-value)))
-;;           parse-result)
-;;         blocks [block]
-;;         after-blocks (rebuild-after-blocks repo file (:end-pos meta) end-pos)
-;;         files [[file-path new-content]]
-;;         block-retracted-attrs (when-not pre-block?
-;;                                 (when-let [id (:db/id block)]
-;;                                   [[:db/retractEntity id]]))
-;;         _ (prn "transact-nf"
-;;             [block-retracted-attrs
-;;              pages
-;;              (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
-;;              blocks
-;;              after-blocks])
-;;         _ (prn " (first blocks) (first after-blocks)"  (first blocks) (first after-blocks))
-;;         transact-fn
-;;         (fn []
-;;           (let [tx (concat
-;;                      block-retracted-attrs
-;;                      pages
-;;                      (mapv (fn [b] {:block/uuid (:block/uuid b)}) blocks)
-;;                      blocks
-;;                      after-blocks)
-;;                 opts {:key :block/insert
-;;                       :data (map (fn [block] (assoc block :block/page page)) blocks)}]
-;;             (do (state/update-last-edit-block)
-;;                 #_(build-outliner-relation (first blocks) (first after-blocks))
-;;                 (db/refresh! repo opts)
-;;                 (let [files (remove nil? files)]
-;;                   (when (seq files)
-;;                     (file-handler/alter-files repo files opts)))))
-;;           (state/set-editor-op! nil))]
-;;     ;; Replace with batch transactions
-;;     (state/add-tx! transact-fn)
-
-;;     (let [blocks (remove (fn [block]
-;;                            (nil? (:block/content block))) blocks)
-;;           page-blocks-atom (db/get-page-blocks-cache-atom repo (:db/id page))
-;;           first-block-id (:block/uuid (first blocks))
-;;           [before-part after-part] (and page-blocks-atom
-;;                                         (split-with
-;;                                          #(not= first-block-id (:block/uuid %))
-;;                                          @page-blocks-atom))
-;;           after-part (rest after-part)
-;;           blocks-container-id (and blocks-container-id
-;;                                    (util/uuid-string? blocks-container-id)
-;;                                    (medley/uuid blocks-container-id))]
-
-;;       ;; WORKAROUND: The block won't refresh itself even if the content is empty.
-;;       (when edit-self?
-;;         (gobj/set input "value" ""))
-
-;;       (when ok-handler
-;;         (ok-handler
-;;          (if edit-self? (first blocks) (last blocks))))
-
-;;       ;; update page blocks cache if exists
-;;       (when page-blocks-atom
-;;         (reset! page-blocks-atom (->> (concat before-part blocks after-part)
-;;                                       (remove nil?))))
-
-;;       ;; update block children cache if exists
-;;       (when blocks-container-id
-;;         (let [blocks-atom (db/get-block-blocks-cache-atom repo blocks-container-id)
-;;               [before-part after-part] (and blocks-atom
-;;                                             (split-with
-;;                                              #(not= first-block-id (:block/uuid %))
-;;                                              @blocks-atom))
-;;               after-part (rest after-part)]
-;;           (and blocks-atom
-;;                (reset! blocks-atom (->> (concat before-part blocks after-part)
-;;                                         (remove nil?)))))))))
-
 (defn outliner-insert-block!
   [current-block new-block child?]
   (let [dummy? (:block/dummy? current-block)
@@ -568,6 +459,9 @@
         (do
           (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
           (state/add-tx! refresh-fn)))
+      ;; WORKAROUND: The block won't refresh itself even if the content is empty.
+      (when block-self?
+        (gobj/set input "value" ""))
       (profile "ok handler" (ok-handler next-block))
       (state/set-editor-op! nil))))
 
