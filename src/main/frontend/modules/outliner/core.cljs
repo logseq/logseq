@@ -146,6 +146,7 @@
                                            [:db/retract id attribute])
                                       db-schema/retract-attributes))))))
       (swap! txs-state conj (dissoc m :db/other-tx))
+      this
       ;; TODO: enable for the database-only version
       ;; (let [[m page-tx] (with-timestamp (:data this))]
       ;;  (swap! txs-state conj m page-tx)
@@ -195,13 +196,14 @@
         node (-> (tree/-set-left-id new-node parent-id)
                (tree/-set-parent-id parent-id))
         right-node (tree/-get-down parent-node)]
-    (do
-      (if (tree/satisfied-inode? right-node)
-        (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
-              saved-new-node (tree/-save node txs-state)]
-          (tree/-save new-right-node txs-state)
-          saved-new-node)
-        (tree/-save node txs-state)))))
+    (if (tree/satisfied-inode? right-node)
+      (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
+            saved-new-node (tree/-save node txs-state)]
+        (tree/-save new-right-node txs-state)
+        [saved-new-node new-right-node])
+      (do
+        (tree/-save node txs-state)
+        [node]))))
 
 (defn insert-node-as-sibling
   "Insert a node as sibling."
@@ -210,21 +212,29 @@
   (let [node (-> (tree/-set-left-id new-node (tree/-get-id left-node))
                (tree/-set-parent-id (tree/-get-parent-id left-node)))
         right-node (tree/-get-right left-node)]
-    (do
-      (if (tree/satisfied-inode? right-node)
-        (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
-              saved-new-node (tree/-save node txs-state)]
-          (tree/-save new-right-node txs-state)
-          saved-new-node)
-        (tree/-save node txs-state)))))
+    (if (tree/satisfied-inode? right-node)
+      (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
+            saved-new-node (tree/-save node txs-state)]
+        (tree/-save new-right-node txs-state)
+        [saved-new-node new-right-node])
+      (do
+        (tree/-save node txs-state)
+        [node]))))
 
 (defn insert-node
-  [new-node target-node sibling?]
-  (ds/auto-transact!
-    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-node}
-    (if sibling?
-      (insert-node-as-sibling txs-state new-node target-node)
-      (insert-node-as-first-child txs-state new-node target-node))))
+  ([new-node target-node sibling?]
+   (insert-node new-node target-node sibling? nil))
+  ([new-node target-node sibling? {:keys [blocks-atom skip-transact?]
+                                   :or {skip-transact? false}}]
+   (ds/auto-transact!
+    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-node
+                                             :skip-transact? skip-transact?}
+    (let [result (if sibling?
+                   (insert-node-as-sibling txs-state new-node target-node)
+                   (insert-node-as-first-child txs-state new-node target-node))]
+      (when blocks-atom
+        (swap! blocks-atom concat result))
+      (first result)))))
 
 
 (defn- walk-&-insert-nodes

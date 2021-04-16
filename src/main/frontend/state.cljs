@@ -709,11 +709,12 @@
                      :editor/last-edit-block-id edit-input-id
                      :cursor-range cursor-range))))
 
-       (let [input (gdom/getElement edit-input-id)
-             pos (count cursor-range)]
-         (set! (.-value input) (string/trim content))
-         (when move-cursor?
-           (util/move-cursor-to input pos)))))))
+       (when-let [input (gdom/getElement edit-input-id)]
+         (let [pos (count cursor-range)]
+           (when content
+             (set! (.-value input) (string/trim content)))
+           (when move-cursor?
+             (util/move-cursor-to input pos))))))))
 
 (defn clear-edit!
   []

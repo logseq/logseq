@@ -24,7 +24,7 @@
 
 (defn write-files!
   [pages]
-  (doseq [page pages]
+  (doseq [page (set pages)]
     (try (do-write-file! page)
          (catch js/Error e
            (notification/show!

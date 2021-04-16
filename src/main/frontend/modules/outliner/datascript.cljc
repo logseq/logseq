@@ -37,7 +37,8 @@
 #?(:cljs
    (defn transact!
      [txs opts]
-     (when (seq txs)
+     (when (and (seq txs)
+                (not (:skip-transact? opts)))
        (let [conn (conn/get-conn false)
              editor-cursor (state/get-last-edit-block)
              meta (merge opts {:editor-cursor editor-cursor})
