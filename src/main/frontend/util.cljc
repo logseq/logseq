@@ -1057,24 +1057,12 @@
     keyboard-shortcut))
 
 (defn default-content-with-title
-  ([text-format title]
-   (default-content-with-title text-format title true))
-  ([text-format title new-block?]
-   (let [contents? (= (string/lower-case title) "contents")
-         properties (case (name text-format)
-                      "org"
-                      (format "#+TITLE: %s" title)
-                      "markdown"
-                      (format "---\ntitle: %s\n---" title)
-                      "")
-         new-block (case (name text-format)
-                     "org"
-                     "* "
+  [text-format]
+  (case (name text-format)
+    "org"
+    "* "
 
-                     "- ")]
-     (if contents?
-       new-block
-       (str properties "\n\n" (if new-block? new-block))))))
+    "- "))
 
 #?(:cljs
     (defn get-first-block-by-id

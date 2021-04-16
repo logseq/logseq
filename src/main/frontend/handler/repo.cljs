@@ -119,7 +119,7 @@
            format (state/get-preferred-format repo-url)
            title (date/today)
            file-name (date/journal-title->default title)
-           default-content (util/default-content-with-title format title false)
+           default-content (util/default-content-with-title format)
            template (state/get-journal-template)
            template (if (and template
                              (not (string/blank? template)))
@@ -132,7 +132,7 @@
                      (str default-content template)
 
                      :else
-                     (util/default-content-with-title format title true))
+                     default-content)
            path (str config/default-journals-directory "/" file-name "."
                      (config/get-file-extension format))
            file-path (str "/" path)

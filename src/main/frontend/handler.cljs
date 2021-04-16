@@ -185,4 +185,4 @@
       (el/listen!))))
 
 (defn stop! []
-  (shortcut/uninstall-shortcuts!))
+  (prn "stop!"))
