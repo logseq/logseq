@@ -61,14 +61,6 @@
       (f e)
       false)))
 
-(defn enable-when-selection!
-  [f]
-  (fn [e]
-    (when (and (state/in-selection-mode?)
-               (seq (state/get-selection-blocks)))
-      (f e)
-      false)))
-
 (defn enable-when-component!
   [component-k]
   (fn [f]
