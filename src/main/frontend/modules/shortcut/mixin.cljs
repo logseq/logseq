@@ -14,7 +14,7 @@
      (js/setTimeout
       (fn []
         (swap! state-store assoc k state))
-      100)
+      5)
      state)
 
    :did-remount
