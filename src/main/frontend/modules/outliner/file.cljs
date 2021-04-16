@@ -23,9 +23,9 @@
     (file/save-tree page-block tree)))
 
 (defn write-files!
-  [pages]
-  (doseq [page (set pages)]
-    (try (do-write-file! page)
+  [page-db-ids]
+  (doseq [page-db-id (set page-db-ids)]
+    (try (do-write-file! page-db-id)
          (catch js/Error e
            (notification/show!
             "Write file failed, please copy the changes to other editors in case of losing data."
