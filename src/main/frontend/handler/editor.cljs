@@ -470,13 +470,10 @@
 
                    :else
                    (not has-children?))]
-    (let [*blocks (atom [current-node])
-          _ (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
-                                                                       :skip-transact? true})
-          tx-f (fn []
-                 (outliner-core/save-node current-node)
-                 (outliner-core/insert-node new-node current-node sibling?))]
-      (if dummy? (tx-f) (state/add-tx! tx-f))
+    (let [*blocks (atom [current-node])]
+      (outliner-core/save-node current-node)
+      (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
+                                                                 :skip-transact? false})
       @*blocks)))
 
 (defn- block-self-alone-when-insert?
@@ -560,15 +557,17 @@
                        (wrap-parse-block))
         blocks (profile
                 "outliner insert block"
-                (outliner-insert-block! current-block next-block block-self?))]
+                (outliner-insert-block! current-block next-block block-self?))
+        refresh-fn (fn []
+                     (let [opts {:key :block/insert
+                                :data [current-block next-block]}]
+                      (db/refresh! repo opts)))]
     (do
       (if dummy?
-        (profile
-         "db refresh"
-         (let [opts {:key :block/insert
-                     :data [current-block next-block]}]
-           (db/refresh! repo opts)))
-        (profile "update cache " (update-cache-for-block-insert! repo config block blocks)))
+        (refresh-fn)
+        (do
+          (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
+          (state/add-tx! refresh-fn)))
       (profile "ok handler" (ok-handler next-block))
       (state/set-editor-op! nil))))
 
