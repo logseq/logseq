@@ -7,7 +7,12 @@
             [rum.core :as rum]
             [datascript.core :as d]
             [frontend.db-schema :as db-schema]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.config :as config]))
+
+(defn load-test-env
+  [f]
+  (with-redefs [config/test? true] (f)))
 
 (defn react-components
   [f]
