@@ -20,8 +20,8 @@
   (let [state-fn (state-f :component/box)]
     {:editor/new-block (editor-handler/keydown-new-block-handler state-fn)
      :editor/new-line (editor-handler/keydown-new-line-handler state-fn)
-     :editor/up (editor-handler/keydown-up-down-handler :up)
-     :editor/down (editor-handler/keydown-up-down-handler :down)
+     ;; :editor/up (editor-handler/keydown-up-down-handler :up)
+     ;; :editor/down (editor-handler/keydown-up-down-handler :down)
      :editor/left (editor-handler/keydown-arrow-handler :left)
      :editor/right (editor-handler/keydown-arrow-handler :right)
      :editor/indent (editor-handler/keydown-tab-handler state-fn :right)
@@ -42,21 +42,24 @@
      :editor/move-block-down (editor-handler/move-up-down false)}))
 
  ;; global editor shortcut
- (let [state-fn (state-f :component/box)]
-   {:editor/copy editor-handler/shortcut-copy
-    :editor/cut (editor-handler/shortcut-cut state-fn)
-    :editor/delete (editor-handler/shortcut-delete state-fn)
-    :editor/save editor-handler/save!
-    :editor/undo history/undo!
-    :editor/redo history/redo!})
+ (before
+  m/prevent-default-behavior
+  (let [state-fn (state-f :component/box)]
+    {:editor/up (editor-handler/shortcut-up-down :up)
+     :editor/down (editor-handler/shortcut-up-down :down)
+     :editor/select-block-up (editor-handler/on-select-block :up)
+     :editor/select-block-down (editor-handler/on-select-block :down)
+     :editor/copy editor-handler/shortcut-copy
+     :editor/cut (editor-handler/shortcut-cut state-fn)
+     :editor/delete (editor-handler/shortcut-delete state-fn)
+     :editor/save editor-handler/save!
+     :editor/undo history/undo!
+     :editor/redo history/redo!}))
 
  ;; global
  (before
   m/prevent-default-behavior
-  {:editor/select-block-up (editor-handler/on-select-block :up)
-   :editor/select-block-down (editor-handler/on-select-block :down)
-
-   :ui/toggle-brackets config-handler/toggle-ui-show-brackets!
+  {:ui/toggle-brackets config-handler/toggle-ui-show-brackets!
    :go/search route-handler/go-to-search!
    :go/journals route-handler/go-to-journals!
 

@@ -1837,7 +1837,7 @@
 
 (defn- keydown-new-block
   [state]
-  (when-not (in-auto-complete? nil)
+  (when-not (state/auto-complete?)
     (let [{:keys [block config]} (get-state state)]
       (when (and block
                  (not (:ref? config))
@@ -1857,14 +1857,13 @@
 
 (defn- keydown-new-line
   []
-  (when (not (in-auto-complete? nil))
+  (when-not (state/auto-complete?)
     (let [^js input (state/get-input)
           selected-start (gobj/get input "selectionStart")
           selected-end (gobj/get input "selectionEnd")
           value (.-value input)
           s1 (subs value 0 selected-start)
-          s2 (subs value selected-end)
-          ]
+          s2 (subs value selected-end)]
       (state/set-edit-content! (state/get-edit-input-id)
                                (str s1 "\n" s2))
       (util/move-cursor-to input (inc selected-start)))))
@@ -1883,6 +1882,26 @@
         (keydown-new-block state)
         (keydown-new-line)))))
 
+(defn- select-first-last
+  "Select first or last block in viewpoint"
+  [direction]
+  (let [f (case direction :up last :down first)
+        block (->> (dom/by-class "ls-block")
+                   (filter util/node-in-viewpoint?)
+                   (f))]
+    (when block
+      (js/console.log "select first last")
+      (exit-editing-and-set-selected-blocks! [block]))))
+
+(defn- select-up-down [direction]
+  (let [selected (first (state/get-selection-blocks))
+        f (case direction
+                :up get-prev-block-non-collapsed
+                :down get-next-block-non-collapsed)
+        sibling-block (f selected)]
+    (when (and sibling-block (d/attr sibling-block "blockid"))
+      (clear-selection! nil)
+      (exit-editing-and-set-selected-blocks! [sibling-block]))))
 
 (defn- move-cross-boundrary-up-down
   [direction]
@@ -1912,28 +1931,26 @@
 
 (defn keydown-up-down-handler
   [direction]
-  (fn [_]
-    (when-not (in-auto-complete? nil)
-      (let [input (state/get-input)
-            line-height (util/get-textarea-line-height input)
-            selected-start (.-selectionStart input)
-            selected-end (.-selectionEnd input)
-            up? (= direction :up)
-            down? (= direction :down)]
-        (cond
-          (not= selected-start selected-end)
-          (if up?
-            (util/set-caret-pos! input selected-start)
-            (util/set-caret-pos! input selected-end))
+  (let [input (state/get-input)
+        line-height (util/get-textarea-line-height input)
+        selected-start (.-selectionStart input)
+        selected-end (.-selectionEnd input)
+        up? (= direction :up)
+        down? (= direction :down)]
+    (cond
+      (not= selected-start selected-end)
+      (if up?
+        (util/set-caret-pos! input selected-start)
+        (util/set-caret-pos! input selected-end))
 
-          (or (and up? (util/textarea-cursor-first-row? input line-height))
-              (and down? (util/textarea-cursor-end-row? input line-height)))
-          (move-cross-boundrary-up-down direction)
+      (or (and up? (util/textarea-cursor-first-row? input line-height))
+          (and down? (util/textarea-cursor-end-row? input line-height)))
+      (move-cross-boundrary-up-down direction)
 
-          :else
-          (if up?
-            (util/move-cursor-up input)
-            (util/move-cursor-down input)))))))
+      :else
+      (if up?
+        (util/move-cursor-up input)
+        (util/move-cursor-down input)))))
 
 (defn- move-to-block-when-cross-boundrary
   [_ direction]
@@ -1960,7 +1977,7 @@
 (defn keydown-arrow-handler
   [direction]
   (fn [e]
-    (when-not (in-auto-complete? nil)
+    (when-not (state/auto-complete?)
       (let [input (state/get-input)
             selected-start (.-selectionStart input)
             selected-end (.-selectionEnd input)
@@ -2419,3 +2436,16 @@
 
       (state/editing?)
       (keydown-backspace-handler state-fn false e))))
+
+(defn shortcut-up-down [direction]
+  (fn [_]
+    (when-not (state/auto-complete?)
+      (cond
+        (state/editing?)
+        (keydown-up-down-handler direction)
+
+        (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
+        (select-up-down direction)
+
+        :else
+        (select-first-last direction)))))

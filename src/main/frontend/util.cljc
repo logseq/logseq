@@ -774,6 +774,20 @@
         (and node
              (rec-get-blocks-content-section (gobj/get node "parentNode"))))))
 
+#?(:cljs
+   (defn node-in-viewpoint?
+     [node]
+     (let [rect (.getBoundingClientRect node)
+           height (or (.-innerHeight js/window)
+                      (.. js/document -documentElement -clientHeight))
+           width (or (.-innerWidth js/window)
+                     ((.. js/document -documentElement -clientWidth)))]
+       (and
+        (>= (.-top rect) 0)
+        (>= (.-left rect) 0)
+        (<= (.-bottom rect) height)
+        (<= (.-right rect) width)))))
+
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
 #?(:cljs

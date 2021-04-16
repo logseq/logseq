@@ -32,8 +32,8 @@
    :editor/move-block-up (if mac? "mod+shift+up"  "alt+shift+up")
    :editor/move-block-down (if mac? "mod+shift+down" "alt+shift+down")
    :editor/save "mod+s"
-   :editor/open-block-first "down"
-   :editor/open-block-last "up"
+   :editor/open-block-first "alt+down"
+   :editor/open-block-last "alt+up"
    :editor/select-block-up "shift+up"
    :editor/select-block-down "shift+down"
 
