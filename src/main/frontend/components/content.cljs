@@ -268,8 +268,7 @@
                                               :left (str client-x "px")
                                               :top (str (+ scroll-y client-y) "px")))))
 
-                          (and (state/in-selection-mode?)
-                               (seq (state/get-selection-blocks)))
+                          (state/selection?)
                           (do
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")

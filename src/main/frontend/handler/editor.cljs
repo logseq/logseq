@@ -1082,21 +1082,21 @@
       (exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
 
       ;; when selection and one block selected, select next block
-      (and (state/in-selection-mode?) (== 1 (count (state/get-selection-blocks))))
+      (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
       (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
             element (f (first (state/get-selection-blocks)))]
         (when element
           (state/conj-selection-block! element direction)))
 
       ;; if same direction, keep conj on same direction
-      (and (state/in-selection-mode?) (= direction (state/get-selection-direction)))
+      (and (state/selection?) (= direction (state/get-selection-direction)))
       (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
             element (f (last (state/get-selection-blocks)))]
         (when element
           (state/conj-selection-block! element direction)))
 
       ;; if different direction, keep clear until one left
-      (state/in-selection-mode?)
+      (state/selection?)
       (clear-last-selected-block!))))
 
 (defn save-block-aux!
@@ -2384,7 +2384,7 @@
   * when in edit mode with text selected, copy selected text as normal"
   [e]
   (cond
-    (and (state/in-selection-mode?) (seq (state/get-selection-blocks)))
+    (state/selection?)
     (shortcut-copy-selection e)
 
     (state/editing?)
@@ -2404,7 +2404,7 @@
   [state-fn]
   (fn [e]
     (cond
-      (and (state/in-selection-mode?) (seq (state/get-selection-blocks)))
+      (state/selection?)
       (shortcut-cut-selection e)
 
       (state/editing?)
@@ -2414,7 +2414,7 @@
   [state-fn]
   (fn [e]
     (cond
-      (and (state/in-selection-mode?) (seq (state/get-selection-blocks)))
+      (state/selection?)
       (shortcut-delete-selection e)
 
       (state/editing?)

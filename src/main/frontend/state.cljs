@@ -549,6 +549,11 @@
   []
   (:selection/mode @state))
 
+(defn selection?
+  "True sense of selection mode with valid selected block"
+  []
+  (and (in-selection-mode?) (seq (get-selection-blocks))))
+
 (defn conj-selection-block!
   [block direction]
   (dom/add-class! block "selected noselect")
