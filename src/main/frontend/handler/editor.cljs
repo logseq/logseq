@@ -456,7 +456,8 @@
 
 (defn outliner-insert-block!
   [current-block new-block child?]
-  (let [[current-node new-node]
+  (let [dummy? (:block/dummy? current-block)
+        [current-node new-node]
         (mapv outliner-core/block [current-block new-block])
         has-children? (db/has-children? (state/get-current-repo)
                                         (tree/-get-id current-node))
@@ -471,10 +472,11 @@
                    (not has-children?))]
     (let [*blocks (atom [current-node])
           _ (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
-                                                                       :skip-transact? true})]
-      (state/add-tx! (fn []
-                       (outliner-core/save-node current-node)
-                       (outliner-core/insert-node new-node current-node sibling?)))
+                                                                       :skip-transact? true})
+          tx-f (fn []
+                 (outliner-core/save-node current-node)
+                 (outliner-core/insert-node new-node current-node sibling?))]
+      (if dummy? (tx-f) (state/add-tx! tx-f))
       @*blocks)))
 
 (defn- block-self-alone-when-insert?
@@ -491,12 +493,14 @@
 
 ;; FIXME: painful
 (defn update-cache-for-block-insert!
-  "It only affects current editor container."
+  "Currently, this only affects current editor container to improve the performance."
   [repo config {:block/keys [page uuid] :as block} blocks]
   (let [blocks (map :data blocks)
         [first-block last-block right-block] blocks
         child? (= (first (:block/parent last-block))
-                    (:block/uuid first-block))
+                  (:block/uuid first-block))
+        block-container-id (when-let [id (:id config)]
+                             (and (util/uuid-string? id) (medley/uuid id)))
         new-last-block (let [first-block-id {:db/id (:db/id first-block)}]
                          (assoc last-block
                                 :block/left first-block-id
@@ -511,8 +515,6 @@
                                        #(not= uuid (:block/uuid %))
                                        @page-blocks-atom))
         after-part (rest after-part)
-        block-container-id (when-let [id (:id config)]
-                             (and (util/uuid-string? id) (medley/uuid id)))
         blocks (concat before-part blocks after-part)
         blocks (if right-block
                  (map (fn [block]
@@ -550,6 +552,7 @@
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
         current-block (-> (assoc block :block/content fst-block-text)
                           (wrap-parse-block))
+        dummy? (:block/dummy? current-block)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge block new-m)
@@ -559,7 +562,13 @@
                 "outliner insert block"
                 (outliner-insert-block! current-block next-block block-self?))]
     (do
-      (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
+      (if dummy?
+        (profile
+         "db refresh"
+         (let [opts {:key :block/insert
+                     :data [current-block next-block]}]
+           (db/refresh! repo opts)))
+        (profile "update cache " (update-cache-for-block-insert! repo config block blocks)))
       (profile "ok handler" (ok-handler next-block))
       (state/set-editor-op! nil))))
 
