@@ -1066,12 +1066,12 @@
 
 (defn highlight-selection-area!
   [end-block]
-  (when-let [start-block (:selection/start-block @state/state)]
+  (when-let [start-block (state/get-selection-start-block)]
     (clear-selection! nil)
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
 
           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")]
-      (exit-editing-and-set-selected-blocks! blocks))))
+      (exit-editing-and-set-selected-blocks! blocks direction))))
 
 (defn on-select-block
   [direction]
