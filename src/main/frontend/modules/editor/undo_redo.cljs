@@ -105,10 +105,10 @@
         db-report (d/transact! conn txs)]
     (do (pipelines/invoke-hooks db-report))))
 
-(defn- refresh
+(defn- refresh!
   [opts]
   (let [repo (state/get-current-repo)]
-   (db/refresh repo opts)))
+   (db/refresh! repo opts)))
 
 (defn undo
   []
@@ -124,7 +124,7 @@
         (transact! new-txs)
         (let [blocks
               (map (fn [x] (get-by-id [:block/uuid (:block/uuid x)])) blocks)]
-          (refresh {:key :block/change :data (vec blocks)}))
+          (refresh! {:key :block/change :data (vec blocks)}))
         (assoc e
                :txs-op new-txs
                :editor-cursor editor-cursor)))))
@@ -136,7 +136,7 @@
       (push-undo e)
       (transact! new-txs)
       (let [blocks (map (fn [x] (get-by-id [:block/uuid (:block/uuid x)])) blocks)]
-        (refresh {:key :block/change :data (vec blocks)}))
+        (refresh! {:key :block/change :data (vec blocks)}))
       (assoc e :txs-op new-txs))))
 
 (defn listen-outliner-operation

@@ -15,12 +15,3 @@
     (util/react)
     (flatten)
     (seq)))
-
-(defn update-block-state
-  [repo node]
-  ;; {:pre [(tree/satisfied-inode? node)]}
-  #_(when-let [parent (tree/-get-parent node)]
-    (react/transact-react!
-      repo
-      [(:data parent)]
-      {:key [:block/children (str (tree/-get-id parent))]})))

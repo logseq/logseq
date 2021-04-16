@@ -275,45 +275,7 @@
            distinct)))
       [[key]])))
 
-(defn transact-react!
-  [repo-url tx-data {:keys [key data] :as handler-opts}]
-  (when-not config/publishing?
-    (let [repo-url (or repo-url (state/get-current-repo))
-          tx-data (->> (util/remove-nils tx-data)
-                       (remove nil?))
-          get-conn (fn [] (conn/get-conn repo-url false))]
-      (when (and (seq tx-data) (get-conn))
-        (let [tx-result (d/transact! (get-conn) (vec tx-data))
-              db (:db-after tx-result)
-              handler-keys (get-handler-keys handler-opts)]
-          (doseq [handler-key handler-keys]
-            (let [handler-key (vec (cons repo-url handler-key))]
-              (when-let [cache (get @query-state handler-key)]
-                (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
-                  (when (or query query-fn)
-                    (let [new-result (->
-                                      (cond
-                                        query-fn
-                                        (profile
-                                         "Query:"
-                                         (doall (query-fn db)))
-
-                                        inputs-fn
-                                        (let [inputs (inputs-fn)]
-                                          (apply d/q query db inputs))
-
-                                        (keyword? query)
-                                        (db-utils/get-key-value repo-url query)
-
-                                        (seq inputs)
-                                        (apply d/q query db inputs)
-
-                                        :else
-                                        (d/q query db))
-                                      transform-fn)]
-                      (set-new-result! handler-key new-result))))))))))))
-
-(defn refresh
+(defn refresh!
   [repo-url {:keys [key data] :as handler-opts}]
   (let [handler-keys (get-handler-keys handler-opts)
         db (conn/get-conn repo-url)]
@@ -343,6 +305,17 @@
                                   (d/q query db))
                                 transform-fn)]
                (set-new-result! handler-key new-result)))))))))
+
+(defn transact-react!
+  [repo-url tx-data {:keys [key data] :as handler-opts}]
+  (when-not config/publishing?
+    (let [repo-url (or repo-url (state/get-current-repo))
+          tx-data (->> (util/remove-nils tx-data)
+                       (remove nil?))
+          get-conn (fn [] (conn/get-conn repo-url false))]
+      (when (and (seq tx-data) (get-conn))
+        (d/transact! (get-conn) (vec tx-data))
+        (refresh! repo-url handler-opts)))))
 
 (defn set-key-value
   [repo-url key value]

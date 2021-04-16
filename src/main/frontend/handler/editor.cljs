@@ -311,7 +311,7 @@
         (outliner-core/save-node))
        (let [opts {:key :block/change
                    :data [block]}]
-         (db/refresh repo opts))))
+         (db/refresh! repo opts))))
 
     (repo-handler/push-if-auto-enabled! repo)))
 
@@ -408,7 +408,7 @@
 ;;                       :data (map (fn [block] (assoc block :block/page page)) blocks)}]
 ;;             (do (state/update-last-edit-block)
 ;;                 #_(build-outliner-relation (first blocks) (first after-blocks))
-;;                 (db/refresh repo opts)
+;;                 (db/refresh! repo opts)
 ;;                 (let [files (remove nil? files)]
 ;;                   (when (seq files)
 ;;                     (file-handler/alter-files repo files opts)))))
@@ -513,7 +513,7 @@
        "db refresh"
        (let [opts {:key :block/insert
                    :data [current-block next-block]}]
-         (db/refresh repo opts)))
+         (db/refresh! repo opts)))
       (ok-handler next-block)
       (state/set-editor-op! nil))))
 
@@ -716,7 +716,7 @@
         (->
          (outliner-core/block block)
          (outliner-core/delete-node))
-        (db/refresh repo {:key :block/change :data [block]})
+        (db/refresh! repo {:key :block/change :data [block]})
         (when (or (seq ref-pages) (seq ref-blocks))
           (ui-handler/re-render-root!))))))
 
@@ -774,7 +774,7 @@
         (outliner-core/delete-nodes start-node end-node lookup-refs)
         (let [opts {:key :block/change
                     :data blocks}]
-          (db/refresh repo opts))))))
+          (db/refresh! repo opts))))))
 
 (defn- block-property-aux!
   [block-id key value]
@@ -799,21 +799,21 @@
           (outliner-core/save-node block)
           (let [opts {:key :block/change
                       :data [block]}]
-            (db/refresh repo opts)))))))
+            (db/refresh! repo opts)))))))
 
 (defn remove-block-property!
   [block-id key]
   (block-property-aux! block-id key nil)
-  (db/refresh (state/get-current-repo)
-              {:key :block/change
-               :data [(db/pull [:block/uuid block-id])]}))
+  (db/refresh! (state/get-current-repo)
+               {:key :block/change
+                :data [(db/pull [:block/uuid block-id])]}))
 
 (defn set-block-property!
   [block-id key value]
   (block-property-aux! block-id key value)
-  (db/refresh (state/get-current-repo)
-              {:key :block/change
-               :data [(db/pull [:block/uuid block-id])]}))
+  (db/refresh! (state/get-current-repo)
+               {:key :block/change
+                :data [(db/pull [:block/uuid block-id])]}))
 
 (defn set-block-timestamp!
   [block-id key value]
@@ -1573,7 +1573,7 @@
         (when-let [repo (state/get-current-repo)]
           (let [opts {:key :block/change
                       :data [block]}]
-            (db/refresh repo opts)))))))
+            (db/refresh! repo opts)))))))
 
 (defn expand!
   []
@@ -1618,7 +1618,7 @@
              (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
              (let [opts {:key :block/change
                          :data blocks}]
-               (db/refresh repo opts)
+               (db/refresh! repo opts)
                (let [blocks (doall
                              (map
                                (fn [block]
@@ -1824,7 +1824,7 @@
          (let [parent-node (tree/-get-parent node)]
            (outliner-core/move-subtree node parent-node true)))
        (let [repo (state/get-current-repo)]
-        (db/refresh repo {:key :block/change :data [(:data node)]}))
+        (db/refresh! repo {:key :block/change :data [(:data node)]}))
        (state/set-editor-op! nil)))))
 
 (defn- last-top-level-child?
@@ -2076,8 +2076,8 @@
                    (outliner-core/move-subtree current-node target-node true))
                  (outliner-core/move-subtree current-node left false))
                (let [repo (state/get-current-repo)]
-                 (db/refresh repo
-                             {:key :block/change :data [(:data current-node)]}))))))
+                 (db/refresh! repo
+                              {:key :block/change :data [(:data current-node)]}))))))
        (state/set-editor-op! nil)))))
 
 (defn outdent-on-shift-tab
@@ -2098,8 +2098,8 @@
            (let [parent (tree/-get-parent current-node)]
              (outliner-core/move-subtree current-node parent true))
            (let [repo (state/get-current-repo)]
-             (db/refresh repo
-                         {:key :block/change :data [(:data current-node)]}))))
+             (db/refresh! repo
+                          {:key :block/change :data [(:data current-node)]}))))
        (state/set-editor-op! nil)))))
 
 (defn keydown-tab-handler
@@ -2306,7 +2306,7 @@
                                                        :block/format)))))))))))
             _ (outliner-core/insert-nodes metadata-replaced-copied-blocks target-block sibling?)
             new-blocks (db/pull-many repo '[*] (map (fn [id] [:block/uuid id]) @new-block-uuids))]
-        (db/refresh repo {:key :block/insert :data new-blocks})
+        (db/refresh! repo {:key :block/insert :data new-blocks})
         (util/stop e)))))
 
 (defn editor-on-paste!

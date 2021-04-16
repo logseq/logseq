@@ -36,5 +36,5 @@
         :else
         (outliner-core/move-subtree current-node target-node true))
       (let [repo (state/get-current-repo)]
-        (db/refresh repo {:key :block/change
-                          :data [(:data current-node) (:data target-node)]})))))
+        (db/refresh! repo {:key :block/change
+                           :data [(:data current-node) (:data target-node)]})))))

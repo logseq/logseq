@@ -12,7 +12,7 @@
             [clojure.zip :as zip]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.datascript :as ds]
-            [frontend.util :as util]
+            [frontend.util :as util :refer-macros [profile]]
             [datascript.core :as d]))
 
 (defrecord Block [data])

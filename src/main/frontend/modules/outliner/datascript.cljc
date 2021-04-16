@@ -6,7 +6,7 @@
                      [frontend.modules.outliner.pipeline :as pipelines]
                      [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
-                     [frontend.util :as util])))
+                     [frontend.util :as util :refer-macros [profile]])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
