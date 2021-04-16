@@ -211,7 +211,7 @@
                          :or {tail-len 0}}]
    (when-not config/publishing?
      (when-let [block-id (:block/uuid block)]
-       (let [block (db/pull [:block/uuid block-id])
+       (let [block (or (db/pull [:block/uuid block-id]) block)
              edit-input-id (if (uuid? id)
                              (get-edit-input-id-with-block-id id)
                              (str (subs id 0 (- (count id) 36)) block-id))
