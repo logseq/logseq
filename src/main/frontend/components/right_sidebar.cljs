@@ -25,6 +25,11 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.config :as config]))
 
+(rum/defc toggle
+  []
+  [:a.opacity-50.hover:opacity-100.ml-4 {:on-click state/toggle-sidebar-open?!}
+   (svg/menu)])
+
 (rum/defc block-cp < rum/reactive
   [repo idx block]
   (let [id (:block/uuid block)]
@@ -263,7 +268,7 @@
          [:div.cp__right-sidebar-inner.flex.flex-col.h-full
 
           (sidebar-resizer)
-          [:div.flex.flex-row.justify-between.items-center.px-4
+          [:div.flex.flex-row.justify-between.items-center.px-4.h-12
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
@@ -289,7 +294,9 @@
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                              (state/sidebar-add-block! repo "help" :help nil))}
-              (t :right-side-bar/help)]]]]
+              (t :right-side-bar/help)]]]
+
+           (when sidebar-open? (toggle))]
           [:.sidebar-item-list.overflow-y-auto.flex-1
            (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
              (rum/with-key

@@ -15,6 +15,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.components.export :as export]
+            [frontend.components.right-sidebar :as sidebar]
             [frontend.handler.project :as project-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
@@ -213,6 +214,4 @@
                        :t t
                        :current-repo current-repo
                        :default-home default-home})
-
-       [:a.close-arrow.opacity-50.hover:opacity-100.ml-4 {:on-click state/toggle-sidebar-open?!}
-        (svg/big-arrow-right)]])))
+       (when (not (state/sub :ui/sidebar-open?)) (sidebar/toggle))])))

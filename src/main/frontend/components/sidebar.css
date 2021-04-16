@@ -141,10 +141,6 @@
     }
   }
 
-  .close-arrow svg {
-    transform: scale(0.8);
-  }
-
   .page {
     margin-top: 0;
   }
