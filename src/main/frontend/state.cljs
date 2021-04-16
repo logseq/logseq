@@ -1168,3 +1168,8 @@
 (defn set-copied-blocks
   [content ids]
   (set-state! :copy/blocks {:copy/content content :copy/block-tree ids}))
+
+(defonce components (atom {}))
+
+(defn auto-complete? []
+  (some? (get @components :component/auto-complete)))
