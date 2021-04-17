@@ -113,7 +113,7 @@
 (rum/defc journals < rum/reactive
   [latest-journals]
   [:div#journals
-   (ui/infinite-list "main-content"
+   (ui/infinite-list "left-container"
                      (for [[journal-name format] latest-journals]
                        [:div.journal-item.content {:key journal-name}
                         (journal-cp [journal-name format])])

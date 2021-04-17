@@ -10,8 +10,15 @@
   }
 }
 
+#app-container {
+    flex: 0 0 100%;
+    transition: all 200ms ease-in 0s;
+}
+
 #main-content-container {
-  font-size: 1em;
+    font-size: 1em;
+    margin-top: 2rem;
+    padding: 1rem;
 }
 
 #left-sidebar {
@@ -115,6 +122,7 @@
     padding-top: 0;
     position: relative;
     min-height: 100%;
+    overflow-y: scroll;
 
     .resizer {
       position: absolute;
@@ -136,9 +144,19 @@
 
     &-btn {
       display: block;
-      padding: 10px 5px;
+      padding: 13px 5px;
       white-space: nowrap;
     }
+  }
+
+  &-topbar {
+      position: sticky;
+      position: -webkit-sticky;
+      top: 0;
+      left: 0;
+      right: 0;
+      background-color: var(--ls-secondary-background-color, #d8e1e8);
+      z-index: 999;
   }
 
   .page {

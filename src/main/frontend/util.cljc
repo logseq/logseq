@@ -1176,6 +1176,11 @@
      []
      (contains? (set (system-locales)) "zh-CN")))
 
+#?(:cljs
+   (defn get-element-width
+     [id]
+     (when-let [element (gdom/getElement id)]
+       (gobj/get element "offsetWidth"))))
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
      "../pages/grant_ideas.org")

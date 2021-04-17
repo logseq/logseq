@@ -107,7 +107,7 @@
 (rum/defc main
   [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div#main-content.cp__sidebar-main-layout.flex-1.overflow-y-auto.flex
+    [:div#main-content.cp__sidebar-main-layout.flex-1.flex
      [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
       {:style {:flex (if (state/get-left-sidebar-open?)
                        "0 1 20%"
@@ -333,28 +333,28 @@
           :close-fn    close-fn
           :route-match route-match})
         [:div.#app-container.h-screen.flex
-         [[:div.flex-1.h-full.flex.flex-col
-           [(header/header {:open-fn        open-fn
-                            :white?         white?
-                            :current-repo   current-repo
-                            :logged?        logged?
-                            :page?          page?
-                            :route-match    route-match
-                            :me             me
-                            :default-home   default-home
-                            :new-block-mode new-block-mode})
+         [:div.flex-1.h-full.flex.flex-col.overflow-y-auto#left-container.relative
+          [(header/header {:open-fn        open-fn
+                           :white?         white?
+                           :current-repo   current-repo
+                           :logged?        logged?
+                           :page?          page?
+                           :route-match    route-match
+                           :me             me
+                           :default-home   default-home
+                           :new-block-mode new-block-mode})
 
 
-            (main {:route-match         route-match
-                   :global-graph-pages? global-graph-pages?
-                   :logged?             logged?
-                   :home?               home?
-                   :route-name          route-name
-                   :indexeddb-support?  indexeddb-support?
-                   :white?              white?
-                   :db-restoring?       db-restoring?
-                   :main-content        main-content})]]
-          (right-sidebar/sidebar)]]
+           (main {:route-match         route-match
+                  :global-graph-pages? global-graph-pages?
+                  :logged?             logged?
+                  :home?               home?
+                  :route-name          route-name
+                  :indexeddb-support?  indexeddb-support?
+                  :white?              white?
+                  :db-restoring?       db-restoring?
+                  :main-content        main-content})]]
+         (right-sidebar/sidebar)]
 
 
         (ui/notification)
