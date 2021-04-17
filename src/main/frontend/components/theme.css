@@ -31,14 +31,6 @@ html {
     height: 8px;
   }
 
-  ::-webkit-scrollbar-thumb {
-    -webkit-border-radius: 100px;
-  }
-
-  ::-webkit-scrollbar-thumb:active {
-    -webkit-border-radius: 100px;
-  }
-
   ::-webkit-scrollbar-corner {
     background: transparent;
   }

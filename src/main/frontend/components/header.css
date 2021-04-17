@@ -1,12 +1,18 @@
 .cp__header {
-  @apply shadow z-10 h-12 pr-4;
+  @apply shadow z-10 h-12;
 
+  padding-right: 1rem;
   display: flex;
   align-items: center;
   flex: 0 0 auto;
   background-color: var(--ls-primary-background-color, #fff);
-
+  position: sticky;
+  position: -webkit-sticky;
+  top: 0;
+  left: 0;
+  right: 0;
   user-select: none;
+  transition: width 0.3s;
 
   .it svg {
     transform: scale(0.8);
