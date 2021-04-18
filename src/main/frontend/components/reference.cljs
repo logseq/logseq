@@ -68,7 +68,8 @@
                        :else
                        (db/get-page-referenced-blocks page-name))
           scheduled-or-deadlines (if (and journal?
-                                          (not (true? (state/scheduled-deadlines-disabled?))))
+                                          (not (true? (state/scheduled-deadlines-disabled?)))
+                                          (= page-name (string/lower-case (date/journal-name))))
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           references (db/get-page-linked-refs-refed-pages repo page-name)
@@ -85,8 +86,7 @@
          [:div.content
           (when (seq scheduled-or-deadlines)
             (ui/foldable
-             [:h2.font-bold.opacity-50 (let []
-                                         "SCHEDULED AND DEADLINE")]
+             [:h2.font-bold.opacity-50 "SCHEDULED AND DEADLINE"]
              [:div.references-blocks.mb-6
               (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
                                                {:id (str page-name "-agenda")

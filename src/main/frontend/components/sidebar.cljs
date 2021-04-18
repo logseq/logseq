@@ -100,14 +100,14 @@
            :stroke-linejoin "round"
            :stroke-linecap "round"}]]]])
     [:div.flex-shrink-0.flex.items-center.px-4.h-16.head-wrap
-     (repo/repos-dropdown false nil)]
+     (repo/repos-dropdown nil)]
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 
-(rum/defc sidebar-main
+(rum/defc main
   [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div#main-content.cp__sidebar-main-layout
+    [:div#main-content.cp__sidebar-main-layout.flex-1.flex
      [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
       {:style {:flex (if (state/get-left-sidebar-open?)
                        "0 1 20%"
@@ -116,7 +116,8 @@
                                   (if white? "#f0f8ff" "#073642"))}}
       (when (state/sub :ui/left-sidebar-open?)
         (sidebar-nav route-match nil))]
-     [:div#main-content-container.cp__sidebar-main-content-container
+     [:div#main-content-container.w-full.flex.justify-center
+      {:margin-top (if global-graph-pages? 0 "2rem")}
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width (or global-graph-pages?
@@ -131,10 +132,9 @@
            (ui/loading (t :loading))]]
 
          :else
-         [:div {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
-                :style {:margin-bottom (if global-graph-pages? 0 120)}}
-          main-content])]]
-     (right-sidebar/sidebar)]))
+         [:div.pb-24 {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
+                      :style {:margin-bottom (if global-graph-pages? 0 120)}}
+          main-content])]]]))
 
 (defn get-default-home-if-valid
   []
@@ -229,7 +229,7 @@
                   :exit 300}}
        links
        ;; (custom-context-menu-content)
-))))
+       ))))
 
 (rum/defc new-block-mode < rum/reactive
   []
@@ -274,7 +274,6 @@
                     (fn [e]
                       ;; hide context menu
                       (state/hide-custom-context-menu!)
-
                       (editor-handler/clear-selection! e)))))
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
@@ -309,28 +308,29 @@
          {:open?       open?
           :close-fn    close-fn
           :route-match route-match})
-        [:div.#app-container.cp__sidebar-layout
-         {:class (if sidebar-open? "is-right-sidebar-open")
-          :style {:padding-bottom (if global-graph-pages? 0 30)}}
-         (header/header {:open-fn        open-fn
-                         :white?         white?
-                         :current-repo   current-repo
-                         :logged?        logged?
-                         :page?          page?
-                         :route-match    route-match
-                         :me             me
-                         :default-home   default-home
-                         :new-block-mode new-block-mode})
+        [:div.#app-container.h-screen.flex
+         [:div.flex-1.h-full.flex.flex-col.overflow-y-auto#left-container.relative
+          [:div
+           (header/header {:open-fn        open-fn
+                           :white?         white?
+                           :current-repo   current-repo
+                           :logged?        logged?
+                           :page?          page?
+                           :route-match    route-match
+                           :me             me
+                           :default-home   default-home
+                           :new-block-mode new-block-mode})
 
-         (sidebar-main {:route-match         route-match
-                        :global-graph-pages? global-graph-pages?
-                        :logged?             logged?
-                        :home?               home?
-                        :route-name          route-name
-                        :indexeddb-support?  indexeddb-support?
-                        :white?              white?
-                        :db-restoring?       db-restoring?
-                        :main-content        main-content})]
+           (main {:route-match         route-match
+                  :global-graph-pages? global-graph-pages?
+                  :logged?             logged?
+                  :home?               home?
+                  :route-name          route-name
+                  :indexeddb-support?  indexeddb-support?
+                  :white?              white?
+                  :db-restoring?       db-restoring?
+                  :main-content        main-content})]]
+         (right-sidebar/sidebar)]
 
         (ui/notification)
         (ui/modal)
@@ -347,4 +347,4 @@
          ;;   :on-click (fn []
          ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
          ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-)]))))
+          )]))))

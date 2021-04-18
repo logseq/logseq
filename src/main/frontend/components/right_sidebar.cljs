@@ -25,6 +25,12 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.config :as config]))
 
+(rum/defc toggle
+  []
+  (when-not (util/mobile?)
+    [:a.opacity-50.hover:opacity-100.ml-4 {:on-click state/toggle-sidebar-open?!}
+    (svg/menu)]))
+
 (rum/defc block-cp < rum/reactive
   [repo idx block]
   (let [id (:block/uuid block)]
@@ -51,7 +57,7 @@
                 (graph-handler/build-block-graph (uuid page) theme)
                 (graph-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
-      [:div.sidebar-item.flex-col.flex-1
+      [:div.sidebar-item.flex-col
        (graph-2d/graph
         (graph/build-graph-opts
          graph dark?
@@ -177,7 +183,7 @@
           (build-sidebar-item repo idx db-id block-type block-data t))]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content.color-level
+        [:div.sidebar-item.content.color-level.px-4.shadow-lg
          (let [[title component] item]
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
@@ -227,14 +233,15 @@
                  (fn [^js/MouseEvent e]
                    (let [width js/document.documentElement.clientWidth
                          offset (.-left (.-rect e))
-                         to-val (- 1 (.toFixed (/ offset width) 6))
-                         to-val (cond
-                                  (< to-val 0.2) 0.2
-                                  (> to-val 0.7) 0.7
-                                  :else to-val)]
-                     (.setProperty (.-style js/document.documentElement)
-                                   "--ls-right-sidebar-width"
-                                   (str (* to-val 100) "%"))))}}))
+                         right-el-ratio (- 1 (.toFixed (/ offset width) 6))
+                         right-el-ratio (cond
+                                          (< right-el-ratio 0.2) 0.2
+                                          (> right-el-ratio 0.7) 0.7
+                                          :else right-el-ratio)
+                         right-el (js/document.getElementById "right-sidebar")]
+                     (when right-el
+                       (let [width (str (* right-el-ratio 100) "%")]
+                         (.setProperty (.-style right-el) "width" width)))))}}))
              (.styleCursor false)
              (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
              (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
@@ -254,12 +261,14 @@
         theme (state/sub :ui/theme)
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#right-sidebar.cp__right-sidebar
-       {:class (if sidebar-open? "is-open")}
+      [:div#right-sidebar.cp__right-sidebar.h-screen
+       {:class (if sidebar-open? "open" "closed")}
        (if sidebar-open?
-         [:div.cp__right-sidebar-inner
+         [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
+
           (sidebar-resizer)
-          [:div.flex.flex-row.justify-between.items-center
+          [:div
+           [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-4.h-12
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
@@ -286,10 +295,13 @@
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                              (state/sidebar-add-block! repo "help" :help nil))}
               (t :right-side-bar/help)]]]
-           [:a.close-arrow.opacity-50.hover:opacity-100 {:on-click state/toggle-sidebar-open?!}
-            (svg/big-arrow-right)]]
 
-          (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
-            (rum/with-key
-              (sidebar-item repo idx db-id block-type block-data t)
-              (str "sidebar-block-" idx)))])])))
+           (when sidebar-open?
+             [:div.mr-1.flex.align-items {:style {:z-index 999}}
+              (toggle)])]
+
+           [:.sidebar-item-list.flex-1
+            (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
+              (rum/with-key
+                (sidebar-item repo idx db-id block-type block-data t)
+                (str "sidebar-block-" idx)))]]])])))

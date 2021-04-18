@@ -279,7 +279,10 @@
      (concat title body))
     (let [refs (remove string/blank? @refs)
           children-pages (->> (mapcat (fn [p]
-                                        (if (string/includes? p "/")
+                                        (when (and (string/includes? p "/")
+                                                   (not (string/starts-with? p "../"))
+                                                   (not (string/starts-with? p "./"))
+                                                   (not (string/starts-with? p "http")))
                                           ;; Don't create the last page for now
                                           (butlast (string/split p #"/"))))
                                       refs)

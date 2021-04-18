@@ -16,7 +16,8 @@
             [clojure.string :as string]
             [goog.object :as gobj]
             [frontend.context.i18n :as i18n]
-            [reitit.frontend.easy :as rfe]))
+            [reitit.frontend.easy :as rfe]
+            [frontend.date :as date]))
 
 (rum/defcs set-email < (rum/local "" ::email)
   [state]
@@ -136,6 +137,7 @@
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (state/get-preferred-format)
+        custom-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
         preferred-language (state/sub [:preferred-language])
         enable-timetracking? (state/enable-timetracking?)
@@ -228,6 +230,24 @@
                          (= format preferred-format)
                          (assoc :selected "selected"))
                (string/capitalize (name format))])]]]]
+
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.block.text-sm.font-medium.leading-5.opacity-70
+          {:for "custom_date_format"}
+          (t :settings-page/custom-date-format)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          [:div.max-w-lg.rounded-md
+           [:select.form-select.is-small
+            {:on-change (fn [e]
+                          (let [format (util/evalue e)]
+                            (when-not (string/blank? format)
+                              (config-handler/set-config! :date-formatter format))))}
+            (for [format (sort (date/journal-title-formatters))]
+              [:option (cond->
+                           {:key format}
+                         (= format custom-date-format)
+                         (assoc :selected "selected"))
+               format])]]]]
 
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.block.text-sm.font-medium.leading-5.opacity-70

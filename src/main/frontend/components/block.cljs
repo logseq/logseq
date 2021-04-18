@@ -501,7 +501,7 @@
     (let [block (and (util/uuid-string? id)
                      (db/pull-block (uuid id)))]
       (if block
-        [:div.block-ref-wrap
+        [:span.block-ref-wrap
          {:on-mouse-down
           (fn [e]
             (util/stop e)
@@ -1350,12 +1350,14 @@
   (let [target (gobj/get e "target")
         button (gobj/get e "buttons")]
     (when (contains? #{1 0} button)
-      (when-not (or (util/link? target)
-                   (util/input? target)
-                   (util/details-or-summary? target)
-                   (and (util/sup? target)
-                        (d/has-class? target "fn"))
-                   (d/has-class? target "image-resize"))
+      (when-not (or
+                 (d/has-class? target "bullet")
+                 (util/link? target)
+                 (util/input? target)
+                 (util/details-or-summary? target)
+                 (and (util/sup? target)
+                      (d/has-class? target "fn"))
+                 (d/has-class? target "image-resize"))
        (editor-handler/clear-selection! nil)
        (editor-handler/unhighlight-blocks!)
        (let [properties-hidden? (text/properties-hidden? properties)
@@ -1864,18 +1866,28 @@
 (defn- trigger-custom-query!
   [state]
   (let [[config query] (:rum/args state)
+        repo (state/get-current-repo)
+        result-atom (atom nil)
         query-atom (if (:dsl-query? config)
                      (let [result (query-dsl/query (state/get-current-repo) (:query query))]
-                       (if (string? result) ; full-text search
+                       (cond
+                         (and (util/electron?) (string? result)) ; full-text search
+                         (if (string/blank? result)
+                           (atom [])
+                           (p/let [blocks (search/block-search repo result {:limit 30})]
+                             (when (seq blocks)
+                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
+                                 (reset! result-atom result)))))
+
+                         (string? result)
                          (atom nil)
-                         ;; (atom
-                         ;;  (if (string/blank? result)
-                         ;;    []
-                         ;;    (let [blocks (search/block-search result 50)]
-                         ;;      (when (seq blocks)
-                         ;;        (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))))))
+
+                         :else
                          result))
-                     (db/custom-query query))]
+                     (db/custom-query query))
+        query-atom (if (instance? Atom query-atom)
+                     query-atom
+                     result-atom)]
     (assoc state :query-atom query-atom)))
 
 (rum/defcs custom-query < rum/reactive
@@ -1950,7 +1962,7 @@
              (and (seq result)
                   (:block/name (first result)))
              [:ul#query-pages.mt-1
-              (for [{:page/keys [name original-name] :as page-entity} result]
+              (for [{:block/keys [name original-name] :as page-entity} result]
                 [:li.mt-1
                  [:a {:href (rfe/href :page {:name name})
                       :on-click (fn [e]

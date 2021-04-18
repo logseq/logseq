@@ -259,6 +259,7 @@
          [:tr [:td (t :help/toggle)] [:td "?"]]
          [:tr [:td (t :help/git-commit-message)] [:td "c"]]
          [:tr [:td (t :help/full-text-search)] [:td (util/->platform-shortcut "Ctrl-u")]]
+         [:tr [:td (t :help/page-search)] [:td (util/->platform-shortcut "Ctrl-Shift-u")]]
          [:tr [:td (t :help/open-link-in-sidebar)] [:td "Shift-Click"]]
          [:tr [:td (t :help/context-menu)] [:td "Right Click"]]
          [:tr [:td (t :help/fold-unfold)] [:td "Tab"]]

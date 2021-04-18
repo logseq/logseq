@@ -9,7 +9,8 @@
             [clojure.string :as string]
             [electron.utils :as utils]
             [electron.state :as state]
-            [clojure.core.async :as async]))
+            [clojure.core.async :as async]
+            [electron.search :as search]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -88,7 +89,6 @@
                 (remove nil?))]
     (vec (cons {:path (fix-win-path! path)} result))))
 
-;; TODO: Is it going to be slow if it's a huge directory
 (defmethod handle :openDir [^js window _messages]
   (let [result (.showOpenDialogSync dialog (bean/->js
                                             {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
@@ -104,6 +104,28 @@
 (defmethod handle :persistent-dbs-saved [window _]
   (async/put! state/persistent-dbs-chan true )
   true)
+
+(defmethod handle :search-blocks [window [_ repo q limit]]
+  (search/search-blocks repo q limit))
+
+(defmethod handle :rebuild-blocks-indice [window [_ repo data]]
+  (search/truncate-blocks-table! repo)
+  ;; unneeded serialization
+  (search/upsert-blocks! repo (bean/->js data)))
+
+(defmethod handle :transact-blocks [window [_ repo data]]
+  (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
+    (when (seq blocks-to-remove-set)
+      (search/delete-blocks! repo blocks-to-remove-set))
+    (when (seq blocks-to-add)
+      ;; unneeded serialization
+      (search/upsert-blocks! repo (bean/->js blocks-to-add)))))
+
+(defmethod handle :truncate-blocks [window [_ repo]]
+  (search/truncate-blocks-table! repo))
+
+(defmethod handle :remove-db [window [_ repo]]
+  (search/delete-db! repo))
 
 (defn- get-file-ext
   [file]

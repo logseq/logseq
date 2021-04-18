@@ -142,7 +142,7 @@
         date (get @*timestamp :date)]
     (when (state/sub :editor/show-date-picker?)
       [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
-                                            :on-mouse-down (fn [e] (util/stop e))}
+                                            :on-mouse-down (fn [e] (.stopPropagation e))}
        (ui/datepicker
         date
         {:deadline-or-schedule? deadline-or-schedule?

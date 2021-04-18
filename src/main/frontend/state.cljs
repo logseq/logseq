@@ -41,6 +41,7 @@
     :journals-length 2
 
     :search/q ""
+    :search/mode :global
     :search/result nil
 
     ;; custom shortcuts
@@ -455,6 +456,10 @@
   [value]
   (set-state! :search/q value))
 
+(defn set-search-mode!
+  [value]
+  (set-state! :search/mode value))
+
 (defn set-editor-show-page-search!
   [value]
   (set-state! :editor/show-page-search? value)
@@ -645,7 +650,7 @@
                                         ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
-    (when-let [elem (gdom/getElement "right-sidebar")]
+    (when-let [elem (gdom/getElement "right-sidebar-container")]
       (util/scroll-to elem 0))))
 
 (defn sidebar-remove-block!
@@ -1128,6 +1133,10 @@
 (defn clear-search-result!
   []
   (set-search-result! nil))
+
+(defn get-search-mode
+  []
+  (:search/mode @state))
 
 (defn toggle!
   [path]

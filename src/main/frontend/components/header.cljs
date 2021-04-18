@@ -15,6 +15,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.components.export :as export]
+            [frontend.components.right-sidebar :as sidebar]
             [frontend.handler.project :as project-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
@@ -191,8 +192,8 @@
 
        (repo/sync-status current-repo)
 
-       [:div.repos.hidden.md:block
-        (repo/repos-dropdown true nil)]
+       [:div.repos
+        (repo/repos-dropdown nil)]
 
        (when (and (nfs/supported?) (empty? repos)
                   (not config/publishing?))
@@ -212,4 +213,5 @@
        (dropdown-menu {:me me
                        :t t
                        :current-repo current-repo
-                       :default-home default-home})])))
+                       :default-home default-home})
+       (when (not (state/sub :ui/sidebar-open?)) (sidebar/toggle))])))

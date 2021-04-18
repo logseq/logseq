@@ -129,10 +129,6 @@
   border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
 
-  &-wrap {
-    display: inline-block;
-  }
-
   &:hover {
     color: var(--ls-link-text-hover-color)
   }
@@ -311,15 +307,13 @@
     transition: transform .2s;
   }
 
-  &:hover {
-    .bullet {
-      transform: scale(1.2);
-    }
-  }
-
   &.bullet-closed {
     background-color: var(--ls-block-bullet-border-color, #ced9e0);
   }
+}
+
+a:hover > .bullet-container .bullet {
+  transform: scale(1.2);
 }
 
 .doc-mode {
@@ -364,4 +358,3 @@
 .embed-header {
   font-weight: 600;
 }
-

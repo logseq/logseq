@@ -160,7 +160,8 @@
    (state/set-today! (date/today))
    (when-let [repo (state/get-current-repo)]
      (when (or (db/cloned? repo)
-               (and (config/local-db? repo)
+               (and (or (config/local-db? repo)
+                        (= "local" repo))
                     ;; config file exists
                     (let [path (config/get-config-path)]
                       (db/get-file path))))
@@ -571,6 +572,7 @@
   (let [delete-db-f (fn []
                       (db/remove-conn! url)
                       (db/remove-db! url)
+                      (search/remove-db! url)
                       (fs/rmdir! (config/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (config/local-db? url)
