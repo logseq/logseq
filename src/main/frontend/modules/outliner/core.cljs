@@ -131,7 +131,7 @@
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [m (-> (:data this)
-                (dissoc :block/children :block/dummy? :block/level :block/meta)
+                (dissoc :block/children :block/dummy? :block/meta)
                 (util/remove-nils))
           other-tx (:db/other-tx m)]
       (when (seq other-tx)
