@@ -134,7 +134,7 @@
           (js->clj :keywordize-keys true))))
 
 (defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map. also transform map to nil if all of its value are nil"
+  "remove pairs of key-value that has nil value from a (possibly nested) map."
   [nm]
   (walk/postwalk
    (fn [el]
@@ -647,9 +647,10 @@
 
 #?(:cljs
    (defn cursor-move-forward [input n]
-     (let [{:keys [pos]} (get-caret-pos input)
-           pos (+ pos n)]
-       (.setSelectionRange input pos pos))))
+     (when input
+       (let [{:keys [pos]} (get-caret-pos input)
+            pos (+ pos n)]
+        (.setSelectionRange input pos pos)))))
 
 #?(:cljs
    (defn move-cursor-to [input n]

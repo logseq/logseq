@@ -48,7 +48,8 @@
    (create! title {}))
   ([title {:keys [redirect?]
            :or {redirect? true}}]
-   (let [page (string/lower-case title)]
+   (let [title (string/trim title)
+         page (string/lower-case title)]
      (let [tx (block/page-name->map title true)]
        (db/transact! [tx]))
      (when redirect?

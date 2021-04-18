@@ -442,8 +442,8 @@
                                    (outliner-insert-block! current-block next-block block-self?))
         refresh-fn (fn []
                      (let [opts {:key :block/insert
-                                :data [current-block next-block]}]
-                      (db/refresh! repo opts)))]
+                                 :data [current-block next-block]}]
+                       (db/refresh! repo opts)))]
     (do
       (if (or dummy? (not sibling?))
         (refresh-fn)
@@ -453,8 +453,7 @@
       ;; WORKAROUND: The block won't refresh itself even if the content is empty.
       (when block-self?
         (gobj/set input "value" ""))
-      (profile "ok handler" (ok-handler next-block))
-      (state/set-editor-op! nil))))
+      (profile "ok handler" (ok-handler next-block)))))
 
 (defn clear-when-saved!
   []
@@ -502,10 +501,8 @@
   ([state]
    (insert-new-block! state nil))
   ([state block-value]
-   (when (and (not config/publishing?)
-           ;; skip this operation if it's inserting
-            (not= :insert (state/get-editor-op)))
-     (state/set-editor-op! :insert)
+   (state/set-editor-op! :insert)
+   (when-not config/publishing?
      (when-let [state (get-state state)]
        (let [{:keys [block value format id config]} state
              value (if (string? block-value) block-value value)
@@ -522,7 +519,8 @@
           {:ok-handler
            (fn [last-block]
              (edit-block! last-block 0 format id)
-             (clear-when-saved!))}))))))
+             (clear-when-saved!))}))))
+   (state/set-editor-op! nil)))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker] :as block} content]
@@ -660,9 +658,7 @@
 (defn delete-block!
   [state repo e]
   (let [{:keys [id block-id block-parent-id dummy? value pos format]} (get-state state)]
-    (when (and block-id
-               (not= :block/delete (state/get-editor-op)))
-      (state/set-editor-op! :block/delete)
+    (when block-id
       (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
             page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
         (when (> page-blocks-count 1)
@@ -685,8 +681,7 @@
                                0)]
                       (edit-block! block pos format id
                                    {:custom-content new-value
-                                    :tail-len tail-len})))))))))
-      (state/set-editor-op! nil))))
+                                    :tail-len tail-len}))))))))))))
 
 (defn- get-end-block-parent
   [end-block blocks]
@@ -1069,9 +1064,8 @@
 
 (defn save-current-block!
   []
-  (when (and (nil? (state/get-editor-op))
-             ;; non English input method
-             (not (state/editor-in-composition?)))
+  ;; non English input method
+  (when-not (state/editor-in-composition?)
     (when-let [repo (state/get-current-repo)]
       (when (and (not (state/get-editor-show-page-search?))
                  (not (state/get-editor-show-page-search-hashtag?))
@@ -1079,7 +1073,6 @@
                  (not (state/get-editor-show-date-picker?))
                  (not (state/get-editor-show-template-search?))
                  (not (state/get-editor-show-input)))
-        (state/set-editor-op! :auto-save)
         (try
           (let [input-id (state/get-edit-input-id)
                 block (state/get-edit-block)
@@ -1096,8 +1089,7 @@
                               (string/trim value))))
               (save-block-aux! db-block value (:block/format db-block) {})))
           (catch js/Error error
-            (log/error :save-block-failed error)))
-        (state/set-editor-op! nil)))))
+            (log/error :save-block-failed error)))))))
 
 (defn on-up-down
   [direction]
@@ -1839,21 +1831,12 @@
   (= parent page))
 
 (defn outdent-on-enter
-  ([node]
-   (outdent-on-enter node 100))
-  ([node retry-limit]
-   (if (= :insert (state/get-editor-op))
-     (if (> retry-limit 0)
-       (js/setTimeout #(outdent-on-enter node (dec retry-limit)) 20)
-       (log/error :editor/indent-outdent-retry-max-limit "Unknown Error."))
-     (do
-       (state/set-editor-op! :indent-outdent)
-       (when-not (parent-is-page? node)
-         (let [parent-node (tree/-get-parent node)]
-           (outliner-core/move-subtree node parent-node true)))
-       (let [repo (state/get-current-repo)]
-        (db/refresh! repo {:key :block/change :data [(:data node)]}))
-       (state/set-editor-op! nil)))))
+  [node]
+  (when-not (parent-is-page? node)
+    (let [parent-node (tree/-get-parent node)]
+      (outliner-core/move-subtree node parent-node true)))
+  (let [repo (state/get-current-repo)]
+    (db/refresh! repo {:key :block/change :data [(:data node)]})))
 
 (defn- last-top-level-child?
   [{:keys [id config]} current-node]
@@ -2084,51 +2067,40 @@
 
 ;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
 (defn indent-on-tab
-  ([state]
-   (indent-on-tab state 100))
-  ([state retry-limit]
-   (if (= :insert (state/get-editor-op))
-     (if (> retry-limit 0)
-       (js/setTimeout #(indent-on-tab state (dec retry-limit)) 20)
-       (log/error :editor/indent-outdent-retry-max-limit "indent on hit tab."))
-     (let [{:keys [block block-parent-id value config]} (get-state state)]
-       (when block
-         (state/set-editor-op! :indent-outdent)
-         (let [current-node (outliner-core/block block)
-               first-child? (outliner-core/first-child? current-node)]
-           (when-not first-child?
-             (let [left (tree/-get-left current-node)
-                   children-of-left (tree/-get-children left)]
-               (if (seq children-of-left)
-                 (let [target-node (last children-of-left)]
-                   (outliner-core/move-subtree current-node target-node true))
-                 (outliner-core/move-subtree current-node left false))
-               (let [repo (state/get-current-repo)]
-                 (db/refresh! repo
-                              {:key :block/change :data [(:data current-node)]}))))))
-       (state/set-editor-op! nil)))))
+  [state]
+  (state/set-editor-op! :indent)
+  (let [{:keys [block block-parent-id value config]} (get-state state)]
+    (when block
+      (let [current-node (outliner-core/block block)
+            first-child? (outliner-core/first-child? current-node)]
+        (when-not first-child?
+          (let [left (tree/-get-left current-node)
+                children-of-left (tree/-get-children left)]
+            (if (seq children-of-left)
+              (let [target-node (last children-of-left)]
+                (outliner-core/move-subtree current-node target-node true))
+              (outliner-core/move-subtree current-node left false))
+            (let [repo (state/get-current-repo)]
+              (db/refresh! repo
+                           {:key :block/change :data [(:data current-node)]})))))))
+  (state/set-editor-op! :nil))
 
 (defn outdent-on-shift-tab
   ([state]
    (outdent-on-shift-tab state 100))
   ([state retry-limit]
-   (if (= :insert (state/get-editor-op))
-     (if (> retry-limit 0)
-       (js/setTimeout #(outdent-on-shift-tab state (dec retry-limit)) 20)
-       (log/error :editor/indent-outdent-retry-max-limit "outdent on hit shift tab."))
-     (do
-       (state/set-editor-op! :indent-outdent)
-       (let [{:keys [block block-parent-id value config]} (get-state state)
-             {:block/keys [parent page]} block
-             current-node (outliner-core/block block)
-             parent-is-page? (= parent page)]
-         (when-not parent-is-page?
-           (let [parent (tree/-get-parent current-node)]
-             (outliner-core/move-subtree current-node parent true))
-           (let [repo (state/get-current-repo)]
-             (db/refresh! repo
-                          {:key :block/change :data [(:data current-node)]}))))
-       (state/set-editor-op! nil)))))
+   (state/set-editor-op! :outdent)
+   (let [{:keys [block block-parent-id value config]} (get-state state)
+         {:block/keys [parent page]} block
+         current-node (outliner-core/block block)
+         parent-is-page? (= parent page)]
+     (when-not parent-is-page?
+       (let [parent (tree/-get-parent current-node)]
+         (outliner-core/move-subtree current-node parent true))
+       (let [repo (state/get-current-repo)]
+         (db/refresh! repo
+                      {:key :block/change :data [(:data current-node)]}))))
+   (state/set-editor-op! nil)))
 
 (defn keydown-tab-handler
   [get-state-fn direction]

@@ -280,16 +280,16 @@
   (let [handler-keys (get-handler-keys handler-opts)
         db (conn/get-conn repo-url)]
     (doseq [handler-key handler-keys]
-     (let [handler-key (vec (cons repo-url handler-key))]
-       (when-let [cache (get @query-state handler-key)]
-         (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
-           (when (or query query-fn)
-             (let [new-result (->
+      (let [handler-key (vec (cons repo-url handler-key))]
+        (when-let [cache (get @query-state handler-key)]
+          (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
+            (when (or query query-fn)
+              (let [new-result (->
                                 (cond
                                   query-fn
                                   (profile
-                                    "Query:"
-                                    (doall (query-fn db)))
+                                   "Query:"
+                                   (doall (query-fn db)))
 
                                   inputs-fn
                                   (let [inputs (inputs-fn)]
@@ -304,7 +304,7 @@
                                   :else
                                   (d/q query db))
                                 transform-fn)]
-               (set-new-result! handler-key new-result)))))))))
+                (set-new-result! handler-key new-result)))))))))
 
 (defn transact-react!
   [repo-url tx-data {:keys [key data] :as handler-opts}]
