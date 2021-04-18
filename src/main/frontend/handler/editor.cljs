@@ -2077,7 +2077,9 @@
 
         ;; deleting hashtag
         (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
-        (state/set-editor-show-page-search-hashtag! false)
+        (do
+          (state/set-editor-show-page-search-hashtag! false)
+          (.setRangeText input "" (dec current-pos) current-pos))
 
         ;; just delete
         :else
