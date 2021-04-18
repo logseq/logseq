@@ -1540,7 +1540,7 @@
                            (or (:block/original-name page)
                                (:block/name page))])
 
-                        (when (and show-page? (seq parents))
+                        (when (and show-page? (seq parents) (> (count parents) 1))
                           [:span.mx-2.opacity-50 "➤"])
 
                         (when (seq parents)
