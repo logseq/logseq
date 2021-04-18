@@ -3,6 +3,7 @@
             [lambdaisland.glogi :as log]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
+            [frontend.db-schema :as db-schema]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
@@ -303,7 +304,8 @@
   [repo block e value {:keys [refresh?]
                        :or {refresh? true}
                        :as opts}]
-  (let [block (assoc block :block/content value)]
+  (let [block (assoc block :block/content value)
+        block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
      (do
@@ -432,8 +434,9 @@
         pos (util/get-input-pos input)
         repo (or repo (state/get-current-repo))
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
-        current-block (-> (assoc block :block/content fst-block-text)
-                          (wrap-parse-block))
+        current-block (assoc block :block/content fst-block-text)
+        current-block (apply dissoc current-block db-schema/retract-attributes)
+        current-block (wrap-parse-block current-block)
         dummy? (:block/dummy? current-block)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
