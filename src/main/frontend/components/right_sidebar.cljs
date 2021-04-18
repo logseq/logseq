@@ -183,7 +183,7 @@
           (build-sidebar-item repo idx db-id block-type block-data t))]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content.color-level.px-4
+        [:div.sidebar-item.content.color-level.px-4.shadow-lg
          (let [[title component] item]
            [:div.flex.flex-col
             [:div.flex.flex-row.justify-between
@@ -264,10 +264,11 @@
       [:div#right-sidebar.cp__right-sidebar.h-screen
        {:class (if sidebar-open? "open" "closed")}
        (if sidebar-open?
-         [:div.cp__right-sidebar-inner.flex.flex-col.h-full
+         [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
           (sidebar-resizer)
-          [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-4.h-12
+          [:div
+           [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-4.h-12
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
@@ -296,10 +297,11 @@
               (t :right-side-bar/help)]]]
 
            (when sidebar-open?
-             [:div.mr-1 {:style {:z-index 999}}
+             [:div.mr-1.flex.align-items {:style {:z-index 999}}
               (toggle)])]
-          [:.sidebar-item-list.flex-1
-           (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
-             (rum/with-key
-               (sidebar-item repo idx db-id block-type block-data t)
-               (str "sidebar-block-" idx)))]])])))
+
+           [:.sidebar-item-list.flex-1
+            (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
+              (rum/with-key
+                (sidebar-item repo idx db-id block-type block-data t)
+                (str "sidebar-block-" idx)))]]])])))

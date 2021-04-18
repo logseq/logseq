@@ -68,6 +68,7 @@ html[data-theme='dark'] {
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-page-inline-code-bg-color: #01222a;
   --ls-scrollbar-foreground-color: rgba(255, 255, 255, 0.05);
+  --ls-scrollbar-background-color: rgba(30, 60, 67, 0.1);
   --ls-scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.2);
   --ls-head-text-color: var(--ls-link-text-color);
   --ls-icon-color: var(--ls-link-text-color);

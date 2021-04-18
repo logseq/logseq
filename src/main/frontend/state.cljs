@@ -641,7 +641,7 @@
                                         ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
-    (when-let [elem (gdom/getElement "right-sidebar")]
+    (when-let [elem (gdom/getElement "right-sidebar-container")]
       (util/scroll-to elem 0))))
 
 (defn sidebar-remove-block!
