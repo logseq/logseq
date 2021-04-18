@@ -5,13 +5,14 @@
             [frontend.modules.file.core :as file]
             [lambdaisland.glogi :as log]
             [clojure.core.async :as async]
-            [frontend.util :as util]
+            [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.notification :as notification]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.state :as state]))
 
 (def write-chan (async/chan))
 
-(def batch-write-interval 2000)
+(def batch-write-interval 3000)
 
 ;; FIXME name conflicts between multiple graphs
 (defn do-write-file!
@@ -37,4 +38,7 @@
   [{page-db-id :db/id :as page-block}]
   (async/put! write-chan page-db-id))
 
-(util/batch write-chan batch-write-interval write-files!)
+(util/batch write-chan
+            batch-write-interval
+            #(state/input-idle? (state/get-current-repo))
+            write-files!)

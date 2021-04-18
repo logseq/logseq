@@ -300,7 +300,9 @@
        (assoc :block/content content))))
 
 (defn- save-block-inner!
-  [repo block e value opts]
+  [repo block e value {:keys [refresh?]
+                       :or {refresh? true}
+                       :as opts}]
   (let [block (assoc block :block/content value)]
     (profile
      "Save block: "
@@ -309,9 +311,10 @@
         (wrap-parse-block block)
         (outliner-core/block)
         (outliner-core/save-node))
-       (let [opts {:key :block/change
-                   :data [block]}]
-         (db/refresh! repo opts))))
+       (when refresh?
+         (let [opts {:key :block/change
+                     :data [block]}]
+           (db/refresh! repo opts)))))
 
     (repo-handler/push-if-auto-enabled! repo)))
 
@@ -501,8 +504,9 @@
   ([state]
    (insert-new-block! state nil))
   ([state block-value]
-   (state/set-editor-op! :insert)
-   (when-not config/publishing?
+   (when (and (not config/publishing?)
+              (not= :insert (state/get-editor-op)))
+     (state/set-editor-op! :insert)
      (when-let [state (get-state state)]
        (let [{:keys [block value format id config]} state
              value (if (string? block-value) block-value value)
@@ -1063,33 +1067,35 @@
      (save-block-aux! block value format {}))))
 
 (defn save-current-block!
-  []
-  ;; non English input method
-  (when-not (state/editor-in-composition?)
-    (when-let [repo (state/get-current-repo)]
-      (when (and (not (state/get-editor-show-page-search?))
-                 (not (state/get-editor-show-page-search-hashtag?))
-                 (not (state/get-editor-show-block-search?))
-                 (not (state/get-editor-show-date-picker?))
-                 (not (state/get-editor-show-template-search?))
-                 (not (state/get-editor-show-input)))
-        (try
-          (let [input-id (state/get-edit-input-id)
-                block (state/get-edit-block)
-                db-block (when-let [block-id (:block/uuid block)]
-                           (db/pull [:block/uuid block-id]))
-                elem (and input-id (gdom/getElement input-id))
-                db-content (:block/content db-block)
-                db-content-without-heading (and db-content
-                                                (util/safe-subs db-content (:block/level db-block)))
-                value (and elem (gobj/get elem "value"))]
-            (when (and block value db-content-without-heading
-                       (or
-                        (not= (string/trim db-content-without-heading)
-                              (string/trim value))))
-              (save-block-aux! db-block value (:block/format db-block) {})))
-          (catch js/Error error
-            (log/error :save-block-failed error)))))))
+  ([]
+   (save-current-block! {}))
+  ([opts]
+   ;; non English input method
+   (when-not (state/editor-in-composition?)
+     (when-let [repo (state/get-current-repo)]
+       (when (and (not (state/get-editor-show-page-search?))
+                  (not (state/get-editor-show-page-search-hashtag?))
+                  (not (state/get-editor-show-block-search?))
+                  (not (state/get-editor-show-date-picker?))
+                  (not (state/get-editor-show-template-search?))
+                  (not (state/get-editor-show-input)))
+         (try
+           (let [input-id (state/get-edit-input-id)
+                 block (state/get-edit-block)
+                 db-block (when-let [block-id (:block/uuid block)]
+                            (db/pull [:block/uuid block-id]))
+                 elem (and input-id (gdom/getElement input-id))
+                 db-content (:block/content db-block)
+                 db-content-without-heading (and db-content
+                                                 (util/safe-subs db-content (:block/level db-block)))
+                 value (and elem (gobj/get elem "value"))]
+             (when (and block value db-content-without-heading
+                        (or
+                         (not= (string/trim db-content-without-heading)
+                               (string/trim value))))
+               (save-block-aux! db-block value (:block/format db-block) opts)))
+           (catch js/Error error
+             (log/error :save-block-failed error))))))))
 
 (defn on-up-down
   [direction]
@@ -1677,20 +1683,31 @@
         new-value (string/replace value full_text new-full-text)]
     (save-block-aux! block new-value (:block/format block) {})))
 
+(defn- mark-last-input-time!
+  [repo]
+  (when repo
+    (state/set-editor-last-input-time! repo (util/time-ms))
+    (db/clear-repo-persistent-job! repo)))
+
 (defonce *auto-save-timeout (atom nil))
 (defn edit-box-on-change!
   [e block id]
   (let [value (util/evalue e)
-        current-pos (util/get-input-pos (gdom/getElement id))]
+        current-pos (util/get-input-pos (gdom/getElement id))
+        repo (or (:block/repo block)
+                 (state/get-current-repo))]
     (state/set-edit-content! id value false)
     (when @*auto-save-timeout
       (js/clearTimeout @*auto-save-timeout))
+    (mark-last-input-time! repo)
     (reset! *auto-save-timeout
-            (js/setTimeout save-current-block! 300))
-    (when-let [repo (or (:block/repo block)
-                        (state/get-current-repo))]
-      (state/set-editor-last-input-time! repo (util/time-ms))
-      (db/clear-repo-persistent-job! repo))
+            (js/setTimeout
+             (fn []
+               (when (state/input-idle? repo)
+                 (state/set-editor-op! :auto-save)
+                 (save-current-block! {:refresh? false})
+                 (state/set-editor-op! nil)))
+             500))
     (let [input (gdom/getElement id)
           native-e (gobj/get e "nativeEvent")
           last-input-char (util/nth-safe value (dec current-pos))]
@@ -2006,6 +2023,7 @@
           block-id (:block-id (first (:rum/args state)))
           page (state/get-current-page)
           repo (state/get-current-repo)]
+      (mark-last-input-time! repo)
       (util/stop e)
       (cond
         (not= selected-start selected-end)
@@ -2069,20 +2087,21 @@
 (defn indent-on-tab
   [state]
   (state/set-editor-op! :indent)
-  (let [{:keys [block block-parent-id value config]} (get-state state)]
-    (when block
-      (let [current-node (outliner-core/block block)
-            first-child? (outliner-core/first-child? current-node)]
-        (when-not first-child?
-          (let [left (tree/-get-left current-node)
-                children-of-left (tree/-get-children left)]
-            (if (seq children-of-left)
-              (let [target-node (last children-of-left)]
-                (outliner-core/move-subtree current-node target-node true))
-              (outliner-core/move-subtree current-node left false))
-            (let [repo (state/get-current-repo)]
-              (db/refresh! repo
-                           {:key :block/change :data [(:data current-node)]})))))))
+  (profile "indent on tab"
+           (let [{:keys [block block-parent-id value config]} (get-state state)]
+     (when block
+       (let [current-node (outliner-core/block block)
+             first-child? (outliner-core/first-child? current-node)]
+         (when-not first-child?
+           (let [left (tree/-get-left current-node)
+                 children-of-left (tree/-get-children left)]
+             (if (seq children-of-left)
+               (let [target-node (last children-of-left)]
+                 (outliner-core/move-subtree current-node target-node true))
+               (outliner-core/move-subtree current-node left false))
+             (let [repo (state/get-current-repo)]
+               (db/refresh! repo
+                            {:key :block/change :data [(:data current-node)]}))))))))
   (state/set-editor-op! :nil))
 
 (defn outdent-on-shift-tab

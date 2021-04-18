@@ -1228,14 +1228,17 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
-(defn batch [in max-time handler]
+(defn batch [in max-time idle? handler]
   (async/go-loop [buf [] t (async/timeout max-time)]
     (let [[v p] (async/alts! [in t])]
       (cond
         (= p t)
-        (do
-          (handler buf)
-          (recur [] (async/timeout max-time)))
+        (let [timeout (async/timeout max-time)]
+          (if (idle?)
+           (do
+             (handler buf)
+             (recur [] timeout))
+           (recur buf timeout)))
 
         (nil? v)                        ; stop
         (when (seq buf)
