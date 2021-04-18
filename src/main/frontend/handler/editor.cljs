@@ -716,7 +716,6 @@
 (defn- block-property-aux!
   [block-id key value]
   (let [block-id (if (string? block-id) (uuid block-id) block-id)
-        key (string/lower-case (name key))
         repo (state/get-current-repo)]
     (when repo
       (when-let [block (db/entity [:block/uuid block-id])]

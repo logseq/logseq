@@ -139,7 +139,7 @@
   (walk/postwalk
    (fn [el]
      (if (map? el)
-       (not-empty (into {} (remove (comp nil? second)) el))
+       (into {} (remove (comp nil? second)) el)
        el))
    nm))
 
