@@ -365,7 +365,8 @@
       (outliner-core/save-node current-node)
       (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
                                                                  :skip-transact? false})
-      @*blocks)))
+      {:blocks @*blocks
+       :sibling? sibling?})))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -387,43 +388,33 @@
         [first-block last-block right-block] blocks
         child? (= (first (:block/parent last-block))
                   (:block/uuid first-block))
-        block-container-id (when-let [id (:id config)]
-                             (and (util/uuid-string? id) (medley/uuid id)))
-        new-last-block (let [first-block-id {:db/id (:db/id first-block)}]
-                         (assoc last-block
-                                :block/left first-block-id
-                                :block/parent (if child?
-                                                first-block-id
-                                                ;; sibling
-                                                (:block/parent first-block))))
-        blocks [first-block new-last-block]
-        page-blocks-atom (db/get-page-blocks-cache-atom repo (:db/id page))
-        [before-part after-part] (and page-blocks-atom
-                                      (split-with
-                                       #(not= uuid (:block/uuid %))
-                                       @page-blocks-atom))
-        after-part (rest after-part)
-        blocks (concat before-part blocks after-part)
-        blocks (if right-block
-                 (map (fn [block]
-                        (if (= (:block/uuid right-block) (:block/uuid block))
-                          (assoc block :block/left (:block/left right-block))
-                          block)) blocks)
-                 blocks)]
-    (when page-blocks-atom
-      (reset! page-blocks-atom blocks))
-
-    ;; update block children cache if exists
-    ;; (when blocks-container-id
-    ;;   (let [blocks-atom (db/get-block-blocks-cache-atom repo blocks-container-id)
-    ;;         [before-part after-part] (and blocks-atom
-    ;;                                       (split-with
-    ;;                                        #(not= uuid (:block/uuid %))
-    ;;                                        @blocks-atom))
-    ;;         after-part (rest after-part)]
-    ;;     (when blocks-atom
-    ;;          (reset! blocks-atom (concat before-part blocks after-part)))))
-    ))
+        blocks-container-id (when-let [id (:id config)]
+                             (and (util/uuid-string? id) (medley/uuid id)))]
+    (let [new-last-block (let [first-block-id {:db/id (:db/id first-block)}]
+                           (assoc last-block
+                                  :block/left first-block-id
+                                  :block/parent (if child?
+                                                  first-block-id
+                                                  ;; sibling
+                                                  (:block/parent first-block))))
+          blocks [first-block new-last-block]
+          blocks-atom (if blocks-container-id
+                        (db/get-block-blocks-cache-atom repo blocks-container-id)
+                        (db/get-page-blocks-cache-atom repo (:db/id page)))
+          [before-part after-part] (and blocks-atom
+                                        (split-with
+                                         #(not= uuid (:block/uuid %))
+                                         @blocks-atom))
+          after-part (rest after-part)
+          blocks (concat before-part blocks after-part)
+          blocks (if right-block
+                   (map (fn [block]
+                          (if (= (:block/uuid right-block) (:block/uuid block))
+                            (assoc block :block/left (:block/left right-block))
+                            block)) blocks)
+                   blocks)]
+      (when blocks-atom
+        (reset! blocks-atom blocks)))))
 
 (defn insert-new-block-aux!
   [config
@@ -446,15 +437,15 @@
         next-block (-> (merge block new-m)
                        (dissoc :db/id :block/collapsed? :block/properties :block/pre-block? :block/meta)
                        (wrap-parse-block))
-        blocks (profile
-                "outliner insert block"
-                (outliner-insert-block! current-block next-block block-self?))
+        {:keys [sibling? blocks]} (profile
+                                   "outliner insert block"
+                                   (outliner-insert-block! current-block next-block block-self?))
         refresh-fn (fn []
                      (let [opts {:key :block/insert
                                 :data [current-block next-block]}]
                       (db/refresh! repo opts)))]
     (do
-      (if dummy?
+      (if (or dummy? (not sibling?))
         (refresh-fn)
         (do
           (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
