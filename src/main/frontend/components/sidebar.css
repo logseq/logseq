@@ -17,7 +17,6 @@
 
 #main-content-container {
     font-size: 1em;
-    margin-top: 2rem;
     padding: 1rem;
 }
 
@@ -180,10 +179,7 @@
   .sidebar-item {
     padding-top: 24px;
     padding-bottom: 24px;
-
-    &:first-child {
-      border-top: none;
-    }
+    margin-bottom: 8px;
 
     .close {
       transform: scale(0.8);

@@ -439,6 +439,7 @@
 
 (defonce graph-ref (atom nil))
 (defonce show-journal? (atom false))
+
 (rum/defcs global-graph < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -466,7 +467,7 @@
             :ref-atom graph-ref}))
          [:div.ls-center.mt-20
           [:p.opacity-70.font-medium "Empty"]])
-       [:div.absolute.top-15.left-5
+       [:div.absolute.top-10.left-5
         [:div.flex.flex-col
          [:a.text-sm.font-medium
           {:on-click (fn [_e]

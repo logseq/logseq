@@ -50,6 +50,19 @@
            pages)
      (remove nil?))))
 
+(defn- uuid-or-asset?
+  [id]
+  (or (util/uuid-string? id)
+      (string/starts-with? id "../assets/")
+      (= id "..")
+      (string/starts-with? id "assets/")))
+
+(defn- remove-uuids-and-files!
+  [nodes]
+  (remove
+   (fn [node] (uuid-or-asset? (:id node)))
+   nodes))
+
 (defn- normalize-page-name
   [{:keys [nodes links] :as g}]
   (let [all-pages (->> (set (apply concat
@@ -61,10 +74,15 @@
         names (zipmap (map :page/name names)
                       (map (fn [x] (get x :page/original-name (:page/name x))) names))
         nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
-        links (mapv (fn [{:keys [source target]}]
-                      {:source (get names source)
-                       :target (get names target)})
-                    links)]
+        links (->>
+               (mapv (fn [{:keys [source target]}]
+                       (when (and (not (uuid-or-asset? source))
+                                  (not (uuid-or-asset? target)))
+                         {:source (get names source)
+                          :target (get names target)}))
+                     links)
+               (remove nil?))
+        nodes (remove-uuids-and-files! nodes)]
     {:nodes nodes
      :links links}))
 
@@ -187,5 +205,6 @@
                        (distinct)
                        ;; FIXME: get block tags
                        (build-nodes dark? block edges #{}))]
-        {:nodes nodes
-         :links edges}))))
+        (normalize-page-name
+         {:nodes nodes
+          :links edges})))))
