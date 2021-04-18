@@ -331,7 +331,7 @@
 
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page?] :as config} page]
-   (when-let [page-name (:block/name page)]
+  (when-let [page-name (:block/name page)]
     (let [page-entity page
           page (string/lower-case page-name)
           redirect-page-name (cond
@@ -378,7 +378,7 @@
                   (string? label)
                   (not (string/blank? label))) ; alias
            label
-           (get page-entity :page/original-name page-name)))])))
+           (get page-entity :block/original-name page-name)))])))
 
 (rum/defc asset-reference
   [title path]
@@ -1529,7 +1529,8 @@
   ([config repo block-id format show-page?]
    (let [parents (db/get-block-parents repo block-id 3)
          page (db/get-block-page repo block-id)
-         page-name (:block/name page)]
+         page-name (:block/name page)
+         page-original-name (:block/original-name page)]
      (when (or (seq parents)
                show-page?
                page-name)
@@ -1537,8 +1538,7 @@
              component [:div.block-parents.flex-row.flex-1
                         (when show-page?
                           [:a {:href (rfe/href :page {:name page-name})}
-                           (or (:block/original-name page)
-                               (:block/name page))])
+                           (or page-original-name page-name)])
 
                         (when (and show-page? (seq parents) (> (count parents) 1))
                           [:span.mx-2.opacity-50 "➤"])

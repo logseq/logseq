@@ -46,9 +46,7 @@
                      false)))
                 state)}
   [blocks page document-mode?]
-  (let [start-level (or (:block/level (first blocks)) 1)
-        config {:id page
-                :start-level 2
+  (let [config {:id page
                 :editor-box editor/box
                 :document/mode? document-mode?}]
     (content/content

@@ -73,9 +73,7 @@
                               :end-pos nil})}))
                       {:journal? journal?
                        :page-name page-name})
-        start-level (or (:block/level (first page-blocks)) 1)
         hiccup-config {:id (if block? (str block-id) page-name)
-                       :start-level start-level
                        :sidebar? sidebar?
                        :block? block?
                        :editor-box editor/box}
@@ -127,8 +125,7 @@
         [:div#today-queries.mt-10
          (for [{:keys [title] :as query} queries]
            (rum/with-key
-             (block/custom-query {:start-level 2
-                                  :attr {:class "mt-10"}
+             (block/custom-query {:attr {:class "mt-10"}
                                   :editor-box editor/box} query)
              (str repo "-custom-query-" (:query query))))]))))
 

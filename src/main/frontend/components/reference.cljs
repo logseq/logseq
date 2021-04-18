@@ -90,7 +90,6 @@
              [:div.references-blocks.mb-6
               (let [ref-hiccup (block/->hiccup scheduled-or-deadlines
                                                {:id (str page-name "-agenda")
-                                                :start-level 2
                                                 :ref? true
                                                 :group-by-page? true
                                                 :editor-box editor/box}
@@ -115,7 +114,6 @@
            [:div.references-blocks
             (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                              {:id page-name
-                                              :start-level 2
                                               :ref? true
                                               :breadcrumb-show? true
                                               :group-by-page? true
@@ -137,7 +135,6 @@
     [:div.references-blocks
      (let [ref-hiccup (block/->hiccup ref-blocks
                                       {:id (str page-name "-unlinked-")
-                                       :start-level 2
                                        :ref? true
                                        :group-by-page? true
                                        :editor-box editor/box}

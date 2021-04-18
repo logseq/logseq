@@ -152,7 +152,6 @@
                    (rest blocks)
                    blocks)
           sections (block/build-slide-sections blocks {:id          "slide-reveal-js"
-                                                       :start-level 2
                                                        :slide?      true
                                                        :sidebar?    true
                                                        :page-name   page-name})]
