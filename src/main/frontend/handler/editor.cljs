@@ -675,37 +675,19 @@
 
 (defn- get-prev-block-non-collapsed
   [block]
-  (let [id (gobj/get block "id")
-        prefix (re-find #"ls-block-[\d]+" id)]
-    (when-let [blocks (dom/by-class "ls-block")]
-      (when-let [index (.indexOf blocks block)]
-        (loop [idx (dec index)]
-          (when (>= idx 0)
-            (let [block (nth blocks idx)
-                  collapsed? (= "none" (dom/style block "display"))
-                  prefix-match? (util/starts-with? (gobj/get block "id") prefix)]
-              (if (or collapsed?
-                      ;; might be embed blocks
-                      (not prefix-match?))
-                (recur (dec idx))
-                block))))))))
+  (when-let [blocks (util/get-blocks-in-viewpoint)]
+    (when-let [index (.indexOf blocks block)]
+      (let [idx (dec index)]
+        (when (>= idx 0)
+          (nth blocks idx))))))
 
 (defn- get-next-block-non-collapsed
   [block]
-  (let [id (gobj/get block "id")
-        prefix (re-find #"ls-block-[\d]+" id)]
-    (when-let [blocks (dom/by-class "ls-block")]
-      (when-let [index (.indexOf blocks block)]
-        (loop [idx (inc index)]
-          (when (>= (count blocks) idx)
-            (when-let [block (util/nth-safe blocks idx)]
-              (let [collapsed? (= "none" (dom/style block "display"))
-                    prefix-match? (util/starts-with? (gobj/get block "id") prefix)]
-                (if (or collapsed?
-                        ;; might be embed blocks
-                        (not prefix-match?))
-                  (recur (inc idx))
-                  block)))))))))
+  (when-let [blocks (util/get-blocks-in-viewpoint)]
+    (when-let [index (.indexOf blocks block)]
+      (let [idx (inc index)]
+        (when (>= (count blocks) idx)
+          (util/nth-safe blocks idx))))))
 
 (defn delete-block-aux!
   [{:block/keys [uuid content repo ref-pages ref-blocks] :as block} dummy?]
@@ -1893,8 +1875,7 @@
   "Select first or last block in viewpoint"
   [direction]
   (let [f (case direction :up last :down first)
-        block (->> (dom/by-class "ls-block")
-                   (filter util/node-in-viewpoint?)
+        block (->> (util/get-blocks-in-viewpoint)
                    (f))]
     (when block
       (exit-editing-and-set-selected-blocks! [block]))))
@@ -1929,11 +1910,12 @@
                       (string/trim value))
             (save-block! repo uuid value)))
 
-        (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
+        (let [new-id (cljs.core/uuid sibling-block-id)
+              block (db/pull repo '[*] [:block/uuid new-id])]
           (edit-block! block
                        [direction line-pos]
                        format
-                       (state/get-edit-input-id)))))))
+                       new-id))))))
 
 (defn keydown-up-down-handler
   [direction]
