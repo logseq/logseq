@@ -20,8 +20,6 @@
   (let [state-fn (state-f :component/box)]
     {:editor/new-block (editor-handler/keydown-new-block-handler state-fn)
      :editor/new-line (editor-handler/keydown-new-line-handler state-fn)
-     ;; :editor/up (editor-handler/keydown-up-down-handler :up)
-     ;; :editor/down (editor-handler/keydown-up-down-handler :down)
      :editor/left (editor-handler/keydown-arrow-handler :left)
      :editor/right (editor-handler/keydown-arrow-handler :right)
      :editor/indent (editor-handler/keydown-tab-handler state-fn :right)
