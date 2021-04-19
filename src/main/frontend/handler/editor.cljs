@@ -617,7 +617,7 @@
 
 (defn- get-prev-block-non-collapsed
   [block]
-  (when-let [blocks (util/get-blocks-in-viewpoint)]
+  (when-let [blocks (util/get-blocks-noncollapse)]
     (when-let [index (.indexOf blocks block)]
       (let [idx (dec index)]
         (when (>= idx 0)
@@ -625,7 +625,7 @@
 
 (defn- get-next-block-non-collapsed
   [block]
-  (when-let [blocks (util/get-blocks-in-viewpoint)]
+  (when-let [blocks (util/get-blocks-noncollapse)]
     (when-let [index (.indexOf blocks block)]
       (let [idx (inc index)]
         (when (>= (count blocks) idx)
@@ -1905,9 +1905,10 @@
   "Select first or last block in viewpoint"
   [direction]
   (let [f (case direction :up last :down first)
-        block (->> (util/get-blocks-in-viewpoint)
+        block (->> (util/get-blocks-noncollapse)
                    (f))]
     (when block
+      (.scrollIntoView block #js {:behavior "smooth" :block "center"})
       (exit-editing-and-set-selected-blocks! [block]))))
 
 (defn- select-up-down [direction]
@@ -1918,6 +1919,7 @@
         sibling-block (f selected)]
     (when (and sibling-block (dom/attr sibling-block "blockid"))
       (clear-selection! nil)
+      (.scrollIntoView sibling-block #js {:behavior "smooth" :block "center"})
       (exit-editing-and-set-selected-blocks! [sibling-block]))))
 
 (defn- move-cross-boundrary-up-down

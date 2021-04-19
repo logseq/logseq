@@ -787,9 +787,9 @@
         (<= (.-bottom rect) height)))))
 
 #?(:cljs
-   (defn get-blocks-in-viewpoint []
+   (defn get-blocks-noncollapse []
      (->> (d/by-class "ls-block")
-          (filter node-in-viewpoint?))))
+          (filter (fn [b] (not= "none" (d/style b "display")))))))
 
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
