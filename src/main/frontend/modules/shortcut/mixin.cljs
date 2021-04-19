@@ -6,6 +6,7 @@
 (defn state-f [k]
   (fn [] (get @state/components k)))
 
+;; FIXME: remove timeout, or remove the whole bind
 (defn bind-state [k]
   {:after-render
    (fn [state]
@@ -20,9 +21,13 @@
      (swap! state/components assoc k new-state)
      new-state)
 
+   ;; Otherwise, (state/auto-complete?) will always be true
    :will-unmount
    (fn [state]
-     (swap! state/components dissoc k)
+     (js/setTimeout
+      (fn []
+        (swap! state/components dissoc k))
+      10)
      state)})
 
 (defn before [f shortcut-map]

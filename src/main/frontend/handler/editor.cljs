@@ -1828,8 +1828,7 @@
                                        (text/remove-property "template")
                                        (text/remove-property "including-parent")
                                        template/resolve-dynamic-template!)))
-      ;; restore state & remove '/' char
-      (state/set-editor-show-template-search! false)
+      (clear-when-saved!)
       (insert-command! id "" format {}))
     (when-let [input (gdom/getElement id)]
       (.focus input))))
