@@ -1500,7 +1500,7 @@
                     :dummy? dummy?
                     :on-hide (fn [value event]
                                (when (= event :esc)
-                                 (editor-handler/highlight-block! uuid)))}
+                                 (editor-handler/select-block! uuid)))}
                    edit-input-id
                    config)]
       (block-content config block edit-input-id block-id slide?))))

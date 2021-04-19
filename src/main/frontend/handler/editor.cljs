@@ -863,6 +863,13 @@
    (state/set-selection-blocks! blocks direction)
    (util/select-highlight! blocks)))
 
+(defn select-block!
+  [block-uuid]
+  (when-let [block (-> (str block-uuid)
+                       (js/document.getElementsByClassName)
+                       first)]
+    (exit-editing-and-set-selected-blocks! [block])))
+
 (defn select-all-blocks!
   []
   (when-let [current-input-id (state/get-edit-input-id)]
