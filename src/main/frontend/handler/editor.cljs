@@ -888,7 +888,10 @@
   (when copy? (copy-selection-blocks))
   (when-let [blocks (seq (get-selected-blocks-with-children))]
     (let [repo (dom/attr (first blocks) "repo")
-          ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
+          ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))
+          ids (if (= :up (state/get-selection-direction))
+                (reverse ids)
+                ids)]
       (delete-blocks! repo ids))))
 
 (defn- get-nearest-page
@@ -1005,8 +1008,11 @@
   (when-let [start-block (state/get-selection-start-block)]
     (clear-selection! nil)
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
+          direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
 
-          direction (util/get-direction-between-two-nodes start-block end-block "ls-block")]
+          blocks (if (= :up direction)
+                   (reverse blocks)
+                   blocks)]
       (exit-editing-and-set-selected-blocks! blocks direction))))
 
 (defn on-select-block
