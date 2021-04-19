@@ -29,7 +29,6 @@
             [frontend.utf8 :as utf8]
             [frontend.fs :as fs]
             [promesa.core :as p]
-            [dommy.core :as d]
             [frontend.diff :as diff]
             [frontend.search :as search]
             [frontend.handler.image :as image-handler]
@@ -677,12 +676,12 @@
   [block]
   (let [id (gobj/get block "id")
         prefix (re-find #"ls-block-[\d]+" id)]
-    (when-let [blocks (d/by-class "ls-block")]
+    (when-let [blocks (dom/by-class "ls-block")]
       (when-let [index (.indexOf blocks block)]
         (loop [idx (dec index)]
           (when (>= idx 0)
             (let [block (nth blocks idx)
-                  collapsed? (= "none" (d/style block "display"))
+                  collapsed? (= "none" (dom/style block "display"))
                   prefix-match? (util/starts-with? (gobj/get block "id") prefix)]
               (if (or collapsed?
                       ;; might be embed blocks
@@ -694,12 +693,12 @@
   [block]
   (let [id (gobj/get block "id")
         prefix (re-find #"ls-block-[\d]+" id)]
-    (when-let [blocks (d/by-class "ls-block")]
+    (when-let [blocks (dom/by-class "ls-block")]
       (when-let [index (.indexOf blocks block)]
         (loop [idx (inc index)]
           (when (>= (count blocks) idx)
             (when-let [block (util/nth-safe blocks idx)]
-              (let [collapsed? (= "none" (d/style block "display"))
+              (let [collapsed? (= "none" (dom/style block "display"))
                     prefix-match? (util/starts-with? (gobj/get block "id") prefix)]
                 (if (or collapsed?
                         ;; might be embed blocks
@@ -736,7 +735,7 @@
                   sibling-block (get-prev-block-non-collapsed block-parent)]
               (delete-block-aux! block dummy?)
               (when (and repo sibling-block)
-                (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+                (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
                   (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
                     (let [original-content (util/trim-safe (:block/content block))
                           new-value (str original-content " " (string/triml value))
@@ -1169,7 +1168,7 @@
           (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
                 sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
             (when sibling-block
-              (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+              (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
                 (let [value (state/get-edit-content)]
                   (when (not= (-> content
                                   (text/remove-level-spaces format)
@@ -1548,7 +1547,7 @@
   [current-id]
   (when-let [input (gdom/getElement current-id)]
     (when-let [prev-block (util/get-prev-block input)]
-      (util/parse-int (d/attr prev-block "level")))))
+      (util/parse-int (dom/attr prev-block "level")))))
 
 (defn append-paste-doc!
   [format event]
@@ -1685,7 +1684,7 @@
       (when node
         (state/clear-selection!)
         (unhighlight-blocks!)
-        (let [block-id (and node (d/attr node "blockid"))
+        (let [block-id (and node (dom/attr node "blockid"))
               edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")
               block-id (medley/uuid block-id)]
           (when-let [block (or (db/entity [:block/uuid block-id])
@@ -1898,7 +1897,7 @@
                 :up get-prev-block-non-collapsed
                 :down get-next-block-non-collapsed)
         sibling-block (f selected)]
-    (when (and sibling-block (d/attr sibling-block "blockid"))
+    (when (and sibling-block (dom/attr sibling-block "blockid"))
       (clear-selection! nil)
       (exit-editing-and-set-selected-blocks! [sibling-block]))))
 
@@ -1913,7 +1912,7 @@
         sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
         {:block/keys [uuid content format]} (state/get-edit-block)]
     (when sibling-block
-      (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+      (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [value (state/get-edit-content)]
           (when (not= (-> content
                           (text/remove-level-spaces format)
@@ -1961,7 +1960,7 @@
     (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
           sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
       (when sibling-block
-        (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+        (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
           (let [content (:block/content block)
                 value (state/get-edit-content)]
             (when (not= (-> content
