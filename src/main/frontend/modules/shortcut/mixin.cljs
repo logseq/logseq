@@ -3,28 +3,26 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
-(def state-store (atom {}))
-
 (defn state-f [k]
-  (fn [] (get @state-store k)))
+  (fn [] (get @state/components k)))
 
 (defn bind-state [k]
   {:after-render
    (fn [state]
      (js/setTimeout
       (fn []
-        (swap! state-store assoc k state))
+        (swap! state/components assoc k state))
       5)
      state)
 
    :did-remount
    (fn [_ new-state]
-     (swap! state-store assoc k new-state)
+     (swap! state/components assoc k new-state)
      new-state)
 
    :will-unmount
    (fn [state]
-     (swap! state-store dissoc k)
+     (swap! state/components dissoc k)
      state)})
 
 (defn before [f shortcut-map]
@@ -58,14 +56,6 @@
   [f]
   (fn [e]
     (when (state/editing?)
-      (f e)
-      false)))
-
-(defn enable-when-selection!
-  [f]
-  (fn [e]
-    (when (and (state/in-selection-mode?)
-               (seq (state/get-selection-blocks)))
       (f e)
       false)))
 

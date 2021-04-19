@@ -321,6 +321,7 @@ title: How to take dummy notes?
         :export-markdown "Export as Markdown"
         :export-public-pages "Export public pages"
         :export-edn "Export as EDN"
+        :convert-markdown "Convert Markdown(Unordered list or Heading)"
         :all-graphs "All graphs"
         :all-pages "All pages"
         :all-files "All files"
@@ -1033,6 +1034,7 @@ title: How to take dummy notes?
            :re-index "重新建立索引"
            :export-json "以 JSON 格式导出"
            :export-markdown "以 Markdown 格式导出"
+           :convert-markdown "转换 Markdown 格式(Unordered list 或 Heading)"
            :unlink "解除绑定"
            :search (if config/publishing?
                      "搜索"
@@ -1298,6 +1300,7 @@ title: How to take dummy notes?
              :re-index "重新建立索引"
              :export-json "以 JSON 格式導出"
              :export-markdown "以 Markdown 格式導出"
+             :convert-markdown "轉換 Markdown 格式(Unordered list 或 Heading)"
              :unlink "解除綁定"
              :search (if config/publishing?
                        "搜索"

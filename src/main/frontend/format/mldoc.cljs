@@ -27,13 +27,23 @@
         :heading_number false
         :keep_line_break true
         :format format
-        :heading_to_list export-heading-to-list?})))))
+        :heading_to_list export-heading-to-list?}))))
+  ([format export-heading-to-list? exporting-keep-properties?]
+   (let [format (string/capitalize (name (or format :markdown)))]
+     (js/JSON.stringify
+      (bean/->js
+       {:toc false
+        :heading_number false
+        :keep_line_break true
+        :format format
+        :heading_to_list export-heading-to-list?
+        :exporting_keep_properties exporting-keep-properties?}))))
+  )
 
 (def default-references
   (js/JSON.stringify
    (clj->js {:embed_blocks []
-             :embed_pages []
-             :refer_blocks []})))
+             :embed_pages []})))
 
 (defn parse-json
   [content config]
