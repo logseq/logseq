@@ -200,6 +200,7 @@
         :down
         (-> (string/split-lines content)
             first
+            (or "")
             (subs 0 pos))))
 
 ;; id: block dom id, "ls-block-counter-uuid"
