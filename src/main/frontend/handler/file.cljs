@@ -290,13 +290,6 @@
      (p/catch (fn [err]
                 (js/console.error "error: " err))))))
 
-(defn re-index!
-  [file]
-  (when-let [repo (state/get-current-repo)]
-    (let [path (:file/path file)
-          content (db/get-file path)]
-      (alter-file repo path content {:re-render-root? true}))))
-
 ;; TODO: batch writes, how to deal with file history?
 (defn run-writes-chan!
   []

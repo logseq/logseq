@@ -325,11 +325,6 @@
                                             (if public? false true))
                                            (state/close-modal!))}})
 
-                            (when file
-                              {:title (t :page/re-index)
-                               :options {:on-click (fn []
-                                                     (file/re-index! file))}})
-
                             (when developer-mode?
                               {:title "(Dev) Show page data"
                                :options {:on-click (fn []
