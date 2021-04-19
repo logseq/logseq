@@ -11,6 +11,8 @@
 (goog-define PUBLISHING false)
 (defonce publishing? PUBLISHING)
 
+(def test? false)
+
 ;; :TODO: How to do this?
 ;; (defonce desktop? ^boolean goog.DESKTOP)
 

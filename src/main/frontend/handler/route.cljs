@@ -80,7 +80,7 @@
 (defn jump-to-anchor!
   [anchor-text]
   (when anchor-text
-    (ui-handler/highlight-element! anchor-text)))
+    (js/setTimeout #(ui-handler/highlight-element! anchor-text) 200)))
 
 (defn set-route-match!
   [route]
@@ -92,7 +92,9 @@
       (util/scroll-to-top))))
 
 (defn go-to-search!
-  []
+  [search-mode]
+  (when search-mode
+    (state/set-search-mode! search-mode))
   (when-let [element (gdom/getElement "search-field")]
     (.focus element)))
 

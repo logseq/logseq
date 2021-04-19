@@ -6,6 +6,8 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.block :as block-handler]
+            [frontend.components.block :as block]
+            [frontend.components.search :as search]
             [frontend.handler.page :as page-handler]
             [frontend.components.datetime :as datetime-comp]
             [frontend.state :as state]
@@ -17,6 +19,7 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             [clojure.string :as string]
+            [promesa.core :as p]
             [frontend.commands :as commands
              :refer [*show-commands
                      *matched-commands
@@ -87,8 +90,38 @@
            matched-pages
            {:on-chosen (page-handler/on-chosen-handler input id q pos format)
             :on-enter #(page-handler/page-not-exists-handler input id q current-pos)
+            :item-render (fn [item] [:div.py-2 (search/highlight-exact-query item q)])
             :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
             :class     "black"}))))))
+
+(rum/defcs block-search-auto-complete < rum/reactive
+  {:init (fn [state]
+           (assoc state ::result (atom nil)))
+   :did-update (fn [state]
+                 (let [result (::result state)
+                       [edit-block _ _ q] (:rum/args state)]
+                   (p/let [matched-blocks (when-not (string/blank? q)
+                                            (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+                     (reset! result matched-blocks)))
+                 state)}
+  [state edit-block input id q format content]
+  (let [result (rum/react (get state ::result))
+        chosen-handler (editor-handler/block-on-chosen-handler input id q format)
+        non-exist-block-handler (editor-handler/block-non-exist-handler input)]
+    (when result
+      (ui/auto-complete
+       result
+       {:on-chosen   chosen-handler
+        :on-enter    non-exist-block-handler
+        :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
+        :item-render (fn [{:block/keys [content page uuid] :as item}]
+                       (let [page (or (:block/original-name page)
+                                      (:block/name page))
+                             repo (state/sub :git/current-repo)
+                             format (db/get-page-format page)]
+
+                         [:.py-2 (search/block-search-result-item repo uuid format content q)]))
+        :class       "black"}))))
 
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
@@ -106,20 +139,9 @@
           q (or
              @editor-handler/*selected-text
              (when (> (count edit-content) current-pos)
-               (subs edit-content pos current-pos)))
-          matched-blocks (when-not (string/blank? q)
-                           (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+               (subs edit-content pos current-pos)))]
       (when input
-        (let [chosen-handler (editor-handler/block-on-chosen-handler input id q format)
-              non-exist-block-handler (editor-handler/block-non-exist-handler input)]
-          (ui/auto-complete
-           matched-blocks
-           {:on-chosen   chosen-handler
-            :on-enter    non-exist-block-handler
-            :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
-            :item-render (fn [{:block/keys [content]}]
-                           (subs content 0 64))
-            :class       "black"}))))))
+        (block-search-auto-complete edit-block input id q format)))))
 
 (rum/defc template-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
@@ -266,6 +288,9 @@
       :style (merge
               {:top        (+ top offset-top)
                :max-height to-max-height
+               :max-width 700
+               ;; TODO: auto responsive fixed size
+               :min-width 300
                :z-index    11}
               (if set-default-width?
                 {:width max-width})
@@ -375,7 +400,7 @@
 
      (transition-cp
       (block-search id format)
-      true
+      false
       *slash-caret-pos)
 
      (transition-cp

@@ -73,9 +73,7 @@
                               :end-pos nil})}))
                       {:journal? journal?
                        :page-name page-name})
-        start-level (or (:block/level (first page-blocks)) 1)
         hiccup-config {:id (if block? (str block-id) page-name)
-                       :start-level start-level
                        :sidebar? sidebar?
                        :block? block?
                        :editor-box editor/box}
@@ -108,8 +106,9 @@
 
 (defn presentation
   [repo page]
-  [:a.opacity-50.hover:opacity-100
+  [:a.opacity-30.hover:opacity-100.page-op
    {:title "Presentation mode (Powered by Reveal.js)"
+    :style {:margin-top -2}
     :on-click (fn []
                 (state/sidebar-add-block!
                  repo
@@ -126,8 +125,7 @@
         [:div#today-queries.mt-10
          (for [{:keys [title] :as query} queries]
            (rum/with-key
-             (block/custom-query {:start-level 2
-                                  :attr {:class "mt-10"}
+             (block/custom-query {:attr {:class "mt-10"}
                                   :editor-box editor/box} query)
              (str repo "-custom-query-" (:query query))))]))))
 
@@ -347,20 +345,27 @@
                                                         false)))}})]
                            (flatten)
                            (remove nil?))]
-                (when (seq links)
-                  (ui/dropdown-with-links
-                   (fn [{:keys [toggle-fn]}]
-                     [:a.opacity-70.hover:opacity-100
-                      {:style {:position "absolute"
+                [:div {:style {:position "absolute"
                                :right 0
-                               :top 20}
-                       :title "More options"
-                       :on-click toggle-fn}
-                      (svg/vertical-dots {:class (util/hiccup->class "opacity-50.hover:opacity-100.h-5.w-5")})])
-                   links
-                   {:modal-class (util/hiccup->class
-                                  "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
-                    :z-index 1}))))
+                               :top 20}}
+                 [:div.flex.flex-row
+                  [:a.opacity-30.hover:opacity-100.page-op.mr-2
+                   {:title "Search in current page"
+                    :on-click #(route-handler/go-to-search! :page)}
+                   svg/search]
+                  (when (not config/mobile?)
+                    (presentation repo page))
+                  (when (seq links)
+                    (ui/dropdown-with-links
+                     (fn [{:keys [toggle-fn]}]
+                       [:a.opacity-30.hover:opacity-100
+                        {:title "More options"
+                         :on-click toggle-fn}
+                        (svg/vertical-dots {:class (util/hiccup->class "opacity-30.hover:opacity-100.h-5.w-5")})])
+                     links
+                     {:modal-class (util/hiccup->class
+                                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
+                      :z-index 1}))]]))
             (when (and (not sidebar?)
                        (not block?))
               [:a {:on-click (fn [e]
@@ -395,10 +400,7 @@
                  [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4
                                                        :word-break    "break-word"}
                                                :href  (rfe/href :file {:path file-path})}
-                  file-path]
-
-                 (when (not config/mobile?)
-                   (presentation repo page))])]
+                  file-path]])]
 
              (when (and repo (not block?))
                (let [alias (db/get-page-alias-names repo page-name)]
@@ -434,6 +436,7 @@
 
 (defonce graph-ref (atom nil))
 (defonce show-journal? (atom false))
+
 (rum/defcs global-graph < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -461,7 +464,7 @@
             :ref-atom graph-ref}))
          [:div.ls-center.mt-20
           [:p.opacity-70.font-medium "Empty"]])
-       [:div.absolute.top-15.left-5
+       [:div.absolute.top-10.left-5
         [:div.flex.flex-col
          [:a.text-sm.font-medium
           {:on-click (fn [_e]

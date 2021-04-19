@@ -68,7 +68,6 @@
                         (string/trimr value)
                         "\n")
              content' (utf8/insert! content start_pos end_pos value)]
-         (state/set-editor-op! :code-editor)
          (editor-handler/save-block-if-changed! block content')
          (let [new-pos-meta {:start_pos start_pos
                              :end_pos (+ start_pos

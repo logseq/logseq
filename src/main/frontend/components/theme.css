@@ -1,6 +1,7 @@
 :root {
   scrollbar-width: thin;
-  scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color);
+  scrollbar-color: var(--ls-scrollbar-foreground-color)
+    var(--ls-scrollbar-background-color);
 
   --ls-z-index-level-0: 0;
   --ls-z-index-level-1: 9;
@@ -30,14 +31,6 @@ html {
     height: 8px;
   }
 
-  ::-webkit-scrollbar-thumb {
-    -webkit-border-radius: 100px;
-  }
-
-  ::-webkit-scrollbar-thumb:active {
-    -webkit-border-radius: 100px;
-  }
-
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
@@ -54,7 +47,7 @@ html {
   transform: scale(1.1);
 }
 
-html[data-theme=dark] {
+html[data-theme='dark'] {
   background-color: var(--ls-primary-background-color);
 
   input.form-input {
@@ -62,7 +55,7 @@ html[data-theme=dark] {
   }
 }
 
-html[data-theme=light] {
+html[data-theme='light'] {
   .form-checkbox {
     &:focus {
       border-color: var(--ls-page-checkbox-border-color);
@@ -72,6 +65,12 @@ html[data-theme=light] {
   .cp__header {
     a {
       color: var(--ls-primary-text-color);
+    }
+
+    .block-parents {
+      a {
+        color: var(--ls-link-ref-text-color);
+      }
     }
   }
 
@@ -115,7 +114,7 @@ html.is-electron {
       }
 
       &:before {
-        content: " ";
+        content: ' ';
         position: fixed;
         top: 0;
         left: 0;
@@ -174,7 +173,7 @@ html.is-electron {
     }
 
     & > .c {
-      font-size: .7rem;
+      font-size: 0.7rem;
     }
 
     a.it {
@@ -191,15 +190,15 @@ html.is-electron {
       }
 
       svg {
-        transform: scale(.6);
+        transform: scale(0.6);
         color: var(--ls-primary-text-color);
         cursor: pointer;
       }
 
       &.maximize {
         svg {
-          transform: scale(.5) translateY(2px) translateX(1px);
-          opacity: .7;
+          transform: scale(0.5) translateY(2px) translateX(1px);
+          opacity: 0.7;
         }
       }
     }

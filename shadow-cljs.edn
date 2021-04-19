@@ -44,7 +44,13 @@
              :main electron.core/main
              :devtools
              {:before-load electron.core/stop
-              :after-load electron.core/start}}
+              :after-load electron.core/start}
+             :compiler-options
+             {:infer-externs :auto
+              :source-map true
+              :externs ["datascript/externs.js"
+                        "externs.js"]
+              :warnings {:fn-deprecated false}}}
 
   :test
   {:target :node-test

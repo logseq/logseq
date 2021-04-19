@@ -6,7 +6,10 @@
                      [frontend.modules.outliner.pipeline :as pipelines]
                      [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
-                     [frontend.util :as util :refer-macros [profile]])))
+                     [frontend.util :as util :refer-macros [profile]]
+                     [frontend.config :as config]
+                     [frontend.util :as util])))
+
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -34,12 +37,14 @@
 #?(:cljs
    (defn transact!
      [txs opts]
-     (when (seq txs)
+     (when (and (seq txs)
+                (not (:skip-transact? opts)))
        (let [conn (conn/get-conn false)
              editor-cursor (state/get-last-edit-block)
              meta (merge opts {:editor-cursor editor-cursor})
              rs (d/transact! conn txs meta)]
-         (after-transact-pipelines rs)
+         (when-not config/test?
+           (after-transact-pipelines rs))
          rs))))
 
 #?(:clj

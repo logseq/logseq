@@ -42,13 +42,26 @@
                              (if dark? "orange" "green")
                              color)]
                  {:id p
-                  :name name
+                  :name p
                   :val (get-connections p edges)
                   :autoColorBy "group"
                   :group (js/Math.ceil (* (js/Math.random) 12))
                   :color color})))
            pages)
      (remove nil?))))
+
+(defn- uuid-or-asset?
+  [id]
+  (or (util/uuid-string? id)
+      (string/starts-with? id "../assets/")
+      (= id "..")
+      (string/starts-with? id "assets/")))
+
+(defn- remove-uuids-and-files!
+  [nodes]
+  (remove
+   (fn [node] (uuid-or-asset? (:id node)))
+   nodes))
 
 (defn- normalize-page-name
   [{:keys [nodes links] :as g}]
@@ -61,10 +74,15 @@
         names (zipmap (map :block/name names)
                       (map (fn [x] (get x :block/original-name (:block/name x))) names))
         nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
-        links (mapv (fn [{:keys [source target]}]
-                      {:source (get names source)
-                       :target (get names target)})
-                    links)]
+        links (->>
+               (mapv (fn [{:keys [source target]}]
+                       (when (and (not (uuid-or-asset? source))
+                                  (not (uuid-or-asset? target)))
+                         {:source (get names source)
+                          :target (get names target)}))
+                     links)
+               (remove nil?))
+        nodes (remove-uuids-and-files! nodes)]
     {:nodes nodes
      :links links}))
 
@@ -187,5 +205,6 @@
                        (distinct)
                        ;; FIXME: get block tags
                        (build-nodes dark? block edges #{}))]
-        {:nodes nodes
-         :links edges}))))
+        (normalize-page-name
+         {:nodes nodes
+          :links edges})))))

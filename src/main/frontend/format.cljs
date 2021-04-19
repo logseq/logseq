@@ -36,7 +36,9 @@
   ([format]
    (mldoc/default-config format))
   ([format heading-to-list?]
-   (mldoc/default-config format heading-to-list?)))
+   (mldoc/default-config format heading-to-list?))
+  ([format heading-to-list? exporting-keep-properties?]
+   (mldoc/default-config format heading-to-list? exporting-keep-properties?)))
 
 (defn to-html
   ([content format]

@@ -46,9 +46,7 @@
                      false)))
                 state)}
   [blocks page document-mode?]
-  (let [start-level (or (:block/level (first blocks)) 1)
-        config {:id page
-                :start-level 2
+  (let [config {:id page
                 :editor-box editor/box
                 :document/mode? document-mode?}]
     (content/content
@@ -113,13 +111,13 @@
 (rum/defc journals < rum/reactive
   [latest-journals]
   [:div#journals
-   (ui/infinite-list
-    (for [[journal-name format] latest-journals]
-      [:div.journal-item.content {:key journal-name}
-       (journal-cp [journal-name format])])
-    {:has-more (page-handler/has-more-journals?)
-     :on-load (fn []
-                (page-handler/load-more-journals!))})])
+   (ui/infinite-list "left-container"
+                     (for [[journal-name format] latest-journals]
+                       [:div.journal-item.content {:key journal-name}
+                        (journal-cp [journal-name format])])
+                     {:has-more (page-handler/has-more-journals?)
+                      :on-load (fn []
+                                 (page-handler/load-more-journals!))})])
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []

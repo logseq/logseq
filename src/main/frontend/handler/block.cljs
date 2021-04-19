@@ -71,14 +71,16 @@
        blocks
        (let [page-block (when page-name (db/entity [:block/name (string/lower-case page-name)]))
              page-id {:db/id (:db/id page-block)}
-             dummy (merge {:block/uuid (db/new-block-id)
-                           :block/left page-id
-                           :block/parent page-id
-                           :block/title ""
-                           :block/content ""
-                           :block/format format
-                           :block/dummy? true}
-                          default-option)]
+             dummy (->
+                    (merge {:block/uuid (db/new-block-id)
+                            :block/left page-id
+                            :block/parent page-id
+                            :block/title ""
+                            :block/content ""
+                            :block/format format
+                            :block/dummy? true}
+                           default-option)
+                    (dissoc :block/file))]
          [dummy])))))
 
 (defn filter-blocks

@@ -134,12 +134,12 @@
           (js->clj :keywordize-keys true))))
 
 (defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map. also transform map to nil if all of its value are nil"
+  "remove pairs of key-value that has nil value from a (possibly nested) map."
   [nm]
   (walk/postwalk
    (fn [el]
      (if (map? el)
-       (not-empty (into {} (remove (comp nil? second)) el))
+       (into {} (remove (comp nil? second)) el)
        el))
    nm))
 
@@ -415,7 +415,8 @@
             (.scroll (app-scroll-container-node)
                      #js {:top (let [top (element-top elem 0)]
                                  (if (< top 256)
-                                   0 top))
+                                   0
+                                   (- top 80)))
                           :behavior "smooth"}))))))
 
 #?(:cljs
@@ -646,9 +647,10 @@
 
 #?(:cljs
    (defn cursor-move-forward [input n]
-     (let [{:keys [pos]} (get-caret-pos input)
-           pos (+ pos n)]
-       (.setSelectionRange input pos pos))))
+     (when input
+       (let [{:keys [pos]} (get-caret-pos input)
+            pos (+ pos n)]
+        (.setSelectionRange input pos pos)))))
 
 #?(:cljs
    (defn move-cursor-to [input n]
@@ -1218,6 +1220,11 @@
      []
      (contains? (set (system-locales)) "zh-CN")))
 
+#?(:cljs
+   (defn get-element-width
+     [id]
+     (when-let [element (gdom/getElement id)]
+       (gobj/get element "offsetWidth"))))
 (comment
   (= (get-relative-path "journals/2020_11_18.org" "pages/grant_ideas.org")
      "../pages/grant_ideas.org")
@@ -1236,14 +1243,17 @@
 
 (defn keyname [key] (str (namespace key) "/" (name key)))
 
-(defn batch [in max-time handler]
+(defn batch [in max-time idle? handler]
   (async/go-loop [buf [] t (async/timeout max-time)]
     (let [[v p] (async/alts! [in t])]
       (cond
         (= p t)
-        (do
-          (handler buf)
-          (recur [] (async/timeout max-time)))
+        (let [timeout (async/timeout max-time)]
+          (if (idle?)
+           (do
+             (handler buf)
+             (recur [] timeout))
+           (recur buf timeout)))
 
         (nil? v)                        ; stop
         (when (seq buf)

@@ -69,7 +69,7 @@
 
      (d/transact! db-conn default-db/built-in-pages)
 
-     (when (and listen-handler (not (util/electron?)))
+     (when listen-handler
        (listen-handler repo)))))
 
 (defn destroy-all!

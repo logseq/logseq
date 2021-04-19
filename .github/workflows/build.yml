@@ -10,6 +10,9 @@ on:
     paths-ignore:
       - '*.md'
 
+env:
+  CLOJURE_VERSION: '1.10.1.727'
+
 jobs:
 
   test:
@@ -44,10 +47,15 @@ jobs:
         with:
           node-version: '12'
 
+      - name: Check Dockerfile consistency
+        run: |
+          DOCKER_VERSION=$(grep -Po 'FROM clojure:.*-deps-?\K(.*)' Dockerfile)
+          [[ $CLOJURE_VERSION == $DOCKER_VERSION ]] || { echo "Please make sure Docker container version matches CLOJURE_VERSION" && exit 1; }
+
       - name: Install Clojure tools.deps
         uses: DeLaGuardo/setup-clojure@master
         with:
-          cli: '1.10.1.727'
+          cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Fetch Maven deps
         if: steps.maven-cache.outputs.cache-hit != 'true'

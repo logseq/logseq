@@ -12,7 +12,7 @@
      (js/setTimeout
       (fn []
         (swap! state/components assoc k state))
-      100)
+      5)
      state)
 
    :did-remount
