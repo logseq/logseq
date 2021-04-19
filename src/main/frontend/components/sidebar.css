@@ -113,15 +113,14 @@
     width: var(--ls-right-sidebar-width);
   }
 
-  &::-webkit-scrollbar {
-    display: none;
+  &-scollable {
+    min-height: 100%;
+    overflow-y: scroll;
   }
 
   &-inner {
     padding-top: 0;
     position: relative;
-    min-height: 100%;
-    overflow-y: scroll;
 
     .resizer {
       position: absolute;
