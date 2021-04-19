@@ -554,6 +554,11 @@
   []
   (:selection/mode @state))
 
+(defn selection?
+  "True sense of selection mode with valid selected block"
+  []
+  (and (in-selection-mode?) (seq (get-selection-blocks))))
+
 (defn conj-selection-block!
   [block direction]
   (dom/add-class! block "selected noselect")
@@ -1173,3 +1178,8 @@
 (defn set-copied-blocks
   [content ids]
   (set-state! :copy/blocks {:copy/content content :copy/block-tree ids}))
+
+(defonce components (atom {}))
+
+(defn auto-complete? []
+  (some? (get @components :component/auto-complete)))

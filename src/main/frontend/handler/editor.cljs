@@ -30,7 +30,6 @@
             [frontend.utf8 :as utf8]
             [frontend.fs :as fs]
             [promesa.core :as p]
-            [dommy.core :as d]
             [frontend.diff :as diff]
             [frontend.search :as search]
             [frontend.handler.image :as image-handler]
@@ -202,6 +201,7 @@
         :down
         (-> (string/split-lines content)
             first
+            (or "")
             (subs 0 pos))))
 
 ;; id: block dom id, "ls-block-counter-uuid"
@@ -617,37 +617,19 @@
 
 (defn- get-prev-block-non-collapsed
   [block]
-  (let [id (gobj/get block "id")
-        prefix (re-find #"ls-block-[\d]+" id)]
-    (when-let [blocks (d/by-class "ls-block")]
-      (when-let [index (.indexOf blocks block)]
-        (loop [idx (dec index)]
-          (when (>= idx 0)
-            (let [block (nth blocks idx)
-                  collapsed? (= "none" (d/style block "display"))
-                  prefix-match? (util/starts-with? (gobj/get block "id") prefix)]
-              (if (or collapsed?
-                      ;; might be embed blocks
-                      (not prefix-match?))
-                (recur (dec idx))
-                block))))))))
+  (when-let [blocks (util/get-blocks-in-viewpoint)]
+    (when-let [index (.indexOf blocks block)]
+      (let [idx (dec index)]
+        (when (>= idx 0)
+          (nth blocks idx))))))
 
 (defn- get-next-block-non-collapsed
   [block]
-  (let [id (gobj/get block "id")
-        prefix (re-find #"ls-block-[\d]+" id)]
-    (when-let [blocks (d/by-class "ls-block")]
-      (when-let [index (.indexOf blocks block)]
-        (loop [idx (inc index)]
-          (when (>= (count blocks) idx)
-            (when-let [block (util/nth-safe blocks idx)]
-              (let [collapsed? (= "none" (d/style block "display"))
-                    prefix-match? (util/starts-with? (gobj/get block "id") prefix)]
-                (if (or collapsed?
-                        ;; might be embed blocks
-                        (not prefix-match?))
-                  (recur (inc idx))
-                  block)))))))))
+  (when-let [blocks (util/get-blocks-in-viewpoint)]
+    (when-let [index (.indexOf blocks block)]
+      (let [idx (inc index)]
+        (when (>= (count blocks) idx)
+          (util/nth-safe blocks idx))))))
 
 (defn delete-block-aux!
   [{:block/keys [uuid content repo ref-pages ref-blocks] :as block} dummy?]
@@ -676,7 +658,7 @@
                   sibling-block (get-prev-block-non-collapsed block-parent)]
               (delete-block-aux! block dummy?)
               (when (and repo sibling-block)
-                (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+                (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
                   (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
                     (let [original-content (util/trim-safe (:block/content block))
                           new-value (str original-content " " (string/triml value))
@@ -801,6 +783,13 @@
    (state/clear-edit!)
    (state/set-selection-blocks! blocks direction)
    (util/select-highlight! blocks)))
+
+(defn select-block!
+  [block-uuid]
+  (when-let [block (-> (str block-uuid)
+                       (js/document.getElementsByClassName)
+                       first)]
+    (exit-editing-and-set-selected-blocks! [block])))
 
 (defn select-all-blocks!
   []
@@ -1013,12 +1002,12 @@
 
 (defn highlight-selection-area!
   [end-block]
-  (when-let [start-block (:selection/start-block @state/state)]
+  (when-let [start-block (state/get-selection-start-block)]
     (clear-selection! nil)
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
 
           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")]
-      (exit-editing-and-set-selected-blocks! blocks))))
+      (exit-editing-and-set-selected-blocks! blocks direction))))
 
 (defn on-select-block
   [direction]
@@ -1029,21 +1018,21 @@
       (exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
 
       ;; when selection and one block selected, select next block
-      (and (state/in-selection-mode?) (== 1 (count (state/get-selection-blocks))))
+      (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
       (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
             element (f (first (state/get-selection-blocks)))]
         (when element
           (state/conj-selection-block! element direction)))
 
       ;; if same direction, keep conj on same direction
-      (and (state/in-selection-mode?) (= direction (state/get-selection-direction)))
+      (and (state/selection?) (= direction (state/get-selection-direction)))
       (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
             element (f (last (state/get-selection-blocks)))]
         (when element
           (state/conj-selection-block! element direction)))
 
       ;; if different direction, keep clear until one left
-      (state/in-selection-mode?)
+      (state/selection?)
       (clear-last-selected-block!))))
 
 (defn save-block-aux!
@@ -1115,7 +1104,7 @@
           (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
                 sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
             (when sibling-block
-              (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+              (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
                 (let [value (state/get-edit-content)]
                   (when (not= (-> content
                                   (text/remove-level-spaces format)
@@ -1494,7 +1483,7 @@
   [current-id]
   (when-let [input (gdom/getElement current-id)]
     (when-let [prev-block (util/get-prev-block input)]
-      (util/parse-int (d/attr prev-block "level")))))
+      (util/parse-int (dom/attr prev-block "level")))))
 
 (defn append-paste-doc!
   [format event]
@@ -1631,7 +1620,7 @@
       (when node
         (state/clear-selection!)
         (unhighlight-blocks!)
-        (let [block-id (and node (d/attr node "blockid"))
+        (let [block-id (and node (dom/attr node "blockid"))
               edit-block-id (string/replace (gobj/get node "id") "ls-block" "edit-block")
               block-id (medley/uuid block-id)]
           (when-let [block (or (db/entity [:block/uuid block-id])
@@ -1868,7 +1857,7 @@
 
 (defn- keydown-new-block
   [state]
-  (when-not (in-auto-complete? nil)
+  (when-not (state/auto-complete?)
     (let [{:keys [block config]} (get-state state)]
       (when (and block
                  (not (:ref? config))
@@ -1888,14 +1877,13 @@
 
 (defn- keydown-new-line
   []
-  (when (not (in-auto-complete? nil))
+  (when-not (state/auto-complete?)
     (let [^js input (state/get-input)
           selected-start (gobj/get input "selectionStart")
           selected-end (gobj/get input "selectionEnd")
           value (.-value input)
           s1 (subs value 0 selected-start)
-          s2 (subs value selected-end)
-          ]
+          s2 (subs value selected-end)]
       (state/set-edit-content! (state/get-edit-input-id)
                                (str s1 "\n" s2))
       (util/move-cursor-to input (inc selected-start)))))
@@ -1914,6 +1902,24 @@
         (keydown-new-block state)
         (keydown-new-line)))))
 
+(defn- select-first-last
+  "Select first or last block in viewpoint"
+  [direction]
+  (let [f (case direction :up last :down first)
+        block (->> (util/get-blocks-in-viewpoint)
+                   (f))]
+    (when block
+      (exit-editing-and-set-selected-blocks! [block]))))
+
+(defn- select-up-down [direction]
+  (let [selected (first (state/get-selection-blocks))
+        f (case direction
+                :up get-prev-block-non-collapsed
+                :down get-next-block-non-collapsed)
+        sibling-block (f selected)]
+    (when (and sibling-block (dom/attr sibling-block "blockid"))
+      (clear-selection! nil)
+      (exit-editing-and-set-selected-blocks! [sibling-block]))))
 
 (defn- move-cross-boundrary-up-down
   [direction]
@@ -1926,7 +1932,7 @@
         sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
         {:block/keys [uuid content format]} (state/get-edit-block)]
     (when sibling-block
-      (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+      (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [value (state/get-edit-content)]
           (when (not= (-> content
                           (text/remove-level-spaces format)
@@ -1935,36 +1941,35 @@
                       (string/trim value))
             (save-block! repo uuid value)))
 
-        (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
+        (let [new-id (cljs.core/uuid sibling-block-id)
+              block (db/pull repo '[*] [:block/uuid new-id])]
           (edit-block! block
                        [direction line-pos]
                        format
-                       (state/get-edit-input-id)))))))
+                       new-id))))))
 
 (defn keydown-up-down-handler
   [direction]
-  (fn [_]
-    (when-not (in-auto-complete? nil)
-      (let [input (state/get-input)
-            line-height (util/get-textarea-line-height input)
-            selected-start (.-selectionStart input)
-            selected-end (.-selectionEnd input)
-            up? (= direction :up)
-            down? (= direction :down)]
-        (cond
-          (not= selected-start selected-end)
-          (if up?
-            (util/set-caret-pos! input selected-start)
-            (util/set-caret-pos! input selected-end))
+  (let [input (state/get-input)
+        line-height (util/get-textarea-line-height input)
+        selected-start (.-selectionStart input)
+        selected-end (.-selectionEnd input)
+        up? (= direction :up)
+        down? (= direction :down)]
+    (cond
+      (not= selected-start selected-end)
+      (if up?
+        (util/set-caret-pos! input selected-start)
+        (util/set-caret-pos! input selected-end))
 
-          (or (and up? (util/textarea-cursor-first-row? input line-height))
-              (and down? (util/textarea-cursor-end-row? input line-height)))
-          (move-cross-boundrary-up-down direction)
+      (or (and up? (util/textarea-cursor-first-row? input line-height))
+          (and down? (util/textarea-cursor-end-row? input line-height)))
+      (move-cross-boundrary-up-down direction)
 
-          :else
-          (if up?
-            (util/move-cursor-up input)
-            (util/move-cursor-down input)))))))
+      :else
+      (if up?
+        (util/move-cursor-up input)
+        (util/move-cursor-down input)))))
 
 (defn- move-to-block-when-cross-boundrary
   [_ direction]
@@ -1976,7 +1981,7 @@
     (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
           sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
       (when sibling-block
-        (when-let [sibling-block-id (d/attr sibling-block "blockid")]
+        (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
           (let [content (:block/content block)
                 value (state/get-edit-content)]
             (when (not= (-> content
@@ -1991,7 +1996,7 @@
 (defn keydown-arrow-handler
   [direction]
   (fn [e]
-    (when-not (in-auto-complete? nil)
+    (when-not (state/auto-complete?)
       (let [input (state/get-input)
             selected-start (.-selectionStart input)
             selected-end (.-selectionEnd input)
@@ -2375,7 +2380,7 @@
   * when in edit mode with text selected, copy selected text as normal"
   [e]
   (cond
-    (and (state/in-selection-mode?) (seq (state/get-selection-blocks)))
+    (state/selection?)
     (shortcut-copy-selection e)
 
     (state/editing?)
@@ -2395,7 +2400,7 @@
   [state-fn]
   (fn [e]
     (cond
-      (and (state/in-selection-mode?) (seq (state/get-selection-blocks)))
+      (state/selection?)
       (shortcut-cut-selection e)
 
       (state/editing?)
@@ -2405,8 +2410,21 @@
   [state-fn]
   (fn [e]
     (cond
-      (and (state/in-selection-mode?) (seq (state/get-selection-blocks)))
+      (state/selection?)
       (shortcut-delete-selection e)
 
       (state/editing?)
       (keydown-backspace-handler state-fn false e))))
+
+(defn shortcut-up-down [direction]
+  (fn [_]
+    (when-not (state/auto-complete?)
+      (cond
+        (state/editing?)
+        (keydown-up-down-handler direction)
+
+        (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
+        (select-up-down direction)
+
+        :else
+        (select-first-last direction)))))
