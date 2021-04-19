@@ -40,19 +40,17 @@
      :editor/move-block-down (editor-handler/move-up-down false)}))
 
  ;; global editor shortcut
- (before
-  m/prevent-default-behavior
-  (let [state-fn (state-f :component/box)]
-    {:editor/up (editor-handler/shortcut-up-down :up)
-     :editor/down (editor-handler/shortcut-up-down :down)
-     :editor/select-block-up (editor-handler/on-select-block :up)
-     :editor/select-block-down (editor-handler/on-select-block :down)
-     :editor/copy editor-handler/shortcut-copy
-     :editor/cut (editor-handler/shortcut-cut state-fn)
-     :editor/delete (editor-handler/shortcut-delete state-fn)
-     :editor/save editor-handler/save!
-     :editor/undo history/undo!
-     :editor/redo history/redo!}))
+ (let [state-fn (state-f :component/box)]
+   {:editor/up (editor-handler/shortcut-up-down :up)
+    :editor/down (editor-handler/shortcut-up-down :down)
+    :editor/select-block-up (editor-handler/on-select-block :up)
+    :editor/select-block-down (editor-handler/on-select-block :down)
+    :editor/copy editor-handler/shortcut-copy
+    :editor/cut (editor-handler/shortcut-cut state-fn)
+    :editor/delete (editor-handler/shortcut-delete state-fn)
+    :editor/save editor-handler/save!
+    :editor/undo history/undo!
+    :editor/redo history/redo!})
 
  ;; global
  (before

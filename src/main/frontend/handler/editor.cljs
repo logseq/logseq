@@ -2020,6 +2020,7 @@
 
 (defn keydown-backspace-handler
   [get-state-fn cut? e]
+  (util/stop e)
   (when-let [state (get-state-fn)]
     (let [^js input (state/get-input)
           id (state/get-edit-input-id)
@@ -2033,7 +2034,6 @@
           page (state/get-current-page)
           repo (state/get-current-repo)]
       (mark-last-input-time! repo)
-      (util/stop e)
       (cond
         (not= selected-start selected-end)
         (do
@@ -2354,10 +2354,12 @@
 
 (defn shortcut-cut-selection
   [e]
+  (util/stop e)
   (cut-blocks-and-clear-selections! true))
 
 (defn shortcut-delete-selection
   [e]
+  (util/stop e)
   (cut-blocks-and-clear-selections! false))
 
 ;; credits to @pengx17
@@ -2380,17 +2382,18 @@
   * when in edit mode but no text selected, copy current block ref
   * when in edit mode with text selected, copy selected text as normal"
   [e]
-  (cond
-    (state/selection?)
-    (shortcut-copy-selection e)
+  (when-not (state/auto-complete?)
+    (cond
+      (state/selection?)
+      (shortcut-copy-selection e)
 
-    (state/editing?)
-    (let [input (state/get-input)
-          selected-start (.-selectionStart input)
-          selected-end (.-selectionEnd input)]
-      (if (= selected-start selected-end)
-        (copy-current-block-ref)
-        (js/document.execCommand "copy")))))
+      (state/editing?)
+      (let [input (state/get-input)
+            selected-start (.-selectionStart input)
+            selected-end (.-selectionEnd input)]
+        (if (= selected-start selected-end)
+          (copy-current-block-ref)
+          (js/document.execCommand "copy"))))))
 
 
 (defn shortcut-cut
@@ -2400,26 +2403,29 @@
   * otherwise same as delete shortcut"
   [state-fn]
   (fn [e]
-    (cond
-      (state/selection?)
-      (shortcut-cut-selection e)
+    (when-not (state/auto-complete?)
+      (cond
+        (state/selection?)
+        (shortcut-cut-selection e)
 
-      (state/editing?)
-      (keydown-backspace-handler state-fn true e))))
+        (state/editing?)
+        (keydown-backspace-handler state-fn true e)))))
 
 (defn shortcut-delete
   [state-fn]
   (fn [e]
-    (cond
-      (state/selection?)
-      (shortcut-delete-selection e)
+    (when-not (state/auto-complete?)
+      (cond
+        (state/selection?)
+        (shortcut-delete-selection e)
 
-      (state/editing?)
-      (keydown-backspace-handler state-fn false e))))
+        (state/editing?)
+        (keydown-backspace-handler state-fn false e)))))
 
 (defn shortcut-up-down [direction]
-  (fn [_]
+  (fn [e]
     (when-not (state/auto-complete?)
+      (util/stop e)
       (cond
         (state/editing?)
         (keydown-up-down-handler direction)
