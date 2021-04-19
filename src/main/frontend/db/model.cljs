@@ -186,34 +186,6 @@
            (conn/get-conn repo-url) path)
       db-utils/seq-flatten))
 
-(defn get-file-after-blocks
-  [repo-url file-id end-pos]
-  (when end-pos
-    (let [pred (fn [db meta]
-                 (>= (:start-pos meta) end-pos))]
-      (-> (d/q '[:find (pull ?block [*])
-                 :in $ ?file-id ?pred
-                 :where
-                 [?block :block/file ?file-id]
-                 [?block :block/meta ?meta]
-                 [(?pred $ ?meta)]]
-               (conn/get-conn repo-url) file-id pred)
-          db-utils/seq-flatten))))
-
-(defn get-file-after-blocks-meta
-  ([repo-url file-id end-pos]
-   (get-file-after-blocks-meta repo-url file-id end-pos false))
-  ([repo-url file-id end-pos content-level?]
-   (let [db (conn/get-conn repo-url)
-         blocks (d/datoms db :avet :block/file file-id)
-         eids (mapv :e blocks)
-         ks (if content-level?
-              '[:block/uuid :block/meta :block/content :block/level]
-              '[:block/uuid :block/meta])
-         blocks (db-utils/pull-many repo-url ks eids)]
-     (filter (fn [{:block/keys [meta]}]
-               (>= (:start-pos meta) end-pos)) blocks))))
-
 (defn get-file-pages
   [repo-url path]
   (-> (d/q '[:find ?page

@@ -59,9 +59,9 @@
   db-mixins/query
   [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
-        grouped-blocks-by-file (into {} (for [[k v] (db-utils/group-by-file raw-page-blocks)]
-                                          [(:file/path (db-utils/entity (:db/id k))) v]))
-        raw-page-blocks (get grouped-blocks-by-file file-path raw-page-blocks)
+        ;; grouped-blocks-by-file (into {} (for [[k v] (db-utils/group-by-file raw-page-blocks)]
+        ;;                                   [(:file/path (db-utils/entity (:db/id k))) v]))
+        ;; raw-page-blocks (get grouped-blocks-by-file file-path raw-page-blocks)
         page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
                         (let [content (db/get-file repo file-path)]
@@ -80,16 +80,16 @@
         hiccup-config (common-handler/config-with-document-mode hiccup-config)
         hiccup (block/->hiccup page-blocks hiccup-config {})]
     [:div.page-blocks-inner
-     (when (and (seq grouped-blocks-by-file)
-                (> (count grouped-blocks-by-file) 1))
-       (ui/admonition
-        :warning
-        [:div.text-sm
-         [:p.font-medium "Those pages have the same title, you might want to only keep one file."]
-         [:ol
-          (for [[file-path blocks] (into (sorted-map) grouped-blocks-by-file)]
-            [:li [:a {:key file-path
-                      :href (rfe/href :file {:path file-path})} file-path]])]]))
+     ;; (when (and (seq grouped-blocks-by-file)
+     ;;            (> (count grouped-blocks-by-file) 1))
+     ;;   (ui/admonition
+     ;;    :warning
+     ;;    [:div.text-sm
+     ;;     [:p.font-medium "Those pages have the same title, you might want to only keep one file."]
+     ;;     [:ol
+     ;;      (for [[file-path blocks] (into (sorted-map) grouped-blocks-by-file)]
+     ;;        [:li [:a {:key file-path
+     ;;                  :href (rfe/href :file {:path file-path})} file-path]])]]))
 
      (rum/with-key
        (content/content page-name

@@ -423,7 +423,7 @@
 
 (defn insert-new-block-aux!
   [config
-   {:block/keys [uuid content repo format]
+   {:block/keys [uuid content repo format page dummy?]
     db-id :db/id
     :as block}
    value
@@ -437,7 +437,6 @@
         current-block (assoc block :block/content fst-block-text)
         current-block (apply dissoc current-block db-schema/retract-attributes)
         current-block (wrap-parse-block current-block)
-        dummy? (:block/dummy? current-block)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge block new-m)
