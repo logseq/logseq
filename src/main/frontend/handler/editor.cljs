@@ -1443,8 +1443,8 @@
     (catch js/Error e
       nil)))
 
-(defn in-auto-complete?
-  [input]
+(defn auto-complete?
+  []
   (or @*show-commands
       @*show-block-commands
       @*asset-uploading?
@@ -1855,7 +1855,7 @@
 
 (defn- keydown-new-block
   [state]
-  (when-not (state/auto-complete?)
+  (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
       (when (and block
                  (not (:ref? config))
@@ -1875,7 +1875,7 @@
 
 (defn- keydown-new-line
   []
-  (when-not (state/auto-complete?)
+  (when-not (auto-complete?)
     (let [^js input (state/get-input)
           selected-start (gobj/get input "selectionStart")
           selected-end (gobj/get input "selectionEnd")
@@ -2409,7 +2409,7 @@
 
 (defn shortcut-up-down [direction]
   (fn [_]
-    (when-not (state/auto-complete?)
+    (when-not (auto-complete?)
       (cond
         (state/editing?)
         (keydown-up-down-handler direction)
