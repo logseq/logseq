@@ -48,7 +48,7 @@
 
     ;; register shortcuts
     (doseq [[id _] shortcut-map]
-      (log/info :shortcut/install-shortcut {:id id :shortcut (shortcut-binding id)})
+      ;; (log/info :shortcut/install-shortcut {:id id :shortcut (shortcut-binding id)})
       (doseq [k (shortcut-binding id)]
         (.registerShortcut handler (util/keyname id) k)))
 
@@ -62,7 +62,7 @@
 
        ;; return deregister fn
       (fn []
-        (log/info :shortcut/dispose (into [] (keys shortcut-map)))
+        ;; (log/info :shortcut/dispose (into [] (keys shortcut-map)))
         (unlisten-fn)))))
 
 (defn install-shortcuts!
