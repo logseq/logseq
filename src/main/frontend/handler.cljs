@@ -19,6 +19,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.handler.events :as events]
             [frontend.fs.watcher-handler :as fs-watcher-handler]
             [frontend.ui :as ui]
             [goog.object :as gobj]
@@ -98,7 +99,7 @@
                                false)
                               (store-schema!))
 
-                            (nfs/ask-permission-if-local?)
+                            (state/pub-event! [:modal/nfs-ask-permission])
 
                             (page-handler/init-commands!)
                             (when (seq (:repos me))
@@ -173,6 +174,8 @@
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
+
+    (events/run!)
 
     (p/let [repos (get-repos)]
       (state/set-repos! repos)

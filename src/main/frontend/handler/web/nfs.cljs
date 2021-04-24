@@ -13,7 +13,6 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [clojure.set :as set]
-            [frontend.ui :as ui]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.db :as db]
@@ -166,30 +165,6 @@
                 (if (contains? #{"AbortError" "Error"} (gobj/get error "name"))
                   (state/set-loading-files! false)
                   (log/error :nfs/open-dir-error error)))))))
-
-(defn get-local-repo
-  []
-  (when-let [repo (state/get-current-repo)]
-    (when (config/local-db? repo)
-      repo)))
-
-(defn ask-permission
-  [repo]
-  (when-not (util/electron?)
-    (fn [close-fn]
-      [:div
-       [:p
-        "Grant native filesystem permission for directory: "
-        [:b (config/get-local-dir repo)]]
-       (ui/button
-        "Grant"
-        :on-click (fn []
-                    (nfs/check-directory-permission! repo)
-                    (close-fn)))])))
-
-(defn ask-permission-if-local? []
-  (when-let [repo (get-local-repo)]
-    (state/set-modal! (ask-permission repo))))
 
 (defn- compute-diffs
   [old-files new-files]

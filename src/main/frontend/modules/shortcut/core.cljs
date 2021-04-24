@@ -38,7 +38,7 @@
     ;; set arrows enter, tab to global
     (.setGlobalKeys handler global-keys)
     ;; default is true, set it to false here
-    (.setAlwaysPreventDefault handler false)
+    ;; (.setAlwaysPreventDefault handler false)
 
     ;; register shortcuts
     (doseq [[id _] shortcut-map]

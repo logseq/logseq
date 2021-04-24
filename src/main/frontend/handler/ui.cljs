@@ -112,51 +112,45 @@
 
 ;; auto-complete
 (defn auto-complete-prev
-  [get-state-fn]
-  (fn [e]
-    (when-let [state (get-state-fn)]
-      (let [current-idx (get state :frontend.ui/current-idx)
-            matched (first (:rum/args state))]
-        (util/stop e)
-        (js/console.log "go prev" current-idx)
-        (cond
-          (>= @current-idx 1)
-          (swap! current-idx dec)
-          (= @current-idx 0)
-          (reset! current-idx (dec (count matched)))
-          :else nil)
-        (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-          (let [ac-inner (gdom/getElement "ui__ac-inner")
-                element-top (gobj/get element "offsetTop")
-                scroll-top (- (gobj/get element "offsetTop") 360)]
-            (set! (.-scrollTop ac-inner) scroll-top)))))))
+  [state e]
+  (let [current-idx (get state :frontend.ui/current-idx)
+        matched (first (:rum/args state))]
+    (util/stop e)
+    (js/console.log "go prev" current-idx)
+    (cond
+      (>= @current-idx 1)
+      (swap! current-idx dec)
+      (= @current-idx 0)
+      (reset! current-idx (dec (count matched)))
+      :else nil)
+    (when-let [element (gdom/getElement (str "ac-" @current-idx))]
+      (let [ac-inner (gdom/getElement "ui__ac-inner")
+            element-top (gobj/get element "offsetTop")
+            scroll-top (- (gobj/get element "offsetTop") 360)]
+        (set! (.-scrollTop ac-inner) scroll-top)))))
 
 (defn auto-complete-next
-  [get-state-fn]
-  (fn [e]
-    (when-let [state (get-state-fn)]
-      (let [current-idx (get state :frontend.ui/current-idx)
-            matched (first (:rum/args state))]
-        (util/stop e)
-        (js/console.log "go next" current-idx "##matched" matched)
-        (let [total (count matched)]
-          (if (>= @current-idx (dec total))
-            (reset! current-idx 0)
-            (swap! current-idx inc)))
-        (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-          (let [ac-inner (gdom/getElement "ui__ac-inner")
-                scroll-top (- (gobj/get element "offsetTop") 360)]
-            (set! (.-scrollTop ac-inner) scroll-top)))))))
+  [state e]
+  (let [current-idx (get state :frontend.ui/current-idx)
+        matched (first (:rum/args state))]
+    (util/stop e)
+    (js/console.log "go next" current-idx "##matched" matched)
+    (let [total (count matched)]
+      (if (>= @current-idx (dec total))
+        (reset! current-idx 0)
+        (swap! current-idx inc)))
+    (when-let [element (gdom/getElement (str "ac-" @current-idx))]
+      (let [ac-inner (gdom/getElement "ui__ac-inner")
+            scroll-top (- (gobj/get element "offsetTop") 360)]
+        (set! (.-scrollTop ac-inner) scroll-top)))))
 
 (defn auto-complete-complete
-  [get-state-fn]
-  (fn [e]
-    (when-let [state (get-state-fn)]
-      (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)
-            current-idx (get state :frontend.ui/current-idx)]
-        (util/stop e)
-        (if (and (seq matched)
-                 (> (count matched)
-                    @current-idx))
-          (on-chosen (nth matched @current-idx) false)
-          (and on-enter (on-enter state)))))))
+  [state e]
+  (let [[matched {:keys [on-chosen on-enter]}] (:rum/args state)
+        current-idx (get state :frontend.ui/current-idx)]
+    (util/stop e)
+    (if (and (seq matched)
+             (> (count matched)
+                @current-idx))
+      (on-chosen (nth matched @current-idx) false)
+      (and on-enter (on-enter state)))))

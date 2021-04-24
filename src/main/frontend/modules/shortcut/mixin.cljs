@@ -3,33 +3,6 @@
             [frontend.state :as state]
             [frontend.util :as util]))
 
-(defn state-f [k]
-  (fn [] (get @state/components k)))
-
-;; FIXME: remove timeout, or remove the whole bind
-(defn bind-state [k]
-  {:after-render
-   (fn [state]
-     (js/setTimeout
-      (fn []
-        (swap! state/components assoc k state))
-      5)
-     state)
-
-   :did-remount
-   (fn [_ new-state]
-     (swap! state/components assoc k new-state)
-     new-state)
-
-   ;; Otherwise, (state/auto-complete?) will always be true
-   :will-unmount
-   (fn [state]
-     (js/setTimeout
-      (fn []
-        (swap! state/components dissoc k))
-      10)
-     state)})
-
 (defn before [f shortcut-map]
   (reduce-kv (fn [r k v]
                (assoc r k (f v)))
@@ -56,18 +29,3 @@
 (defn only-enable-when-dev!
   [_]
   (boolean config/dev?))
-
-(defn enable-when-block-editing!
-  [f]
-  (fn [e]
-    (when (state/editing?)
-      (f e)
-      false)))
-
-(defn enable-when-component!
-  [component-k]
-  (fn [f]
-    (fn [e]
-      (when ((state-f component-k))
-        (f e)
-        false))))

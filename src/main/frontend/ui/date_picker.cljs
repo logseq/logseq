@@ -8,9 +8,9 @@
    [frontend.mixins :as mixins]
    [frontend.util :as util]
    [frontend.state :as state]
-   [frontend.modules.shortcut.mixin :refer [bind-state]]
    [goog.object :as gobj]
-   [clojure.string :as string]))
+   [clojure.string :as string]
+   [frontend.modules.shortcut.core :as shortcut]))
 
 ;; Adapted from re-com date-picker
 
@@ -196,37 +196,42 @@
         (util/select? elem))))
 
 (defn shortcut-complete
-  [get-state-fn]
-  (fn [e]
-    (when-let [state (get-state-fn)]
-      (let [{:keys [on-change deadline-or-schedule?]} (last (:rum/args state))]
-        (when (and on-change
-                   (not (input-or-select?)))
-          (when-not deadline-or-schedule?
-            (on-change e @*internal-model)))))))
+  [state e]
+  (let [{:keys [on-change deadline-or-schedule?]} (last (:rum/args state))]
+    (when (and on-change
+               (not (input-or-select?)))
+      (when-not deadline-or-schedule?
+        (on-change e @*internal-model)))))
 
 (defn shortcut-prev-day
-  [e]
+  [_state e]
   (when-not (input-or-select?)
     (swap! *internal-model inc-date -1)))
 
 (defn shortcut-next-day
-  [e]
+  [_state e]
   (when-not (input-or-select?)
     (swap! *internal-model inc-date 1)))
 
 (defn shortcut-prev-week
-  [e]
+  [_state e]
   (when-not (input-or-select?)
     (swap! *internal-model inc-week -1)))
 
 (defn shortcut-next-week
-  [e]
+  [_state e]
   (when-not (input-or-select?)
     (swap! *internal-model inc-week 1)))
 
 (rum/defc date-picker < rum/reactive
-  (bind-state :component/date-picker)
+  (mixins/shortcuts
+   shortcut/install-shortcut!
+   :shortcut-listener/date-picker
+   {:date-picker/complete shortcut-complete
+    :date-picker/prev-day shortcut-prev-day
+    :date-picker/next-day shortcut-next-day
+    :date-picker/prev-week shortcut-prev-week
+    :date-picker/next-week shortcut-next-week})
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))
            state)}
