@@ -1197,8 +1197,3 @@
 (defn get-editor-args
   []
   (:editor/args @state))
-
-(defonce components (atom {}))
-
-(defn auto-complete? []
-  (some? (get @components :component/auto-complete)))

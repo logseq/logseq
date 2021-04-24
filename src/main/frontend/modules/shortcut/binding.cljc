@@ -49,6 +49,10 @@
    :editor/copy "mod+c"
    :editor/cut "mod+x"
    :editor/delete ["backspace" "delete"]
+   :editor/delete-selection ["backspace" "delete"]
+
+   :editor/selection-up "up"
+   :editor/selection-down "down"
 
    :ui/toggle-help "shift+/"
    :ui/toggle-theme "t t"
@@ -70,21 +74,21 @@
    :search/re-index "mod+c mod+s"
    :graph/re-index "mod+c mod+r"})
 
-(def custom
-  {:editor/new-block "enter"
-   :editor/new-line "shift+enter"
-   :editor/up ["ctrl+k" "up"]
-   :editor/down ["ctrl+j" "down"]
-   :editor/left ["ctrl+h" "left"]
-   :editor/right ["ctrl+l" "right"]
-   :editor/delete ["ctrl+d" "backspace"]
+;; (def custom
+;;   {:editor/new-block "enter"
+;;    :editor/new-line "shift+enter"
+;;    :editor/up ["ctrl+k" "up"]
+;;    :editor/down ["ctrl+j" "down"]
+;;    :editor/left ["ctrl+h" "left"]
+;;    :editor/right ["ctrl+l" "right"]
+;;    :editor/delete ["ctrl+d" "backspace"]
 
-   :date-picker/complete ["ctrl+a" "enter"]
-   :date-picker/prev-day ["ctrl+h" "left"]
-   :date-picker/next-day ["ctrl+l" "right"]
-   :date-picker/prev-week ["ctrl+k" "up"]
-   :date-picker/next-week ["ctrl+j" "down"]
+;;    :date-picker/complete ["ctrl+a" "enter"]
+;;    :date-picker/prev-day ["ctrl+h" "left"]
+;;    :date-picker/next-day ["ctrl+l" "right"]
+;;    :date-picker/prev-week ["ctrl+k" "up"]
+;;    :date-picker/next-week ["ctrl+j" "down"]
 
-   :auto-complete/prev ["ctrl+k" "up"]
-   :auto-complete/next ["ctrl+j" "down"]
-   :auto-complete/complete ["ctrl+l" "enter"]})
+;;    :auto-complete/prev ["ctrl+k" "up"]
+;;    :auto-complete/next ["ctrl+j" "down"]
+;;    :auto-complete/complete ["ctrl+l" "enter"]})

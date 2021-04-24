@@ -651,7 +651,6 @@
             page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
         (when (> page-blocks-count 1)
           (do
-            (util/stop e)
             (let [block (db/pull [:block/uuid block-id])
                   block-parent (gdom/getElement block-parent-id)
                   sibling-block (get-prev-block-non-collapsed block-parent)]
@@ -1889,12 +1888,16 @@
 (defn keydown-new-block-handler [state e]
   (if (state/get-new-block-toggle?)
     (keydown-new-line)
-    (keydown-new-block state)))
+    (do
+      (.preventDefault e)
+      (keydown-new-block state))))
 
 (defn keydown-new-line-handler [state e]
   (if (state/get-new-block-toggle?)
     (keydown-new-block state)
-    (keydown-new-line)))
+    (do
+      (.preventDefault e)
+      (keydown-new-line))))
 
 (defn- select-first-last
   "Select first or last block in viewpoint"
@@ -1993,24 +1996,26 @@
   [direction]
   (fn [state e]
     (let [input (state/get-input)
+          element js/document.activeElement
           selected-start (.-selectionStart input)
           selected-end (.-selectionEnd input)
           left? (= direction :left)
           right? (= direction :right)]
-      (cond
-        (not= selected-start selected-end)
-        (if left?
-          (util/set-caret-pos! input selected-start)
-          (util/set-caret-pos! input selected-end))
+      (when (= input element)
+        (cond
+          (not= selected-start selected-end)
+          (if left?
+            (util/set-caret-pos! input selected-start)
+            (util/set-caret-pos! input selected-end))
 
-        (or (and left? (util/input-start? input))
-            (and right? (util/input-end? input)))
-        (move-to-block-when-cross-boundrary e direction)
+          (or (and left? (util/input-start? input))
+              (and right? (util/input-end? input)))
+          (move-to-block-when-cross-boundrary e direction)
 
-        :else
-        (if left?
-          (util/cursor-move-back input 1)
-          (util/cursor-move-forward input 1))))))
+          :else
+          (if left?
+            (util/cursor-move-back input 1)
+            (util/cursor-move-forward input 1)))))))
 
 (defn keydown-backspace-handler
   [cut? e]
@@ -2026,7 +2031,6 @@
         page (state/get-current-page)
         repo (state/get-current-repo)]
     (mark-last-input-time! repo)
-    (util/stop e)
     (cond
       (not= selected-start selected-end)
       (do
@@ -2398,13 +2402,16 @@
     (state/editing?)
     (keydown-backspace-handler true e)))
 
-(defn shortcut-delete
+(defn delete-selection
   [e]
-  (cond
+  (when
     (state/selection?)
-    (shortcut-delete-selection e)
+    (shortcut-delete-selection e)))
 
-    (state/editing?)
+(defn editor-delete
+  [_state e]
+  (when (state/editing?)
+    (util/stop e)
     (keydown-backspace-handler false e)))
 
 (defn shortcut-up-down [direction]

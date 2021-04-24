@@ -367,9 +367,13 @@
 (rum/defcs box < rum/reactive
   (mixins/event-mixin setup-key-listener!)
   (mixins/shortcuts
-   shortcut/install-shortcut!
+   #(shortcut/install-shortcut! % {})
    :shortcut-listener/editor
    shortcut-handler/editing-only)
+  (mixins/shortcuts
+   #(shortcut/install-shortcut! % {:prevent-default? true})
+   :shortcut-listener/editor-prevent-default
+   shortcut-handler/editing-only-prevent-default)
   lifecycle/lifecycle
   {:did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))

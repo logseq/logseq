@@ -15,9 +15,12 @@
 (def editing-only
   {:editor/new-block editor-handler/keydown-new-block-handler
    :editor/new-line editor-handler/keydown-new-line-handler
+   :editor/delete editor-handler/editor-delete
    :editor/left (editor-handler/keydown-arrow-handler :left)
-   :editor/right (editor-handler/keydown-arrow-handler :right)
-   :editor/indent (editor-handler/keydown-tab-handler :right)
+   :editor/right (editor-handler/keydown-arrow-handler :right)})
+
+(def editing-only-prevent-default
+  {:editor/indent (editor-handler/keydown-tab-handler :right)
    :editor/outindent (editor-handler/keydown-tab-handler :left)
    :editor/zoom-in  editor-handler/zoom-in!
    :editor/zoom-out  editor-handler/zoom-out!
@@ -42,7 +45,7 @@
     :editor/select-block-down (editor-handler/on-select-block :down)
     :editor/copy editor-handler/shortcut-copy
     :editor/cut editor-handler/shortcut-cut
-    :editor/delete editor-handler/shortcut-delete
+    :editor/delete-selection editor-handler/delete-selection
     :editor/save editor-handler/save!
     :editor/undo history/undo!
     :editor/redo history/redo!}
