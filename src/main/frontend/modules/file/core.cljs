@@ -31,7 +31,7 @@
 
                      :else
                      (str (->>
-                           (repeat (dec level) "  ")
+                           (repeat (dec level) (state/get-export-bullet-indentation))
                            (apply str))
                           "-"))         ; TODO:
             new-content (string/trim content)]

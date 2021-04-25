@@ -1197,3 +1197,15 @@
 (defn get-editor-args
   []
   (:editor/args @state))
+
+(defn get-export-bullet-indentation
+  []
+  (case (get @state :export/bullet-indentation :four-spaces)
+    :eight-spaces
+    "        "
+    :four-spaces
+    "    "
+    :two-spaces
+    "  "
+    :tab
+    "\t"))

@@ -12,7 +12,7 @@
 
 (def write-chan (async/chan))
 
-(def batch-write-interval 3000)
+(def batch-write-interval 1000)
 
 ;; FIXME name conflicts between multiple graphs
 (defn do-write-file!
