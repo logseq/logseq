@@ -11,7 +11,8 @@
            [goog.events KeyCodes]))
 
 (def installed (atom []))
-(def binding-profile (atom [binding/default binding/custom]))
+;; (def binding-profile (atom [binding/default binding/custom]))
+(def binding-profile (atom [binding/default]))
 
 (defn- mod-key [shortcut]
   (str/replace shortcut #"(?i)mod"
@@ -29,44 +30,44 @@
      (mapv mod-key))))
 
 (def global-keys #js
-  [KeyCodes/ENTER KeyCodes/TAB KeyCodes/BACKSPACE KeyCodes/DELETE
+  [KeyCodes/TAB
+   KeyCodes/ENTER
+   KeyCodes/BACKSPACE KeyCodes/DELETE
    KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (defn install-shortcut!
-  [shortcut-map]
+  [shortcut-map {:keys [set-global-keys? prevent-default?]
+                 :or {set-global-keys? true
+                      prevent-default? false}}]
   (let [handler (new KeyboardShortcutHandler js/window)]
-    ;; set arrows enter, tab to global
-    (.setGlobalKeys handler global-keys)
-    ;; default is true, set it to false here
-    (.setAlwaysPreventDefault handler false)
+     ;; set arrows enter, tab to global
+    (when set-global-keys?
+      (.setGlobalKeys handler global-keys))
+
+    (.setAlwaysPreventDefault handler prevent-default?)
 
     ;; register shortcuts
     (doseq [[id _] shortcut-map]
-      (log/info :shortcut/install-shortcut {:id id :shortcut (shortcut-binding id)})
+      ;; (log/info :shortcut/install-shortcut {:id id :shortcut (shortcut-binding id)})
       (doseq [k (shortcut-binding id)]
         (.registerShortcut handler (util/keyname id) k)))
 
     (let [f (fn [e]
               (let [dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
-                ;; trigger fn
+                 ;; trigger fn
                 (dispatch-fn e)))
           unlisten-fn (fn [] (.dispose handler))]
 
       (events/listen handler EventType/SHORTCUT_TRIGGERED f)
 
-      ;; return deregister fn
+       ;; return deregister fn
       (fn []
-        (log/info :shortcut/dispose (into [] (keys shortcut-map)))
+        ;; (log/info :shortcut/dispose (into [] (keys shortcut-map)))
         (unlisten-fn)))))
 
 (defn install-shortcuts!
   []
   (let [result (->> handler
-                    (map #(install-shortcut! %))
+                    (map #(install-shortcut! % {}))
                     doall)]
     (reset! installed result)))
-
-(defn uninstall-shortcuts!
-  []
-  (doseq [f @installed]
-    (f)))

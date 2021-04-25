@@ -86,11 +86,12 @@
            [:p.content
             (util/format "File %s already exists!" file-path)]
            :error)
-          (let [file-path (config/get-file-path repo path)]
-            (db/transact! [{:file/path file-path}
-                           {:block/name (:block/name page)
-                            :block/file [:file/path file-path]}])
-            (ok-handler)))))))
+          (let [file-path (config/get-file-path repo path)
+                tx [{:file/path file-path}
+                    {:block/name (:block/name page)
+                     :block/file [:file/path file-path]}]]
+            (db/transact! tx)
+            (when ok-handler (ok-handler))))))))
 
 (defn save-tree-aux!
   [page-block tree]

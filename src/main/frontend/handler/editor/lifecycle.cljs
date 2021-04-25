@@ -48,7 +48,7 @@
 
 (defn will-unmount
   [state]
-  (let [{:keys [id value format block repo dummy? config]} (get-state state)
+  (let [{:keys [id value format block repo dummy? config]} (get-state)
         file? (:file? config)]
     (when-let [input (gdom/getElement id)]
       ;; (.removeEventListener input "paste" (fn [event]
@@ -86,7 +86,7 @@
                   (file/alter-file (state/get-current-repo) new-path (string/trim value)
                                    {:re-render-root? true})))))))
       (when-not (contains? #{:insert :indent :outdent :auto-save} (state/get-editor-op))
-        (editor-handler/save-block! (get-state state) value))))
+        (editor-handler/save-block! (get-state) value))))
   state)
 
 (def lifecycle

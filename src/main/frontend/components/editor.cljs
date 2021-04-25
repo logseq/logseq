@@ -14,7 +14,7 @@
             [frontend.mixins :as mixins]
             [frontend.ui :as ui]
             [frontend.db :as db]
-            [frontend.modules.shortcut.mixin :refer [bind-state]]
+            [frontend.modules.shortcut.handler :as shortcut-handler]
             [dommy.core :as d]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -27,7 +27,8 @@
                      *angle-bracket-caret-pos
                      *matched-block-commands
                      *show-block-commands]]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [frontend.modules.shortcut.core :as shortcut]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -356,7 +357,7 @@
 
 (defn- setup-key-listener!
   [state]
-  (let [{:keys [id format block]} (get-state state)
+  (let [{:keys [id format block]} (get-state)
         input-id id
         input (gdom/getElement input-id)
         repo (:block/repo block)]
@@ -365,8 +366,18 @@
 
 (rum/defcs box < rum/reactive
   (mixins/event-mixin setup-key-listener!)
-  (bind-state :component/box)
+  (mixins/shortcuts
+   #(shortcut/install-shortcut! % {})
+   :shortcut-listener/editor
+   shortcut-handler/editing-only)
+  (mixins/shortcuts
+   #(shortcut/install-shortcut! % {:prevent-default? true})
+   :shortcut-listener/editor-prevent-default
+   shortcut-handler/editing-only-prevent-default)
   lifecycle/lifecycle
+  {:did-mount (fn [state]
+                (state/set-editor-args! (:rum/args state))
+                state)}
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or   {dummy? false}
           :as   option} id config]

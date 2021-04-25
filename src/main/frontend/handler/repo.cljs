@@ -21,36 +21,16 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.extract :as extract-handler]
-            [frontend.ui :as ui]
             [clojure.string :as string]
             [frontend.dicts :as dicts]
             [frontend.spec :as spec]
             [frontend.encrypt :as encrypt]
             [goog.dom :as gdom]
-            [goog.object :as gobj]
-            ;; TODO: remove component dependency from handlers, we can use a core.async channel
-            [frontend.components.encryption :as encryption]))
+            [goog.object :as gobj]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
 ;; 2. Git pulls the new change (fn: load-files)
-
-(defn show-install-error!
-  [repo-url title]
-  (spec/validate :repos/url repo-url)
-  (notification/show!
-   [:p.content
-    title
-    " "
-    [:span.mr-2
-     (util/format
-      "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
-      repo-url)
-     (ui/button
-      "Install Logseq on GitHub"
-      :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
-   :error
-   false))
 
 (defn create-config-file-if-not-exists
   [repo-url]
@@ -225,10 +205,8 @@
     (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
     (when first-clone?
       (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
-        (state/set-modal!
-         (encryption/encryption-setup-dialog
-          repo-url
-          #(create-default-files! repo-url %)))
+        (state/pub-event! [:modal/encryption-setup-dialog repo-url
+                           #(create-default-files! repo-url %)])
         (create-default-files! repo-url db-encrypted?)))
     (when re-render?
       (ui-handler/re-render-root! re-render-opts))
@@ -259,11 +237,9 @@
           db-encrypted? (:db/encrypted? metadata)
           db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
       (if db-encrypted?
-        (state/set-modal!
-         (encryption/encryption-input-secret-dialog
-          repo-url
-          db-encrypted-secret
-          #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)))
+        (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)]
+          (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
+                             close-fn]))
         (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)))))
 
 (defn load-repo-to-db!
@@ -410,7 +386,7 @@
                     (cond
                       (string/includes? (str error) "404")
                       (do (log/error :git/pull-error error)
-                          (show-install-error! repo-url (util/format "Failed to fetch %s." repo-url)))
+                          (state/pub-event! [:repo/install-error repo-url (util/format "Failed to fetch %s." repo-url)]))
 
                       (string/includes? (str error) "401")
                       (let [remain-times (dec try-times)]
@@ -514,7 +490,7 @@
          (state/set-cloning! false)
          (git-handler/set-git-status! repo-url :clone-failed)
          (git-handler/set-git-error! repo-url e)
-         (show-install-error! repo-url (util/format "Failed to clone %s." repo-url)))))))
+         (state/pub-event! [:repo/install-error repo-url (util/format "Failed to clone %s." repo-url)]))))))
 
 (defn remove-repo!
   [{:keys [id url] :as repo}]

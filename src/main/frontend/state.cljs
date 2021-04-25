@@ -17,6 +17,7 @@
   (atom
    {:route-match nil
     :today nil
+    :system/events (async/chan 100)
     :db/batch-txs (async/chan 100)
     :file/writes (async/chan 100)
     :notification/show? false
@@ -84,6 +85,7 @@
     :editor/set-timestamp-block nil
     :editor/last-input-time nil
     :editor/new-block-toggle? false
+    :editor/args nil
     :db/last-transact-time {}
     :db/last-persist-transact-ids {}
     ;; whether database is persisted
@@ -1169,6 +1171,15 @@
    (get-in @state [:me :settings :start-of-week])
    6))
 
+(defn get-events-chan
+  []
+  (:system/events @state))
+
+(defn pub-event!
+  [payload]
+  (let [chan (get-events-chan)]
+    (async/put! chan payload)))
+
 (defonce diffs (atom nil))
 
 (defn get-copied-blocks
@@ -1179,7 +1190,10 @@
   [content ids]
   (set-state! :copy/blocks {:copy/content content :copy/block-tree ids}))
 
-(defonce components (atom {}))
+(defn set-editor-args!
+  [args]
+  (set-state! :editor/args args))
 
-(defn auto-complete? []
-  (some? (get @components :component/auto-complete)))
+(defn get-editor-args
+  []
+  (:editor/args @state))

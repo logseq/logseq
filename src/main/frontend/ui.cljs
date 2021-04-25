@@ -7,7 +7,7 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
-            [frontend.modules.shortcut.mixin :refer [bind-state]]
+            [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.components.svg :as svg]
             [clojure.string :as string]
@@ -15,7 +15,8 @@
             [goog.dom :as gdom]
             [medley.core :as medley]
             [frontend.ui.date-picker]
-            [frontend.context.i18n :as i18n]))
+            [frontend.context.i18n :as i18n]
+            [frontend.modules.shortcut.core :as shortcut]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -321,7 +322,12 @@
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
-  (bind-state :component/auto-complete)
+  (mixins/shortcuts
+   #(shortcut/install-shortcut! % {})
+   :shortcut-listener/auto-complete
+   {:auto-complete/prev ui-handler/auto-complete-prev
+    :auto-complete/next ui-handler/auto-complete-next
+    :auto-complete/complete ui-handler/auto-complete-complete})
   [state matched {:keys [on-chosen
                          on-shift-chosen
                          on-enter

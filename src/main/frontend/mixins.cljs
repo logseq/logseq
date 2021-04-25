@@ -173,3 +173,32 @@
        (profile
         (str "Render " desc)
         (render-fn state))))})
+
+(defn shortcuts
+  [install-shortcut! listener dispatcher]
+  {:did-mount
+   (fn [state]
+     (->> dispatcher
+          (reduce-kv (fn [result id handle-fn]
+                       (assoc result id (partial handle-fn state)))
+                     {})
+          install-shortcut!
+          (assoc state listener)))
+   :did-remount (fn [old-state new-state]
+
+                  ;; remove shortcuts and unlisten
+                  (when-let [f (get old-state listener)]
+                    (f))
+
+                  ;; update new states
+                  (->> dispatcher
+                       (reduce-kv (fn [result id handle-fn]
+                                    (assoc result id (partial handle-fn new-state)))
+                                  {})
+                       install-shortcut!
+                       (assoc new-state listener)))
+   :will-unmount
+   (fn [state]
+     (when-let [f (get state listener)]
+       (f))
+     (dissoc state listener))})

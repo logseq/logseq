@@ -23,7 +23,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export]
             [frontend.config :as config]
-            [frontend.modules.shortcut.core :as shortcut]
             [dommy.core :as d]
             [clojure.string :as string]
             [goog.object :as gobj]
