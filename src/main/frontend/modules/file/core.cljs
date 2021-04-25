@@ -15,26 +15,32 @@
             [frontend.modules.outliner.tree :as tree]
             [promesa.core :as p]))
 
+(defn- indented-block-content
+  [content spaces-tabs]
+  (let [lines (string/split-lines content)]
+    (string/join (str "\n" spaces-tabs) lines)))
+
 (defn transform-content
   [{:block/keys [format pre-block? content unordered]} level]
   (let [content (or content "")]
     (if pre-block?
       (string/trim content)
-      (let [prefix (cond
-                     (= format :org)
-                     (->>
-                      (repeat level "*")
-                      (apply str))
+      (let [[prefix spaces-tabs]
+            (cond
+              (= format :org)
+              [(->>
+                (repeat level "*")
+                (apply str)) ""]
 
-                     (and (= format :markdown) (not unordered)) ; heading
-                     ""
+              (and (= format :markdown) (not unordered)) ; heading
+              ["" ""]
 
-                     :else
-                     (str (->>
-                           (repeat (dec level) (state/get-export-bullet-indentation))
-                           (apply str))
-                          "-"))         ; TODO:
-            new-content (string/trim content)]
+              :else
+              (let [spaces-tabs (->>
+                                 (repeat (dec level) (state/get-export-bullet-indentation))
+                                 (apply str))]
+                [(str spaces-tabs "-") (str spaces-tabs "  ")]))
+            new-content (indented-block-content (string/trim content) spaces-tabs)]
         (str prefix " " new-content)))))
 
 (defn tree->file-content
