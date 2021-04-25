@@ -886,7 +886,10 @@
   (when copy? (copy-selection-blocks))
   (when-let [blocks (seq (get-selected-blocks-with-children))]
     (let [repo (dom/attr (first blocks) "repo")
-          ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
+          ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))
+          ids (if (= :up (state/get-selection-direction))
+                (reverse ids)
+                ids)]
       (delete-blocks! repo ids))))
 
 (defn- get-nearest-page
@@ -1003,8 +1006,11 @@
   (when-let [start-block (state/get-selection-start-block)]
     (clear-selection! nil)
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
+          direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
 
-          direction (util/get-direction-between-two-nodes start-block end-block "ls-block")]
+          blocks (if (= :up direction)
+                   (reverse blocks)
+                   blocks)]
       (exit-editing-and-set-selected-blocks! blocks direction))))
 
 (defn on-select-block
@@ -2350,10 +2356,12 @@
 
 (defn shortcut-cut-selection
   [e]
+  (util/stop e)
   (cut-blocks-and-clear-selections! true))
 
 (defn shortcut-delete-selection
   [e]
+  (util/stop e)
   (cut-blocks-and-clear-selections! false))
 
 ;; credits to @pengx17
@@ -2376,17 +2384,18 @@
   * when in edit mode but no text selected, copy current block ref
   * when in edit mode with text selected, copy selected text as normal"
   [e]
-  (cond
-    (state/selection?)
-    (shortcut-copy-selection e)
+  (when-not (state/auto-complete?)
+    (cond
+      (state/selection?)
+      (shortcut-copy-selection e)
 
-    (state/editing?)
-    (let [input (state/get-input)
-          selected-start (.-selectionStart input)
-          selected-end (.-selectionEnd input)]
-      (if (= selected-start selected-end)
-        (copy-current-block-ref)
-        (js/document.execCommand "copy")))))
+      (state/editing?)
+      (let [input (state/get-input)
+            selected-start (.-selectionStart input)
+            selected-end (.-selectionEnd input)]
+        (if (= selected-start selected-end)
+          (copy-current-block-ref)
+          (js/document.execCommand "copy"))))))
 
 
 (defn shortcut-cut
@@ -2426,3 +2435,4 @@
 
         :else
         (select-first-last direction)))))
+
