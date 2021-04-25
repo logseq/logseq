@@ -105,22 +105,22 @@ html.is-electron {
   }
 
   &.is-mac {
+    .theme-inner:before {
+      content: ' ';
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 8;
+      -webkit-app-region: drag;
+      width: 100%;
+      height: var(--frame-top-height);
+    }
+
     .cp__header {
       height: calc(2.2rem + var(--frame-top-height));
       padding-top: var(--frame-top-height);
 
       &-logo {
-        height: var(--frame-top-height);
-      }
-
-      &:before {
-        content: ' ';
-        position: fixed;
-        top: 0;
-        left: 0;
-        z-index: 8;
-        -webkit-app-region: drag;
-        width: 100%;
         height: var(--frame-top-height);
       }
     }
