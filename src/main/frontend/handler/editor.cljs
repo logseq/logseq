@@ -2384,7 +2384,7 @@
   * when in edit mode but no text selected, copy current block ref
   * when in edit mode with text selected, copy selected text as normal"
   [e]
-  (when-not (state/auto-complete?)
+  (when-not (auto-complete?)
     (cond
       (state/selection?)
       (shortcut-copy-selection e)
@@ -2435,4 +2435,3 @@
 
         :else
         (select-first-last direction)))))
-
