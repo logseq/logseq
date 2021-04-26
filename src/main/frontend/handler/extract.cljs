@@ -23,6 +23,19 @@
          (map string/lower-case)
          (distinct))))
 
+(defn- remove-indentation-spaces
+  [s level]
+  (let [level (inc level)
+        lines (string/split-lines s)
+        [f & r] lines
+        body (map (fn [line]
+                    (if (string/blank? (util/safe-subs line 0 level))
+                      (util/safe-subs line level)
+                      line))
+                  r)
+        content (cons f body)]
+    (string/join "\n" content)))
+
 (defn- get-block-content
   [utf8-content block format]
   (let [meta (:block/meta block)
@@ -33,7 +46,11 @@
                   (utf8/substring utf8-content
                                   (:start-pos meta)))]
     (when content
-      (text/remove-level-spaces content format))))
+      (let [content (text/remove-level-spaces content format)]
+        (if (or (:block/pre-block? block)
+                (= (:block/format block) :org))
+          content
+          (remove-indentation-spaces content (:block/level block)))))))
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
