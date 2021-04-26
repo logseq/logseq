@@ -77,15 +77,16 @@
                 (notification/show! "Journal title can't be changed." :warning)
                 (let [new-name (if journal? (date/journal-title->default new-name) new-name)
                       new-path (if new-name
-                                (if (and
-                                     new-name old-page-name
-                                     (= (string/lower-case new-name) (string/lower-case old-page-name)))
-                                  path
-                                  (page-handler/compute-new-file-path path new-name))
-                                path)]
+                                 (if (and
+                                      new-name old-page-name
+                                      (= (string/lower-case new-name) (string/lower-case old-page-name)))
+                                   path
+                                   (page-handler/compute-new-file-path path new-name))
+                                 path)]
                   (file/alter-file (state/get-current-repo) new-path (string/trim value)
                                    {:re-render-root? true})))))))
-      (when-not (contains? #{:insert :indent :outdent :auto-save} (state/get-editor-op))
+      ;; TODO: ugly
+      (when-not (contains? #{:insert :indent :outdent :auto-save :undo :redo} (state/get-editor-op))
         (editor-handler/save-block! (get-state) value))))
   state)
 

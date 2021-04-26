@@ -36,12 +36,16 @@
 (defn undo!
   [e]
   (util/stop e)
+  (state/set-editor-op! :undo)
   (editor/save-current-block!)
   (let [{:keys [editor-cursor]} (undo-redo/undo)]
-    (restore-cursor! editor-cursor)))
+    (restore-cursor! editor-cursor))
+  (state/set-editor-op! nil))
 
 (defn redo!
   [e]
   (util/stop e)
+  (state/set-editor-op! :redo)
   (let [{:keys [editor-cursor]} (undo-redo/redo)]
-    (restore-cursor! editor-cursor)))
+    (restore-cursor! editor-cursor))
+  (state/set-editor-op! nil))
