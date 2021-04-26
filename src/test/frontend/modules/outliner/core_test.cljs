@@ -27,8 +27,8 @@
                           :block/left
                           (outliner-u/->block-lookup-ref left-id)
                           :block/content (str id)})
-             (remove #(nil? (val %)))
-             (into {}))]
+                (remove #(nil? (val %)))
+                (into {}))]
      (outliner-core/block m))))
 
 (defrecord TreeNode [id children])
@@ -42,7 +42,7 @@
   "build RDS record from memory node struct."
   [tree-record]
   (outliner-ds/auto-transact!
-    [state (outliner-ds/new-outliner-txs-state)] nil
+   [state (outliner-ds/new-outliner-txs-state)] nil
    (letfn [(build [node queue]
              (let [{:keys [id left parent]} node
                    block (build-block id parent left)
@@ -51,7 +51,7 @@
                                    (let [node (assoc c :left @left :parent (:id node))]
                                      (swap! left (constantly (:id c)))
                                      node))
-                              (:children node))
+                                 (:children node))
                    queue (concat queue children)]
                (tree/-save block state)
                (when (seq queue)
@@ -81,7 +81,7 @@
 
 (deftest test-insert-node-as-first-child
   "
-  Inert a node between 6 and 9.
+  Insert a node between 6 and 9.
   [1 [[2 [[18]         ;; add
           [3 [[4]
               [5]]]
@@ -98,16 +98,16 @@
   (let [new-node (build-block 18 nil nil)
         parent-node (build-block 2 1 1)]
     (outliner-ds/auto-transact!
-      [state (outliner-ds/new-outliner-txs-state)] nil
+     [state (outliner-ds/new-outliner-txs-state)] nil
      (outliner-core/insert-node-as-first-child state new-node parent-node))
     (let [children-of-2 (->> (build-block 2 1 1)
-                          (tree/-get-children)
-                          (mapv #(-> % :data :block/uuid)))]
+                             (tree/-get-children)
+                             (mapv #(-> % :data :block/uuid)))]
       (is (= [18 3 6 9] children-of-2)))))
 
 (deftest test-insert-node-as-sibling
   "
-  Inert a node between 6 and 9.
+  Insert a node between 6 and 9.
   [1 [[2 [[3 [[4]
               [5]]]
           [6 [[7 [[8]]]]]
@@ -123,11 +123,11 @@
   (let [new-node (build-block 18 nil nil)
         left-node (build-block 6 2 3)]
     (outliner-ds/auto-transact!
-      [state (outliner-ds/new-outliner-txs-state)] nil
+     [state (outliner-ds/new-outliner-txs-state)] nil
      (outliner-core/insert-node-as-sibling state new-node left-node))
     (let [children-of-2 (->> (build-block 2 1 1)
-                          (tree/-get-children)
-                          (mapv #(-> % :data :block/uuid)))]
+                             (tree/-get-children)
+                             (mapv #(-> % :data :block/uuid)))]
       (is (= [3 6 18 9] children-of-2)))))
 
 (deftest test-delete-node
@@ -147,8 +147,8 @@
   (let [node (build-block 6 2 3)]
     (outliner-core/delete-node node)
     (let [children-of-2 (->> (build-block 2 1 1)
-                          (tree/-get-children)
-                          (mapv #(-> % :data :block/uuid)))]
+                             (tree/-get-children)
+                             (mapv #(-> % :data :block/uuid)))]
       (is (= [3 9] children-of-2)))))
 
 
@@ -170,11 +170,11 @@
         target-node (build-block 14 12 13)]
     (outliner-core/move-subtree node target-node true)
     (let [old-parent's-children (->> (build-block 2 1 1)
-                                  (tree/-get-children)
-                                  (mapv #(-> % :data :block/uuid)))
+                                     (tree/-get-children)
+                                     (mapv #(-> % :data :block/uuid)))
           new-parent's-children (->> (build-block 12 1 2)
-                                  (tree/-get-children)
-                                  (mapv #(-> % :data :block/uuid)))]
+                                     (tree/-get-children)
+                                     (mapv #(-> % :data :block/uuid)))]
       (is (= [6 9] old-parent's-children))
       (is (= [13 14 3 15] new-parent's-children)))))
 
@@ -197,10 +197,10 @@
         target-node (build-block 12 1 2)]
     (outliner-core/move-subtree node target-node false)
     (let [old-parent's-children (->> (build-block 2 1 1)
-                                  (tree/-get-children)
-                                  (mapv #(-> % :data :block/uuid)))
+                                     (tree/-get-children)
+                                     (mapv #(-> % :data :block/uuid)))
           new-parent's-children (->> (build-block 12 1 2)
-                                  (tree/-get-children)
-                                  (mapv #(-> % :data :block/uuid)))]
+                                     (tree/-get-children)
+                                     (mapv #(-> % :data :block/uuid)))]
       (is (= [6 9] old-parent's-children))
       (is (= [3 13 14 15] new-parent's-children)))))
