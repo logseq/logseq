@@ -2154,9 +2154,11 @@
                    (util/move-cursor-to input pos))))))))
 
 (defn keydown-not-matched-handler
-  [input input-id format]
+  [format]
   (fn [e key-code]
-    (let [key (gobj/get e "key")
+    (let [input-id (state/get-edit-input-id)
+          input (state/get-input)
+          key (gobj/get e "key")
           value (gobj/get input "value")
           ctrlKey (gobj/get e "ctrlKey")
           metaKey (gobj/get e "metaKey")

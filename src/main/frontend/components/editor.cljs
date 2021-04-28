@@ -340,11 +340,11 @@
         *slash-caret-pos)))])
 
 (defn- set-up-key-down!
-  [repo state input input-id format]
+  [repo state format]
   (mixins/on-key-down
    state
    {}
-   {:not-matched-handler (editor-handler/keydown-not-matched-handler input input-id format)}))
+   {:not-matched-handler (editor-handler/keydown-not-matched-handler format)}))
 
 (defn- set-up-key-up!
   [state input input-id search-timeout]
@@ -361,7 +361,7 @@
         input-id id
         input (gdom/getElement input-id)
         repo (:block/repo block)]
-    (set-up-key-down! repo state input input-id format)
+    (set-up-key-down! repo state format)
     (set-up-key-up! state input input-id search-timeout)))
 
 (rum/defcs box < rum/reactive
