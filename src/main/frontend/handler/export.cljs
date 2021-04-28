@@ -13,7 +13,47 @@
             [frontend.text :as text]
             [frontend.handler.common :as common-handler]
             [frontend.extensions.zip :as zip]
+            [frontend.modules.file.core :as outliner-file]
+            [frontend.modules.outliner.tree :as outliner-tree]
             [promesa.core :as p]))
+
+
+(defn- get-page-content
+  [page]
+  (outliner-file/tree->file-content
+   (outliner-tree/blocks->vec-tree
+    (db/get-page-blocks-no-cache page) page) 1))
+
+(defn- get-file-content
+  [file-path]
+  (let [page-name
+        (ffirst (d/q '[:find ?pn
+                       :where
+                       [?e :file/path file-path]
+                       [?p :block/file ?e]
+                       [?p :block/name ?pn]] (db/get-conn)))]
+    (get-page-content page-name)))
+
+(defn- get-file-contents
+  [repo]
+  (let [conn (db/get-conn repo)]
+    (->> (d/q '[:find ?n ?fp
+                :where
+                [?e :block/file ?f]
+                [?f :file/path ?fp]
+                [?e :block/name ?n]] conn)
+         (mapv (fn [[page-name file-path]]
+                 [file-path
+                  (outliner-file/tree->file-content
+                   (outliner-tree/blocks->vec-tree
+                    (db/get-page-blocks-no-cache page-name) page-name) 1)])))))
+
+(defn- get-blocks-contents
+  [repo root-block-uuid]
+  (->
+   (db/get-block-and-children repo root-block-uuid)
+   (outliner-tree/blocks->vec-tree (str root-block-uuid))
+   (outliner-file/tree->file-content 1)))
 
 (defn copy-block!
   [block-id]
@@ -60,15 +100,14 @@
 
 (defn download-file!
   [file-path]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [content (db/get-file repo file-path)]
-      (let [data (js/Blob. ["\ufeff" (array content)] ; prepend BOM
-                           (clj->js {:type "text/plain;charset=utf-8,"}))]
-        (let [anchor (gdom/getElement "download")
-              url (js/window.URL.createObjectURL data)]
-          (.setAttribute anchor "href" url)
-          (.setAttribute anchor "download" file-path)
-          (.click anchor))))))
+  (when-let [content (get-file-content file-path)]
+    (let [data (js/Blob. ["\ufeff" (array content)] ; prepend BOM
+                         (clj->js {:type "text/plain;charset=utf-8,"}))]
+      (let [anchor (gdom/getElement "download")
+            url (js/window.URL.createObjectURL data)]
+        (.setAttribute anchor "href" url)
+        (.setAttribute anchor "download" file-path)
+        (.click anchor)))))
 
 (defn export-repo-as-html!
   [repo]
@@ -94,9 +133,11 @@
           (.setAttribute anchor "download" "index.html")
           (.click anchor))))))
 
+
+
 (defn export-repo-as-zip!
   [repo]
-  (let [files (db/get-file-contents repo)
+  (let [files (get-file-contents repo)
         [owner repo-name] (util/get-git-owner-and-repo repo)
         repo-name (str owner "-" repo-name)]
     (when (seq files)
@@ -112,7 +153,7 @@
     (->>
      (filterv (fn [[path _]]
                 (or (string/ends-with? path ".md")))
-              (db/get-file-contents repo))
+              (get-file-contents repo))
      (mapv (fn [[path content]] {:path path :content content
                                  :names (d/q '[:find [?n ?n2]
                                                :in $ ?p
@@ -130,11 +171,12 @@
                     (let [[ref-blocks ref-pages]
                           (->> (if is-block?
                                  [page-or-block]
-                                 (db/get-page-blocks
-                                  repo page-or-block {:use-cache? false
-                                                      :pull-keys '[:block/refs]}))
+                                 (db/get-page-blocks-no-cache
+                                  repo page-or-block {:pull-keys '[:block/refs]}))
                                (filterv :block/refs)
-                               (apply mapv vector)
+                               (mapcat :block/refs)
+                               (group-by #(boolean (:block/page (db/entity (:db/id %)))))
+                               ((fn [g] [(get g true []) (get g false [])]))
                                (mapv #(vec (distinct (flatten (remove nil? %))))))
                           ref-block-ids
                           (->> ref-blocks
@@ -151,6 +193,7 @@
                           ref-pages
                           (->> ref-page-ids
                                (db/pull-many repo '[*])
+                               (filterv :block/name)
                                (flatten))
                           [next-ref-blocks1 next-ref-pages1]
                           (->> ref-blocks
@@ -191,17 +234,11 @@
                        [[name file-path]]
                        [[name file-path] [origin-name file-path]])))
              (apply concat)
-             (mapv (fn [[page-name file-path]] [page-name (:file/path file-path)]))
-             (d/q '[:find ?n ?c
-                    :in $ [[?n ?p] ...]
-                    :where
-                    [?e :file/path ?p]
-                    [?e :file/content ?c]] (db/get-conn repo)))
+             (mapv (fn [[page-name file-path]]
+                     [page-name (get-page-content page-name)])))
         embed-blocks
         (mapv (fn [b] [(str (:block/uuid b))
-                       [(apply str
-                               (mapv #(:block/content %)
-                                     (db/get-block-and-children repo (:block/uuid b))))
+                       [(get-blocks-contents repo (:block/uuid b))
                         (:block/title b)]])
               blocks)]
     {:embed_blocks embed-blocks
@@ -348,9 +385,7 @@
     {:embed_blocks
      (mapv (fn [[title _content uuid id]]
              [(str uuid)
-              [(apply str
-                      (mapv #(:block/content %)
-                            (db/get-block-and-children repo uuid)))
+              [(get-blocks-contents repo uuid)
                title]])
            block-refs)
      :embed_pages (vec page-refs)}))
@@ -400,7 +435,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [file (db/get-page-file page-name)]
       (when-let [path (:file/path file)]
-        (when-let [content (db/get-file path)]
+        (when-let [content (get-page-content page-name)]
           (let [names [page-name]
                 format (f/get-format path)
                 files [{:path path :content content :names names :format format}]]
@@ -433,7 +468,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [file (db/get-page-file page-name)]
       (when-let [path (:file/path file)]
-        (when-let [content (db/get-file path)]
+        (when-let [content (get-page-content page-name)]
           (let [names [page-name]
                 format (f/get-format path)
                 files [{:path path :content content :names names :format format}]]
