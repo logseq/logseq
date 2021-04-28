@@ -10,9 +10,10 @@
   (let [r (d/pull db-after '[*] db-id)]
     (if (= keys-of-deleted-entity (count r))
       (let [r (d/pull db-before '[*] db-id)]
-        (if (= keys-of-deleted-entity (count r))
-          (log/error :outliner-pipeline/cannot-find-entity {:entity r})
-          r))
+        (when (= keys-of-deleted-entity (count r))
+          ;; TODO: What can cause this happen?
+          (log/error :outliner-pipeline/cannot-find-entity {:entity r}))
+        r)
       r)))
 
 (defn get-blocks-and-pages

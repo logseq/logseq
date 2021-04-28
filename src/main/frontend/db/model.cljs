@@ -211,6 +211,12 @@
       (-> (d/entity (d/db conn) [:file/path path])
           :file/last-modified-at))))
 
+(defn file-exists?
+  [repo path]
+  (when (and repo path)
+    (when-let [conn (conn/get-conn repo false)]
+      (d/entity (d/db conn) [:file/path path]))))
+
 (defn get-file
   ([path]
    (get-file (state/get-current-repo) path))
