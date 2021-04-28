@@ -1692,6 +1692,8 @@
       {:id block-id
        :data-refs data-refs
        :data-refs-self data-refs-self
+       :data-title (str title)
+       :data-body (str body)
        :style {:position "relative"}
        :class (str uuid
                    (when dummy? " dummy")
