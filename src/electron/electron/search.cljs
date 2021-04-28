@@ -32,29 +32,28 @@
   (when db
     (.prepare db sql)))
 
-;; (defn add-triggers!
-;;   [db]
-;;   (let [triggers ["CREATE TRIGGER blocks_ai AFTER INSERT ON blocks
-;;     BEGIN
-;;         INSERT INTO blocks_fts (id, text)
-;;         VALUES (new.id, new.text);
-;;     END;
-;; "
-;;                   "CREATE TRIGGER blocks_ad AFTER DELETE ON blocks
-;;     BEGIN
-;;         INSERT INTO blocks_fts (blocks_fts, id, text)
-;;         VALUES ('delete', old.id, old.text);
-;;     END;"
-;;                   "CREATE TRIGGER blocks_au AFTER UPDATE ON blocks
-;;     BEGIN
-;;         INSERT INTO blocks_fts (blocks_fts, id, text)
-;;         VALUES ('delete', old.id, old.text);
-;;         INSERT INTO blocks_fts (id, text)
-;;         VALUES (new.id, new.text);
-;;     END;"]]
-;;     (doseq [trigger triggers]
-;;      (let [stmt (prepare db trigger)]
-;;        (.run ^object stmt)))))
+(defn add-triggers!
+  [db]
+  (let [triggers ["CREATE TRIGGER IF NOT EXISTS blocks_ad AFTER DELETE ON blocks
+    BEGIN
+        DELETE from blocks_fts where rowid = old.id;
+    END;"
+                  "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
+    BEGIN
+        INSERT INTO blocks_fts (rowid, uuid, content)
+        VALUES (new.id, new.uuid, new.content);
+    END;
+"
+                  "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
+    BEGIN
+        DELETE from blocks_fts where rowid = old.id;
+        INSERT INTO blocks_fts (rowid, uuid, content)
+        VALUES (new.id, new.uuid, new.content);
+    END;"
+                  ]]
+    (doseq [trigger triggers]
+     (let [stmt (prepare db trigger)]
+       (.run ^object stmt)))))
 
 (defn create-blocks-table!
   [db]
@@ -66,7 +65,7 @@
 
 (defn create-blocks-fts-table!
   [db]
-  (let [stmt (prepare db "CREATE VIRTUAL TABLE blocks_fts USING fts5(id, uuid, content)")]
+  (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(uuid, content)")]
     (.run ^object stmt)))
 
 (defn get-search-dir
@@ -88,7 +87,10 @@
   [db-name]
   (let [[db-name db-full-path] (get-db-full-path db-name)
         db (sqlite3 db-full-path nil)
-        _ (create-blocks-table! db)]
+        _ (create-blocks-table! db)
+        _ (create-blocks-fts-table! db)
+        _ (add-triggers! db)
+        ]
     (swap! databases assoc db-name db)))
 
 (defn open-dbs!
@@ -133,29 +135,40 @@
   [repo q limit]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
-      (let [limit (or limit 20)
-            stmt (prepare database
-                          "select id, uuid, content from blocks where content like ? limit ?")]
-       (js->clj (.all ^object stmt (str "%" q "%") limit) :keywordize-keys true)))))
+      (let [match? (or
+                    (string/includes? q " and ")
+                    (string/includes? q " && ")
+                    (string/includes? q " or ")
+                    (string/includes? q " | ")
+                    ;; (string/includes? q " not ")
+                    )
+            q (if match?
+                (-> q
+                    (string/replace " and " " AND ")
+                    (string/replace " && " " AND ")
+                    (string/replace " or " " OR ")
+                    (string/replace " | " " OR ")
+                    (string/replace " not " " NOT "))
+                q)
+            limit (or limit 20)
+            [sql input] (if match?
+                          ["select rowid, uuid, content from blocks_fts where content match ? order by rank limit ?"
+                           q]
+                          (let [q (string/replace q #"\s+" "%")]
+                            ["select rowid, uuid, content from blocks_fts where content like ? limit ?"
+                             (str "%" q "%")]))
+            stmt (prepare database sql)]
+        (js->clj (.all ^object stmt input limit) :keywordize-keys true)))))
 
 (defn truncate-blocks-table!
   [repo]
   (when-let [database (get-db repo)]
     (let [stmt (prepare database
-                       "delete from blocks;")]
-     (.run ^object stmt))))
-
-(defn drop-blocks-table!
-  [repo]
-  (when-let [database (get-db repo)]
-    (let [stmt (prepare database
-                       "drop table blocks;")
-         _ (.run ^object stmt)
-         ;; stmt (prepare @database
-         ;;               "drop table blocks_fts;")
-         ]
-     ;; (.run ^object stmt)
-      )))
+                        "delete from blocks;")
+          _ (.run ^object stmt)
+          stmt (prepare database
+                        "delete from blocks_fts;")]
+      (.run ^object stmt))))
 
 (defn delete-db!
   [repo]
@@ -165,29 +178,16 @@
       (println "Delete search indice: " db-full-path)
       (fs/unlinkSync db-full-path))))
 
+(defn query
+  [repo sql]
+  (when-let [database (get-db repo)]
+    (let [stmt (prepare database sql)]
+      (.all ^object stmt))))
 
 (comment
-  (open-db!)
+  (def repo (first (keys @databases)))
+  (query repo
+    "select * from blocks_fts")
 
-  (add-blocks! (clj->js [{:id "a"
-                          :uuid ""
-                          :content "hello world"}
-                         {:id "b"
-                          :uuid ""
-                          :content "foo bar"}]))
-
-  (time
-    (let [blocks (for [i (range 10000)]
-                   {:id (str i)
-                    :uuid ""
-                    :content (rand-nth ["hello" "world" "nice"])})]
-      (add-blocks! (clj->js blocks))))
-
-  (get-all-blocks)
-
-  (search-blocks "hello")
-
-  (def block {:id 16, :uuid "5f713e91-8a3c-4b04-a33a-c39482428e2d", :content "Hello, I'm a block!"})
-
-  (add-blocks! (clj->js [block]))
+  (delete-db! repo)
   )
