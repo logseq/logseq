@@ -117,7 +117,7 @@
       (when (state/sub :ui/left-sidebar-open?)
         (sidebar-nav route-match nil))]
      [:div#main-content-container.w-full.flex.justify-center
-      {:margin-top (if global-graph-pages? 0 "2rem")}
+      {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width (or global-graph-pages?
