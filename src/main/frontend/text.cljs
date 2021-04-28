@@ -120,10 +120,7 @@
      text
 
      :else
-     (let [text' (remove-level-space-aux! text (config/get-block-pattern format) space?)]
-       (if (and (= format :markdown) (= text text') )
-         (remove-level-space-aux! text "#" space?)
-         text')))))
+     (remove-level-space-aux! text (config/get-block-pattern format) space?))))
 
 (defn append-newline-after-level-spaces
   [text format]
