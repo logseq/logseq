@@ -452,7 +452,7 @@
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
     [:div.color-level.embed-block.bg-base-2 {:style {:z-index 2}}
      [:div.px-3.pt-1.pb-2
-      (blocks-container blocks (assoc config
+      (blocks-container blocks (assoc (assoc config :id (str id))
                                       :embed? true
                                       :ref? false))]]))
 

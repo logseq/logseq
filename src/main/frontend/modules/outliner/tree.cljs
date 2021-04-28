@@ -62,7 +62,7 @@
   [blocks root-id]
   (let [original-blocks blocks
         blocks (atom blocks)
-        [page? root] (get-root-and-page root-id)
+        [page? root] (get-root-and-page (str root-id))
         result (blocks->vec-tree-aux blocks root)]
     (cond
       (not root)                        ; custom query
