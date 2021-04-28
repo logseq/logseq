@@ -116,7 +116,7 @@
       (when (state/sub :ui/left-sidebar-open?)
         (sidebar-nav route-match nil))]
      [:div#main-content-container.w-full.flex.justify-center
-      {:margin-top (if global-graph-pages? 0 "2rem")}
+      {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width (or global-graph-pages?
@@ -228,7 +228,7 @@
                   :exit 300}}
        links
        ;; (custom-context-menu-content)
-       ))))
+))))
 
 (rum/defc new-block-mode < rum/reactive
   []
@@ -346,4 +346,4 @@
          ;;   :on-click (fn []
          ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
          ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-          )]))))
+)]))))
