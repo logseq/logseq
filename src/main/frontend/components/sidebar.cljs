@@ -135,6 +135,11 @@
                       :style {:margin-bottom (if global-graph-pages? 0 120)}}
           main-content])]]]))
 
+(rum/defc footer
+  []
+  (when-let [user-footer (and config/publishing? (get-in (state/get-config) [:publish-common-footer]))]
+    [:div.p-6 user-footer]))
+
 (defn get-default-home-if-valid
   []
   (when-let [default-home (state/get-default-home)]
@@ -328,7 +333,9 @@
                   :indexeddb-support?  indexeddb-support?
                   :white?              white?
                   :db-restoring?       db-restoring?
-                  :main-content        main-content})]]
+                  :main-content        main-content})
+
+           (footer)]]
          (right-sidebar/sidebar)]
 
         (ui/notification)
