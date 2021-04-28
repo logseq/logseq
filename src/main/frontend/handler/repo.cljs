@@ -24,9 +24,7 @@
             [clojure.string :as string]
             [frontend.dicts :as dicts]
             [frontend.spec :as spec]
-            [frontend.encrypt :as encrypt]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [frontend.encrypt :as encrypt]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)

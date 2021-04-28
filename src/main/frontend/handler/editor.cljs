@@ -15,8 +15,6 @@
             [frontend.format :as format]
             [frontend.format.block :as block]
             [frontend.image :as image]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
             [frontend.db :as db]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -125,12 +123,6 @@
           cur-pos (or selection-start cur-pos)]
       (state/set-edit-content! edit-id new-value)
       (util/move-cursor-to input (+ cur-pos forward-pos)))))
-
-(defn focus-on-block!
-  [block-id]
-  (when block-id
-    (route-handler/redirect! {:to :page
-                              :path-params {:name (str block-id)}})))
 
 (defn open-block-in-sidebar!
   [block-id]
@@ -288,9 +280,11 @@
   (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
         properties? (= "Properties" first-elem-type)
+        markdown-heading? (and (= format :markdown)
+                               (= "Heading" first-elem-type))
         heading? (= "Paragraph" first-elem-type)
         content (string/triml content)
-        content' (if properties?
+        content' (if (or properties? markdown-heading?)
                    content
                    (str (config/get-block-pattern format) (if heading? " " "\n") content))
         block (block/parse-block (assoc block :block/content content'))
@@ -1655,9 +1649,10 @@
 
 (defn close-autocomplete-if-outside
   [input]
-  (when (or (state/get-editor-show-page-search?)
-            (state/get-editor-show-page-search-hashtag?)
-            (state/get-editor-show-block-search?))
+  (when (and input
+             (or (state/get-editor-show-page-search?)
+                 (state/get-editor-show-page-search-hashtag?)
+                 (state/get-editor-show-block-search?)))
     (when-let [q (get-search-q)]
       (let [value (gobj/get input "value")
             pos (:editor/last-saved-cursor @state/state)
@@ -2189,11 +2184,6 @@
           (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
         (and
-         (= key " ")
-         (state/get-editor-show-page-search-hashtag?))
-        (state/set-editor-show-page-search-hashtag! false)
-
-        (and
          (contains? (set/difference (set (keys reversed-autopair-map))
                                     #{"`"})
                     key)
@@ -2248,6 +2238,9 @@
     (let [k (gobj/get e "key")
           format (:format (get-state))]
       (when-not (state/get-editor-show-input)
+        (when (= k " ")
+          (state/set-editor-show-page-search-hashtag! false))
+
         (when (and @*show-commands (not= key-code 191)) ; not /
           (let [matched-commands (get-matched-commands input)]
             (if (seq matched-commands)

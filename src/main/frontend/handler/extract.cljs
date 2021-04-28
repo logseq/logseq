@@ -59,7 +59,7 @@
     (let [now (tc/to-long (t/now))
           page (db/get-page-name file ast)
           [page page-name journal-day] (block/convert-page-if-journal page)
-          blocks (->> (block/extract-blocks ast content false)
+          blocks (->> (block/extract-blocks ast content false format)
                       (block/with-parent-and-left [:block/name (string/lower-case page)]))
           ref-pages (atom #{})
           ref-tags (atom #{})

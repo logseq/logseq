@@ -397,7 +397,7 @@
     block))
 
 (defn extract-blocks
-  [blocks content with-id?]
+  [blocks content with-id? format]
   (let [encoded-content (utf8/encode content)
         last-pos (utf8/length encoded-content)
         pre-block-body (atom nil)
@@ -412,7 +412,8 @@
                children []]
           (if (seq blocks)
             (let [[block {:keys [start_pos end_pos]}] (first blocks)
-                  level (:level (second block))]
+                  unordered? (:unordered (second block))
+                  markdown-heading? (and (false? unordered?) (= :markdown format))]
               (cond
                 (paragraph-timestamp-block? block)
                 (let [timestamps (extract-timestamps block)
@@ -435,13 +436,12 @@
                       ref-pages-in-properties (->> (:page-refs properties)
                                                    (remove string/blank?))
                       block (second block)
+                      block (if markdown-heading?
+                              (assoc block :level 1 :heading-level (:level block))
+                              block)
                       level (:level block)
                       [children current-block-children]
                       (cond
-                        (>= level last-level)
-                        [(conj children [id level])
-                         #{}]
-
                         (< level last-level)
                         (let [current-block-children (set (->> (filter #(< level (second %)) children)
                                                                (map first)
@@ -449,7 +449,12 @@
                                                                       [:block/uuid id]))))
                               others (vec (remove #(< level (second %)) children))]
                           [(conj others [id level])
-                           current-block-children]))
+                           current-block-children])
+
+                        (>= level last-level)
+                        [(conj children [id level])
+                         #{}])
+
                       block (-> (assoc block
                                        :uuid id
                                        :body (vec (reverse block-body))
@@ -541,7 +546,7 @@
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            ast (format/to-edn content format nil)
-           new-block (first (extract-blocks ast content with-id?))
+           new-block (first (extract-blocks ast content with-id? format))
            parent-refs (->> (db/get-block-parent (state/get-current-repo) uuid)
                             :block/path-refs
                             (map :db/id))

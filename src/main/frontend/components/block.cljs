@@ -1197,7 +1197,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority anchor meta format content pre-block? dummy? block-refs-count page properties]
+  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority anchor meta format content pre-block? dummy? block-refs-count page properties unordered level heading-level]
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1211,10 +1211,14 @@
         marker-cp (marker-cp t)
         priority (priority-cp t)
         tags (block-tags-cp t)
-        contents? (= (:id config) "contents")
-        bg-color (:background-color properties)]
+        bg-color (:background-color properties)
+        elem (if (and (false? unordered)
+                      heading-level
+                      (<= heading-level 6))
+               (keyword (str "h" heading-level))
+               :div)]
     (->elem
-     :div
+     elem
      (merge
       {:id anchor}
       (when (and marker
@@ -1394,11 +1398,10 @@
   (util/stop event)
   (when (and (not (dnd-same-block? uuid))
              (not (:block/dummy? block)))
-    (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
-      (dnd/move-block @*dragging-block
-                      block
-                      false
-                      true)))
+    (dnd/move-block @*dragging-block
+                    block
+                    false
+                    true))
   (reset! *dragging? false)
   (reset! *dragging-block nil)
   (editor-handler/unhighlight-blocks!))

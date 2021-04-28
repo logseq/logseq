@@ -1,21 +1,17 @@
 (ns frontend.handler.editor.lifecycle
   (:require [frontend.state :as state]
-            [lambdaisland.glogi :as log]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [frontend.util :as util :refer-macros [profile]]
             [cljs-drag-n-drop.core :as dnd]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.date :as date]
             [frontend.handler.file :as file]
-            [promesa.core :as p]
-            [frontend.debug :as debug]))
+            [promesa.core :as p]))
 
 (defn did-mount!
   [state]
@@ -70,8 +66,7 @@
         (when (and
                (not (string/blank? value))
                (not= (string/trim value) (string/trim content)))
-          (let [old-page-name (db/get-file-page path false)
-                journal? (date/valid-journal-title? path)]
+          (let [old-page-name (db/get-file-page path false)]
             (p/let [[journal? new-name] (page-handler/rename-when-alter-title-property! old-page-name path format content value)]
               (if (and journal? new-name (not= old-page-name (string/lower-case new-name)))
                 (notification/show! "Journal title can't be changed." :warning)
