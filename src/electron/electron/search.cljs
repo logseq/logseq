@@ -137,7 +137,7 @@
     (when-not (string/blank? q)
       (let [match? (or
                     (string/includes? q " and ")
-                    (string/includes? q " && ")
+                    (string/includes? q " & ")
                     (string/includes? q " or ")
                     (string/includes? q " | ")
                     ;; (string/includes? q " not ")
@@ -145,7 +145,7 @@
             q (if match?
                 (-> q
                     (string/replace " and " " AND ")
-                    (string/replace " && " " AND ")
+                    (string/replace " & " " AND ")
                     (string/replace " or " " OR ")
                     (string/replace " | " " OR ")
                     (string/replace " not " " NOT "))
