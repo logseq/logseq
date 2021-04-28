@@ -554,12 +554,6 @@
                   {:block/path-refs path-ref-pages})]
        (if uuid (assoc block :block/uuid uuid) block)))))
 
-(defn with-levels
-  [text format {:block/keys [level pre-block?]}]
-  (let [pattern (config/get-block-pattern format)
-        prefix (if pre-block? "" (str (apply str (repeat level pattern)) " "))]
-    (str prefix (string/triml text))))
-
 (defn macro-subs
   [macro-content arguments]
   (loop [s macro-content
