@@ -164,11 +164,11 @@
   (when (seq files)
     (let [result (->> files
                       (map
-                        (fn [{:file/keys [path content]} contents]
-                          (println "Parsing : " path)
-                          (when content
-                            (let [utf8-content (utf8/encode content)]
-                              (extract-blocks-pages repo-url path content utf8-content)))))
+                       (fn [{:file/keys [path content]} contents]
+                         (println "Parsing : " path)
+                         (when content
+                           (let [utf8-content (utf8/encode content)]
+                             (extract-blocks-pages repo-url path content utf8-content)))))
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
@@ -176,9 +176,11 @@
                             (let [id (:block/uuid block)
                                   properties (get-in metadata [:block/properties id])]
                               (update block :block/properties merge properties)))
-                       blocks)
+                          blocks)
+              ;; To prevent "unique constraint" on datascript
+              pages-index (map #(select-keys % [:block/name]) pages)
               pages (util/distinct-by :block/name pages)
               block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
               blocks (map (fn [b]
                             (update b :block/refs #(set/intersection (set %) block-ids-set))) blocks)]
-          (apply concat [pages block-ids blocks]))))))
+          (apply concat [pages-index pages block-ids blocks]))))))
