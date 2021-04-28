@@ -54,7 +54,8 @@
   (if (string? root-id)
     (if (util/uuid-string? root-id)
       [false (db/entity [:block/uuid (uuid root-id)])]
-      [true (db/entity [:block/name root-id])])
+      [true (or (db/entity [:block/name root-id])
+                (db/entity [:block/original-name root-id]))])
     [false root-id]))
 
 (defn blocks->vec-tree
