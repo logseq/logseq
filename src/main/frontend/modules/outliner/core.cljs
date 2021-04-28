@@ -7,13 +7,10 @@
             [frontend.modules.outliner.utils :as outliner-u]
             [frontend.modules.outliner.state :as outliner-state]
             [frontend.state :as state]
-            [frontend.debug :as debug]
             [clojure.set :as set]
             [clojure.zip :as zip]
-            [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.datascript :as ds]
-            [frontend.util :as util :refer-macros [profile]]
-            [datascript.core :as d]))
+            [frontend.util :as util]))
 
 (defrecord Block [data])
 

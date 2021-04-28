@@ -683,11 +683,23 @@
         end-block-parent (get-end-block-parent end-block blocks)]
     (outliner-core/block end-block-parent)))
 
+(defn- reorder-blocks
+  [blocks]
+  (if (<= (count blocks) 1)
+    blocks
+    (let [[f s & others] blocks]
+      (if (= (or (:block/left s)
+                 (:block/parent s))
+             {:db/id (:db/id f)})
+        blocks
+        (reverse blocks)))))
+
 (defn delete-blocks!
   [repo block-uuids]
   (when (seq block-uuids)
     (let [lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-          blocks (db/pull-many repo '[*] lookup-refs)]
+          blocks (db/pull-many repo '[*] lookup-refs)
+          blocks (reorder-blocks blocks)]
       (let [start-node (outliner-core/block (first blocks))
             end-node (get-top-level-end-node blocks)]
         (outliner-core/delete-nodes start-node end-node lookup-refs)
@@ -1544,29 +1556,29 @@
         (cond
           (seq blocks)
           (do
-            (util/stop e)
             (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
                                                      [:block/uuid (medley/uuid id)])) blocks)
-                                  (remove nil?))
-                 blocks (db/pull-many repo '[*] lookup-refs)
-                 end-node (get-top-level-end-node blocks)
-                 end-node-parent (tree/-get-parent end-node)
-                 top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
-                                                  (get-in % [:block/parent :db/id])) blocks)
-                                      (map outliner-core/block))]
-             (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
-             (let [opts {:key :block/change
-                         :data blocks}]
-               (db/refresh! repo opts)
-               (let [blocks (doall
-                             (map
+                                   (remove nil?))
+                  blocks (db/pull-many repo '[*] lookup-refs)
+                  blocks (reorder-blocks blocks)
+                  end-node (get-top-level-end-node blocks)
+                  end-node-parent (tree/-get-parent end-node)
+                  top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
+                                                   (get-in % [:block/parent :db/id])) blocks)
+                                       (map outliner-core/block))]
+              (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+              (let [opts {:key :block/change
+                          :data blocks}]
+                (db/refresh! repo opts)
+                (let [blocks (doall
+                              (map
                                (fn [block]
                                  (when-let [id (gobj/get block "id")]
                                    (when-let [block (gdom/getElement id)]
                                      (dom/add-class! block "selected noselect")
                                      block)))
                                blocks-dom-nodes))]
-                 (state/set-selection-blocks! blocks)))))
+                  (state/set-selection-blocks! blocks)))))
 
           (gdom/getElement "date-time-picker")
           nil
