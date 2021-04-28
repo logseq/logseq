@@ -89,6 +89,20 @@
        ["NOW" (->marker "NOW")]])))
 
 ;; Credits to roamresearch.com
+
+(defn- ->heading
+  [heading]
+  [[:editor/clear-current-slash]
+   [:editor/set-heading heading]
+   [:editor/move-cursor-to-end]])
+
+(defn- markdown-headings
+  []
+  (let [format (state/get-preferred-format)]
+    (when (= (name format) "markdown")
+      (mapv (fn [level]
+              (let [heading (str "h" level)]
+                [heading (->heading (apply str (repeat level "#")))])) (range 1 7)))))
 (defn commands-map
   [get-page-ref-text]
   (->>
@@ -157,7 +171,8 @@
 
      ;; TODO:
      ;; ["Upload a file" nil]
-]
+     ]
+    (markdown-headings)
     ;; Allow user to modify or extend, should specify how to extend.
     (state/get-commands))
    (remove nil?)
@@ -457,6 +472,24 @@
 
                         :else
                         (str new-priority " " (string/triml edit-content)))]
+        (state/set-edit-content! input-id new-value)))))
+
+(defmethod handle-step :editor/set-heading [[_ heading]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [edit-content (gobj/get current-input "value")
+            slash-pos (:pos @*slash-caret-pos)
+            heading-pattern  #"^#\+"
+            prefix (subs edit-content 0 (dec slash-pos))
+            pos (count (re-find heading-pattern prefix))
+            new-value (cond
+                        (re-find heading-pattern prefix)
+                        (str (subs edit-content 0 pos)
+                             (string/replace-first (subs edit-content pos)
+                                                   heading-pattern
+                                                   heading))
+                        :else
+                        (str heading " " (string/triml edit-content)))]
         (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/search-page [[_]]
