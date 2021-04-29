@@ -2062,6 +2062,7 @@
     (cond
       (not= selected-start selected-end)
       (do
+        (util/stop e)
         (when cut?
           (js/document.execCommand "copy"))
         (.setRangeText input "" selected-start selected-end))
@@ -2071,11 +2072,14 @@
            (not (and page
                      (util/uuid-string? page)
                      (= (medley/uuid page) block-id))))
-      (delete-block! repo e)
+      (do
+        (util/stop e)
+        (delete-block! repo e))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) commands/slash))
       (do
+        (util/stop e)
         (reset! *slash-caret-pos nil)
         (reset! *show-commands false)
         (.setRangeText input "" (dec current-pos) current-pos))
@@ -2083,6 +2087,7 @@
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
       (do
+        (util/stop e)
         (reset! *angle-bracket-caret-pos nil)
         (reset! *show-block-commands false)
         (.setRangeText input "" (dec current-pos) current-pos))
@@ -2098,6 +2103,7 @@
           (get delete-map deleted)))
 
       (do
+        (util/stop e)
         (commands/delete-pair! id)
         (cond
           (and (= deleted "[") (state/get-editor-show-page-search?))
@@ -2111,13 +2117,11 @@
 
       ;; deleting hashtag
       (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
-      (do
-        (state/set-editor-show-page-search-hashtag! false)
-        (.setRangeText input "" (dec current-pos) current-pos))
+      (state/set-editor-show-page-search-hashtag! false)
 
       ;; just delete
       :else
-      (.setRangeText input "" (dec current-pos) current-pos))))
+      nil)))
 
 ;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
 (defn indent-on-tab
@@ -2441,7 +2445,6 @@
 (defn editor-delete
   [_state e]
   (when (state/editing?)
-    (util/stop e)
     (keydown-backspace-handler false e)))
 
 (defn shortcut-up-down [direction]
