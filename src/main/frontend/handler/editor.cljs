@@ -2417,8 +2417,7 @@
 
 (defn delete-selection
   [e]
-  (when
-    (state/selection?)
+  (when (state/selection?)
     (shortcut-delete-selection e)))
 
 (defn editor-delete
@@ -2428,8 +2427,9 @@
     (keydown-backspace-handler false e)))
 
 (defn shortcut-up-down [direction]
-  (fn [_]
+  (fn [e]
     (when-not (auto-complete?)
+      (util/stop e)
       (cond
         (state/editing?)
         (keydown-up-down-handler direction)
@@ -2454,8 +2454,9 @@
                    block-id))))
 
 (defn shortcut-left-right [direction]
-  (fn [_]
+  (fn [e]
     (when-not (auto-complete?)
+      (util/stop e)
       (cond
         (state/editing?)
         (keydown-arrow-handler direction)

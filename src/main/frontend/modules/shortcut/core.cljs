@@ -68,6 +68,6 @@
 (defn install-shortcuts!
   []
   (let [result (->> handler
-                    (map #(install-shortcut! % {:prevent-default? true}))
+                    (map #(install-shortcut! % {}))
                     doall)]
     (reset! installed result)))
