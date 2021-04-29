@@ -1,6 +1,6 @@
 (ns frontend.db-schema)
 
-(defonce version "0.0.1")
+(defonce version "0.0.2")
 
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def schema
