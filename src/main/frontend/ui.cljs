@@ -99,7 +99,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                       ;; [:div {:style {:position "absolute" :right "8px"}}
                       ;;  icon]
-                     ]]
+]]
           (rum/with-key
             (menu-link new-options child)
             title)))
@@ -443,7 +443,9 @@
         (modal-panel modal-panel-content state close-fn fullscreen?)))]))
 
 (defn make-confirm-modal
-  [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm] :as opts}]
+  [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm]
+    :or {on-cancel #()}
+    :as opts}]
   (fn [close-fn]
     (rum/with-context [[t] i18n/*tongue-context*]
       (let [*sub-checkbox-selected (and sub-checkbox? (atom []))]
