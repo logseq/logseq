@@ -35,7 +35,8 @@
         (-write writer (str "\"" (.toString sym) "\"")))))
 
 #?(:cljs (defonce ^js node-path nodePath))
-#?(:cljs (defn app-scroll-container-node []  js/document.documentElement))
+#?(:cljs (defn app-scroll-container-node []
+           (gdom/getElement "left-container")))
 
 #?(:cljs
     (defn ios?
@@ -360,28 +361,6 @@
      [anchor]
      (let [fragment (get-fragment)]
        (str "#" fragment "?anchor=" anchor))))
-
-;; (defn scroll-into-view
-;;   [element]
-;;   (let [scroll-top (gobj/get element "offsetTop")
-;;         scroll-top (if (zero? scroll-top)
-;;                      (-> (gobj/get element "parentElement")
-;;                          (gobj/get "offsetTop"))
-;;                      scroll-top)]
-;;     (prn {:scroll-top scroll-top})
-;;     (when-let [main (gdom/getElement "main-content")]
-;;       (prn {:main main})
-;;       (.scroll main #js {:top scroll-top
-;;                          ;; :behavior "smooth"
-;;                          }))))
-
-;; (defn scroll-to-element
-;;   [fragment]
-;;   (when fragment
-;;     (prn {:fragment fragment})
-;;     (when-not (string/blank? fragment)
-;;       (when-let [element (gdom/getElement fragment)]
-;;         (scroll-into-view element)))))
 
 (def speed 500)
 (def moving-frequency 15)
