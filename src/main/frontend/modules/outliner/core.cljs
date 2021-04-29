@@ -306,7 +306,7 @@
               new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
           (tree/-save new-right-node txs-state))))))
 
-(defn get-left-nodes
+(defn- get-left-nodes
   [node limit]
   (let [parent (tree/-get-parent node)]
     (loop [node node
@@ -320,7 +320,7 @@
            result)
          result)))))
 
-(defn get-node-parents
+(defn- get-node-parents
   [node limit]
   (loop [node node
          limit limit
@@ -361,7 +361,7 @@
    (tree/-get-left-id node)
    (tree/-get-parent-id node)))
 
-(defn first-level?
+(defn- first-level?
   "Can't be outdented."
   [node]
   (nil? (tree/-get-parent (tree/-get-parent node))))
