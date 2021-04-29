@@ -789,10 +789,7 @@
 #?(:cljs
    (defn get-blocks-noncollapse []
      (->> (d/by-class "ls-block")
-          (filter (fn [b]
-                    (if-let [parent (gdom/getParentElement b)]
-                      (not= "none" (d/style parent "display"))
-                      false))))))
+          (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
 
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
