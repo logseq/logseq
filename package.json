@@ -19,7 +19,7 @@
         "postcss-import-ext-glob": "^2.0.1",
         "postcss-nested": "5.0.5",
         "purgecss": "4.0.2",
-        "shadow-cljs": "2.11.11",
+        "shadow-cljs": "^2.12.5",
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
         "tailwindcss": "2.0.3"
