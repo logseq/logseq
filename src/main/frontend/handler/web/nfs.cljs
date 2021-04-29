@@ -299,12 +299,12 @@
 (defn refresh!
   [repo ok-handler]
   (if (refactored-version?)
-    (rebuild-index! repo ok-handler)
     (when repo
       (state/set-nfs-refreshing! true)
       (p/let [_ (reload-dir! repo)
               _ (ok-handler)]
-        (state/set-nfs-refreshing! false)))))
+        (state/set-nfs-refreshing! false)))
+    (rebuild-index! repo ok-handler)))
 
 (defn supported?
   []

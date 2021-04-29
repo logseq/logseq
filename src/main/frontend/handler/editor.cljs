@@ -275,17 +275,26 @@
     block))
 
 (defn- wrap-parse-block
-  [{:block/keys [content format] :as block}]
+  [{:block/keys [content format parent page] :as block}]
   (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
         properties? (= "Properties" first-elem-type)
+        top-level? (= parent page)
         markdown-heading? (and (= format :markdown)
                                (= "Heading" first-elem-type))
         heading? (= "Paragraph" first-elem-type)
         content (string/triml content)
-        content' (if (or properties? markdown-heading?)
-                   content
-                   (str (config/get-block-pattern format) (if heading? " " "\n") content))
+        [content content'] (cond
+                             (or properties? (and markdown-heading? top-level?))
+                             [content content]
+
+                             markdown-heading?
+                             (let [content (string/replace content #"^#+\s+" "")]
+                               [content (str (config/get-block-pattern format) " " content)])
+
+                             :else
+                             (let [content' (str (config/get-block-pattern format) (if heading? " " "\n") content)]
+                               [content content']))
         block (block/parse-block (assoc block :block/content content'))
         block (attach-page-properties-if-exists! block)]
     (-> block

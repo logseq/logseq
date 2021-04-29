@@ -130,5 +130,6 @@
     :block/scheduled
     :block/deadline
     :block/repeated?
+    :block/pre-block?
     }
   )

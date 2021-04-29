@@ -23,10 +23,15 @@
 (defn transform-content
   [{:block/keys [format pre-block? content unordered]} level]
   (let [content (or content "")]
-    (if (or pre-block?
-            (and (= format :markdown)
-                 (re-find #"#+\s+" content)))
+    (cond
+      pre-block?
+      (str (string/trim content) "\n")
+
+      (and (= format :markdown)
+           (re-find #"#+\s+" content))
       (string/trim content)
+
+      :else
       (let [[prefix spaces-tabs]
             (cond
               (= format :org)
