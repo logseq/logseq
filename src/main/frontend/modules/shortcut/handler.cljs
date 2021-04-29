@@ -15,9 +15,7 @@
 (def editing-only
   {:editor/new-block editor-handler/keydown-new-block-handler
    :editor/new-line editor-handler/keydown-new-line-handler
-   :editor/delete editor-handler/editor-delete
-   :editor/left (editor-handler/keydown-arrow-handler :left)
-   :editor/right (editor-handler/keydown-arrow-handler :right)})
+   :editor/delete editor-handler/editor-delete})
 
 (def editing-only-prevent-default
   {:editor/indent (editor-handler/keydown-tab-handler :right)
@@ -41,6 +39,8 @@
   [;; global editor shortcut
    {:editor/up (editor-handler/shortcut-up-down :up)
     :editor/down (editor-handler/shortcut-up-down :down)
+    :editor/left (editor-handler/shortcut-left-right :left)
+    :editor/right (editor-handler/shortcut-left-right :right)
     :editor/select-block-up (editor-handler/on-select-block :up)
     :editor/select-block-down (editor-handler/on-select-block :down)
     :editor/copy editor-handler/shortcut-copy
