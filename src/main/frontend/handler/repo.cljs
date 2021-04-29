@@ -499,7 +499,7 @@
                       (search/remove-db! url)
                       (fs/rmdir! (config/get-repo-dir url))
                       (state/delete-repo! repo))]
-    (if (config/local-db? url)
+    (if (or (config/local-db? url) (= url "local"))
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
         (delete-db-f))
       (util/delete (str config/api "repos/" id)

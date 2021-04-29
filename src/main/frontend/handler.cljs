@@ -46,10 +46,9 @@
   []
   (storage/set :db-schema db-schema/schema))
 
-(defn schema-changed?
+(defn refactored-version?
   []
-  (when-let [schema (storage/get :db-schema)]
-    (not= schema db-schema/schema)))
+  (:block/name (storage/get :db-schema)))
 
 (defn- get-me-and-repos
   []
@@ -61,14 +60,6 @@
     {:me me
      :logged? logged?
      :repos repos}))
-
-(declare restore-and-setup!)
-
-(defn clear-stores-and-refresh!
-  []
-  (p/let [_ (idb/clear-local-storage-and-idb!)]
-    (let [{:keys [me logged? repos]} (get-me-and-repos)]
-      (js/window.location.reload))))
 
 (defn restore-and-setup!
   [me repos logged?]
@@ -161,6 +152,18 @@
             (when-not config/dev? (init-sentry)))]
     (set! js/window.onload f)))
 
+(defn clear-stores-and-init!
+  [me logged?]
+  (let [example-repo {:url config/local-repo
+                      :example? true}]
+    (p/let [repos (get-repos)]
+      (doseq [repo (distinct (conj repos example-repo))]
+        (repo-handler/remove-repo! repo))
+      (p/let [_ (idb/clear-local-storage-and-idb!)
+              repos [example-repo]]
+        (state/set-repos! repos)
+        (restore-and-setup! me repos logged?)))))
+
 (defn start!
   [render]
   (let [{:keys [me logged? repos]} (get-me-and-repos)]
@@ -177,9 +180,12 @@
 
     (events/run!)
 
-    (p/let [repos (get-repos)]
-      (state/set-repos! repos)
-      (restore-and-setup! me repos logged?))
+    (if-not (refactored-version?)
+      (clear-stores-and-init! me logged?)
+      (p/let [repos (get-repos)]
+        (state/set-repos! repos)
+        (restore-and-setup! me repos logged?)))
+
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)

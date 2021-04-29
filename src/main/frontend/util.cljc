@@ -1261,3 +1261,8 @@
 
         :else
         (recur (conj buf v) t)))))
+
+#?(:cljs
+   (defn trace!
+     []
+     (js/console.trace)))
