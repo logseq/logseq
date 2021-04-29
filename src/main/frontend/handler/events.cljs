@@ -34,11 +34,11 @@
 (defmethod handle :repo/install-error [[_ repo-url title]]
   (show-install-error! repo-url title))
 
-(defmethod handle :modal/encryption-setup-dialog [repo-url close-fn]
+(defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
   (state/set-modal!
    (encryption/encryption-setup-dialog repo-url close-fn)))
 
-(defmethod handle :modal/encryption-input-secret-dialog [repo-url db-encrypted-secret close-fn]
+(defmethod handle :modal/encryption-input-secret-dialog [[_ repo-url db-encrypted-secret close-fn]]
   (state/set-modal!
    (encryption/encryption-input-secret-dialog
     repo-url
