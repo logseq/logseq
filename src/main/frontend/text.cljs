@@ -4,6 +4,9 @@
             [clojure.string :as string]
             [clojure.set :as set]))
 
+(defonce properties-start ":PROPERTIES:")
+(defonce properties-end ":END:")
+
 (defn page-ref?
   [s]
   (and
@@ -173,7 +176,9 @@
                    (remove #(let [s (string/lower-case (string/trim %))]
                               (and
                                (or (string/starts-with? s ":id:")
-                                   (string/starts-with? s ":custom_id:"))
+                                   (string/starts-with? s ":custom_id:")
+                                   (string/starts-with? s "id:: ")
+                                   (string/starts-with? s "custom_id:: "))
                                (let [id (and
                                          (> (count s) 36)
                                          (subs s (- (count s) 36)))]
@@ -238,18 +243,6 @@
                         (when-not (contains? #{"properties" "end"} k)
                           [k v])))))))
          (into {}))))
-
-(defn re-construct-block-properties
-  [format content properties block-with-title?]
-  (let [format (keyword format)
-        level-spaces (extract-level-spaces content format)
-        result (-> content
-                   (remove-level-spaces format)
-                   (remove-properties!)
-                   (rejoin-properties properties {:block-with-title? block-with-title?}))]
-    (str (when level-spaces (string/trim-newline level-spaces))
-         (when (not block-with-title?) "\n")
-         (string/triml result))))
 
 (defn insert-property
   [content key value]
@@ -319,3 +312,25 @@
 (defn image-link?
   [img-formats s]
   (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
+
+(defn ->new-properties
+  "New syntax: key:: value"
+  [content]
+  (if (and (string/includes? content properties-start)
+           (string/includes? content properties-end))
+    (let [lines (string/split-lines content)
+          start-idx (.indexOf lines properties-start)
+          end-idx (.indexOf lines properties-end)]
+      (if (and (>= start-idx 0) (> end-idx 0) (> end-idx start-idx))
+        (let [before (subvec lines 0 start-idx)
+              middle (->> (subvec lines (inc start-idx) end-idx)
+                          (map (fn [text]
+                                 (let [[k v] (util/split-first ":" (subs text 1))]
+                                   (if (and k v)
+                                     (str k ":: " (string/trim v))
+                                     text)))))
+              after (subvec lines (inc end-idx))
+              lines (concat before middle after)]
+          (string/join "\n" lines))
+        content))
+    content))

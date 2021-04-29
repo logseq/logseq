@@ -145,7 +145,7 @@
              :on-click (fn [_e]
                          (editor-handler/remove-block-property! block-id "background-color"))}
             "Clear"]]
-          (let [empty-properties? (not (text/contains-properties? (:block/content block)))
+          (let [empty-properties? (empty? (:block/properties block))
                 all-hidden? (text/properties-hidden? (:block/properties block))]
             (when (or empty-properties? all-hidden?)
               (ui/menu-link
