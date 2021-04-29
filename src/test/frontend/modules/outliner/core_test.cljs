@@ -204,3 +204,62 @@
                                      (mapv #(-> % :data :block/uuid)))]
       (is (= [6 9] old-parent's-children))
       (is (= [3 13 14 15] new-parent's-children)))))
+
+
+[1 [[2 [[3]
+        [4] ;; outdent 6, 9
+        [5]
+        [6 [[7 [[8]]]]]
+        [9 [[10]
+            [11]]]]]
+    [12 [[13]
+         [14]
+         [15]]]
+    [16 [[17]]]]]
+
+
+(deftest test-indent-nodes
+  "
+  [1 [[2 [[3
+           [[4]
+            [5]
+            [6 [[7 [[8]]]]] ;; indent 6, 9
+            [9 [[10]
+                [11]]]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+  "
+  (build-db-records node-tree)
+  (let [nodes [(build-block 6 2 3)
+               (build-block 9 2 6)]]
+    (outliner-core/indent-outdent-nodes nodes true)
+    (let [children-of-2 (->> (build-block 3)
+                          (tree/-get-children)
+                          (mapv #(-> % :data :block/uuid)))]
+      (is (= [4 5 6 9] children-of-2)))))
+
+(deftest test-outdent-nodes
+  "
+  [1 [[2 [[3]
+          [4] ;; outdent 6, 9
+          [5]
+          [6 [[7 [[8]]]]]
+          [9 [[10]
+              [11]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+  "
+  (build-db-records node-tree)
+  (let [nodes [(build-block 4 3 3)
+               (build-block 5 3 4)]]
+    (outliner-core/indent-outdent-nodes nodes false)
+    (let [children-of-2 (->> (build-block 2)
+                          (tree/-get-children)
+                          (mapv #(-> % :data :block/uuid)))]
+      (is (= [3 4 5 6 9] children-of-2)))))
+
+(run-test test-outdent-nodes)
