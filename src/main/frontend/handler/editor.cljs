@@ -1455,6 +1455,8 @@
   (or @*show-commands
       @*show-block-commands
       @*asset-uploading?
+      (= (gdom/getElement "search-field")
+         (.-activeElement js/document))
       (state/get-editor-show-input)
       (state/get-editor-show-page-search?)
       (state/get-editor-show-block-search?)
