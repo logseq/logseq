@@ -158,7 +158,7 @@
    (:name (first (second block)))))
 
 (defonce non-parsing-properties
-  (atom #{:background-color}))
+  (atom #{"background-color" "background_color"}))
 
 (defn extract-properties
   [[_ properties] _start-pos _end-pos]
@@ -179,25 +179,33 @@
                         (medley/map-kv (fn [k v]
                                          (let [v (string/trim v)
                                                k (string/replace k " " "-")
-                                               k (string/replace k "_" "-")]
-                                           (cond
-                                             (and (= "\"" (first v) (last v))) ; wrapped in ""
-                                             [(string/lower-case k) (string/trim (subs v 1 (dec (count v))))]
+                                               k (string/replace k "_" "-")
+                                               k (string/lower-case k)
+                                               v (cond
+                                                   (= v "true")
+                                                   true
+                                                   (= v "false")
+                                                   false
 
-                                             (contains? @non-parsing-properties (string/lower-case k))
-                                             [(string/lower-case k) v]
+                                                   (re-find #"^\d+$" v)
+                                                   (util/safe-parse-int v)
 
-                                             :else
-                                             (let [k' (and k (string/trim (string/lower-case k)))
-                                                   v' v
-                                                   ;; built-in collections
-                                                   comma? (contains? #{"tags" "alias"} k)
-                                                   v' (if (and k' v'
-                                                               (contains? config/markers k')
-                                                               (util/safe-parse-int v'))
-                                                        (util/safe-parse-int v')
-                                                        (text/split-page-refs-without-brackets v' comma?))]
-                                               [k' v']))))))]
+                                                   (and (= "\"" (first v) (last v))) ; wrapped in ""
+                                                   (string/trim (subs v 1 (dec (count v))))
+
+                                                   (contains? @non-parsing-properties (string/lower-case k))
+                                                   v
+
+                                                   :else
+                                                   (let [v' v
+                                                         ;; built-in collections
+                                                         comma? (contains? #{"tags" "alias"} k)]
+                                                     (if (and k v'
+                                                              (contains? config/markers k)
+                                                              (util/safe-parse-int v'))
+                                                       (util/safe-parse-int v')
+                                                       (text/split-page-refs-without-brackets v' comma?))))]
+                                           [(keyword k) v]))))]
     {:properties properties
      :page-refs page-refs}))
 
@@ -427,8 +435,9 @@
                   (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
                 (heading-block? block)
-                (let [id (or (when-let [custom-id (or (get-in properties [:properties "custom_id"])
-                                                      (get-in properties [:properties "id"]))]
+                (let [id (or (when-let [custom-id (or (get-in properties [:properties :custom-id])
+                                                      (get-in properties [:properties :custom_id])
+                                                      (get-in properties [:properties :id]))]
                                (let [custom-id (string/trim custom-id)]
                                  (when (util/uuid-string? custom-id)
                                    (uuid custom-id))))

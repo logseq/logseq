@@ -19,7 +19,9 @@
             [frontend.db.model :as db-model]
             [frontend.config :as config]
             [lambdaisland.glogi :as log]
-            [frontend.encrypt :as encrypt]))
+            [frontend.encrypt :as encrypt]
+            [frontend.search :as search]
+            [frontend.storage :as storage]))
 
 (defn remove-ignore-files
   [files]
@@ -278,24 +280,31 @@
         (p/finally (fn [_]
                      (state/set-graph-syncing? false))))))))
 
-(defn refresh!
-  [repo ok-handler]
-  (when repo
-    (state/set-nfs-refreshing! true)
-    (p/let [_ (reload-dir! repo)
-            _ (ok-handler)]
-      (state/set-nfs-refreshing! false))))
-
 (defn rebuild-index!
   [repo ok-handler]
   (when repo
     (state/set-nfs-refreshing! true)
-
-    ;; TODO: What about other relationships?
-    (db-model/remove-all-aliases! repo)
+    (search/reset-indice! repo)
+    (db/remove-conn! repo)
+    (db/clear-query-state!)
+    (db/start-db-conn! (state/get-me) repo)
     (p/let [_ (reload-dir! repo true)
             _ (ok-handler)]
       (state/set-nfs-refreshing! false))))
+
+(defn refactored-version?
+  []
+  (:block/name (storage/get :db-schema)))
+
+(defn refresh!
+  [repo ok-handler]
+  (if (refactored-version?)
+    (rebuild-index! repo ok-handler)
+    (when repo
+      (state/set-nfs-refreshing! true)
+      (p/let [_ (reload-dir! repo)
+              _ (ok-handler)]
+        (state/set-nfs-refreshing! false)))))
 
 (defn supported?
   []

@@ -137,7 +137,7 @@
 
 (def hidden-properties
   (set/union
-   #{:id :custom-id :background-color :heading}
+   #{:id :custom-id :background-color :heading :collapsed}
    config/markers))
 
 (defn properties-hidden?
@@ -195,8 +195,8 @@
                         :or {remove-blank? true
                              block-with-title? true}}]
    (let [content (string/triml content)
-         properties (if (= (get properties "heading") "false")
-                      (dissoc properties "heading")
+         properties (if (false? (get properties :heading))
+                      (dissoc properties :heading)
                       properties)
          properties (if remove-blank?
                       (remove (fn [[k _v]] (string/blank? k)) properties)

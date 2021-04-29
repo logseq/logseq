@@ -113,9 +113,9 @@
                                        [:p "Template already exists!"]
                                        :error)
                                       (do
-                                        (editor-handler/set-block-property! block-id "template" title)
+                                        (editor-handler/set-block-property! block-id :template title)
                                         (when (false? including-parent?)
-                                          (editor-handler/set-block-property! block-id "including-parent" false))
+                                          (editor-handler/set-block-property! block-id :including-parent false))
                                         (state/hide-custom-context-menu!)))))))])
       (ui/menu-link
        {:key "Make template"
@@ -136,14 +136,14 @@
             (for [color block-background-colors]
               [:a.m-2.shadow-sm
                {:on-click (fn [_e]
-                            (editor-handler/set-block-property! block-id :background-color color))}
+                            (editor-handler/set-block-property! block-id "background-color" color))}
                [:div.heading-bg {:style {:background-color color}}]])]
            [:a.text-sm
             {:title (t :remove-background)
              :style {:margin-right 14
                      :margin-top 4}
              :on-click (fn [_e]
-                         (editor-handler/remove-block-property! block-id :background-color))}
+                         (editor-handler/remove-block-property! block-id "background-color"))}
             "Clear"]]
           (let [empty-properties? (not (text/contains-properties? (:block/content block)))
                 all-hidden? (text/properties-hidden? (:block/properties block))]

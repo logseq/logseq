@@ -224,7 +224,7 @@
                    '?v
                      (uniq-symbol counter "?v"))]
          [['?b :block/properties '?prop]
-          [(list 'get '?prop (name (nth e 1))) sym]
+          [(list 'get '?prop (keyword (nth e 1))) sym]
           (list
            'or
            [(list '= sym v)]
@@ -233,7 +233,7 @@
        (and (= 'property fe)
             (= 2 (count e)))
        [['?b :block/properties '?prop]
-        [(list 'get '?prop (name (nth e 1)))]]
+        [(list 'get '?prop (keyword (nth e 1)))]]
 
        (= 'todo fe)
        (let [markers (if (coll? (first (rest e)))

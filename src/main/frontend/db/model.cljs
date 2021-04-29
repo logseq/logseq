@@ -1141,7 +1141,7 @@
 (defn get-all-templates
   []
   (let [pred (fn [db properties]
-               (some? (get properties "template")))]
+               (some? (:template properties)))]
     (->> (d/q
           '[:find ?b ?p
             :in $ ?pred
@@ -1151,7 +1151,7 @@
           (conn/get-conn)
           pred)
          (map (fn [[e m]]
-                [(get m "template") e]))
+                [(get m :template) e]))
          (into {}))))
 
 (defonce blocks-count-cache (atom nil))

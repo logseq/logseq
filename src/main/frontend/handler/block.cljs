@@ -25,40 +25,6 @@
            block)]
     @ids))
 
-(defn collapse-block!
-  [block]
-  (let [repo (:block/repo block)]
-    (db/transact! repo
-      [{:block/uuid (:block/uuid block)
-        :block/collapsed? true}])))
-
-(defn collapse-blocks!
-  [block-ids]
-  (let [repo (state/get-current-repo)]
-    (db/transact! repo
-      (map
-        (fn [id]
-          {:block/uuid id
-           :block/collapsed? true})
-        block-ids))))
-
-(defn expand-block!
-  [block]
-  (let [repo (:block/repo block)]
-    (db/transact! repo
-      [{:block/uuid (:block/uuid block)
-        :block/collapsed? false}])))
-
-(defn expand-blocks!
-  [block-ids]
-  (let [repo (state/get-current-repo)]
-    (db/transact! repo
-      (map
-        (fn [id]
-          {:block/uuid id
-           :block/collapsed? false})
-        block-ids))))
-
 ;; TODO: should we remove this dummy block and use the page's root block instead?
 (defn with-dummy-block
   ([blocks format]

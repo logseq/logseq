@@ -46,10 +46,6 @@
   []
   (storage/set :db-schema db-schema/schema))
 
-(defn refactored-version?
-  []
-  (:block/name (storage/get :db-schema)))
-
 (defn- get-me-and-repos
   []
   (let [me (and js/window.user (bean/->clj js/window.user))
@@ -152,17 +148,10 @@
             (when-not config/dev? (init-sentry)))]
     (set! js/window.onload f)))
 
-(defn clear-stores-and-init!
-  [me logged?]
-  (let [example-repo {:url config/local-repo
-                      :example? true}]
-    (p/let [repos (get-repos)]
-      (doseq [repo (distinct (conj repos example-repo))]
-        (repo-handler/remove-repo! repo))
-      (p/let [_ (idb/clear-local-storage-and-idb!)
-              repos [example-repo]]
-        (state/set-repos! repos)
-        (restore-and-setup! me repos logged?)))))
+(defn clear-stores-and-refresh!
+  []
+  (p/let [_ (idb/clear-local-storage-and-idb!)]
+    (js/window.location.reload)))
 
 (defn start!
   [render]
@@ -180,11 +169,9 @@
 
     (events/run!)
 
-    (if-not (refactored-version?)
-      (clear-stores-and-init! me logged?)
-      (p/let [repos (get-repos)]
-        (state/set-repos! repos)
-        (restore-and-setup! me repos logged?)))
+    (p/let [repos (get-repos)]
+      (state/set-repos! repos)
+      (restore-and-setup! me repos logged?))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)

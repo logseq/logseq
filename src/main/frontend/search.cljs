@@ -120,7 +120,8 @@
                   (fn [{:keys [item]}]
                     (:name item))
                  result)
-                (remove nil?))))))))
+                (remove nil?)
+                (util/distinct-by :name))))))))
 
 (defn file-search
   ([q]

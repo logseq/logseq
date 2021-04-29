@@ -9,7 +9,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.expand :as expand]
             [frontend.handler.block :as block-handler]
             [frontend.format.mldoc :as mldoc]
             [frontend.format :as format]
@@ -325,7 +324,7 @@
          e (db/entity repo [:block/uuid uuid])
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
-         block-id (when (map? properties) (get properties "id"))]
+         block-id (when (map? properties) (get properties :id))]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
@@ -727,14 +726,16 @@
 
 (defn remove-block-property!
   [block-id key]
-  (block-property-aux! block-id key nil)
+  (let [key (keyword key)]
+    (block-property-aux! block-id key nil))
   (db/refresh! (state/get-current-repo)
                {:key :block/change
                 :data [(db/pull [:block/uuid block-id])]}))
 
 (defn set-block-property!
   [block-id key value]
-  (block-property-aux! block-id key value)
+  (let [key (keyword key)]
+    (block-property-aux! block-id key value))
   (db/refresh! (state/get-current-repo)
                {:key :block/change
                 :data [(db/pull [:block/uuid block-id])]}))
@@ -1521,22 +1522,30 @@
 (defn expand!
   []
   (when-let [current-block (state/get-edit-block)]
-    (expand/expand! current-block)))
+    (remove-block-property! (:block/uuid current-block) :collapsed)))
 
 (defn collapse!
   []
   (when-let [current-block (state/get-edit-block)]
-    (expand/collapse! current-block)))
+    (set-block-property! (:block/uuid current-block) :collapsed true)))
 
+;; TODO:
 (defn cycle-collapse!
   [e]
-  (when (and
-         ;; not input, t
-         (nil? (state/get-edit-input-id))
-         (not (state/get-editor-show-input))
-         (string/blank? (:search/q @state/state)))
-    (util/stop e)
-    (expand/cycle!)))
+  ;; (let [current-page (state/get-current-page)]
+  ;;   (when (and
+  ;;         ;; not input, t
+  ;;         (nil? (state/get-edit-input-id))
+  ;;         (not (state/get-editor-show-input))
+  ;;         (string/blank? (:search/q @state/state))
+  ;;         current-page)
+  ;;    (util/stop e)
+  ;;    (let [page (db/pull [:block/name (string/lower-case current-page)])
+  ;;          collapsed? (boolean (get (:block/properties page) :collapsed))]
+  ;;      (prn {:current-page current-page
+  ;;            :collapsed? collapsed?})
+  ;;      (set-block-property! (:block/uuid page) :collapsed (not collapsed?)))))
+  )
 
 (defn on-tab
   "direction = :left|:right, only indent or outdent when blocks are siblings"
@@ -1740,7 +1749,7 @@
 
       ;; Save it so it'll be parsed correctly in the future
       (set-block-property! (:block/uuid chosen)
-                           "ID"
+                           :id
                            uuid-string)
 
       (when-let [input (gdom/getElement id)]
@@ -1800,8 +1809,8 @@
                                                    :block/file (select-keys file [:db/id])
                                                    :block/format format
                                                    :block/properties (apply dissoc (:block/properties %)
-                                                                            (concat ["id" "custom_id"]
-                                                                                    exclude-properties))
+                                                                       (concat [:id :custom_id :custom-id]
+                                                                               exclude-properties))
                                                    :block/meta (dissoc (:block/meta %) :start-pos :end-pos)
                                                    :block/content new-content
                                                    :block/title new-title}
@@ -1827,11 +1836,11 @@
     (let [repo (state/get-current-repo)
           block (db/entity db-id)
           block-uuid (:block/uuid block)
-          including-parent? (not= "false" (get (:block/properties block) "including-parent"))
+          including-parent? (not (false? (:including-parent (:block/properties block))))
           blocks (if including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
           level-blocks-map (blocks-with-level blocks)
           tree (blocks-vec->tree (vals level-blocks-map))]
-      (paste-block-tree-at-point tree ["template" "including-parent"]
+      (paste-block-tree-at-point tree [:template :including-parent]
                                  (fn [content]
                                    (-> content
                                        (text/remove-property "template")

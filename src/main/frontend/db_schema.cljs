@@ -130,6 +130,5 @@
     :block/scheduled
     :block/deadline
     :block/repeated?
-    :block/properties
     }
   )

@@ -14,7 +14,6 @@
             [dommy.core :as d]
             [datascript.core :as dc]
             [goog.dom :as gdom]
-            [frontend.handler.expand :as expand]
             [frontend.components.svg :as svg]
             [frontend.components.datetime :as datetime-comp]
             [frontend.ui :as ui]
@@ -1019,12 +1018,12 @@
                                 :path-params {:name (str uuid)}}))))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children dummy? *control-show? *collapsed?]
+  [state config block uuid block-id body children dummy? *control-show?]
   (let [has-child? (and
                     (not (:pre-block? block))
                     (or (seq children)
                         (seq body)))
-        collapsed? (rum/react *collapsed?)
+        collapsed? (get (:block/properties block) :collapsed)
         control-show? (util/react *control-show?)
         dark? (= "dark" (state/sub :ui/theme))]
     [:div.mr-2.flex.flex-row.items-center
@@ -1039,10 +1038,8 @@
                :margin-right 2}
        :on-click (fn [e]
                    (util/stop e)
-                   (if collapsed?
-                     (expand/expand! block)
-                     (expand/collapse! block))
-                   (reset! *collapsed? (not collapsed?)))}
+                   (when-not (and (not collapsed?) (not has-child?))
+                       (editor-handler/set-block-property! uuid :collapsed (not collapsed?))))}
       (cond
         (and control-show? collapsed?)
         (svg/caret-right)
@@ -1407,8 +1404,9 @@
   (editor-handler/unhighlight-blocks!))
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title body meta content marker dummy? page format repo children pre-block? properties collapsed? idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
-  (let [dragging? (rum/react *dragging?)
+  [config {:block/keys [uuid title body meta content marker dummy? page format repo children pre-block? properties idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
+  (let [collapsed? (get properties :collapsed)
+        dragging? (rum/react *dragging?)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
                          :on-click
@@ -1478,12 +1476,12 @@
      (when (and (= marker "DONE")
                 (state/enable-timetracking?))
        (let [start-time (or
-                         (get properties "now")
-                         (get properties "doing")
-                         (get properties "in-progress")
-                         (get properties "later")
-                         (get properties "todo"))
-             finish-time (get properties "done")]
+                         (get properties :now)
+                         (get properties :doing)
+                         (get properties :in-progress)
+                         (get properties :later)
+                         (get properties :todo))
+             finish-time (get properties :done)]
          (when (and start-time finish-time (> finish-time start-time))
            [:div.text-sm.absolute.time-spent {:style {:top 0
                                                       :right 0
@@ -1493,7 +1491,7 @@
              (utils/timeConversion (- finish-time start-time))]])))]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? collapsed? idx] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? idx] :as block} edit-input-id block-id slide?]
   (let [edit? (state/sub [:editor/editing? edit-input-id])
         editor-box (get config :editor-box)]
     (if (and edit? editor-box)
@@ -1653,23 +1651,13 @@
 
 (rum/defcs block-container < rum/static
   {:init (fn [state]
-           (let [block (last (:rum/args state))
-                 collapsed? (:block/collapsed? block)]
-             (assoc state
-                    ::control-show? (atom false)
-                    ::collapsed? (atom collapsed?))))
-   :did-mount (fn [state]
-                (let [block (nth (:rum/args state) 1)
-                      collapsed? (:block/collapsed? block)]
-                  (when collapsed?
-                    (expand/collapse! block))
-                  state))
+           (assoc state ::control-show? (atom false)))
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [state config {:block/keys [uuid title body meta content dummy? page format repo children collapsed? pre-block? top? properties refs-with-children] :as block}]
+  [state config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? top? properties refs-with-children] :as block}]
   (let [*control-show? (get state ::control-show?)
-        *collapsed? (get state ::collapsed?)
+        collapsed? (get properties :collapsed)
         ref? (boolean (:ref? config))
         breadcrumb-show? (:breadcrumb-show? config)
         sidebar? (boolean (:sidebar? config))
@@ -1709,7 +1697,7 @@
 
      [:div.flex-1.flex-row
       (when (not slide?)
-        (block-control config block uuid block-id body children dummy? *control-show? *collapsed?))
+        (block-control config block uuid block-id body children dummy? *control-show?))
 
       (let [edit-input-id (str "edit-block-" unique-dom-id uuid)]
         (block-content-or-editor config block edit-input-id block-id slide?))]
