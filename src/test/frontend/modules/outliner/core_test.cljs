@@ -206,18 +206,6 @@
       (is (= [3 13 14 15] new-parent's-children)))))
 
 
-[1 [[2 [[3]
-        [4] ;; outdent 6, 9
-        [5]
-        [6 [[7 [[8]]]]]
-        [9 [[10]
-            [11]]]]]
-    [12 [[13]
-         [14]
-         [15]]]
-    [16 [[17]]]]]
-
-
 (deftest test-indent-nodes
   "
   [1 [[2 [[3
@@ -235,10 +223,10 @@
   (let [nodes [(build-block 6 2 3)
                (build-block 9 2 6)]]
     (outliner-core/indent-outdent-nodes nodes true)
-    (let [children-of-2 (->> (build-block 3)
+    (let [children-of-3 (->> (build-block 3)
                           (tree/-get-children)
                           (mapv #(-> % :data :block/uuid)))]
-      (is (= [4 5 6 9] children-of-2)))))
+      (is (= [4 5 6 9] children-of-3)))))
 
 (deftest test-outdent-nodes
   "
@@ -262,4 +250,92 @@
                           (mapv #(-> % :data :block/uuid)))]
       (is (= [3 4 5 6 9] children-of-2)))))
 
-(run-test test-outdent-nodes)
+(comment
+  (run-test test-outdent-nodes))
+
+(deftest test-delete-nodes
+  "
+  [1 [[2 [[3 [[4]
+              [5]]]
+          ;[6 [[7 [[8]]]]] delete 6, 9
+          ;[9 [[10]
+          ;    [11]]]
+          ]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+"
+  (build-db-records node-tree)
+  (let [start-node (build-block 6 2 3)
+        end-node (build-block 11 9 10)
+        block-ids [7 8 9 10]]
+    (outliner-core/delete-nodes start-node end-node block-ids)
+    (let [children-of-2 (->> (build-block 2)
+                          (tree/-get-children)
+                          (mapv #(-> % :data :block/uuid)))]
+      (is (= [3] children-of-2)))))
+
+(comment
+  (run-test test-delete-nodes))
+
+(deftest test-move-node
+  "
+  [1 [[2 [[3 [[4]
+              [5]]]
+          [9 [[10] ;; swap 6 and 9
+              [11]]]
+          [6 [[7 [[8]]]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+  "
+  (build-db-records node-tree)
+  (let [node (build-block 9 2 6)]
+    (outliner-core/move-node node true)
+    (let [children-of-2 (->> (build-block 2)
+                          (tree/-get-children)
+                          (mapv #(-> % :data :block/uuid)))]
+      (is (= [3 9 6] children-of-2)))))
+
+(comment
+  (run-test test-move-node))
+
+(deftest test-insert-nodes
+  "
+  add [18 [19 20] 21] after 6
+
+  [1 [[2 [[3 [[4]
+              [5]]]
+          [6 [[7 [[8]]]]]
+          [9 [[10]
+              [11]]]]]
+      [12 [[13]
+           [14]
+           [15]]]
+      [16 [[17]]]]]
+ "
+  (build-db-records node-tree)
+  (let [new-nodes-tree [(build-block 18)
+                        [(build-block 19)
+                         (build-block 20)]
+                        (build-block 21)]
+        target-node (build-block 6 2 3)]
+    (outliner-core/insert-nodes
+      new-nodes-tree target-node true)
+    (let [children-of-2 (->> (build-block 2)
+                          (tree/-get-children)
+                          (mapv #(-> % :data :block/uuid)))]
+      (is (= [3 6 18 21 9] children-of-2)))
+
+    (let [children-of-18 (->> (build-block 18)
+                           (tree/-get-children)
+                           (mapv #(-> % :data :block/uuid)))]
+      (is (= [19 20] children-of-18)))))
+
+(comment
+  (run-test test-insert-nodes))
+
+
+
