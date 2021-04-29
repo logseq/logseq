@@ -365,6 +365,9 @@
     (set-up-key-up! state input input-id search-timeout)))
 
 (rum/defcs box < rum/reactive
+  {:did-mount (fn [state]
+                (state/set-editor-args! (:rum/args state))
+                state)}
   (mixins/event-mixin setup-key-listener!)
   (mixins/shortcuts
    #(shortcut/install-shortcut! % {})
@@ -375,9 +378,6 @@
    :shortcut-listener/editor-prevent-default
    shortcut-handler/editing-only-prevent-default)
   lifecycle/lifecycle
-  {:did-mount (fn [state]
-                (state/set-editor-args! (:rum/args state))
-                state)}
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or   {dummy? false}
           :as   option} id config]
