@@ -1980,7 +1980,7 @@
         (util/move-cursor-down input)))))
 
 (defn- move-to-block-when-cross-boundrary
-  [_ direction]
+  [direction]
   (let [up? (= :left direction)
         pos (if up? :max 0)
         {:block/keys [format uuid] :as block} (state/get-edit-block)
@@ -2003,28 +2003,27 @@
 
 (defn keydown-arrow-handler
   [direction]
-  (fn [state e]
-    (let [input (state/get-input)
-          element js/document.activeElement
-          selected-start (.-selectionStart input)
-          selected-end (.-selectionEnd input)
-          left? (= direction :left)
-          right? (= direction :right)]
-      (when (= input element)
-        (cond
-          (not= selected-start selected-end)
-          (if left?
-            (util/set-caret-pos! input selected-start)
-            (util/set-caret-pos! input selected-end))
+  (let [input (state/get-input)
+        element js/document.activeElement
+        selected-start (.-selectionStart input)
+        selected-end (.-selectionEnd input)
+        left? (= direction :left)
+        right? (= direction :right)]
+    (when (= input element)
+      (cond
+        (not= selected-start selected-end)
+        (if left?
+          (util/set-caret-pos! input selected-start)
+          (util/set-caret-pos! input selected-end))
 
-          (or (and left? (util/input-start? input))
-              (and right? (util/input-end? input)))
-          (move-to-block-when-cross-boundrary e direction)
+        (or (and left? (util/input-start? input))
+            (and right? (util/input-end? input)))
+        (move-to-block-when-cross-boundrary direction)
 
-          :else
-          (if left?
-            (util/cursor-move-back input 1)
-            (util/cursor-move-forward input 1)))))))
+        :else
+        (if left?
+          (util/cursor-move-back input 1)
+          (util/cursor-move-forward input 1))))))
 
 (defn keydown-backspace-handler
   [cut? e]
@@ -2438,3 +2437,29 @@
 
         :else
         (select-first-last direction)))))
+
+(defn open-selected-block!
+  [direction]
+  (when-let [block-id (some-> (state/get-selection-blocks)
+                              first
+                              (dom/attr "blockid")
+                              medley/uuid)]
+    (let [block {:block/uuid block-id}
+          left? (= direction :left)]
+      (edit-block! block
+                   (if left? 0 :max)
+                   (:block/format block)
+                   block-id))))
+
+(defn shortcut-left-right [direction]
+  (fn [_]
+    (when-not (auto-complete?)
+      (cond
+        (state/editing?)
+        (keydown-arrow-handler direction)
+
+        (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
+        (open-selected-block! direction)
+
+        :else
+        nil))))
