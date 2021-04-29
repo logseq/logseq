@@ -221,54 +221,106 @@
 (defn insert-node
   ([new-node target-node sibling?]
    (insert-node new-node target-node sibling? nil))
-  ([new-node target-node sibling? {:keys [blocks-atom skip-transact?]
+  ([new-node target-node sibling? {:keys [blocks-atom skip-transact? txs-state]
                                    :or {skip-transact? false}}]
-   (ds/auto-transact!
-    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-node
-                                             :skip-transact? skip-transact?}
-    (let [result (if sibling?
+   (if txs-state
+     (let [result (if sibling?
                    (insert-node-as-sibling txs-state new-node target-node)
                    (insert-node-as-first-child txs-state new-node target-node))]
       (when blocks-atom
         (swap! blocks-atom concat result))
-      (first result)))))
+      (first result))
+     (ds/auto-transact!
+      [txs-state (ds/new-outliner-txs-state)]
+      {:outliner-op :insert-node
+       :skip-transact? skip-transact?}
+      (let [result (if sibling?
+                     (insert-node-as-sibling txs-state new-node target-node)
+                     (insert-node-as-first-child txs-state new-node target-node))]
+        (when blocks-atom
+          (swap! blocks-atom concat result))
+        (first result))))))
 
 (defn- walk-&-insert-nodes
-  [loc target-node sibling?]
+  [loc target-node sibling? transact]
   (let [update-node-fn
-        (fn [node] (block
-                    (db/pull (or (:block/repo node)
-                                 (state/get-current-repo))
-                             '[*]
-                             [:block/uuid (tree/-get-id node)])))]
-    (when-not (zip/end? loc)
+        (fn [node new-node] new-node)]
+    (if (zip/end? loc)
+      loc
       (if (vector? (zip/node loc))
-        (recur (zip/next loc) target-node sibling?)
+        (recur (zip/next loc) target-node sibling? transact)
         (let [left1 (zip/left loc)
               left2 (zip/left (zip/left loc))]
           (if-let [left (or (and left1 (not (vector? (zip/node left1))) left1)
                             (and left2 (not (vector? (zip/node left2))) left2))]
             ;; found left sibling loc
-            (do
-              (insert-node (zip/node loc) (zip/node left) true)
-              (recur (zip/next (zip/edit loc update-node-fn)) target-node sibling?))
+            (let [new-node
+                  (insert-node (zip/node loc) (zip/node left) true {:txs-state transact})]
+              (recur (zip/next (zip/edit loc update-node-fn new-node)) target-node sibling? transact))
             ;; else: need to find parent loc
             (if-let [parent (-> loc zip/up zip/left)]
-              (do
-                (insert-node (zip/node loc) (zip/node parent) false)
-                (recur (zip/next (zip/edit loc update-node-fn)) target-node sibling?))
+              (let [new-node
+                    (insert-node (zip/node loc) (zip/node parent) false {:txs-state transact})]
+                (recur (zip/next (zip/edit loc update-node-fn new-node)) target-node sibling? transact))
               ;; else: not found parent, it should be the root node
-              (do
-                (insert-node (zip/node loc) target-node sibling?)
-                (recur (zip/next (zip/edit loc update-node-fn)) target-node sibling?)))))))))
+              (let [new-node
+                    (insert-node (zip/node loc) target-node sibling? {:txs-state transact})]
+                (recur (zip/next (zip/edit loc update-node-fn new-node)) target-node sibling? transact)))))))))
+
+
+(defn- get-node-tree-topmost-last-loc
+  [loc]
+  (let [result-loc-or-vec (zip/rightmost (zip/down loc))]
+    (if (vector? (zip/node result-loc-or-vec))
+      (zip/left result-loc-or-vec)
+      result-loc-or-vec)))
+
+(defn- get-node-tree-sub-topmost-last-loc
+  [loc]
+  (let [topmost-last-loc (get-node-tree-topmost-last-loc loc)
+        result-vec-or-nil (zip/right topmost-last-loc)]
+    (when (and (some? result-vec-or-nil)
+               (vector? (zip/node result-vec-or-nil)))
+      (get-node-tree-topmost-last-loc result-vec-or-nil))))
 
 (defn insert-nodes
   "Insert nodes as children(or siblings) of target-node.
   new-nodes-tree is an vector of blocks, e.g [1 [2 3] 4 [5 [6 7]]]"
   [new-nodes-tree target-node sibling?]
-  (let [loc (zip/vector-zip new-nodes-tree)]
-    ;; TODO: validate new-nodes-tree structure
-    (walk-&-insert-nodes loc target-node sibling?)))
+  (ds/auto-transact!
+   [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-node}
+   (let [loc (zip/vector-zip new-nodes-tree)]
+     ;; TODO: validate new-nodes-tree structure
+     (let [updated-nodes (walk-&-insert-nodes loc target-node sibling? txs-state)
+           loc (zip/vector-zip (zip/root updated-nodes))
+           ;; topmost-last-loc=4, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
+           topmost-last-loc (get-node-tree-topmost-last-loc loc)
+           ;; sub-topmost-last-loc=5, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
+           sub-topmost-last-loc (get-node-tree-sub-topmost-last-loc loc)
+           right-node (tree/-get-right target-node)
+           down-node (tree/-get-down target-node)]
+       ;; update node's left&parent after inserted nodes
+       (cond
+         (and (not sibling?) (some? right-node))
+         nil            ;ignore
+         (and sibling? (some? right-node) topmost-last-loc) ;; right-node.left=N
+         (let [topmost-last-node (zip/node topmost-last-loc)
+               updated-node (tree/-set-left-id right-node (tree/-get-id topmost-last-node))]
+           (tree/-save updated-node txs-state))
+         (and (not sibling?) (some? down-node) topmost-last-loc) ;; down-node.left=N
+         (let [topmost-last-node (zip/node topmost-last-loc)
+               updated-node (tree/-set-left-id down-node (tree/-get-id topmost-last-node))]
+           (tree/-save updated-node txs-state))
+         (and sibling? (some? down-node) topmost-last-loc) ;; down-node.parent=N, down-node.left=N
+         (let [topmost-last-node-id (tree/-get-id (zip/node topmost-last-loc))
+               updated-node (tree/-set-parent-id (tree/-set-left-id down-node topmost-last-node-id) topmost-last-node-id)]
+           (tree/-save updated-node txs-state))
+         (and sibling? (some? down-node) sub-topmost-last-loc) ;; down-node.left=N, down-node.parent=N.parent
+         (let [sub-topmost-last-node (zip/node sub-topmost-last-loc)
+               updated-node (tree/-set-parent-id
+                             (tree/-set-left-id down-node (tree/-get-id sub-topmost-last-node))
+                             (tree/-get-parent-id sub-topmost-last-node))]
+           (tree/-save updated-node txs-state)))))))
 
 (defn move-node
   [node up?]
