@@ -74,6 +74,8 @@
 
   .resize {
     display: inline-flex;
+    /* Fix chrome missing resize handle issue. Ref: https://github.com/logseq/logseq/pull/1692/files */
+    transform: translate3d(0, 0, 0);
   }
 
   .draw [aria-labelledby="shapes-title"] {
