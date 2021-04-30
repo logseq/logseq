@@ -8,6 +8,7 @@
    :date-picker/prev-week "up"
    :date-picker/next-week "down"
 
+   ;; auto complete navigation, works for command prompt, search prompt or any auto complete prompt
    :auto-complete/prev "up"
    :auto-complete/next "down"
    :auto-complete/complete "enter"
@@ -39,10 +40,14 @@
 
    :editor/new-block "enter"
    :editor/new-line "shift+enter"
+   ;; 1. when block selection, select up/down
+   ;;    open edit block at leftmost or rightmost
+   ;; 2. when in editing, normal cursor arrow key move
    :editor/up "up"
    :editor/down "down"
    :editor/left "left"
    :editor/right "right"
+   ;; open selected block and edit
    :editor/open-edit "enter"
    :editor/indent "tab"
    :editor/outindent "shift+tab"
