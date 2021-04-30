@@ -222,7 +222,7 @@ jobs:
         uses: actions/upload-artifact@v1
         with:
           name: Logseq-x64.zip
-          path: static/out/make/zip/darwin/x64/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
+          path: static/out/make/zip/darwin/x64/*-darwin-x64-${{ github.event.inputs.tag-version }}.zip
 
   release:
     needs: [ build-macos, build-linux, build-windows ]
