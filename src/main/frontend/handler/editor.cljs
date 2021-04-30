@@ -1111,8 +1111,7 @@
 
 (defn- clean-content!
   [format content]
-  (->> content
-       (text/remove-level-spaces format)
+  (->> (text/remove-level-spaces content format)
        (text/remove-properties! format)
        string/trim))
 
