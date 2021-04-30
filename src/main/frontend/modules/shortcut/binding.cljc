@@ -61,7 +61,7 @@
    :ui/toggle-new-block "t e"
    :ui/show-contents "t c"
    :ui/toggle-wide-mode "t w"
-   :ui/toggle-between-page-and-file "s"
+   ;; :ui/toggle-between-page-and-file "s"
    :ui/fold "tab"
    :ui/un-fold "shift+tab"
    :ui/toggle-brackets "mod+c mod+b"

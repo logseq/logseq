@@ -72,7 +72,7 @@
      :ui/toggle-new-block state/toggle-new-block-shortcut!
      :ui/show-contents ui-handler/toggle-contents!
      :ui/toggle-wide-mode ui-handler/toggle-wide-mode!
-     :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
+     ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
      :ui/fold (editor-handler/on-tab :right)
      :ui/un-fold (editor-handler/on-tab :left)
 

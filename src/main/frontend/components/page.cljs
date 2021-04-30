@@ -385,19 +385,19 @@
                    page-name
                    path-page-name))]])
             [:div
-             [:div.content
-              (when (and file-path
-                         (not sidebar?)
-                         (not block?)
-                         (not (state/hide-file?))
-                         (not config/publishing?))
-                [:div.text-sm.ml-1.mb-4.flex-1.inline-flex
-                 {:key "page-file"}
-                 [:span.opacity-50 {:style {:margin-top 2}} (t :file/file)]
-                 [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4
-                                                       :word-break    "break-word"}
-                                               :href  (rfe/href :file {:path file-path})}
-                  file-path]])]
+             ;; [:div.content
+             ;;  (when (and file-path
+             ;;             (not sidebar?)
+             ;;             (not block?)
+             ;;             (not (state/hide-file?))
+             ;;             (not config/publishing?))
+             ;;    [:div.text-sm.ml-1.mb-4.flex-1.inline-flex
+             ;;     {:key "page-file"}
+             ;;     [:span.opacity-50 {:style {:margin-top 2}} (t :file/file)]
+             ;;     [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4
+             ;;                                           :word-break    "break-word"}
+             ;;                                   :href  (rfe/href :file {:path file-path})}
+             ;;      file-path]])]
 
              (when (and repo (not block?))
                (let [alias (db/get-page-alias-names repo page-name)]
