@@ -267,9 +267,11 @@
                      (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
                           (db/entity repo))
                      (db/entity repo [:block/name page-name]))
+              ;; TODO: replace page with frontend.format.block/page->map
               page (if page page (do
                                    (db/transact! repo [{:block/name page-name
-                                                        :block/original-name path-page-name}])
+                                                        :block/original-name path-page-name
+                                                        :block/uuid (db/new-block-id)}])
                                    (db/entity repo [:block/name page-name])))
               {:keys [title] :as properties} (:block/properties page)
               page-name (:block/name page)
