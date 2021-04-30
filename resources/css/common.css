@@ -596,23 +596,23 @@ button.menu {
   color: var(--ls-link-text-color, #24292e);
 }
 
-a.menu-link:hover,
+div.menu-link:hover,
 button.pull:hover,
 button.menu:focus {
   background-color: var(--ls-menu-hover-color, #f4f5f7);
 }
 
-a.menu-link {
+div.menu-link {
   background-color: var(--ls-primary-background-color, #fff);
   color: var(--ls-primary-text-color);
 }
 
-a.menu-link:first-of-type {
+div.menu-link:first-of-type {
   border-top-left-radius: var(--ls-border-radius-low);
   border-top-right-radius: var(--ls-border-radius-low);
 }
 
-a.menu-link:last-of-type {
+div.menu-link:last-of-type {
   border-bottom-left-radius: var(--ls-border-radius-low);
   border-bottom-right-radius: var(--ls-border-radius-low);
 }
