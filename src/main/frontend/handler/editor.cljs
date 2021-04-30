@@ -1814,9 +1814,9 @@
                                                     [new-content new-title])
                                                   [(:block/content %) (:block/title %)])
                                                 new-content
-                                                (-> new-content
-                                                    (text/remove-property! format "id")
-                                                    (text/remove-property! format "custom_id"))]
+                                                (->> new-content
+                                                     (text/remove-property! format "id")
+                                                     (text/remove-property! format "custom_id"))]
                                             (conj {:block/uuid uuid
                                                    :block/page (select-keys page [:db/id])
                                                    :block/file (select-keys file [:db/id])
@@ -1855,10 +1855,10 @@
           tree (blocks-vec->tree (vals level-blocks-map))]
       (paste-block-tree-at-point tree [:template :including-parent]
                                  (fn [content]
-                                   (-> content
-                                       (text/remove-property! format "template")
-                                       (text/remove-property! format "including-parent")
-                                       template/resolve-dynamic-template!)))
+                                   (->> content
+                                        (text/remove-property! format "template")
+                                        (text/remove-property! format "including-parent")
+                                        template/resolve-dynamic-template!)))
       (clear-when-saved!)
       (insert-command! id "" format {})
       (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]}))
