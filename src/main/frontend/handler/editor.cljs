@@ -1109,6 +1109,13 @@
            (catch js/Error error
              (log/error :save-block-failed error))))))))
 
+(defn- clean-content!
+  [format content]
+  (->> content
+       (text/remove-level-spaces format)
+       (text/remove-properties! format)
+       string/trim))
+
 (defn on-up-down
   [direction]
   (when (state/editing?)
@@ -1126,10 +1133,7 @@
             (when sibling-block
               (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
                 (let [value (state/get-edit-content)]
-                  (when (not= (-> content
-                                  (text/remove-level-spaces format)
-                                  text/remove-properties!
-                                  string/trim)
+                  (when (not= (clean-content! format content)
                               (string/trim value))
                     (save-block! repo uuid value)))
                 (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
@@ -1967,10 +1971,7 @@
     (when sibling-block
       (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [value (state/get-edit-content)]
-          (when (not= (-> content
-                          (text/remove-level-spaces format)
-                          text/remove-properties!
-                          string/trim)
+          (when (not= (clean-content! format content)
                       (string/trim value))
             (save-block! repo uuid value)))
 
@@ -2017,10 +2018,7 @@
         (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
           (let [content (:block/content block)
                 value (state/get-edit-content)]
-            (when (not= (-> content
-                            (text/remove-level-spaces format)
-                            text/remove-properties!
-                            string/trim)
+            (when (not= (clean-content! format content)
                         (string/trim value))
               (save-block! repo uuid value)))
           (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]

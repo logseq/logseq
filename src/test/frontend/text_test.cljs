@@ -110,17 +110,17 @@
   []
   (testing "properties with non-blank lines"
     (are [x y] (= x y)
-      (text/remove-properties! "** hello\n:PROPERTIES:\n:x: y\n:END:\n")
+      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n:END:\n")
       "** hello"
 
-      (text/remove-properties! "** hello\n:PROPERTIES:\n:x: y\na:b\n:END:\n")
+      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\na:b\n:END:\n")
       "** hello"))
   (testing "properties with blank lines"
     (are [x y] (= x y)
-      (text/remove-properties! "** hello\n:PROPERTIES:\n\n:x: y\n:END:\n")
+      (text/remove-properties! :org "** hello\n:PROPERTIES:\n\n:x: y\n:END:\n")
       "** hello"
 
-      (text/remove-properties! "** hello\n:PROPERTIES:\n:x: y\n\na:b\n:END:\n")
+      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n\na:b\n:END:\n")
       "** hello")))
 
 (defn test-insert-property

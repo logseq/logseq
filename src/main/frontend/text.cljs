@@ -149,26 +149,46 @@
        (let [ks (map (comp keyword string/lower-case name) (keys properties))]
          (every? hidden-properties ks))))
 
-(defn remove-properties!
+(defn contains-properties?
   [content]
-  (let [lines (string/split-lines content)
-        [title-lines properties-and-body] (split-with (fn [l] (not (string/starts-with? (string/upper-case (string/triml l)) ":PROPERTIES:"))) lines)
-        body (drop-while (fn [l]
-                           (let [l' (string/lower-case (string/trim l))]
-                             (or
-                              (and (string/starts-with? l' ":")
-                                   (not (string/starts-with? l' ":end:")))
-                              (string/blank? l))))
-                         properties-and-body)
-        body (if (and (seq body)
-                      (string/starts-with? (string/lower-case (string/triml (first body))) ":end:"))
-               (let [line (string/replace (first body) #"(?i):end:\s?" "")]
-                 (if (string/blank? line)
-                   (rest body)
-                   (cons line (rest body))))
-               body)]
-    (->> (concat title-lines body)
-         (string/join "\n"))))
+  (and (string/includes? content properties-start)
+       (string/includes? content properties-end)))
+
+(defn simplified-property?
+  [line]
+  (some? (first (util/split-first ":: " line))))
+
+(defn remove-properties!
+  [format content]
+  (let [org? (= format :org)]
+    (cond
+      (contains-properties? content)
+      (let [lines (string/split-lines content)
+            [title-lines properties-and-body] (split-with (fn [l] (not (string/starts-with? (string/upper-case (string/triml l)) ":PROPERTIES:"))) lines)
+            body (drop-while (fn [l]
+                               (let [l' (string/lower-case (string/trim l))]
+                                 (or
+                                  (and (string/starts-with? l' ":")
+                                       (not (string/starts-with? l' ":end:")))
+                                  (string/blank? l))))
+                             properties-and-body)
+            body (if (and (seq body)
+                          (string/starts-with? (string/lower-case (string/triml (first body))) ":end:"))
+                   (let [line (string/replace (first body) #"(?i):end:\s?" "")]
+                     (if (string/blank? line)
+                       (rest body)
+                       (cons line (rest body))))
+                   body)]
+        (->> (concat title-lines body)
+             (string/join "\n")))
+
+      (not org?)
+      (let [lines (string/split-lines content)
+            non-properties (get (group-by simplified-property? lines) false)]
+        (string/join "\n" non-properties))
+
+      :else
+      content)))
 
 (defn build-properties-str
   [format properties]
@@ -179,15 +199,6 @@
           properties-content (->> (map (fn [[k v]] (util/format kv-format k v)) properties)
                                   (string/join "\n"))]
       (util/format full-format properties-content))))
-
-(defn contains-properties?
-  [content]
-  (and (string/includes? content properties-start)
-       (string/includes? content properties-end)))
-
-(defn simplified-property?
-  [line]
-  (some? (first (util/split-first ":: " line))))
 
 (defn insert-property!
   [format content key value]
