@@ -3,6 +3,7 @@ const path = require('path')
 module.exports = {
   packagerConfig: {
     icon: './icons/canary/logseq_big_sur.icns',
+    name: 'Logseq Canary',
   },
   makers: [
     {
