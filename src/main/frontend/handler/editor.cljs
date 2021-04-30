@@ -1084,7 +1084,9 @@
    ;; non English input method
    (when-not (state/editor-in-composition?)
      (when-let [repo (state/get-current-repo)]
-       (when (and (not (state/get-editor-show-page-search?))
+       (when (and (not @commands/*show-commands)
+                  (not @commands/*show-block-commands)
+                  (not (state/get-editor-show-page-search?))
                   (not (state/get-editor-show-page-search-hashtag?))
                   (not (state/get-editor-show-block-search?))
                   (not (state/get-editor-show-date-picker?))
@@ -1845,6 +1847,7 @@
 (defn template-on-chosen-handler
   [input id q format edit-block edit-content]
   (fn [[template db-id] _click?]
+    (save-current-block!)
     (let [repo (state/get-current-repo)
           block (db/entity db-id)
           block-uuid (:block/uuid block)
