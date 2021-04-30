@@ -9,8 +9,9 @@ module.exports = {
     {
       'name': '@electron-forge/maker-squirrel',
       'config': {
-        'name': 'Logseq Canary',
-        'setupIcon': './icons/canary/logseq.ico'
+        title: 'Logseq Canary',
+        name: 'LogseqCanary', // ID name
+        setupIcon: './icons/canary/logseq.ico'
       }
     },
     {
