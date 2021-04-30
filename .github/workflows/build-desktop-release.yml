@@ -221,11 +221,14 @@ jobs:
       - name: ls files
         run: du -a static/out/
 
+      - name: Change zip Name
+        run: mv static/out/make/zip/darwin/x64/*.zip static/out/make/zip/darwin/x64/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
+
       - name: Cache Artifact ZIP
         uses: actions/upload-artifact@v1
         with:
           name: Logseq-x64.zip
-          path: static/out/make/zip/darwin/x64/*-${{ github.event.inputs.tag-version }}.zip
+          path: static/out/make/zip/darwin/x64/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
 
   release:
     needs: [ build-macos, build-linux, build-windows ]
