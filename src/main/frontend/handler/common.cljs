@@ -55,8 +55,8 @@
                  (js/console.dir error)))))))
 
 (defn copy-to-clipboard-without-id-property!
-  [content]
-  (util/copy-to-clipboard! (text/remove-id-property content)))
+  [format content]
+  (util/copy-to-clipboard! (text/remove-id-property! format content)))
 
 (defn config-with-document-mode
   [config]

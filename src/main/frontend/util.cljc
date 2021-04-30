@@ -1245,3 +1245,12 @@
    (defn trace!
      []
      (js/console.trace)))
+
+(defn remove-first [pred coll]
+  ((fn inner [coll]
+     (lazy-seq
+      (when-let [[x & xs] (seq coll)]
+        (if (pred x)
+          xs
+          (cons x (inner xs))))))
+   coll))

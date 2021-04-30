@@ -59,7 +59,7 @@
   [block-id]
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [content (:block/content block)]
-      (common-handler/copy-to-clipboard-without-id-property! content))))
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content))))
 
 (defn copy-block-as-json!
   [block-id]

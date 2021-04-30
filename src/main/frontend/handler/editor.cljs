@@ -716,14 +716,13 @@
       (when-let [block (db/entity [:block/uuid block-id])]
         (let [format (:block/format block)
               content (:block/content block)
-              markdown? (= format :markdown)
               properties (:block/properties block)
               properties (if value        ; add
                            (assoc properties key value)
                            (dissoc properties key))
               content (if value
-                        (text/insert-property content key value)
-                        (text/remove-property content key))
+                        (text/insert-property! format content key value)
+                        (text/remove-property! format key content))
               block (outliner-core/block {:block/uuid block-id
                                           :block/properties properties
                                           :block/content content})]
@@ -891,8 +890,9 @@
           ids (if (= :up (state/get-selection-direction))
                 (reverse ids)
                 ids)
-          [content tree] (compose-copied-blocks-contents-&-block-tree repo ids)]
-      (common-handler/copy-to-clipboard-without-id-property! content)
+          [content tree] (compose-copied-blocks-contents-&-block-tree repo ids)
+          block (db/pull [:block/uuid (first ids)])]
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
       (state/set-copied-blocks content tree))))
 
 (defn cut-selection-blocks
@@ -994,7 +994,7 @@
   [block-id]
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [content (:block/content block)]
-      (common-handler/copy-to-clipboard-without-id-property! content)
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
       (delete-block-aux! block false))))
 
 (defn clear-last-selected-block!
@@ -1815,8 +1815,8 @@
                                                   [(:block/content %) (:block/title %)])
                                                 new-content
                                                 (-> new-content
-                                                    (text/remove-property "id")
-                                                    (text/remove-property "custom_id"))]
+                                                    (text/remove-property! format "id")
+                                                    (text/remove-property! format "custom_id"))]
                                             (conj {:block/uuid uuid
                                                    :block/page (select-keys page [:db/id])
                                                    :block/file (select-keys file [:db/id])
@@ -1844,9 +1844,8 @@
          (db/refresh! repo {:key :block/insert :data new-blocks}))))))
 
 (defn template-on-chosen-handler
-  [input id q format edit-block edit-content]
-  (fn [[template db-id] _click?]
-    (save-current-block!)
+  [_input id _q format _edit-block _edit-content]
+  (fn [[_template db-id] _click?]
     (let [repo (state/get-current-repo)
           block (db/entity db-id)
           block-uuid (:block/uuid block)
@@ -1857,8 +1856,8 @@
       (paste-block-tree-at-point tree [:template :including-parent]
                                  (fn [content]
                                    (-> content
-                                       (text/remove-property "template")
-                                       (text/remove-property "including-parent")
+                                       (text/remove-property! format "template")
+                                       (text/remove-property! format "including-parent")
                                        template/resolve-dynamic-template!)))
       (clear-when-saved!)
       (insert-command! id "" format {})

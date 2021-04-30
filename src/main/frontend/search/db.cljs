@@ -16,7 +16,7 @@
 (defn block->index
   [{:block/keys [uuid content format] :as block}]
   (when-let [result (->> (text/remove-level-spaces content format)
-                         (text/remove-properties!))]
+                         (text/remove-id-property! format))]
     {:id (:db/id block)
      :uuid (str uuid)
      :content result}))
@@ -35,7 +35,7 @@
                       (clj->js {:keys ["uuid" "content"]
                                 :shouldSort true
                                 :tokenize true
-                                :minMatchCharLength 2
+                                :minMatchCharLength 1
                                 :distance 1000
                                 :threshold 0.35}))]
     (swap! indices assoc-in [repo :blocks] indice)
@@ -52,7 +52,7 @@
                         (clj->js {:keys ["name"]
                                   :shouldSort true
                                   :tokenize true
-                                  :minMatchCharLength 2
+                                  :minMatchCharLength 1
                                   :distance 1000
                                   :threshold 0.35
                                   }))]
