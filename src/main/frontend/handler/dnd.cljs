@@ -6,6 +6,21 @@
             [lambdaisland.glogi :as log]
             [frontend.debug :as debug]))
 
+
+(defn- moveable?
+  [current-block target-block]
+  (let [current-block-uuid (:block/uuid current-block)]
+    (or
+     (not= (:block/page current-block) (:block/page target-block))
+     (and
+      (not= current-block-uuid (:block/uuid target-block))
+      (loop [loc target-block]
+        (if-let [parent (db/pull (:db/id (:block/parent loc)))]
+          (if (= (:block/uuid parent) current-block-uuid)
+            false
+            (recur parent))
+          true))))))
+
 (defn move-block
   "There can be at least 3 possible situations:
   1. Move a block in the same file (either top-to-bottom or bottom-to-top).
@@ -18,7 +33,8 @@
   2. Sometimes we might need to move a parent block to it's own child.
   "
   [current-block target-block top? nested?]
-  (when (every? map? [current-block target-block])
+  (when (and (every? map? [current-block target-block])
+             (moveable? current-block target-block))
     (let [[current-node target-node]
           (mapv outliner-core/block [current-block target-block])]
       (cond
