@@ -373,6 +373,10 @@
    #(shortcut/install-shortcut! % {:prevent-default? true})
    :shortcut-listener/editor-prevent-default
    shortcut-handler/editing-only-prevent-default)
+  (mixins/shortcuts
+   #(shortcut/install-shortcut! % {:prevent-default? false})
+   :shortcut-listener/editor
+   shortcut-handler/editing)
   lifecycle/lifecycle
   [state {:keys [on-hide dummy? node format block block-parent-id]
           :or   {dummy? false}

@@ -12,12 +12,16 @@
             [frontend.state :as state]
             [frontend.handler.history :as history]))
 
+(def editing
+  {:editor/delete editor-handler/editor-delete})
+
 (def editing-only-prevent-default
-  {:editor/new-block editor-handler/keydown-new-block-handler
-   :editor/new-line editor-handler/keydown-new-line-handler
-   :editor/delete editor-handler/editor-delete
+  {
+   ;; FIXME: tab not working anymore in the scheduled dialog
    :editor/indent (editor-handler/keydown-tab-handler :right)
    :editor/outindent (editor-handler/keydown-tab-handler :left)
+   :editor/new-block editor-handler/keydown-new-block-handler
+   :editor/new-line editor-handler/keydown-new-line-handler
    :editor/zoom-in  editor-handler/zoom-in!
    :editor/zoom-out  editor-handler/zoom-out!
    :editor/cycle-todo editor-handler/cycle-todo!

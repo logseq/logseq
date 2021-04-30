@@ -2129,7 +2129,7 @@
 
       ;; just delete
       :else
-      (delete-and-update input (dec current-pos) current-pos))))
+      (state/set-edit-content! (state/get-edit-input-id) (.-value input)))))
 
 ;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
 (defn indent-on-tab
