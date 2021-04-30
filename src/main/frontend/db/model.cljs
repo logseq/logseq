@@ -1118,15 +1118,6 @@
   [repo]
   (= :local-native-fs (get-db-type repo)))
 
-(defn get-collapsed-blocks
-  []
-  (d/q
-   '[:find ?content
-     :where
-     [?h :block/collapsed? true]
-     [?h :block/content ?content]]
-   (conn/get-conn)))
-
 (defn get-public-pages
   [db]
   (-> (d/q

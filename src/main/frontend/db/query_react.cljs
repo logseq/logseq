@@ -80,14 +80,25 @@
   (let [page-ref? #(and (string? %) (text/page-ref? %))]
     (walk/postwalk
      (fn [f]
-       (if (and (list? f)
-                (= (first f) '=)
-                (= 3 (count f))
-                (some page-ref? (rest f)))
+       (cond
+         ;; backward compatible
+         ;; 1. replace :page/ => :block/
+         (and (keyword? f) (= "page" (namespace f)))
+         (keyword "block" (name f))
+
+         (and (keyword? f) (contains? #{:block/ref-pages :block/ref-blocks} f))
+         :block/refs
+
+         (and (list? f)
+              (= (first f) '=)
+              (= 3 (count f))
+              (some page-ref? (rest f)))
          (let [[x y] (rest f)
                [page-ref sym] (if (page-ref? x) [x y] [y x])
                page-ref (string/lower-case page-ref)]
            (list 'contains? sym (text/page-ref-un-brackets! page-ref)))
+
+         :else
          f)) query)))
 
 (defn react-query

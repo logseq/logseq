@@ -73,9 +73,6 @@
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
 
-   ;; whether block is collapsed
-   :block/collapsed? {}
-
    ;; scheduled day
    :block/scheduled {}
 
