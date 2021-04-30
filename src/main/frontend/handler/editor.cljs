@@ -889,6 +889,9 @@
           ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))
+          ids (if (= :up (state/get-selection-direction))
+                (reverse ids)
+                ids)
           [content tree] (compose-copied-blocks-contents-&-block-tree repo ids)]
       (common-handler/copy-to-clipboard-without-id-property! content)
       (state/set-copied-blocks content tree))))
