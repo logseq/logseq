@@ -218,28 +218,28 @@
         (tree/-save node txs-state)
         [node]))))
 
+(defn- insert-node-aux
+  ([new-node target-node sibling? txs-state]
+   (insert-node-aux new-node target-node sibling? txs-state nil))
+  ([new-node target-node sibling? txs-state blocks-atom]
+   (let [result (if sibling?
+                  (insert-node-as-sibling txs-state new-node target-node)
+                  (insert-node-as-first-child txs-state new-node target-node))]
+     (when blocks-atom
+       (swap! blocks-atom concat result))
+     (first result))))
+
 (defn insert-node
   ([new-node target-node sibling?]
    (insert-node new-node target-node sibling? nil))
-  ([new-node target-node sibling? {:keys [blocks-atom skip-transact? txs-state]
-                                   :or {skip-transact? false}}]
-   (if txs-state
-     (let [result (if sibling?
-                   (insert-node-as-sibling txs-state new-node target-node)
-                   (insert-node-as-first-child txs-state new-node target-node))]
-      (when blocks-atom
-        (swap! blocks-atom concat result))
-      (first result))
-     (ds/auto-transact!
-      [txs-state (ds/new-outliner-txs-state)]
-      {:outliner-op :insert-node
-       :skip-transact? skip-transact?}
-      (let [result (if sibling?
-                     (insert-node-as-sibling txs-state new-node target-node)
-                     (insert-node-as-first-child txs-state new-node target-node))]
-        (when blocks-atom
-          (swap! blocks-atom concat result))
-        (first result))))))
+  ([new-node target-node sibling? {:keys [blocks-atom skip-transact?]
+                                   :or {skip-transact? false}
+                                   :as opts}]
+   (ds/auto-transact!
+    [txs-state (ds/new-outliner-txs-state)]
+    {:outliner-op :insert-node
+     :skip-transact? skip-transact?}
+    (insert-node-aux new-node target-node sibling? txs-state blocks-atom))))
 
 (defn- walk-&-insert-nodes
   [loc target-node sibling? transact]
@@ -255,16 +255,16 @@
                             (and left2 (not (vector? (zip/node left2))) left2))]
             ;; found left sibling loc
             (let [new-node
-                  (insert-node (zip/node loc) (zip/node left) true {:txs-state transact})]
+                  (insert-node-aux (zip/node loc) (zip/node left) true transact)]
               (recur (zip/next (zip/edit loc update-node-fn new-node)) target-node sibling? transact))
             ;; else: need to find parent loc
             (if-let [parent (-> loc zip/up zip/left)]
               (let [new-node
-                    (insert-node (zip/node loc) (zip/node parent) false {:txs-state transact})]
+                    (insert-node-aux (zip/node loc) (zip/node parent) false transact)]
                 (recur (zip/next (zip/edit loc update-node-fn new-node)) target-node sibling? transact))
               ;; else: not found parent, it should be the root node
               (let [new-node
-                    (insert-node (zip/node loc) target-node sibling? {:txs-state transact})]
+                    (insert-node-aux (zip/node loc) target-node sibling? transact)]
                 (recur (zip/next (zip/edit loc update-node-fn new-node)) target-node sibling? transact)))))))))
 
 
@@ -288,7 +288,7 @@
   new-nodes-tree is an vector of blocks, e.g [1 [2 3] 4 [5 [6 7]]]"
   [new-nodes-tree target-node sibling?]
   (ds/auto-transact!
-   [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-node}
+   [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-nodes}
    (let [loc (zip/vector-zip new-nodes-tree)]
      ;; TODO: validate new-nodes-tree structure
      (let [updated-nodes (walk-&-insert-nodes loc target-node sibling? txs-state)
