@@ -199,8 +199,9 @@
 (defn edit-block!
   ([block pos format id]
    (edit-block! block pos format id nil))
-  ([block pos format id {:keys [custom-content tail-len]
-                         :or {tail-len 0}}]
+  ([block pos format id {:keys [custom-content tail-len move-cursor?]
+                         :or {tail-len 0
+                              move-cursor? true}}]
    (when-not config/publishing?
      (when-let [block-id (:block/uuid block)]
        (let [block (or (db/pull [:block/uuid block-id]) block)
@@ -223,7 +224,7 @@
                           (subs content 0 pos))]
          (do
            (clear-selection! nil)
-           (state/set-editing! edit-input-id content block text-range)))))))
+           (state/set-editing! edit-input-id content block text-range move-cursor?)))))))
 
 (defn edit-last-block-for-new-page!
   [last-block pos]
@@ -669,7 +670,8 @@
                                0)]
                       (edit-block! block pos format id
                                    {:custom-content new-value
-                                    :tail-len tail-len}))))))))))))
+                                    :tail-len tail-len
+                                    :move-cursor? false}))))))))))))
 
 (defn- get-end-block-parent
   [end-block blocks]
