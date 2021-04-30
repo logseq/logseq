@@ -120,7 +120,10 @@
 (defn save-tree
   [page-block tree]
   {:pre [(map? page-block)]}
-  (let [ok-handler #(save-tree-aux! page-block tree)]
-    (if-let [file (:block/file page-block)]
+  (let [ok-handler #(save-tree-aux! page-block tree)
+        file (or (:block/file page-block)
+                 (when-let [page (:db/id (:block/page page-block))]
+                   (:block/file (db-utils/entity page))))]
+    (if file
       (ok-handler)
       (create-file-if-not-exists! page-block ok-handler))))
