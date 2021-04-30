@@ -703,10 +703,10 @@
           blocks (reorder-blocks blocks)]
       (let [start-node (outliner-core/block (first blocks))
             end-node (get-top-level-end-node blocks)]
-        (outliner-core/delete-nodes start-node end-node lookup-refs)
-        (let [opts {:key :block/change
-                    :data blocks}]
-          (db/refresh! repo opts))))))
+        (when (outliner-core/delete-nodes start-node end-node lookup-refs)
+          (let [opts {:key :block/change
+                      :data blocks}]
+            (db/refresh! repo opts)))))))
 
 (defn- block-property-aux!
   [block-id key value]
