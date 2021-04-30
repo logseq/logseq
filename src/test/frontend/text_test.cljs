@@ -99,7 +99,7 @@
 
 (defn remove-id-property
   []
-  (are [x y] (= (text/remove-id-property! x) y)
+  (are [x y] (= (text/remove-id-property! :org x) y)
     "hello\n:PROPERTIES:\n:id: f9873a81-07b9-4246-b910-53a6f5ec7e04\n:END:\n"
     "hello\n:PROPERTIES:\n:END:"
 

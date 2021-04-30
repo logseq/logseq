@@ -274,7 +274,7 @@
      (let [format (or format :markdown)
            key (string/lower-case (name key))
            remove-f (if first? util/remove-first remove)]
-       (if-not (and (= format :org) (contains-properties? content))
+       (if (and (= format :org) (not (contains-properties? content)))
          content
          (let [lines (->> (string/split-lines content)
                           (remove-f (fn [line]
