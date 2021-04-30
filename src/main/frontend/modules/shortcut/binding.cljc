@@ -43,6 +43,7 @@
    :editor/down "down"
    :editor/left "left"
    :editor/right "right"
+   :editor/open-edit "enter"
    :editor/indent "tab"
    :editor/outindent "shift+tab"
 

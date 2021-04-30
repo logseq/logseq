@@ -2462,11 +2462,12 @@
         (select-first-last direction)))))
 
 (defn open-selected-block!
-  [direction]
+  [direction e]
   (when-let [block-id (some-> (state/get-selection-blocks)
                               first
                               (dom/attr "blockid")
                               medley/uuid)]
+    (util/stop e)
     (let [block {:block/uuid block-id}
           left? (= direction :left)]
       (edit-block! block
@@ -2483,7 +2484,7 @@
         (keydown-arrow-handler direction)
 
         (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
-        (open-selected-block! direction)
+        (open-selected-block! direction e)
 
         :else
         nil))))

@@ -39,6 +39,7 @@
     :editor/down (editor-handler/shortcut-up-down :down)
     :editor/left (editor-handler/shortcut-left-right :left)
     :editor/right (editor-handler/shortcut-left-right :right)
+    :editor/open-edit (partial editor-handler/open-selected-block! :right)
     :editor/select-block-up (editor-handler/on-select-block :up)
     :editor/select-block-down (editor-handler/on-select-block :down)
     :editor/copy editor-handler/shortcut-copy
