@@ -370,10 +370,6 @@
                 state)}
   (mixins/event-mixin setup-key-listener!)
   (mixins/shortcuts
-   #(shortcut/install-shortcut! % {})
-   :shortcut-listener/editor
-   shortcut-handler/editing-only)
-  (mixins/shortcuts
    #(shortcut/install-shortcut! % {:prevent-default? true})
    :shortcut-listener/editor-prevent-default
    shortcut-handler/editing-only-prevent-default)

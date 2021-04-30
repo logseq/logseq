@@ -2121,7 +2121,7 @@
 
       ;; just delete
       :else
-      nil)))
+      (.setRangeText input "" (dec current-pos) current-pos))))
 
 ;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
 (defn indent-on-tab

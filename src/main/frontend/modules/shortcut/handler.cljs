@@ -12,13 +12,11 @@
             [frontend.state :as state]
             [frontend.handler.history :as history]))
 
-(def editing-only
+(def editing-only-prevent-default
   {:editor/new-block editor-handler/keydown-new-block-handler
    :editor/new-line editor-handler/keydown-new-line-handler
-   :editor/delete editor-handler/editor-delete})
-
-(def editing-only-prevent-default
-  {:editor/indent (editor-handler/keydown-tab-handler :right)
+   :editor/delete editor-handler/editor-delete
+   :editor/indent (editor-handler/keydown-tab-handler :right)
    :editor/outindent (editor-handler/keydown-tab-handler :left)
    :editor/zoom-in  editor-handler/zoom-in!
    :editor/zoom-out  editor-handler/zoom-out!
