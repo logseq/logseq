@@ -484,7 +484,7 @@
          :sidebar? sidebar?
          :format format
          :id id
-         :block block
+         :block (or (db/pull [:block/uuid (:block/uuid block)]) block)
          :block-id block-id
          :block-parent-id block-parent-id
          :node node
@@ -1856,7 +1856,8 @@
                                        (text/remove-property "including-parent")
                                        template/resolve-dynamic-template!)))
       (clear-when-saved!)
-      (insert-command! id "" format {}))
+      (insert-command! id "" format {})
+      (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]}))
     (when-let [input (gdom/getElement id)]
       (.focus input))))
 
@@ -2129,19 +2130,19 @@
   (state/set-editor-op! :indent)
   (profile "indent on tab"
            (let [{:keys [block block-parent-id value config]} (get-state)]
-     (when block
-       (let [current-node (outliner-core/block block)
-             first-child? (outliner-core/first-child? current-node)]
-         (when-not first-child?
-           (let [left (tree/-get-left current-node)
-                 children-of-left (tree/-get-children left)]
-             (if (seq children-of-left)
-               (let [target-node (last children-of-left)]
-                 (outliner-core/move-subtree current-node target-node true))
-               (outliner-core/move-subtree current-node left false))
-             (let [repo (state/get-current-repo)]
-               (db/refresh! repo
-                            {:key :block/change :data [(:data current-node)]}))))))))
+             (when block
+               (let [current-node (outliner-core/block block)
+                     first-child? (outliner-core/first-child? current-node)]
+                 (when-not first-child?
+                   (let [left (tree/-get-left current-node)
+                         children-of-left (tree/-get-children left)]
+                     (if (seq children-of-left)
+                       (let [target-node (last children-of-left)]
+                         (outliner-core/move-subtree current-node target-node true))
+                       (outliner-core/move-subtree current-node left false))
+                     (let [repo (state/get-current-repo)]
+                       (db/refresh! repo
+                                    {:key :block/change :data [(:data current-node)]}))))))))
   (state/set-editor-op! :nil))
 
 (defn outdent-on-shift-tab
