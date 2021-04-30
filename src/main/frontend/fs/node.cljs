@@ -27,7 +27,9 @@
   [repo dir path content {:keys [ok-handler error-handler] :as opts} stat]
   (p/let [disk-mtime (when stat (gobj/get stat "mtime"))
           db-mtime (db/get-file-last-modified-at repo path)]
-    (if (not= disk-mtime db-mtime)
+    (if
+        false
+        ;; (not= disk-mtime db-mtime)
       (js/alert (str "The file has been modified on your local disk! File path: " path
                      ", please save your changes and click the refresh button to reload it."))
       (->
