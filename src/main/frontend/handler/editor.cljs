@@ -303,9 +303,8 @@
        (assoc :block/content content))))
 
 (defn- save-block-inner!
-  [repo block e value {:keys [refresh?]
-                       :or {refresh? true}
-                       :as opts}]
+  [repo block value {:keys [refresh?]
+                     :or {refresh? true}}]
   (let [block (assoc block :block/content value)
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
@@ -344,7 +343,7 @@
        :else
        (let [content-changed? (not= (string/trim content) (string/trim value))]
          (when (and content-changed? page)
-           (save-block-inner! repo block e value opts)))))))
+           (save-block-inner! repo block value opts)))))))
 
 (defn- compute-fst-snd-block-text
   [value pos]
@@ -1729,7 +1728,7 @@
              (fn []
                (when (state/input-idle? repo)
                  (state/set-editor-op! :auto-save)
-                 (save-current-block! {:refresh? false})
+                 (save-current-block! {})
                  (state/set-editor-op! nil)))
              500))
     (let [input (gdom/getElement id)
