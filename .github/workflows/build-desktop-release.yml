@@ -20,6 +20,10 @@ on:
         description: 'Pre Release?'
         required: true
         default: "true"
+      package-name:
+        description: 'Without platform and version.'
+        required: true
+        default: "logseq"
 
 jobs:
   compile-cljs:
@@ -281,7 +285,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
-          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
+          asset_name: ${{ github.event.inputs.package-name }}-darwin-x64-${{ github.event.inputs.tag-version }}.zip
           asset_content_type: application/zip
 
       - name: Upload MacOS X64 DMG Artifact
@@ -292,7 +296,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
-          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+          asset_name: ${{ github.event.inputs.package-name }}-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
           asset_content_type: application/x-apple-diskimage
 
       - name: Upload Linux Artifact With Zip format
@@ -303,7 +307,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Logseq-linux.zip
-          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-version }}.zip
+          asset_name: ${{ github.event.inputs.package-name }}-linux-x64-${{ github.event.inputs.tag-version }}.zip
           asset_content_type: application/zip
 
       - name: Upload Linux Artifact With AppImage format
@@ -314,7 +318,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Logseq-linux.AppImage
-          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-version }}.AppImage
+          asset_name: ${{ github.event.inputs.package-name }}-linux-x64-${{ github.event.inputs.tag-version }}.AppImage
           asset_content_type: application/octet-stream
 
       - name: Upload Windows Artifact
@@ -325,5 +329,5 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./Logseq-win64.exe
-          asset_name: logseq-win-x64-${{ github.event.inputs.tag-version }}.exe
+          asset_name: ${{ github.event.inputs.package-name }}-win-x64-${{ github.event.inputs.tag-version }}.exe
           asset_content_type: application/octet-stream
