@@ -206,26 +206,30 @@
 (defn shortcut-prev-day
   [_state e]
   (when-not (input-or-select?)
+    (util/stop e)
     (swap! *internal-model inc-date -1)))
 
 (defn shortcut-next-day
   [_state e]
   (when-not (input-or-select?)
+    (util/stop e)
     (swap! *internal-model inc-date 1)))
 
 (defn shortcut-prev-week
   [_state e]
   (when-not (input-or-select?)
+    (util/stop e)
     (swap! *internal-model inc-week -1)))
 
 (defn shortcut-next-week
   [_state e]
   (when-not (input-or-select?)
+    (util/stop e)
     (swap! *internal-model inc-week 1)))
 
 (rum/defc date-picker < rum/reactive
   (mixins/shortcuts
-   #(shortcut/install-shortcut! % {:prevent-default? true})
+   #(shortcut/install-shortcut! % {})
    :shortcut-listener/date-picker
    {:date-picker/complete shortcut-complete
     :date-picker/prev-day shortcut-prev-day
