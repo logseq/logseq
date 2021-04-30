@@ -40,6 +40,7 @@
              dummy (merge {:block/uuid (db/new-block-id)
                            :block/left page-id
                            :block/parent page-id
+                           :block/page page-id
                            :block/title ""
                            :block/content ""
                            :block/format format

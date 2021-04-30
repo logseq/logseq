@@ -59,7 +59,8 @@
   (let [raw-blocks (db/get-page-blocks repo page)
         document-mode? (state/sub :document/mode?)
         blocks (->>
-                (block-handler/with-dummy-block raw-blocks format nil {:journal? true})
+                (block-handler/with-dummy-block raw-blocks format nil {:journal? true
+                                                                       :page-name page})
                 (db/with-block-refs-count repo))]
     (blocks-inner blocks page document-mode?)))
 
