@@ -116,7 +116,6 @@
   (let [current-idx (get state :frontend.ui/current-idx)
         matched (first (:rum/args state))]
     (util/stop e)
-    (js/console.log "go prev" current-idx)
     (cond
       (>= @current-idx 1)
       (swap! current-idx dec)
@@ -134,7 +133,6 @@
   (let [current-idx (get state :frontend.ui/current-idx)
         matched (first (:rum/args state))]
     (util/stop e)
-    (js/console.log "go next" current-idx "##matched" matched)
     (let [total (count matched)]
       (if (>= @current-idx (dec total))
         (reset! current-idx 0)
