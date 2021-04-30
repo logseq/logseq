@@ -3,13 +3,13 @@ const path = require('path')
 module.exports = {
   packagerConfig: {
     icon: './icons/canary/logseq_big_sur.icns',
-    name: 'Logseq Canary',
+    name: 'LogseqCanary',
   },
   makers: [
     {
       'name': '@electron-forge/maker-squirrel',
       'config': {
-        title: 'Logseq Canary',
+        title: 'LogseqCanary',
         name: 'LogseqCanary', // ID name
         setupIcon: './icons/canary/logseq.ico'
       }
@@ -19,7 +19,7 @@ module.exports = {
       config: {
         format: 'ULFO',
         icon: './icons/canary/logseq_big_sur.icns',
-        name: 'Logseq Canary'
+        name: 'LogseqCanary'
       }
     },
     {
