@@ -2051,6 +2051,10 @@
           (util/cursor-move-back input 1)
           (util/cursor-move-forward input 1))))))
 
+(defn- delete-and-update [input start end]
+  (.setRangeText input "" start end)
+  (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
+
 (defn keydown-backspace-handler
   [cut? e]
   (let [^js input (state/get-input)
@@ -2071,7 +2075,7 @@
         (util/stop e)
         (when cut?
           (js/document.execCommand "copy"))
-        (.setRangeText input "" selected-start selected-end))
+        (delete-and-update input selected-start selected-end))
 
       (and (zero? current-pos)
            ;; not the top block in a block page
@@ -2088,7 +2092,7 @@
         (util/stop e)
         (reset! *slash-caret-pos nil)
         (reset! *show-commands false)
-        (.setRangeText input "" (dec current-pos) current-pos))
+        (delete-and-update input (dec current-pos) current-pos))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
@@ -2096,7 +2100,7 @@
         (util/stop e)
         (reset! *angle-bracket-caret-pos nil)
         (reset! *show-block-commands false)
-        (.setRangeText input "" (dec current-pos) current-pos))
+        (delete-and-update input (dec current-pos) current-pos))
 
       ;; pair
       (and
@@ -2123,11 +2127,13 @@
 
       ;; deleting hashtag
       (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
-      (state/set-editor-show-page-search-hashtag! false)
+      (do
+        (state/set-editor-show-page-search-hashtag! false)
+        (delete-and-update input (dec current-pos) current-pos))
 
       ;; just delete
       :else
-      (.setRangeText input "" (dec current-pos) current-pos))))
+      (delete-and-update input (dec current-pos) current-pos))))
 
 ;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
 (defn indent-on-tab
