@@ -233,8 +233,7 @@
   ([new-node target-node sibling?]
    (insert-node new-node target-node sibling? nil))
   ([new-node target-node sibling? {:keys [blocks-atom skip-transact?]
-                                   :or {skip-transact? false}
-                                   :as opts}]
+                                   :or {skip-transact? false}}]
    (ds/auto-transact!
     [txs-state (ds/new-outliner-txs-state)]
     {:outliner-op :insert-node
