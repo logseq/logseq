@@ -2406,7 +2406,7 @@
 (defn- copy-current-block-ref
   []
   (when-let [current-block (state/get-edit-block)]
-    (let [block-id (:block/uuid current-block)]
+    (when-let [block-id (:block/uuid current-block)]
       (copy-block-ref! block-id #(str "((" % "))"))
       (notification/show!
        [:div
