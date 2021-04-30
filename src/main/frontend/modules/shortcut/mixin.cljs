@@ -26,6 +26,13 @@
       (f e)
       false)))
 
+(defn enable-when-editing-mode!
+  [f]
+  (fn [state e]
+    (when (state/editing?)
+      (util/stop e)
+      (f state e))))
+
 (defn only-enable-when-dev!
   [_]
   (boolean config/dev?))

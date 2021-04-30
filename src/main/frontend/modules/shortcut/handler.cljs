@@ -12,30 +12,29 @@
             [frontend.state :as state]
             [frontend.handler.history :as history]))
 
-(def editing
-  {:editor/delete editor-handler/editor-delete})
-
 (def editing-only-prevent-default
-  {
-   ;; FIXME: tab not working anymore in the scheduled dialog
-   :editor/indent (editor-handler/keydown-tab-handler :right)
-   :editor/outindent (editor-handler/keydown-tab-handler :left)
-   :editor/new-block editor-handler/keydown-new-block-handler
-   :editor/new-line editor-handler/keydown-new-line-handler
-   :editor/zoom-in  editor-handler/zoom-in!
-   :editor/zoom-out  editor-handler/zoom-out!
-   :editor/cycle-todo editor-handler/cycle-todo!
-   :editor/expand-block-children editor-handler/expand!
-   :editor/collapse-block-children editor-handler/collapse!
-   :editor/follow-link editor-handler/follow-link-under-cursor!
-   :editor/open-link-in-sidebar editor-handler/open-link-in-sidebar!
-   :editor/bold editor-handler/bold-format!
-   :editor/italics editor-handler/italics-format!
-   :editor/highlight editor-handler/highlight-format!
-   :editor/insert-link editor-handler/html-link-format!
-   :editor/select-all-blocks editor-handler/select-all-blocks!
-   :editor/move-block-up (editor-handler/move-up-down true)
-   :editor/move-block-down (editor-handler/move-up-down false)})
+  (before
+   m/enable-when-editing-mode!
+   {
+    :editor/delete editor-handler/editor-delete
+    :editor/indent (editor-handler/keydown-tab-handler :right)
+    :editor/outindent (editor-handler/keydown-tab-handler :left)
+    :editor/new-block editor-handler/keydown-new-block-handler
+    :editor/new-line editor-handler/keydown-new-line-handler
+    :editor/zoom-in  editor-handler/zoom-in!
+    :editor/zoom-out  editor-handler/zoom-out!
+    :editor/cycle-todo editor-handler/cycle-todo!
+    :editor/expand-block-children editor-handler/expand!
+    :editor/collapse-block-children editor-handler/collapse!
+    :editor/follow-link editor-handler/follow-link-under-cursor!
+    :editor/open-link-in-sidebar editor-handler/open-link-in-sidebar!
+    :editor/bold editor-handler/bold-format!
+    :editor/italics editor-handler/italics-format!
+    :editor/highlight editor-handler/highlight-format!
+    :editor/insert-link editor-handler/html-link-format!
+    :editor/select-all-blocks editor-handler/select-all-blocks!
+    :editor/move-block-up (editor-handler/move-up-down true)
+    :editor/move-block-down (editor-handler/move-up-down false)}))
 
 (def handler
   [;; global editor shortcut

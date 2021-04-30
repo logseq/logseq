@@ -225,7 +225,7 @@
 
 (rum/defc date-picker < rum/reactive
   (mixins/shortcuts
-   #(shortcut/install-shortcut! % {})
+   #(shortcut/install-shortcut! % {:prevent-default? true})
    :shortcut-listener/date-picker
    {:date-picker/complete shortcut-complete
     :date-picker/prev-day shortcut-prev-day
