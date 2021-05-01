@@ -176,6 +176,13 @@
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
+              ref-pages (->> (mapcat :block/refs blocks)
+                             (filter :block/name))
+              pages (->> (util/distinct-by :block/name (concat pages ref-pages))
+                         (map (fn [page]
+                                (if (:block/uuid page)
+                                  page
+                                  (assoc page :block/uuid (db/new-block-id))))))
               blocks (map (fn [block]
                             (let [id (:block/uuid block)
                                   properties (get-in metadata [:block/properties id])]
@@ -186,5 +193,9 @@
               pages (util/distinct-by :block/name pages)
               block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
               blocks (map (fn [b]
-                            (update b :block/refs #(set/intersection (set %) block-ids-set))) blocks)]
+                            (update b :block/refs
+                                    (fn [refs]
+                                      (set/union
+                                       (filter :block/name refs)
+                                       (set/intersection (set refs) block-ids-set))))) blocks)]
           (apply concat [pages-index pages block-ids blocks]))))))
