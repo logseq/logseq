@@ -154,8 +154,12 @@
   (-del [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
       "db should be satisfied outliner-tx-state?")
-    (let [block-id (tree/-get-id this)]
-      (swap! txs-state conj [:db.fn/retractEntity [:block/uuid block-id]])
+    (let [block-id (tree/-get-id this)
+          children (db/get-block-children (state/get-current-repo) block-id)
+          children-ids (map :block/uuid children)
+          ids (set (conj children-ids block-id))
+          txs (map (fn [id] [:db.fn/retractEntity [:block/uuid id]]) ids)]
+      (swap! txs-state concat txs)
       block-id))
 
   (-get-children [this]

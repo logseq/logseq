@@ -19,7 +19,7 @@
       #?(:cljs [frontend.react-impls :as react-impls])
       [clojure.string :as string]
       [clojure.core.async :as async]
-      [clojure.pprint :refer [pprint]]
+      [clojure.pprint]
       [clojure.walk :as walk]
       [frontend.regex :as regex]
       [promesa.core :as p]))
@@ -1007,7 +1007,7 @@
    (string/upper-case s)))
 
 (defn pp-str [x]
-  (with-out-str (pprint x)))
+  (with-out-str (clojure.pprint/pprint x)))
 
 (defn hiccup-keywordize
   [hiccup]
@@ -1254,3 +1254,5 @@
           xs
           (cons x (inner xs))))))
    coll))
+
+(def pprint clojure.pprint/pprint)
