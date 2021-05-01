@@ -268,7 +268,7 @@
         (merge m
                {:block/journal? true
                 :block/journal-day journal-day})
-        m))))
+        (assoc m :block/journal? false)))))
 
 (defn with-page-refs
   [{:keys [title body tags refs] :as block} with-id?]
