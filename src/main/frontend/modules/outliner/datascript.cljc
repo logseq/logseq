@@ -19,7 +19,7 @@
      [state]
      (and
        (instance? cljs.core/Atom state)
-       (vector? @state))))
+       (coll? @state))))
 
 #?(:cljs
    (defn add-txs

@@ -128,5 +128,8 @@
     :block/deadline
     :block/repeated?
     :block/pre-block?
+    :block/level
+    :block/heading-level
+    :block/type
     }
   )

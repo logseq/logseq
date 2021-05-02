@@ -442,7 +442,8 @@
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge block new-m)
-                       (dissoc :db/id :block/properties :block/pre-block? :block/meta)
+                       (dissoc :db/id :block/properties :block/pre-block? :block/meta
+                               :block/heading-level :block/type)
                        (wrap-parse-block))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"

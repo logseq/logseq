@@ -1491,7 +1491,7 @@
              (utils/timeConversion (- finish-time start-time))]])))]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? idx] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
   (let [editor-box (get config :editor-box)
         edit? (state/sub [:editor/editing? edit-input-id])]
     (if (and edit? editor-box)
@@ -1501,6 +1501,7 @@
                     :block-parent-id block-id
                     :format format
                     :dummy? dummy?
+                    :heading-level heading-level
                     :on-hide (fn [value event]
                                (when (= event :esc)
                                  (editor-handler/select-block! uuid)))}
@@ -1651,12 +1652,13 @@
 
 (rum/defcs block-container < rum/static
   {:init (fn [state]
-           (assoc state ::control-show? (atom false)))
+           (assoc state
+                  ::control-show? (atom false)))
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
   [state config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? top? properties refs-with-children heading-level level type] :as block}]
-  (let [heading? (and (= type :heading) (<= level 6))
+  (let [heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
         collapsed? (get properties :collapsed)
         ref? (boolean (:ref? config))
@@ -1673,8 +1675,7 @@
                      (or (seq children)
                          (seq body))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?)
-        [data-refs data-refs-self] (get-data-refs-and-self block refs-with-children)
-        edit-input-id (str "edit-block-" unique-dom-id uuid)]
+        [data-refs data-refs-self] (get-data-refs-and-self block refs-with-children)]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
       {:id block-id
@@ -1689,9 +1690,7 @@
        :repo repo
        :haschild (str has-child?)}
        (not slide?)
-       (merge attrs)
-       (and heading? heading-level)
-       (assoc :data-heading-level heading-level))
+       (merge attrs))
 
      (when (and ref? breadcrumb-show?)
        (when-let [comp (block-parents config repo uuid format false)]
@@ -1703,7 +1702,8 @@
       (when (not slide?)
         (block-control config block uuid block-id body children dummy? *control-show?))
 
-      (block-content-or-editor config block edit-input-id block-id slide?)]
+      (let [edit-input-id (str "edit-block-" unique-dom-id uuid)]
+        (block-content-or-editor config block edit-input-id block-id slide? heading-level))]
 
      (when (seq children)
        [:div.block-children {:style {:margin-left (if doc-mode? 12 21)

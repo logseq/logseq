@@ -364,8 +364,21 @@
     (set-up-key-down! repo state format)
     (set-up-key-up! state input input-id search-timeout)))
 
+(defn- get-editor-style
+  [heading-level]
+  (case heading-level
+    1 {:font-size "2em" :font-weight "bold" :margin "0.67em 0"}
+    2 {:font-size "1.5em" :font-weight "bold" :margin "0.75em 0"}
+    3 {:font-size "1.17em" :font-weight "bold" :margin "0.83em 0"}
+    4 {:font-weight "bold" :margin "1.12em 0"}
+    5 {:font-size "0.83em" :font-weight "bold" :margin "1.5em 0"}
+    6 {:font-size "0.75em" :font-weight "bold" :margin "1.67em 0"}
+    nil))
+
 (rum/defcs box < rum/reactive
-  {:did-mount (fn [state]
+  {:init (fn [state]
+           (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
+   :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}
   (mixins/event-mixin setup-key-listener!)
@@ -374,10 +387,11 @@
    :shortcut-listener/editor-prevent-default
    shortcut-handler/editing-only-prevent-default)
   lifecycle/lifecycle
-  [state {:keys [on-hide dummy? node format block block-parent-id]
+  [state {:keys [on-hide dummy? node format block block-parent-id heading-level]
           :or   {dummy? false}
           :as   option} id config]
-  (let [content (state/get-edit-content)]
+  (let [content (state/get-edit-content)
+        heading-level (get state ::heading-level)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
@@ -388,7 +402,8 @@
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
-       :auto-focus        false})
+       :auto-focus        false
+       :style             (get-editor-style heading-level)})
 
      ;; TODO: how to render the transitions asynchronously?
      (transition-cp
