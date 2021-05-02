@@ -6,8 +6,7 @@
             [frontend.db :as db]
             [datascript.db :as ddb]
             [clojure.string :as string]
-            [promesa.core :as p]
-            [medley.core :as medley]))
+            [promesa.core :as p]))
 
 (def default-metadata-str "{}")
 

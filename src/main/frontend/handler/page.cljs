@@ -22,10 +22,7 @@
             [frontend.fs :as fs]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
-            [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
             [cljs.reader :as reader]
             [goog.object :as gobj]))
 
@@ -304,11 +301,7 @@
   (let [new-name (string/trim new-name)]
     (when-not (string/blank? new-name)
       (when (and old-name new-name)
-        (let [case-changed? (and (= (string/lower-case old-name)
-                                    (string/lower-case new-name))
-                                 (not= (string/trim old-name)
-                                       (string/trim new-name)))
-              name-changed? (not= (string/lower-case (string/trim old-name))
+        (let [name-changed? (not= (string/lower-case (string/trim old-name))
                                   (string/lower-case (string/trim new-name)))]
           (when-let [repo (state/get-current-repo)]
             (when-let [page (db/entity [:block/name (string/lower-case old-name)])]
@@ -317,13 +310,12 @@
                     journal? (:block/journal? page)]
                 (d/transact! (db/get-conn repo false)
                   [{:db/id (:db/id page)
+                    :block/uuid (:block/uuid page)
                     :block/name (string/lower-case new-name)
                     :block/original-name new-name}])
 
                 (when (and file (not journal?) name-changed?)
-                  (rename-file! file new-name
-                                (fn []
-                                  (page-add-properties! (string/lower-case new-name) {:title new-name}))))
+                  (rename-file! file new-name (fn [] nil)))
 
                 ;; update all files which have references to this page
                 (let [files (db/get-files-that-referenced-page (:db/id page))]
@@ -350,21 +342,6 @@
               (repo-handler/push-if-auto-enabled! repo)
 
               (ui-handler/re-render-root!))))))))
-
-(defn rename-when-alter-title-property!
-  [page path format original-content content]
-  (when (and page (contains? config/mldoc-support-formats format))
-    (let [old-name page
-          new-name (let [ast (mldoc/->edn content (mldoc/default-config format))]
-                     (db/get-page-name path ast))
-          journal? (date/valid-journal-title? old-name)]
-      (if (not= old-name new-name)
-        (if journal?
-          [true old-name]
-          (do
-            (rename! old-name new-name)
-            [false new-name]))
-        [journal? old-name]))))
 
 (defn handle-add-page-to-contents!
   [page-name]

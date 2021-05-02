@@ -3,7 +3,6 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [medley.core :as medley]
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]

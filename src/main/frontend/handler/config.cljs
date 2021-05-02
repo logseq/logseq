@@ -2,7 +2,6 @@
   (:require [frontend.state :as state]
             [frontend.handler.file :as file-handler]
             [frontend.config :as config]
-            [frontend.db :as db]
             [clojure.string :as string]))
 
 (defn set-config!
@@ -18,7 +17,3 @@
   [project]
   (when-not (string/blank? project)
     (set-config! [:project :name] project)))
-
-(defn set-preferred-workflow!
-  [workflow]
-  (set-config! :preferred-workflow (name workflow)))

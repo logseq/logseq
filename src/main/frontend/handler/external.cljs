@@ -7,7 +7,6 @@
             [frontend.date :as date]
             [frontend.config :as config]
             [clojure.string :as string]
-            [promesa.core :as p]
             [frontend.db :as db]))
 
 (defonce debug-files (atom nil))

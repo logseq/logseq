@@ -276,7 +276,7 @@
   (when-not (string/blank? file)
     (->
      (p/let [_ (or (config/local-db? repo) (git/remove-file repo file))
-             result (fs/unlink! (config/get-repo-path repo file) nil)]
+             _ (fs/unlink! (config/get-repo-path repo file) nil)]
        (when-let [file (db/entity repo [:file/path file])]
          (common-handler/check-changed-files-status)
          (let [file-id (:db/id file)

@@ -5,7 +5,6 @@
             [frontend.components.svg :as svg]
             [frontend.handler.route :as route]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.file :as file-handler]
             [frontend.db :as db]
             [frontend.handler.search :as search-handler]
             [frontend.ui :as ui]
@@ -141,10 +140,7 @@
 (rum/defc search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (let [new-file (when-let [ext (util/get-file-ext search-q)]
-                     (when (contains? config/mldoc-support-formats (keyword (string/lower-case ext)))
-                       [{:type :new-file}]))
-          pages (when-not all? (map (fn [page] {:type :page :data page}) pages))
+    (let [pages (when-not all? (map (fn [page] {:type :page :data page}) pages))
           files (when-not all? (map (fn [file] {:type :file :data file}) files))
           blocks (map (fn [block] {:type :block :data block}) blocks)
           search-mode (state/get-search-mode)
@@ -159,7 +155,7 @@
                      [{:type :new-page}])
           result (if config/publishing?
                    (concat pages files blocks)
-                   (concat new-page pages new-file files blocks))]
+                   (concat new-page pages files blocks))]
       [:div.rounded-md.shadow-lg
        {:style (merge
                 {:top 48
@@ -179,9 +175,6 @@
                         :page
                         (route/redirect! {:to :page
                                           :path-params {:name data}})
-
-                        :new-file
-                        (file-handler/create! search-q)
 
                         :file
                         (route/redirect! {:to :file
@@ -219,10 +212,6 @@
                           [:div {:class "py-2"} (case type
                                                   :new-page
                                                   [:div.text.font-bold (str (t :new-page) ": ")
-                                                   [:span.ml-1 (str "\"" search-q "\"")]]
-
-                                                  :new-file
-                                                  [:div.text.font-bold (str (t :new-file) ": ")
                                                    [:span.ml-1 (str "\"" search-q "\"")]]
 
                                                   :page
