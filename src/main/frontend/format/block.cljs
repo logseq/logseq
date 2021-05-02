@@ -446,7 +446,10 @@
                                                    (remove string/blank?))
                       block (second block)
                       block (if markdown-heading?
-                              (assoc block :level 1 :heading-level (:level block))
+                              (assoc block
+                                     :type :heading
+                                     :level 1
+                                     :heading-level (:level block))
                               block)
                       level (:level block)
                       [children current-block-children]

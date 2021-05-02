@@ -2051,7 +2051,7 @@
           (util/cursor-move-back input 1)
           (util/cursor-move-forward input 1))))))
 
-(defn- delete-and-update [input start end]
+(defn- delete-and-update [^js input start end]
   (.setRangeText input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 

@@ -1026,7 +1026,7 @@
         collapsed? (get (:block/properties block) :collapsed)
         control-show? (util/react *control-show?)
         dark? (= "dark" (state/sub :ui/theme))]
-    [:div.mr-2.flex.flex-row.items-center
+    [:div.bullet.mr-2.flex.flex-row.items-center
      {:style {:height 24
               :margin-top 0
               :float "left"}}
@@ -1418,7 +1418,7 @@
                :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
                :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
                :on-drop       (fn [event] (block-content-on-drop event block uuid))}]
-    [:div.flex.relative
+    [:div.flex.relative {:style {:width "100%"}}
      [:div.flex-1.flex-col.relative.block-content
       (cond-> {:id (str "block-content-" uuid)}
         (not slide?)
@@ -1492,8 +1492,8 @@
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? idx] :as block} edit-input-id block-id slide?]
-  (let [edit? (state/sub [:editor/editing? edit-input-id])
-        editor-box (get config :editor-box)]
+  (let [editor-box (get config :editor-box)
+        edit? (state/sub [:editor/editing? edit-input-id])]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id (str "editor-" edit-input-id)}
        (editor-box {:block block
@@ -1655,8 +1655,9 @@
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [state config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? top? properties refs-with-children] :as block}]
-  (let [*control-show? (get state ::control-show?)
+  [state config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? top? properties refs-with-children heading-level level type] :as block}]
+  (let [heading? (and (= type :heading) (<= level 6))
+        *control-show? (get state ::control-show?)
         collapsed? (get properties :collapsed)
         ref? (boolean (:ref? config))
         breadcrumb-show? (:breadcrumb-show? config)
@@ -1672,7 +1673,8 @@
                      (or (seq children)
                          (seq body))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?)
-        [data-refs data-refs-self] (get-data-refs-and-self block refs-with-children)]
+        [data-refs data-refs-self] (get-data-refs-and-self block refs-with-children)
+        edit-input-id (str "edit-block-" unique-dom-id uuid)]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
       {:id block-id
@@ -1687,7 +1689,9 @@
        :repo repo
        :haschild (str has-child?)}
        (not slide?)
-       (merge attrs))
+       (merge attrs)
+       (and heading? heading-level)
+       (assoc :data-heading-level heading-level))
 
      (when (and ref? breadcrumb-show?)
        (when-let [comp (block-parents config repo uuid format false)]
@@ -1695,12 +1699,11 @@
 
      (dnd-separator-wrapper block slide? top?)
 
-     [:div.flex-1.flex-row
+     [:div.flex.flex-row {:class (if heading? "items-center" "")}
       (when (not slide?)
         (block-control config block uuid block-id body children dummy? *control-show?))
 
-      (let [edit-input-id (str "edit-block-" unique-dom-id uuid)]
-        (block-content-or-editor config block edit-input-id block-id slide?))]
+      (block-content-or-editor config block edit-input-id block-id slide?)]
 
      (when (seq children)
        [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
