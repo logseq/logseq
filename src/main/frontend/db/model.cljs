@@ -922,6 +922,18 @@
         (map (fn [block] (assoc block :block/children-refs
                                 (get refs (:db/id block)))) blocks)))))
 
+(defn get-page-referenced-blocks-no-cache
+  [page-id]
+  (when-let [repo (state/get-current-repo)]
+    (->>
+     (d/q '[:find (pull ?b [*])
+            :in $ ?page-id
+            :where
+            [?b :block/refs ?page-id]]
+          (conn/get-conn repo)
+       page-id)
+     (flatten))))
+
 (defn get-page-referenced-blocks
   ([page]
    (get-page-referenced-blocks (state/get-current-repo) page))

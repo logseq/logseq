@@ -15,6 +15,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.config :as config-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.modules.outliner.file :as outliner-file]
             [frontend.commands :as commands]
             [frontend.date :as date]
             [clojure.walk :as walk]
@@ -24,7 +25,8 @@
             [lambdaisland.glogi :as log]
             [frontend.format.block :as block]
             [cljs.reader :as reader]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [clojure.data :as data]))
 
 (defn- get-directory
   [journal?]
@@ -296,6 +298,21 @@
      (p/catch (fn [error]
                 (println "file rename failed: " error))))))
 
+;; FIXME: not safe
+(defn- replace-old-page!
+  [s old-name new-name]
+  (-> s
+      (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
+      (string/replace (str "#" old-name) (str "#" new-name))))
+
+(defn- walk-replace-old-page!
+  [form old-name new-name]
+  (walk/postwalk (fn [f] (if (string? f)
+                          (if (= f old-name)
+                            new-name
+                            (replace-old-page! f old-name new-name))
+                           f)) form))
+
 (defn rename!
   [old-name new-name]
   (let [new-name (string/trim new-name)]
@@ -309,27 +326,39 @@
                     file (:block/file page)
                     journal? (:block/journal? page)]
                 (d/transact! (db/get-conn repo false)
-                  [{:db/id (:db/id page)
-                    :block/uuid (:block/uuid page)
-                    :block/name (string/lower-case new-name)
-                    :block/original-name new-name}])
+                             [{:db/id (:db/id page)
+                               :block/uuid (:block/uuid page)
+                               :block/name (string/lower-case new-name)
+                               :block/original-name new-name}])
 
                 (when (and file (not journal?) name-changed?)
                   (rename-file! file new-name (fn [] nil)))
 
                 ;; update all files which have references to this page
-                (let [files (db/get-files-that-referenced-page (:db/id page))]
-                  (doseq [file-path files]
-                    (let [file-content (db/get-file file-path)
-                          ;; FIXME: not safe
-                          new-content (string/replace file-content
-                                                      (util/format "[[%s]]" old-original-name)
-                                                      (util/format "[[%s]]" new-name))]
-                      (file-handler/alter-file repo
-                                               file-path
-                                               new-content
-                                               {:reset? true
-                                                :re-render-root? false})))))
+                (let [blocks (db/get-page-referenced-blocks-no-cache (:db/id page))
+                      page-ids (->> (map :block/page blocks)
+                                    (remove nil?)
+                                    (set))
+                      tx (->> (map (fn [{:block/keys [uuid title content properties] :as block}]
+                                     (let [title (let [title' (walk-replace-old-page! title old-original-name new-name)]
+                                                   (when-not (= title' title)
+                                                     title'))
+                                           content (let [content' (replace-old-page! content old-original-name new-name)]
+                                                     (when-not (= content' content)
+                                                       content'))
+                                           properties (let [properties' (walk-replace-old-page! properties old-original-name new-name)]
+                                                        (when-not (= properties' properties)
+                                                          properties'))]
+                                       (when (or title content properties)
+                                         (util/remove-nils-non-nested
+                                          {:block/uuid uuid
+                                           :block/title title
+                                           :block/content content
+                                           :block/properties properties})))) blocks)
+                              (remove nil?))]
+                  (db/transact! repo tx)
+                  (doseq [page-id page-ids]
+                    (outliner-file/sync-to-file page-id))))
 
               ;; TODO: update browser history, remove the current one
 
