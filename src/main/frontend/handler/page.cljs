@@ -10,7 +10,6 @@
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.project :as project-handler]
             [frontend.handler.web.nfs :as web-nfs]
             [frontend.handler.notification :as notification]
             [frontend.handler.config :as config-handler]
@@ -109,25 +108,6 @@
                                {:reset? true
                                 :re-render-root? true}))))
 
-(defn published-success-handler
-  [page-name]
-  (fn [result]
-    (let [permalink (:permalink result)]
-      (page-add-properties! page-name {"permalink" permalink})
-      (let [win (js/window.open (str
-                                 config/website
-                                 "/"
-                                 (state/get-current-project)
-                                 "/"
-                                 permalink))]
-        (.focus win)))))
-
-(defn published-failed-handler
-  [error]
-  (notification/show!
-   "Publish failed, please give it another try."
-   :error))
-
 (defn get-plugins
   [blocks]
   (let [plugins (atom {})
@@ -150,91 +130,6 @@
          x))
      (map :block/body blocks))
     @plugins))
-
-(defn publish-page-as-slide!
-  ([page-name project-add-modal export-page-html]
-   (publish-page-as-slide! page-name (db/get-page-blocks page-name) project-add-modal export-page-html))
-  ([page-name blocks project-add-modal export-page-html]
-   (project-handler/exists-or-create!
-    (fn [project]
-      (config-handler/set-config! [:project :name] project)
-      (page-add-properties! page-name {"published" true
-                                       "slide" true})
-      (let [properties (db/get-page-properties page-name)
-            plugins (get-plugins blocks)
-            data {:project project
-                  :title page-name
-                  :permalink (:permalink properties)
-                  :html (export-page-html page-name blocks notification/show!)
-                  :tags (:tags properties)
-                  :settings (merge
-                             (assoc properties
-                                    :slide true
-                                    :published true)
-                             plugins)
-                  :repo (state/get-current-repo)}]
-        (util/post (str config/api "pages")
-                   data
-                   (published-success-handler page-name)
-                   published-failed-handler)))
-    project-add-modal)))
-
-(defn publish-page!
-  [page-name project-add-modal export-page-html]
-  (project-handler/exists-or-create!
-   (fn [project]
-     (let [properties (db/get-page-properties page-name)
-           slide? (let [slide (:slide properties)]
-                    (or (true? slide)
-                        (= "true" slide)))
-           blocks (db/get-page-blocks page-name)
-           plugins (get-plugins blocks)]
-       (p/let [_ (config-handler/set-config! [:project :name] project)]
-         (if slide?
-           (publish-page-as-slide! page-name blocks project-add-modal)
-           (do
-             (page-add-properties! page-name {"published" true})
-             (let [data {:project project
-                         :title page-name
-                         :permalink (:permalink properties)
-                         :html (export-page-html page-name blocks notification/show!)
-                         :tags (:tags properties)
-                         :settings (merge properties plugins)
-                         :repo (state/get-current-repo)}]
-               (util/post (str config/api "pages")
-                          data
-                          (published-success-handler page-name)
-                          published-failed-handler))))
-         (state/close-modal!))))
-   project-add-modal))
-
-(defn unpublished-success-handler
-  [page-name]
-  (fn [result]
-    (state/close-modal!)
-    (notification/show!
-     "Un-publish successfully!"
-     :success)))
-
-(defn unpublished-failed-handler
-  [error]
-  (notification/show!
-   "Un-publish failed, please give it another try."
-   :error))
-
-(defn unpublish-page!
-  [page-name]
-  (page-add-properties! page-name {"published" false})
-  (let [properties (db/get-page-properties page-name)
-        permalink (:permalink properties)
-        project (state/get-current-project)]
-    (if (and project permalink)
-      (util/delete (str config/api project "/" permalink)
-                   (unpublished-success-handler page-name)
-                   unpublished-failed-handler)
-      (notification/show!
-       "Can't find the permalink of this page!"
-       :error))))
 
 (defn delete!
   [page-name ok-handler]
@@ -437,42 +332,6 @@
 (defn init-commands!
   []
   (commands/init-commands! get-page-ref-text))
-
-(defn delete-page-from-logseq
-  [project permalink]
-  (let [url (util/format "%s%s/%s" config/api project permalink)]
-    (js/Promise.
-     (fn [resolve reject]
-       (util/delete url
-                    (fn [result]
-                      (resolve result))
-                    (fn [error]
-                      (log/error :page/http-delete-failed error)
-                      (reject error)))))))
-
-(defn get-page-list-by-project-name
-  [project]
-  (js/Promise.
-   (fn [resolve _]
-     (if-not (string? project)
-       (resolve :project-name-is-invalid)
-       (let [url (util/format "%sprojects/%s/pages" config/api project)]
-         (util/fetch url
-                     (fn [result]
-                       (log/debug :page/get-page-list result)
-                       (let [data (:result result)]
-                         (if (sequential? data)
-                           (do (state/set-published-pages data)
-                               (resolve data))
-                           (log/error :page/http-get-list-result-malformed result))))
-                     (fn [error]
-                       (log/error :page/http-get-list-failed error)
-                       (resolve error))))))))
-
-(defn update-state-and-notify
-  [page-name]
-  (page-add-properties! page-name {:published false})
-  (notification/show! (util/format "Remove Page \"%s\" from Logseq server success" page-name) :success))
 
 (defn add-page-to-recent!
   [repo page]

@@ -1,7 +1,6 @@
 (ns frontend.components.file
   (:require [rum.core :as rum]
             [frontend.util :as util]
-            [frontend.handler.project :as project]
             [frontend.handler.export :as export-handler]
             [frontend.config :as config]
             [frontend.state :as state]
@@ -97,9 +96,6 @@
                                 :display "inline-block"}})
           [:span.ml-1 "Please don't remove the page's title property (you can still modify it)."]])
 
-       (when (and config? (state/logged?))
-         [:a.mb-8.block {:on-click (fn [_e] (project/sync-project-settings!))}
-          (tongue :project/sync-settings)])
        (cond
          ;; image type
          (and format (contains? (config/img-formats) format))

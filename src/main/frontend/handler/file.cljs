@@ -15,7 +15,6 @@
             [frontend.config :as config]
             [frontend.format :as format]
             [clojure.string :as string]
-            [frontend.handler.project :as project-handler]
             [lambdaisland.glogi :as log]
             [clojure.core.async :as async]
             [cljs.core.async.interop :refer-macros [<p!]]
@@ -83,14 +82,7 @@
    (let [config-content (if config-content config-content
                             (common-handler/get-config repo-url))]
      (when config-content
-       (let [old-project (:project (state/get-config))
-             new-config (common-handler/reset-config! repo-url config-content)]
-         (when (and (not (config/local-db? repo-url))
-                    project-changed-check?)
-           (let [new-project (:project new-config)
-                 project-name (:name old-project)]
-             (when-not (= new-project old-project)
-               (project-handler/sync-project-settings! project-name new-project)))))))))
+       (common-handler/reset-config! repo-url config-content)))))
 
 (defn load-files
   [repo-url]

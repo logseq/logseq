@@ -20,7 +20,6 @@
             [frontend.extensions.graph-2d :as graph-2d]
             [frontend.ui :as ui]
             [frontend.components.content :as content]
-            [frontend.components.project :as project]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as model]

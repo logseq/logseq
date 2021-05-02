@@ -16,7 +16,6 @@
             [frontend.components.search :as search]
             [frontend.components.export :as export]
             [frontend.components.right-sidebar :as sidebar]
-            [frontend.handler.project :as project-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
             [goog.dom :as gdom]
@@ -109,18 +108,6 @@
          {:title (t :all-journals)
           :options {:href (rfe/href :all-journals)}
           :icon svg/calendar-sm})
-
-       (when (project-handler/get-current-project current-repo projects)
-         {:title (t :my-publishing)
-          :options {:href (rfe/href :my-publishing)}})
-
-       (when-let [project (and current-repo
-                               (project-handler/get-current-project current-repo projects))]
-         (let [link (str config/website "/" project)]
-           {:title (str (t :go-to) "/" project)
-            :options {:href link
-                      :target "_blank"}
-            :icon svg/external-link}))
 
        (when current-repo
          {:title (t :settings)

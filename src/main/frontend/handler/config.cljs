@@ -12,8 +12,3 @@
 (defn toggle-ui-show-brackets! []
   (let [show-brackets? (state/show-brackets?)]
     (set-config! :ui/show-brackets? (not show-brackets?))))
-
-(defn set-project!
-  [project]
-  (when-not (string/blank? project)
-    (set-config! [:project :name] project)))
