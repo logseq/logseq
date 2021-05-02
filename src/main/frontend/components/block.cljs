@@ -824,7 +824,7 @@
                           :query query}))]
 
         (= name "youtube")
-        (let [url (first arguments)]
+        (when-let [url (first arguments)]
           (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
             (when-let [youtube-id (cond
                                     (== 11 (count url)) url
@@ -844,7 +844,7 @@
                     :width width}])))))
 
         (= name "vimeo")
-        (let [url (first arguments)]
+        (when-let [url (first arguments)]
           (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
             (when-let [vimeo-id (nth (re-find Vimeo-regex url) 5)]
               (when-not (string/blank? vimeo-id)
@@ -862,25 +862,25 @@
 
         ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
         (= name "bilibili")
-        (let [url (first arguments)
-              id-regex #"https?://www\.bilibili\.com/video/([\w\W]+)"]
-          (when-let [id (cond
-                          (<= (count url) 15) url
-                          :else
-                          (last (re-find id-regex url)))]
-            (when-not (string/blank? id)
-              (let [width (min (- (util/get-width) 96)
-                               560)
-                    height (int (* width (/ 315 560)))]
-                [:iframe
-                 {:allowfullscreen true
-                  :framespacing "0"
-                  :frameborder "no"
-                  :border "0"
-                  :scrolling "no"
-                  :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
-                  :width width
-                  :height (max 500 height)}]))))
+        (when-let [url (first arguments)]
+          (let [id-regex #"https?://www\.bilibili\.com/video/([\w\W]+)"]
+            (when-let [id (cond
+                           (<= (count url) 15) url
+                           :else
+                           (last (re-find id-regex url)))]
+             (when-not (string/blank? id)
+               (let [width (min (- (util/get-width) 96)
+                                560)
+                     height (int (* width (/ 315 560)))]
+                 [:iframe
+                  {:allowfullscreen true
+                   :framespacing "0"
+                   :frameborder "no"
+                   :border "0"
+                   :scrolling "no"
+                   :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+                   :width width
+                   :height (max 500 height)}])))))
 
         (= name "embed")
         (let [a (first arguments)]
