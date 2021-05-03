@@ -247,8 +247,8 @@
 (defn- attach-page-properties-if-exists!
   [block]
   (if (and (:block/pre-block? block)
-           (= "Properties" (ffirst (:block/body block)))) ; page properties
-    (let [page-properties (second (first (:block/body block)))
+           (seq (:block/properties block)))
+    (let [page-properties (:block/properties block)
           str->page (fn [n] {:block/name (string/lower-case n) :block/original-name n})
           refs (->> page-properties
                     (filter (fn [[_ v]] (coll? v)))
@@ -279,7 +279,7 @@
   [{:block/keys [content format parent page] :as block}]
   (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
-        properties? (= "Properties" first-elem-type)
+        properties? (= "Property_Drawer" first-elem-type)
         top-level? (= parent page)
         markdown-heading? (and (= format :markdown)
                                (= "Heading" first-elem-type))

@@ -20,6 +20,7 @@
             [clojure.walk :as walk]
             [frontend.git :as git]
             [frontend.fs :as fs]
+            [frontend.text :as text]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.format.block :as block]
@@ -86,27 +87,10 @@
 
 (defn page-remove-property!
   [page-name k]
-  (when-let [properties-content (string/trim (db/get-page-properties-content page-name))]
-    (let [page (db/entity [:block/name page-name])
-          file (db/entity (:db/id (:block/file page)))
-          file-path (:file/path file)
-          file-content (db/get-file file-path)
-          after-content (subs file-content (count properties-content))
-          page-format (db/get-page-format page-name)
-          new-properties-content (let [lines (string/split-lines properties-content)
-                                       prefix (case page-format
-                                                :org (str "#+" (string/upper-case k) ": ")
-                                                :markdown (str (string/lower-case k) ": ")
-                                                "")
-                                       exists? (atom false)
-                                       lines (remove #(util/starts-with? % prefix) lines)]
-                                   (string/join "\n" lines))
-          full-content (str new-properties-content "\n\n" (string/trim after-content))]
-      (file-handler/alter-file (state/get-current-repo)
-                               file-path
-                               full-content
-                               {:reset? true
-                                :re-render-root? true}))))
+  (when-let [page (db/entity [:page/name (string/lower-case page-name)])]
+    (let [tx [{:db/id (:db/id page)
+               :block/properties (dissoc (:block/properties page) k)}]])
+    ))
 
 (defn get-plugins
   [blocks]

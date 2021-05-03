@@ -1260,12 +1260,12 @@
           ast (map first ast)
           slide? (:slide? config)
           only-title? (and (= 1 (count ast))
-                           (= "Properties" (ffirst ast))
+                           (= "Property_Drawer" (ffirst ast))
                            (let [m (second (first ast))]
                              (every? #(contains? #{:title :filters} %) (keys m))))
           block-cp [:div {:class (if only-title?
                                    (util/hiccup->class "pre-block.opacity-50")
-                                   (util/hiccup->class "pre-block.bg-base-2.p-2.rounded"))}
+                                   (util/hiccup->class "pre-block.p-2"))}
                     (if only-title?
                       [:span (t :page/edit-properties-placeholder)]
                       (markup-elements-cp (assoc config :block/format format) ast))]]
@@ -1425,14 +1425,14 @@
         (merge attrs))
 
       (cond
-        pre-block?
-        (pre-block-cp config content format)
-
         dummy?
         [:span.opacity-50 "Click here to start writing"]
 
         (seq title)
-        (build-block-title config block))
+        (build-block-title config block)
+
+        :else
+        nil)
 
       (when (and dragging? (not slide?) (not dummy?))
         (dnd-separator block 0 -4 false true))
@@ -1450,6 +1450,9 @@
                    (not hidden?))
                  (not (:slide? config)))
         (properties-cp config block))
+
+      (when pre-block?
+        (pre-block-cp config content format))
 
       (when (and (not pre-block?) (seq body))
         (do

@@ -131,5 +131,6 @@
     :block/level
     :block/heading-level
     :block/type
+    :block/title
     }
   )

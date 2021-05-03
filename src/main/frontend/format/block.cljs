@@ -148,7 +148,8 @@
   [block]
   (and
    (vector? block)
-   (= "Property_Drawer" (first block))))
+   (contains? #{"Property_Drawer" "Properties"}
+              (first block))))
 
 (defn definition-list-block?
   [block]
@@ -409,6 +410,7 @@
   (let [encoded-content (utf8/encode content)
         last-pos (utf8/length encoded-content)
         pre-block-body (atom nil)
+        pre-block-properties (atom nil)
         blocks
         (loop [headings []
                block-body []
@@ -492,6 +494,8 @@
             (do
               (when (seq block-body)
                 (reset! pre-block-body (reverse block-body)))
+              (when (seq properties)
+                (reset! pre-block-properties (:properties properties)))
               (-> (reverse headings)
                   safe-blocks))))]
     (let [first-block (first blocks)
@@ -508,6 +512,7 @@
                                 :end-pos (or first-block-start-pos
                                              (utf8/length encoded-content))}
                          :body @pre-block-body
+                         :properties @pre-block-properties
                          :pre-block? true}
                         (block-keywordize)))
                      (select-keys first-block [:block/file :block/format :block/page]))
