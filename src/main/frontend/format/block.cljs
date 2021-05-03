@@ -178,7 +178,8 @@
                    (remove string/blank?))
         properties (->> properties
                         (medley/map-kv (fn [k v]
-                                         (let [v (string/trim v)
+                                         (let [k (name k)
+                                               v (string/trim v)
                                                k (string/replace k " " "-")
                                                k (string/replace k "_" "-")
                                                k (string/lower-case k)

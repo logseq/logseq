@@ -2,7 +2,8 @@
   (:require [frontend.config :as config]
             [frontend.util :as util]
             [clojure.string :as string]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [medley.core :as medley]))
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")
@@ -158,6 +159,10 @@
   [line]
   (some? (first (util/split-first ":: " line))))
 
+(defn front-matter-property?
+  [line]
+  (some? (first (util/split-first ": " line))))
+
 (defn remove-properties!
   [format content]
   (let [org? (= format :org)]
@@ -200,9 +205,16 @@
                                   (string/join "\n"))]
       (util/format full-format properties-content))))
 
+;; FIXME:
+(defn front-matter?
+  [s]
+  (string/starts-with? s "---\n"))
+
 (defn insert-property!
-  [format content key value]
-  (when (and (not (string/blank? (name key)))
+  ([format content key value]
+   (insert-property! format content key value false))
+  ([format content key value front-matter?]
+   (when (and (not (string/blank? (name key)))
              (not (string/blank? (str value))))
     (let [org? (= :org format)
           key (string/lower-case (name key))
@@ -236,20 +248,22 @@
 
         (not org?)
         (let [exists? (atom false)
-              new-property-s (str key ":: "  value)
-              groups (partition-by simplified-property? lines)
+              sym (if front-matter? ": " ":: ")
+              new-property-s (str key sym  value)
+              property-f (if front-matter? front-matter-property? simplified-property?)
+              groups (partition-by property-f lines)
               no-properties? (and (= 1 (count groups))
-                                  (not (simplified-property? (ffirst groups))))
+                                  (not (property-f (ffirst groups))))
               lines (mapcat (fn [lines]
-                              (if (simplified-property? (first lines))
+                              (if (property-f (first lines))
                                 (let [lines (doall
                                              (mapv (fn [text]
-                                                     (let [[k v] (util/split-first ":: " text)]
+                                                     (let [[k v] (util/split-first sym text)]
                                                        (if (and k v)
                                                          (let [key-exists? (= k key)
                                                                _ (when key-exists? (reset! exists? true))
                                                                v (if key-exists? value v)]
-                                                           (str k ":: "  (string/trim v)))
+                                                           (str k sym  (string/trim v)))
                                                          text)))
                                                    lines))
                                       lines (if @exists? lines (conj lines new-property-s))]
@@ -264,7 +278,7 @@
           (string/join "\n" lines))
 
         :else
-        content))))
+        content)))))
 
 (defn remove-property!
   ([format key content]
@@ -307,6 +321,46 @@
           (string/join "\n" lines))
         content))
     content))
+
+(defn add-page-properties!
+  [page-format properties-content properties]
+  (let [properties (medley/map-keys name properties)
+        lines (string/split-lines properties-content)
+        front-matter-format? (contains? #{:markdown} page-format)
+        lines (if front-matter-format?
+                (remove (fn [line]
+                          (contains? #{"---" ""} (string/trim line))) lines)
+                lines)
+        property-keys (keys properties)
+        prefix-f (case page-format
+                   :org (fn [k]
+                          (str "#+" (string/upper-case k) ": "))
+                   :markdown (fn [k]
+                               (str (string/lower-case k) ": "))
+                   identity)
+        exists? (atom #{})
+        lines (doall
+               (mapv (fn [line]
+                       (let [result (filter #(and % (util/starts-with? line (prefix-f %)))
+                                            property-keys)]
+                         (if (seq result)
+                           (let [k (first result)]
+                             (swap! exists? conj k)
+                             (str (prefix-f k) (get properties k)))
+                           line))) lines))
+        lines (concat
+               lines
+               (let [not-exists (remove
+                                 (fn [[k _]]
+                                   (contains? @exists? k))
+                                 properties)]
+                 (when (seq not-exists)
+                   (mapv
+                    (fn [[k v]] (str (prefix-f k) v))
+                    not-exists))))]
+    (util/format
+     (config/properties-wrapper-pattern page-format)
+     (string/join "\n" lines))))
 
 (defn build-data-value
   [col]

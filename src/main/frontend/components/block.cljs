@@ -1253,26 +1253,6 @@
       (d/remove-class! element "dnd-separator-cur")
       (d/add-class! element "dnd-separator"))))
 
-(defn- pre-block-cp
-  [config content format]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    (let [ast (mldoc/->edn content (mldoc/default-config format))
-          ast (map first ast)
-          slide? (:slide? config)
-          only-title? (and (= 1 (count ast))
-                           (= "Property_Drawer" (ffirst ast))
-                           (let [m (second (first ast))]
-                             (every? #(contains? #{:title :filters} %) (keys m))))
-          block-cp [:div {:class (if only-title?
-                                   (util/hiccup->class "pre-block.opacity-50")
-                                   (util/hiccup->class "pre-block.p-2"))}
-                    (if only-title?
-                      [:span (t :page/edit-properties-placeholder)]
-                      (markup-elements-cp (assoc config :block/format format) ast))]]
-      (if slide?
-        [:div [:h1 (:page-name config)]]
-        block-cp))))
-
 (rum/defc span-comma
   []
   [:span ", "])
@@ -1451,10 +1431,7 @@
                  (not (:slide? config)))
         (properties-cp config block))
 
-      (when pre-block?
-        (pre-block-cp config content format))
-
-      (when (and (not pre-block?) (seq body))
+      (when (seq body)
         (do
           [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
           ;; TODO: consistent id instead of the idx (since it could be changed later)

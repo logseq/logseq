@@ -279,7 +279,7 @@
   [{:block/keys [content format parent page] :as block}]
   (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
-        properties? (= "Property_Drawer" first-elem-type)
+        properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
         top-level? (= parent page)
         markdown-heading? (and (= format :markdown)
                                (= "Heading" first-elem-type))

@@ -15,6 +15,7 @@
             [frontend.handler.config :as config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.file :as outliner-file]
+            [frontend.modules.outliner.core :as outliner-core]
             [frontend.commands :as commands]
             [frontend.date :as date]
             [clojure.walk :as walk]
@@ -55,67 +56,49 @@
       (route-handler/redirect! {:to :page
                                 :path-params {:name page}})))))
 
-(defn page-add-properties!
-  [page-name properties]
-  (let [page (db/entity [:block/name page-name])
-        page-title (:or (:block/original-name page) (:block/name page))
-        file (:block/file page)]
-    (if file
-      (let [page-format (db/get-page-format page-name)
-            properties-content (db/get-page-properties-content page-name)
-            properties-content (if properties-content
-                                 (string/trim properties-content)
-                                 (config/properties-wrapper page-format))
-            file (db/entity (:db/id (:block/file page)))
-            file-path (:file/path file)
-            file-content (db/get-file file-path)
-            after-content (if (string/blank? properties-content)
-                            file-content
-                            (subs file-content (inc (count properties-content))))
-            properties-content (if properties-content
-                                 (string/trim properties-content)
-                                 (config/properties-wrapper page-format))
-            new-properties-content (db/add-properties! page-format properties-content properties)
-            full-content (str new-properties-content "\n\n" (string/trim after-content))]
-        (file-handler/alter-file (state/get-current-repo)
-                                 file-path
-                                 full-content
-                                 {:reset? true
-                                  :re-render-root? true}))
-      (p/let [_ (create! page-name)]
-        (page-add-properties! page-name properties)))))
-
-(defn- remove-property-from-frontmatter-or-directives!
-  [content format k]
-  (let [k (name k)
-        lines (string/split-lines content)
-        prefix (case format
-                 :org (str "#+" (string/upper-case k) ": ")
-                 :markdown (str (string/lower-case k) ": ")
-                 "")
-        lines (remove #(util/starts-with? % prefix) lines)]
-    (string/join "\n" lines)))
-
-(defn page-remove-property!
-  [page-name k]
-  (when-let [page (db/entity [:block/name (string/lower-case page-name)])]
+(defn page-add-property!
+  [page-name key value]
+  (when-let [page (db/pull [:block/name (string/lower-case page-name)])]
     (let [repo (state/get-current-repo)
-          k (keyword k)
+          key (keyword key)
           pre-block (db/get-pre-block repo (:db/id page))
-          pre-block-tx (when pre-block
-                         (let [{:block/keys [properties format content]} pre-block]
-                           [{:db/id (:db/id pre-block)
-                             :block/properties (dissoc properties k)
-                             :block/content (-> (text/remove-property! format k content)
-                                                (remove-property-from-frontmatter-or-directives! format k))}]))
-          page-block-tx [{:db/id (:db/id page)
-                          :block/properties (dissoc (:block/properties page) k)}]
-          txs (->> (concat pre-block-tx page-block-tx)
-                   (remove nil?))]
-      (db/transact! txs)
-      (outliner-file/sync-to-file {:db/id (:db/id page)})
-      (db/refresh! repo {:key :block/change
-                         :data [pre-block]}))))
+          format (state/get-preferred-format)
+          page-id {:db/id (:db/id page)}
+          org? (= format :org)]
+      (if pre-block
+        (let [properties (:block/properties pre-block)
+              new-properties (assoc properties key value)
+              content (:block/content pre-block)
+              front-matter? (text/front-matter? content)
+              new-content (text/insert-property! format content key value front-matter?)
+              block {:db/id (:db/id pre-block)
+                     :block/properties new-properties
+                     :block/content new-content
+                     :block/page page}
+              tx [(assoc page-id :block/properties new-properties)
+                  block]]
+          (db/transact! tx)
+          (db/refresh! repo {:key :block/change
+                             :data [block]}))
+        (let [block {:block/uuid (db/new-block-id)
+                     :block/left page-id
+                     :block/parent page-id
+                     :block/page page-id
+                     :block/title []
+                     :block/content (if org?
+                                      (str "#+" (string/upper-case (name key)) ": " value)
+                                      (str (name key) ":: " value))
+                     :block/format format
+                     :block/properties {key value}
+                     :block/file (:block/file page)
+                     :block/pre-block? true}]
+          (outliner-core/insert-node (outliner-core/block block)
+                                     (outliner-core/block page)
+                                     false)
+          (db/transact! [(assoc page-id :block/properties {key value})])
+          (db/refresh! repo {:key :block/change
+                             :data [block]})))
+      (outliner-file/sync-to-file page-id))))
 
 (defn get-plugins
   [blocks]
@@ -312,7 +295,7 @@
 
 (defn update-public-attribute!
   [page-name value]
-  (page-add-properties! page-name {:public value}))
+  (page-add-property! page-name :public value))
 
 (defn get-page-ref-text
   [page]
@@ -372,9 +355,7 @@
 
 (defn save-filter!
   [page-name filter-state]
-  (if (empty? filter-state)
-    (page-remove-property! page-name "filters")
-    (page-add-properties! page-name {"filters" filter-state})))
+  (page-add-property! page-name :filters filter-state))
 
 (defn get-filter
   [page-name]

@@ -18,7 +18,6 @@
             [lambdaisland.glogi :as log]
             [clojure.core.async :as async]
             [cljs.core.async.interop :refer-macros [<p!]]
-            [goog.object :as gobj]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.utf8 :as utf8]
