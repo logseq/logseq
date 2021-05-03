@@ -85,12 +85,37 @@
       (p/let [_ (create! page-name)]
         (page-add-properties! page-name properties)))))
 
+(defn- remove-property-from-frontmatter-or-directives!
+  [content format k]
+  (let [k (name k)
+        lines (string/split-lines content)
+        prefix (case format
+                 :org (str "#+" (string/upper-case k) ": ")
+                 :markdown (str (string/lower-case k) ": ")
+                 "")
+        lines (remove #(util/starts-with? % prefix) lines)]
+    (string/join "\n" lines)))
+
 (defn page-remove-property!
   [page-name k]
-  (when-let [page (db/entity [:page/name (string/lower-case page-name)])]
-    (let [tx [{:db/id (:db/id page)
-               :block/properties (dissoc (:block/properties page) k)}]])
-    ))
+  (when-let [page (db/entity [:block/name (string/lower-case page-name)])]
+    (let [repo (state/get-current-repo)
+          k (keyword k)
+          pre-block (db/get-pre-block repo (:db/id page))
+          pre-block-tx (when pre-block
+                         (let [{:block/keys [properties format content]} pre-block]
+                           [{:db/id (:db/id pre-block)
+                             :block/properties (dissoc properties k)
+                             :block/content (-> (text/remove-property! format k content)
+                                                (remove-property-from-frontmatter-or-directives! format k))}]))
+          page-block-tx [{:db/id (:db/id page)
+                          :block/properties (dissoc (:block/properties page) k)}]
+          txs (->> (concat pre-block-tx page-block-tx)
+                   (remove nil?))]
+      (db/transact! txs)
+      (outliner-file/sync-to-file {:db/id (:db/id page)})
+      (db/refresh! repo {:key :block/change
+                         :data [pre-block]}))))
 
 (defn get-plugins
   [blocks]

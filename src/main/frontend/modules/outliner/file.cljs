@@ -35,7 +35,7 @@
            (log/error :file/write-file-error {:error e})))))
 
 (defn sync-to-file
-  [{page-db-id :db/id :as page-block}]
+  [{page-db-id :db/id}]
   (async/put! write-chan page-db-id))
 
 (util/batch write-chan

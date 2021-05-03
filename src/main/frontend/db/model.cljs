@@ -1276,13 +1276,14 @@
 
 (defn get-pre-block
   [repo page-id]
-  (d/q '[:find (pull ?b [*])
-         :in $ ?page
-         :where
-         [?b :block/page ?page]
-         [?b :block/pre-block? true]]
-    (conn/get-conn repo)
-    page-id))
+  (-> (d/q '[:find (pull ?b [*])
+             :in $ ?page
+             :where
+             [?b :block/page ?page]
+             [?b :block/pre-block? true]]
+        (conn/get-conn repo)
+        page-id)
+      ffirst))
 
 (comment
   (def page-names ["foo" "bar"])

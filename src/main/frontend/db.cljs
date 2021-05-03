@@ -34,7 +34,7 @@
   entity pull pull-many transact! get-key-value]
 
  [frontend.db.model
-  add-properties! block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks
+  add-properties! block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
   delete-file! delete-file-blocks! delete-file-pages! delete-file-tx delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
