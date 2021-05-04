@@ -2205,13 +2205,10 @@
         (or ctrlKey metaKey)
         nil
 
-        (or
-         (and (= key "#")
-              (and
-               (> pos 0)
-               (= "#" (util/nth-safe value (dec pos)))))
-         (and (= key " ")
-              (state/get-editor-show-page-search-hashtag?)))
+        (and (= key "#")
+             (and
+              (> pos 0)
+              (= "#" (util/nth-safe value (dec pos)))))
         (state/set-editor-show-page-search-hashtag! false)
 
         (or
@@ -2276,9 +2273,12 @@
   [state input input-id search-timeout]
   (fn [e key-code]
     (let [k (gobj/get e "key")
-          format (:format (get-state))]
+          format (:format (get-state))
+          current-pos (util/get-input-pos input)
+          value (gobj/get input "value")
+          c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (= k " ")
+        (when (= c " ")
           (state/set-editor-show-page-search-hashtag! false))
 
         (when (and @*show-commands (not= key-code 191)) ; not /
