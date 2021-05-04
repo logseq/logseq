@@ -4,7 +4,6 @@
    #?(:cljs [cljs-bean.core :as bean])
    #?(:cljs [cljs-time.coerce :as tc])
    #?(:cljs [cljs-time.core :as t])
-   #?(:cljs [cljs-time.format :as format])
    #?(:cljs [dommy.core :as d])
    #?(:cljs ["/frontend/caret_pos" :as caret-pos])
    #?(:cljs ["/frontend/selection" :as selection])
@@ -839,11 +838,6 @@
        (js/document.execCommand "copy")
        (js/document.body.removeChild el))))
 
-(defn take-at-most
-  [s n]
-  (if (<= (count s) n)
-    s
-    (subs s 0 n)))
 (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
 (defonce exactly-uuid-pattern (re-pattern (str "^" uuid-pattern "$")))
 (defn uuid-string?

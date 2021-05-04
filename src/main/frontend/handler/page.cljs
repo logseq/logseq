@@ -64,7 +64,8 @@
           pre-block (db/get-pre-block repo (:db/id page))
           format (state/get-preferred-format)
           page-id {:db/id (:db/id page)}
-          org? (= format :org)]
+          org? (= format :org)
+          value (if (contains? #{:filters} key) (pr-str value) value)]
       (if pre-block
         (let [properties (:block/properties pre-block)
               new-properties (assoc properties key value)
@@ -74,9 +75,10 @@
               block {:db/id (:db/id pre-block)
                      :block/properties new-properties
                      :block/content new-content
-                     :block/page page}
+                     :block/page page-id}
               tx [(assoc page-id :block/properties new-properties)
                   block]]
+          ;; (util/pprint tx)
           (db/transact! tx)
           (db/refresh! repo {:key :block/change
                              :data [block]}))
@@ -97,7 +99,9 @@
                                      false)
           (db/transact! [(assoc page-id :block/properties {key value})])
           (db/refresh! repo {:key :block/change
-                             :data [block]})))
+                             :data [block]})
+          ;; (ui-handler/re-render-root!)
+          ))
       (outliner-file/sync-to-file page-id))))
 
 (defn get-plugins
@@ -353,14 +357,18 @@
   (->> (db/get-modified-pages repo)
        (remove util/file-page?)))
 
+(defonce filters-state (atom nil))
+(defn get-filters
+  [page-name]
+  (let [properties (db/get-page-properties page-name)
+        filters (reader/read-string (get properties :filters "{}"))]
+    (reset! filters-state filters)
+    filters-state))
+
 (defn save-filter!
   [page-name filter-state]
-  (page-add-property! page-name :filters filter-state))
-
-(defn get-filter
-  [page-name]
-  (let [properties (db/get-page-properties page-name)]
-    (atom (reader/read-string (get-in properties [:filters] "{}")))))
+  (page-add-property! page-name :filters filter-state)
+  (reset! filters-state (pr-str filter-state)))
 
 (defn page-exists?
   [page-name]

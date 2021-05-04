@@ -19,7 +19,7 @@
 
 (rum/defc filter-dialog-inner < rum/reactive
   [close-fn references page-name]
-  (let [filter-state (page-handler/get-filter page-name)]
+  (let [filter-state (page-handler/get-filters page-name)]
     [:div.filters
      [:div.sm:flex.sm:items-start
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
@@ -73,8 +73,8 @@
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           references (db/get-page-linked-refs-refed-pages repo page-name)
-          filter-state (rum/react (page-handler/get-filter page-name))
-          included (filter (fn [[x v]]) filter-state)
+          filters (page-handler/get-filters page-name)
+          filter-state (rum/react filters)
           filters (when (seq filter-state)
                     (->> (group-by second filter-state)
                          (medley/map-vals #(map first %))))

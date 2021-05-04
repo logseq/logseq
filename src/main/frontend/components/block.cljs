@@ -1284,12 +1284,23 @@
 (rum/defc properties-cp
   [config block]
   (let [properties (walk/keywordize-keys (:block/properties block))
-        properties (apply dissoc properties text/hidden-properties)]
-    (when (seq properties)
+        properties (apply dissoc properties text/hidden-properties)
+        pre-block? (:block/pre-block? block)
+        properties (if pre-block?
+                     (dissoc properties :title :filters)
+                     properties)]
+    (cond
+      (seq properties)
       [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
        (for [[k v] properties]
          (rum/with-key (property-cp config block k v)
-           (str (:block/uuid block) "-" k)))])))
+           (str (:block/uuid block) "-" k)))]
+
+      (and pre-block? properties)
+      [:span.opacity-50 "Properties"]
+
+      :else
+      nil)))
 
 (rum/defcs timestamp-cp < rum/reactive
   (rum/local false ::show?)

@@ -26,7 +26,10 @@
         heading-with-title? (seq title)]
     (cond
       pre-block?
-      (str (string/trim content) "\n")
+      (let [content (-> (string/trim content)
+                        ;; FIXME: should only works with :filters
+                        (string/replace "\"" "\\\""))]
+        (str content "\n"))
 
       (and (= format :markdown)
            (re-find #"#+\s+" content))

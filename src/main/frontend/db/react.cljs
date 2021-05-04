@@ -191,7 +191,7 @@
         (and (util/marker? page-name)
              (string/upper-case page-name))))))
 
-(defn get-handler-keys
+(defn get-related-keys
   [{:keys [key data]}]
   (cond
     (coll? key)
@@ -206,7 +206,7 @@
               current-marker (get-current-marker)
               current-page-id (:db/id (get-current-page))
               {:block/keys [page]} (first blocks)
-              handler-keys (->>
+              related-keys (->>
                             (util/concat-without-nil
                              (mapcat
                               (fn [block]
@@ -251,7 +251,7 @@
                            (fn [[k page-id]]
                              (if (= k :block/refed-blocks)
                                [:page/ref-pages page-id]))
-                           handler-keys)
+                           related-keys)
               custom-queries (some->>
                               (filter (fn [v]
                                         (and (= (first v) (state/get-current-repo))
@@ -268,7 +268,7 @@
                                    (vec (drop 1 v)))))]
           (->>
            (util/concat-without-nil
-            handler-keys
+            related-keys
             refed-pages
             custom-queries
             block-blocks)
@@ -277,11 +277,11 @@
 
 (defn refresh!
   [repo-url {:keys [key data] :as handler-opts}]
-  (let [handler-keys (get-handler-keys handler-opts)
+  (let [related-keys (get-related-keys handler-opts)
         db (conn/get-conn repo-url)]
-    (doseq [handler-key handler-keys]
-      (let [handler-key (vec (cons repo-url handler-key))]
-        (when-let [cache (get @query-state handler-key)]
+    (doseq [related-key related-keys]
+      (let [related-key (vec (cons repo-url related-key))]
+        (when-let [cache (get @query-state related-key)]
           (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
             (when (or query query-fn)
               (let [new-result (->
@@ -304,7 +304,7 @@
                                   :else
                                   (d/q query db))
                                 transform-fn)]
-                (set-new-result! handler-key new-result)))))))))
+                (set-new-result! related-key new-result)))))))))
 
 (defn transact-react!
   [repo-url tx-data {:keys [key data] :as handler-opts}]
