@@ -276,7 +276,7 @@
     block))
 
 (defn- wrap-parse-block
-  [{:block/keys [content format parent page] :as block}]
+  [{:block/keys [content format parent page uuid] :as block}]
   (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
         properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
@@ -285,6 +285,7 @@
                                (= "Heading" first-elem-type))
         heading? (= "Paragraph" first-elem-type)
         content (string/triml content)
+        content (string/replace content (util/format "((%s))" (str uuid)) "")
         [content content'] (cond
                              (or properties? (and markdown-heading? top-level?))
                              [content content]
