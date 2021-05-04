@@ -214,7 +214,8 @@
 (defn- paragraph-timestamp-block?
   [block]
   (and (paragraph-block? block)
-       (timestamp-block? (first (second block)))))
+       (or (timestamp-block? (first (second block)))
+           (timestamp-block? (second (second block))))))
 
 (defn extract-timestamps
   [block]
@@ -236,11 +237,9 @@
                             (cond->
                              (case k
                                :scheduled
-                               {:scheduled day
-                                :scheduled-ast v}
+                               {:scheduled day}
                                :deadline
-                               {:deadline day
-                                :deadline-ast v})
+                               {:deadline day})
                               repetition
                               (assoc :repeated? true))))))]
     (apply merge m)))
