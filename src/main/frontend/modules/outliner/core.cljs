@@ -130,6 +130,7 @@
     (let [m (-> (:data this)
                 (dissoc :block/children :block/dummy? :block/meta)
                 (util/remove-nils))
+          m (update m :block/refs db-outliner/remove-non-existed-refs!)
           other-tx (:db/other-tx m)]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]

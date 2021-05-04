@@ -1,5 +1,6 @@
 (ns frontend.db.outliner
   (:require [datascript.core :as d]
+            [frontend.db :as db]
             [frontend.db.react :as react]
             [frontend.util :as util]
             [frontend.debug :as debug]
@@ -54,3 +55,7 @@
                  [?a :block/journal? true]]
                @conn)]
     (flatten r)))
+
+(defn remove-non-existed-refs!
+  [refs]
+  (filter db/entity refs))
