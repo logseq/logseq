@@ -296,7 +296,8 @@
               (t :right-side-bar/help)]]]
 
            (when sidebar-open?
-             [:div.mr-1.flex.align-items {:style {:z-index 999}}
+             [:div.flex.align-items {:style {:z-index 999
+                                             :margin-right 2}}
               (toggle)])]
 
            [:.sidebar-item-list.flex-1
