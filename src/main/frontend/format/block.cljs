@@ -501,7 +501,8 @@
                   safe-blocks))))]
     (let [first-block (first blocks)
           first-block-start-pos (get-in first-block [:block/meta :start-pos])
-          blocks (if (seq @pre-block-body)
+          blocks (if (or (seq @pre-block-body)
+                         (seq @pre-block-properties))
                    (cons
                     (merge
                      (let [content (utf8/substring encoded-content 0 first-block-start-pos)]
