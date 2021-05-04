@@ -21,8 +21,9 @@
     (string/join (str "\n" spaces-tabs) lines)))
 
 (defn transform-content
-  [{:block/keys [format pre-block? content unordered]} level]
-  (let [content (or content "")]
+  [{:block/keys [format pre-block? title content unordered body]} level]
+  (let [content (or content "")
+        heading-with-title? (seq title)]
     (cond
       pre-block?
       (str (string/trim content) "\n")
@@ -47,8 +48,11 @@
                                  (repeat (dec level) (state/get-export-bullet-indentation))
                                  (apply str))]
                 [(str spaces-tabs "-") (str spaces-tabs "  ")]))
-            new-content (indented-block-content (string/trim content) spaces-tabs)]
-        (str prefix " " new-content)))))
+            new-content (indented-block-content (string/trim content) spaces-tabs)
+            sep (if heading-with-title?
+                  " "
+                  (str "\n" spaces-tabs))]
+        (str prefix sep new-content)))))
 
 (defn tree->file-content
   [tree init-level]
