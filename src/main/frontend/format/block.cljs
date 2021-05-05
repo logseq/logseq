@@ -546,8 +546,6 @@
 
               (> cur-level level)         ; child
               (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
-                    _ (prn {:cur-level cur-level
-                            :level level})
                     block (cond->
                             (assoc block
                                   :block/parent parent
