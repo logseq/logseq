@@ -548,7 +548,9 @@
               (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
                     block (assoc block
                                  :block/parent parent
-                                 :block/left parent)
+                                 :block/left parent
+                                 ;; Fix wrong input levels
+                                 :block/level (inc level))
                     parents' (conj parents block)
                     result' (conj result block)]
                 [others parents' result'])

@@ -101,6 +101,10 @@
   }
 }
 
+.block-body ul, .block-body ol, .block-body dl {
+    margin-bottom: 2em;
+}
+
 .block-children {
   border-left: 1px solid;
   border-left-color: var(--ls-guideline-color, #ddd);
