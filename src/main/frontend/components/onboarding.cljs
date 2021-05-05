@@ -279,7 +279,7 @@
          [:tr [:td (t :bold)] [:td (util/->platform-shortcut "Ctrl-b")]]
          [:tr [:td (t :italics)] [:td (util/->platform-shortcut "Ctrl-i")]]
          [:tr [:td (t :html-link)] [:td (util/->platform-shortcut "Ctrl-k")]]
-         [:tr [:td (t :highlight)] [:td (util/->platform-shortcut "Ctrl-h")]]]]]
+         [:tr [:td (t :highlight)] [:td (util/->platform-shortcut "Ctrl-Shift-h")]]]]]
 
       [:li
        (t :help/markdown-syntax)

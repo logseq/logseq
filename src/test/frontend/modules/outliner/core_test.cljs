@@ -145,7 +145,7 @@
    "
   (build-db-records node-tree)
   (let [node (build-block 6 2 3)]
-    (outliner-core/delete-node node)
+    (outliner-core/delete-node node true)
     (let [children-of-2 (->> (build-block 2 1 1)
                              (tree/-get-children)
                              (mapv #(-> % :data :block/uuid)))]
@@ -336,6 +336,3 @@
 
 (comment
   (run-test test-insert-nodes))
-
-
-

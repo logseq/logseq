@@ -635,14 +635,14 @@
           (util/nth-safe blocks idx))))))
 
 (defn delete-block-aux!
-  [{:block/keys [uuid content repo ref-pages ref-blocks] :as block} dummy?]
+  [{:block/keys [uuid content repo ref-pages ref-blocks] :as block} dummy? children?]
   (when-not dummy?
     (let [repo (or repo (state/get-current-repo))
           block (db/pull repo '[*] [:block/uuid uuid])]
       (when block
         (->
          (outliner-core/block block)
-         (outliner-core/delete-node))
+         (outliner-core/delete-node children?))
         (db/refresh! repo {:key :block/change :data [block]})
         (when (or (seq ref-pages) (seq ref-blocks))
           (ui-handler/re-render-root!))))))
@@ -658,7 +658,7 @@
             (let [block (db/pull [:block/uuid block-id])
                   block-parent (gdom/getElement block-parent-id)
                   sibling-block (get-prev-block-non-collapsed block-parent)]
-              (delete-block-aux! block dummy?)
+              (delete-block-aux! block dummy? true)
               (when (and repo sibling-block)
                 (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
                   (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
@@ -708,7 +708,7 @@
       (let [start-node (outliner-core/block (first blocks))
             end-node (get-top-level-end-node blocks)]
         (if (= start-node end-node)
-          (delete-block-aux! (first blocks) false)
+          (delete-block-aux! (first blocks) false true)
           (when (outliner-core/delete-nodes start-node end-node lookup-refs)
             (let [opts {:key :block/change
                         :data blocks}]
@@ -1001,7 +1001,7 @@
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [content (:block/content block)]
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
-      (delete-block-aux! block false))))
+      (delete-block-aux! block false true))))
 
 (defn clear-last-selected-block!
   []
@@ -2057,6 +2057,23 @@
   (.setRangeText input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
+(defn keydown-delete-handler
+  [e]
+  (let [^js input (state/get-input)
+        input-id (state/get-edit-input-id)
+        current-pos (util/get-input-pos input)
+        value (gobj/get input "value")
+        end? (= current-pos (count value))
+        current-block (state/get-edit-block)]
+    (when current-block
+      (if (and end? current-block)
+        (when-let [right (outliner-core/get-right-node (outliner-core/block current-block))]
+          (let [right-block (:data right)]
+            (delete-block-aux! right-block false false)
+            (state/set-edit-content! input-id (str value "" (:block/content right-block)))
+            (util/move-cursor-to input current-pos)))
+       (delete-and-update input current-pos (inc current-pos))))))
+
 (defn keydown-backspace-handler
   [cut? e]
   (let [^js input (state/get-input)
@@ -2459,6 +2476,11 @@
     (shortcut-delete-selection e)))
 
 (defn editor-delete
+  [_state e]
+  (when (state/editing?)
+    (keydown-delete-handler e)))
+
+(defn editor-delete-char
   [_state e]
   (when (state/editing?)
     (keydown-backspace-handler false e)))

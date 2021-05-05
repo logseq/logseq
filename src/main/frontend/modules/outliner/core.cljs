@@ -152,14 +152,29 @@
       )
     )
 
-  (-del [this txs-state]
+  (-del [this txs-state children?]
     (assert (ds/outliner-txs-state? txs-state)
       "db should be satisfied outliner-tx-state?")
     (let [block-id (tree/-get-id this)
-          children (db/get-block-children (state/get-current-repo) block-id)
-          children-ids (map :block/uuid children)
-          ids (set (conj children-ids block-id))
-          txs (map (fn [id] [:db.fn/retractEntity [:block/uuid id]]) ids)]
+          ids (set (if children?
+                     (let [children (db/get-block-children (state/get-current-repo) block-id)
+                           children-ids (map :block/uuid children)]
+                       (conj children-ids block-id))
+                     [block-id]))
+          txs (map (fn [id] [:db.fn/retractEntity [:block/uuid id]]) ids)
+          txs (or (let [immediate-children (db/get-block-immediate-children (state/get-current-repo) block-id)]
+                    (when (seq immediate-children)
+                      (let [left-id (tree/-get-id (tree/-get-left this))]
+                        (concat txs
+                                (map-indexed (fn [idx child]
+                                               (let [parent [:block/uuid left-id]]
+                                                 (cond->
+                                                  {:db/id (:db/id child)
+                                                   :block/parent parent}
+                                                  (zero? idx)
+                                                   (assoc :block/left parent))))
+                                             immediate-children)))))
+                  txs)]
       (swap! txs-state concat txs)
       block-id))
 
@@ -350,12 +365,12 @@
 
 (defn delete-node
   "Delete node from the tree."
-  [node]
+  [node children?]
   {:pre [(tree/satisfied-inode? node)]}
   (ds/auto-transact!
     [txs-state (ds/new-outliner-txs-state)] {:outliner-op :delete-node}
     (let [right-node (tree/-get-right node)]
-      (tree/-del node txs-state)
+      (tree/-del node txs-state children?)
       (when (tree/satisfied-inode? right-node)
         (let [left-node (tree/-get-left node)
               new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
@@ -404,7 +419,7 @@
         [txs-state (ds/new-outliner-txs-state)]
         {:outliner-op :delete-nodes}
         (if (= start-node end-node)
-          (delete-node start-node)
+          (delete-node start-node true)
           (let [right-node (tree/-get-right end-node)
                 end-node-left-nodes (get-left-nodes end-node (count block-ids))
                 start-node-parents-with-self (conj (get-node-parents start-node 1000) (tree/-get-id start-node))]
@@ -487,3 +502,8 @@
       (if sibling?
         (insert-node-as-sibling txs-state root target-node)
         (insert-node-as-first-child txs-state root target-node)))))
+
+(defn get-right-node
+  [node]
+  {:pre [(tree/satisfied-inode? node)]}
+  (tree/-get-right node))

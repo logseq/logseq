@@ -15,7 +15,7 @@
 (def editing-only-prevent-default
   (before
    m/enable-when-editing-mode!
-   {
+   {:editor/delete-char editor-handler/editor-delete-char
     :editor/delete editor-handler/editor-delete
     :editor/indent (editor-handler/keydown-tab-handler :right)
     :editor/outindent (editor-handler/keydown-tab-handler :left)

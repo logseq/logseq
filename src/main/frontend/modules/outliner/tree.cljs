@@ -18,7 +18,7 @@
   (-get-down [this])
 
   (-save [this db])
-  (-del [this db])
+  (-del [this db children?])
   (-get-children [this]))
 
 (defn satisfied-inode?

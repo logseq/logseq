@@ -54,7 +54,8 @@
 
    :editor/copy "mod+c"
    :editor/cut "mod+x"
-   :editor/delete "backspace"
+   :editor/delete-char "backspace"
+   :editor/delete "delete"
    :editor/delete-selection ["backspace" "delete"]
 
    :editor/selection-up "up"
