@@ -366,8 +366,10 @@
 
 (defn sort-blocks
   [blocks]
-  (let [pages-ids (map (comp :db/id :block/page) blocks)
-        pages (db-utils/pull-many '[:db/id :block/name :block/original-name :block/journal-day] pages-ids)
+  (let [pages-ids (->> (map (comp :db/id :block/page) blocks)
+                       (remove nil?))
+        pages (when (seq pages-ids)
+                (db-utils/pull-many '[:db/id :block/name :block/original-name :block/journal-day] pages-ids))
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
                 (fn [block]

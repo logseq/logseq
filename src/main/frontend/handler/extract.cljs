@@ -142,7 +142,7 @@
        block-ids
        (remove nil? blocks)])
     (catch js/Error e
-      (log/error :extract-pages-and-blocks/failed e))))
+      (log/error :exception e))))
 
 (defn extract-blocks-pages
   [repo-url file content utf8-content]

@@ -178,36 +178,38 @@
                    (remove string/blank?))
         properties (->> properties
                         (medley/map-kv (fn [k v]
-                                         (let [k (name k)
-                                               v (string/trim v)
-                                               k (string/replace k " " "-")
-                                               k (string/replace k "_" "-")
-                                               k (string/lower-case k)
-                                               v (cond
-                                                   (= v "true")
-                                                   true
-                                                   (= v "false")
-                                                   false
+                                         (if (coll? v)
+                                           [(keyword k) v]
+                                           (let [k (name k)
+                                                v (string/trim v)
+                                                k (string/replace k " " "-")
+                                                k (string/replace k "_" "-")
+                                                k (string/lower-case k)
+                                                v (cond
+                                                    (= v "true")
+                                                    true
+                                                    (= v "false")
+                                                    false
 
-                                                   (re-find #"^\d+$" v)
-                                                   (util/safe-parse-int v)
+                                                    (re-find #"^\d+$" v)
+                                                    (util/safe-parse-int v)
 
-                                                   (and (= "\"" (first v) (last v))) ; wrapped in ""
-                                                   (string/trim (subs v 1 (dec (count v))))
+                                                    (and (= "\"" (first v) (last v))) ; wrapped in ""
+                                                    (string/trim (subs v 1 (dec (count v))))
 
-                                                   (contains? @non-parsing-properties (string/lower-case k))
-                                                   v
+                                                    (contains? @non-parsing-properties (string/lower-case k))
+                                                    v
 
-                                                   :else
-                                                   (let [v' v
-                                                         ;; built-in collections
-                                                         comma? (contains? #{"tags" "alias"} k)]
-                                                     (if (and k v'
-                                                              (contains? config/markers k)
-                                                              (util/safe-parse-int v'))
-                                                       (util/safe-parse-int v')
-                                                       (text/split-page-refs-without-brackets v' comma?))))]
-                                           [(keyword k) v]))))]
+                                                    :else
+                                                    (let [v' v
+                                                          ;; built-in collections
+                                                          comma? (contains? #{"tags" "alias"} k)]
+                                                      (if (and k v'
+                                                               (contains? config/markers k)
+                                                               (util/safe-parse-int v'))
+                                                        (util/safe-parse-int v')
+                                                        (text/split-page-refs-without-brackets v' comma?))))]
+                                            [(keyword k) v])))))]
     {:properties properties
      :page-refs page-refs}))
 
