@@ -649,7 +649,7 @@
      "Move cursor up. If EOL, always move cursor to previous EOL."
      [input]
      (let [val (gobj/get input "value")
-           {:keys [pos]} (get-caret-pos input)
+           pos (.-selectionStart input)
            prev-idx (string/last-index-of val \newline pos)
            pprev-idx (or (string/last-index-of val \newline (dec prev-idx)) -1)
            cal-idx (+ pprev-idx pos (- prev-idx))]
@@ -664,12 +664,16 @@
   If EOL, always move cursor to next EOL."
      [input]
      (let [val (gobj/get input "value")
-           {:keys [pos]} (get-caret-pos input)
+           pos (.-selectionStart input)
            prev-idx (or (string/last-index-of val \newline pos) -1)
            next-idx (or (string/index-of val \newline (inc pos))
                         (count val))
+           nnext-idx (or (string/index-of val \newline (inc next-idx))
+                        (count val))
            cal-idx (+ next-idx pos (- prev-idx))]
-       (move-cursor-to input cal-idx))))
+       (if (> (- pos prev-idx) (- nnext-idx next-idx))
+         (move-cursor-to input nnext-idx)
+         (move-cursor-to input cal-idx)))))
 
 ;; copied from re_com
 #?(:cljs
