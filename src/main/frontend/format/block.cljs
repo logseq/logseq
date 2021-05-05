@@ -546,11 +546,18 @@
 
               (> cur-level level)         ; child
               (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
-                    block (assoc block
-                                 :block/parent parent
-                                 :block/left parent
-                                 ;; Fix wrong input levels
-                                 :block/level (inc level))
+                    _ (prn {:cur-level cur-level
+                            :level level})
+                    block (cond->
+                            (assoc block
+                                  :block/parent parent
+                                  :block/left parent)
+                            ;; fix block levels with wrong order
+                            ;; For example:
+                            ;;   - a
+                            ;; - b
+                            (> (- cur-level level) 1)
+                            (assoc :block/level (inc level)))
                     parents' (conj parents block)
                     result' (conj result block)]
                 [others parents' result'])
