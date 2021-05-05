@@ -114,3 +114,8 @@
    (when-let [db (conn/get-conn repo-url)]
      (some-> (d/entity db key)
              key))))
+
+(defn q
+  [query & inputs]
+  (when-let [repo (state/get-current-repo)]
+    (apply d/q query (conn/get-conn repo) inputs)))

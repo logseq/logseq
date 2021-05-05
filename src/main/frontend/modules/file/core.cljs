@@ -31,10 +31,6 @@
                         (string/replace "\"" "\\\""))]
         (str content "\n"))
 
-      (and (= format :markdown)
-           (re-find #"#+\s+" content))
-      (string/trim content)
-
       :else
       (let [[prefix spaces-tabs]
             (cond
@@ -58,7 +54,7 @@
         (str prefix sep new-content)))))
 
 (defn tree->file-content
-  [tree init-level]
+  [tree {:keys [init-level]}]
   (loop [block-contents []
          [f & r] tree
          level init-level]
@@ -67,7 +63,7 @@
       (let [content (transform-content f level)
             new-content
             (if-let [children (seq (:block/children f))]
-              [content (tree->file-content children (inc level))]
+              [content (tree->file-content children {:init-level (inc level)})]
               [content])]
         (recur (into block-contents new-content) r level)))))
 
@@ -116,7 +112,7 @@
 (defn save-tree-aux!
   [page-block tree]
   (let [page-block (db/pull (:db/id page-block))
-        new-content (tree->file-content tree init-level)
+        new-content (tree->file-content tree {:init-level init-level})
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (db-utils/entity file-db-id) :file/path)
         _ (assert (string? file-path) "File path should satisfy string?")
