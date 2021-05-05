@@ -21,7 +21,7 @@
     (string/join (str "\n" spaces-tabs) lines)))
 
 (defn transform-content
-  [{:block/keys [format pre-block? title content unordered body]} level]
+  [{:block/keys [format pre-block? title content unordered body heading-level]} level heading-to-list?]
   (let [content (or content "")
         heading-with-title? (seq title)]
     (cond
@@ -39,28 +39,44 @@
                 (repeat level "*")
                 (apply str)) ""]
 
-              (and (= format :markdown) (not unordered)) ; heading
+              (and (= format :markdown) (not unordered) (not heading-to-list?)) ; heading
               ["" ""]
 
               :else
-              (let [spaces-tabs (->>
+              (let [level (if (and heading-to-list? heading-level)
+                            (if (> heading-level 1)
+                              (dec heading-level)
+                              heading-level)
+                            level)
+                    spaces-tabs (->>
                                  (repeat (dec level) (state/get-export-bullet-indentation))
                                  (apply str))]
                 [(str spaces-tabs "-") (str spaces-tabs "  ")]))
+            content (if heading-to-list?
+                      (-> (string/replace content #"^\s?#+\s+" "")
+                          (string/replace #"^\s?#+\s?$" ""))
+                      content)
             new-content (indented-block-content (string/trim content) spaces-tabs)
-            sep (if heading-with-title?
+            sep (cond
+                  heading-with-title?
                   " "
+
+                  (string/blank? new-content)
+                  ""
+
+                  :else
                   (str "\n" spaces-tabs))]
         (str prefix sep new-content)))))
 
 (defn tree->file-content
-  [tree {:keys [init-level]}]
+  [tree {:keys [init-level heading-to-list?]
+         :or {heading-to-list? false}}]
   (loop [block-contents []
          [f & r] tree
          level init-level]
     (if (nil? f)
       (string/join "\n" block-contents)
-      (let [content (transform-content f level)
+      (let [content (transform-content f level heading-to-list?)
             new-content
             (if-let [children (seq (:block/children f))]
               [content (tree->file-content children {:init-level (inc level)})]

@@ -1932,19 +1932,6 @@
                                (str error)]))]
                (util/hiccup-keywordize result))
 
-             (and (seq result)
-                  (or only-blocks? blocks-grouped-by-page?))
-             (->hiccup result (cond-> (assoc config
-                                             :custom-query? true
-                                             ;; :breadcrumb-show? true
-                                             :group-by-page? blocks-grouped-by-page?
-                                             ;; :ref? true
-                                             )
-                                children?
-                                (assoc :ref? true))
-                       {:style {:margin-top "0.25rem"
-                                :margin-left "0.25rem"}})
-
              ;; page list
              (and (seq result)
                   (:block/name (first result)))
@@ -1963,6 +1950,19 @@
                                     (route-handler/redirect! {:to :page
                                                               :path-params {:name name}})))}
                   (or original-name name)]])]
+
+             (and (seq result)
+                  (or only-blocks? blocks-grouped-by-page?))
+             (->hiccup result (cond-> (assoc config
+                                             :custom-query? true
+                                             ;; :breadcrumb-show? true
+                                             :group-by-page? blocks-grouped-by-page?
+                                             ;; :ref? true
+                                             )
+                                children?
+                                (assoc :ref? true))
+                       {:style {:margin-top "0.25rem"
+                                :margin-left "0.25rem"}})
 
              (seq result)                     ;TODO: table
              (let [result (->>

@@ -318,7 +318,7 @@ title: How to take dummy notes?
         :export-markdown "Export as Markdown"
         :export-public-pages "Export public pages"
         :export-edn "Export as EDN"
-        :convert-markdown "Convert Markdown(Unordered list or Heading)"
+        :convert-markdown "Convert Markdown headings to unordered lists (# -> -)"
         :all-graphs "All graphs"
         :all-pages "All pages"
         :all-files "All files"

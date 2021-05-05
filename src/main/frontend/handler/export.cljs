@@ -24,6 +24,13 @@
    (outliner-tree/blocks->vec-tree
     (db/get-page-blocks-no-cache page) page) {:init-level 1}))
 
+(defn- get-page-content-debug
+  [page]
+  (outliner-file/tree->file-content
+   (outliner-tree/blocks->vec-tree
+    (db/get-page-blocks-no-cache page) page) {:init-level 1
+                                              :heading-to-list? true}))
+
 (defn- get-file-content
   [file-path]
   (let [page-name
@@ -120,19 +127,21 @@
           (.click anchor))))))
 
 (defn- get-file-contents
-  [repo]
-  (let [conn (db/get-conn repo)]
-    (->> (d/q '[:find ?n ?fp
-                :where
-                [?e :block/file ?f]
-                [?f :file/path ?fp]
-                [?e :block/name ?n]] conn)
-         (mapv (fn [[page-name file-path]]
-                 [file-path
-                  (outliner-file/tree->file-content
-                   (outliner-tree/blocks->vec-tree
-                    (db/get-page-blocks-no-cache page-name) page-name)
-                   {:init-level 1})])))))
+  ([repo]
+   (get-file-contents repo {:init-level 1}))
+  ([repo file-opts]
+   (let [conn (db/get-conn repo)]
+     (->> (d/q '[:find ?n ?fp
+                 :where
+                 [?e :block/file ?f]
+                 [?f :file/path ?fp]
+                 [?e :block/name ?n]] conn)
+          (mapv (fn [[page-name file-path]]
+                  [file-path
+                   (outliner-file/tree->file-content
+                    (outliner-tree/blocks->vec-tree
+                     (db/get-page-blocks-no-cache page-name) page-name)
+                    file-opts)]))))))
 
 (defn export-repo-as-zip!
   [repo]
@@ -153,7 +162,7 @@
               (let [path (string/lower-case path)]
                 (or (string/ends-with? path ".md")
                     (string/ends-with? path ".markdown"))))
-            (get-file-contents repo))))
+            (get-file-contents repo {:init-level 1 :heading-to-list? true}))))
 
 (defn- get-embed-and-refs-blocks-pages-aux []
   (let [mem (atom {})]
@@ -456,17 +465,6 @@
                   (.setAttribute anchor "download" path)
                   (.click anchor))))))))))
 
-(defn convert-repo-markdown-v2!
-  [repo]
-  (when repo
-    (when-let [files (get-md-file-contents repo)]
-      (let [zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files)]
-          (when-let [anchor (gdom/getElement "convert-markdown-to-unordered-list-or-heading")]
-            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-            (.setAttribute anchor "download" (.-name zipfile))
-            (.click anchor)))))))
-
 (defn convert-page-markdown-unordered-list-or-heading!
   [page-name]
   (when-let [repo (state/get-current-repo)]
@@ -484,3 +482,14 @@
                   (.setAttribute anchor "href" url)
                   (.setAttribute anchor "download" path)
                   (.click anchor))))))))))
+
+(defn convert-repo-markdown-v2!
+  [repo]
+  (when repo
+    (when-let [files (get-md-file-contents repo)]
+      (let [zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files)]
+          (when-let [anchor (gdom/getElement "convert-markdown-to-unordered-list-or-heading")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))

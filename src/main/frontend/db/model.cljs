@@ -551,17 +551,36 @@
             rules)
            (apply concat)))))
 
+;; FIXME: alert
+(defn- keep-only-one-file
+  [blocks parent]
+  (if-let [file (:db/id (:block/file parent))]
+    (filter (fn [b] (= (:db/id (:block/file b)) file)) blocks)
+    blocks))
+
 (defn sort-by-left
   [blocks parent]
-  (when (not= (count blocks) (count (set (map :block/left blocks))))
-    (util/pprint blocks))
-  (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
-  (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
-    (loop [block parent
-           result []]
-      (if-let [next (get left->blocks (:db/id block))]
-        (recur next (conj result next))
-        (vec result)))))
+  (let [blocks (keep-only-one-file blocks parent)]
+    (when (not= (count blocks) (count (set (map :block/left blocks))))
+     (let [duplicates (->> (map (comp :db/id :block/left) blocks)
+                           frequencies
+                           (filter (fn [[_k v]] (> v 1)))
+                           (map (fn [[k _v]]
+                                  (let [left (db-utils/pull k)]
+                                    {:left left
+                                     :duplicates (->>
+                                                  (filter (fn [block]
+                                                            (= k (:db/id (:block/left block))))
+                                                          blocks)
+                                                  (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
+       (util/pprint duplicates)))
+    (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
+    (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
+      (loop [block parent
+             result []]
+        (if-let [next (get left->blocks (:db/id block))]
+          (recur next (conj result next))
+          (vec result))))))
 
 (defn get-block-immediate-children
   "Doesn't include nested children."
