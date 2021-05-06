@@ -45,6 +45,7 @@
             [lambdaisland.glogi :as log]
             [cljs.core.match :refer-macros [match]]
             [frontend.modules.outliner.core :as outliner-core]
+            [frontend.db.outliner :as outliner-db]
             [frontend.modules.outliner.tree :as tree]
             [frontend.debug :as debug]))
 
@@ -2070,11 +2071,26 @@
         repo (state/get-current-repo)]
     (when current-block
       (if (and end? current-block)
-        (when-let [right (outliner-core/get-right-node (outliner-core/block current-block))]
-          (when-not (db/has-children? repo (tree/-get-id right))
-            (let [right-block (:data right)]
-              (delete-block-aux! right-block false false)
-              (state/set-edit-content! input-id (str value "" (:block/content right-block)))
+        (let [right (outliner-core/get-right-node (outliner-core/block current-block))
+              current-block-has-children? (db/has-children? repo (:block/uuid current-block))
+              collapsed? (:collapsed (:block/properties current-block))
+              first-child (outliner-db/get-first-child (db/get-conn repo false) (:db/id current-block))
+              next-block (if (or collapsed? (not current-block-has-children?))
+                           (:data right)
+                           first-child)
+              first-child-has-children? (and first-child
+                                             (db/has-children? repo (:block/uuid first-child)))]
+          (cond
+            (and collapsed? right (db/has-children? repo (tree/-get-id right)))
+            nil
+
+            (and (not collapsed?) first-child (db/has-children? repo (:block/uuid first-child)))
+            nil
+
+            :else
+            (do
+              (delete-block-aux! next-block false false)
+              (state/set-edit-content! input-id (str value "" (:block/content next-block)))
               (util/move-cursor-to input current-pos))))
        (delete-and-update input current-pos (inc current-pos))))))
 
