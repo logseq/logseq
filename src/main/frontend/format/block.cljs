@@ -533,7 +533,7 @@
       result
       (let [[block & others] blocks
             cur-level (:block/level block)
-            {:block/keys [uuid level parent] :as last-parent} (last parents)
+            {:block/keys [uuid level parent unordered] :as last-parent} (last parents)
             [blocks parents result]
             (cond
               (= cur-level level)        ; sibling
@@ -554,7 +554,8 @@
                             ;; For example:
                             ;;   - a
                             ;; - b
-                            (> (- cur-level level) 1)
+                            ;; What if the input indentation is two spaces instead of 4 spaces
+                            (> (- cur-level level) (if unordered 4 1))
                             (assoc :block/level (inc level)))
                     parents' (conj parents block)
                     result' (conj result block)]
