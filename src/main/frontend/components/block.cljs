@@ -1026,7 +1026,7 @@
         collapsed? (get (:block/properties block) :collapsed)
         control-show? (util/react *control-show?)
         dark? (= "dark" (state/sub :ui/theme))]
-    [:div.bullet.mr-2.flex.flex-row.items-center
+    [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
               :margin-top 0
               :float "left"}}
