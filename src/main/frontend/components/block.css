@@ -74,7 +74,7 @@
 
   .resize {
     display: inline-flex;
-    /* Fix chrome missing resize handle issue. Ref: https://github.com/logseq/logseq/pull/1692/files */
+    /* Fix chrome missing resize handle issue https://bugs.chromium.org/p/chromium/issues/detail?id=1135676&q=css%20resize%20type%3DBug&can=2.*/
     transform: translate3d(0, 0, 0);
   }
 
