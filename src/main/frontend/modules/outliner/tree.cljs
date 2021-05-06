@@ -43,11 +43,12 @@
 
 (defn- blocks->vec-tree-aux
   [blocks root]
-  (some->>
-   (get-children blocks root)
-   (map (fn [block]
-          (let [children (blocks->vec-tree-aux blocks block)]
-            (with-children-and-refs block children))))))
+  (let [root {:db/id (:db/id root)}]
+    (some->>
+     (get-children blocks root)
+     (map (fn [block]
+            (let [children (blocks->vec-tree-aux blocks block)]
+              (with-children-and-refs block children)))))))
 
 (defn- get-root-and-page
   [root-id]
