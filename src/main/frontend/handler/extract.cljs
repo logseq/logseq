@@ -178,7 +178,11 @@
         (let [[pages block-ids blocks] (apply map concat result)
               ref-pages (->> (mapcat :block/refs blocks)
                              (filter :block/name))
-              pages (->> (util/distinct-by :block/name (concat pages ref-pages))
+              pages (->> (concat pages ref-pages)
+                         (group-by :block/name)
+                         vals
+                         (map (partial apply merge)))
+              pages (->> (util/distinct-by :block/name pages)
                          (map (fn [page]
                                 (if (:block/uuid page)
                                   page
@@ -190,7 +194,6 @@
                           blocks)
               ;; To prevent "unique constraint" on datascript
               pages-index (map #(select-keys % [:block/name]) pages)
-              pages (util/distinct-by :block/name pages)
               block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
               blocks (map (fn [b]
                             (update b :block/refs
