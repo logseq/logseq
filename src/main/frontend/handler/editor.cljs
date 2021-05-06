@@ -648,8 +648,10 @@
           (ui-handler/re-render-root!))))))
 
 (defn delete-block!
-  [repo e]
-  (let [{:keys [id block-id block-parent-id dummy? value format]} (get-state)]
+  ([repo e]
+   (delete-block! repo e true))
+  ([repo e delete-children?]
+   (let [{:keys [id block-id block-parent-id dummy? value format]} (get-state)]
     (when block-id
       (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
             page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
@@ -658,7 +660,7 @@
             (let [block (db/pull [:block/uuid block-id])
                   block-parent (gdom/getElement block-parent-id)
                   sibling-block (get-prev-block-non-collapsed block-parent)]
-              (delete-block-aux! block dummy? true)
+              (delete-block-aux! block dummy? delete-children?)
               (when (and repo sibling-block)
                 (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
                   (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
@@ -673,7 +675,7 @@
                       (edit-block! block pos format id
                                    {:custom-content new-value
                                     :tail-len tail-len
-                                    :move-cursor? false}))))))))))))
+                                    :move-cursor? false})))))))))))))
 
 (defn- get-end-block-parent
   [end-block blocks]
@@ -2103,7 +2105,7 @@
                      (= (medley/uuid page) block-id))))
       (do
         (util/stop e)
-        (delete-block! repo e))
+        (delete-block! repo e false))
 
       (and (> current-pos 1)
            (= (util/nth-safe value (dec current-pos)) commands/slash))
