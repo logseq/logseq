@@ -61,7 +61,7 @@
         "@excalidraw/excalidraw": "^0.4.2",
         "@kanru/rage-wasm": "^0.2.1",
         "chokidar": "^3.5.1",
-        "chrono-node": "^2.2.1",
+        "chrono-node": "^2.2.4",
         "codemirror": "^5.58.1",
         "diff": "5.0.0",
         "diff-match-patch": "^1.0.5",
