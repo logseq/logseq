@@ -2480,7 +2480,7 @@
   (when (state/editing?)
     (keydown-delete-handler e)))
 
-(defn editor-delete-char
+(defn editor-backspace
   [_state e]
   (when (state/editing?)
     (keydown-backspace-handler false e)))
