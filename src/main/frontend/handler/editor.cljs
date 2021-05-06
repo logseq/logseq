@@ -2066,14 +2066,16 @@
         current-pos (util/get-input-pos input)
         value (gobj/get input "value")
         end? (= current-pos (count value))
-        current-block (state/get-edit-block)]
+        current-block (state/get-edit-block)
+        repo (state/get-current-repo)]
     (when current-block
       (if (and end? current-block)
         (when-let [right (outliner-core/get-right-node (outliner-core/block current-block))]
-          (let [right-block (:data right)]
-            (delete-block-aux! right-block false false)
-            (state/set-edit-content! input-id (str value "" (:block/content right-block)))
-            (util/move-cursor-to input current-pos)))
+          (when-not (db/has-children? repo (tree/-get-id right))
+            (let [right-block (:data right)]
+              (delete-block-aux! right-block false false)
+              (state/set-edit-content! input-id (str value "" (:block/content right-block)))
+              (util/move-cursor-to input current-pos))))
        (delete-and-update input current-pos (inc current-pos))))))
 
 (defn keydown-backspace-handler

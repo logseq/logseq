@@ -52,7 +52,7 @@
     {}
     blocks))
 
-(defn- get-children
+(defn get-children
   [id]
   (let [repo (state/get-current-repo)]
    (some->>
