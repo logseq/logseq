@@ -43,6 +43,11 @@
     ;; Win10 file path has a length limit of 260 chars
     (util/safe-subs s 0 200)))
 
+(defn get-page-file-path
+  ([] (get-page-file-path (state/get-current-page)))
+  ([page-name] (when-let [page (db/entity [:block/name page-name])]
+                 (:file/path (:block/file page)))))
+
 (defn create!
   ([title]
    (create! title {}))
@@ -349,7 +354,6 @@
   (web-nfs/ls-dir-files-with-handler!
    (fn []
      (init-commands!))))
-
 
 ;; TODO: add use :file/last-modified-at
 (defn get-pages-with-modified-at
