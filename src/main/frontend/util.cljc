@@ -1341,4 +1341,4 @@
                         (remove nil?)
                         (apply min))
                    (count val))]
-       (.setRangeText input "" current idx))))
+       (.setRangeText input "" current (inc idx)))))
