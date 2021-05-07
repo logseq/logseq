@@ -1276,3 +1276,69 @@
    coll))
 
 (def pprint clojure.pprint/pprint)
+
+#?(:cljs
+   (defn move-cursor-forward-by-word
+     [input]
+     (let [val   (.-value input)
+           current (.-selectionStart input)
+           current (loop [idx current]
+                     (if (#{\space \newline} (nth-safe val idx))
+                       (recur (inc idx))
+                       idx))
+           idx (or (->> [(string/index-of val \space current)
+                         (string/index-of val \newline current)]
+                        (remove nil?)
+                        (apply min))
+                   (count val))]
+       (move-cursor-to input idx))))
+
+#?(:cljs
+   (defn move-cursor-backward-by-word
+     [input]
+     (let [val     (.-value input)
+           current (.-selectionStart input)
+           prev    (or
+                    (max
+                     (string/last-index-of val \space (dec current))
+                     (string/last-index-of val \newline (dec current)))
+                    0)
+           idx     (loop [idx prev]
+                     (if (#{\space \newline} (nth-safe val idx))
+                       (recur (dec idx))
+                       idx))
+           idx     (if (zero? idx) idx (inc idx))]
+       (move-cursor-to input idx))))
+
+#?(:cljs
+   (defn backward-kill-word
+     [input]
+     (let [val     (.-value input)
+           current (.-selectionStart input)
+           prev    (or
+                    (max
+                     (string/last-index-of val \space (dec current))
+                     (string/last-index-of val \newline (dec current)))
+                    0)
+           idx     (loop [idx prev]
+                     (if (#{\space \newline} (nth-safe val idx))
+                       (recur (dec idx))
+                       idx))
+           idx     (if (zero? idx) idx (inc idx))]
+       (.setRangeText input "" idx current))))
+
+#?(:cljs
+   (defn forward-kill-word
+     [input]
+     (let [val   (.-value input)
+           current (.-selectionStart input)
+           current (loop [idx current]
+                     (if (#{\space \newline} (nth-safe val idx))
+                       (recur (inc idx))
+                       idx))
+           idx (or (->> [(string/index-of val \space current)
+                         (string/index-of val \newline current)]
+                        (remove nil?)
+                        (apply min))
+                   (count val))]
+       (.setRangeText input "" current idx))))

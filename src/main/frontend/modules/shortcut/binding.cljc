@@ -68,6 +68,15 @@
    :editor/beginning-of-block "alt+a"
    ;; go to the end of the block
    :editor/end-of-block "alt+e"
+   ;; forward one word
+   :editor/forward-word "alt+f"
+   ;; backward one word
+   :editor/backward-word "alt+b"
+   ;; kill one word backward
+   :editor/backward-kill-word "alt+w"
+   ;; kill one word forward
+   :editor/forward-kill-word "alt+d"
+
 
    :editor/selection-up "up"
    :editor/selection-down "down"

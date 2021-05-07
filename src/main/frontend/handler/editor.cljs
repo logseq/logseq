@@ -2356,7 +2356,6 @@
   [id]
   (fn [_e]
     (let [input (gdom/getElement id)]
-      (save-current-block! {:force? true})
       (close-autocomplete-if-outside input))))
 
 (defn editor-on-change!
@@ -2573,3 +2572,21 @@
 
 (defn end-of-block []
   (util/move-cursor-to-end (state/get-input)))
+
+(defn cursor-forward-word []
+  (util/move-cursor-forward-by-word (state/get-input)))
+
+(defn cursor-backward-word []
+  (util/move-cursor-backward-by-word (state/get-input)))
+
+(defn backward-kill-word []
+  (let [input (state/get-input)]
+    (save-current-block! {:force? true})
+    (util/backward-kill-word input)
+    (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
+
+(defn forward-kill-word []
+  (let [input (state/get-input)]
+    (save-current-block! {:force? true})
+    (util/forward-kill-word input)
+    (state/set-edit-content! (state/get-edit-input-id) (.-value input))))

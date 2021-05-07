@@ -39,7 +39,11 @@
     :editor/kill-line-before editor-handler/kill-line-before!
     :editor/kill-line-after editor-handler/kill-line-after!
     :editor/beginning-of-block editor-handler/beginning-of-block
-    :editor/end-of-block editor-handler/end-of-block}))
+    :editor/end-of-block editor-handler/end-of-block
+    :editor/forward-word editor-handler/cursor-forward-word
+    :editor/backward-word editor-handler/cursor-backward-word
+    :editor/backward-kill-word editor-handler/backward-kill-word
+    :editor/forward-kill-word editor-handler/forward-kill-word}))
 
 (def handler
   [;; global editor shortcut
