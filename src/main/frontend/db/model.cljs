@@ -1182,19 +1182,20 @@
   (let [public-pages (get-public-pages db)]
     (when (seq public-pages)
       (let [public-pages (set public-pages)
-            page-or-block? #(contains? #{"page" "block" "me" "recent" "file"} %)
+            exported-namespace? #(contains? #{"block" "me" "recent"} %)
             filtered-db (d/filter db
                                   (fn [db datom]
                                     (let [ns (namespace (:a datom))]
                                       (or
-                                       (not (page-or-block? ns))
-                                       (and (= ns "page")
-                                            (contains? public-pages (:e datom)))
+                                       (not (exported-namespace? ns))
+                                       ;; (and (= ns "page")
+                                       ;;      (contains? public-pages (:e datom)))
                                        (and (= ns "block")
-                                            (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))
+                                            (or
+                                             (contains? public-pages (:e datom))
+                                             (contains? public-pages (:db/id (:block/page (d/entity db (:e datom)))))))))))
             datoms (d/datoms filtered-db :eavt)
             public-assets-filesnames
-
             (keep
              (fn [datom]
 
