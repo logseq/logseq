@@ -282,8 +282,7 @@
                        journal?
                        (= page-name (string/lower-case (date/journal-name))))
                developer-mode? (state/sub [:ui/developer-mode?])
-               published? (= "true" (:published properties))
-               public? (= "true" (:public properties))]
+               public? (true? (:public properties))]
            [:div.flex-1.page.relative (if (seq (:block/tags page))
                                         (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                                           {:data-page-tags (text/build-data-value page-names)})

@@ -1118,9 +1118,10 @@
   (-> (d/q
        '[:find ?p
          :where
-         [?p :block/properties ?d]
-         [(get ?d :public) ?pub]
-         [(= "true" ?pub)]]
+         [?p :block/name]
+         [?p :block/properties ?properties]
+         [(get ?properties :public) ?pub]
+         [(= true ?pub)]]
        db)
       (db-utils/seq-flatten)))
 
