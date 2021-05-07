@@ -85,7 +85,7 @@
                (sort-by :score (comp - compare)
                         (filter #(< 0 (:score %))
                                 (for [item data]
-                                  (let [s (if extract-fn (extract-fn item) item)]
+                                  (let [s (str (if extract-fn (extract-fn item) item))]
                                     {:data item
                                      :score (score query (.toLowerCase s))})))))
          (map :data))))
