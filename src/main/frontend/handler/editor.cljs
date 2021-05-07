@@ -1209,15 +1209,15 @@
   ([{block-id :block/uuid} repo files]
    (when-let [block-file (db-model/get-block-file block-id)]
      (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
-       (let [prefix (:file/path block-file)
-             prefix (and prefix (string/replace
-                                 (if (util/electron?)
-                                   (string/replace prefix (str repo-dir "/") "")
-                                   prefix) "/" "_"))
-             prefix (and prefix (subs prefix 0 (string/last-index-of prefix ".")))]
-         (save-assets! repo repo-dir assets-dir files
-                       (fn [index file-base]
-                         (str (string/replace file-base " " "_") "_" (.now js/Date) "_" index)))))))
+       (save-assets! repo repo-dir assets-dir files
+                     (fn [index file-base]
+                       ;; TODO: maybe there're other chars we need to handle?
+                       (let [file-base (-> file-base
+                                           (string/replace " " "_")
+                                           (string/replace "%" "_")
+                                           (string/replace "/" "_"))
+                             file-name (str file-base "_" (.now js/Date) "_" index)]
+                         (string/replace file-name #"_+" "_")))))))
   ([repo dir path files gen-filename]
    (p/all
     (for [[index ^js file] (map-indexed vector files)]
