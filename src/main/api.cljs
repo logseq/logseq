@@ -2,6 +2,7 @@
   (:require [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.handler.block :as block-handler]
+            [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.util :as util]
             [electron.ipc :as ipc]
             [promesa.core :as p]
@@ -122,7 +123,7 @@
                               (dissoc :block/children)
                               (assoc :block/uuid (str (:block/uuid %))))
                          blocks)
-            blocks (block-handler/blocks->vec-tree blocks)
+            blocks (outliner-tree/blocks->vec-tree blocks (:db/id (db/get-page (state/get-current-page))))
             ;; clean key
             blocks (walk/postwalk
                      (fn [a]
