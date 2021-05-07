@@ -7,7 +7,7 @@
             [promesa.core :as p]
             ["fs-extra" :as fs]
             ["path" :as path]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
+            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem] :as electron]
             ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
             [electron.state :as state]))
@@ -26,18 +26,18 @@
   []
   (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
         win-opts (cond->
-                   {:width         (.-width win-state)
-                    :height        (.-height win-state)
-                    :frame         (not mac?)
-                    :autoHideMenuBar (not mac?)
-                    :titleBarStyle (if mac? "hidden" nil)
-                    :webPreferences
-                    {:plugins                 true ; pdf
-                     :nodeIntegration         false
-                     :nodeIntegrationInWorker false
-                     :contextIsolation        true
-                     :spellcheck              true
-                     :preload                 (path/join js/__dirname "js/preload.js")}}
+                  {:width         (.-width win-state)
+                   :height        (.-height win-state)
+                   :frame         (not mac?)
+                   :autoHideMenuBar (not mac?)
+                   :titleBarStyle (if mac? "hidden" nil)
+                   :webPreferences
+                   {:plugins                 true ; pdf
+                    :nodeIntegration         false
+                    :nodeIntegrationInWorker false
+                    :contextIsolation        true
+                    :spellcheck              true
+                    :preload                 (path/join js/__dirname "js/preload.js")}}
                    linux?
                    (assoc :icon (path/join js/__dirname "icons/logseq.png")))
         url MAIN_WINDOW_ENTRY
@@ -53,7 +53,7 @@
   ;;  (init-updater {:repo   "logseq/logseq"
   ;;                 :logger logger
   ;;                 :win    win}))
-)
+  )
 
 (defn setup-interceptor! []
   (.registerFileProtocol
@@ -127,6 +127,30 @@
                    (js-invoke app type args)
                    (catch js/Error e
                      (js/console.error e))))))
+
+
+    (.on web-contents "context-menu"
+         (fn
+           [_event params]
+           (let [menu (Menu.)
+                 suggestions (. params -dictionarySuggestions)]
+
+             (doseq [suggestion suggestions]
+               (. menu append
+                  (MenuItem. (clj->js {:label
+                                       suggestion
+                                       :click
+                                       (fn [] (. web-contents replaceMisspelling suggestion))}))))
+
+             (when-let [misspelled-word (. params -misspelledWord)]
+               (. menu append
+                  (MenuItem. (clj->js {:label
+                                       "Add to dictionary"
+                                       :click
+                                       (fn [] (.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word)))}))))
+
+             (. menu popup))))
+
 
     (.on web-contents  "new-window"
          (fn [e url]
