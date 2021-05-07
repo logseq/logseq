@@ -21,11 +21,13 @@
     (string/join (str "\n" spaces-tabs) lines)))
 
 (defn transform-content
-  [{:block/keys [format pre-block? title content unordered body heading-level]} level heading-to-list?]
+  [{:block/keys [format pre-block? title content unordered body heading-level left page]} level heading-to-list?]
   (let [content (or content "")
-        heading-with-title? (seq title)]
+        heading-with-title? (seq title)
+        first-block? (= left page)
+        pre-block? (and first-block? pre-block?)]
     (cond
-      pre-block?
+      (and first-block? pre-block?)
       (let [content (-> (string/trim content)
                         ;; FIXME: should only works with :filters
                         (string/replace "\"" "\\\""))]

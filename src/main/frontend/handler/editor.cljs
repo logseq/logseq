@@ -277,8 +277,9 @@
     block))
 
 (defn- wrap-parse-block
-  [{:block/keys [content format parent page uuid] :as block}]
-  (let [ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
+  [{:block/keys [content format parent left page uuid pre-block?] :as block}]
+  (let [first-block? (= left page)
+        ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
         properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
         top-level? (= parent page)
@@ -299,6 +300,9 @@
                              (let [content' (str (config/get-block-pattern format) (if heading? " " "\n") content)]
                                [content content']))
         block (block/parse-block (assoc block :block/content content'))
+        block (if (and first-block? (:block/pre-block? block))
+                block
+                (dissoc block :block/pre-block?))
         block (attach-page-properties-if-exists! block)]
     (-> block
        (dissoc :block/top?
@@ -1820,7 +1824,9 @@
                                                         new-title (or (:title (second (ffirst
                                                                                        (mldoc/->edn (str (case format
                                                                                                            :markdown "- "
-                                                                                                           :org "* ") new-content)
+                                                                                                           :org "* ")
+                                                                                                         (if (:block/title %) "" "\n")
+                                                                                                         new-content)
                                                                                                     (mldoc/default-config format)))))
                                                                       (:block/title %))]
                                                     [new-content new-title])
@@ -1840,6 +1846,7 @@
                                                    :block/content new-content
                                                    :block/title new-title}
                                                   (dissoc %
+                                                          :block/pre-block?
                                                           :block/uuid
                                                           :block/page
                                                           :block/file

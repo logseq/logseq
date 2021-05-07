@@ -516,7 +516,8 @@
                                              (utf8/length encoded-content))}
                          :body @pre-block-body
                          :properties @pre-block-properties
-                         :pre-block? true}
+                         :pre-block? true
+                         :unordered true}
                         (block-keywordize)))
                      (select-keys first-block [:block/file :block/format :block/page]))
                     blocks)
