@@ -7,7 +7,7 @@
             [promesa.core :as p]
             ["fs-extra" :as fs]
             ["path" :as path]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog] :as electron]
+            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem] :as electron]
             ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
             [electron.state :as state]))
@@ -137,6 +137,30 @@
                    (js-invoke app type args)
                    (catch js/Error e
                      (js/console.error e))))))
+
+
+    (.on web-contents "context-menu"
+         (fn
+           [_event params]
+           (let [menu (Menu.)
+                 suggestions (. params -dictionarySuggestions)]
+
+             (doseq [suggestion suggestions]
+               (. menu append
+                  (MenuItem. (clj->js {:label
+                                       suggestion
+                                       :click
+                                       (fn [] (. web-contents replaceMisspelling suggestion))}))))
+
+             (when-let [misspelled-word (. params -misspelledWord)]
+               (. menu append
+                  (MenuItem. (clj->js {:label
+                                       "Add to dictionary"
+                                       :click
+                                       (fn [] (.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word)))}))))
+
+             (. menu popup))))
+
 
     (.on web-contents  "new-window"
          (fn [e url]
