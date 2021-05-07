@@ -105,9 +105,9 @@
 (defn export-repo-as-html!
   [repo]
   (when-let [db (db/get-conn repo)]
-    (let [db           (if (state/all-pages-public?)
-                         (db/clean-export! db)
-                         (db/filter-only-public-pages-and-blocks db))
+    (let [[db asset-filenames]           (if (state/all-pages-public?)
+                                           (db/clean-export! db)
+                                           (db/filter-only-public-pages-and-blocks db))
           db-str       (db/db->string db)
           state        (select-keys @state/state
                                     [:ui/theme :ui/cycle-collapse
@@ -120,7 +120,8 @@
           html-str     (str "data:text/html;charset=UTF-8,"
                             (js/encodeURIComponent raw-html-str))]
       (if (util/electron?)
-        (js/window.apis.exportPublishAssets raw-html-str (config/get-custom-css-path))
+        (js/window.apis.exportPublishAssets raw-html-str (config/get-custom-css-path) (config/get-repo-dir repo) (clj->js asset-filenames))
+
         (when-let [anchor (gdom/getElement "download-as-html")]
           (.setAttribute anchor "href" html-str)
           (.setAttribute anchor "download" "index.html")
@@ -424,13 +425,13 @@
     (->>
      md-files
      (map (fn [[path content]] {:path path :content content
-                               :names (d/q '[:find [?n ?n2]
-                                             :in $ ?p
-                                             :where [?e :file/path ?p]
-                                             [?e2 :block/file ?e]
-                                             [?e2 :block/name ?n]
-                                             [?e2 :block/original-name ?n2]] conn path)
-                               :format (f/get-format path)})))))
+                                :names (d/q '[:find [?n ?n2]
+                                              :in $ ?p
+                                              :where [?e :file/path ?p]
+                                              [?e2 :block/file ?e]
+                                              [?e2 :block/name ?n]
+                                              [?e2 :block/original-name ?n2]] conn path)
+                                :format (f/get-format path)})))))
 
 (defn export-repo-as-markdown!
   [repo]
