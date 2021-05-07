@@ -44,7 +44,7 @@
     ;;            [(identity ?vs) [?v ...]]
     ;;            (not-join [?e ?v]
     ;;                      [?e ?a ?v]))]
-])
+    ])
 
 (defn transact-files-db!
   ([tx-data]
@@ -156,7 +156,7 @@
             :where
             [?file :file/path ?path]
             ;; [?file :file/last-modified-at ?modified-at]
-]
+            ]
           conn)
          (seq)
          ;; (sort-by last)
@@ -224,7 +224,7 @@
    (when (and repo path)
      (->
       (react/q repo [:file/content path]
-        {:use-cache? true}
+               {:use-cache? true}
                '[:find ?content
                  :in $ ?path
                  :where
@@ -243,7 +243,7 @@
         :where
         [?file :file/path ?path]
         [?file :file/content ?content]]
-       conn)
+      conn)
      (into {}))))
 
 
@@ -562,18 +562,18 @@
   [blocks parent]
   (let [blocks (keep-only-one-file blocks parent)]
     (when (not= (count blocks) (count (set (map :block/left blocks))))
-     (let [duplicates (->> (map (comp :db/id :block/left) blocks)
-                           frequencies
-                           (filter (fn [[_k v]] (> v 1)))
-                           (map (fn [[k _v]]
-                                  (let [left (db-utils/pull k)]
-                                    {:left left
-                                     :duplicates (->>
-                                                  (filter (fn [block]
-                                                            (= k (:db/id (:block/left block))))
-                                                          blocks)
-                                                  (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
-       (util/pprint duplicates)))
+      (let [duplicates (->> (map (comp :db/id :block/left) blocks)
+                            frequencies
+                            (filter (fn [[_k v]] (> v 1)))
+                            (map (fn [[k _v]]
+                                   (let [left (db-utils/pull k)]
+                                     {:left left
+                                      :duplicates (->>
+                                                   (filter (fn [block]
+                                                             (= k (:db/id (:block/left block))))
+                                                           blocks)
+                                                   (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
+        (util/pprint duplicates)))
     (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
     (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
       (loop [block parent
@@ -587,26 +587,26 @@
   [repo block-uuid]
   (when-let [conn (conn/get-conn repo)]
     (-> (d/q
-          '[:find [(pull ?b [*]) ...]
-            :in $ ?parent-id
-            :where
-            [?b :block/parent ?parent]
-            [?parent :block/uuid ?parent-id]]
-          conn
-          block-uuid)
+         '[:find [(pull ?b [*]) ...]
+           :in $ ?parent-id
+           :where
+           [?b :block/parent ?parent]
+           [?parent :block/uuid ?parent-id]]
+         conn
+         block-uuid)
         (sort-by-left (db-utils/entity [:block/uuid block-uuid])))))
 
 (defn get-blocks-by-page
   [id-or-lookup-ref]
   (when-let [conn (conn/get-conn)]
     (->
-      (d/q
-       '[:find (pull ?block [*])
-         :in $ ?page
-         :where
-         [?block :block/page ?page]]
-       conn id-or-lookup-ref)
-      flatten)))
+     (d/q
+      '[:find (pull ?block [*])
+        :in $ ?page
+        :where
+        [?block :block/page ?page]]
+      conn id-or-lookup-ref)
+     flatten)))
 
 (defn get-block-children
   "Including nested children."
@@ -622,18 +622,18 @@
    (get-block-and-children repo block-uuid true))
   ([repo block-uuid use-cache?]
    (some-> (react/q repo [:block/block block-uuid]
-             {:use-cache? use-cache?
-              :transform-fn #(block-and-children-transform % repo block-uuid)}
-             '[:find (pull ?c [*])
-               :in $ ?id %
-               :where
-               [?b :block/uuid ?id]
-               (or-join [?b ?c ?id]
+                    {:use-cache? use-cache?
+                     :transform-fn #(block-and-children-transform % repo block-uuid)}
+                    '[:find (pull ?c [*])
+                      :in $ ?id %
+                      :where
+                      [?b :block/uuid ?id]
+                      (or-join [?b ?c ?id]
                         ;; including the parent
-                        [?c :block/uuid ?id]
-                        (parent ?b ?c))]
-             block-uuid
-             rules)
+                               [?c :block/uuid ?id]
+                               (parent ?b ?c))]
+                    block-uuid
+                    rules)
            react)))
 
 (defn get-file-page
@@ -794,17 +794,17 @@
   (when-let [conn (conn/get-conn repo)]
     (->
      (d/q
-       '[:find [?ref-page ...]
-         :in $ % ?page
-         :where
-         [?p :block/name ?page]
-         [?b :block/path-refs ?p]
-         [?b :block/refs ?other-p]
-         [(not= ?p ?other-p)]
-         [?other-p :block/name ?ref-page]]
-       conn
-       rules
-       page)
+      '[:find [?ref-page ...]
+        :in $ % ?page
+        :where
+        [?p :block/name ?page]
+        [?b :block/path-refs ?p]
+        [?b :block/refs ?other-p]
+        [(not= ?p ?other-p)]
+        [?other-p :block/name ?ref-page]]
+      conn
+      rules
+      page)
      (distinct))))
 
 ;; Ignore files with empty blocks for now
@@ -891,15 +891,15 @@
     (when (seq blocks)
       (let [block-ids (set (map :db/id blocks))
             refs (d/q
-                   '[:find ?p ?ref
-                     :in $ % ?block-ids
-                     :where
-                     (parent ?p ?b)
-                     [(contains? ?block-ids ?p)]
-                     [?b :block/refs ?ref]]
-                   conn
-                   rules
-                   block-ids)
+                  '[:find ?p ?ref
+                    :in $ % ?block-ids
+                    :where
+                    (parent ?p ?b)
+                    [(contains? ?block-ids ?p)]
+                    [?b :block/refs ?ref]]
+                  conn
+                  rules
+                  block-ids)
             refs (->> (group-by first refs)
                       (medley/map-vals #(set (map (fn [[_ id]] {:db/id id}) %))))]
         (map (fn [block] (assoc block :block/children-refs
@@ -914,7 +914,7 @@
             :where
             [?b :block/refs ?page-id]]
           (conn/get-conn repo)
-       page-id)
+          page-id)
      (flatten))))
 
 (defn get-page-referenced-blocks
@@ -969,29 +969,29 @@
   (when-let [date (date/journal-title->int journal-title)]
     (let [future-days (state/get-scheduled-future-days)]
       (when-let [repo (state/get-current-repo)]
-       (when-let [conn (conn/get-conn repo)]
-         (->> (react/q repo [:custom :scheduled-deadline journal-title] {}
-                '[:find (pull ?block [*])
-                  :in $ ?day ?future
-                  :where
-                  (or
-                   [?block :block/scheduled ?d]
-                   [?block :block/deadline ?d])
-                  [(get-else $ ?block :block/repeated? false) ?repeated]
-                  [(get-else $ ?block :block/marker "NIL") ?marker]
-                  [(not= ?marker "DONE")]
-                  [(not= ?marker "CANCELED")]
-                  [(not= ?marker "CANCELLED")]
-                  [(<= ?d ?future)]
-                  (or-join [?repeated ?d ?day]
-                           [(true? ?repeated)]
-                           [(>= ?d ?day)])]
-                date
-                (+ date future-days))
-              react
-              db-utils/seq-flatten
-              sort-blocks
-              db-utils/group-by-page))))))
+        (when-let [conn (conn/get-conn repo)]
+          (->> (react/q repo [:custom :scheduled-deadline journal-title] {}
+                        '[:find (pull ?block [*])
+                          :in $ ?day ?future
+                          :where
+                          (or
+                           [?block :block/scheduled ?d]
+                           [?block :block/deadline ?d])
+                          [(get-else $ ?block :block/repeated? false) ?repeated]
+                          [(get-else $ ?block :block/marker "NIL") ?marker]
+                          [(not= ?marker "DONE")]
+                          [(not= ?marker "CANCELED")]
+                          [(not= ?marker "CANCELLED")]
+                          [(<= ?d ?future)]
+                          (or-join [?repeated ?d ?day]
+                                   [(true? ?repeated)]
+                                   [(>= ?d ?day)])]
+                        date
+                        (+ date future-days))
+               react
+               db-utils/seq-flatten
+               sort-blocks
+               db-utils/group-by-page))))))
 
 (defn get-files-that-referenced-page
   [page-id]
@@ -1151,8 +1151,8 @@
      @blocks-count-cache
      (when-let [conn (conn/get-conn)]
        (let [n (count (d/datoms conn :avet :block/uuid))]
-        (reset! blocks-count-cache n)
-        n)))))
+         (reset! blocks-count-cache n)
+         n)))))
 
 ;; block/uuid and block/content
 (defn get-all-block-contents
@@ -1192,8 +1192,21 @@
                                             (contains? public-pages (:e datom)))
                                        (and (= ns "block")
                                             (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))
-            datoms (d/datoms filtered-db :eavt)]
-        @(d/conn-from-datoms datoms db-schema/schema)))))
+            datoms (d/datoms filtered-db :eavt)
+            public-assets-filesnames
+
+            (keep
+             (fn [datom]
+
+               (if (= :block/content (:a datom))
+                 (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))
+
+                       path (get (get (into [] matched) 0) 1)]
+                   path)))
+             datoms)]
+
+
+        [@(d/conn-from-datoms datoms db-schema/schema) (into [] public-assets-filesnames)]))))
 
 (defn delete-blocks
   [repo-url files]
@@ -1265,8 +1278,8 @@
              :where
              [?b :block/page ?page]
              [?b :block/pre-block? true]]
-        (conn/get-conn repo)
-        page-id)
+           (conn/get-conn repo)
+           page-id)
       ffirst))
 
 (comment
@@ -1293,4 +1306,4 @@
                    [(contains? ?refs ?b-ref)]))]
        (conn/get-conn)
        rules
-    page-ids))
+       page-ids))

@@ -248,9 +248,11 @@
     (if (and (config/local-asset? href)
              (config/local-db? (state/get-current-repo)))
       (asset-link config title href label metadata full_text)
-      (let [href (if (util/starts-with? href "http")
-                   href
-                   (get-file-absolute-path config href))]
+      (let [href (if config/publishing?
+                   (subs href 1)
+                   (if (util/starts-with? href "http")
+                     href
+                     (get-file-absolute-path config href)))]
         (resizable-image config title href metadata full_text false)))))
 
 (defn repetition-to-string
@@ -428,8 +430,8 @@
          [:span.text-gray-500.bracket "[["])
        (let [s (string/trim s)]
          (page-cp (assoc config
-                        :label (mldoc/plain->text label)
-                        :contents-page? contents-page?) {:block/name s}))
+                         :label (mldoc/plain->text label)
+                         :contents-page? contents-page?) {:block/name s}))
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
@@ -865,22 +867,22 @@
         (when-let [url (first arguments)]
           (let [id-regex #"https?://www\.bilibili\.com/video/([\w\W]+)"]
             (when-let [id (cond
-                           (<= (count url) 15) url
-                           :else
-                           (last (re-find id-regex url)))]
-             (when-not (string/blank? id)
-               (let [width (min (- (util/get-width) 96)
-                                560)
-                     height (int (* width (/ 315 560)))]
-                 [:iframe
-                  {:allowfullscreen true
-                   :framespacing "0"
-                   :frameborder "no"
-                   :border "0"
-                   :scrolling "no"
-                   :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
-                   :width width
-                   :height (max 500 height)}])))))
+                            (<= (count url) 15) url
+                            :else
+                            (last (re-find id-regex url)))]
+              (when-not (string/blank? id)
+                (let [width (min (- (util/get-width) 96)
+                                 560)
+                      height (int (* width (/ 315 560)))]
+                  [:iframe
+                   {:allowfullscreen true
+                    :framespacing "0"
+                    :frameborder "no"
+                    :border "0"
+                    :scrolling "no"
+                    :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
+                    :width width
+                    :height (max 500 height)}])))))
 
         (= name "embed")
         (let [a (first arguments)]
@@ -1039,7 +1041,7 @@
        :on-click (fn [e]
                    (util/stop e)
                    (when-not (and (not collapsed?) (not has-child?))
-                       (editor-handler/set-block-property! uuid :collapsed (not collapsed?))))}
+                     (editor-handler/set-block-property! uuid :collapsed (not collapsed?))))}
       (cond
         (and control-show? collapsed?)
         (svg/caret-right)
@@ -1350,22 +1352,22 @@
                  (and (util/sup? target)
                       (d/has-class? target "fn"))
                  (d/has-class? target "image-resize"))
-       (editor-handler/clear-selection! nil)
-       (editor-handler/unhighlight-blocks!)
-       (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-             f #(let [cursor-range (util/caret-range (gdom/getElement block-id))]
-                  (state/set-editing!
-                   edit-input-id
-                   content
-                   block
-                   cursor-range
-                   false))]
+        (editor-handler/clear-selection! nil)
+        (editor-handler/unhighlight-blocks!)
+        (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+              f #(let [cursor-range (util/caret-range (gdom/getElement block-id))]
+                   (state/set-editing!
+                    edit-input-id
+                    content
+                    block
+                    cursor-range
+                    false))]
          ;; wait a while for the value of the caret range
-         (if (util/ios?)
-           (f)
-           (js/setTimeout f 5)))
+          (if (util/ios?)
+            (f)
+            (js/setTimeout f 5)))
 
-       (when block-id (state/set-selection-start-block! block-id))))))
+        (when block-id (state/set-selection-start-block! block-id))))))
 
 (defn- block-content-on-drag-over
   [event uuid]
@@ -1444,11 +1446,11 @@
         (do
           [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
           ;; TODO: consistent id instead of the idx (since it could be changed later)
-          (let [body (block/trim-break-lines! (:block/body block))]
-            (for [[idx child] (medley/indexed body)]
-              (when-let [block (markup-element-cp config child)]
-                (rum/with-key (block-child block)
-                  (str uuid "-" idx)))))]))]
+           (let [body (block/trim-break-lines! (:block/body block))]
+             (for [[idx child] (medley/indexed body)]
+               (when-let [block (markup-element-cp config child)]
+                 (rum/with-key (block-child block)
+                   (str uuid "-" idx)))))]))]
      (when (and block-refs-count (> block-refs-count 0))
        [:div
         [:a.open-block-ref-link.bg-base-2
@@ -1539,7 +1541,7 @@
                                          (for [{:block/keys [uuid title name]} parents]
                                            (when-not name ; not page
                                              [:a {:href (rfe/href :page {:name uuid})}
-                                             (map-inline config title)])))
+                                              (map-inline config title)])))
                                 parents (remove nil? parents)]
                             (reset! parents-atom parents)
                             (when (seq parents)

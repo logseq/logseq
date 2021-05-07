@@ -26,18 +26,18 @@
   []
   (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
         win-opts (cond->
-                   {:width         (.-width win-state)
-                    :height        (.-height win-state)
-                    :frame         (not mac?)
-                    :autoHideMenuBar (not mac?)
-                    :titleBarStyle (if mac? "hidden" nil)
-                    :webPreferences
-                    {:plugins                 true ; pdf
-                     :nodeIntegration         false
-                     :nodeIntegrationInWorker false
-                     :contextIsolation        true
-                     :spellcheck              true
-                     :preload                 (path/join js/__dirname "js/preload.js")}}
+                  {:width         (.-width win-state)
+                   :height        (.-height win-state)
+                   :frame         (not mac?)
+                   :autoHideMenuBar (not mac?)
+                   :titleBarStyle (if mac? "hidden" nil)
+                   :webPreferences
+                   {:plugins                 true ; pdf
+                    :nodeIntegration         false
+                    :nodeIntegrationInWorker false
+                    :contextIsolation        true
+                    :spellcheck              true
+                    :preload                 (path/join js/__dirname "js/preload.js")}}
                    linux?
                    (assoc :icon (path/join js/__dirname "icons/logseq.png")))
         url MAIN_WINDOW_ENTRY
@@ -53,7 +53,7 @@
   ;;  (init-updater {:repo   "logseq/logseq"
   ;;                 :logger logger
   ;;                 :win    win}))
-)
+  )
 
 (defn setup-interceptor! []
   (.registerFileProtocol
@@ -65,18 +65,28 @@
        (callback #js {:path path}))))
   #(.unregisterProtocol protocol "assets"))
 
-(defn- handle-export-publish-assets [_event html custom-css-path]
+(defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames]
   (let [app-path (. app getAppPath)
+        asset-filenames (js->clj asset-filenames)
         paths (js->clj (. dialog showOpenDialogSync (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]})))]
     (when (seq paths)
       (let [root-dir (first paths)
             static-dir (path/join root-dir "static")
+            assets-from-dir (path/join repo-path "assets")
+            assets-to-dir (path/join root-dir "assets")
             index-html-path (path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)
+                _ (. fs ensureDir assets-to-dir)
                 _ (p/all  (concat
                            [(. fs writeFile index-html-path html)
 
+
                             (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
+
+                           (map
+                            (fn [filename] (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename)))
+
+                            asset-filenames)
 
                            (map
                             (fn [part]
