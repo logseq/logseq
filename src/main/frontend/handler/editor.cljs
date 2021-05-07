@@ -328,7 +328,7 @@
   ([block value]
    (save-block-if-changed! block value nil))
   ([block value
-    {:keys []
+    {:keys [force?]
      :as opts}]
    (let [{:block/keys [uuid content file page format repo content properties]} block
          repo (or repo (state/get-current-repo))
@@ -342,6 +342,9 @@
         [:p.content
          (util/format "Block with the id % already exists!" block-id)]
         :error)
+
+       force?
+       (save-block-inner! repo block value opts)
 
        :else
        (let [content-changed? (not= (string/trim content) (string/trim value))]
@@ -1088,7 +1091,7 @@
 (defn save-current-block!
   ([]
    (save-current-block! {}))
-  ([opts]
+  ([{:keys [force?] :as opts}]
    ;; non English input method
    (when-not (state/editor-in-composition?)
      (when-let [repo (state/get-current-repo)]
@@ -1110,11 +1113,16 @@
                  db-content-without-heading (and db-content
                                                  (util/safe-subs db-content (:block/level db-block)))
                  value (and elem (gobj/get elem "value"))]
-             (when (and block value db-content-without-heading
-                        (or
-                         (not= (string/trim db-content-without-heading)
-                               (string/trim value))))
-               (save-block-aux! db-block value (:block/format db-block) opts)))
+             (cond
+               force?
+               (save-block-aux! db-block value (:block/format db-block) opts)
+
+               (and block value db-content-without-heading
+                    (or
+                     (not= (string/trim db-content-without-heading)
+                           (string/trim value))))
+               (save-block-aux! db-block value (:block/format db-block) opts))
+             )
            (catch js/Error error
              (log/error :save-block-failed error))))))))
 
@@ -2348,6 +2356,7 @@
   [id]
   (fn [_e]
     (let [input (gdom/getElement id)]
+      (save-current-block! {:force? true})
       (close-autocomplete-if-outside input))))
 
 (defn editor-on-change!
@@ -2546,3 +2555,21 @@
 
         :else
         nil))))
+
+(defn clear-block-content! []
+  (save-current-block! {:force? true})
+  (state/set-edit-content! (state/get-edit-input-id) ""))
+
+(defn kill-line-before! []
+  (save-current-block! {:force? true})
+  (util/kill-line-before! (state/get-input)))
+
+(defn kill-line-after! []
+  (save-current-block! {:force? true})
+  (util/kill-line-after! (state/get-input)))
+
+(defn beginning-of-block []
+  (util/move-cursor-to (state/get-input) 0))
+
+(defn end-of-block []
+  (util/move-cursor-to-end (state/get-input)))

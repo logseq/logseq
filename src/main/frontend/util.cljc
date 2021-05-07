@@ -645,6 +645,24 @@
        (move-cursor-to input pos))))
 
 #?(:cljs
+   (defn kill-line-before!
+     [input]
+     (let [val (.-value input)
+           end (.-selectionStart input)
+           n-pos (string/last-index-of val \newline (dec end))
+           start (if n-pos (inc n-pos) 0)]
+       (.setRangeText input "" start end))))
+
+#?(:cljs
+   (defn kill-line-after!
+     [input]
+     (let [val   (.-value input)
+           start (.-selectionStart input)
+           end   (or (string/index-of val \newline start)
+                     (count val))]
+       (.setRangeText input "" start end))))
+
+#?(:cljs
    (defn move-cursor-up
      "Move cursor up. If EOL, always move cursor to previous EOL."
      [input]

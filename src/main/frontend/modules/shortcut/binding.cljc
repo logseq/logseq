@@ -58,6 +58,17 @@
    :editor/delete "delete"
    :editor/delete-selection ["backspace" "delete"]
 
+   ;; clear the block content
+   :editor/clear-block "alt+l"
+   ;; kill the line before the cursor position
+   :editor/kill-line-before "alt+u"
+   ;; kill the line after the cursor position
+   :editor/kill-line-after "alt+k"
+   ;; go to the beginning of the block
+   :editor/beginning-of-block "alt+a"
+   ;; go to the end of the block
+   :editor/end-of-block "alt+e"
+
    :editor/selection-up "up"
    :editor/selection-down "down"
 
