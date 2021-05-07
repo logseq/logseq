@@ -143,7 +143,7 @@
          (fn
            [_event params]
            (let [menu (Menu.)
-                 suggestions (. params -dictionarySuggestions)]
+                 suggestions (.-dictionarySuggestions ^js params)]
 
              (doseq [suggestion suggestions]
                (. menu append
@@ -152,7 +152,7 @@
                                        :click
                                        (fn [] (. web-contents replaceMisspelling suggestion))}))))
 
-             (when-let [misspelled-word (. params -misspelledWord)]
+             (when-let [misspelled-word (.-misspelledWord ^js params)]
                (. menu append
                   (MenuItem. (clj->js {:label
                                        "Add to dictionary"
