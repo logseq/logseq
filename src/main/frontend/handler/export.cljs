@@ -240,7 +240,7 @@
         embed-blocks
         (mapv (fn [b] [(str (:block/uuid b))
                        [(get-blocks-contents repo (:block/uuid b))
-                        (:block/title b)]])
+                        (:block/content b)]])
               blocks)]
     {:embed_blocks embed-blocks
      :embed_pages pages-name-and-content}))
@@ -384,10 +384,10 @@
   (let [[block-refs page-refs]
         (get-page&block-refs-aux repo page false page&block-refs #{} #{})]
     {:embed_blocks
-     (mapv (fn [[title _content uuid id]]
+     (mapv (fn [[_title content uuid id]]
              [(str uuid)
               [(get-blocks-contents repo uuid)
-               title]])
+               content]])
            block-refs)
      :embed_pages (vec page-refs)}))
 
