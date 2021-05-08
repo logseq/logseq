@@ -1238,7 +1238,7 @@
         priority]
        (if title
          (map-inline config title)
-         [[:span.opacity-50 "Click here to start writing"]])
+         [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
 
 (defn show-dnd-separator
@@ -1418,9 +1418,6 @@
         (merge attrs))
 
       (cond
-        dummy?
-        [:span.opacity-50 "Click here to start writing"]
-
         (seq title)
         (build-block-title config block)
 

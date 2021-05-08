@@ -225,9 +225,8 @@
                           (subs content 0 pos))
              content (text/remove-built-in-properties! (:block/format block)
                                                        content)]
-         (do
-           (clear-selection! nil)
-           (state/set-editing! edit-input-id content block text-range move-cursor?)))))))
+         (clear-selection! nil)
+         (state/set-editing! edit-input-id content block text-range move-cursor?))))))
 
 (defn edit-last-block-for-new-page!
   [last-block pos]
