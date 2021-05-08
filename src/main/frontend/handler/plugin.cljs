@@ -4,6 +4,7 @@
             [frontend.util :as util]
             [frontend.fs :as fs]
             [frontend.handler.notification :as notifications]
+            [frontend.storage :as storage]
             [camel-snake-kebab.core :as csk]
             [frontend.state :as state]
             [medley.core :as md]
@@ -11,7 +12,9 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]))
 
-(defonce lsp-enabled? (util/electron?))
+(defonce lsp-enabled?
+  (and (util/electron?)
+       (= (storage/get "developer-mode") "true")))
 
 ;; state handlers
 (defn register-plugin

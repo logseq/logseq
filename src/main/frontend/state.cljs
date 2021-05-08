@@ -112,6 +112,16 @@
     :electron/updater-pending? false
     :electron/updater {}
 
+    ;; plugin
+    :plugin/indicator-text        nil
+    :plugin/installed-plugins     {}
+    :plugin/installed-themes      []
+    :plugin/installed-commands    {}
+    :plugin/simple-commands       {}
+    :plugin/selected-theme        nil
+    :plugin/selected-unpacked-pkg nil
+    :plugin/active-readme         nil
+
     ;; all notification contents as k-v pairs
     :notification/contents {}
     :graph/syncing? false
@@ -1029,6 +1039,15 @@
 (defn get-commands
   []
   (:commands (get-config)))
+
+(defn get-plugins-commands
+  []
+  (mapcat seq (flatten (vals (:plugin/installed-commands @state)))))
+
+(defn get-plugins-commands-with-type
+  [type]
+  (filterv #(= (keyword (first %)) (keyword type))
+           (apply concat (vals (:plugin/simple-commands @state)))))
 
 (defn get-scheduled-future-days
   []

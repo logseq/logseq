@@ -244,7 +244,7 @@
                               (config-handler/set-config! :date-formatter format))))}
             (for [format (sort (date/journal-title-formatters))]
               [:option (cond->
-                           {:key format}
+                        {:key format}
                          (= format custom-date-format)
                          (assoc :selected "selected"))
                format])]]]]
@@ -352,7 +352,10 @@
          [:div.mt-1.sm:mt-0.sm:col-span-2
           [:div.rounded-md.sm:max-w-xs
            (ui/toggle developer-mode?
-                      #(state/set-developer-mode! (not developer-mode?))
+                      (fn []
+                        (let [mode (not developer-mode?)]
+                          (state/set-developer-mode! mode)
+                          (and mode (js/alert (t :developer-mode-alert)))))
                       true)]]]
         [:div.text-sm.opacity-50
          (t :settings-page/developer-mode-desc)]
