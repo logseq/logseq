@@ -15,6 +15,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
             [frontend.components.export :as export]
+            [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
@@ -71,6 +72,7 @@
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
   (let [projects (state/sub [:me :projects])
+        developer-mode? (state/sub [:ui/developer-mode?])
         logged? (state/logged?)]
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
@@ -113,6 +115,14 @@
          {:title (t :settings)
           :options {:on-click #(ui-handler/toggle-settings-modal!)}
           :icon svg/settings-sm})
+
+       (when developer-mode?
+         {:title (t :plugins)
+          :options {:href (rfe/href :plugins)}})
+
+       (when developer-mode?
+         {:title (t :themes)
+          :options {:on-click #(plugins/open-select-theme!)}})
 
        (when current-repo
          {:title (t :export)
