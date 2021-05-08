@@ -138,9 +138,10 @@
   ([repo dir path]
    (create-if-not-exists repo dir path ""))
   ([repo dir path initial-content]
-   (let [path (if (util/starts-with? path "/")
-                path
-                (str "/" path))]
+   (let [path (if (util/is-absolute-path path) path
+                  (if (util/starts-with? path "/")
+                    path
+                    (str "/" path)))]
      (->
       (p/let [stat (stat dir path)]
         true)

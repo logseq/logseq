@@ -1070,6 +1070,14 @@
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
                    :clj nil))
 
+#?(:cljs
+   (defn is-absolute-path
+     [path]
+     (try
+       (js/window.apis.isAbsolutePath path)
+       (catch js/Error _
+         (node-path.isAbsolute path)))))
+
 (defn ->system-modifier
   [keyboard-shortcut]
   (if mac?
