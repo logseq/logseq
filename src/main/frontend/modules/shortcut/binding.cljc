@@ -59,23 +59,23 @@
    :editor/delete-selection ["backspace" "delete"]
 
    ;; clear the block content
-   :editor/clear-block "alt+l"
+   :editor/clear-block (if mac? "ctrl+l" "alt+l")
    ;; kill the line before the cursor position
-   :editor/kill-line-before "alt+u"
+   :editor/kill-line-before (if mac? "ctrl+u" "alt+u")
    ;; kill the line after the cursor position
-   :editor/kill-line-after "alt+k"
+   :editor/kill-line-after (if mac? "ctrl+k" "alt+k")
    ;; go to the beginning of the block
-   :editor/beginning-of-block "alt+a"
+   :editor/beginning-of-block (if mac? "ctrl+a" "alt+a")
    ;; go to the end of the block
-   :editor/end-of-block "alt+e"
+   :editor/end-of-block (if mac? "ctrl+e" "alt+e")
    ;; forward one word
-   :editor/forward-word "alt+f"
+   :editor/forward-word (if mac? "ctrl+f" "alt+f")
    ;; backward one word
-   :editor/backward-word "alt+b"
+   :editor/backward-word (if mac? "ctrl+b" "alt+b")
    ;; kill one word backward
-   :editor/backward-kill-word "alt+w"
+   :editor/backward-kill-word (if mac? "ctrl+w" "alt+w")
    ;; kill one word forward
-   :editor/forward-kill-word "alt+d"
+   :editor/forward-kill-word (if mac? "ctrl+d" "alt+d")
 
 
    :editor/selection-up "up"
