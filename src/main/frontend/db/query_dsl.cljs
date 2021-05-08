@@ -282,7 +282,8 @@
            (let [v (some->> (name (nth e 2))
                             (text/page-ref-un-brackets!))
                  sym '?v]
-             [['?p :block/properties '?prop]
+             [['?p :block/name]
+              ['?p :block/properties '?prop]
               [(list 'get '?prop (keyword (nth e 1))) sym]
               (list
                'or

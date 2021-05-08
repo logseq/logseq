@@ -137,27 +137,21 @@
             (p/let [_ (verify-permission repo file-handle true)
                     _ (utils/writeFile file-handle content)
                     file (.getFile file-handle)]
-              (p/let [_ (verify-permission repo file-handle true)
-                      _ (utils/writeFile file-handle content)
-                      file (.getFile file-handle)]
-                (when file
-                  (nfs-saved-handler repo path file)))
-              ;; (if (and local-content new?
-              ;;          (or
-              ;;           draw?
-              ;;           ;; Writing not finished
-              ;;           (> pending-writes 0)
-              ;;           ;; not changed by other editors
-              ;;           not-changed?
-              ;;           new-created?))
-              ;;   (p/let [_ (verify-permission repo file-handle true)
-              ;;           _ (utils/writeFile file-handle content)
-              ;;           file (.getFile file-handle)]
-              ;;     (when file
-              ;;       (nfs-saved-handler repo path file)))
-              ;;   (js/alert (str "The file has been modified on your local disk! File path: " path
-              ;;                  ", please save your changes and click the refresh button to reload it.")))
-              ))
+              (if (and local-content new?
+                       (or
+                        draw?
+                        ;; Writing not finished
+                        (> pending-writes 0)
+                        ;; not changed by other editors
+                        not-changed?
+                        new-created?))
+                (p/let [_ (verify-permission repo file-handle true)
+                        _ (utils/writeFile file-handle content)
+                        file (.getFile file-handle)]
+                  (when file
+                    (nfs-saved-handler repo path file)))
+                (js/alert (str "The file has been modified on your local disk! File path: " path
+                               ", please save your changes and click the refresh button to reload it.")))))
            ;; create file handle
           (->
            (p/let [handle (idb/get-item handle-path)]
