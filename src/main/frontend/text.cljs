@@ -167,12 +167,6 @@
    (and (string? line)
         (re-find #"^\s*[^ ]+: " line))))
 
-(defn org-property?
-  [line]
-  (boolean
-   (and (string? line)
-        (re-find #"^\s*:[^: ]+: " line))))
-
 (defn get-property-key
   [line format]
   (and (string? line)
@@ -181,6 +175,14 @@
                          (re-find #"^\s*:([^: ]+): " line)
                          (re-find #"^\s*([^ ]+):: " line)))]
          (keyword key))))
+
+(defn org-property?
+  [line]
+  (boolean
+   (and (string? line)
+        (re-find #"^\s*:[^: ]+: " line)
+        (when-let [key (get-property-key line :org)]
+          (not (contains? #{:PROPERTIES :END} key))))))
 
 (defn remove-properties!
   [format content]
