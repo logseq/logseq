@@ -419,7 +419,7 @@
 
 (defn compute-pos-delta-when-change-marker
   [current-input edit-content new-value marker pos]
-  (let [old-marker (some->> (first (re-find format/bare-marker-pattern edit-content))
+  (let [old-marker (some->> (first (re-find util/bare-marker-pattern edit-content))
                             (string/trim))
         old-marker (if old-marker old-marker "")
         pos-delta (- (count marker)
@@ -444,7 +444,7 @@
                     (count (re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
-                                                 format/marker-pattern
+                                                 util/marker-pattern
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)
         (let [new-pos (compute-pos-delta-when-change-marker
@@ -467,8 +467,8 @@
                              (string/replace-first (subs edit-content pos)
                                                    priority-pattern
                                                    new-priority))
-                        (re-find format/marker-pattern edit-content)
-                        (string/replace-first edit-content format/marker-pattern
+                        (re-find util/marker-pattern edit-content)
+                        (string/replace-first edit-content util/marker-pattern
                                               (fn [marker] (str marker new-priority " ")))
 
                         :else

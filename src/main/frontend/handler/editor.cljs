@@ -506,7 +506,7 @@
 
 (defn- with-timetracking-properties
   [block value]
-  (let [new-marker (first (re-find format/bare-marker-pattern (or value "")))
+  (let [new-marker (first (re-find util/bare-marker-pattern (or value "")))
         new-marker (if new-marker (string/lower-case (string/trim new-marker)))
         time-properties (if (and
                              new-marker
@@ -594,27 +594,33 @@
     (let [edit-input-id (state/get-edit-input-id)
           current-input (gdom/getElement edit-input-id)
           content (state/get-edit-content)
+          format (or (db/get-page-format (state/get-current-page))
+                     (state/get-preferred-format))
+          cond-fn (fn [marker] (or (and (= :markdown format)
+                                        (re-find (re-pattern (str "#*\\s*" marker)) content))
+                                     (util/starts-with? content "TODO")))
           [new-content marker] (cond
-                                 (util/starts-with? content "TODO")
+                                 (cond-fn "TODO")
                                  [(string/replace-first content "TODO" "DOING") "DOING"]
-                                 (util/starts-with? content "DOING")
+                                 (cond-fn "DOING")
                                  [(string/replace-first content "DOING" "DONE") "DONE"]
-                                 (util/starts-with? content "LATER")
+                                 (cond-fn "LATER")
                                  [(string/replace-first content "LATER" "NOW") "NOW"]
-                                 (util/starts-with? content "NOW")
+                                 (cond-fn "NOW")
                                  [(string/replace-first content "NOW" "DONE") "DONE"]
-                                 (util/starts-with? content "DONE")
+                                 (cond-fn "DONE")
                                  [(string/replace-first content "DONE" "") nil]
                                  :else
                                  (let [marker (if (= :now (state/get-preferred-workflow))
                                                 "LATER"
                                                 "TODO")]
-                                   [(str marker " " (string/triml content)) marker]))
+                                   [(util/add-or-update-marker (string/triml content) format marker)  marker]))
           new-content (string/triml new-content)]
       (let [new-pos (commands/compute-pos-delta-when-change-marker
                      current-input content new-content marker (util/get-input-pos current-input))]
         (state/set-edit-content! edit-input-id new-content)
         (util/set-caret-pos! current-input new-pos)))))
+
 
 (defn set-marker
   [{:block/keys [uuid marker content dummy? properties] :as block} new-marker]
