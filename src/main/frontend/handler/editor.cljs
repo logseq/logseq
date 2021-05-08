@@ -926,7 +926,8 @@
           [content tree] (compose-copied-blocks-contents-&-block-tree repo ids)
           block (db/pull [:block/uuid (first ids)])]
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
-      (state/set-copied-blocks content tree))))
+      (state/set-copied-blocks content tree)
+      (notification/show! "Copied!" :success))))
 
 (defn cut-selection-blocks
   [copy?]
@@ -2444,8 +2445,7 @@
 
 (defn shortcut-copy-selection
   [e]
-  (copy-selection-blocks)
-  (clear-selection! nil))
+  (copy-selection-blocks))
 
 (defn shortcut-cut-selection
   [e]
