@@ -63,19 +63,19 @@
    ;; kill the line before the cursor position
    :editor/kill-line-before (if mac? "ctrl+u" "alt+u")
    ;; kill the line after the cursor position
-   :editor/kill-line-after (if mac? "ctrl+k" "alt+k")
+   :editor/kill-line-after (if mac? false "alt+k")
    ;; go to the beginning of the block
-   :editor/beginning-of-block (if mac? "ctrl+a" "alt+a")
+   :editor/beginning-of-block (if mac? false "alt+a")
    ;; go to the end of the block
-   :editor/end-of-block (if mac? "ctrl+e" "alt+e")
+   :editor/end-of-block (if mac? false "alt+e")
    ;; forward one word
-   :editor/forward-word (if mac? "ctrl+f" "alt+f")
+   :editor/forward-word (if mac? "ctrl+shift+f" "alt+f")
    ;; backward one word
-   :editor/backward-word (if mac? "ctrl+b" "alt+b")
+   :editor/backward-word (if mac? "ctrl+shift+b" "alt+b")
    ;; kill one word backward
    :editor/backward-kill-word (if mac? "ctrl+w" "alt+w")
    ;; kill one word forward
-   :editor/forward-kill-word (if mac? "ctrl+d" "alt+d")
+   :editor/forward-kill-word (if mac? "ctrl+shift+w" "alt+d")
 
 
    :editor/selection-up "up"
