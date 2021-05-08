@@ -2,7 +2,6 @@
   (:require [rum.core :as rum]
             [frontend.util :as util]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.components.svg :as svg]))
 
 (rum/defc container
@@ -13,8 +12,7 @@
       (.setAttribute doc "data-theme" (if (= theme "white") "light" theme))
       (if (= theme "dark")                                 ;; for tailwind dark mode
         (.add cls "dark")
-        (.remove cls "dark"))
-      (plugin-handler/hook-plugin-app :theme-mode-changed theme nil))
+        (.remove cls "dark")))
    [theme])
 
   (rum/use-effect!

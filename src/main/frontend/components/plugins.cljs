@@ -81,8 +81,7 @@
        [:sup.inline-block.px-1.text-xs.opacity-30 version]]
       [:div.desc.text-xs.opacity-60
        [:p description]
-       ;;[:small (js/JSON.stringify (bean/->js settings))]
-]
+       [:small (js/JSON.stringify (bean/->js settings))]]
       [:div.flag
        [:p.text-xs.text-gray-300.pr-2.flex.justify-between.dark:opacity-40
         [:small author]
@@ -147,9 +146,9 @@
   ([type payload opts]
    (let [id (str "slot__" (util/rand-str 8))]
      (rum/use-effect!
-      (fn []
-        (plugin-handler/hook-plugin-app type {:slot id :payload payload} nil)
-        #())
-      [])
+       (fn []
+         (plugin-handler/hook-plugin-app type {:slot id :payload payload} nil)
+         #())
+       [])
      [:div.lsp-hook-ui-slot
       (merge opts {:id id})])))

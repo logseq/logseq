@@ -77,11 +77,6 @@
         title (get-title (:name data) path-params)]
     (util/set-title! title)))
 
-(defn update-page-label!
-  [route]
-  (let [{:keys [data]} route]
-    (set! (. js/document.body.dataset -page) (name (:name data)))))
-
 (defn jump-to-anchor!
   [anchor-text]
   (when anchor-text
@@ -92,7 +87,6 @@
   (let [route route]
     (swap! state/state assoc :route-match route)
     (update-page-title! route)
-    (update-page-label! route)
     (when-let [anchor (get-in route [:query-params :anchor])]
       (jump-to-anchor! anchor)
       (util/scroll-to-top))))

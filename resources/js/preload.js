@@ -1,6 +1,6 @@
 const fs = require('fs')
 const path = require('path')
-const { ipcRenderer, contextBridge, shell, clipboard, webFrame } = require('electron')
+const { ipcRenderer, contextBridge, shell, clipboard } = require('electron')
 
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
@@ -136,8 +136,4 @@ contextBridge.exposeInMainWorld('apis', {
 
   getFilePathFromClipboard,
   isClipboardHasImage,
-
-  setZoomFactor (factor) {
-    webFrame.setZoomFactor(factor)
-  }
 })

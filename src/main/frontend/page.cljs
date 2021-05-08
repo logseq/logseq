@@ -3,7 +3,6 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.components.sidebar :as sidebar]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.context.i18n :as i18n]))
 
 (rum/defc route-view
@@ -16,7 +15,6 @@
                    (state/setup-electron-updater!)
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
-                   (plugin-handler/host-mounted!)
                    (let [teardown-fn (comp (ui/setup-patch-ios-fixed-bottom-position!))]
                      (assoc state ::teardown teardown-fn)))
    :will-unmount (fn [state]
