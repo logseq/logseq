@@ -1149,33 +1149,6 @@
        (text/remove-properties! format)
        string/trim))
 
-(defn on-up-down
-  [direction]
-  (when (state/editing?)
-    (let [edit-block (state/get-edit-block)
-          {:block/keys [uuid content format]} edit-block
-          element (state/get-input)
-          line-height (util/get-textarea-line-height element)
-          repo (state/get-current-repo)
-          up? (= :up direction)]
-      (if (or (and up? (util/textarea-cursor-first-row? element line-height))
-              (and (not up?) (util/textarea-cursor-end-row? element line-height)))
-        (do
-          (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
-                sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
-            (when sibling-block
-              (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-                (let [value (state/get-edit-content)]
-                  (when (not= (clean-content! format content)
-                              (string/trim value))
-                    (save-block! repo uuid value)))
-                (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
-                  (edit-block! block [direction (util/get-first-or-last-line-pos element)] format (state/get-edit-input-id)))))))
-        ;;just up and down
-        (if up?
-          (util/move-cursor-up element)
-          (util/move-cursor-down element))))))
-
 (defn insert-command!
   [id command-output format {:keys [restore?]
                              :or {restore? true}
