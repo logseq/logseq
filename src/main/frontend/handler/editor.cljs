@@ -596,16 +596,19 @@
           content (state/get-edit-content)
           format (or (db/get-page-format (state/get-current-page))
                      (state/get-preferred-format))
+          cond-fn (fn [marker] (or (and (= :markdown format)
+                                        (re-find (re-pattern (str "#*\\s*" marker)) content))
+                                     (util/starts-with? content "TODO")))
           [new-content marker] (cond
-                                 (util/starts-with? content "TODO")
+                                 (cond-fn "TODO")
                                  [(string/replace-first content "TODO" "DOING") "DOING"]
-                                 (util/starts-with? content "DOING")
+                                 (cond-fn "DOING")
                                  [(string/replace-first content "DOING" "DONE") "DONE"]
-                                 (util/starts-with? content "LATER")
+                                 (cond-fn "LATER")
                                  [(string/replace-first content "LATER" "NOW") "NOW"]
-                                 (util/starts-with? content "NOW")
+                                 (cond-fn "NOW")
                                  [(string/replace-first content "NOW" "DONE") "DONE"]
-                                 (util/starts-with? content "DONE")
+                                 (cond-fn "DONE")
                                  [(string/replace-first content "DONE" "") nil]
                                  :else
                                  (let [marker (if (= :now (state/get-preferred-workflow))
