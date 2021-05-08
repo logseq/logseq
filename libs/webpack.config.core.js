@@ -27,6 +27,6 @@ module.exports = {
     library: 'LSPlugin',
     libraryTarget: 'umd',
     filename: 'lsplugin.core.js',
-    path: path.resolve(__dirname, '../static/js'),
+    path: path.resolve(__dirname, '../resources/js'),
   },
 }
