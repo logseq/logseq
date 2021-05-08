@@ -241,8 +241,11 @@
                                    (rest body)
                                    body))
             {properties-lines true body false} (group-by (fn [s]
-                                                     (or (simplified-property? s)
-                                                         (and org? (org-property? s)))) properties-and-body)
+                                                           (or (simplified-property? s)
+                                                               (and org? (org-property? s)))) properties-and-body)
+            body (if org?
+                   (remove (fn [s] (= (string/trim s) properties-start)) body)
+                   body)
             properties-in-content (->> (map #(get-property-key % format) properties-lines)
                                        (remove nil?)
                                        (set))
@@ -252,7 +255,7 @@
                                               (str ":" (name k) ": " v)
                                               (str (name k) ":: " v))) properties)
             body (concat (if no-title? nil [title])
-                         (when (and org? properties-in-content?) [properties-start])
+                         (when org? [properties-start])
                          built-in-properties-area
                          properties-lines
                          body)]
@@ -297,7 +300,7 @@
                                        text))))))
               middle (if @exists? middle (conj middle (str ":" key ": "  value)))
               after (subvec lines (inc end-idx))
-              lines (concat before middle after)]
+              lines (concat before [properties-start] middle [properties-end] after)]
           (string/join "\n" lines))
 
         (not org?)
