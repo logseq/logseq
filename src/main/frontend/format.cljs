@@ -64,9 +64,3 @@
   [format]
   (when-let [record (get-format-record format)]
     (protocol/loaded? record)))
-
-(def marker-pattern
-  #"^(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\s?")
-
-(def bare-marker-pattern
-  #"^(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS){1}\s+")
