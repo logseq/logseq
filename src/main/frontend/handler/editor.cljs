@@ -507,14 +507,22 @@
   [block value]
   (let [new-marker (first (re-find util/bare-marker-pattern (or value "")))
         new-marker (if new-marker (string/lower-case (string/trim new-marker)))
-        time-properties (if (and
-                             new-marker
-                             (not= new-marker (string/lower-case (or (:block/marker block) "")))
-                             (state/enable-timetracking?))
-                          {new-marker (util/time-ms)}
-                          {})]
-    (merge (:block/properties block)
-           time-properties)))
+        new-marker? (and
+                     new-marker
+                     (not= new-marker (string/lower-case (or (:block/marker block) "")))
+                     (state/enable-timetracking?))
+        ts (util/time-ms)
+        properties (if new-marker?
+                     (assoc (:block/properties block) new-marker ts)
+                     (:block/properties block))
+        value (or
+               (when new-marker?
+                 (text/insert-property! (:block/format block)
+                                        value
+                                        new-marker
+                                        ts))
+               value)]
+    [properties value]))
 
 (defn insert-new-block!
   ([state]
@@ -530,7 +538,7 @@
              block (or (db/pull [:block/uuid block-id])
                        block)
              repo (or (:block/repo block) (state/get-current-repo))
-             properties (with-timetracking-properties block value)]
+             [properties value] (with-timetracking-properties block value)]
          ;; save the current block and insert a new block
          (insert-new-block-aux!
           config
@@ -563,29 +571,30 @@
     content))
 
 (defn- with-marker-time
-  [block marker]
+  [content format marker]
   (if (state/enable-timetracking?)
     (let [marker (string/lower-case marker)]
-      {marker (util/time-ms)})
-    {}))
+      (text/insert-property! format content marker (util/time-ms)))
+    content))
 
 (defn check
-  [{:block/keys [uuid marker content dummy? repeated?] :as block}]
+  [{:block/keys [uuid marker content format dummy? repeated?] :as block}]
   (let [new-content (string/replace-first content marker "DONE")
-        new-content (if repeated?
-                      (update-timestamps-content! block content)
-                      new-content)]
-    (save-block-if-changed! block new-content
-                            {:custom-properties (with-marker-time block "DONE")})))
+        new-content (->
+                     (if repeated?
+                       (update-timestamps-content! block content)
+                       new-content)
+                     (with-marker-time format "DONE"))]
+    (save-block-if-changed! block new-content)))
 
 (defn uncheck
-  [{:block/keys [uuid marker content dummy?] :as block}]
+  [{:block/keys [uuid marker content format dummy?] :as block}]
   (let [marker (if (= :now (state/get-preferred-workflow))
                  "LATER"
                  "TODO")
-        new-content (string/replace-first content "DONE" marker)]
-    (save-block-if-changed! block new-content
-                            {:custom-properties (with-marker-time block marker)})))
+        new-content (-> (string/replace-first content "DONE" marker)
+                        (with-marker-time format marker))]
+    (save-block-if-changed! block new-content)))
 
 (defn cycle-todo!
   []
@@ -622,10 +631,10 @@
 
 
 (defn set-marker
-  [{:block/keys [uuid marker content dummy? properties] :as block} new-marker]
-  (let [new-content (string/replace-first content marker new-marker)]
-    (save-block-if-changed! block new-content
-                            {:custom-properties (with-marker-time block new-marker)})))
+  [{:block/keys [uuid marker content format dummy? properties] :as block} new-marker]
+  (let [new-content (-> (string/replace-first content marker new-marker)
+                        (with-marker-time format new-marker))]
+    (save-block-if-changed! block new-content)))
 
 (defn set-priority
   [{:block/keys [uuid marker priority content dummy?] :as block} new-priority]
@@ -1080,7 +1089,7 @@
 (defn save-block-aux!
   [block value format opts]
   (let [value (string/trim value)
-        properties (with-timetracking-properties block value)]
+        [properties value] (with-timetracking-properties block value)]
     ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
     ;; maybe we shouldn't save the block/file in "will-unmount" event?
     (save-block-if-changed! block value
@@ -1572,19 +1581,6 @@
 ;; TODO:
 (defn cycle-collapse!
   [e]
-  ;; (let [current-page (state/get-current-page)]
-  ;;   (when (and
-  ;;         ;; not input, t
-  ;;         (nil? (state/get-edit-input-id))
-  ;;         (not (state/get-editor-show-input))
-  ;;         (string/blank? (:search/q @state/state))
-  ;;         current-page)
-  ;;    (util/stop e)
-  ;;    (let [page (db/pull [:block/name (string/lower-case current-page)])
-  ;;          collapsed? (boolean (get (:block/properties page) :collapsed))]
-  ;;      (prn {:current-page current-page
-  ;;            :collapsed? collapsed?})
-  ;;      (set-block-property! (:block/uuid page) :collapsed (not collapsed?)))))
   )
 
 (defn on-tab

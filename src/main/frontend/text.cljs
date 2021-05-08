@@ -157,11 +157,30 @@
 
 (defn simplified-property?
   [line]
-  (some? (first (util/split-first ":: " line))))
+  (boolean
+   (and (string? line)
+        (re-find #"^\s?[^ ]+:: " line))))
 
 (defn front-matter-property?
   [line]
-  (some? (first (util/split-first ": " line))))
+  (boolean
+   (and (string? line)
+        (re-find #"^\s*[^ ]+: " line))))
+
+(defn org-property?
+  [line]
+  (boolean
+   (and (string? line)
+        (re-find #"^\s*:[^: ]+: " line))))
+
+(defn get-property-key
+  [line format]
+  (and (string? line)
+       (when-let [key (last
+                       (if (= format :org)
+                         (re-find #"^\s*:([^: ]+): " line)
+                         (re-find #"^\s*([^ ]+):: " line)))]
+         (keyword key))))
 
 (defn remove-properties!
   [format content]
@@ -214,16 +233,27 @@
       (let [[title & body] (string/split-lines content)
             properties-in-content? (and title (= (string/upper-case title) properties-start))
             no-title? (or (simplified-property? title) properties-in-content?)
-            built-in-properties-area (map (fn [[k v]] (if org?
+            properties-and-body (concat
+                                 (if (and no-title? (not org?)) [title])
+                                 (if (and org? properties-in-content?)
+                                   (rest body)
+                                   body))
+            {properties-lines true body false} (group-by (fn [s]
+                                                     (or (simplified-property? s)
+                                                         (and org? (org-property? s)))) properties-and-body)
+            properties-in-content (->> (map #(get-property-key % format) properties-lines)
+                                       (remove nil?)
+                                       (set))
+            properties (remove (comp properties-in-content first) properties)
+            built-in-properties-area (map (fn [[k v]]
+                                            (if org?
                                               (str ":" (name k) ": " v)
                                               (str (name k) ":: " v))) properties)
             body (concat (if no-title? nil [title])
                          (when (and org? properties-in-content?) [properties-start])
                          built-in-properties-area
-                         (if (and no-title? (not org?)) [title])
-                         (if (and org? properties-in-content?)
-                           (rest body)
-                           body))]
+                         properties-lines
+                         body)]
         (string/join "\n" body))
       content)))
 
