@@ -62,12 +62,14 @@
     :editor/redo history/redo!}
 
    ;; global
-   {:ui/toggle-brackets config-handler/toggle-ui-show-brackets!
-    :go/search route-handler/go-to-search!
-    :go/journals route-handler/go-to-journals!
+   (before
+    m/prevent-default-behavior
+    {:ui/toggle-brackets config-handler/toggle-ui-show-brackets!
+     :go/search route-handler/go-to-search!
+     :go/journals route-handler/go-to-journals!
 
-    :search/re-index search-handler/rebuild-indices!
-    :graph/re-index #(repo-handler/re-index! nfs-handler/rebuild-index!)}
+     :search/re-index search-handler/rebuild-indices!
+     :graph/re-index #(repo-handler/re-index! nfs-handler/rebuild-index!)})
 
    ;; non-editing only
    (before
