@@ -139,16 +139,16 @@
 
 ;; properties
 
-(def hidden-properties
+(def built-in-properties
   (set/union
    #{:id :custom-id :background-color :heading :collapsed}
-   config/markers))
+   (set (map keyword config/markers))))
 
-(defn properties-hidden?
+(defn properties-built-in?
   [properties]
   (and (seq properties)
        (let [ks (map (comp keyword string/lower-case name) (keys properties))]
-         (every? hidden-properties ks))))
+         (every? built-in-properties ks))))
 
 (defn contains-properties?
   [content]
@@ -204,6 +204,28 @@
           properties-content (->> (map (fn [[k v]] (util/format kv-format k v)) properties)
                                   (string/join "\n"))]
       (util/format full-format properties-content))))
+
+;; title properties body
+(defn with-built-in-properties
+  [properties content format]
+  (let [org? (= format :org)
+        properties (filter (fn [[k v]] (built-in-properties k)) properties)]
+    (if (seq properties)
+      (let [[title & body] (string/split-lines content)
+            properties-in-content? (and title (= (string/upper-case title) properties-start))
+            no-title? (or (simplified-property? title) properties-in-content?)
+            built-in-properties-area (map (fn [[k v]] (if org?
+                                              (str ":" (name k) ": " v)
+                                              (str (name k) ":: " v))) properties)
+            body (concat (if no-title? nil [title])
+                         (when (and org? properties-in-content?) [properties-start])
+                         built-in-properties-area
+                         (if (and no-title? (not org?)) [title])
+                         (if (and org? properties-in-content?)
+                           (rest body)
+                           body))]
+        (string/join "\n" body))
+      content)))
 
 ;; FIXME:
 (defn front-matter?
@@ -300,6 +322,11 @@
 (defn remove-id-property!
   [format content]
   (remove-property! format "id" content false))
+
+(defn remove-built-in-properties!
+  [format content]
+  (reduce (fn [content key]
+            (remove-property! format key content)) content built-in-properties))
 
 (defn ->new-properties
   "New syntax: key:: value"

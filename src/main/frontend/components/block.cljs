@@ -1286,7 +1286,7 @@
 (rum/defc properties-cp
   [config block]
   (let [properties (walk/keywordize-keys (:block/properties block))
-        properties (apply dissoc properties text/hidden-properties)
+        properties (apply dissoc properties text/built-in-properties)
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
                      (dissoc properties :title :filters)
@@ -1355,7 +1355,9 @@
         (editor-handler/clear-selection! nil)
         (editor-handler/unhighlight-blocks!)
         (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-              f #(let [cursor-range (util/caret-range (gdom/getElement block-id))]
+              f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
+                       content (text/remove-built-in-properties! (:block/format block)
+                                                                 content)]
                    (state/set-editing!
                     edit-input-id
                     content
@@ -1437,7 +1439,7 @@
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
       (when (and (seq properties)
-                 (let [hidden? (text/properties-hidden? properties)]
+                 (let [hidden? (text/properties-built-in? properties)]
                    (not hidden?))
                  (not (:slide? config)))
         (properties-cp config block))

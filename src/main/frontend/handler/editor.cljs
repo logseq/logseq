@@ -222,7 +222,9 @@
                           content
 
                           :else
-                          (subs content 0 pos))]
+                          (subs content 0 pos))
+             content (text/remove-built-in-properties! (:block/format block)
+                                                       content)]
          (do
            (clear-selection! nil)
            (state/set-editing! edit-input-id content block text-range move-cursor?)))))))
@@ -277,8 +279,12 @@
     block))
 
 (defn- wrap-parse-block
-  [{:block/keys [content format parent left page uuid pre-block?] :as block}]
-  (let [first-block? (= left page)
+  [{:block/keys [content format parent left page uuid pre-block? properties] :as block}]
+  (let [real-content (:block/content (db/entity (:db/id block)))
+        content (if (and (seq properties) real-content (not= real-content content))
+                  (text/with-built-in-properties properties content format)
+                  content)
+        first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
         properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)

@@ -719,12 +719,11 @@
                    (assoc block
                           :block/container (gobj/get container "id"))
                    block)
-           content (or content "")]
-
+           content (string/trim (or content ""))]
        (swap! state
               (fn [state]
                 (-> state
-                    (assoc-in [:editor/content edit-input-id] (string/trim content))
+                    (assoc-in [:editor/content edit-input-id] content)
                     (assoc
                      :editor/block block
                      :editor/editing? {edit-input-id true}
