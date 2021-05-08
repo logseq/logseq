@@ -96,10 +96,10 @@ interface IEditorProxy {
   insertBlock: (srcBlock: BlockIdentity, content: string, opts: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockIdentity>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts: Partial<{ includeChildren: boolean }>) => Promise<void>
-  touchBlock: (srcBlock: BlockIdentity) => Promise<BlockIdentity>
+  getBlock: (srcBlock: BlockIdentity) => Promise<BlockIdentity>
   moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts: Partial<{ before: boolean, sibling: boolean }>) => Promise<void>
 
-  updateBlockProperty: (block: BlockIdentity, key: string, value: any) => Promise<void>
+  upsertBlockProperty: (block: BlockIdentity, key: string, value: any) => Promise<void>
   removeBlockProperty: (block: BlockIdentity) => Promise<void>
 }
 
