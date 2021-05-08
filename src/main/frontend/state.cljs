@@ -723,6 +723,12 @@
        (when-let [input (gdom/getElement edit-input-id)]
          (let [pos (count cursor-range)]
            (when content
+             (util/set-change-value input content)
+             ;; FIXME
+             ;; use set-change-value for now
+             ;; until somebody can figure out why set! value doesn't work here
+             ;; it seems to me textarea autoresize is completely broken
+             #_
              (set! (.-value input) (string/trim content)))
            (when move-cursor?
              (util/move-cursor-to input pos))))))))
