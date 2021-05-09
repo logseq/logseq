@@ -22,7 +22,7 @@
           (= "add" type)
           (when-not (db/file-exists? repo path)
               (let [_ (file-handler/alter-file repo path content {:re-render-root? true
-                                                               :from-disk? true})]
+                                                                  :from-disk? true})]
              (db/set-file-last-modified-at! repo path mtime)))
 
           (and (= "change" type)
@@ -33,7 +33,6 @@
                (not= content (db/get-file path))
                (when-let [last-modified-at (db/get-file-last-modified-at repo path)]
                  (> mtime last-modified-at)))
-
           (let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                               :from-disk? true})]
             (db/set-file-last-modified-at! repo path mtime))

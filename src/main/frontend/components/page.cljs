@@ -88,13 +88,8 @@
         ;; raw-page-blocks (get grouped-blocks-by-file file-path raw-page-blocks)
         page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
-                        (let [content (db/get-file repo file-path)]
-                          {:block/page {:db/id (:db/id page)}
-                           :block/file {:db/id (:db/id (:block/file page))}
-                           :block/meta
-                           (let [file-id (:db/id (:block/file page))]
-                             {:start-pos (utf8/length (utf8/encode content))
-                              :end-pos nil})}))
+                        {:block/page {:db/id (:db/id page)}
+                         :block/file {:db/id (:db/id (:block/file page))}})
                       {:journal? journal?
                        :page-name page-name})
         hiccup-config {:id (if block? (str block-id) page-name)
