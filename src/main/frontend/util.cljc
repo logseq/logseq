@@ -1299,15 +1299,19 @@
      (let [val     (.-value input)
            current (.-selectionStart input)
            prev    (or
-                    (max
-                     (string/last-index-of val \space (dec current))
-                     (string/last-index-of val \newline (dec current)))
+                    (->> [(string/last-index-of val \space (dec current))
+                          (string/last-index-of val \newline (dec current))]
+                         (remove nil?)
+                         (apply max))
                     0)
-           idx     (loop [idx prev]
-                     (if (#{\space \newline} (nth-safe val idx))
-                       (recur (dec idx))
-                       idx))
-           idx     (if (zero? idx) idx (inc idx))]
+           idx     (if (zero? prev)
+                     0
+                     (->
+                      (loop [idx prev]
+                        (if (#{\space \newline} (nth-safe val idx))
+                          (recur (dec idx))
+                          idx))
+                      inc))]
        (move-cursor-to input idx))))
 
 #?(:cljs
@@ -1316,15 +1320,19 @@
      (let [val     (.-value input)
            current (.-selectionStart input)
            prev    (or
-                    (max
-                     (string/last-index-of val \space (dec current))
-                     (string/last-index-of val \newline (dec current)))
+                    (->> [(string/last-index-of val \space (dec current))
+                          (string/last-index-of val \newline (dec current))]
+                         (remove nil?)
+                         (apply max))
                     0)
-           idx     (loop [idx prev]
-                     (if (#{\space \newline} (nth-safe val idx))
-                       (recur (dec idx))
-                       idx))
-           idx     (if (zero? idx) idx (inc idx))]
+           idx     (if (zero? prev)
+                     0
+                     (->
+                      (loop [idx prev]
+                        (if (#{\space \newline} (nth-safe val idx))
+                          (recur (dec idx))
+                          idx))
+                      inc))]
        (.setRangeText input "" idx current))))
 
 #?(:cljs
