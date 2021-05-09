@@ -4,6 +4,7 @@
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.config :as config]
+            [frontend.db :as db]
             [clojure.string :as string]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -455,24 +456,10 @@
 (defmethod handle-step :editor/set-priority [[_ priority] format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (let [edit-content (gobj/get current-input "value")
-            slash-pos (:pos @*slash-caret-pos)
-            priority-pattern  #"\[#[A|B|C]{1}\]"
-            prefix (subs edit-content 0 (dec slash-pos))
-            pos (count (re-find priority-pattern prefix))
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+            edit-content (gobj/get current-input "value")
             new-priority (util/format "[#%s]" priority)
-            new-value (cond
-                        (re-find priority-pattern prefix)
-                        (str (subs edit-content 0 pos)
-                             (string/replace-first (subs edit-content pos)
-                                                   priority-pattern
-                                                   new-priority))
-                        (re-find util/marker-pattern edit-content)
-                        (string/replace-first edit-content util/marker-pattern
-                                              (fn [marker] (str marker new-priority " ")))
-
-                        :else
-                        (str new-priority " " (string/triml edit-content)))]
+            new-value (string/trim (util/add-or-update-priority edit-content format new-priority))]
         (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/set-heading [[_ heading]]

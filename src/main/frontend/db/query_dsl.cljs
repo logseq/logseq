@@ -27,7 +27,7 @@
 ;;            (between last-modified-at -1d today)
 ;; [[page-ref]]
 ;; property (block)
-;; todo (block)
+;; task (block)
 ;; priority (block)
 ;; page
 ;; page-property (page)
@@ -138,7 +138,7 @@
          page-ref? (text/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
-               (contains? #{'between 'property 'todo 'priority 'sort-by 'page} fe))
+               (contains? #{'between 'property 'todo 'task 'priority 'sort-by 'page} fe))
        (reset! blocks? true))
      (cond
        (nil? e)
@@ -235,7 +235,7 @@
        [['?b :block/properties '?prop]
         [(list 'get '?prop (keyword (nth e 1)))]]
 
-       (= 'todo fe)
+       (or (= 'todo fe) (= 'task fe))
        (let [markers (if (coll? (first (rest e)))
                        (first (rest e))
                        (rest e))]
@@ -438,7 +438,7 @@
 
   (query "(and [[some page]] (property foo bar))")
 
-  (query "(and [[some page]] (todo now later))")
+  (query "(and [[some page]] (task now later))")
 
   (query "(and [[some page]] (priority A))")
 

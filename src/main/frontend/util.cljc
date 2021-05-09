@@ -1014,23 +1014,50 @@
 (def bare-marker-pattern
   #"^(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS){1}\s+")
 
-(defn add-or-update-marker
-  [content format marker]
-  (let [[re-pattern new-line-re-pattern]
-        (if (= :org format)
-          [#"\*+\s" #"\n\*+\s"]
-          [#"#+\s" #"\n#+\s"])
-        pos
-        (if-let [matches (seq (re-pos new-line-re-pattern content))]
-          (let [[start-pos content] (last matches)]
-            (+ start-pos (count content)))
-          (count (re-find re-pattern content)))
-        new-content
-        (str (subs content 0 pos)
-             (string/replace-first (subs content pos)
-                                   marker-pattern
-                                   (str marker " ")))]
-    new-content))
+#?(:cljs
+   (defn add-or-update-marker
+     [content format marker]
+     (let [[re-pattern new-line-re-pattern]
+           (if (= :org format)
+             [#"\*+\s" #"\n\*+\s"]
+             [#"#+\s" #"\n#+\s"])
+           pos
+           (if-let [matches (seq (re-pos new-line-re-pattern content))]
+             (let [[start-pos content] (last matches)]
+               (+ start-pos (count content)))
+             (count (re-find re-pattern content)))
+           new-content
+           (str (subs content 0 pos)
+                (string/replace-first (subs content pos)
+                                      marker-pattern
+                                      (str marker " ")))]
+       new-content)))
+
+#?(:cljs
+   (defn add-or-update-priority
+     [content format priority]
+     (let [priority-pattern  #"(\[#[ABC]\])?\s?"
+           [re-pattern new-line-re-pattern]
+           (if (= :org format)
+             [#"\*+\s" #"\n\*+\s"]
+             [#"#+\s" #"\n#+\s"])
+           skip-hash-pos
+           (if-let [matches (seq (re-pos new-line-re-pattern content))]
+             (let [[start-pos content] (last matches)]
+               (+ start-pos (count content)))
+             (count (re-find re-pattern content)))
+           skip-marker-pos
+           (if-let [matches (seq (re-pos bare-marker-pattern (subs content skip-hash-pos)))]
+             (let [[start-pos content] (last matches)]
+               (+ start-pos (count content)))
+             0)
+           pos (+ skip-hash-pos skip-marker-pos)
+           new-content
+           (str (subs content 0 pos)
+                (string/replace-first (subs content pos)
+                                      priority-pattern
+                                      (str priority " ")))]
+       new-content)))
 
 (defn pp-str [x]
   (with-out-str (clojure.pprint/pprint x)))

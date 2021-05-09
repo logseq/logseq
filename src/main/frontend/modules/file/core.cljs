@@ -99,7 +99,8 @@
 (defn- create-file-if-not-exists!
   [page ok-handler]
   (when-let [repo (state/get-current-repo)]
-    (let [format (name (get page :block/format :markdown))
+    (let [format (name (get page :block/format
+                            (state/get-preferred-format)))
           title (string/capitalize (:block/name page))
           journal-page? (date/valid-journal-title? title)
           path (str
