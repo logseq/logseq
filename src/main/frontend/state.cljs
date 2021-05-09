@@ -70,6 +70,7 @@
 
     :github/contents {}
     :config {}
+    :editor/code-mode? false
     :editor/show-page-search? false
     :editor/show-page-search-hashtag? false
     :editor/show-date-picker? false
@@ -1198,6 +1199,14 @@
 (defn set-editor-args!
   [args]
   (set-state! :editor/args args))
+
+(defn code-mode?
+  []
+  (:editor/code-mode? @state))
+
+(defn go-to-code-mode!
+  []
+  (set-state! :editor/code-mode? true))
 
 (defn get-editor-args
   []
