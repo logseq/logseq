@@ -69,9 +69,9 @@
    ;; go to the end of the block
    :editor/end-of-block (if mac? false "alt+e")
    ;; forward one word
-   :editor/forward-word (if mac? "ctrl+f" "alt+f")
+   :editor/forward-word (if mac? "ctrl+shift+f" "alt+f")
    ;; backward one word
-   :editor/backward-word (if mac? "ctrl+b" "alt+b")
+   :editor/backward-word (if mac? "ctrl+shift+b" "alt+b")
    ;; kill one word backward
    :editor/backward-kill-word (if mac? "ctrl+w" "alt+w")
    ;; kill one word forward
