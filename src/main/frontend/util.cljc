@@ -645,6 +645,24 @@
        (move-cursor-to input pos))))
 
 #?(:cljs
+   (defn kill-line-before!
+     [input]
+     (let [val (.-value input)
+           end (.-selectionStart input)
+           n-pos (string/last-index-of val \newline (dec end))
+           start (if n-pos (inc n-pos) 0)]
+       (.setRangeText input "" start end))))
+
+#?(:cljs
+   (defn kill-line-after!
+     [input]
+     (let [val   (.-value input)
+           start (.-selectionStart input)
+           end   (or (string/index-of val \newline start)
+                     (count val))]
+       (.setRangeText input "" start end))))
+
+#?(:cljs
    (defn move-cursor-up
      "Move cursor up. If EOL, always move cursor to previous EOL."
      [input]
@@ -1317,3 +1335,77 @@
    coll))
 
 (def pprint clojure.pprint/pprint)
+
+#?(:cljs
+   (defn move-cursor-forward-by-word
+     [input]
+     (let [val   (.-value input)
+           current (.-selectionStart input)
+           current (loop [idx current]
+                     (if (#{\space \newline} (nth-safe val idx))
+                       (recur (inc idx))
+                       idx))
+           idx (or (->> [(string/index-of val \space current)
+                         (string/index-of val \newline current)]
+                        (remove nil?)
+                        (apply min))
+                   (count val))]
+       (move-cursor-to input idx))))
+
+#?(:cljs
+   (defn move-cursor-backward-by-word
+     [input]
+     (let [val     (.-value input)
+           current (.-selectionStart input)
+           prev    (or
+                    (->> [(string/last-index-of val \space (dec current))
+                          (string/last-index-of val \newline (dec current))]
+                         (remove nil?)
+                         (apply max))
+                    0)
+           idx     (if (zero? prev)
+                     0
+                     (->
+                      (loop [idx prev]
+                        (if (#{\space \newline} (nth-safe val idx))
+                          (recur (dec idx))
+                          idx))
+                      inc))]
+       (move-cursor-to input idx))))
+
+#?(:cljs
+   (defn backward-kill-word
+     [input]
+     (let [val     (.-value input)
+           current (.-selectionStart input)
+           prev    (or
+                    (->> [(string/last-index-of val \space (dec current))
+                          (string/last-index-of val \newline (dec current))]
+                         (remove nil?)
+                         (apply max))
+                    0)
+           idx     (if (zero? prev)
+                     0
+                     (->
+                      (loop [idx prev]
+                        (if (#{\space \newline} (nth-safe val idx))
+                          (recur (dec idx))
+                          idx))
+                      inc))]
+       (.setRangeText input "" idx current))))
+
+#?(:cljs
+   (defn forward-kill-word
+     [input]
+     (let [val   (.-value input)
+           current (.-selectionStart input)
+           current (loop [idx current]
+                     (if (#{\space \newline} (nth-safe val idx))
+                       (recur (inc idx))
+                       idx))
+           idx (or (->> [(string/index-of val \space current)
+                         (string/index-of val \newline current)]
+                        (remove nil?)
+                        (apply min))
+                   (count val))]
+       (.setRangeText input "" current (inc idx)))))

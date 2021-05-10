@@ -21,13 +21,19 @@
   [id]
   (let [shortcut (or (state/get-shortcut id)
                      (get (apply merge @binding-profile) id))]
-    (when-not shortcut
-      (log/error :shortcut/binding-not-found {:id id}))
-    (->>
-     (if (string? shortcut)
-       [shortcut]
-       shortcut)
-     (mapv mod-key))))
+    (cond
+      (nil? shortcut)
+      (log/error :shortcut/binding-not-found {:id id})
+
+      (false? shortcut)
+      (log/debug :shortcut/disabled {:id id})
+
+      :else
+      (->>
+       (if (string? shortcut)
+         [shortcut]
+         shortcut)
+       (mapv mod-key)))))
 
 (def global-keys #js
   [KeyCodes/TAB

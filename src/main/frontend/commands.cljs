@@ -194,9 +194,15 @@
   ([type]
    (->block type nil))
   ([type optional]
-   (let [left (util/format "#+BEGIN_%s"
-                           (string/upper-case type))
-         right (util/format "\n#+END_%s" (string/upper-case type))
+   (let [format (get state/get-edit-block :block/format :markdown)
+         org? (= format :org)
+         left (if org?
+                (util/format "#+BEGIN_%s"
+                             (string/upper-case type))
+                (str "```" (let [t (string/lower-case type)] (if (= t "src") "" t))))
+         right (if org?
+                 (util/format "\n#+END_%s" (string/upper-case type))
+                 (str "\n```"))
          template (str
                    left
                    (if optional (str " " optional) "")
