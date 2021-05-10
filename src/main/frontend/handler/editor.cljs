@@ -2048,39 +2048,51 @@
   (.setRangeText input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
+(defn- delete-concat [current-block]
+  (let [input-id (state/get-edit-input-id)
+        ^js input (state/get-input)
+        current-pos (util/get-input-pos input)
+        value (gobj/get input "value")
+        repo (state/get-current-repo)
+        right (outliner-core/get-right-node (outliner-core/block current-block))
+        current-block-has-children? (db/has-children? repo (:block/uuid current-block))
+        collapsed? (:collapsed (:block/properties current-block))
+        first-child (outliner-db/get-first-child (db/get-conn repo false) (:db/id current-block))
+        next-block (if (or collapsed? (not current-block-has-children?))
+                     (:data right)
+                     first-child)]
+    (cond
+      (and collapsed? right (db/has-children? repo (tree/-get-id right)))
+      nil
+
+      (and (not collapsed?) first-child (db/has-children? repo (:block/uuid first-child)))
+      nil
+
+      :else
+      (do
+        (delete-block-aux! next-block false false)
+        (state/set-edit-content! input-id (str value "" (:block/content next-block)))
+        (util/move-cursor-to input current-pos)))))
+
 (defn keydown-delete-handler
   [e]
   (let [^js input (state/get-input)
-        input-id (state/get-edit-input-id)
         current-pos (util/get-input-pos input)
         value (gobj/get input "value")
         end? (= current-pos (count value))
         current-block (state/get-edit-block)
-        repo (state/get-current-repo)]
+        selected-start (gobj/get input "selectionStart")
+        selected-end (gobj/get input "selectionEnd")]
     (when current-block
-      (if (and end? current-block)
-        (let [right (outliner-core/get-right-node (outliner-core/block current-block))
-              current-block-has-children? (db/has-children? repo (:block/uuid current-block))
-              collapsed? (:collapsed (:block/properties current-block))
-              first-child (outliner-db/get-first-child (db/get-conn repo false) (:db/id current-block))
-              next-block (if (or collapsed? (not current-block-has-children?))
-                           (:data right)
-                           first-child)
-              first-child-has-children? (and first-child
-                                             (db/has-children? repo (:block/uuid first-child)))]
-          (cond
-            (and collapsed? right (db/has-children? repo (tree/-get-id right)))
-            nil
+      (cond
+        (not= selected-start selected-end)
+        (delete-and-update input selected-start selected-end)
 
-            (and (not collapsed?) first-child (db/has-children? repo (:block/uuid first-child)))
-            nil
+        (and end? current-block)
+        (delete-concat current-block)
 
-            :else
-            (do
-              (delete-block-aux! next-block false false)
-              (state/set-edit-content! input-id (str value "" (:block/content next-block)))
-              (util/move-cursor-to input current-pos))))
-       (delete-and-update input current-pos (inc current-pos))))))
+        :else
+        (delete-and-update input current-pos (inc current-pos))))))
 
 (defn keydown-backspace-handler
   [cut? e]
