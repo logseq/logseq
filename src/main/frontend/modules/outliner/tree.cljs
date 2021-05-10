@@ -76,3 +76,19 @@
       (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) @blocks)
             root-block (with-children-and-refs root-block result)]
         [root-block]))))
+
+(defn sort-blocks-aux
+  [parents parent-groups]
+  (mapv (fn [parent]
+          (let [parent-id {:db/id (:db/id parent)}
+                children (db/sort-by-left (get @parent-groups parent-id) parent)
+                _ (swap! parent-groups #(dissoc % parent-id))
+                sorted-nested-children (when (not-empty children) (sort-blocks-aux children parent-groups))]
+                    (if sorted-nested-children [parent sorted-nested-children] [parent])))
+        parents))
+
+(defn sort-blocks
+  "sort blocks by parent & left"
+  [blocks-exclude-root root]
+  (let [parent-groups (atom (group-by #(:block/parent %) blocks-exclude-root))]
+    (flatten (concat (sort-blocks-aux [root] parent-groups) (vals @parent-groups)))))
