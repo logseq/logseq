@@ -1135,23 +1135,23 @@
         [:a.marker-switch
          {:title "Change from NOW to LATER"
           :on-click (set-marker-fn "LATER")}
-         "N"]
+         "NOW"]
         "LATER"
         [:a.marker-switch
          {:title "Change from LATER to NOW"
           :on-click (set-marker-fn "NOW")}
-         "L"]
+         "LATER"]
 
         "TODO"
         [:a.marker-switch
          {:title "Change from TODO to DOING"
           :on-click (set-marker-fn "DOING")}
-         "T"]
+         "TODO"]
         "DOING"
         [:a.marker-switch
          {:title "Change from DOING to TODO"
           :on-click (set-marker-fn "TODO")}
-         "D"]
+         "DOING"]
         nil))))
 
 (defn marker-cp
