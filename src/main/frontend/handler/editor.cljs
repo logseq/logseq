@@ -568,7 +568,7 @@
       (when content
         (str (string/trimr content)
              "\n"
-             (util/format "- %s -> DONE [%s]"
+             (util/format "* %s -> DONE [%s]"
                           marker
                           (date/get-local-date-time-string)))))
     content))
