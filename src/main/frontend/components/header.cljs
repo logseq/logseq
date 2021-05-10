@@ -159,8 +159,7 @@
        {:on-double-click (fn [^js e]
                            (when-let [target (.-target e)]
                              (when (and (util/electron?)
-                                        (or (.. target -classList (contains "cp__header"))
-                                            (. target (closest "#search"))))
+                                        (or (.. target -classList (contains "cp__header"))))
                                (js/window.apis.toggleMaxOrMinActiveWindow))))}
        (left-menu-button {:on-click (fn []
                                       (open-fn)

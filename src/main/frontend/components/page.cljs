@@ -14,6 +14,7 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.editor :as editor]
+            [frontend.components.plugins :as plugins]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.components.export :as export]
@@ -359,6 +360,9 @@
                      svg/search]
                     (when (not config/mobile?)
                       (presentation repo page))
+
+                    (plugins/hook-ui-slot :page-file-mounted nil)
+
                     (ui/dropdown-with-links
                       (fn [{:keys [toggle-fn]}]
                         [:a.opacity-30.hover:opacity-100

@@ -10,6 +10,7 @@
             [goog.object :as gobj]
             [frontend.format :as format]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
             [promesa.core :as p]))
@@ -175,7 +176,8 @@
      ]
     (markdown-headings)
     ;; Allow user to modify or extend, should specify how to extend.
-    (state/get-commands))
+    (state/get-commands)
+    (state/get-plugins-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
 
@@ -385,6 +387,9 @@
         result))))
 
 (defmulti handle-step first)
+
+(defmethod handle-step :editor/hook [[_ event {:keys [pid] :as payload}]]
+  (plugin-handler/hook-plugin-editor event payload pid))
 
 (defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]
