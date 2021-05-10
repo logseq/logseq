@@ -492,7 +492,8 @@
 
 (defn- set-nodes-page&file
   [node target-node txs-state]
-  (let [page (get-in target-node [:data :block/page])
+  (let [page (or (get-in target-node [:data :block/page])
+                 {:db/id (get-in target-node [:data :db/id])}) ; or page block
         file (get-in target-node [:data :block/file])]
     (set-nodes-page&file-aux node page file txs-state)))
 
