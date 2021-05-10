@@ -68,11 +68,12 @@
 ;; persisting DBs between page reloads
 (defn persist! [repo]
   (let [key (datascript-db repo)
-        conn (get-conn repo false)
-        db (d/db conn)
-        db-str (if db (db->string db) "")]
-    (p/let [_ (idb/set-batch! [{:key key :value db-str}])]
-      (state/set-last-persist-transact-id! repo false (get-max-tx-id db)))))
+        conn (get-conn repo false)]
+    (when conn
+      (let [db (d/db conn)
+            db-str (if db (db->string db) "")]
+        (p/let [_ (idb/set-batch! [{:key key :value db-str}])]
+          (state/set-last-persist-transact-id! repo false (get-max-tx-id db)))))))
 
 (defonce persistent-jobs (atom {}))
 
