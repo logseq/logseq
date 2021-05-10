@@ -48,7 +48,8 @@
             [frontend.db.outliner :as outliner-db]
             [frontend.modules.outliner.tree :as tree]
             [frontend.debug :as debug]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.util.marker :as marker]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -521,7 +522,7 @@
 
 (defn- with-timetracking-properties
   [block value]
-  (let [new-marker (first (re-find util/bare-marker-pattern (or value "")))
+  (let [new-marker (first (re-find marker/bare-marker-pattern (or value "")))
         new-marker (if new-marker (string/lower-case (string/trim new-marker)))
         new-marker? (and
                      new-marker
@@ -638,7 +639,7 @@
                                  (let [marker (if (= :now (state/get-preferred-workflow))
                                                 "LATER"
                                                 "TODO")]
-                                   [(util/add-or-update-marker (string/triml content) format marker)  marker]))
+                                   [(marker/add-or-update-marker (string/triml content) format marker)  marker]))
           new-content (string/triml new-content)]
       (let [new-pos (commands/compute-pos-delta-when-change-marker
                      current-input content new-content marker (util/get-input-pos current-input))]
