@@ -1,6 +1,7 @@
 (ns frontend.components.page
   (:require [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.util.marker :as marker]
             [frontend.tools.html-export :as html-export]
             [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
@@ -238,7 +239,7 @@
     (let [current-repo (state/sub :git/current-repo)
          repo (or repo current-repo)
          page-name (string/lower-case path-page-name)
-         marker-page? (util/marker? page-name)
+         marker-page? (marker/marker? page-name)
          priority-page? (contains? #{"a" "b" "c"} page-name)
          block? (util/uuid-string? page-name)
          block-id (and block? (uuid page-name))

@@ -1,5 +1,7 @@
 (ns frontend.commands
   (:require [frontend.util :as util]
+            [frontend.util.marker :as marker]
+            [frontend.util.priority :as priority]
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.search :as search]
@@ -431,7 +433,7 @@
 
 (defn compute-pos-delta-when-change-marker
   [current-input edit-content new-value marker pos]
-  (let [old-marker (some->> (first (re-find util/bare-marker-pattern edit-content))
+  (let [old-marker (some->> (first (re-find marker/bare-marker-pattern edit-content))
                             (string/trim))
         old-marker (if old-marker old-marker "")
         pos-delta (- (count marker)
@@ -456,7 +458,7 @@
                     (count (re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
-                                                 util/marker-pattern
+                                                 marker/marker-pattern
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)
         (let [new-pos (compute-pos-delta-when-change-marker
@@ -470,7 +472,7 @@
       (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
             edit-content (gobj/get current-input "value")
             new-priority (util/format "[#%s]" priority)
-            new-value (string/trim (util/add-or-update-priority edit-content format new-priority))]
+            new-value (string/trim (priority/add-or-update-priority edit-content format new-priority))]
         (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
