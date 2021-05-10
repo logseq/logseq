@@ -52,10 +52,11 @@
 
 (defn- uuid-or-asset?
   [id]
-  (or (util/uuid-string? id)
-      (string/starts-with? id "../assets/")
-      (= id "..")
-      (string/starts-with? id "assets/")))
+  (let [id (str id)]
+    (or (util/uuid-string? id)
+       (string/starts-with? id "../assets/")
+       (= id "..")
+       (string/starts-with? id "assets/"))))
 
 (defn- remove-uuids-and-files!
   [nodes]
@@ -70,10 +71,14 @@
                                     (map :source links)
                                     (map :target links)]))
                        (map string/lower-case))
-        names (db/pull-many '[:block/name :block/original-name] (mapv (fn [page] [:block/name page]) all-pages))
-        names (zipmap (map :block/name names)
-                      (map (fn [x] (get x :block/original-name (:block/name x))) names))
-        nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
+        names (db/pull-many '[:block/name :block/original-name] (mapv (fn [page]
+                                                                        (if (util/uuid-string? page)
+                                                                          [:block/uuid (uuid page)]
+                                                                          [:block/name page])) all-pages))
+        names (zipmap (map (fn [x] (get x :block/name)) names)
+                      (map (fn [x]
+                             (get x :block/original-name (:block/name x))) names))
+        nodes (mapv (fn [node] (assoc node :id (get names (:id node) (:id node)))) nodes)
         links (->>
                (mapv (fn [{:keys [source target]}]
                        (when (and (not (uuid-or-asset? source))
