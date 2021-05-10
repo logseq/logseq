@@ -467,14 +467,15 @@
   [value]
   (set-state! :editor/show-page-search? value)
   (set-state! :editor/show-page-search-hashtag? false))
-(defn set-editor-show-page-search-hashtag!
-  [value]
-  (set-state! :editor/show-page-search? value)
-  (set-state! :editor/show-page-search-hashtag? value))
 
 (defn get-editor-show-page-search?
   []
   (get @state :editor/show-page-search?))
+
+(defn set-editor-show-page-search-hashtag!
+  [value]
+  (set-state! :editor/show-page-search? value)
+  (set-state! :editor/show-page-search-hashtag? value))
 (defn get-editor-show-page-search-hashtag?
   []
   (get @state :editor/show-page-search-hashtag?))

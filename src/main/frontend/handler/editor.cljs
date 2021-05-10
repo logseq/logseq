@@ -2327,7 +2327,8 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (= c " ")
+        (when (and (= c " ")
+                   (not (state/get-editor-show-page-search?)))
           (state/set-editor-show-page-search-hashtag! false))
 
         (when (and @*show-commands (not= key-code 191)) ; not /
