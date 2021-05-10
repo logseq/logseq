@@ -26,11 +26,10 @@
              (db/set-file-last-modified-at! repo path mtime)))
 
           (and (= "change" type)
-               (nil? (db/get-file path)))
+               (not (db/file-exists? repo path)))
           (js/console.warn "Can't get file in the db: " path)
 
           (and (= "change" type)
-               (not= content (db/get-file path))
                (when-let [last-modified-at (db/get-file-last-modified-at repo path)]
                  (> mtime last-modified-at)))
           (let [_ (file-handler/alter-file repo path content {:re-render-root? true
