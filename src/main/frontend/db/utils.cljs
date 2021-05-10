@@ -37,8 +37,10 @@
 
 (defn group-by-page
   [blocks]
-  (some->> blocks
-           (group-by :block/page)))
+  (if (:block/page (first blocks))
+    (some->> blocks
+             (group-by :block/page))
+    blocks))
 
 (defn group-by-file
   [blocks]
