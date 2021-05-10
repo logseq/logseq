@@ -1,26 +1,25 @@
 (ns frontend.modules.shortcut.core
   (:require [clojure.string :as str]
-            [frontend.modules.shortcut.binding :as binding]
-            [frontend.modules.shortcut.handler :refer [handler]]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.modules.shortcut.data-helper :as dh]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [lambdaisland.glogi :as log])
+            [lambdaisland.glogi :as log]
+            [medley.core :as medley])
   (:import [goog.ui KeyboardShortcutHandler]
            [goog.events KeyCodes]))
 
-(def installed (atom []))
-;; (def binding-profile (atom [binding/default binding/custom]))
-(def binding-profile (atom [binding/default]))
+(def *installed (atom {}))
 
 (defn- mod-key [shortcut]
   (str/replace shortcut #"(?i)mod"
                (if util/mac? "meta" "ctrl")))
+
 (defn shortcut-binding
   [id]
   (let [shortcut (or (state/get-shortcut id)
-                     (get (apply merge @binding-profile) id))]
+                     (get (dh/binding-map) id))]
     (cond
       (nil? shortcut)
       (log/error :shortcut/binding-not-found {:id id})
@@ -42,10 +41,11 @@
    KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (defn install-shortcut!
-  [shortcut-map {:keys [set-global-keys? prevent-default?]
-                 :or {set-global-keys? true
+  [handler-id {:keys [set-global-keys? prevent-default? state]
+               :or   {set-global-keys? true
                       prevent-default? false}}]
-  (let [handler (new KeyboardShortcutHandler js/window)]
+  (let [shortcut-map (dh/shortcut-map handler-id state)
+        handler      (new KeyboardShortcutHandler js/window)]
      ;; set arrows enter, tab to global
     (when set-global-keys?
       (.setGlobalKeys handler global-keys))
@@ -60,20 +60,55 @@
 
     (let [f (fn [e]
               (let [dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
-                 ;; trigger fn
+                ;; trigger fn
                 (dispatch-fn e)))
-          unlisten-fn (fn [] (.dispose handler))]
+          install-id (medley/random-uuid)
+          data       {install-id
+                      {:group      handler-id
+                       :dispath-fn f
+                       :handler    handler}}]
 
       (events/listen handler EventType/SHORTCUT_TRIGGERED f)
 
-       ;; return deregister fn
-      (fn []
-        ;; (log/info :shortcut/dispose (into [] (keys shortcut-map)))
-        (unlisten-fn)))))
+      (swap! *installed merge data)
+
+      install-id)))
 
 (defn install-shortcuts!
   []
-  (let [result (->> handler
-                    (map #(install-shortcut! % {}))
-                    doall)]
-    (reset! installed result)))
+  (->> [:shortcut.handler/editor-global
+        :shortcut.handler/global-non-editing-only
+        :shortcut.handler/global-prevent-default]
+       (map #(install-shortcut! % {}))
+       doall))
+
+(defn uninstall-shortcut! [install-id]
+  (let [handler
+        (-> (get @*installed install-id)
+            :handler)]
+    (.dispose ^js handler)
+    (swap! *installed dissoc install-id)))
+
+
+(defn mixin [handler-id]
+  {:did-mount
+   (fn [state]
+     (let [install-id (-> handler-id
+                          (install-shortcut! {:state state}))]
+       (assoc state :shortcut-key install-id)))
+
+   :did-remount (fn [old-state new-state]
+
+                  ;; uninstall
+                  (-> (get old-state :shortcut-key)
+                      uninstall-shortcut!)
+
+                  ;; update new states
+                  (let [install-id (-> handler-id
+                                       (install-shortcut! {:state new-state}))]
+                    (assoc new-state :shortcut-key install-id)))
+   :will-unmount
+   (fn [state]
+     (-> (get state :shortcut-key)
+         uninstall-shortcut!)
+     (dissoc state :shortcut-key))})

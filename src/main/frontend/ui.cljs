@@ -322,12 +322,7 @@
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
-  (mixins/shortcuts
-   #(shortcut/install-shortcut! % {})
-   :shortcut-listener/auto-complete
-   {:auto-complete/prev ui-handler/auto-complete-prev
-    :auto-complete/next ui-handler/auto-complete-next
-    :auto-complete/complete ui-handler/auto-complete-complete})
+  (shortcut/mixin :shortcut.handler/auto-complete)
   [state matched {:keys [on-chosen
                          on-shift-chosen
                          on-enter
