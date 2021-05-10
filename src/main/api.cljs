@@ -6,6 +6,8 @@
             [frontend.util :as util]
             [electron.ipc :as ipc]
             [promesa.core :as p]
+            [sci.core :as sci]
+            [lambdaisland.glogi :as log]
             [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [frontend.state :as state]
@@ -19,6 +21,25 @@
             [cljs.reader]
             [reitit.frontend.easy :as rfe]
             [frontend.db.query-dsl :as query-dsl]))
+
+;; helpers
+(defn- normalize-keyword-for-json
+  [input]
+  (when input
+    (walk/postwalk
+     (fn [a]
+       (cond
+         (keyword? a) (csk/->camelCase (name a))
+         (uuid? a) (str a)
+         :else a)) input)))
+
+(defn- parse-hiccup-ui
+  [input]
+  (when (string? input)
+    (try
+      (sci/eval-string input {:preset :termination-safe})
+      (catch js/Error e
+        (js/console.error "[parse hiccup error]" e) input))))
 
 ;; base
 (def ^:export show_themes
@@ -114,16 +135,6 @@
     (rfe/replace-state
      (keyword k) (bean/->clj params))))
 
-(defn- normalize-keyword-for-json
-  [input]
-  (when input
-    (walk/postwalk
-     (fn [a]
-       (cond
-         (keyword? a) (csk/->camelCase (name a))
-         (uuid? a) (str a)
-         :else a)) input)))
-
 ;; editor
 (def ^:export get_current_block
   (fn []
@@ -164,4 +175,6 @@
 ;; helpers
 (defn ^:export show_msg
   ([content] (show_msg content :success))
-  ([content status] (notification/show! content (keyword status))))
+  ([content status] (let [hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
+                          content (if hiccup? (parse-hiccup-ui content) content)]
+                      (notification/show! content (keyword status)))))
