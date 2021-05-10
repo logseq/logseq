@@ -322,11 +322,9 @@
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (do
-       (->
-        (wrap-parse-block block)
-        (outliner-core/block)
-        (outliner-core/save-node))
+     (let [block (wrap-parse-block block)]
+       (-> (outliner-core/block block)
+           (outliner-core/save-node))
        (when refresh?
          (let [opts {:key :block/change
                      :data [block]}]
