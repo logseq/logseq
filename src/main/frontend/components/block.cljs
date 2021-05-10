@@ -1290,7 +1290,8 @@
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
                      (dissoc properties :title :filters)
-                     properties)]
+                     properties)
+        properties (sort properties)]
     (cond
       (seq properties)
       [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
