@@ -62,10 +62,25 @@ type IHookEvent = {
 
 type IUserHook = (callback: (e: IHookEvent) => void) => void
 type IUserSlotHook = (callback: (e: IHookEvent & UISlotIdentity) => void) => void
+type IEntityID = { id: number }
 
 interface BlockEntity {
+  id: number // db id
   uuid: string
+  anchor: string
+  body: any
+  children: any
+  container: string
   content: string
+  format: 'markdown' | 'org'
+  file: IEntityID
+  left: IEntityID
+  level: number
+  meta: { timestamps: any, properties: any, startPos: number, endPos: number }
+  page: IEntityID
+  parent: IEntityID
+  title: Array<any>
+  unordered: boolean
 
   [key: string]: any
 }
@@ -90,13 +105,13 @@ interface IEditorProxy {
   registerBlockContextMenu: (this: LSPluginUser, tag: string, action: () => void) => boolean
 
   // TODO: Block related APIs
-  getCurrentBlock: () => Promise<BlockIdentity>
+  getCurrentBlock: () => Promise<BlockEntity>
   getCurrentPageBlocksTree: <T = any> () => Promise<T>
 
   insertBlock: (srcBlock: BlockIdentity, content: string, opts: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockIdentity>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts: Partial<{ includeChildren: boolean }>) => Promise<void>
-  getBlock: (srcBlock: BlockIdentity) => Promise<BlockIdentity>
+  getBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity>
   moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts: Partial<{ before: boolean, sibling: boolean }>) => Promise<void>
 
   upsertBlockProperty: (block: BlockIdentity, key: string, value: any) => Promise<void>

@@ -94,27 +94,42 @@
   (fn [pid ^js cmd-actions]
     (when-let [[cmd actions] (bean/->clj cmd-actions)]
       (plugin-handler/register-plugin-slash-command
-        pid [cmd (mapv #(into [(keyword (first %))]
-                              (rest %)) actions)]))))
+       pid [cmd (mapv #(into [(keyword (first %))]
+                             (rest %)) actions)]))))
 
 (def ^:export register_plugin_simple_command
   (fn [pid ^js cmd-action]
     (when-let [[cmd action] (bean/->clj cmd-action)]
       (plugin-handler/register-plugin-simple-command
-        pid cmd (assoc action 0 (keyword (first action)))))))
+       pid cmd (assoc action 0 (keyword (first action)))))))
 
 ;; app
 (def ^:export push_state
   (fn [^js k ^js params]
     (rfe/push-state
-      (keyword k) (bean/->clj params))))
+     (keyword k) (bean/->clj params))))
 
 (def ^:export replace_state
   (fn [^js k ^js params]
     (rfe/replace-state
-      (keyword k) (bean/->clj params))))
+     (keyword k) (bean/->clj params))))
+
+(defn- normalize-keyword-for-json
+  [input]
+  (when input
+    (walk/postwalk
+     (fn [a]
+       (cond
+         (keyword? a) (csk/->camelCase (name a))
+         (uuid? a) (str a)
+         :else a)) input)))
 
 ;; editor
+(def ^:export get_current_block
+  (fn []
+    (when-let [block (state/get-edit-block)]
+      (bean/->js (normalize-keyword-for-json block)))))
+
 (def ^:export get_current_page_blocks_tree
   (fn []
     (when-let [page (state/get-current-page)]
@@ -125,11 +140,7 @@
                          blocks)
             blocks (outliner-tree/blocks->vec-tree blocks (:db/id (db/get-page (state/get-current-page))))
             ;; clean key
-            blocks (walk/postwalk
-                     (fn [a]
-                       (if (keyword? a)
-                         (csk/->camelCase (name a))
-                         a)) blocks)]
+            blocks (normalize-keyword-for-json blocks)]
         (bean/->js blocks)))))
 
 ;; db
