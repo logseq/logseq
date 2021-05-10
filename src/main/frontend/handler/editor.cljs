@@ -47,7 +47,8 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.db.outliner :as outliner-db]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [datascript.core :as d]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1016,7 +1017,9 @@
     (if block-id
       (let [repo (state/get-current-repo)
             block-parent (db/get-block-parent repo block-id)]
-        (if-let [id (:block/uuid block-parent)]
+        (if-let [id (and
+                      (nil? (:block/name block-parent))
+                      (:block/uuid block-parent))]
           (route-handler/redirect! {:to :page
                                     :path-params {:name (str id)}})
           (let [page-id (-> (db/entity [:block/uuid block-id])
