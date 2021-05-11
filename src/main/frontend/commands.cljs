@@ -196,13 +196,18 @@
   ([type optional]
    (let [format (get state/get-edit-block :block/format :markdown)
          org? (= format :org)
-         left (if org?
+         t (string/lower-case type)
+         markdown-src? (and (= format :markdown) (= t "src"))
+         left (cond
+                markdown-src?
+                "```"
+
+                :else
                 (util/format "#+BEGIN_%s"
-                             (string/upper-case type))
-                (str "```" (let [t (string/lower-case type)] (if (= t "src") "" t))))
-         right (if org?
-                 (util/format "\n#+END_%s" (string/upper-case type))
-                 (str "\n```"))
+                             (string/upper-case type)))
+         right (if markdown-src?
+                 (str "\n```")
+                 (util/format "\n#+END_%s" (string/upper-case type)))
          template (str
                    left
                    (if optional (str " " optional) "")

@@ -322,11 +322,9 @@
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (do
-       (->
-        (wrap-parse-block block)
-        (outliner-core/block)
-        (outliner-core/save-node))
+     (let [block (wrap-parse-block block)]
+       (-> (outliner-core/block block)
+           (outliner-core/save-node))
        (when refresh?
          (let [opts {:key :block/change
                      :data [block]}]
@@ -1862,8 +1860,13 @@
           block-uuid (:block/uuid block)
           including-parent? (not (false? (:including-parent (:block/properties block))))
           blocks (if including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
-          level-blocks-map (blocks-with-level blocks)
-          tree (blocks-vec->tree (vals level-blocks-map))]
+          level-blocks (vals (blocks-with-level blocks))
+          grouped-blocks (group-by #(= db-id (:db/id %)) level-blocks)
+          root-block (or (first (get grouped-blocks true)) (assoc (db/pull db-id) :level 0))
+          blocks-exclude-root (get grouped-blocks false)
+          sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
+          result-blocks (if including-parent? sorted-blocks (drop 1 sorted-blocks))
+          tree (blocks-vec->tree result-blocks)]
       (paste-block-tree-at-point tree [:template :including-parent]
                                  (fn [content]
                                    (->> content
@@ -2327,7 +2330,8 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (= c " ")
+        (when (and (= c " ")
+                   (not (state/get-editor-show-page-search?)))
           (state/set-editor-show-page-search-hashtag! false))
 
         (when (and @*show-commands (not= key-code 191)) ; not /
