@@ -278,6 +278,12 @@
              :db/other-tx page-tx))
     block))
 
+(defn- remove-non-existed-refs!
+  [refs]
+  (remove (fn [x] (and (vector? x)
+                      (= :block/uuid (first x))
+                      (nil? (db/entity x)))) refs))
+
 (defn- wrap-parse-block
   [{:block/keys [content format parent left page uuid pre-block?] :as block}]
   (let [block (or (db/pull (:db/id block)) block)
@@ -312,6 +318,7 @@
         block (if (and first-block? (:block/pre-block? block))
                 block
                 (dissoc block :block/pre-block?))
+        block (update block :block/refs remove-non-existed-refs!)
         block (attach-page-properties-if-exists! block)
         new-properties (merge
                         (select-keys properties text/built-in-properties)
