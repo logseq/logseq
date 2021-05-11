@@ -279,8 +279,10 @@
     block))
 
 (defn- wrap-parse-block
-  [{:block/keys [content format parent left page uuid pre-block? properties] :as block}]
-  (let [real-content (:block/content (db/entity (:db/id block)))
+  [{:block/keys [content format parent left page uuid pre-block?] :as block}]
+  (let [block (or (db/pull (:db/id block)) block)
+        properties (:block/properties block)
+        real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
                   (text/with-built-in-properties properties content format)
                   content)
@@ -305,7 +307,8 @@
                              :else
                              (let [content' (str (config/get-block-pattern format) (if heading? " " "\n") content)]
                                [content content']))
-        block (block/parse-block (assoc block :block/content content'))
+        block (block/parse-block (-> (assoc block :block/content content')
+                                     (dissoc :block/properties)))
         block (if (and first-block? (:block/pre-block? block))
                 block
                 (dissoc block :block/pre-block?))
