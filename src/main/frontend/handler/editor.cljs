@@ -469,9 +469,8 @@
         current-block (wrap-parse-block current-block)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
-        next-block (-> (merge block new-m)
-                       (dissoc :db/id :block/properties :block/pre-block? :block/meta
-                               :block/heading-level :block/type)
+        next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
+                                                  :block/page :block/level :block/file :block/journal?]) new-m)
                        (wrap-parse-block))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
