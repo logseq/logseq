@@ -233,7 +233,7 @@
                 (t :help/working-with-lists)]]
           [:th (t :help/shortcut)]]]
         [:tbody
-         [:tr [:td (t :help/indent-block-tab)] [:td "Tab"]]
+         [:tr [:td (t :shortcut.editor/indent)] [:td "Tab"]]
          [:tr [:td (t :help/unindent-block)] [:td "Shift-Tab"]]
          [:tr [:td (t :help/move-block-up)] [:td (util/->platform-shortcut "Alt-Shift-Up")]]
          [:tr [:td (t :help/move-block-down)] [:td (util/->platform-shortcut "Alt-Shift-Down")]]

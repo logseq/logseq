@@ -52,9 +52,13 @@
      :fn      editor-handler/editor-delete}
     :editor/indent
     {:binding "tab"
+     :i18n    :help/indent-block-tab
+     :tags    #{:shortcut.tag/basics}
      :fn      (editor-handler/keydown-tab-handler :right)}
     :editor/outindent
     {:binding "shift+tab"
+     :i18n    :help/unindent-block
+     :tags    #{:shortcut.tag/basics}
      :fn      (editor-handler/keydown-tab-handler :left)}
     :editor/new-block
     {:binding "enter"
@@ -85,15 +89,23 @@
      :fn      editor-handler/open-link-in-sidebar!}
     :editor/bold
     {:binding "mod+b"
+     :i18n    :bold
+     :tags    #{:shortcut.tag/formatting}
      :fn      editor-handler/bold-format!}
     :editor/italics
     {:binding "mod+i"
+     :i18n    :italics
+     :tags    #{:shortcut.tag/formatting}
      :fn      editor-handler/italics-format!}
     :editor/highlight
     {:binding "mod+shift+h"
+     :i18n    :highlight
+     :tags    #{:shortcut.tag/formatting}
      :fn      editor-handler/highlight-format!}
     :editor/insert-link
     {:binding "mod+shift+k"
+     :tags    #{:shortcut.tag/formatting}
+     :i18n    :html-link
      :fn      editor-handler/html-link-format!}
     :editor/select-all-blocks
     {:binding "mod+shift+a"

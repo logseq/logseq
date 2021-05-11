@@ -12,28 +12,6 @@
 
 (def *installed (atom {}))
 
-(defn- mod-key [shortcut]
-  (str/replace shortcut #"(?i)mod"
-               (if util/mac? "meta" "ctrl")))
-
-(defn shortcut-binding
-  [id]
-  (let [shortcut (or (state/get-shortcut id)
-                     (get (dh/binding-map) id))]
-    (cond
-      (nil? shortcut)
-      (log/error :shortcut/binding-not-found {:id id})
-
-      (false? shortcut)
-      (log/debug :shortcut/disabled {:id id})
-
-      :else
-      (->>
-       (if (string? shortcut)
-         [shortcut]
-         shortcut)
-       (mapv mod-key)))))
-
 (def global-keys #js
   [KeyCodes/TAB
    KeyCodes/ENTER
@@ -55,7 +33,7 @@
     ;; register shortcuts
     (doseq [[id _] shortcut-map]
       ;; (log/info :shortcut/install-shortcut {:id id :shortcut (shortcut-binding id)})
-      (doseq [k (shortcut-binding id)]
+      (doseq [k (dh/shortcut-binding id)]
         (.registerShortcut handler (util/keyname id) k)))
 
     (let [f (fn [e]

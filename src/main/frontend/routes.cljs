@@ -7,7 +7,8 @@
             [frontend.components.journal :as journal]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
-            [frontend.components.external :as external]))
+            [frontend.components.external :as external]
+            [frontend.components.shortcut :as shortcut]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -65,4 +66,8 @@
 
    ["/all-journals"
     {:name :all-journals
-     :view journal/all-journals}]])
+     :view journal/all-journals}]
+
+   ["/helper/shortcut"
+    {:name :shortcut
+     :view shortcut/shortcut}]])
