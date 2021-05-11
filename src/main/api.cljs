@@ -43,6 +43,17 @@
         (js/console.error "[parse hiccup error]" e) input))))
 
 ;; base
+(def ^:export get_app_configs
+  (fn []
+    (bean/->js
+      (normalize-keyword-for-json
+        {:preferred-language (:preferred-language @state/state)
+         :preferred-format   (state/get-preferred-format)
+         :preferred-workflow (state/get-preferred-workflow)
+         :preferred-todo     (state/get-preferred-todo)
+         :current-graph (state/get-current-repo)
+         :me (state/get-me)}))))
+
 (def ^:export show_themes
   (fn []
     (plugins/open-select-theme!)))

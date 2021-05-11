@@ -68,6 +68,14 @@ type BlockUUID = string
 
 type IEntityID = { id: BlockID }
 
+interface AppConfigs {
+  preferredFormat: 'markdown' | 'org'
+  preferredLanguage: string
+  preferredWorkflow: string
+
+  [key: string]: any
+}
+
 interface BlockEntity {
   id: number // db id
   uuid: string
@@ -94,11 +102,18 @@ type SlashCommandActionTag = 'editor/input' | 'editor/hook' | 'editor/clear-curr
 type SlashCommandAction = [SlashCommandActionTag, ...args: any]
 
 interface IAppProxy {
+  getUserState: () => Promise<any>
+  getAppConfigs: () => Promise<AppConfigs>
+
+  // router
   pushState: (k: string, params?: {}) => void
   replaceState: (k: string, params?: {}) => void
-  getUserState: () => Promise<any>
+
+  // ui
   showMsg: (content: string, status?: 'success' | 'warning' | string) => void
   setZoomFactor: (factor: number) => void
+
+  // events
   onThemeModeChanged: IUserHook
   onPageFileMounted: IUserSlotHook
   onBlockRendererMounted: IUserSlotHook
