@@ -142,7 +142,8 @@
           file-content [{:file/path file}]
           tx (if (contains? config/mldoc-support-formats format)
                (let [delete-blocks (db/delete-file-blocks! repo-url file)
-                     [pages block-ids blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)]
+                     [pages block-ids blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
+                     pages (extract-handler/with-ref-pages pages blocks)]
                  (concat file-content delete-blocks pages block-ids blocks))
                file-content)
           tx (concat tx [(let [t (tc/to-long (t/now))]

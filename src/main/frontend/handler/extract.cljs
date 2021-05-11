@@ -163,6 +163,24 @@
        format ast properties
        file content utf8-content journal?))))
 
+(defn with-block-uuid
+  [pages]
+  (->> (util/distinct-by :block/name pages)
+       (map (fn [page]
+              (if (:block/uuid page)
+                page
+                (assoc page :block/uuid (db/new-block-id)))))))
+
+(defn with-ref-pages
+  [pages blocks]
+  (let [ref-pages (->> (mapcat :block/refs blocks)
+                       (filter :block/name))]
+    (->> (concat pages ref-pages)
+         (group-by :block/name)
+         vals
+         (map (partial apply merge))
+         (with-block-uuid))))
+
 (defn extract-all-blocks-pages
   [repo-url files metadata]
   (when (seq files)
@@ -176,17 +194,7 @@
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
-              ref-pages (->> (mapcat :block/refs blocks)
-                             (filter :block/name))
-              pages (->> (concat pages ref-pages)
-                         (group-by :block/name)
-                         vals
-                         (map (partial apply merge)))
-              pages (->> (util/distinct-by :block/name pages)
-                         (map (fn [page]
-                                (if (:block/uuid page)
-                                  page
-                                  (assoc page :block/uuid (db/new-block-id))))))
+              pages (with-ref-pages pages blocks)
               blocks (map (fn [block]
                             (let [id (:block/uuid block)
                                   properties (get-in metadata [:block/properties id])]
