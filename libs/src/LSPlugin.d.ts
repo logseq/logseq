@@ -62,7 +62,11 @@ type IHookEvent = {
 
 type IUserHook = (callback: (e: IHookEvent) => void) => void
 type IUserSlotHook = (callback: (e: IHookEvent & UISlotIdentity) => void) => void
-type IEntityID = { id: number }
+
+type BlockID = number
+type BlockUUID = string
+
+type IEntityID = { id: BlockID }
 
 interface BlockEntity {
   id: number // db id
@@ -85,7 +89,7 @@ interface BlockEntity {
   [key: string]: any
 }
 
-type BlockIdentity = 'string' | Pick<BlockEntity, 'uuid'>
+type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
 type SlashCommandActionTag = 'editor/input' | 'editor/hook' | 'editor/clear-current-slash'
 type SlashCommandAction = [SlashCommandActionTag, ...args: any]
 
@@ -111,7 +115,7 @@ interface IEditorProxy {
   insertBlock: (srcBlock: BlockIdentity, content: string, opts: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockIdentity>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts: Partial<{ includeChildren: boolean }>) => Promise<void>
-  getBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity>
+  getBlock: (srcBlock: BlockIdentity | BlockID) => Promise<BlockEntity>
   moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts: Partial<{ before: boolean, sibling: boolean }>) => Promise<void>
 
   upsertBlockProperty: (block: BlockIdentity, key: string, value: any) => Promise<void>

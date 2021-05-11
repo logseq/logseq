@@ -1,6 +1,7 @@
 (ns ^:no-doc api
   (:require [frontend.db :as db]
             [frontend.db.model :as db-model]
+            [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.util :as util]
@@ -140,6 +141,14 @@
   (fn []
     (when-let [block (state/get-edit-block)]
       (bean/->js (normalize-keyword-for-json block)))))
+
+(def ^:export get_block
+  (fn [id-or-uuid]
+    (when-let [ret (cond
+                     (number? id-or-uuid) (db-utils/pull id-or-uuid)
+                     (string? id-or-uuid) (db-model/query-block-by-uuid id-or-uuid))]
+      (when (contains? ret :block/uuid)
+        (bean/->js (normalize-keyword-for-json ret))))))
 
 (def ^:export get_current_page_blocks_tree
   (fn []
