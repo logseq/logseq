@@ -121,7 +121,7 @@
                     (:name item))
                  result)
                 (remove nil?)
-                (util/distinct-by :name))))))))
+                (distinct))))))))
 
 (defn file-search
   ([q]
