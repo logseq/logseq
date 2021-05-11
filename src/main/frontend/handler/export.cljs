@@ -150,7 +150,7 @@
         [owner repo-name] (util/get-git-owner-and-repo repo)
         repo-name (str owner "-" repo-name)]
     (when (seq files)
-      (p/let [zipfile (zip/make-zip repo-name files)]
+      (p/let [zipfile (zip/make-zip repo-name files repo)]
         (when-let [anchor (gdom/getElement "download-as-zip")]
           (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
           (.setAttribute anchor "download" (.-name zipfile))
@@ -441,7 +441,7 @@
             files
             (export-files-as-markdown repo files heading-to-list?)
             zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files)]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
           (when-let [anchor (gdom/getElement "export-as-markdown")]
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
             (.setAttribute anchor "download" (.-name zipfile))
@@ -489,7 +489,7 @@
   (when repo
     (when-let [files (get-md-file-contents repo)]
       (let [zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files)]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
           (when-let [anchor (gdom/getElement "convert-markdown-to-unordered-list-or-heading")]
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
             (.setAttribute anchor "download" (.-name zipfile))
