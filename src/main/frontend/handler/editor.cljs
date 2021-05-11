@@ -309,11 +309,15 @@
         block (if (and first-block? (:block/pre-block? block))
                 block
                 (dissoc block :block/pre-block?))
-        block (attach-page-properties-if-exists! block)]
+        block (attach-page-properties-if-exists! block)
+        new-properties (merge
+                        (select-keys properties text/built-in-properties)
+                        (:block/properties block))]
     (-> block
        (dissoc :block/top?
                :block/block-refs-count)
-       (assoc :block/content content))))
+       (assoc :block/content content
+              :block/properties new-properties))))
 
 (defn- save-block-inner!
   [repo block value {:keys [refresh?]

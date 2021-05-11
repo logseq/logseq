@@ -133,7 +133,6 @@
     :block/type
     :block/title
     :block/body
-    :block/properties
     :block/created-at
     :block/updated-at
     }
