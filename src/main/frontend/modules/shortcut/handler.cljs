@@ -66,6 +66,7 @@
     m/prevent-default-behavior
     {:ui/toggle-brackets config-handler/toggle-ui-show-brackets!
      :go/search route-handler/go-to-search!
+     :go/search-page #(route-handler/go-to-search! :page)
      :go/journals route-handler/go-to-journals!
 
      :search/re-index search-handler/rebuild-indices!

@@ -94,6 +94,7 @@
    :ui/refresh ["f5" "mod+r" "mod+shift+r"]
 
    :go/search "mod+u"
+   :go/search-page "mod+shift+u"
    :go/journals (if mac? "mod+j" "alt+j")
 
    :git/commit "g c"
