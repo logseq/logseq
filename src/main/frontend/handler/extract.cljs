@@ -145,23 +145,25 @@
       (log/error :exception e))))
 
 (defn extract-blocks-pages
-  [repo-url file content utf8-content]
-  (if (string/blank? content)
-    []
-    (let [journal? (util/journal? file)
-          format (format/get-format file)
-          ast (mldoc/->edn content
-                           (mldoc/default-config format))
-          first-block (first ast)
-          properties (let [properties (and (seq first-block)
-                                           (= "Properties" (ffirst first-block))
-                                           (last (first first-block)))]
-                       (if (and properties (seq properties))
-                         properties))]
-      (extract-pages-and-blocks
-       repo-url
-       format ast properties
-       file content utf8-content journal?))))
+  ([repo-url file content]
+   (extract-blocks-pages repo-url file content (utf8/encode content)))
+  ([repo-url file content utf8-content]
+   (if (string/blank? content)
+     []
+     (let [journal? (util/journal? file)
+           format (format/get-format file)
+           ast (mldoc/->edn content
+                            (mldoc/default-config format))
+           first-block (first ast)
+           properties (let [properties (and (seq first-block)
+                                            (= "Properties" (ffirst first-block))
+                                            (last (first first-block)))]
+                        (if (and properties (seq properties))
+                          properties))]
+       (extract-pages-and-blocks
+        repo-url
+        format ast properties
+        file content utf8-content journal?)))))
 
 (defn with-block-uuid
   [pages]

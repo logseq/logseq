@@ -31,7 +31,7 @@
     "[[foo]]" ["[[foo]]"]
     "[[nested [[foo]]]]" ["[[nested [[foo]]]]"]))
 
-(defn split-page-refs-without-brackets
+(deftest split-page-refs-without-brackets
   []
   (are [x y] (= (text/split-page-refs-without-brackets x) y)
     "foobar" "foobar"
@@ -49,7 +49,7 @@
     "#tag1,#tag2" #{"tag1" "tag2"}
     "[[Jan 26th, 2021]], hello" #{"hello" "Jan 26th, 2021"}))
 
-(defn extract-level-spaces
+(deftest extract-level-spaces
   []
   (testing "markdown"
     (are [x y] (= (text/extract-level-spaces x :markdown) y)
@@ -62,7 +62,7 @@
       "**   foobar" "**   "
       "*********************  foobar" "*********************  ")))
 
-(defn remove-level-spaces
+(deftest remove-level-spaces
   []
   (testing "markdown"
     (are [x y] (= (text/remove-level-spaces x :markdown true) y)
@@ -85,7 +85,7 @@
       "**foobar" "foobar"
       "*********************foobar" "foobar")))
 
-(defn append-newline-after-level-spaces
+(deftest append-newline-after-level-spaces
   []
   (are [x y] (= (text/append-newline-after-level-spaces x :markdown) y)
     "# foobar" "#\nfoobar"
@@ -97,7 +97,7 @@
     "* foobar\nfoo" "*\nfoobar\nfoo"
     "** foobar\nfoo" "**\nfoobar\nfoo"))
 
-(defn remove-id-property
+(deftest remove-id-property
   []
   (are [x y] (= (text/remove-id-property! :org x) y)
     "hello\n:PROPERTIES:\n:id: f9873a81-07b9-4246-b910-53a6f5ec7e04\n:END:\n"
@@ -106,7 +106,7 @@
     "hello\n:PROPERTIES:\n:id: f9873a81-07b9-4246-b910-53a6f5ec7e04\na: b\n:END:\n"
     "hello\n:PROPERTIES:\na: b\n:END:"))
 
-(defn test-remove-properties!
+(deftest test-remove-properties!
   []
   (testing "properties with non-blank lines"
     (are [x y] (= x y)
@@ -123,7 +123,7 @@
       (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n\na:b\n:END:\n")
       "** hello")))
 
-(defn test-insert-property
+(deftest test-insert-property
   []
   (are [x y] (= x y)
     (text/insert-property! :org "hello" "a" "b")
@@ -138,7 +138,7 @@
     (text/insert-property! :org "hello\n:PROPERTIES:\n:a: b\n:END: world\n" "c" "d")
     "hello\n:PROPERTIES:\n:c: d\n:END:\n:PROPERTIES:\n:a: b\n:END: world\n"))
 
-(defn test->new-properties
+(deftest test->new-properties
   []
   (are [x y] (= (text/->new-properties x) y)
     ":PROPERTIES:\n:foo: bar\n:END:"
