@@ -1165,6 +1165,7 @@
                 (let [e (db-utils/entity [:block/uuid id])]
                   {:db/id (:db/id e)
                    :block/uuid id
+                   :block/page (:db/id (:block/page e))
                    :block/content (:block/content e)
                    :block/format (:block/format e)}))))))
 

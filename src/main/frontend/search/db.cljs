@@ -14,11 +14,12 @@
   (nil? (get @indices repo)))
 
 (defn block->index
-  [{:block/keys [uuid content format] :as block}]
+  [{:block/keys [uuid content format page] :as block}]
   (when-let [result (->> (text/remove-level-spaces content format)
                          (text/remove-id-property! format))]
     {:id (:db/id block)
      :uuid (str uuid)
+     :page page
      :content result}))
 
 (defn build-blocks-indice
@@ -32,7 +33,7 @@
   [repo]
   (let [blocks (build-blocks-indice repo)
         indice (fuse. blocks
-                      (clj->js {:keys ["uuid" "content"]
+                      (clj->js {:keys ["uuid" "content" "page"]
                                 :shouldSort true
                                 :tokenize true
                                 :minMatchCharLength 1
