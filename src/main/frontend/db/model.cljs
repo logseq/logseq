@@ -716,7 +716,8 @@
                                     (string? title)
                                     title))
             file-name (when-let [file-name (last (string/split file #"/"))]
-                        (first (util/split-last "." file-name)))]
+                        (-> (first (util/split-last "." file-name))
+                            (string/replace "." "/")))]
         (or property-name
             (if (= (state/page-name-order) "heading")
               (or first-block-name file-name)
