@@ -865,11 +865,12 @@
         ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
         (= name "bilibili")
         (when-let [url (first arguments)]
-          (let [id-regex #"https?://www\.bilibili\.com/video/([\w\W]+)"]
+          (let [id-regex #"https?://www\.bilibili\.com/video/([^? ]+)"]
             (when-let [id (cond
                             (<= (count url) 15) url
                             :else
                             (last (re-find id-regex url)))]
+              (prn {:id id})
               (when-not (string/blank? id)
                 (let [width (min (- (util/get-width) 96)
                                  560)
