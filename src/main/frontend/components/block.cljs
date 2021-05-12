@@ -1778,7 +1778,10 @@
       (if (nil? checkbox)
         (->elem
          :li
-         {:checked checked?}
+         (cond->
+           {:checked checked?}
+           number
+           (assoc :value number))
          (vec-cat
           [(->elem
             :p

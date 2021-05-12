@@ -526,26 +526,30 @@
 
 (defn with-parent-and-left
   [page-id blocks]
-  (loop [blocks blocks
+  (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
          parents [{:page/id page-id     ; db id or lookup ref [:block/name "xxx"]
-                   :block/level 0}]
+                   :block/level 0
+                   :block/level-spaces 0}]
          result []]
     (if (empty? blocks)
-      result
+      (map #(dissoc % :block/level-spaces) result)
       (let [[block & others] blocks
-            cur-level (:block/level block)
+            level-spaces (:block/level-spaces block)
             {:block/keys [uuid level parent unordered] :as last-parent} (last parents)
+            parent-spaces (:block/level-spaces last-parent)
             [blocks parents result]
             (cond
-              (= cur-level level)        ; sibling
+              (= level-spaces parent-spaces)        ; sibling
               (let [block (assoc block
                                  :block/parent parent
-                                 :block/left [:block/uuid uuid])
+                                 :block/left [:block/uuid uuid]
+                                 :block/level level
+                                 )
                     parents' (conj (vec (butlast parents)) block)
                     result' (conj result block)]
                 [others parents' result'])
 
-              (> cur-level level)         ; child
+              (> level-spaces parent-spaces)         ; child
               (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
                     block (cond->
                             (assoc block
@@ -556,14 +560,16 @@
                             ;;   - a
                             ;; - b
                             ;; What if the input indentation is two spaces instead of 4 spaces
-                            (> (- cur-level level) (if unordered 4 1))
+                            (>= (- level-spaces parent-spaces) 1)
                             (assoc :block/level (inc level)))
                     parents' (conj parents block)
                     result' (conj result block)]
                 [others parents' result'])
 
-              (< cur-level level)         ; outdent
-              (let [parents' (vec (filter (fn [p] (<= (:block/level p) cur-level)) parents))]
+              (< level-spaces parent-spaces)         ; outdent
+              (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
+                    blocks (cons (assoc (first blocks) :block/level (dec level))
+                                 (rest blocks))]
                 [blocks parents' result]))]
         (recur blocks parents result)))))
 

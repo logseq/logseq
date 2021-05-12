@@ -48,7 +48,8 @@
             [frontend.db.outliner :as outliner-db]
             [frontend.modules.outliner.tree :as tree]
             [frontend.debug :as debug]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.util.marker :as marker]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -278,9 +279,17 @@
              :db/other-tx page-tx))
     block))
 
+(defn- remove-non-existed-refs!
+  [refs]
+  (remove (fn [x] (and (vector? x)
+                      (= :block/uuid (first x))
+                      (nil? (db/entity x)))) refs))
+
 (defn- wrap-parse-block
-  [{:block/keys [content format parent left page uuid pre-block? properties] :as block}]
-  (let [real-content (:block/content (db/entity (:db/id block)))
+  [{:block/keys [content format parent left page uuid pre-block?] :as block}]
+  (let [block (or (db/pull (:db/id block)) block)
+        properties (:block/properties block)
+        real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
                   (text/with-built-in-properties properties content format)
                   content)
@@ -305,15 +314,21 @@
                              :else
                              (let [content' (str (config/get-block-pattern format) (if heading? " " "\n") content)]
                                [content content']))
-        block (block/parse-block (assoc block :block/content content'))
+        block (block/parse-block (-> (assoc block :block/content content')
+                                     (dissoc :block/properties)))
         block (if (and first-block? (:block/pre-block? block))
                 block
                 (dissoc block :block/pre-block?))
-        block (attach-page-properties-if-exists! block)]
+        block (update block :block/refs remove-non-existed-refs!)
+        block (attach-page-properties-if-exists! block)
+        new-properties (merge
+                        (select-keys properties text/built-in-properties)
+                        (:block/properties block))]
     (-> block
        (dissoc :block/top?
                :block/block-refs-count)
-       (assoc :block/content content))))
+       (assoc :block/content content
+              :block/properties new-properties))))
 
 (defn- save-block-inner!
   [repo block value {:keys [refresh?]
@@ -454,9 +469,8 @@
         current-block (wrap-parse-block current-block)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
-        next-block (-> (merge block new-m)
-                       (dissoc :db/id :block/properties :block/pre-block? :block/meta
-                               :block/heading-level :block/type)
+        next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
+                                                  :block/page :block/level :block/file :block/journal?]) new-m)
                        (wrap-parse-block))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
@@ -507,7 +521,7 @@
 
 (defn- with-timetracking-properties
   [block value]
-  (let [new-marker (first (re-find util/bare-marker-pattern (or value "")))
+  (let [new-marker (first (re-find marker/bare-marker-pattern (or value "")))
         new-marker (if new-marker (string/lower-case (string/trim new-marker)))
         new-marker? (and
                      new-marker
@@ -624,7 +638,7 @@
                                  (let [marker (if (= :now (state/get-preferred-workflow))
                                                 "LATER"
                                                 "TODO")]
-                                   [(util/add-or-update-marker (string/triml content) format marker)  marker]))
+                                   [(marker/add-or-update-marker (string/triml content) format marker)  marker]))
           new-content (string/triml new-content)]
       (let [new-pos (commands/compute-pos-delta-when-change-marker
                      current-input content new-content marker (util/get-input-pos current-input))]

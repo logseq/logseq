@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.util :as util :refer-macros [profile] :refer [react]]
+            [frontend.util.marker :as marker]
             [clojure.string :as string]
             [frontend.config :as config]
             [datascript.core :as d]
@@ -188,7 +189,7 @@
         route-name (get-in match [:data :name])]
     (when (= route-name :page)
       (when-let [page-name (get-in match [:path-params :name])]
-        (and (util/marker? page-name)
+        (and (marker/marker? page-name)
              (string/upper-case page-name))))))
 
 (defn get-related-keys

@@ -28,7 +28,7 @@
    :editor/bold "mod+b"
    :editor/italics "mod+i"
    :editor/highlight "mod+shift+h"
-   :editor/insert-link "mod+shift+k"
+   :editor/insert-link "mod+k"
    :editor/select-all-blocks "mod+shift+a"
    :editor/move-block-up (if mac? "mod+shift+up"  "alt+shift+up")
    :editor/move-block-down (if mac? "mod+shift+down" "alt+shift+down")
@@ -94,6 +94,7 @@
    :ui/refresh ["f5" "mod+r" "mod+shift+r"]
 
    :go/search "mod+u"
+   :go/search-page "mod+shift+u"
    :go/journals (if mac? "mod+j" "alt+j")
 
    :git/commit "g c"
