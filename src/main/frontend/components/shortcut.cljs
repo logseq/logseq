@@ -2,39 +2,44 @@
   (:require [rum.core :as rum]
             [frontend.context.i18n :as i18n]
             [frontend.util :as util]
-            [frontend.modules.shortcut.data-helper :as dh]))
+            [frontend.state :as state]
+            [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.modules.shortcut.config :as config]))
+(def *shortcut-config (rum/cursor-in state/state [:config (state/get-current-repo) :shortcuts]))
 
-(rum/defc shortcut-table
-  [tag]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    [:table
-     [:thead
-      [:tr
-       [:th [:b (t tag)]]
-       [:th (t :help/shortcut)]]]
-     [:tbody
-      (map (fn [[k {:keys [i18n binding]}]]
-             [:tr {:key k}
-              [:td (t i18n)]
-              [:td binding]])
-           (dh/binding-by-tag tag))]]))
+(rum/defc shortcut-table < rum/reactive
+  [name]
+  (let [_ (rum/react *shortcut-config)]
+    (rum/with-context [[t] i18n/*tongue-context*]
+      [:div
+       [:table
+        [:thead
+         [:tr
+          [:th [:b (t name)]]
+          [:th (t :help/shortcut)]]]
+        [:tbody
+         (map (fn [[k {:keys [i18n binding]}]]
+                [:tr {:key k}
+                 [:td (t i18n)]
+                 [:td binding]])
+              (dh/binding-by-category name))]]])))
 
 (rum/defc shortcut
   []
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div
      [:h1.title (t :shortcut/page-title)]
-       [:table
-        [:thead
-         [:tr
-          [:th [:b (t :help/shortcuts-triggers)]]
-          [:th (t :help/shortcut)]]]
-        [:tbody
-         [:tr [:td (t :help/slash-autocomplete)] [:td "/"]]
-         [:tr [:td (t :help/block-content-autocomplete)] [:td "<"]]
-         [:tr [:td (t :help/reference-autocomplete)] [:td "[[]]"]]
-         [:tr [:td (t :help/block-reference)] [:td "(())"]]]]
-     (shortcut-table :shortcut.tag/basics)
+     [:table
+      [:thead
+       [:tr
+        [:th [:b (t :help/shortcuts-triggers)]]
+        [:th (t :help/shortcut)]]]
+      [:tbody
+       [:tr [:td (t :help/slash-autocomplete)] [:td "/"]]
+       [:tr [:td (t :help/block-content-autocomplete)] [:td "<"]]
+       [:tr [:td (t :help/reference-autocomplete)] [:td "[[]]"]]
+       [:tr [:td (t :help/block-reference)] [:td "(())"]]]]
+     (shortcut-table :shortcut.category/basics)
 
      #_
      [:table
@@ -60,27 +65,27 @@
        [:tr [:td (t :select-block-above)] [:td "Shift-Up"]]
        [:tr [:td (t :select-block-below)] [:td "Shift-Down"]]
        [:tr [:td (t :select-all-blocks)] [:td (util/->platform-shortcut "Ctrl-Shift-a")]]]]
-       [:table
-        [:thead
-         [:tr
-          [:th [:b (t :general)]]
-          [:th (t :help/shortcut)]]]
-        [:tbody
-         [:tr [:td (t :help/toggle)] [:td "?"]]
-         [:tr [:td (t :help/git-commit-message)] [:td "c"]]
-         [:tr [:td (t :help/full-text-search)] [:td (util/->platform-shortcut "Ctrl-u")]]
-         [:tr [:td (t :help/page-search)] [:td (util/->platform-shortcut "Ctrl-Shift-u")]]
-         [:tr [:td (t :help/open-link-in-sidebar)] [:td "Shift-Click"]]
-         [:tr [:td (t :help/context-menu)] [:td "Right Click"]]
-         [:tr [:td (t :help/fold-unfold)] [:td "Tab"]]
-         [:tr [:td (t :help/toggle-contents)] [:td "t c"]]
-         [:tr [:td (t :help/toggle-doc-mode)] [:td "t d"]]
-         [:tr [:td (t :help/toggle-theme)] [:td "t t"]]
-         [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
-         [:tr [:td (t :help/toggle-settings)] [:td "t s"]]
-         [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
-         [:tr [:td (t :help/jump-to-journals)] [:td (if util/mac? "Cmd-j" "Alt-j")]]]]
-       (shortcut-table :shortcut.tag/formatting)
+     [:table
+      [:thead
+       [:tr
+        [:th [:b (t :general)]]
+        [:th (t :help/shortcut)]]]
+      [:tbody
+       [:tr [:td (t :help/toggle)] [:td "?"]]
+       [:tr [:td (t :help/git-commit-message)] [:td "c"]]
+       [:tr [:td (t :help/full-text-search)] [:td (util/->platform-shortcut "Ctrl-u")]]
+       [:tr [:td (t :help/page-search)] [:td (util/->platform-shortcut "Ctrl-Shift-u")]]
+       [:tr [:td (t :help/open-link-in-sidebar)] [:td "Shift-Click"]]
+       [:tr [:td (t :help/context-menu)] [:td "Right Click"]]
+       [:tr [:td (t :help/fold-unfold)] [:td "Tab"]]
+       [:tr [:td (t :help/toggle-contents)] [:td "t c"]]
+       [:tr [:td (t :help/toggle-doc-mode)] [:td "t d"]]
+       [:tr [:td (t :help/toggle-theme)] [:td "t t"]]
+       [:tr [:td (t :help/toggle-right-sidebar)] [:td "t r"]]
+       [:tr [:td (t :help/toggle-settings)] [:td "t s"]]
+       [:tr [:td (t :help/toggle-insert-new-block)] [:td "t e"]]
+       [:tr [:td (t :help/jump-to-journals)] [:td (if util/mac? "Cmd-j" "Alt-j")]]]]
+     (shortcut-table :shortcut.category/formatting)
 
      ]
 

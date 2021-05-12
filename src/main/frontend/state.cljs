@@ -45,9 +45,6 @@
     :search/mode :global
     :search/result nil
 
-    ;; custom shortcuts
-    :shortcuts {:editor/new-block "enter"}
-
     ;; modals
     :modal/show? false
 
@@ -865,9 +862,7 @@
   ([key]
    (get-shortcut (get-current-repo) key))
   ([repo key]
-   (or
-    (get (storage/get (str repo "-shortcuts")) key)
-    (get-in @state [:config repo :shortcuts key]))))
+   (get-in @state [:config repo :shortcuts key])))
 
 (defn get-me
   []
@@ -1001,9 +996,7 @@
 
 (defn set-config!
   [repo-url value]
-  (set-state! [:config repo-url] value)
-  (let [shortcuts (or (:shortcuts value) {})]
-    (storage/set (str repo-url "-shortcuts") shortcuts)))
+  (set-state! [:config repo-url] value))
 
 (defn get-git-auto-push?
   ([]

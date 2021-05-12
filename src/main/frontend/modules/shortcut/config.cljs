@@ -53,18 +53,18 @@
     :editor/indent
     {:binding "tab"
      :i18n    :help/indent-block-tab
-     :tags    #{:shortcut.tag/basics}
      :fn      (editor-handler/keydown-tab-handler :right)}
     :editor/outindent
     {:binding "shift+tab"
      :i18n    :help/unindent-block
-     :tags    #{:shortcut.tag/basics}
      :fn      (editor-handler/keydown-tab-handler :left)}
     :editor/new-block
     {:binding "enter"
+     :i18n    :help/create-new-block
      :fn      editor-handler/keydown-new-block-handler}
     :editor/new-line
     {:binding "shift+enter"
+     :i18n    :help/new-line-in-block
      :fn      editor-handler/keydown-new-line-handler}
     :editor/zoom-in
     {:binding (if mac? "mod+." "alt+right")
@@ -90,21 +90,17 @@
     :editor/bold
     {:binding "mod+b"
      :i18n    :bold
-     :tags    #{:shortcut.tag/formatting}
      :fn      editor-handler/bold-format!}
     :editor/italics
     {:binding "mod+i"
      :i18n    :italics
-     :tags    #{:shortcut.tag/formatting}
      :fn      editor-handler/italics-format!}
     :editor/highlight
     {:binding "mod+shift+h"
      :i18n    :highlight
-     :tags    #{:shortcut.tag/formatting}
      :fn      editor-handler/highlight-format!}
     :editor/insert-link
-    {:binding "mod+shift+k"
-     :tags    #{:shortcut.tag/formatting}
+    {:binding "mod+k"
      :i18n    :html-link
      :fn      editor-handler/html-link-format!}
     :editor/select-all-blocks
@@ -191,6 +187,9 @@
    {:ui/toggle-brackets
     {:binding "mod+c mod+b"
      :fn      config-handler/toggle-ui-show-brackets!}
+    :go/search-in-page
+    {:binding "mod+shift+u"
+     :fn      #(route-handler/go-to-search! :page)}
     :go/search
     {:binding "mod+u"
      :fn      route-handler/go-to-search!}
@@ -241,3 +240,18 @@
     :git/commit
     {:binding "g c"
      :fn      (git-handler/show-commit-modal! commit/add-commit-message)}}})
+
+
+;; Categories for docs purpose
+(def category
+  {:shortcut.category/basics
+   [:editor/new-block
+    :editor/new-line
+    :editor/indent
+    :editor/outindent]
+
+   :shortcut.category/formatting
+   [:editor/bold
+    :editor/insert-link
+    :editor/italics
+    :editor/highlight]})
