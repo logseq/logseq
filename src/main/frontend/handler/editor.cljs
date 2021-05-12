@@ -304,7 +304,7 @@
         content (string/triml content)
         content (string/replace content (util/format "((%s))" (str uuid)) "")
         [content content'] (cond
-                             (or properties? (and markdown-heading? top-level?))
+                             (and markdown-heading? top-level?)
                              [content content]
 
                              markdown-heading?
@@ -1829,7 +1829,7 @@
                                                                                        (mldoc/->edn (str (case format
                                                                                                            :markdown "- "
                                                                                                            :org "* ")
-                                                                                                         (if (:block/title %) "" "\n")
+                                                                                                         (if (seq (:block/title %)) "" "\n")
                                                                                                          new-content)
                                                                                                     (mldoc/default-config format)))))
                                                                       (:block/title %))]
