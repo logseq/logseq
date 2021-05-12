@@ -109,10 +109,12 @@
 
                         (and (vector? block)
                              (= "Link" (first block))
-                             (map? (second block))
-                             (= "id" (:protocol (second (:url (second block))))))
-
-                        (:link (second (:url (second block))))
+                             (map? (second block)))
+                        (if (= "id" (:protocol (second (:url (second block)))))
+                          (:link (second (:url (second block))))
+                          (let [id (second (:url (second block)))]
+                            (when (text/block-ref? id)
+                             (text/block-ref-un-brackets! id))))
 
                         :else
                         nil)]

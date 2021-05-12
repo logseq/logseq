@@ -80,23 +80,26 @@
                        :sidebar? sidebar?})
      (str page-name "-hiccup"))])
 
+(declare page)
+
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
-  [repo page file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
+  [repo page-e file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
   (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
         ;; grouped-blocks-by-file (into {} (for [[k v] (db-utils/group-by-file raw-page-blocks)]
         ;;                                   [(:file/path (db-utils/entity (:db/id k))) v]))
         ;; raw-page-blocks (get grouped-blocks-by-file file-path raw-page-blocks)
         page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
-                        {:block/page {:db/id (:db/id page)}
-                         :block/file {:db/id (:db/id (:block/file page))}})
+                        {:block/page {:db/id (:db/id page-e)}
+                         :block/file {:db/id (:db/id (:block/file page-e))}})
                       {:journal? journal?
                        :page-name page-name})
         hiccup-config {:id (if block? (str block-id) page-name)
                        :sidebar? sidebar?
                        :block? block?
-                       :editor-box editor/box}
+                       :editor-box editor/box
+                       :page page}
         hiccup-config (common-handler/config-with-document-mode hiccup-config)
         hiccup (block/->hiccup page-blocks hiccup-config {})]
     (page-blocks-inner page-name page-blocks hiccup sidebar?)))
@@ -130,7 +133,8 @@
          (for [{:keys [title] :as query} queries]
            (rum/with-key
              (block/custom-query {:attr {:class "mt-10"}
-                                  :editor-box editor/box} query)
+                                  :editor-box editor/box
+                                  :page page} query)
              (str repo "-custom-query-" (:query query))))]))))
 
 (defn- delete-page!
@@ -233,8 +237,9 @@
    :did-update (fn [state]
                  (ui-handler/scroll-and-highlight! state)
                  state)}
-  [state {:keys [repo] :as option}]
-  (when-let [path-page-name (or (get-page-name state)
+  [state {:keys [repo page-name preview?] :as option}]
+  (when-let [path-page-name (or page-name
+                                (get-page-name state)
                                 (state/get-current-page))]
     (let [current-repo (state/sub :git/current-repo)
          repo (or repo current-repo)
@@ -297,74 +302,74 @@
                         (not sidebar?)
                         (not config/publishing?))
 
-                (let [contents? (= (string/lower-case (str page-name)) "contents")
-                      links (fn [] (->>
-                                     [(when-not contents?
-                                        {:title   (t :page/add-to-contents)
-                                         :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+               (let [contents? (= (string/lower-case (str page-name)) "contents")
+                     links (fn [] (->>
+                                   [(when-not contents?
+                                      {:title   (t :page/add-to-contents)
+                                       :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
 
-                                      (when-not contents?
-                                        {:title   (t :page/rename)
-                                         :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
+                                    (when-not contents?
+                                      {:title   (t :page/rename)
+                                       :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
 
-                                      (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
-                                        [{:title   (t :page/open-in-finder)
-                                          :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-                                         {:title   (t :page/open-with-default-app)
-                                          :options {:on-click #(js/window.apis.openPath file-path)}}])
+                                    (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
+                                      [{:title   (t :page/open-in-finder)
+                                        :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
+                                       {:title   (t :page/open-with-default-app)
+                                        :options {:on-click #(js/window.apis.openPath file-path)}}])
 
-                                      (when-not contents?
-                                        {:title   (t :page/delete)
-                                         :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+                                    (when-not contents?
+                                      {:title   (t :page/delete)
+                                       :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-                                      (when (state/get-current-page)
-                                        {:title   (t :export)
-                                         :options {:on-click #(state/set-modal! export/export-page)}})
+                                    (when (state/get-current-page)
+                                      {:title   (t :export)
+                                       :options {:on-click #(state/set-modal! export/export-page)}})
 
-                                      (when (util/electron?)
-                                        {:title   (t (if public? :page/make-private :page/make-public))
-                                         :options {:on-click
-                                                   (fn []
-                                                     (page-handler/update-public-attribute!
-                                                       page-name
-                                                       (if public? false true))
-                                                     (state/close-modal!))}})
+                                    (when (util/electron?)
+                                      {:title   (t (if public? :page/make-private :page/make-public))
+                                       :options {:on-click
+                                                 (fn []
+                                                   (page-handler/update-public-attribute!
+                                                    page-name
+                                                    (if public? false true))
+                                                   (state/close-modal!))}})
 
-                                      (when developer-mode?
-                                        {:title   "(Dev) Show page data"
-                                         :options {:on-click (fn []
-                                                               (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
-                                                                 (println page-data)
-                                                                 (notification/show!
-                                                                   [:div
-                                                                    [:pre.code page-data]
-                                                                    [:br]
-                                                                    (ui/button "Copy to clipboard"
-                                                                               :on-click #(.writeText js/navigator.clipboard page-data))]
-                                                                   :success
-                                                                   false)))}})]
-                                     (flatten)
-                                     (remove nil?)))]
-                  [:div {:style {:position "absolute"
-                                 :right 0
-                                 :top 20}}
-                   [:div.flex.flex-row
-                    [:a.opacity-30.hover:opacity-100.page-op.mr-2
-                     {:title "Search in current page"
-                      :on-click #(route-handler/go-to-search! :page)}
-                     svg/search]
-                    (when (not config/mobile?)
-                      (presentation repo page))
-                    (ui/dropdown-with-links
-                      (fn [{:keys [toggle-fn]}]
-                        [:a.opacity-30.hover:opacity-100
-                         {:title    "More options"
-                          :on-click toggle-fn}
-                         (svg/vertical-dots {:class (util/hiccup->class "opacity-30.hover:opacity-100.h-5.w-5")})])
-                      links
-                      {:modal-class (util/hiccup->class
-                                      "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
-                       :z-index     1})]]))
+                                    (when developer-mode?
+                                      {:title   "(Dev) Show page data"
+                                       :options {:on-click (fn []
+                                                             (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
+                                                               (println page-data)
+                                                               (notification/show!
+                                                                [:div
+                                                                 [:pre.code page-data]
+                                                                 [:br]
+                                                                 (ui/button "Copy to clipboard"
+                                                                   :on-click #(.writeText js/navigator.clipboard page-data))]
+                                                                :success
+                                                                false)))}})]
+                                   (flatten)
+                                   (remove nil?)))]
+                 [:div {:style {:position "absolute"
+                                :right 0
+                                :top 20}}
+                  [:div.flex.flex-row
+                   [:a.opacity-30.hover:opacity-100.page-op.mr-2
+                    {:title "Search in current page"
+                     :on-click #(route-handler/go-to-search! :page)}
+                    svg/search]
+                   (when (not config/mobile?)
+                     (presentation repo page))
+                   (ui/dropdown-with-links
+                    (fn [{:keys [toggle-fn]}]
+                      [:a.opacity-30.hover:opacity-100
+                       {:title    "More options"
+                        :on-click toggle-fn}
+                       (svg/vertical-dots {:class (util/hiccup->class "opacity-30.hover:opacity-100.h-5.w-5")})])
+                    links
+                    {:modal-class (util/hiccup->class
+                                   "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
+                     :z-index     1})]]))
               (when (and (not sidebar?)
                          (not block?))
                 [:a {:on-click (fn [e]

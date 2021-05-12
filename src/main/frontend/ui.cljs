@@ -4,6 +4,7 @@
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-resize-context" :as Resize]
+            ["react-tippy" :as react-tippy]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
@@ -23,6 +24,7 @@
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 (def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
+(def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 
 (rum/defc ls-textarea < rum/reactive
   [{:keys [on-change] :as props}]
@@ -369,18 +371,6 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
-(defn tooltip
-  ([label children]
-   (tooltip label children {}))
-  ([label children {:keys [label-style]}]
-   [:div.Tooltip {:style {:display "inline"}}
-    [:div (cond->
-           {:class "Tooltip__label"}
-            label-style
-            (assoc :style label-style))
-     label]
-    children]))
-
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
   [state]
@@ -585,3 +575,8 @@
                 selected
                 (assoc :selected selected))
       label])])
+
+(rum/defc tippy
+  [opts child]
+  (Tippy (merge {:arrow true} opts)
+         child))

@@ -330,6 +330,39 @@
 
 (declare page-reference)
 
+(rum/defc page-inner
+  [config page-name href redirect-page-name page-entity contents-page? children html-export? label]
+  [:a.page-ref
+   {:data-ref page-name
+    :href href
+    :on-click (fn [e]
+                (util/stop e)
+                (if (gobj/get e "shiftKey")
+                  (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+                    (state/sidebar-add-block!
+                     (state/get-current-repo)
+                     (:db/id page-entity)
+                     :page
+                     {:page page-entity}))
+                  (route-handler/redirect! {:to :page
+                                            :path-params {:name redirect-page-name}}))
+                (when (and contents-page?
+                           (state/get-left-sidebar-open?))
+                  (ui-handler/close-left-sidebar!)))}
+
+   (if (seq children)
+     (for [child children]
+       (if (= (first child) "Label")
+         (last child)
+         (let [{:keys [content children]} (last child)
+               page-name (subs content 2 (- (count content) 2))]
+           (page-reference html-export? page-name (assoc config :children children) nil))))
+     (if (and label
+              (string? label)
+              (not (string/blank? label))) ; alias
+       label
+       (get page-entity :block/original-name page-name)))])
+
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page?] :as config} page]
   (when-let [page-name (:block/name page)]
@@ -349,37 +382,14 @@
                                page)
           href (if html-export?
                  (util/encode-str page)
-                 (rfe/href :page {:name redirect-page-name}))]
-      [:a.page-ref
-       {:data-ref page-name
-        :href href
-        :on-click (fn [e]
-                    (util/stop e)
-                    (if (gobj/get e "shiftKey")
-                      (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-                        (state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id page-entity)
-                         :page
-                         {:page page-entity}))
-                      (route-handler/redirect! {:to :page
-                                                :path-params {:name redirect-page-name}}))
-                    (when (and contents-page?
-                               (state/get-left-sidebar-open?))
-                      (ui-handler/close-left-sidebar!)))}
-
-       (if (seq children)
-         (for [child children]
-           (if (= (first child) "Label")
-             (last child)
-             (let [{:keys [content children]} (last child)
-                   page-name (subs content 2 (- (count content) 2))]
-               (page-reference html-export? page-name (assoc config :children children) nil))))
-         (if (and label
-                  (string? label)
-                  (not (string/blank? label))) ; alias
-           label
-           (get page-entity :block/original-name page-name)))])))
+                 (rfe/href :page {:name redirect-page-name}))
+          inner (page-inner config page-name href redirect-page-name page-entity contents-page? children html-export? label)]
+      inner
+      ;; (ui/tippy
+      ;;  {:interactive true
+      ;;   :html (page-preview page-name)}
+      ;;  inner)
+      )))
 
 (rum/defc asset-reference
   [title path]
@@ -496,6 +506,7 @@
     (util/format "{{{%s}}}" name)))
 
 (declare block-content)
+(declare block-container)
 (rum/defc block-reference < rum/reactive
   [config id label]
   (when-not (string/blank? id)
@@ -524,9 +535,12 @@
                           :span.block-ref
                           (map-inline config title))))]
            (if label
-             (->elem
-              :span.block-ref {:title (:block/content block)} ; TODO: replace with a popup
-              (map-inline config label))
+             (ui/tippy
+              {:html (block-container config block)
+               :interactive true}
+              (->elem
+               :span.block-ref
+               (map-inline config label)))
              title))]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
@@ -870,7 +884,6 @@
                             (<= (count url) 15) url
                             :else
                             (last (re-find id-regex url)))]
-              (prn {:id id})
               (when-not (string/blank? id)
                 (let [width (min (- (util/get-width) 96)
                                  560)
@@ -1097,7 +1110,6 @@
                 {:top 0}
                 {:bottom 0}))}]))
 
-(declare block-container)
 (defn block-checkbox
   [block class]
   (let [marker (:block/marker block)
@@ -1163,20 +1175,28 @@
               :style {:margin-right 3.5}}
        (string/upper-case marker)])))
 
+(rum/defc set-priority
+  [block priority]
+  [:ul
+   (for [p (remove #(= priority %) ["A" "B" "C"])]
+     [:a.mr-2.text-base.tooltip-priority {:priority p
+                                          :on-click (fn [] (editor-handler/set-priority block p))}])])
+
+(rum/defc priority-text
+  [priority]
+  [:a.opacity-50.hover:opacity-100
+   {:class "priority"
+    :href (rfe/href :page {:name priority})
+    :style {:margin-right 3.5}}
+   (util/format "[#%s]" (str priority))])
+
 (defn priority-cp
   [{:block/keys [pre-block? priority] :as block}]
-
   (when (and (not pre-block?) priority)
-    (ui/tooltip
-     [:ul
-      (for [p (remove #(= priority %) ["A" "B" "C"])]
-        [:a.mr-2.text-base.tooltip-priority {:priority p
-                                             :on-click (fn [] (editor-handler/set-priority block p))}])]
-     [:a.opacity-50.hover:opacity-100
-      {:class "priority"
-       :href (rfe/href :page {:name priority})
-       :style {:margin-right 3.5}}
-      (util/format "[#%s]" (str priority))])))
+    (ui/tippy
+     {:interactive true
+      :html (set-priority block priority)}
+     (priority-text priority))))
 
 (defn block-tags-cp
   [{:block/keys [pre-block? tags] :as block}]

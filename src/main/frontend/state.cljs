@@ -756,6 +756,10 @@
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
 
+(defn dark?
+  []
+  (= "dark" (:ui/theme @state)))
+
 (defn set-editing-block-dom-id!
   [block-dom-id]
   (set-state! :editor/block-dom-id block-dom-id))
