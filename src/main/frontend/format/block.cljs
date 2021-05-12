@@ -41,7 +41,8 @@
                      (when (and (not (util/starts-with? page "http:"))
                                 (not (util/starts-with? page "https:"))
                                 (not (util/starts-with? page "file:"))
-                                (or (= ext :excalidraw) (not (contains? (config/supported-formats) ext))))
+                                (or (= ext :excalidraw)
+                                    (not (contains? (config/supported-formats) ext))))
                        page)))
 
                   (and
@@ -143,13 +144,6 @@
   (and
    (vector? block)
    (= "Timestamp" (first block))))
-
-(defn properties-block?
-  [block]
-  (and
-   (vector? block)
-   (contains? #{"Property_Drawer" "Properties"}
-              (first block))))
 
 (defn definition-list-block?
   [block]
@@ -299,7 +293,7 @@
                                       refs)
                               (remove string/blank?))
           refs (->> (distinct (concat refs children-pages))
-                         (remove nil?))
+                    (remove nil?))
           refs (map (fn [ref] (page-name->map ref with-id?)) refs)]
       (assoc block :refs refs))))
 
@@ -434,7 +428,7 @@
                                       (drop-while #(= ["Break_Line"] %)))]
                   (recur headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
 
-                (properties-block? block)
+                (text/properties-block? block)
                 (let [properties (extract-properties block start_pos end_pos)]
                   (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
@@ -497,7 +491,8 @@
               (when (seq block-body)
                 (reset! pre-block-body (reverse block-body)))
               (when (seq properties)
-                (reset! pre-block-properties (:properties properties)))
+                (let [properties (:properties properties)]
+                  (reset! pre-block-properties properties)))
               (-> (reverse headings)
                   safe-blocks))))]
     (let [first-block (first blocks)

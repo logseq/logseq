@@ -81,7 +81,8 @@
           filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
           n-ref (count filtered-ref-blocks)]
       (when (or (> n-ref 0)
-                (seq scheduled-or-deadlines))
+                (seq scheduled-or-deadlines)
+                (seq filter-state))
         [:div.references.mt-6.flex-1.flex-row
          [:div.content
           (when (seq scheduled-or-deadlines)

@@ -1133,7 +1133,10 @@
 ;; fs
 (defn get-file-ext
   [file]
-  (last (string/split file #"\.")))
+  (and
+   (string? file)
+   (string/includes? file ".")
+   (last (string/split file #"\."))))
 
 (defn get-dir-and-basename
   [path]

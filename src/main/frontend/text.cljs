@@ -433,3 +433,10 @@
 (defn image-link?
   [img-formats s]
   (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
+
+(defn properties-block?
+  [block]
+  (and
+   (vector? block)
+   (contains? #{"Property_Drawer" "Properties"}
+              (first block))))

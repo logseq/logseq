@@ -172,7 +172,8 @@
                :where
                [?file :file/path ?path]
                [(?pred $ ?path)]
-               [?block :block/file ?file]]
+               [?block :block/file ?file]
+               [(missing? $ ?block :block/name)]]
              (conn/get-conn repo-url) pred)
         db-utils/seq-flatten)))
 
@@ -182,7 +183,8 @@
              :in $ ?path
              :where
              [?file :file/path ?path]
-             [?block :block/file ?file]]
+             [?block :block/file ?file]
+             [(missing? $ ?block :block/name)]]
            (conn/get-conn repo-url) path)
       db-utils/seq-flatten))
 
@@ -700,28 +702,6 @@
   (and
    (vector? block)
    (= "Heading" (first block))))
-
-(defn get-page-name
-  [file ast]
-  ;; headline
-  (let [ast (map first ast)]
-    (if (string/includes? file "pages/contents.")
-      "Contents"
-      (let [first-block (last (first (filter heading-block? ast)))
-            property-name (when (and (= "Properties" (ffirst ast))
-                                     (not (string/blank? (:title (last (first ast))))))
-                            (:title (last (first ast))))
-            first-block-name (let [title (last (first (:title first-block)))]
-                               (and first-block
-                                    (string? title)
-                                    title))
-            file-name (when-let [file-name (last (string/split file #"/"))]
-                        (-> (first (util/split-last "." file-name))
-                            (string/replace "." "/")))]
-        (or property-name
-            (if (= (state/page-name-order) "heading")
-              (or first-block-name file-name)
-              (or file-name first-block-name)))))))
 
 (defn get-page-original-name
   [page-name]

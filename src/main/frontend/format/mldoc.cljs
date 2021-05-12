@@ -212,16 +212,3 @@
 (defn plain->text
   [plains]
   (string/join (map last plains)))
-
-(defn parse-properties
-  [content format]
-  (let [ast (->> (->edn content
-                        (default-config format))
-                 (map first))
-        properties (collect-page-properties ast)
-        properties (let [properties (and (seq ast)
-                                         (= "Properties" (ffirst ast))
-                                         (last (first ast)))]
-                     (if (and properties (seq properties))
-                       properties))]
-    (into {} properties)))
