@@ -1,15 +1,15 @@
 (ns frontend.modules.shortcut.data-helper
-  (:require [frontend.modules.shortcut.data :refer [data]]
+  (:require [frontend.modules.shortcut.config :refer [default-config]]
             [lambdaisland.glogi :as log]
             [frontend.util :as util]
             [clojure.string :as str]
             [frontend.state :as state]))
 
 (defn binding-map []
-  (->> (vals data)
+  (->> (vals default-config)
        (apply merge)
        (map (fn [[k {:keys [binding]}]]
-              {k binding}))
+              {k (or (state/get-shortcut k) binding)}))
        (into {})))
 
 (defn- mod-key [shortcut]
@@ -18,8 +18,7 @@
 
 (defn shortcut-binding
   [id]
-  (let [shortcut (or (state/get-shortcut id)
-                     (get (binding-map) id))]
+  (let [shortcut (get (binding-map) id)]
     (cond
       (nil? shortcut)
       (log/error :shortcut/binding-not-found {:id id})
@@ -36,14 +35,14 @@
 
 (defn binding-by-tag
   [tag]
-  (->> (vals data)
-       (apply merge)
-       (map (fn [[k {:keys [tags] :as v}]]
-              (when (and tags (tags tag))
-                {k (assoc v :binding (shortcut-binding k))})))
-       (into {})))
+  (let [keys (->> (vals default-config)
+                  (apply merge)
+                  (map (fn [[k {:keys [tags] :as v}]]
+                         (when (and tags (tags tag)) k)))
+                  (remove nil?))]
+    (select-keys (binding-map) keys)))
 
-
+#_
 (defn decorate-namespace [k]
   (let [n (name k)
         ns (namespace k)]
@@ -53,7 +52,7 @@
   ([handler-id]
    (shortcut-map handler-id nil))
   ([handler-id state]
-   (let [raw       (get data handler-id)
+   (let [raw       (get default-config handler-id)
          handler-m (->> raw
                         (map (fn [[k {:keys [fn]}]]
                                {k fn}))

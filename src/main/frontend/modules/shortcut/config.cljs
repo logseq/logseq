@@ -1,4 +1,4 @@
-(ns frontend.modules.shortcut.data
+(ns frontend.modules.shortcut.config
   (:require [frontend.components.commit :as commit]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
@@ -13,7 +13,7 @@
             [frontend.modules.shortcut.before :as m]
             [frontend.util :refer [mac?]]))
 
-(def data
+(def default-config
   {:shortcut.handler/date-picker
    {:date-picker/complete
     {:binding "enter"
