@@ -268,8 +268,8 @@
         (assoc m :block/journal? false)))))
 
 (defn with-page-refs
-  [{:keys [title body tags refs] :as block} with-id?]
-  (let [refs (->> (concat tags refs)
+  [{:keys [title body tags refs marker priority] :as block} with-id?]
+  (let [refs (->> (concat tags refs [marker priority])
                   (remove string/blank?)
                   (distinct))
         refs (atom refs)]

@@ -73,6 +73,7 @@
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           references (db/get-page-linked-refs-refed-pages repo page-name)
+          _ (def xx references)
           filters (page-handler/get-filters page-name)
           filter-state (rum/react filters)
           filters (when (seq filter-state)
