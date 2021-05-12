@@ -31,16 +31,17 @@
      (when (seq references)
        [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
         (for [reference references]
-          (let [filtered (get (rum/react filter-state) reference)
+          (let [lc-reference (string/lower-case reference)
+                filtered (get (rum/react filter-state) lc-reference)
                 color (condp = filtered
                         true "text-green-400"
                         false "text-red-400"
                         nil)]
-            [:button.border.rounded.px-1.mb-1 {:key reference :class color :style {:border-color "currentColor"}
+            [:button.border.rounded.px-1.mb-1.mr-1 {:key reference :class color :style {:border-color "currentColor"}
                                                :on-click (fn [e]
-                                                           (swap! filter-state #(if (nil? (get @filter-state reference))
-                                                                                  (assoc % reference (not (.-shiftKey e)))
-                                                                                  (dissoc % reference)))
+                                                           (swap! filter-state #(if (nil? (get @filter-state lc-reference))
+                                                                                  (assoc % lc-reference (not (.-shiftKey e)))
+                                                                                  (dissoc % lc-reference)))
                                                            (page-handler/save-filter! page-name @filter-state))}
              reference]))])]))
 
@@ -67,13 +68,16 @@
                        (db/get-block-referenced-blocks block-id)
                        :else
                        (db/get-page-referenced-blocks page-name))
+          ref-pages (map (comp :block/original-name first) ref-blocks)
           scheduled-or-deadlines (if (and journal?
                                           (not (true? (state/scheduled-deadlines-disabled?)))
                                           (= page-name (string/lower-case (date/journal-name))))
                                    (db/get-date-scheduled-or-deadlines (string/capitalize page-name))
                                    nil)
           references (db/get-page-linked-refs-refed-pages repo page-name)
-          _ (def xx references)
+          references (->> (concat ref-pages references)
+                          (remove nil?)
+                          (distinct))
           filters (page-handler/get-filters page-name)
           filter-state (rum/react filters)
           filters (when (seq filter-state)

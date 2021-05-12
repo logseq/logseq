@@ -172,8 +172,7 @@
                :where
                [?file :file/path ?path]
                [(?pred $ ?path)]
-               [?block :block/file ?file]
-               [(missing? $ ?block :block/name)]]
+               [?block :block/file ?file]]
              (conn/get-conn repo-url) pred)
         db-utils/seq-flatten)))
 
@@ -183,8 +182,7 @@
              :in $ ?path
              :where
              [?file :file/path ?path]
-             [?block :block/file ?file]
-             [(missing? $ ?block :block/name)]]
+             [?block :block/file ?file]]
            (conn/get-conn repo-url) path)
       db-utils/seq-flatten))
 
@@ -782,7 +780,7 @@
         [?b :block/path-refs ?p]
         [?b :block/refs ?other-p]
         [(not= ?p ?other-p)]
-        [?other-p :block/name ?ref-page]]
+        [?other-p :block/original-name ?ref-page]]
       conn
       rules
       page)

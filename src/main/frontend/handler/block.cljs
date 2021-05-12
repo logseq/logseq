@@ -57,6 +57,7 @@
                          (mapcat last ref-blocks)
                          ref-blocks)
                        (mapcat (fn [b] (concat (:block/refs b) (:block/children-refs b))))
+                       (concat (when group-by-page? (map first ref-blocks)))
                        (distinct)
                        (map :db/id)
                        (db/pull-many repo '[:db/id :block/name]))
@@ -74,15 +75,19 @@
                          (seq exclude-ids)
                          (remove (fn [block]
                                    (let [ids (set (concat (map :db/id (:block/refs block))
-                                                          (map :db/id (:block/children-refs block))))]
+                                                          (map :db/id (:block/children-refs block))
+                                                          [(:db/id (:block/page block))]))]
                                      (seq (set/intersection exclude-ids ids)))))
 
                          (seq include-ids)
                          (remove (fn [block]
-                                   (let [ids (set (concat (map :db/id (:block/refs block))
+                                   (let [page-block-id (:db/id (:block/page block))
+                                         ids (set (concat (map :db/id (:block/refs block))
                                                           (map :db/id (:block/children-refs block))))]
-                                     (empty? (set/intersection include-ids ids)))))
-                         ))]
+                                     (if (and (contains? include-ids page-block-id)
+                                              (= 1 (count include-ids)))
+                                       (not= page-block-id (first include-ids))
+                                       (empty? (set/intersection include-ids (set (conj ids page-block-id))))))))))]
         (if group-by-page?
           (->> (map (fn [[p ref-blocks]]
                       [p (filter-f ref-blocks)]) ref-blocks)
