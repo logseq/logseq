@@ -113,7 +113,7 @@ title: How to take dummy notes?
         :help/privacy "Privacy policy"
         :help/terms "Terms"
         :help/community "Discord community"
-        :help/shortcuts "Keyboard Shortcuts"
+        :help/shortcuts "Shortcuts (Click for a Full List)"
         :help/shortcuts-triggers "Triggers"
         :help/shortcut "Shortcut"
         :help/slash-autocomplete "Slash Autocomplete"
