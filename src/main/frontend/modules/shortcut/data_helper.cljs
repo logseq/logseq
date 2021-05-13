@@ -1,9 +1,10 @@
 (ns frontend.modules.shortcut.data-helper
-  (:require [frontend.modules.shortcut.config :as config]
-            [lambdaisland.glogi :as log]
-            [frontend.util :as util]
+  (:require [camel-snake-kebab.core :as csk]
             [clojure.string :as str]
-            [frontend.state :as state]))
+            [frontend.modules.shortcut.config :as config]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]))
 (defn binding-map []
   (->> (vals config/default-config)
        (apply merge)
@@ -78,3 +79,22 @@
        (map (fn [[k v]]
               {k (:doc (meta v))}))
        (into {})))
+
+(defn decorate-binding [binding]
+  (-> binding
+      (str/replace "mod" (if util/mac? "cmd" "ctrl"))
+      (str/replace "alt" (if util/mac? "opt" "alt"))
+      (csk/->PascalCase :separator #"(\+|\s)")))
+
+(defn binding-for-display [binding]
+  (cond
+    (false? binding)
+    "Disabled"
+
+    (string? binding)
+    (decorate-binding binding)
+
+    :else
+    (->> binding
+         (map decorate-binding)
+         (str/join " | "))))

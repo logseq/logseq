@@ -1,10 +1,8 @@
 (ns frontend.components.shortcut
-  (:require [rum.core :as rum]
-            [frontend.context.i18n :as i18n]
-            [frontend.util :as util]
-            [frontend.state :as state]
+  (:require [frontend.context.i18n :as i18n]
             [frontend.modules.shortcut.data-helper :as dh]
-            [frontend.modules.shortcut.config :as config]))
+            [frontend.state :as state]
+            [rum.core :as rum]))
 (def *shortcut-config (rum/cursor-in state/state [:config (state/get-current-repo) :shortcuts]))
 
 (rum/defc shortcut-table < rum/reactive
@@ -21,7 +19,7 @@
          (map (fn [[k {:keys [binding]}]]
                 [:tr {:key k}
                  [:td (t (dh/decorate-namespace k))]
-                 [:td binding]])
+                 [:td (dh/binding-for-display binding)]])
               (dh/binding-by-category name))]]])))
 
 (rum/defc shortcut
@@ -49,10 +47,4 @@
      (shortcut-table :shortcut.category/block-selection)
      (shortcut-table :shortcut.category/formatting)
      (shortcut-table :shortcut.category/toggle)
-     (shortcut-table :shortcut.category/others)
-
-     ]
-
-
-    )
-  )
+     (shortcut-table :shortcut.category/others)]))
