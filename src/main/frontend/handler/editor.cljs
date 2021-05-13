@@ -588,25 +588,18 @@
              repo (or (:block/repo block) (state/get-current-repo))
              [properties value] (with-timetracking-properties block value)
              block-self? (block-self-alone-when-insert? config block-id)
-             has-children? (db/has-children? repo block-id)]
-         (if (or block-self? (not has-children?))
-           ;; save the current block and insert a new block
-           (insert-new-block-aux!
+             has-children? (db/has-children? repo block-id)
+             insert-fn (if (or block-self? (not has-children?))
+                         insert-new-block-aux!
+                         insert-new-block-before-block-aux!)]
+         (insert-fn
             config
             (assoc block :block/properties properties)
             value
             {:ok-handler
              (fn [last-block]
                (edit-block! last-block 0 format id)
-               (clear-when-saved!))})
-           (insert-new-block-before-block-aux!
-            config
-            (assoc block :block/properties properties)
-            value
-            {:ok-handler
-             (fn [last-block]
-               (edit-block! last-block 0 format id)
-               (clear-when-saved!))})))))
+               (clear-when-saved!))}))))
    (state/set-editor-op! nil)))
 
 (defn update-timestamps-content!
