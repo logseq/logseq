@@ -182,10 +182,14 @@
 
                         :block
                         (let [block-uuid (uuid (:block/uuid data))
-                              page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
-                          (route/redirect! {:to :page
-                                            :path-params {:name page}
-                                            :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))
+                              collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)]
+                          (if collapsed?
+                            (route/redirect! {:to :page
+                                              :path-params {:name (str block-uuid)}})
+                            (let [page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
+                             (route/redirect! {:to :page
+                                               :path-params {:name page}
+                                               :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))))
                         nil))
          :on-shift-chosen (fn [{:keys [type data]}]
                             (case type

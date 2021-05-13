@@ -467,6 +467,27 @@
           (recur (:block/uuid parent) (conj parents parent) (inc d))
           parents)))))
 
+(comment
+  (defn get-immediate-children-v2
+    [repo block-id]
+    (d/pull (conn/get-conn repo)
+            '[:block/_parent]
+            [:block/uuid block-id])))
+
+;; Use built-in recursive
+(defn get-block-parents-v2
+  [repo block-id]
+  (d/pull (conn/get-conn repo)
+          '[:db/id :block/properties {:block/parent ...}]
+          [:block/uuid block-id]))
+
+(defn parents-collapsed?
+  [repo block-id]
+  (when-let [block (:block/parent (get-block-parents-v2 repo block-id))]
+    (->> (tree-seq map? (fn [x] [(:block/parent x)]) block)
+         (map (comp :collapsed :block/properties))
+         (some true?))))
+
 (defn get-block-page
   [repo block-id]
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
@@ -1262,29 +1283,3 @@
            (conn/get-conn repo)
            page-id)
       ffirst))
-
-(comment
-  (def page-names ["foo" "bar"])
-
-  (def page-ids (set (get-page-ids-by-names page-names)))
-
-  (d/q '[:find [(pull ?b [*]) ...]
-         :in $ % ?refs
-         :where
-         [?b :block/refs ?p]
-         ;; Filter other blocks
-         [(contains? ?refs ?p)]
-         (or-join [?b ?refs]
-                  (matches-all ?b :block/refs ?refs)
-                  (and
-                   (parent ?p ?b)
-                   ;; FIXME: not working
-                   ;; (matches-all (union ?p ?b) :block/refs ?refs)
-                   [?p :block/refs ?p-ref]
-                   [?b :block/refs ?b-ref]
-                   [(not= ?p-ref ?b-ref)]
-                   [(contains? ?refs ?p-ref)]
-                   [(contains? ?refs ?b-ref)]))]
-       (conn/get-conn)
-       rules
-       page-ids))

@@ -39,7 +39,7 @@
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-children-ids get-block-file get-block-immediate-children get-block-page
-  get-block-page-end-pos get-block-parent get-block-parents get-block-referenced-blocks get-block-refs-count
+  get-block-page-end-pos get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks get-block-refs-count
   get-blocks-by-priority get-blocks-contents get-custom-css
   get-date-scheduled-or-deadlines get-db-type get-empty-pages get-file
   get-file-blocks get-file-contents get-file-last-modified-at get-file-no-sub get-file-page get-file-page-id file-exists?
