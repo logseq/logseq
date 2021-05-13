@@ -11,7 +11,9 @@
             [medley.core :as medley]
             [frontend.format.block :as block]
             [frontend.debug :as debug]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.text :as text]
+            [frontend.handler.common :as common-handler]))
 
 (defn get-block-ids
   [block]
@@ -35,14 +37,21 @@
          blocks (vec blocks)]
      (if (seq blocks)
        blocks
-       (let [page-block (when page-name (db/entity [:block/name (string/lower-case page-name)]))
+       (let [page-block (when page-name (db/pull [:block/name (string/lower-case page-name)]))
+             create-title-property? (util/include-windows-reserved-chars? page-name)
+             content (if create-title-property?
+                       (let [title (or (:block/original-name page-block)
+                                       (:block/name page-block))
+                             properties (common-handler/get-page-default-properties title)]
+                         (text/build-properties-str format properties))
+                       "")
              page-id {:db/id (:db/id page-block)}
              dummy (merge {:block/uuid (db/new-block-id)
                            :block/left page-id
                            :block/parent page-id
                            :block/page page-id
                            :block/title ""
-                           :block/content ""
+                           :block/content content
                            :block/format format
                            :block/dummy? true}
                           default-option)

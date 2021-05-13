@@ -92,7 +92,8 @@
       block-id))
 
   (-get-parent-id [this]
-    (-> (get-in this [:data :block/parent])
+    (-> (or (get-in this [:data :block/parent])
+            (get-in this [:data :block/uuid]))
       (outliner-u/->block-id)))
 
   (-set-parent-id [this parent-id]
@@ -108,7 +109,7 @@
     (update this :data assoc :block/left [:block/uuid left-id]))
 
   (-get-parent [this]
-    (when-let [parent-id (tree/-get-parent-id this)]
+    (when-let [parent-id (or (tree/-get-parent-id this) (get-in this [:data :db/id]))]
       (get-block-by-id parent-id)))
 
   (-get-left [this]

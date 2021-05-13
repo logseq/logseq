@@ -217,14 +217,21 @@
       content)))
 
 (defn build-properties-str
-  [format properties]
-  (when (seq properties)
-    (let [org? (= format :org)
-          kv-format (if org? ":%s: %s" "%s:: %s")
-          full-format (if org? ":PROPERTIES:\n%s\n:END:\n" "%s\n")
-          properties-content (->> (map (fn [[k v]] (util/format kv-format k v)) properties)
-                                  (string/join "\n"))]
-      (util/format full-format properties-content))))
+  ([format properties]
+   (build-properties-str format properties false))
+  ([format properties front-matter?]
+   (when (seq properties)
+     (let [org? (= format :org)
+           [kv-format wrapper] (cond
+                                 org?
+                                 [":%s: %s" ":PROPERTIES:\n%s\n:END:"]
+                                 front-matter?
+                                 ["%s: %s" "---\n%s\n---"]
+                                 :else
+                                 ["%s:: %s" "%s"])
+           properties-content (->> (map (fn [[k v]] (util/format kv-format (name k) v)) properties)
+                                   (string/join "\n"))]
+       (util/format wrapper properties-content)))))
 
 ;; title properties body
 (defn with-built-in-properties

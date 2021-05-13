@@ -1282,27 +1282,32 @@
 
 (rum/defc property-cp
   [config block k v]
-  [:div.my-1
-   [:b (name k)]
-   [:span.mr-1 ":"]
-   (cond
-     (int? v)
-     v
+  (let [pre-block? (:block/pre-block? block)
+        date (and (= k :date) (date/get-locale-string (str v)))]
+    [:div
+     [:span.font-bold (name k)]
+     [:span.mr-1 ":"]
+     (cond
+       (int? v)
+       v
 
-     (coll? v)
-     (let [v (->> (remove string/blank? v)
-                  (filter string?))
-           vals (for [v-item v]
-                  (page-cp config {:block/name v-item}))
-           elems (interpose (span-comma) vals)]
-       (for [elem elems]
-         (rum/with-key elem (str (random-uuid)))))
+       date
+       date
 
-     :else
-     (let [page-name (string/lower-case (str v))]
-       (if (db/entity [:block/name page-name])
-         (page-cp config {:block/name page-name})
-         (inline-text (:block/format block) (str v)))))])
+       (coll? v)
+       (let [v (->> (remove string/blank? v)
+                    (filter string?))
+             vals (for [v-item v]
+                    (page-cp config {:block/name v-item}))
+             elems (interpose (span-comma) vals)]
+         (for [elem elems]
+           (rum/with-key elem (str (random-uuid)))))
+
+       :else
+       (let [page-name (string/lower-case (str v))]
+         (if (db/entity [:block/name page-name])
+           (page-cp config {:block/name page-name})
+           (inline-text (:block/format block) (str v)))))]))
 
 (rum/defc properties-cp
   [config block]
@@ -1315,7 +1320,7 @@
         properties (sort properties)]
     (cond
       (seq properties)
-      [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
+      [:div
        (for [[k v] properties]
          (rum/with-key (property-cp config block k v)
            (str (:block/uuid block) "-" k)))]
