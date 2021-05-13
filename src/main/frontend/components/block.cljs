@@ -39,6 +39,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.format.mldoc :as mldoc]
             [frontend.text :as text]
+            [frontend.util.property :as property]
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
             [frontend.security :as security]
@@ -1320,7 +1321,7 @@
 (rum/defc properties-cp
   [config block]
   (let [properties (walk/keywordize-keys (:block/properties block))
-        properties (apply dissoc properties text/built-in-properties)
+        properties (apply dissoc properties property/built-in-properties)
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
                      (dissoc properties :title :filters)
@@ -1391,7 +1392,7 @@
         (editor-handler/unhighlight-blocks!)
         (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
               f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
-                       content (text/remove-built-in-properties! (:block/format block)
+                       content (property/remove-built-in-properties! (:block/format block)
                                                                  content)]
                    (state/set-editing!
                     edit-input-id
@@ -1471,7 +1472,7 @@
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
       (when (and (seq properties)
-                 (let [hidden? (text/properties-built-in? properties)]
+                 (let [hidden? (property/properties-built-in? properties)]
                    (not hidden?))
                  (not (:slide? config)))
         (properties-cp config block))

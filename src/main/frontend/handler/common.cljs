@@ -4,7 +4,7 @@
             [cljs-bean.core :as bean]
             [promesa.core :as p]
             [frontend.util :as util]
-            [frontend.text :as text]
+            [frontend.util.property :as property]
             [frontend.git :as git]
             [frontend.db :as db]
             [frontend.encrypt :as e]
@@ -57,7 +57,7 @@
 
 (defn copy-to-clipboard-without-id-property!
   [format content]
-  (util/copy-to-clipboard! (text/remove-id-property! format content)))
+  (util/copy-to-clipboard! (property/remove-id-property! format content)))
 
 (defn config-with-document-mode
   [config]

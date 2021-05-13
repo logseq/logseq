@@ -83,69 +83,16 @@
       "**foobar" "foobar"
       "*********************foobar" "foobar")))
 
-(deftest remove-id-property
+(deftest append-newline-after-level-spaces
   []
-  (are [x y] (= (text/remove-id-property! :org x) y)
-    "hello\n:PROPERTIES:\n:id: f9873a81-07b9-4246-b910-53a6f5ec7e04\n:END:\n"
-    "hello\n:PROPERTIES:\n:END:"
+  (are [x y] (= (text/append-newline-after-level-spaces x :markdown) y)
+    "# foobar" "#\nfoobar"
+    "# foobar\nfoo" "#\nfoobar\nfoo"
+    "## foobar\nfoo" "##\nfoobar\nfoo")
 
-    "hello\n:PROPERTIES:\n:id: f9873a81-07b9-4246-b910-53a6f5ec7e04\na: b\n:END:\n"
-    "hello\n:PROPERTIES:\na: b\n:END:"))
-
-(deftest test-remove-properties!
-  []
-  (testing "properties with non-blank lines"
-    (are [x y] (= x y)
-      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n:END:\n")
-      "** hello"
-
-      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n:a: b\n:END:\n")
-      "** hello"))
-  (testing "properties with blank lines"
-    (are [x y] (= x y)
-      (text/remove-properties! :org "** hello\n:PROPERTIES:\n\n:x: y\n:END:\n")
-      "** hello"
-
-      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n\n:a: b\n:END:\n")
-      "** hello")))
-
-(deftest test-insert-property
-  []
-  (are [x y] (= x y)
-    (text/insert-property! :org "hello" "a" "b")
-    "hello\n:PROPERTIES:\n:a: b\n:END:"
-
-    (text/insert-property! :org "hello" "a" false)
-    "hello\n:PROPERTIES:\n:a: false\n:END:"
-
-    (text/insert-property! :org "hello\n:PROPERTIES:\n:a: b\n:END:" "c" "d")
-    "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:"
-
-    (text/insert-property! :org "hello\n:PROPERTIES:\n:a: b\n:END:\nworld" "c" "d")
-    "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:\nworld"))
-
-(deftest test->new-properties
-  []
-  (are [x y] (= (text/->new-properties x) y)
-    ":PROPERTIES:\n:foo: bar\n:END:"
-    "foo:: bar"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:END:"
-    "hello\nfoo:: bar"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:"
-    "hello\nfoo:: bar\nnice:: bingo"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:\n"
-    "hello\nfoo:: bar\nnice:: bingo"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:\nnice"
-    "hello\nfoo:: bar\nnice:: bingo\nnice"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice:\n:END:\nnice"
-    "hello\nfoo:: bar\nnice:: \nnice"
-
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice\n:END:\nnice"
-    "hello\nfoo:: bar\n:nice\nnice"))
+  (are [x y] (= (text/append-newline-after-level-spaces x :org) y)
+    "* foobar" "*\nfoobar"
+    "* foobar\nfoo" "*\nfoobar\nfoo"
+    "** foobar\nfoo" "**\nfoobar\nfoo"))
 
 #_(cljs.test/test-ns 'frontend.text-test)

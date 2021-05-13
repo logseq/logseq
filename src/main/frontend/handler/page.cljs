@@ -22,7 +22,7 @@
             [clojure.walk :as walk]
             [frontend.git :as git]
             [frontend.fs :as fs]
-            [frontend.text :as text]
+            [frontend.util.property :as property]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.format.block :as block]
@@ -107,8 +107,8 @@
         (let [properties (:block/properties pre-block)
               new-properties (assoc properties key value)
               content (:block/content pre-block)
-              front-matter? (text/front-matter? content)
-              new-content (text/insert-property! format content key value front-matter?)
+              front-matter? (property/front-matter? content)
+              new-content (property/insert-property! format content key value front-matter?)
               block {:db/id (:db/id pre-block)
                      :block/properties new-properties
                      :block/content new-content
