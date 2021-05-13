@@ -986,12 +986,15 @@
   [copy?]
   (when copy? (copy-selection-blocks))
   (when-let [blocks (seq (get-selected-blocks-with-children))]
-    (let [repo (dom/attr (first blocks) "repo")
-          ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))
-          ids (if (= :up (state/get-selection-direction))
-                (reverse ids)
-                ids)]
-      (delete-blocks! repo ids))))
+    ;; remove embeds and references
+    (let [blocks (remove (fn [block] (= "true" (dom/attr block "data-transclude"))) blocks)]
+      (when (seq blocks)
+        (let [repo (dom/attr (first blocks) "repo")
+             ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))
+             ids (if (= :up (state/get-selection-direction))
+                   (reverse ids)
+                   ids)]
+         (delete-blocks! repo ids))))))
 
 (defn- get-nearest-page
   []

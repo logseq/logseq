@@ -658,7 +658,7 @@
 
     ["Block_reference" id]
     ;; FIXME: alert when self block reference
-    (block-reference config id nil)
+    (block-reference (assoc config :reference? true) id nil)
 
     ["Nested_link" link]
     (nested-link config html-export? link)
@@ -1679,6 +1679,7 @@
         slide? (boolean (:slide? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
+        reference? (:reference? config)
         unique-dom-id (build-id (dissoc config :block/uuid))
         block-id (str "ls-block-" unique-dom-id uuid)
         has-child? (boolean
@@ -1701,8 +1702,12 @@
        :blockid (str uuid)
        :repo repo
        :haschild (str has-child?)}
+
        (not slide?)
-       (merge attrs))
+       (merge attrs)
+
+       (or reference? embed?)
+       (assoc :data-transclude true))
 
      (when (and ref? breadcrumb-show?)
        (when-let [comp (block-parents config repo uuid format false)]
