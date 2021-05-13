@@ -487,7 +487,7 @@
                                    (outliner-insert-block! left-block prev-block nil sibling?))]
 
     (db/refresh! repo {:key :block/insert :data [prev-block left-block current-block]})
-    (profile "ok handler" (ok-handler current-block))))
+    (profile "ok handler" (ok-handler prev-block))))
 
 (defn insert-new-block-aux!
   [config
@@ -596,7 +596,14 @@
              block-self? (block-self-alone-when-insert? config block-id)
              has-children? (db/has-children? repo block-id)
              collapsed? (:collapsed (:block/properties block))
-             insert-fn (if (or block-self? (not has-children?) collapsed?)
+             input (gdom/getElement (state/get-edit-input-id))
+             pos (util/get-input-pos input)
+             repo (or repo (state/get-current-repo))
+             [fst-block-text _snd-block-text] (compute-fst-snd-block-text value pos)
+             insert-fn (if (or block-self?
+                               (not has-children?)
+                               collapsed?
+                               (seq fst-block-text))
                          insert-new-block-aux!
                          insert-new-block-before-block-aux!)]
          (insert-fn
