@@ -1,14 +1,14 @@
 (ns frontend.modules.shortcut.core
   (:require [clojure.string :as str]
-            [frontend.state :as state]
-            [frontend.util :as util]
+            [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.util :as util]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
             [lambdaisland.glogi :as log]
             [medley.core :as medley])
-  (:import [goog.ui KeyboardShortcutHandler]
-           [goog.events KeyCodes]))
+  (:import [goog.events KeyCodes]
+           [goog.ui KeyboardShortcutHandler]))
 
 (def *installed (atom {}))
 
@@ -35,7 +35,13 @@
     (doseq [[id _] shortcut-map]
       ;; (log/info :shortcut/install-shortcut {:id id :shortcut (dh/shortcut-binding id)})
       (doseq [k (dh/shortcut-binding id)]
-        (.registerShortcut handler (util/keyname id) k)))
+        (try
+          (.registerShortcut handler (util/keyname id) k)
+          (catch js/Object e
+            (log/error :shortcut/register-shortcut {:id id
+                                                    :binding k
+                                                    :error e})
+            (notification/show! (str/join " " [id k (.-message e)]) :error)))))
 
     (let [f (fn [e]
               (let [dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
