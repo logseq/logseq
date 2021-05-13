@@ -382,8 +382,7 @@
     [fst-block-text snd-block-text]))
 
 (defn outliner-insert-block!
-  [current-block new-block child? {:keys [need-save-current-block?]
-                                   :or {need-save-current-block? true}}]
+  [current-block new-block child? sibling?]
   (let [dummy? (:block/dummy? current-block)
         [current-node new-node]
         (mapv outliner-core/block [current-block new-block])
@@ -393,14 +392,16 @@
                    child?
                    false
 
+                   (some? sibling?)
+                   sibling?
+
                    (:collapsed (:block/properties current-block))
                    true
 
                    :else
                    (not has-children?))]
     (let [*blocks (atom [current-node])]
-      (when need-save-current-block?
-        (outliner-core/save-node current-node))
+      (outliner-core/save-node current-node)
       (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
                                                                  :skip-transact? false})
       {:blocks @*blocks
@@ -474,14 +475,14 @@
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/level :block/file :block/journal?]) new-m)
                        (wrap-parse-block))
-        parent-block (db/pull (:db/id (:block/left block)))
+        left-block (db/pull (:db/id (:block/left block)))
         _ (outliner-core/save-node (outliner-core/block current-block))
+        sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
-                                   (outliner-insert-block! parent-block prev-block nil
-                                                           {:need-save-current-block? false}))]
+                                   (outliner-insert-block! left-block prev-block nil sibling?))]
 
-    (db/refresh! repo {:key :block/insert :data [prev-block parent-block current-block]})
+    (db/refresh! repo {:key :block/insert :data [prev-block left-block current-block]})
     (profile "ok handler" (ok-handler current-block))))
 
 (defn insert-new-block-aux!
@@ -507,7 +508,7 @@
                        (wrap-parse-block))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
-                                   (outliner-insert-block! current-block next-block block-self? {}))
+                                   (outliner-insert-block! current-block next-block block-self? nil))
         refresh-fn (fn []
                      (let [opts {:key :block/insert
                                  :data [current-block next-block]}]
@@ -590,7 +591,8 @@
              [properties value] (with-timetracking-properties block value)
              block-self? (block-self-alone-when-insert? config block-id)
              has-children? (db/has-children? repo block-id)
-             insert-fn (if (or block-self? (not has-children?))
+             collapsed? (:collapsed (:block/properties block))
+             insert-fn (if (or block-self? (not has-children?) collapsed?)
                          insert-new-block-aux!
                          insert-new-block-before-block-aux!)]
          (insert-fn
