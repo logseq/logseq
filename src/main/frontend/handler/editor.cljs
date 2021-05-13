@@ -381,7 +381,8 @@
     [fst-block-text snd-block-text]))
 
 (defn outliner-insert-block!
-  [current-block new-block child?]
+  [current-block new-block child? {:keys [need-save-current-block?]
+                                   :or {need-save-current-block? true}}]
   (let [dummy? (:block/dummy? current-block)
         [current-node new-node]
         (mapv outliner-core/block [current-block new-block])
@@ -397,7 +398,8 @@
                    :else
                    (not has-children?))]
     (let [*blocks (atom [current-node])]
-      (outliner-core/save-node current-node)
+      (when need-save-current-block?
+        (outliner-core/save-node current-node))
       (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
                                                                  :skip-transact? false})
       {:blocks @*blocks
@@ -451,6 +453,36 @@
       (when blocks-atom
         (reset! blocks-atom blocks)))))
 
+(defn insert-new-block-before-block-aux!
+  [config
+   {:block/keys [uuid content repo format page dummy?]
+    db-id :db/id
+    :as block}
+   value
+   {:keys [ok-handler]
+    :as opts}]
+  (let [input (gdom/getElement (state/get-edit-input-id))
+        pos (util/get-input-pos input)
+        repo (or repo (state/get-current-repo))
+        [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
+        current-block (assoc block :block/content snd-block-text)
+        current-block (apply dissoc current-block db-schema/retract-attributes)
+        current-block (wrap-parse-block current-block)
+        new-m {:block/uuid (db/new-block-id)
+               :block/content fst-block-text}
+        prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
+                                                  :block/page :block/level :block/file :block/journal?]) new-m)
+                       (wrap-parse-block))
+        parent-block (db/pull (:db/id (:block/left block)))
+        _ (outliner-core/save-node (outliner-core/block current-block))
+        {:keys [sibling? blocks]} (profile
+                                   "outliner insert block"
+                                   (outliner-insert-block! parent-block prev-block nil
+                                                           {:need-save-current-block? false}))]
+
+    (db/refresh! repo {:key :block/insert :data [prev-block parent-block current-block]})
+    (profile "ok handler" (ok-handler current-block))))
+
 (defn insert-new-block-aux!
   [config
    {:block/keys [uuid content repo format page dummy?]
@@ -474,7 +506,7 @@
                        (wrap-parse-block))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
-                                   (outliner-insert-block! current-block next-block block-self?))
+                                   (outliner-insert-block! current-block next-block block-self? {}))
         refresh-fn (fn []
                      (let [opts {:key :block/insert
                                  :data [current-block next-block]}]
@@ -554,16 +586,27 @@
              block (or (db/pull [:block/uuid block-id])
                        block)
              repo (or (:block/repo block) (state/get-current-repo))
-             [properties value] (with-timetracking-properties block value)]
-         ;; save the current block and insert a new block
-         (insert-new-block-aux!
-          config
-          (assoc block :block/properties properties)
-          value
-          {:ok-handler
-           (fn [last-block]
-             (edit-block! last-block 0 format id)
-             (clear-when-saved!))}))))
+             [properties value] (with-timetracking-properties block value)
+             block-self? (block-self-alone-when-insert? config block-id)
+             has-children? (db/has-children? repo block-id)]
+         (if (or block-self? (not has-children?))
+           ;; save the current block and insert a new block
+           (insert-new-block-aux!
+            config
+            (assoc block :block/properties properties)
+            value
+            {:ok-handler
+             (fn [last-block]
+               (edit-block! last-block 0 format id)
+               (clear-when-saved!))})
+           (insert-new-block-before-block-aux!
+            config
+            (assoc block :block/properties properties)
+            value
+            {:ok-handler
+             (fn [last-block]
+               (edit-block! last-block 0 format id)
+               (clear-when-saved!))})))))
    (state/set-editor-op! nil)))
 
 (defn update-timestamps-content!
