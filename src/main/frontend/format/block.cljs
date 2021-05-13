@@ -9,6 +9,7 @@
             [datascript.core :as d]
             [frontend.date :as date]
             [frontend.text :as text]
+            [frontend.util.property :as property]
             [medley.core :as medley]
             [frontend.state :as state]
             [frontend.db :as db]))
@@ -411,7 +412,7 @@
                                       (drop-while #(= ["Break_Line"] %)))]
                   (recur headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
 
-                (text/properties-block? block)
+                (property/properties-block? block)
                 (let [properties (extract-properties block start_pos end_pos)]
                   (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
 

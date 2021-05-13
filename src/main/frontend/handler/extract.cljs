@@ -7,6 +7,7 @@
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
             [frontend.text :as text]
+            [frontend.util.property :as property]
             [clojure.string :as string]
             [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
@@ -94,7 +95,7 @@
                               content (get-block-content utf8-content block format)
                               content (if (= format :org)
                                         content
-                                        (text/->new-properties content))]
+                                        (property/->new-properties content))]
                           (when block-ref-pages
                             (swap! ref-pages set/union (set block-ref-pages)))
                           (-> block
@@ -180,7 +181,7 @@
            ast (mldoc/->edn content
                             (mldoc/default-config format))
            first-block (ffirst ast)
-           properties (let [properties (and (text/properties-block? first-block)
+           properties (let [properties (and (property/properties-block? first-block)
                                             (->> (last first-block)
                                                  (into {})
                                                  (walk/keywordize-keys)))]
