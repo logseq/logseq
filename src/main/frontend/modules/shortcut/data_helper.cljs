@@ -5,7 +5,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]))
-(defn binding-map []
+(defonce binding-map
   (->> (vals config/default-config)
        (apply merge)
        (map (fn [[k {:keys [binding]}]]
@@ -18,7 +18,7 @@
 
 (defn shortcut-binding
   [id]
-  (let [shortcut (get (binding-map) id)]
+  (let [shortcut (get binding-map id)]
     (cond
       (nil? shortcut)
       (log/error :shortcut/binding-not-found {:id id})
@@ -38,7 +38,7 @@
   (let [dict (->> (vals config/default-config)
                   (apply merge)
                   (map (fn [[k {:keys [i18n]}]]
-                         {k {:binding (get (binding-map) k)
+                         {k {:binding (get binding-map k)
                              :i18n    i18n}}))
                   (into {}))]
     (->> (config/category name)

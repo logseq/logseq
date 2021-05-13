@@ -863,7 +863,9 @@
   ([key]
    (get-shortcut (get-current-repo) key))
   ([repo key]
-   (get-in @state [:config repo :shortcuts key])))
+   (or
+    (get (storage/get (str repo "-shortcuts")) key)
+    (get-in @state [:config repo :shortcuts key]))))
 
 (defn get-me
   []
@@ -997,7 +999,9 @@
 
 (defn set-config!
   [repo-url value]
-  (set-state! [:config repo-url] value))
+  (set-state! [:config repo-url] value)
+  (let [shortcuts (or (:shortcuts value) {})]
+    (storage/set (str repo-url "-shortcuts") shortcuts)))
 
 (defn get-git-auto-push?
   ([]

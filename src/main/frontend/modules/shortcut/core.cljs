@@ -33,7 +33,7 @@
     ;; register shortcuts
     ;; TODO add try catch for register conflicts
     (doseq [[id _] shortcut-map]
-      (log/info :shortcut/install-shortcut {:id id :shortcut (dh/shortcut-binding id)})
+      ;; (log/info :shortcut/install-shortcut {:id id :shortcut (dh/shortcut-binding id)})
       (doseq [k (dh/shortcut-binding id)]
         (.registerShortcut handler (util/keyname id) k)))
 
