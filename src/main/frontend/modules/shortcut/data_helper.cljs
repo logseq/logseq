@@ -84,6 +84,7 @@
   (-> binding
       (str/replace "mod" (if util/mac? "cmd" "ctrl"))
       (str/replace "alt" (if util/mac? "opt" "alt"))
+      (str/replace "shift+/" "?")
       (csk/->PascalCase :separator #"(\+|\s)")))
 
 (defn binding-for-display [binding]
