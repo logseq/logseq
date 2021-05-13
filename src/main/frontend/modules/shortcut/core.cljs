@@ -41,7 +41,7 @@
             (log/error :shortcut/register-shortcut {:id id
                                                     :binding k
                                                     :error e})
-            (notification/show! (str/join " " [id k (.-message e)]) :error)))))
+            (notification/show! (str/join " " [id k (.-message e)]) :error false)))))
 
     (let [f (fn [e]
               (let [dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
