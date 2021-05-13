@@ -283,7 +283,7 @@
                           (js/clearTimeout @search-timeout))
                         (let [value (util/evalue e)]
                           (if (string/blank? value)
-                            (search-handler/clear-search!)
+                            (search-handler/clear-search! false)
                             (let [search-mode (state/get-search-mode)
                                   opts (if (= :page search-mode)
                                          (let [current-page (or (state/get-current-page)

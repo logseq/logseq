@@ -31,13 +31,16 @@
         (swap! state/state assoc search-key result))))))
 
 (defn clear-search!
-  []
-  (swap! state/state assoc
-         :search/result nil
-         :search/q ""
-         :search/mode :global)
-  (when-let [input (gdom/getElement "search-field")]
-    (gobj/set input "value" "")))
+  ([]
+   (clear-search! true))
+  ([clear-search-mode?]
+   (let [m (cond-> {:search/result nil
+                    :search/q ""}
+             clear-search-mode?
+             (assoc :search/mode :global))]
+     (swap! state/state merge m))
+   (when-let [input (gdom/getElement "search-field")]
+     (gobj/set input "value" ""))))
 
 (defn rebuild-indices!
   []
