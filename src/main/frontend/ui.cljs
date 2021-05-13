@@ -316,11 +316,10 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     (rum/fragment
      body
-     [:a.fade-link.text-link.font-bold.text-4xl
-      {:on-click on-load
-       :disabled (not has-more)
-       :class (when (not has-more) "cursor-not-allowed ")}
-      (t (if has-more :page/earlier :page/no-more-journals))])))
+     (when has-more
+       [:a.fade-link.text-link.font-bold.text-4xl
+        {:on-click on-load}
+        (t :page/earlier)]))))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)

@@ -402,18 +402,14 @@
   (->> (db/get-modified-pages repo)
        (remove util/file-page?)))
 
-(defonce filters-state (atom nil))
 (defn get-filters
   [page-name]
-  (let [properties (db/get-page-properties page-name)
-        filters (reader/read-string (get properties :filters "{}"))]
-    (reset! filters-state filters)
-    filters-state))
+  (let [properties (db/get-page-properties page-name)]
+    (reader/read-string (get properties :filters "{}"))))
 
 (defn save-filter!
   [page-name filter-state]
-  (page-add-property! page-name :filters filter-state)
-  (reset! filters-state (pr-str filter-state)))
+  (page-add-property! page-name :filters filter-state))
 
 (defn page-exists?
   [page-name]

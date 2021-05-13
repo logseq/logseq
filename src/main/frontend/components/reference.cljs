@@ -18,42 +18,48 @@
             [medley.core :as medley]))
 
 (rum/defc filter-dialog-inner < rum/reactive
-  [close-fn references page-name]
-  (let [filter-state (page-handler/get-filters page-name)]
-    [:div.filters
-     [:div.sm:flex.sm:items-start
-      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
-       (svg/filter-icon)]
-      [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-       [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
-       [:span.text-xs
-        "Click to include and shift-click to exclude. Click again to remove."]]]
-     (when (seq references)
+  [filters-atom close-fn references page-name]
+  [:div.filters
+   [:div.sm:flex.sm:items-start
+    [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
+     (svg/filter-icon)]
+    [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
+     [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
+     [:span.text-xs
+      "Click to include and shift-click to exclude. Click again to remove."]]]
+   (when (seq references)
+     (let [filters (rum/react filters-atom)]
        [:div.mt-5.sm:mt-4.sm:flex.sm.gap-1.flex-wrap
-        (for [reference references]
-          (let [lc-reference (string/lower-case reference)
-                filtered (get (rum/react filter-state) lc-reference)
-                color (condp = filtered
-                        true "text-green-400"
-                        false "text-red-400"
-                        nil)]
-            [:button.border.rounded.px-1.mb-1.mr-1 {:key reference :class color :style {:border-color "currentColor"}
-                                               :on-click (fn [e]
-                                                           (swap! filter-state #(if (nil? (get @filter-state lc-reference))
-                                                                                  (assoc % lc-reference (not (.-shiftKey e)))
-                                                                                  (dissoc % lc-reference)))
-                                                           (page-handler/save-filter! page-name @filter-state))}
-             reference]))])]))
+       (for [reference references]
+         (let [lc-reference (string/lower-case reference)
+               filtered (get filters lc-reference)
+               color (condp = filtered
+                       true "text-green-400"
+                       false "text-red-400"
+                       nil)]
+           [:button.border.rounded.px-1.mb-1.mr-1 {:key reference :class color :style {:border-color "currentColor"}
+                                                   :on-click (fn [e]
+                                                               (swap! filters-atom #(if (nil? (get filters lc-reference))
+                                                                                      (assoc % lc-reference (not (.-shiftKey e)))
+                                                                                      (dissoc % lc-reference)))
+                                                               (page-handler/save-filter! page-name @filters-atom))}
+            reference]))]))])
 
 (defn filter-dialog
-  [references page-name]
+  [filters-atom references page-name]
   (fn [close-fn]
-    (filter-dialog-inner close-fn references page-name)))
+    (filter-dialog-inner filters-atom close-fn references page-name)))
 
-(rum/defc references < rum/reactive
-  [page-name marker? priority?]
+(rum/defcs references < rum/reactive
+  {:init (fn [state]
+           (let [page-name (first (:rum/args state))
+                 filters (when page-name
+                           (atom (page-handler/get-filters (string/lower-case page-name))))]
+             (assoc state ::filters filters)))}
+  [state page-name marker? priority?]
   (when page-name
-    (let [block? (util/uuid-string? page-name)
+    (let [filters-atom (get state ::filters)
+          block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           page-name (string/lower-case page-name)
           journal? (date/valid-journal-title? (string/capitalize page-name))
@@ -78,8 +84,7 @@
           references (->> (concat ref-pages references)
                           (remove nil?)
                           (distinct))
-          filters (page-handler/get-filters page-name)
-          filter-state (rum/react filters)
+          filter-state (rum/react filters-atom)
           filters (when (seq filter-state)
                     (->> (group-by second filter-state)
                          (medley/map-vals #(map first %))))
@@ -110,7 +115,7 @@
                                              (if (> n-ref 1) "s")))]
             [:a.opacity-50.hover:opacity-100
              {:title "Filter"
-              :on-click #(state/set-modal! (filter-dialog references page-name))}
+              :on-click #(state/set-modal! (filter-dialog filters-atom references page-name))}
              (svg/filter-icon (cond
                                 (empty? filter-state) nil
                                 (every? true? (vals filter-state)) "text-green-400"
