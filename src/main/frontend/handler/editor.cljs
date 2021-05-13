@@ -314,8 +314,9 @@
                              :else
                              (let [content' (str (config/get-block-pattern format) (if heading? " " "\n") content)]
                                [content content']))
-        block (block/parse-block (-> (assoc block :block/content content')
-                                     (dissoc :block/properties)))
+        block (assoc block :block/content content')
+        block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
+        block (block/parse-block block)
         block (if (and first-block? (:block/pre-block? block))
                 block
                 (dissoc block :block/pre-block?))
