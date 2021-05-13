@@ -771,6 +771,7 @@ title: How to take dummy notes?
            :help/shortcuts "快捷键"
            :help/shortcuts-triggers "触发"
            :help/shortcut "快捷键"
+           :help/shortcut-page-title "完整快捷键"
            :help/slash-autocomplete "Slash 自动提示"
            :help/block-content-autocomplete "块内容 (Src, Quote, Query 等) 自动完成"
            :help/reference-autocomplete "页面引用自动补全"
