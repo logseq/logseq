@@ -15,23 +15,23 @@
 (def default-config
   {:shortcut.handler/date-picker
    {:date-picker/complete
-    {:desc    "Choose selected item"
+    {:desc    "Date picker choose selected day"
      :binding "enter"
      :fn      ui-handler/shortcut-complete}
     :date-picker/prev-day
-    {:desc    "Select previous day"
+    {:desc    "Date picker select previous day"
      :binding "left"
      :fn      ui-handler/shortcut-prev-day}
     :date-picker/next-day
-    {:desc    "Select next day"
+    {:desc    "Date picker select next day"
      :binding "right"
      :fn      ui-handler/shortcut-next-day}
     :date-picker/prev-week
-    {:desc    "Select prev week"
+    {:desc    "Date picker select prev week"
      :binding "up"
      :fn      ui-handler/shortcut-prev-week}
     :date-picker/next-week
-    {:desc    "Select next week"
+    {:desc    "Date picker select next week"
      :binding "down"
      :fn      ui-handler/shortcut-next-week}}
 
@@ -390,4 +390,12 @@
    ^{:doc "Others"}
    [:go/journals
     :search/re-index
-    :graph/re-index]})
+    :graph/re-index
+    :auto-complete/prev
+    :auto-complete/next
+    :auto-complete/complete
+    :date-picker/prev-day
+    :date-picker/next-day
+    :date-picker/prev-week
+    :date-picker/next-week
+    :date-picker/complete]})
