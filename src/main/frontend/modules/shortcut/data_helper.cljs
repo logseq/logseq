@@ -4,8 +4,6 @@
             [frontend.util :as util]
             [clojure.string :as str]
             [frontend.state :as state]))
-
-
 (defn binding-map []
   (->> (vals config/default-config)
        (apply merge)
@@ -63,18 +61,20 @@
                            (assoc r k (before v)))
                          {})))))
 
-(defn- decorate-namespace [k]
+(defn decorate-namespace [k]
   (let [n (name k)
         ns (namespace k)]
     (keyword (str "shortcut." ns) n)))
-(defn shortcut-dict
-  "All docs for EN are generated from :desc field of shortcut default-config map.
-  For all other languages, need manual translation in dict file.
-  Eg: editor/insert-link would be shortcut.editor/insert-link in dict file"
-  []
-  {:en
-   (->> (vals config/default-config)
-        (apply merge)
-        (map (fn [[k {:keys [desc]}]]
-               {(decorate-namespace k) desc}))
-        (into {}))})
+
+(defn desc-helper []
+  (->> (vals config/default-config)
+       (apply merge)
+       (map (fn [[k {:keys [desc]}]]
+              {(decorate-namespace k) desc}))
+       (into {})))
+
+(defn category-helper []
+  (->> config/category
+       (map (fn [[k v]]
+              {k (:doc (meta v))}))
+       (into {})))

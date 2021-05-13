@@ -10,9 +10,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
             [frontend.config :as config]
-            [cljs-time.local :as tl]
-            [clojure.string :as string]
-            [goog.object :as gobj]))
+            [cljs-time.local :as tl]))
 
 (defn- set-git-status!
   [repo-url value]
@@ -63,18 +61,3 @@
      (config/get-repo-dir repo-url)
      name
      email)))
-
-(defn show-commit-modal!
-  [modal]
-  (fn [e]
-    (when (and
-          (string/starts-with? (state/get-current-repo) "https://")
-          (not (util/input? (gobj/get e "target")))
-          (not (gobj/get e "shiftKey"))
-          (not (gobj/get e "ctrlKey"))
-          (not (gobj/get e "altKey"))
-          (not (gobj/get e "metaKey")))
-     (when-let [repo-url (state/get-current-repo)]
-       (when-not (state/get-edit-input-id)
-         (util/stop e)
-         (state/set-modal! modal))))))

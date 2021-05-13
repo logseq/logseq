@@ -18,9 +18,9 @@
           [:th [:b (t name)]]
           [:th (t :help/shortcut)]]]
         [:tbody
-         (map (fn [[k {:keys [i18n binding]}]]
+         (map (fn [[k {:keys [binding]}]]
                 [:tr {:key k}
-                 [:td (t i18n)]
+                 [:td (t (dh/decorate-namespace k))]
                  [:td binding]])
               (dh/binding-by-category name))]]])))
 

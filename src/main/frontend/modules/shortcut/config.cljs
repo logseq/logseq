@@ -1,14 +1,15 @@
 (ns frontend.modules.shortcut.config
-  (:require [frontend.handler.config :as config-handler]
+  (:require [frontend.components.commit :as commit]
+            [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.components.commit :as git-handler]
+            [frontend.handler.history :as history]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.state :as state]
             [frontend.modules.shortcut.before :as m]
+            [frontend.state :as state]
             [frontend.util :refer [mac?]]))
 
 (def default-config
@@ -238,7 +239,7 @@
      :binding "mod+shift+u"
      :fn      #(route-handler/go-to-search! :page)}
     :go/search
-    {:desc  "Full text search"
+    {:desc    "Full text search"
      :binding "mod+u"
      :fn      route-handler/go-to-search!}
     :go/journals
@@ -300,12 +301,13 @@
     :git/commit
     {:desc    "Git commit message"
      :binding "g c"
-     :fn      git-handler/show-commit-modal!}}})
+     :fn      commit/show-commit-modal!}}})
 
 
 ;; Categories for docs purpose
 (def category
   {:shortcut.category/basics
+   ^{:doc "Basics"}
    [:editor/new-block
     :editor/new-line
     :editor/indent
@@ -322,18 +324,21 @@
     :editor/cut]
 
    :shortcut.category/formatting
+   ^{:doc "Formatting"}
    [:editor/bold
     :editor/insert-link
     :editor/italics
     :editor/highlight]
 
    :shortcut.category/navigating
+   ^{:doc "Navigation"}
    [:editor/up
     :editor/down
     :editor/left
     :editor/right]
 
    :shortcut.category/block-editing
+   ^{:doc "Block editing general"}
    [:editor/backspace
     :editor/delete
     :editor/indent
@@ -350,6 +355,7 @@
     :editor/move-block-down]
 
    :shortcut.category/block-command-editing
+   ^{:doc "Block command editing"}
    [:editor/backspace
     :editor/clear-block
     :editor/kill-line-before
@@ -362,12 +368,14 @@
     :editor/backward-kill-word]
 
    :shortcut.category/block-selection
+   ^{:doc "Block selection (press Esc to quit selection)"}
    [:editor/open-edit
     :editor/select-block-up
     :editor/select-block-down
     :editor/delete-selection]
 
    :shortcut.category/toggle
+   ^{:doc "Toggle"}
    [:ui/toggle-help
     :ui/toggle-new-block
     :ui/toggle-wide-mode
@@ -379,7 +387,7 @@
     :ui/toggle-contents]
 
    :shortcut.category/others
+   ^{:doc "Others"}
    [:go/journals
     :search/re-index
-    :graph/re-index]
-   })
+    :graph/re-index]})
