@@ -354,12 +354,13 @@
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [{:block/keys [uuid content file page format repo content properties]} block
+   (let [{:block/keys [uuid file page format repo content properties]} block
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
-         block-id (when (map? properties) (get properties :id))]
+         block-id (when (map? properties) (get properties :id))
+         content (text/remove-built-in-properties! format content)]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
