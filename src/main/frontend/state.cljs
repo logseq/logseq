@@ -466,14 +466,15 @@
   [value]
   (set-state! :editor/show-page-search? value)
   (set-state! :editor/show-page-search-hashtag? false))
-(defn set-editor-show-page-search-hashtag!
-  [value]
-  (set-state! :editor/show-page-search? value)
-  (set-state! :editor/show-page-search-hashtag? value))
 
 (defn get-editor-show-page-search?
   []
   (get @state :editor/show-page-search?))
+
+(defn set-editor-show-page-search-hashtag!
+  [value]
+  (set-state! :editor/show-page-search? value)
+  (set-state! :editor/show-page-search-hashtag? value))
 (defn get-editor-show-page-search-hashtag?
   []
   (get @state :editor/show-page-search-hashtag?))
@@ -657,7 +658,7 @@
                                         ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
-    (when-let [elem (gdom/getElement "right-sidebar-container")]
+    (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scollable")]
       (util/scroll-to elem 0))))
 
 (defn sidebar-remove-block!
@@ -1209,7 +1210,7 @@
 
 (defn get-export-bullet-indentation
   []
-  (case (get (get-config) :export/bullet-indentation :four-spaces)
+  (case (get (get-config) :export/bullet-indentation :two-spaces)
     :eight-spaces
     "        "
     :four-spaces

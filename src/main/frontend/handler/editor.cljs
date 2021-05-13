@@ -47,7 +47,9 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.db.outliner :as outliner-db]
             [frontend.modules.outliner.tree :as tree]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [datascript.core :as d]
+            [frontend.util.marker :as marker]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -277,9 +279,17 @@
              :db/other-tx page-tx))
     block))
 
+(defn- remove-non-existed-refs!
+  [refs]
+  (remove (fn [x] (and (vector? x)
+                      (= :block/uuid (first x))
+                      (nil? (db/entity x)))) refs))
+
 (defn- wrap-parse-block
-  [{:block/keys [content format parent left page uuid pre-block? properties] :as block}]
-  (let [real-content (:block/content (db/entity (:db/id block)))
+  [{:block/keys [content format parent left page uuid pre-block?] :as block}]
+  (let [block (or (db/pull (:db/id block)) block)
+        properties (:block/properties block)
+        real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
                   (text/with-built-in-properties properties content format)
                   content)
@@ -294,7 +304,7 @@
         content (string/triml content)
         content (string/replace content (util/format "((%s))" (str uuid)) "")
         [content content'] (cond
-                             (or properties? (and markdown-heading? top-level?))
+                             (and markdown-heading? top-level?)
                              [content content]
 
                              markdown-heading?
@@ -304,15 +314,21 @@
                              :else
                              (let [content' (str (config/get-block-pattern format) (if heading? " " "\n") content)]
                                [content content']))
-        block (block/parse-block (assoc block :block/content content'))
+        block (block/parse-block (-> (assoc block :block/content content')
+                                     (dissoc :block/properties)))
         block (if (and first-block? (:block/pre-block? block))
                 block
                 (dissoc block :block/pre-block?))
-        block (attach-page-properties-if-exists! block)]
+        block (update block :block/refs remove-non-existed-refs!)
+        block (attach-page-properties-if-exists! block)
+        new-properties (merge
+                        (select-keys properties text/built-in-properties)
+                        (:block/properties block))]
     (-> block
        (dissoc :block/top?
                :block/block-refs-count)
-       (assoc :block/content content))))
+       (assoc :block/content content
+              :block/properties new-properties))))
 
 (defn- save-block-inner!
   [repo block value {:keys [refresh?]
@@ -321,11 +337,9 @@
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (do
-       (->
-        (wrap-parse-block block)
-        (outliner-core/block)
-        (outliner-core/save-node))
+     (let [block (wrap-parse-block block)]
+       (-> (outliner-core/block block)
+           (outliner-core/save-node))
        (when refresh?
          (let [opts {:key :block/change
                      :data [block]}]
@@ -455,9 +469,8 @@
         current-block (wrap-parse-block current-block)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
-        next-block (-> (merge block new-m)
-                       (dissoc :db/id :block/properties :block/pre-block? :block/meta
-                               :block/heading-level :block/type)
+        next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
+                                                  :block/page :block/level :block/file :block/journal?]) new-m)
                        (wrap-parse-block))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
@@ -508,7 +521,7 @@
 
 (defn- with-timetracking-properties
   [block value]
-  (let [new-marker (first (re-find util/bare-marker-pattern (or value "")))
+  (let [new-marker (first (re-find marker/bare-marker-pattern (or value "")))
         new-marker (if new-marker (string/lower-case (string/trim new-marker)))
         new-marker? (and
                      new-marker
@@ -568,7 +581,7 @@
       (when content
         (str (string/trimr content)
              "\n"
-             (util/format "- %s -> DONE [%s]"
+             (util/format "* %s -> DONE [%s]"
                           marker
                           (date/get-local-date-time-string)))))
     content))
@@ -625,7 +638,7 @@
                                  (let [marker (if (= :now (state/get-preferred-workflow))
                                                 "LATER"
                                                 "TODO")]
-                                   [(util/add-or-update-marker (string/triml content) format marker)  marker]))
+                                   [(marker/add-or-update-marker (string/triml content) format marker)  marker]))
           new-content (string/triml new-content)]
       (let [new-pos (commands/compute-pos-delta-when-change-marker
                      current-input content new-content marker (util/get-input-pos current-input))]
@@ -1016,7 +1029,9 @@
     (if block-id
       (let [repo (state/get-current-repo)
             block-parent (db/get-block-parent repo block-id)]
-        (if-let [id (:block/uuid block-parent)]
+        (if-let [id (and
+                      (nil? (:block/name block-parent))
+                      (:block/uuid block-parent))]
           (route-handler/redirect! {:to :page
                                     :path-params {:name (str id)}})
           (let [page-id (-> (db/entity [:block/uuid block-id])
@@ -1814,7 +1829,7 @@
                                                                                        (mldoc/->edn (str (case format
                                                                                                            :markdown "- "
                                                                                                            :org "* ")
-                                                                                                         (if (:block/title %) "" "\n")
+                                                                                                         (if (seq (:block/title %)) "" "\n")
                                                                                                          new-content)
                                                                                                     (mldoc/default-config format)))))
                                                                       (:block/title %))]
@@ -1859,8 +1874,13 @@
           block-uuid (:block/uuid block)
           including-parent? (not (false? (:including-parent (:block/properties block))))
           blocks (if including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
-          level-blocks-map (blocks-with-level blocks)
-          tree (blocks-vec->tree (vals level-blocks-map))]
+          level-blocks (vals (blocks-with-level blocks))
+          grouped-blocks (group-by #(= db-id (:db/id %)) level-blocks)
+          root-block (or (first (get grouped-blocks true)) (assoc (db/pull db-id) :level 0))
+          blocks-exclude-root (get grouped-blocks false)
+          sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
+          result-blocks (if including-parent? sorted-blocks (drop 1 sorted-blocks))
+          tree (blocks-vec->tree result-blocks)]
       (paste-block-tree-at-point tree [:template :including-parent]
                                  (fn [content]
                                    (->> content
@@ -2324,7 +2344,8 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (= c " ")
+        (when (and (= c " ")
+                   (not (state/get-editor-show-page-search?)))
           (state/set-editor-show-page-search-hashtag! false))
 
         (when (and @*show-commands (not= key-code 191)) ; not /

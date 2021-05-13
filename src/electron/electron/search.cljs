@@ -174,9 +174,10 @@
   [repo]
   (when-let [database (get-db repo)]
     (.close database)
-    (let [[_ db-full-path] (get-db-full-path repo)]
+    (let [[db-name db-full-path] (get-db-full-path repo)]
       (println "Delete search indice: " db-full-path)
-      (fs/unlinkSync db-full-path))))
+      (fs/unlinkSync db-full-path)
+      (swap! databases dissoc db-name))))
 
 (defn query
   [repo sql]

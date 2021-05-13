@@ -865,11 +865,12 @@
         ;; TODO: support fullscreen mode, maybe we need a fullscreen dialog?
         (= name "bilibili")
         (when-let [url (first arguments)]
-          (let [id-regex #"https?://www\.bilibili\.com/video/([\w\W]+)"]
+          (let [id-regex #"https?://www\.bilibili\.com/video/([^? ]+)"]
             (when-let [id (cond
                             (<= (count url) 15) url
                             :else
                             (last (re-find id-regex url)))]
+              (prn {:id id})
               (when-not (string/blank? id)
                 (let [width (min (- (util/get-width) 96)
                                  560)
@@ -1135,23 +1136,23 @@
         [:a.marker-switch
          {:title "Change from NOW to LATER"
           :on-click (set-marker-fn "LATER")}
-         "N"]
+         "NOW"]
         "LATER"
         [:a.marker-switch
          {:title "Change from LATER to NOW"
           :on-click (set-marker-fn "NOW")}
-         "L"]
+         "LATER"]
 
         "TODO"
         [:a.marker-switch
          {:title "Change from TODO to DOING"
           :on-click (set-marker-fn "DOING")}
-         "T"]
+         "TODO"]
         "DOING"
         [:a.marker-switch
          {:title "Change from DOING to TODO"
           :on-click (set-marker-fn "TODO")}
-         "D"]
+         "DOING"]
         nil))))
 
 (defn marker-cp
@@ -1290,7 +1291,8 @@
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
                      (dissoc properties :title :filters)
-                     properties)]
+                     properties)
+        properties (sort properties)]
     (cond
       (seq properties)
       [:div.blocks-properties.text-sm.opacity-80.my-1.p-2
@@ -1777,7 +1779,10 @@
       (if (nil? checkbox)
         (->elem
          :li
-         {:checked checked?}
+         (cond->
+           {:checked checked?}
+           number
+           (assoc :value number))
          (vec-cat
           [(->elem
             :p

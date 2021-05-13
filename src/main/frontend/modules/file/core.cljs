@@ -25,7 +25,8 @@
   (let [content (or content "")
         heading-with-title? (seq title)
         first-block? (= left page)
-        pre-block? (and first-block? pre-block?)]
+        pre-block? (and first-block? pre-block?)
+        markdown-heading? (and (= format :markdown) (not unordered) (not heading-to-list?))]
     (cond
       (and first-block? pre-block?)
       (let [content (-> (string/trim content)
@@ -41,7 +42,7 @@
                 (repeat level "*")
                 (apply str)) ""]
 
-              (and (= format :markdown) (not unordered) (not heading-to-list?)) ; heading
+              markdown-heading?
               ["" ""]
 
               :else
@@ -60,6 +61,9 @@
                       content)
             new-content (indented-block-content (string/trim content) spaces-tabs)
             sep (cond
+                  markdown-heading?
+                  ""
+
                   heading-with-title?
                   " "
 
@@ -110,7 +114,7 @@
                 "/"
                 (if journal-page?
                   (date/journal-title->default title)
-                  (-> (:block/name page)
+                  (-> (or (:block/original-name page) (:block/name page))
                       (util/page-name-sanity))) "."
                 (if (= format "markdown") "md" format))
           file-path (str "/" path)

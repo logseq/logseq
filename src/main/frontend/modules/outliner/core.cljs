@@ -130,7 +130,6 @@
     (let [m (-> (:data this)
                 (dissoc :block/children :block/dummy? :block/meta)
                 (util/remove-nils))
-          m (update m :block/refs db-outliner/remove-non-existed-refs!)
           other-tx (:db/other-tx m)]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
@@ -483,6 +482,21 @@
              (tree/-set-left-id (tree/-get-id last-node))
              (tree/-save txs-state))))))))
 
+
+(defn- set-nodes-page&file-aux
+  [node page file txs-state]
+  (let [new-node (update node :data assoc :block/page page :block/file file)]
+    (tree/-save new-node txs-state)
+    (doseq [n (tree/-get-children new-node)]
+      (set-nodes-page&file-aux n page file txs-state))))
+
+(defn- set-nodes-page&file
+  [node target-node txs-state]
+  (let [page (or (get-in target-node [:data :block/page])
+                 {:db/id (get-in target-node [:data :db/id])}) ; or page block
+        file (get-in target-node [:data :block/file])]
+    (set-nodes-page&file-aux node page file txs-state)))
+
 (defn move-subtree
   "Move subtree to a destination position in the relation tree.
   Args:
@@ -506,9 +520,10 @@
          (when (tree/satisfied-inode? right-node)
            (let [new-right-node (tree/-set-left-id right-node left-node-id)]
              (tree/-save new-right-node txs-state)))
-         (if sibling?
-           (insert-node-as-sibling txs-state root target-node)
-           (insert-node-as-first-child txs-state root target-node)))))))
+         (let [new-root (first (if sibling?
+                                 (insert-node-as-sibling txs-state root target-node)
+                                 (insert-node-as-first-child txs-state root target-node)))]
+           (set-nodes-page&file new-root target-node txs-state)))))))
 
 (defn get-right-node
   [node]

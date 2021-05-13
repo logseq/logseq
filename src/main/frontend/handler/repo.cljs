@@ -237,6 +237,7 @@
       (if db-encrypted?
         (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)]
           (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
+                             db-encrypted-secret
                              close-fn]))
         (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)))))
 

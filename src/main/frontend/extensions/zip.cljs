@@ -2,6 +2,8 @@
   (:require ["jszip" :as JSZip]
             ["/frontend/utils" :as utils]
             [promesa.core :as p]
+            [clojure.string :as string]
+            [frontend.config :as config]
             [medley.core :as medley]))
 
 (defn make-file [content file-name args]
@@ -11,10 +13,15 @@
     (aset args "lastModified" last-modified)
     (js/File. blob-content file-name args)))
 
-(defn make-zip [repo file-name->content]
+(defn make-zip [zip-filename file-name->content repo]
   (let [zip (JSZip.)
-        folder (.folder zip repo)]
+        zip-foldername (subs zip-filename (inc (string/last-index-of zip-filename "/")))
+        src-filepath (string/replace repo config/local-db-prefix "")
+        folder (.folder zip zip-foldername)]
     (doseq [[file-name content] file-name->content]
-      (.file folder file-name content))
+      (.file folder (-> file-name
+                        (string/replace src-filepath "")
+                        (string/replace #"^/+" ""))
+             content))
     (p/let [zip-blob (.generateAsync zip #js {:type "blob"})]
-      (make-file zip-blob (str repo ".zip") {:type "application/zip"}))))
+      (make-file zip-blob (str zip-filename ".zip") {:type "application/zip"}))))
