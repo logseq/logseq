@@ -304,6 +304,9 @@
         content (string/triml content)
         content (string/replace content (util/format "((%s))" (str uuid)) "")
         [content content'] (cond
+                             (and first-block? properties?)
+                             [content content]
+
                              (and markdown-heading? top-level?)
                              [content content]
 
