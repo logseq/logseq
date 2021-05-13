@@ -206,7 +206,8 @@
                                  :block
                                  block))
 
-                              nil))
+                              nil)
+                            (search-handler/clear-search!))
          :item-render (fn [{:keys [type data]}]
                         (let [search-mode (state/get-search-mode)]
                           [:div {:class "py-2"} (case type
