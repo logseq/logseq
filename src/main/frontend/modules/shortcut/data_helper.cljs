@@ -45,12 +45,6 @@
     (->> (config/category name)
          (mapv (fn [k] [k (k dict)])))))
 
-#_
-(defn decorate-namespace [k]
-  (let [n (name k)
-        ns (namespace k)]
-    (keyword (str "shortcut." ns) n)))
-
 (defn shortcut-map
   ([handler-id]
    (shortcut-map handler-id nil))
@@ -68,3 +62,19 @@
        before (reduce-kv (fn [r k v]
                            (assoc r k (before v)))
                          {})))))
+
+(defn- decorate-namespace [k]
+  (let [n (name k)
+        ns (namespace k)]
+    (keyword (str "shortcut." ns) n)))
+(defn shortcut-dict
+  "All docs for EN are generated from :desc field of shortcut default-config map.
+  For all other languages, need manual translation in dict file.
+  Eg: editor/insert-link would be shortcut.editor/insert-link in dict file"
+  []
+  {:en
+   (->> (vals config/default-config)
+        (apply merge)
+        (map (fn [[k {:keys [desc]}]]
+               {(decorate-namespace k) desc}))
+        (into {}))})
