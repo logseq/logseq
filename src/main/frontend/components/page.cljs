@@ -101,19 +101,6 @@
           file-path (:file/path file)]
       (page-blocks-cp repo contents file-path name original-name name true false false nil format))))
 
-(defn presentation
-  [repo page]
-  [:a.opacity-30.hover:opacity-100.page-op
-   {:title "Presentation mode (Powered by Reveal.js)"
-    :style {:margin-top -2}
-    :on-click (fn []
-                (state/sidebar-add-block!
-                 repo
-                 (:db/id page)
-                 :page-presentation
-                 {:page page}))}
-   svg/slideshow])
-
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
   (when (and today? (not sidebar?))
@@ -270,99 +257,100 @@
                                         {:data-page-tags (text/build-data-value page-names)})
                                       {})
           [:div.relative
-           (when (and (not block?)
-                      (not sidebar?)
-                      (not config/publishing?))
-
-             (let [contents? (= (string/lower-case (str page-name)) "contents")
-                   links (fn [] (->>
-                                 [(when-not contents?
-                                    {:title   (t :page/add-to-contents)
-                                     :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
-
-                                  (when-not contents?
-                                    {:title   (t :page/rename)
-                                     :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
-
-                                  (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
-                                    [{:title   (t :page/open-in-finder)
-                                      :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-                                     {:title   (t :page/open-with-default-app)
-                                      :options {:on-click #(js/window.apis.openPath file-path)}}])
-
-                                  (when-not contents?
-                                    {:title   (t :page/delete)
-                                     :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
-
-                                  (when (state/get-current-page)
-                                    {:title   (t :export)
-                                     :options {:on-click #(state/set-modal! export/export-page)}})
-
-                                  (when (util/electron?)
-                                    {:title   (t (if public? :page/make-private :page/make-public))
-                                     :options {:on-click
-                                               (fn []
-                                                 (page-handler/update-public-attribute!
-                                                  page-name
-                                                  (if public? false true))
-                                                 (state/close-modal!))}})
-
-                                  (when developer-mode?
-                                    {:title   "(Dev) Show page data"
-                                     :options {:on-click (fn []
-                                                           (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
-                                                             (println page-data)
-                                                             (notification/show!
-                                                              [:div
-                                                               [:pre.code page-data]
-                                                               [:br]
-                                                               (ui/button "Copy to clipboard"
-                                                                 :on-click #(.writeText js/navigator.clipboard page-data))]
-                                                              :success
-                                                              false)))}})]
-                                 (flatten)
-                                 (remove nil?)))]
-               [:div {:style {:position "absolute"
-                              :right 0
-                              :top 20}}
-                [:div.flex.flex-row
-                 [:a.opacity-30.hover:opacity-100.page-op.mr-2
-                  {:title "Search in current page"
-                   :on-click #(route-handler/go-to-search! :page)}
-                  svg/search]
-                 (when (not config/mobile?)
-                   (presentation repo page))
-                 (ui/dropdown-with-links
-                  (fn [{:keys [toggle-fn]}]
-                    [:a.opacity-30.hover:opacity-100
-                     {:title    "More options"
-                      :on-click toggle-fn}
-                     (svg/vertical-dots {:class (util/hiccup->class "opacity-30.hover:opacity-100.h-5.w-5")})])
-                  links
-                  {:modal-class (util/hiccup->class
-                                 "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
-                   :z-index     1})]]))
            (when (and (not sidebar?)
                       (not block?))
-             [:a {:on-click (fn [e]
-                              (.preventDefault e)
-                              (when (gobj/get e "shiftKey")
-                                (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                                  (state/sidebar-add-block!
-                                   repo
-                                   (:db/id page)
-                                   :page
-                                   {:page page}))))}
-              [:h1.title {:style {:margin-left -2}}
-               (if page-original-name
-                 (if (and (string/includes? page-original-name "[[")
-                          (string/includes? page-original-name "]]"))
-                   (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
-                     (block/markup-element-cp {} (ffirst ast)))
-                   page-original-name)
-                 (or
-                  page-name
-                  path-page-name))]])
+             [:div.flex.flex-row.space-between
+              [:div.flex-1.flex-row
+               [:a {:on-click (fn [e]
+                                (.preventDefault e)
+                                (when (gobj/get e "shiftKey")
+                                  (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                                    (state/sidebar-add-block!
+                                     repo
+                                     (:db/id page)
+                                     :page
+                                     {:page page}))))}
+                [:h1.title {:style {:margin-left -2}}
+                 (if page-original-name
+                   (if (and (string/includes? page-original-name "[[")
+                            (string/includes? page-original-name "]]"))
+                     (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
+                       (block/markup-element-cp {} (ffirst ast)))
+                     page-original-name)
+                   (or
+                    page-name
+                    path-page-name))]]]
+              (when (not config/publishing?)
+                (let [contents? (= (string/lower-case (str page-name)) "contents")
+                      links (fn [] (->>
+                                   [(when-not contents?
+                                      {:title   (t :page/add-to-contents)
+                                       :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+
+                                    {:title "Go to presentation mode"
+                                     :options {:on-click (fn []
+                                                           (state/sidebar-add-block!
+                                                            repo
+                                                            (:db/id page)
+                                                            :page-presentation
+                                                            {:page page}))}}
+                                    (when-not contents?
+                                      {:title   (t :page/rename)
+                                       :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
+
+                                    (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
+                                      [{:title   (t :page/open-in-finder)
+                                        :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
+                                       {:title   (t :page/open-with-default-app)
+                                        :options {:on-click #(js/window.apis.openPath file-path)}}])
+
+                                    (when-not contents?
+                                      {:title   (t :page/delete)
+                                       :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+
+                                    (when (state/get-current-page)
+                                      {:title   (t :export)
+                                       :options {:on-click #(state/set-modal! export/export-page)}})
+
+                                    (when (util/electron?)
+                                      {:title   (t (if public? :page/make-private :page/make-public))
+                                       :options {:on-click
+                                                 (fn []
+                                                   (page-handler/update-public-attribute!
+                                                    page-name
+                                                    (if public? false true))
+                                                   (state/close-modal!))}})
+
+                                    (when developer-mode?
+                                      {:title   "(Dev) Show page data"
+                                       :options {:on-click (fn []
+                                                             (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
+                                                               (println page-data)
+                                                               (notification/show!
+                                                                [:div
+                                                                 [:pre.code page-data]
+                                                                 [:br]
+                                                                 (ui/button "Copy to clipboard"
+                                                                   :on-click #(.writeText js/navigator.clipboard page-data))]
+                                                                :success
+                                                                false)))}})]
+                                   (flatten)
+                                   (remove nil?)))]
+                  [:div.flex.flex-row
+                   [:a.opacity-30.hover:opacity-100.page-op.mr-1
+                    {:title "Search in current page"
+                     :on-click #(route-handler/go-to-search! :page)}
+                    svg/search]
+                   (ui/dropdown-with-links
+                    (fn [{:keys [toggle-fn]}]
+                      [:a.cp__vertial-menu-button
+                       {:title    "More options"
+                        :on-click toggle-fn}
+                       (svg/vertical-dots nil)])
+                    links
+                    {:modal-class (util/hiccup->class
+                                   "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
+                     :z-index     1})]))])
            [:div
             ;; [:div.content
             ;;  (when (and file-path

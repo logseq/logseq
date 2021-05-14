@@ -28,3 +28,17 @@
     }
   }
 }
+
+.cp__vertial-menu-button {
+    opacity: 0.3;
+    display: block;
+}
+
+.cp__vertial-menu-button:hover {
+    opacity: 1;
+}
+
+.cp__vertial-menu-button svg {
+    width: 20px;
+    height: 20px;
+}
