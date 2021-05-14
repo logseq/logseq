@@ -463,7 +463,8 @@
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
     [:div.color-level.embed-block.bg-base-2 {:style {:z-index 2}}
      [:div.px-3.pt-1.pb-2
-      (blocks-container blocks (assoc (assoc config :id (str id))
+      (blocks-container blocks (assoc config
+                                      :id (str id)
                                       :embed? true
                                       :ref? false))]]))
 
@@ -483,6 +484,7 @@
                   page-name))
        (let [blocks (db/get-page-blocks (state/get-current-repo) page-name)]
          (blocks-container blocks (assoc config
+                                         :id page-name
                                          :embed? true
                                          :ref? false))))]))
 
