@@ -1,4 +1,4 @@
-{:paths ["src/main"]
+{:paths ["src/main" "templates"]
  :deps
  {org.clojure/clojure         {:mvn/version "1.10.0"}
   cheshire/cheshire {:mvn/version "5.10.0"}
