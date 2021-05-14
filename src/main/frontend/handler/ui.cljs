@@ -1,11 +1,13 @@
 (ns frontend.handler.ui
-  (:require [dommy.core :as dom]
-            [frontend.state :as state]
+  (:require [cljs-time.core :refer [plus days weeks]]
+            [dommy.core :as dom]
+            [frontend.util :as util]
             [frontend.db :as db]
-            [rum.core :as rum]
+            [frontend.state :as state]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [frontend.util :as util :refer-macros [profile]]))
+            [clojure.string :as string]
+            [rum.core :as rum]))
 
 ;; sidebars
 (defn close-left-sidebar!
@@ -152,3 +154,56 @@
                 @current-idx))
       (on-chosen (nth matched @current-idx) false)
       (and on-enter (on-enter state)))))
+
+;; date-picker
+;; TODO: find a better way
+(def *internal-model (rum/cursor state/state :date-picker/date))
+
+(defn- non-edit-input?
+  []
+  (when-let [elem js/document.activeElement]
+    (and (util/input? elem)
+         (when-let [id (gobj/get elem "id")]
+           (not (string/starts-with? id "edit-block-"))))))
+
+(defn- input-or-select?
+  []
+  (when-let [elem js/document.activeElement]
+    (or (non-edit-input?)
+        (util/select? elem))))
+
+(defn- inc-date [date n] (plus date (days n)))
+
+(defn- inc-week [date n] (plus date (weeks n)))
+
+(defn shortcut-complete
+  [state e]
+  (let [{:keys [on-change deadline-or-schedule?]} (last (:rum/args state))]
+    (when (and on-change
+               (not (input-or-select?)))
+      (when-not deadline-or-schedule?
+        (on-change e @*internal-model)))))
+
+(defn shortcut-prev-day
+  [_state e]
+  (when-not (input-or-select?)
+    (util/stop e)
+    (swap! *internal-model inc-date -1)))
+
+(defn shortcut-next-day
+  [_state e]
+  (when-not (input-or-select?)
+    (util/stop e)
+    (swap! *internal-model inc-date 1)))
+
+(defn shortcut-prev-week
+  [_state e]
+  (when-not (input-or-select?)
+    (util/stop e)
+    (swap! *internal-model inc-week -1)))
+
+(defn shortcut-next-week
+  [_state e]
+  (when-not (input-or-select?)
+    (util/stop e)
+    (swap! *internal-model inc-week 1)))

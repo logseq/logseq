@@ -45,9 +45,6 @@
     :search/mode :global
     :search/result nil
 
-    ;; custom shortcuts
-    :shortcuts {:editor/new-block "enter"}
-
     ;; modals
     :modal/show? false
 
@@ -118,7 +115,9 @@
     :graph/syncing? false
 
     ;; copied blocks
-    :copy/blocks {:copy/content nil :copy/block-tree nil}}))
+    :copy/blocks {:copy/content nil :copy/block-tree nil}
+
+    :date-picker/date nil}))
 
 (defn get-route-match
   []

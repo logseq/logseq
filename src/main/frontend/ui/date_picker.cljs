@@ -5,12 +5,10 @@
    [cljs-time.predicates :refer [sunday?]]
    [cljs-time.format     :refer [parse unparse formatters formatter]]
    [frontend.util          :refer [deref-or-value now->utc]]
-   [frontend.mixins :as mixins]
+   [frontend.modules.shortcut.core :as shortcut]
    [frontend.util :as util]
    [frontend.state :as state]
-   [goog.object :as gobj]
-   [clojure.string :as string]
-   [frontend.modules.shortcut.core :as shortcut]))
+   [goog.object :as gobj]))
 
 ;; Adapted from re-com date-picker
 
@@ -88,7 +86,7 @@
 
 ;; ----------------------------------------------------------------------------
 
-(def *internal-model (atom nil))
+(def *internal-model (rum/cursor state/state :date-picker/date))
 
 (defn- main-div-with
   [table-div class style attr]
@@ -181,64 +179,12 @@
                         (constantly true))]
     (merge attributes {:selectable-fn selectable-fn})))
 
-;; TODO: find a better way
-(defn- non-edit-input?
-  []
-  (when-let [elem js/document.activeElement]
-    (and (util/input? elem)
-         (when-let [id (gobj/get elem "id")]
-           (not (string/starts-with? id "edit-block-"))))))
-
-(defn- input-or-select?
-  []
-  (when-let [elem js/document.activeElement]
-    (or (non-edit-input?)
-        (util/select? elem))))
-
-(defn shortcut-complete
-  [state e]
-  (let [{:keys [on-change deadline-or-schedule?]} (last (:rum/args state))]
-    (when (and on-change
-               (not (input-or-select?)))
-      (when-not deadline-or-schedule?
-        (on-change e @*internal-model)))))
-
-(defn shortcut-prev-day
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-date -1)))
-
-(defn shortcut-next-day
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-date 1)))
-
-(defn shortcut-prev-week
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-week -1)))
-
-(defn shortcut-next-week
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-week 1)))
 
 (rum/defc date-picker < rum/reactive
-  (mixins/shortcuts
-   #(shortcut/install-shortcut! % {})
-   :shortcut-listener/date-picker
-   {:date-picker/complete shortcut-complete
-    :date-picker/prev-day shortcut-prev-day
-    :date-picker/next-day shortcut-next-day
-    :date-picker/prev-week shortcut-prev-week
-    :date-picker/next-week shortcut-next-week})
   {:init (fn [state]
            (reset! *internal-model (first (:rum/args state)))
            state)}
+  (shortcut/mixin :shortcut.handler/date-picker)
   [model {:keys [on-change on-switch disabled? start-of-week class style attr]
           :or   {start-of-week (state/get-start-of-week)} ;; Default to Sunday
           :as   args}]
