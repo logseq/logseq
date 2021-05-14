@@ -594,26 +594,22 @@
              repo (or (:block/repo block) (state/get-current-repo))
              [properties value] (with-timetracking-properties block value)
              block-self? (block-self-alone-when-insert? config block-id)
-             has-children? (db/has-children? repo block-id)
-             collapsed? (:collapsed (:block/properties block))
              input (gdom/getElement (state/get-edit-input-id))
              pos (util/get-input-pos input)
              repo (or repo (state/get-current-repo))
-             [fst-block-text _snd-block-text] (compute-fst-snd-block-text value pos)
-             insert-fn (if (or block-self?
-                               (not has-children?)
-                               collapsed?
-                               (seq fst-block-text))
-                         insert-new-block-aux!
-                         insert-new-block-before-block-aux!)]
+             [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
+             insert-fn (match (mapv boolean [block-self? (seq fst-block-text) (seq snd-block-text)])
+                         [true _ _] insert-new-block-aux!
+                         [_ false true] insert-new-block-before-block-aux!
+                         [_ _ _] insert-new-block-aux!)]
          (insert-fn
-            config
-            (assoc block :block/properties properties)
-            value
-            {:ok-handler
-             (fn [last-block]
-               (edit-block! last-block 0 format id)
-               (clear-when-saved!))}))))
+          config
+          (assoc block :block/properties properties)
+          value
+          {:ok-handler
+           (fn [last-block]
+             (edit-block! last-block 0 format id)
+             (clear-when-saved!))}))))
    (state/set-editor-op! nil)))
 
 (defn update-timestamps-content!
