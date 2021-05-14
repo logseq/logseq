@@ -14,12 +14,12 @@
         [:thead
          [:tr
           [:th.text-left [:b (t name)]]
-          [:th.text-right (t :help/shortcut)]]]
+          [:th.text-right [:b (t :help/shortcut)]]]]
         [:tbody
          (map (fn [[k {:keys [binding]}]]
                 [:tr {:key k}
                  [:td.text-left (t (dh/decorate-namespace k))]
-                 [:td.text-right (dh/binding-for-display binding)]])
+                 [:td.text-right (dh/binding-for-display k binding)]])
               (dh/binding-by-category name))]]])))
 
 (rum/defc trigger-table []
@@ -28,7 +28,7 @@
      [:thead
       [:tr
        [:th.text-left [:b (t :help/shortcuts-triggers)]]
-       [:th.text-right (t :help/shortcut)]]]
+       [:th.text-right [:b (t :help/shortcut)]]]]
      [:tbody
       [:tr
        [:td.text-left (t :help/slash-autocomplete)]

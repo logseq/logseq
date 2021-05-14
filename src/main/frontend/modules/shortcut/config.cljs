@@ -156,11 +156,11 @@
      :fn      editor-handler/cursor-backward-word}
     :editor/forward-kill-word
     {:desc    "Kill a word forwards"
-     :binding (if mac? false "alt+d")
+     :binding (if mac? "ctrl+w" "alt+d")
      :fn      editor-handler/forward-kill-word}
     :editor/backward-kill-word
     {:desc    "Kill a word backwards"
-     :binding (if mac? "ctrl+w" "alt+w")
+     :binding (if mac? false "alt+w")
      :fn      editor-handler/backward-kill-word}}
 
    :shortcut.handler/editor-global
