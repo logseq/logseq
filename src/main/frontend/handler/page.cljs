@@ -108,7 +108,7 @@
               new-properties (assoc properties key value)
               content (:block/content pre-block)
               front-matter? (property/front-matter? content)
-              new-content (property/insert-property! format content key value front-matter?)
+              new-content (property/insert-property format content key value front-matter?)
               block {:db/id (:db/id pre-block)
                      :block/properties new-properties
                      :block/content new-content

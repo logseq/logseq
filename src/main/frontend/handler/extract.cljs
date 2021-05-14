@@ -181,7 +181,7 @@
            ast (mldoc/->edn content
                             (mldoc/default-config format))
            first-block (ffirst ast)
-           properties (let [properties (and (property/properties-block? first-block)
+           properties (let [properties (and (property/properties-ast? first-block)
                                             (->> (last first-block)
                                                  (into {})
                                                  (walk/keywordize-keys)))]

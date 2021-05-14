@@ -55,7 +55,7 @@
         (when-let [key (get-property-key line :org)]
           (not (contains? #{:PROPERTIES :END} key))))))
 
-(defn remove-properties!
+(defn remove-properties
   [format content]
   (let [org? (= format :org)]
     (cond
@@ -137,9 +137,9 @@
   [s]
   (string/starts-with? s "---\n"))
 
-(defn insert-property!
+(defn insert-property
   ([format content key value]
-   (insert-property! format content key value false))
+   (insert-property format content key value false))
   ([format content key value front-matter?]
    (when (and (not (string/blank? (name key)))
               (not (string/blank? (str value))))
@@ -207,9 +207,9 @@
          :else
          content)))))
 
-(defn remove-property!
+(defn remove-property
   ([format key content]
-   (remove-property! format key content true))
+   (remove-property format key content true))
   ([format key content first?]
    (when (not (string/blank? (name key)))
      (let [format (or format :markdown)
@@ -224,14 +224,14 @@
                                             (string/starts-with? s (str key ":: ")))))))]
            (string/join "\n" lines)))))))
 
-(defn remove-id-property!
+(defn remove-id-property
   [format content]
-  (remove-property! format "id" content false))
+  (remove-property format "id" content false))
 
-(defn remove-built-in-properties!
+(defn remove-built-in-properties
   [format content]
   (reduce (fn [content key]
-            (remove-property! format key content)) content built-in-properties))
+            (remove-property format key content)) content built-in-properties))
 
 (defn ->new-properties
   "New syntax: key:: value"
@@ -254,7 +254,7 @@
         content))
     content))
 
-(defn add-page-properties!
+(defn add-page-properties
   [page-format properties-content properties]
   (let [properties (medley/map-keys name properties)
         lines (string/split-lines properties-content)
@@ -294,7 +294,7 @@
      (config/properties-wrapper-pattern page-format)
      (string/join "\n" lines))))
 
-(defn properties-block?
+(defn properties-ast?
   [block]
   (and
    (vector? block)
