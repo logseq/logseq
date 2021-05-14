@@ -13,33 +13,48 @@
        [:table
         [:thead
          [:tr
-          [:th [:b (t name)]]
-          [:th (t :help/shortcut)]]]
+          [:th.text-left [:b (t name)]]
+          [:th.text-right (t :help/shortcut)]]]
         [:tbody
          (map (fn [[k {:keys [binding]}]]
                 [:tr {:key k}
-                 [:td (t (dh/decorate-namespace k))]
-                 [:td (dh/binding-for-display binding)]])
+                 [:td.text-left (t (dh/decorate-namespace k))]
+                 [:td.text-right (dh/binding-for-display binding)]])
               (dh/binding-by-category name))]]])))
+
+(rum/defc trigger-table []
+  (rum/with-context [[t] i18n/*tongue-context*]
+    [:table
+     [:thead
+      [:tr
+       [:th.text-left [:b (t :help/shortcuts-triggers)]]
+       [:th.text-right (t :help/shortcut)]]]
+     [:tbody
+      [:tr
+       [:td.text-left (t :help/slash-autocomplete)]
+       [:td.text-right "/"]]
+      [:tr
+       [:td.text-left (t :help/block-content-autocomplete)]
+       [:td.text-right "<"]]
+      [:tr
+       [:td.text-left (t :help/reference-autocomplete)]
+       [:td.text-right "[[]]"]]
+      [:tr
+       [:td.text-left (t :help/block-reference)]
+       [:td.text-right "(())"]]
+      [:tr
+       [:td.text-left (t :shortcut.editor/open-link-in-sidebar)]
+       [:td.text-right "shift-click"]]
+      [:tr
+       [:td.text-left (t :help/context-menu)]
+       [:td.text-right "right click"]]]]))
 
 (rum/defc shortcut
   []
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div
      [:h1.title (t :help/shortcut-page-title)]
-     [:table
-      [:thead
-       [:tr
-        [:th [:b (t :help/shortcuts-triggers)]]
-        [:th (t :help/shortcut)]]]
-      [:tbody
-       [:tr [:td (t :help/slash-autocomplete)] [:td "/"]]
-       [:tr [:td (t :help/block-content-autocomplete)] [:td "<"]]
-       [:tr [:td (t :help/reference-autocomplete)] [:td "[[]]"]]
-       [:tr [:td (t :help/block-reference)] [:td "(())"]]
-       [:tr [:td (t :shortcut.editor/open-link-in-sidebar)] [:td "shift-click"]]
-
-       [:tr [:td (t :help/context-menu)] [:td "right click"]]]]
+     (trigger-table)
      (shortcut-table :shortcut.category/basics)
      (shortcut-table :shortcut.category/navigating)
      (shortcut-table :shortcut.category/block-editing)

@@ -224,16 +224,7 @@
         :on-click
         (fn []
           (route-handler/redirect! {:to :shortcut})))
-       [:table
-        [:thead
-         [:tr
-          [:th [:b (t :help/shortcuts-triggers)]]
-          [:th (t :help/shortcut)]]]
-        [:tbody
-         [:tr [:td (t :help/slash-autocomplete)] [:td "/"]]
-         [:tr [:td (t :help/block-content-autocomplete)] [:td "<"]]
-         [:tr [:td (t :help/reference-autocomplete)] [:td "[[]]"]]
-         [:tr [:td (t :help/block-reference)] [:td "(())"]]]]
+       (shortcut/trigger-table)
        (shortcut/shortcut-table :shortcut.category/basics)
        (shortcut/shortcut-table :shortcut.category/block-editing)
        (shortcut/shortcut-table :shortcut.category/formatting)]
