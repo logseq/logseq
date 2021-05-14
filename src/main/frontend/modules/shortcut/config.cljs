@@ -321,7 +321,8 @@
     :editor/zoom-in
     :editor/zoom-out
     :editor/copy
-    :editor/cut]
+    :editor/cut
+    :ui/toggle-wide-mode]
 
    :shortcut.category/formatting
    ^{:doc "Formatting"}
