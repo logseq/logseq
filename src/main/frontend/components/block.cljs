@@ -1742,7 +1742,7 @@
        (let [children (db/get-block-immediate-children repo uuid)
              children (block-handler/filter-blocks repo children (:filters config) false)]
          (when (seq children)
-           [:div.ref-children.ml-12
+           [:div.ref-children {:style {:margin-left "1.8rem"}}
             (blocks-container children (assoc config
                                               :breadcrumb-show? false
                                               :ref? true))])))
