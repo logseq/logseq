@@ -1392,7 +1392,7 @@
         (editor-handler/unhighlight-blocks!)
         (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
               f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
-                       content (property/remove-built-in-properties! (:block/format block)
+                       content (property/remove-built-in-properties (:block/format block)
                                                                  content)]
                    (state/set-editing!
                     edit-input-id

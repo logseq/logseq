@@ -412,7 +412,7 @@
                                       (drop-while #(= ["Break_Line"] %)))]
                   (recur headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
 
-                (property/properties-block? block)
+                (property/properties-ast? block)
                 (let [properties (extract-properties block start_pos end_pos)]
                   (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
 

@@ -17,7 +17,7 @@
 (defn block->index
   [{:block/keys [uuid content format page] :as block}]
   (when-let [result (->> (text/remove-level-spaces content format)
-                         (property/remove-id-property! format))]
+                         (property/remove-id-property format))]
     {:id (:db/id block)
      :uuid (str uuid)
      :page page

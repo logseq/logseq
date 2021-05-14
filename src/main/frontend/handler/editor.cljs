@@ -226,7 +226,7 @@
 
                           :else
                           (subs content 0 pos))
-             content (property/remove-built-in-properties! (:block/format block)
+             content (property/remove-built-in-properties (:block/format block)
                                                        content)]
          (clear-selection! nil)
          (state/set-editing! edit-input-id content block text-range move-cursor?))))))
@@ -572,7 +572,7 @@
                      (:block/properties block))
         value (or
                (when new-marker?
-                 (property/insert-property! (:block/format block)
+                 (property/insert-property (:block/format block)
                                         value
                                         new-marker
                                         ts))
@@ -638,7 +638,7 @@
   [content format marker]
   (if (state/enable-timetracking?)
     (let [marker (string/lower-case marker)]
-      (property/insert-property! format content marker (util/time-ms)))
+      (property/insert-property format content marker (util/time-ms)))
     content))
 
 (defn check
@@ -818,8 +818,8 @@
                            (assoc properties key value)
                            (dissoc properties key))
               content (if value
-                        (property/insert-property! format content key value)
-                        (property/remove-property! format key content))
+                        (property/insert-property format content key value)
+                        (property/remove-property format key content))
               block (outliner-core/block {:block/uuid block-id
                                           :block/properties properties
                                           :block/content content})]
@@ -1232,7 +1232,7 @@
 (defn- clean-content!
   [format content]
   (->> (text/remove-level-spaces content format)
-       (property/remove-properties! format)
+       (property/remove-properties format)
        string/trim))
 
 (defn insert-command!
@@ -1899,8 +1899,8 @@
                                                   [(:block/content %) (:block/title %)])
                                                 new-content
                                                 (->> new-content
-                                                     (property/remove-property! format "id")
-                                                     (property/remove-property! format "custom_id"))]
+                                                     (property/remove-property format "id")
+                                                     (property/remove-property format "custom_id"))]
                                             (conj {:block/uuid uuid
                                                    :block/page (select-keys page [:db/id])
                                                    :block/file (select-keys file [:db/id])
@@ -1946,8 +1946,8 @@
       (paste-block-tree-at-point tree [:template :including-parent]
                                  (fn [content]
                                    (->> content
-                                        (property/remove-property! format "template")
-                                        (property/remove-property! format "including-parent")
+                                        (property/remove-property format "template")
+                                        (property/remove-property format "including-parent")
                                         template/resolve-dynamic-template!)))
       (clear-when-saved!)
       (insert-command! id "" format {})

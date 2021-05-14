@@ -57,7 +57,7 @@
 
 (defn copy-to-clipboard-without-id-property!
   [format content]
-  (util/copy-to-clipboard! (property/remove-id-property! format content)))
+  (util/copy-to-clipboard! (property/remove-id-property format content)))
 
 (defn config-with-document-mode
   [config]
