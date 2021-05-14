@@ -386,13 +386,18 @@
     [fst-block-text snd-block-text]))
 
 (defn outliner-insert-block!
-  [current-block new-block child? sibling?]
-  (let [dummy? (:block/dummy? current-block)
+  [config current-block new-block child? sibling?]
+  (let [ref-top-block? (and (:ref? config)
+                            (not (:ref-child? config)))
+        dummy? (:block/dummy? current-block)
         [current-node new-node]
         (mapv outliner-core/block [current-block new-block])
         has-children? (db/has-children? (state/get-current-repo)
                                         (tree/-get-id current-node))
         sibling? (cond
+                   ref-top-block?
+                   false
+
                    child?
                    false
 
@@ -484,7 +489,7 @@
         sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
-                                   (outliner-insert-block! left-block prev-block nil sibling?))]
+                                   (outliner-insert-block! config left-block prev-block nil sibling?))]
 
     (db/refresh! repo {:key :block/insert :data [prev-block left-block current-block]})
     (profile "ok handler" (ok-handler prev-block))))
@@ -512,13 +517,13 @@
                        (wrap-parse-block))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
-                                   (outliner-insert-block! current-block next-block block-self? nil))
+                                   (outliner-insert-block! config current-block next-block block-self? nil))
         refresh-fn (fn []
                      (let [opts {:key :block/insert
                                  :data [current-block next-block]}]
                        (db/refresh! repo opts)))]
     (do
-      (if (or dummy? (not sibling?))
+      (if (or dummy? (:ref? config) (not sibling?))
         (refresh-fn)
         (do
           (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
@@ -1967,7 +1972,6 @@
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
       (when (and block
-                 (not (:ref? config))
                  (not (:custom-query? config)))
         (let [content (state/get-edit-content)
               current-node (outliner-core/block block)

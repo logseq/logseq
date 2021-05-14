@@ -55,6 +55,17 @@
                    (into {}))]
     (reset! query-state state)))
 
+(defn get-current-repo-refs-keys
+  []
+  (when-let [current-repo (state/get-current-repo)]
+    (->>
+     (map (fn [[repo k id]]
+            (when (and (= repo current-repo)
+                       (= k :block/refed-blocks))
+              [k id]))
+       (keys @query-state))
+     (remove nil?))))
+
 ;; TODO: Add components which subscribed to a specific query
 (defn add-q!
   [k query inputs result-atom transform-fn query-fn inputs-fn]
@@ -214,7 +225,8 @@
                                 (when-let [page-id (:db/id (:block/page block))]
                                   [[:blocks (:block/uuid block)]
                                    [:page/blocks page-id]
-                                   [:page/ref-pages page-id]]))
+                                   [:page/ref-pages page-id]
+                                   [:block/immediate-children (:db/id (:block/parent block))]]))
                               blocks)
 
                              (when pre-block?
@@ -230,7 +242,7 @@
 
                              (when current-page-id
                                [[:page/ref-pages current-page-id]
-                                [:block/refed-blocks current-page-id]
+                                ;; [:block/refed-blocks current-page-id]
                                 [:page/mentioned-pages current-page-id]])
 
                              (apply concat
@@ -240,14 +252,16 @@
                                                               (db-utils/entity [:block/name (:block/name ref)])
                                                               (db-utils/entity ref))]
                                              [[:page/blocks (:db/id (:block/page block))]
-                                              [:block/refed-blocks (:db/id block)]]))
+                                              ;; [:block/refed-blocks (:db/id block)]
+                                              ]))
                                          refs))))
                             (distinct))
               refed-pages (map
                            (fn [[k page-id]]
                              (if (= k :block/refed-blocks)
                                [:page/ref-pages page-id]))
-                           related-keys)
+                            related-keys)
+              all-refed-blocks (get-current-repo-refs-keys)
               custom-queries (some->>
                               (filter (fn [v]
                                         (and (= (first v) (state/get-current-repo))
@@ -266,6 +280,7 @@
            (util/concat-without-nil
             related-keys
             refed-pages
+            all-refed-blocks
             custom-queries
             block-blocks)
            distinct)))

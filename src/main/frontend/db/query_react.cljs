@@ -59,7 +59,7 @@
                        (some->> result
                                 (db-utils/with-repo repo)
                                 (model/with-block-refs-count repo)
-                                (model/sort-blocks)))
+                                (model/with-pages)))
                      result)]
         (if-let [result-transform (:result-transform q)]
           (if-let [f (sci/eval-string (pr-str result-transform))]
