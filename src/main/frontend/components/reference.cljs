@@ -65,11 +65,6 @@
           journal? (date/valid-journal-title? (string/capitalize page-name))
           repo (state/get-current-repo)
           ref-blocks (cond
-                       priority?
-                       (db/get-blocks-by-priority repo page-name)
-
-                       marker?
-                       (db/get-marker-blocks repo page-name)
                        block-id
                        (db/get-block-referenced-blocks block-id)
                        :else
