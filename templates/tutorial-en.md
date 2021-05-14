@@ -18,18 +18,18 @@ some changes on the right sidebar, those referenced blocks will be changed too!
     - Of course, this is a #dummy tag.
 - 4. Do you support tasks like todo/doing/done and priorities?
     - Yes, type `/` and pick your favorite todo keyword or priority (A/B/C).
-    - NOW [#A] A dummy tutorial on \"How to take dummy notes?\"
-    - LATER [#A] Check out this awesome video by [:a {:href \"https://twitter.com/EdTravelling\" :target \"_blank\"} \"@EdTravelling\"], which shows how to use logseq to open your local directory.
+    - NOW [#A] A dummy tutorial on "How to take dummy notes?"
+    - LATER [#A] Check out this awesome video by [:a {:href "https://twitter.com/EdTravelling" :target "_blank"} "@EdTravelling"], which shows how to use logseq to open your local directory.
 
 [:div.video-wrapper.mb-4
         [:iframe
-         {:allowFullScreen \"allowfullscreen\"
+         {:allowFullScreen "allowfullscreen"
           :allow
-          \"accelerometer; autoplay; encrypted-media; gyroscope\"
-        :frameBorder \"0\"
-        :src \"https://www.youtube.com/embed/Afmqowr0qEQ\"
-        :height \"367\"
-        :width \"653\"}]]
+          "accelerometer; autoplay; encrypted-media; gyroscope"
+        :frameBorder "0"
+        :src "https://www.youtube.com/embed/Afmqowr0qEQ"
+        :height "367"
+        :width "653"}]]
     - DONE Create a page
     - CANCELED [#C] Write a page with more than 1000 blocks
 - That's it! You can create more bullets or open a local directory to import some notes now!
