@@ -15,6 +15,7 @@
 (defonce parseHtml (gobj/get Mldoc "parseHtml"))
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
+(defonce astExportMarkdown (gobj/get Mldoc "astExportMarkdown"))
 
 (defn default-config
   ([format]
@@ -37,8 +38,7 @@
         :keep_line_break true
         :format format
         :heading_to_list export-heading-to-list?
-        :exporting_keep_properties exporting-keep-properties?}))))
-  )
+        :exporting_keep_properties exporting-keep-properties?})))))
 
 (def default-references
   (js/JSON.stringify
@@ -58,6 +58,12 @@
   (parseAndExportMarkdown content
                           (or config default-config)
                           (or references default-references)))
+
+(defn ast-export-markdown
+  [ast config references]
+  (astExportMarkdown ast
+                     (or config default-config)
+                     (or references default-references)))
 
 ;; Org-roam
 (defn get-tags-from-definition
@@ -206,8 +212,7 @@
   (lazyLoad [this ok-handler]
     true)
   (exportMarkdown [this content config references]
-    (parse-export-markdown content config references))
-  )
+    (parse-export-markdown content config references)))
 
 (defn plain->text
   [plains]
