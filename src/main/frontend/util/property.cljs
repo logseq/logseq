@@ -7,6 +7,8 @@
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")
+(defonce properties-end-pattern
+  (re-pattern (util/format "%s[\t\r ]*\n|(%s\\s*$)" properties-end properties-end)))
 
 (def built-in-properties
   (set/union
@@ -22,7 +24,7 @@
 (defn contains-properties?
   [content]
   (and (string/includes? content properties-start)
-       (string/includes? content properties-end)))
+       (re-find properties-end-pattern content)))
 
 (defn simplified-property?
   [line]
@@ -63,8 +65,7 @@
             body (drop-while (fn [l]
                                (let [l' (string/lower-case (string/trim l))]
                                  (or
-                                  (and (string/starts-with? l' ":")
-                                       (not (string/starts-with? l' ":end:")))
+                                  (not (string/starts-with? l' ":end:"))
                                   (string/blank? l))))
                              properties-and-body)
             body (if (and (seq body)
