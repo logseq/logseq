@@ -2275,7 +2275,8 @@
    (cond-> option
      (:document/mode? config)
      (assoc :class "doc-mode"))
-   (if (:group-by-page? config)
+   (if (and (:group-by-page? config)
+            (vector? (first blocks)))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]

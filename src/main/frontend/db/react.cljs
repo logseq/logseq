@@ -235,9 +235,10 @@
 
                              (apply concat
                                     (for [{:block/keys [refs]} blocks]
-                                      (map (fn [page]
-                                             (when-let [page (db-utils/entity [:block/name (:block/name page)])]
-                                               [:block/refed-blocks (:db/id page)]))
+                                      (mapcat (fn [ref]
+                                                (when-let [block (db-utils/entity ref)]
+                                                  [[:page/blocks (:db/id (:block/page block))]
+                                                   [:block/refed-blocks (:db/id block)]]))
                                         refs))))
                             (distinct))
               refed-pages (map

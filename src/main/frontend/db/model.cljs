@@ -1035,17 +1035,18 @@
   [block-uuid]
   (when-let [repo (state/get-current-repo)]
     (when (conn/get-conn repo)
-      (->> (react/q repo [:block/refed-blocks block-uuid] {}
-                    '[:find (pull ?ref-block [*])
-                      :in $ ?block-uuid
-                      :where
-                      [?block :block/uuid ?block-uuid]
-                      [?ref-block :block/refs ?block]]
-                    block-uuid)
-           react
-           db-utils/seq-flatten
-           sort-blocks
-           db-utils/group-by-page))))
+      (let [block (db-utils/entity [:block/uuid block-uuid])]
+        (->> (react/q repo [:block/refed-blocks (:db/id block)] {}
+              '[:find (pull ?ref-block [*])
+                :in $ ?block-uuid
+                :where
+                [?block :block/uuid ?block-uuid]
+                [?ref-block :block/refs ?block]]
+              block-uuid)
+            react
+            db-utils/seq-flatten
+            sort-blocks
+            db-utils/group-by-page)))))
 
 (defn get-matched-blocks
   [match-fn limit]
