@@ -1,4 +1,4 @@
-(ns frontend.util.priority_test
+(ns frontend.util.priority-test
   (:require [cljs.test :refer [deftest is are testing]]
             [frontend.util.priority :as priority]))
 
