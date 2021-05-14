@@ -9,7 +9,7 @@
         :on-boarding/title "Hi, welcome to Logseq!"
         :on-boarding/sharing "sharing"
         :on-boarding/is-a " is a "
-        :on-boarding/vision "A privacy-first, open-source platform for knowledge sharing and management."
+        :on-boarding/vision "A privacy-first, open-source platform for knowledge management and collaboration."
         :on-boarding/local-first "local-first"
         :on-boarding/non-linear "non-linear"
         :on-boarding/outliner "outliner"
