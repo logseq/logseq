@@ -1277,17 +1277,16 @@
 
 (defn save-assets!
   ([{block-id :block/uuid} repo files]
-   (when-let [block-file (db-model/get-block-file block-id)]
-     (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
-       (save-assets! repo repo-dir assets-dir files
-                     (fn [index file-base]
-                       ;; TODO: maybe there're other chars we need to handle?
-                       (let [file-base (-> file-base
-                                           (string/replace " " "_")
-                                           (string/replace "%" "_")
-                                           (string/replace "/" "_"))
-                             file-name (str file-base "_" (.now js/Date) "_" index)]
-                         (string/replace file-name #"_+" "_")))))))
+   (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
+     (save-assets! repo repo-dir assets-dir files
+                   (fn [index file-base]
+                     ;; TODO: maybe there're other chars we need to handle?
+                     (let [file-base (-> file-base
+                                         (string/replace " " "_")
+                                         (string/replace "%" "_")
+                                         (string/replace "/" "_"))
+                           file-name (str file-base "_" (.now js/Date) "_" index)]
+                       (string/replace file-name #"_+" "_"))))))
   ([repo dir path files gen-filename]
    (p/all
     (for [[index ^js file] (map-indexed vector files)]

@@ -688,13 +688,6 @@
               (db-utils/entity [:block/original-name page-name]))
           :block/file))
 
-(defn get-block-file
-  [block-id]
-  (let [page-id (some-> (db-utils/entity [:block/uuid block-id])
-                        :block/page
-                        :db/id)]
-    (:block/file (db-utils/entity page-id))))
-
 (defn get-file-page-id
   [file-path]
   (when-let [repo (state/get-current-repo)]
