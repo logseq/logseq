@@ -16,6 +16,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.commands :as commands]
             [frontend.date :as date]
             [clojure.walk :as walk]
@@ -252,7 +253,7 @@
               (let [old-original-name (:block/original-name page)
                     file (:block/file page)
                     journal? (:block/journal? page)
-                    properties-block (:data (outliner-core/get-right-node (outliner-core/block page)))
+                    properties-block (:data (outliner-tree/-get-down (outliner-core/block page)))
                     properties-block-tx (when (and properties-block
                                                    (string/includes? (string/lower-case (:block/content properties-block))
                                                                      (string/lower-case old-name)))
@@ -266,6 +267,7 @@
                                :block/name (string/lower-case new-name)
                                :block/original-name new-name}]
                     page-txs (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
+
                 (d/transact! (db/get-conn repo false) page-txs)
 
                 (when (and file (not journal?) name-changed?)
@@ -295,7 +297,9 @@
                               (remove nil?))]
                   (db/transact! repo tx)
                   (doseq [page-id page-ids]
-                    (outliner-file/sync-to-file page-id))))
+                    (outliner-file/sync-to-file page-id)))
+
+                (outliner-file/sync-to-file page))
 
               ;; TODO: update browser history, remove the current one
 

@@ -2137,7 +2137,7 @@
         right (outliner-core/get-right-node (outliner-core/block current-block))
         current-block-has-children? (db/has-children? repo (:block/uuid current-block))
         collapsed? (:collapsed (:block/properties current-block))
-        first-child (outliner-db/get-first-child (db/get-conn repo false) (:db/id current-block))
+        first-child (:data (tree/-get-down (outliner-core/block current-block)))
         next-block (if (or collapsed? (not current-block-has-children?))
                      (:data right)
                      first-child)]
