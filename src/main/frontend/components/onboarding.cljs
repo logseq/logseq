@@ -1,12 +1,12 @@
 (ns frontend.components.onboarding
-  (:require [rum.core :as rum]
+  (:require [frontend.components.shortcut :as shortcut]
             [frontend.components.svg :as svg]
-            [frontend.components.shortcut :as shortcut]
-            [frontend.extensions.latex :as latex]
-            [frontend.extensions.highlight :as highlight]
             [frontend.context.i18n :as i18n]
-            [reitit.frontend.easy :as rfe]
-            [frontend.util :as util]))
+            [frontend.extensions.highlight :as highlight]
+            [frontend.extensions.latex :as latex]
+            [frontend.handler.route :as route-handler]
+            [frontend.ui :as ui]
+            [rum.core :as rum]))
 
 (rum/defc intro
   []
@@ -217,9 +217,13 @@
          [:span.mr-1 (t :help/community)]
          svg/discord]]]
       [:li
-       [:a {:href (rfe/href :shortcut)
-            :target "_blank"}
-        (t :help/shortcuts)]
+       (t :help/shortcuts)
+       [:br]
+       (ui/button
+        "Learn more"
+        :on-click
+        (fn []
+          (route-handler/redirect! {:to :shortcut})))
        [:table
         [:thead
          [:tr
