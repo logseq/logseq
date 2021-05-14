@@ -2325,15 +2325,6 @@
               (= "#" (util/nth-safe value (dec pos)))))
         (state/set-editor-show-page-search-hashtag! false)
 
-        (or
-         (surround-by? input "#" " ")
-         (surround-by? input "#" :end)
-         (= key "#"))
-        (do
-          (commands/handle-step [:editor/search-page-hashtag])
-          (state/set-last-pos! (:pos (util/get-caret-pos input)))
-          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-
         (and
          (contains? (set/difference (set (keys reversed-autopair-map))
                                     #{"`"})
@@ -2358,6 +2349,15 @@
               (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
             :else
             nil))
+
+        (or
+         (surround-by? input "#" " ")
+         (surround-by? input "#" :end)
+         (= key "#"))
+        (do
+          (commands/handle-step [:editor/search-page-hashtag])
+          (state/set-last-pos! (:pos (util/get-caret-pos input)))
+          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
         (let [sym "$"]
           (and (= key sym)

@@ -464,8 +464,7 @@
 
 (defn set-editor-show-page-search!
   [value]
-  (set-state! :editor/show-page-search? value)
-  (set-state! :editor/show-page-search-hashtag? false))
+  (set-state! :editor/show-page-search? value))
 
 (defn get-editor-show-page-search?
   []
