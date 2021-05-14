@@ -364,7 +364,7 @@
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
          block-id (when (map? properties) (get properties :id))
-         content (text/remove-built-in-properties! format content)]
+         content (property/remove-built-in-properties format content)]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
