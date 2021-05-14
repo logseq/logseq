@@ -179,8 +179,7 @@
                                            (let [k (name k)
                                                 v (string/trim v)
                                                 k (string/replace k " " "-")
-                                                k (string/replace k "_" "-")
-                                                k (string/lower-case k)
+                                                 k (string/lower-case k)
                                                 v (cond
                                                     (= v "true")
                                                     true
@@ -197,14 +196,12 @@
                                                     v
 
                                                     :else
-                                                    (let [v' v
-                                                          ;; built-in collections
-                                                          comma? (contains? #{"tags" "alias"} k)]
+                                                    (let [v' v]
                                                       (if (and k v'
                                                                (contains? config/markers k)
                                                                (util/safe-parse-int v'))
                                                         (util/safe-parse-int v')
-                                                        (text/split-page-refs-without-brackets v' comma?))))]
+                                                        (text/split-page-refs-without-brackets v' true))))]
                                             [(keyword k) v])))))]
     {:properties properties
      :page-refs page-refs}))

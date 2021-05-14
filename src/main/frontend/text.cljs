@@ -51,23 +51,32 @@
      (remove string/blank?)
      (map string/trim))))
 
+(defn- not-matched-nested-pages
+  [s]
+  (and (string? s)
+       (> (count (re-seq #"\[\[" s))
+          (count (re-seq #"\]\]" s)))))
+
 (defn- concat-nested-pages
   [coll]
-  (loop [coll coll
-         result []]
-    (if (seq coll)
-      (let [item (first coll)]
-        (if (= item "]]")
-          (recur (rest coll)
-                 (conj
-                  (vec (butlast result))
-                  (str (last result) item)))
-          (recur (rest coll) (conj result item))))
-      result)))
+  (first
+   (reduce (fn [[acc not-matched-s] s]
+             (cond
+               (and not-matched-s (= s "]]"))
+               [(conj acc (str not-matched-s s)) nil]
+
+               not-matched-s
+               [acc (str not-matched-s s)]
+
+               (not-matched-nested-pages s)
+               [acc s]
+
+               :else
+               [(conj acc s) not-matched-s])) [[] nil] coll)))
 
 (defn split-page-refs-without-brackets
   ([s]
-   (split-page-refs-without-brackets s false))
+   (split-page-refs-without-brackets s true))
   ([s comma?]
    (cond
      (and (string? s)
@@ -75,8 +84,12 @@
             (or (re-find page-ref-re s)
                 (re-find (if comma? #"[\,|，|#]+" #"#") s)))
      (let [result (->> (string/split s page-ref-re-2)
-                       (remove string/blank?)
+                       (map (fn [s] (if (string/ends-with? (string/trimr s) "]],")
+                                     (let [s (string/trimr s)]
+                                       (subs s 0 (dec (count s))))
+                                     s)))
                        concat-nested-pages
+                       (remove string/blank?)
                        (mapcat (fn [s]
                                  (if (page-ref? s)
                                    [(page-ref-un-brackets! s)]
@@ -125,17 +138,6 @@
 
      :else
      (remove-level-space-aux! text (config/get-block-pattern format) space?))))
-
-(defn append-newline-after-level-spaces
-  [text format]
-  (if-not (string/blank? text)
-    (let [pattern (util/format
-                   "^[%s]+\\s?\n?"
-                   (config/get-block-pattern format))
-          matched-text (re-find (re-pattern pattern) text)]
-      (if matched-text
-        (string/replace-first text matched-text (str (string/trimr matched-text) "\n"))
-        text))))
 
 ;; properties
 

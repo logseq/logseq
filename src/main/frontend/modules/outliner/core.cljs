@@ -412,7 +412,7 @@
   {:pre [(tree/satisfied-inode? start-node)
          (tree/satisfied-inode? end-node)]}
   (let [sibling? (= (tree/-get-parent-id start-node)
-                   (tree/-get-parent-id end-node))]
+                    (tree/-get-parent-id end-node))]
     (when sibling?
       (ds/auto-transact!
         [txs-state (ds/new-outliner-txs-state)]

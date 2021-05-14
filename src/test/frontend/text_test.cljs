@@ -37,13 +37,14 @@
     "foobar" "foobar"
     "foo bar" "foo bar"
     "foo, bar" #{"foo" "bar"}
-    "foo \"bar\"" #{"foo" "bar"}
-    "[[foo]] [[bar]]" #{"foo]] [[bar"}
+    "[[foo]] [[bar]]" #{"foo" "bar"}
     "[[foo]],[[bar]]" #{"foo", "bar"}
     "[[foo]], [[bar]]" #{"foo", "bar"}
     "[[foo]]" #{"foo"}
     "[[nested [[foo]]]]" #{"nested [[foo]]"}
     "[[nested [[foo]]]], [[foo]]" #{"nested [[foo]]" "foo"}
+    "[[nested [[foo]] [[bar]]]], [[foo]]" #{"nested [[foo]] [[bar]]" "foo"}
+    "[[nested [[foo]], [[bar]]]], [[foo]]" #{"nested [[foo]], [[bar]]" "foo"}
     "#tag," #{"tag"}
     "#tag" #{"tag"}
     "#tag1,#tag2" #{"tag1" "tag2"}
@@ -53,27 +54,24 @@
   []
   (testing "markdown"
     (are [x y] (= (text/extract-level-spaces x :markdown) y)
-      "# foobar" "# "
-      "##   foobar" "##   "
-      "#####################   foobar" "#####################   "))
+      "- foobar" "- "
+      "--   foobar" "-- "
+      "---------------------   foobar" "--------------------- "))
   (testing "org mode"
     (are [x y] (= (text/extract-level-spaces x :org) y)
       "* foobar" "* "
-      "**   foobar" "**   "
-      "*********************  foobar" "*********************  ")))
+      "**   foobar" "** "
+      "*********************  foobar" "********************* ")))
 
 (deftest remove-level-spaces
   []
   (testing "markdown"
     (are [x y] (= (text/remove-level-spaces x :markdown true) y)
-      "# foobar" "foobar"
-      "##   foobar" "foobar"
-      "#####################   foobar" "foobar"))
+      "- foobar" "foobar"
+      " - foobar" "foobar"))
   (testing "markdown without spaces between the `#` and title"
     (are [x y] (= (text/remove-level-spaces x :markdown) y)
-      "#foobar" "foobar"
-      "##foobar" "foobar"
-      "#####################foobar" "foobar"))
+      "-foobar" "foobar"))
   (testing "org"
     (are [x y] (= (text/remove-level-spaces x :org true) y)
       "* foobar" "foobar"
@@ -84,18 +82,6 @@
       "*foobar" "foobar"
       "**foobar" "foobar"
       "*********************foobar" "foobar")))
-
-(deftest append-newline-after-level-spaces
-  []
-  (are [x y] (= (text/append-newline-after-level-spaces x :markdown) y)
-    "# foobar" "#\nfoobar"
-    "# foobar\nfoo" "#\nfoobar\nfoo"
-    "## foobar\nfoo" "##\nfoobar\nfoo")
-
-  (are [x y] (= (text/append-newline-after-level-spaces x :org) y)
-    "* foobar" "*\nfoobar"
-    "* foobar\nfoo" "*\nfoobar\nfoo"
-    "** foobar\nfoo" "**\nfoobar\nfoo"))
 
 (deftest remove-id-property
   []
@@ -113,30 +99,30 @@
       (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n:END:\n")
       "** hello"
 
-      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\na:b\n:END:\n")
+      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n:a: b\n:END:\n")
       "** hello"))
   (testing "properties with blank lines"
     (are [x y] (= x y)
       (text/remove-properties! :org "** hello\n:PROPERTIES:\n\n:x: y\n:END:\n")
       "** hello"
 
-      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n\na:b\n:END:\n")
+      (text/remove-properties! :org "** hello\n:PROPERTIES:\n:x: y\n\n:a: b\n:END:\n")
       "** hello")))
 
 (deftest test-insert-property
   []
   (are [x y] (= x y)
     (text/insert-property! :org "hello" "a" "b")
-    "hello\n:PROPERTIES:\n:a: b\n:END:\n"
+    "hello\n:PROPERTIES:\n:a: b\n:END:"
 
     (text/insert-property! :org "hello" "a" false)
-    "hello\n:PROPERTIES:\n:a: false\n:END:\n"
+    "hello\n:PROPERTIES:\n:a: false\n:END:"
 
-    (text/insert-property! :org "hello\n:PROPERTIES:\n:a: b\n:END:\n" "c" "d")
+    (text/insert-property! :org "hello\n:PROPERTIES:\n:a: b\n:END:" "c" "d")
     "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:"
 
-    (text/insert-property! :org "hello\n:PROPERTIES:\n:a: b\n:END: world\n" "c" "d")
-    "hello\n:PROPERTIES:\n:c: d\n:END:\n:PROPERTIES:\n:a: b\n:END: world\n"))
+    (text/insert-property! :org "hello\n:PROPERTIES:\n:a: b\n:END:\nworld" "c" "d")
+    "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:\nworld"))
 
 (deftest test->new-properties
   []

@@ -122,10 +122,9 @@
           properties (->> (map first directive-ast)
                           (map (fn [[_ k v]]
                                  (let [k (keyword (string/lower-case k))
-                                       comma? (contains? #{:tags :alias :roam_tags} k)
                                        v (if (contains? #{:title :description :roam_tags} k)
                                            v
-                                           (text/split-page-refs-without-brackets v comma?))]
+                                           (text/split-page-refs-without-brackets v true))]
                                    [k v])))
                           (reverse)
                           (into {}))
