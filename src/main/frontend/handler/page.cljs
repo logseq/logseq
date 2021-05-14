@@ -52,7 +52,7 @@
 (defn default-properties-block
   [title format page]
   (let [properties (common-handler/get-page-default-properties title)
-        content (text/build-properties-str format properties)]
+        content (property/build-properties-str format properties)]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties
@@ -258,7 +258,7 @@
                                                    (string/includes? (string/lower-case (:block/content properties-block))
                                                                      (string/lower-case old-name)))
                                           {:db/id (:db/id properties-block)
-                                           :block/content (text/insert-property! (:block/format properties-block)
+                                           :block/content (property/insert-property (:block/format properties-block)
                                                                                  (:block/content properties-block)
                                                                                  :title
                                                                                  new-name)})
