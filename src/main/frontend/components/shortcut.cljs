@@ -37,9 +37,9 @@
        [:tr [:td (t :help/block-content-autocomplete)] [:td "<"]]
        [:tr [:td (t :help/reference-autocomplete)] [:td "[[]]"]]
        [:tr [:td (t :help/block-reference)] [:td "(())"]]
-       [:tr [:td (t :shortcut.editor/open-link-in-sidebar)] [:td "Shift-Click"]]
+       [:tr [:td (t :shortcut.editor/open-link-in-sidebar)] [:td "shift-click"]]
 
-       [:tr [:td (t :help/context-menu)] [:td "Right Click"]]]]
+       [:tr [:td (t :help/context-menu)] [:td "right click"]]]]
      (shortcut-table :shortcut.category/basics)
      (shortcut-table :shortcut.category/navigating)
      (shortcut-table :shortcut.category/block-editing)
