@@ -17,7 +17,6 @@
                                :sha "edd87dc7f045f28d7afcbfc44bc0f0a2683dde62"}
   funcool/promesa             {:mvn/version "4.0.2"}
   medley/medley               {:mvn/version "1.2.0"}
-  camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.2"}
   metosin/reitit-frontend     {:mvn/version "0.3.10"}
   cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
   prismatic/dommy             {:mvn/version "1.1.0"}

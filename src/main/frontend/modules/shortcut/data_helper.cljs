@@ -1,6 +1,5 @@
 (ns frontend.modules.shortcut.data-helper
-  (:require [camel-snake-kebab.core :as csk]
-            [clojure.string :as str]
+  (:require [clojure.string :as str]
             [frontend.modules.shortcut.config :as config]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -85,7 +84,7 @@
       (str/replace "mod" (if util/mac? "cmd" "ctrl"))
       (str/replace "alt" (if util/mac? "opt" "alt"))
       (str/replace "shift+/" "?")
-      (csk/->PascalCase :separator #"(\+|\s)")))
+      (str/lower-case)))
 
 (defn binding-for-display [binding]
   (cond
