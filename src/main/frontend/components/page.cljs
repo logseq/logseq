@@ -392,14 +392,17 @@
 
           (tagged-pages repo page-name)
 
+          ;; TODO: or we can lazy load them
           ;; referenced blocks
-          [:div {:key "page-references"}
-           (rum/with-key
-             (reference/references route-page-name false)
-             (str route-page-name "-refs"))]
+          (when-not sidebar?
+            [:div {:key "page-references"}
+             (rum/with-key
+               (reference/references route-page-name false)
+               (str route-page-name "-refs"))])
 
-          [:div {:key "page-unlinked-references"}
-           (reference/unlinked-references route-page-name)]])))))
+          (when-not sidebar?
+            [:div {:key "page-unlinked-references"}
+             (reference/unlinked-references route-page-name)])])))))
 
 (defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 

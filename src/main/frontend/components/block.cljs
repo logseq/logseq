@@ -1676,6 +1676,18 @@
         data-refs-self (text/build-data-value refs)]
     [data-refs data-refs-self]))
 
+;; (rum/defc block-immediate-children < rum/reactive
+;;   [repo config uuid ref? collapsed?]
+;;   (when (and ref? (not collapsed?))
+;;     (let [children (db/get-block-immediate-children repo uuid)
+;;           children (block-handler/filter-blocks repo children (:filters config) false)]
+;;       (when (seq children)
+;;         [:div.ref-children {:style {:margin-left "1.8rem"}}
+;;          (blocks-container children (assoc config
+;;                                            :breadcrumb-show? false
+;;                                            :ref? true
+;;                                            :ref-child? true))]))))
+
 (rum/defcs block-container < rum/static
   {:init (fn [state]
            (assoc state
@@ -1741,18 +1753,18 @@
                                      :display (if collapsed? "none" "")}}
         (for [child children]
           (when (map? child)
-            (let [child (dissoc child :block/meta)]
-              (rum/with-key (block-container (assoc config :block/uuid (:block/uuid child)) child)
+            (let [child (dissoc child :block/meta)
+                  config (cond->
+                           (-> config
+                               (assoc :block/uuid (:block/uuid child))
+                               (dissoc :breadcrumb-show?))
+                           ref?
+                           (assoc :ref-child? true))]
+              (rum/with-key (block-container config
+                             child)
                 (:block/uuid child)))))])
 
-     (when ref?
-       (let [children (db/get-block-immediate-children repo uuid)
-             children (block-handler/filter-blocks repo children (:filters config) false)]
-         (when (seq children)
-           [:div.ref-children {:style {:margin-left "1.8rem"}}
-            (blocks-container children (assoc config
-                                              :breadcrumb-show? false
-                                              :ref? true))])))
+     ;; (block-immediate-children repo config uuid ref? collapsed?)
 
      (dnd-separator-wrapper block slide? false)]))
 
@@ -2252,12 +2264,12 @@
 
 (defn blocks-container
   [blocks config]
-  (let [blocks (map #(dissoc % :block/children) blocks)
+  (let [
+        ;; blocks (map #(dissoc % :block/children) blocks)
         sidebar? (:sidebar? config)
         ref? (:ref? config)
         custom-query? (:custom-query? config)
         blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree % (:id config)))
-        ;; FIXME: blocks->vec-tree not working for the block container (zoom view)
         blocks' (blocks->vec-tree blocks)
         blocks (if (seq blocks') blocks' blocks)]
     (when (seq blocks)
