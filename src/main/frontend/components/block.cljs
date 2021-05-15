@@ -536,14 +536,13 @@
                          (->elem
                           :span.block-ref
                           (map-inline config title))))]
-           (if label
-             (ui/tippy
-              {:html (block-container config block)
-               :interactive true}
+           (ui/tippy {:html (block-container config block)
+                      :interactive true}
+            (if label
               (->elem
                :span.block-ref
-               (map-inline config label)))
-             title))]
+               (map-inline config label))
+              title)))]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
