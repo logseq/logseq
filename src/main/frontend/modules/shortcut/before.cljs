@@ -31,7 +31,6 @@
   [f]
   (fn [e]
     (when-not (state/block-component-editing?)
-      (util/stop e)
       (f e))))
 
 (defn only-enable-when-dev!
