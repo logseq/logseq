@@ -178,7 +178,10 @@
                   state)}
   [state config id attr code pos-meta]
   [:div.extensions__code
-   {:on-mouse-down (fn [e] (util/stop e))}
+   {:on-mouse-down (fn [e]
+                     (util/stop e)
+                     (state/set-block-component-editing-mode! true))
+    :on-blur #(state/set-block-component-editing-mode! false)}
    [:div.extensions__code-lang
     (let [mode (string/lower-case (get attr :data-lang "javascript"))]
       (if (= mode "text/x-clojure")

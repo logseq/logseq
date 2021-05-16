@@ -164,6 +164,7 @@
      :fn      editor-handler/backward-kill-word}}
 
    :shortcut.handler/editor-global
+   ^{:before m/enable-when-not-component-editing!}
    {:editor/up
     {:desc    "Move cursor up / Select up"
      :binding "up"

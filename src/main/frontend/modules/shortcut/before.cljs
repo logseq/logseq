@@ -27,6 +27,13 @@
       (util/stop e)
       (f e))))
 
+(defn enable-when-not-component-editing!
+  [f]
+  (fn [e]
+    (when-not (state/block-component-editing?)
+      (util/stop e)
+      (f e))))
+
 (defn only-enable-when-dev!
   [_]
   (boolean config/dev?))

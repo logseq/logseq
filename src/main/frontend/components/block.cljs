@@ -2193,14 +2193,12 @@
 
               :else
               (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} language) "text/x-clojure" language)]
-                (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
-               ;; (if (:slide? config)
-               ;;   (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
-               ;;   [:div
-               ;;    (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
-               ;;    (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
-               ;;      (sci/eval-result code))])
-                ))))
+                (if (:slide? config)
+                 (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
+                 [:div
+                  (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
+                  (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
+                    (sci/eval-result code))])))))
 
         :else
         "")

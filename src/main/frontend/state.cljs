@@ -67,7 +67,8 @@
 
     :github/contents {}
     :config {}
-    :editor/code-mode? false
+    :block/component-editing-mode? false
+    :editor/draw-mode? false
     :editor/show-page-search? false
     :editor/show-page-search-hashtag? false
     :editor/show-date-picker? false
@@ -1203,13 +1204,13 @@
   [args]
   (set-state! :editor/args args))
 
-(defn code-mode?
+(defn block-component-editing?
   []
-  (:editor/code-mode? @state))
+  (:block/component-editing-mode? @state))
 
-(defn go-to-code-mode!
-  []
-  (set-state! :editor/code-mode? true))
+(defn set-block-component-editing-mode!
+  [value]
+  (set-state! :block/component-editing-mode? value))
 
 (defn get-editor-args
   []
