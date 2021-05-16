@@ -1321,7 +1321,7 @@
         properties (sort properties)]
     (cond
       (seq properties)
-      [:div
+      [:div.blocks-properties
        (for [[k v] properties]
          (rum/with-key (property-cp config block k v)
            (str (:block/uuid block) "-" k)))]

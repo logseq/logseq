@@ -161,6 +161,7 @@
 }
 
 .blocks-properties {
+  padding: 4px 8px;
   background-color: var(--ls-block-properties-background-color, #f0f8ff);
 }
 
