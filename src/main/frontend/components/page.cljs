@@ -230,7 +230,7 @@
          journal? (db/journal-page? page-name)
          sidebar? (:sidebar? option)]
      (rum/with-context [[t] i18n/*tongue-context*]
-       (let [route-page-name page-name
+       (let [route-page-name path-page-name
              page (if block?
                     (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
                          (db/entity repo))
