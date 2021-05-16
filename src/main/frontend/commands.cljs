@@ -284,6 +284,9 @@
                                (string/ends-with? s "(")
                                (or (string/starts-with? last-pattern "((")
                                    (string/starts-with? last-pattern "[["))))))
+          space? (if (and space? (string/starts-with? last-pattern "#[["))
+                   false
+                   space?)
           prefix (if (string/blank? last-pattern)
                    (if space?
                      (util/concat-without-spaces prefix value)

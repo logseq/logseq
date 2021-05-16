@@ -77,7 +77,7 @@
           input (gdom/getElement id)]
       (when input
         (let [current-pos (:pos (util/get-caret-pos input))
-              edit-content (state/sub [:editor/content id])
+              edit-content (or (state/sub [:editor/content id]) "")
               edit-block (state/sub :editor/block)
               q (or
                  @editor-handler/*selected-text

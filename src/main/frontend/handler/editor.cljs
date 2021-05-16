@@ -1734,7 +1734,7 @@
     (when-let [input (gdom/getElement id)]
       (let [current-pos (:pos (util/get-caret-pos input))
             pos (:editor/last-saved-cursor @state/state)
-            edit-content (state/sub [:editor/content id])]
+            edit-content (or (state/sub [:editor/content id]) "")]
         (or
          @*selected-text
          (util/safe-subs edit-content pos current-pos))))))
@@ -2392,9 +2392,10 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (and (= c " ")
-                   (not (state/get-editor-show-page-search?)))
-          (state/set-editor-show-page-search-hashtag! false))
+        (when (= c " ")
+          (when (or (= (util/nth-safe value (dec (dec current-pos))) "#")
+                    (not (state/get-editor-show-page-search?)))
+            (state/set-editor-show-page-search-hashtag! false)))
 
         (when (and @*show-commands (not= key-code 191)) ; not /
           (let [matched-commands (get-matched-commands input)]

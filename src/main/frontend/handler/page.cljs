@@ -453,16 +453,16 @@
     (if (state/sub :editor/show-page-search-hashtag?)
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
-        (let [chosen (if (re-find #"\s+" chosen)
+        (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
+              chosen (if (and (re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
                        chosen)]
           (editor-handler/insert-command! id
-                                          (str "#" chosen)
+                                          (str "#" (when wrapped? "[[") chosen)
                                           format
                                           {:last-pattern (let [q (if @editor-handler/*selected-text "" q)]
-                                                           (if (and q (string/starts-with? q "#"))
-                                                             q
-                                                             (str "#" q)))})))
+                                                           (str "#" (when wrapped? "[[") q))
+                                           :forward-pos (if wrapped? 3 2)})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [page-ref-text (get-page-ref-text chosen)]
