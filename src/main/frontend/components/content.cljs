@@ -128,7 +128,8 @@
   [target block-id]
   (rum/with-context [[t] i18n/*tongue-context*]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [properties (:block/properties block)]
+      (let [properties (:block/properties block)
+            heading? (true? (:heading properties))]
         [:div#custom-context-menu
          [:div.py-1.rounded-md.bg-base-3.shadow-xs
           [:div.flex-row.flex.justify-between.py-4.pl-2
@@ -145,6 +146,16 @@
              :on-click (fn [_e]
                          (editor-handler/remove-block-property! block-id "background-color"))}
             "Clear"]]
+
+          (ui/menu-link
+           {:key "Convert heading"
+            :on-click (fn [_e]
+                        (if heading?
+                          (editor-handler/remove-block-property! block-id :heading)
+                          (editor-handler/set-block-property! block-id :heading true)))}
+           (if heading?
+             "Convert back to a block"
+             "Convert to a heading"))
 
           (ui/menu-link
            {:key "Open in sidebar"

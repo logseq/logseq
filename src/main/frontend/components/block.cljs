@@ -1233,9 +1233,16 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         bg-color (:background-color properties)
-        elem (if (and (false? unordered)
-                      heading-level
-                      (<= heading-level 6))
+        heading-level (or (and (false? unordered)
+                               heading-level
+                               (<= heading-level 6)
+                               heading-level)
+                          (and (get properties :heading)
+                               (<= level 6)
+                               level
+                               ;; FIXME: construct the proper level later
+                               2))
+        elem (if heading-level
                (keyword (str "h" heading-level))
                :div)]
     (->elem
