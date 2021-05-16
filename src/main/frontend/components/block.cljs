@@ -2040,6 +2040,27 @@
 ;;       :else
 ;;       ["Src" options])))
 
+(rum/defc src-cp < rum/static
+  [config options html-export?]
+  (when options
+    (let [{:keys [language lines pos_meta]} options
+          attr (if language
+                 {:data-lang language})
+          code (join-lines lines)]
+      (cond
+        html-export?
+        (highlight/html-export attr code)
+
+        :else
+        (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} language) "text/x-clojure" language)]
+          (if (:slide? config)
+            (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
+            [:div
+             (lazy-editor/editor config (str (dc/squuid)) attr code options)
+             (let [options (:options options)]
+               (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
+                 (sci/eval-result code)))]))))))
+
 (defn markup-element-cp
   [{:keys [html-export?] :as config} item]
   (let [format (or (:block/format config)
@@ -2182,23 +2203,7 @@
               [:sup.fn (str name "↩︎")]])]])
 
         ["Src" options]
-        (when options
-          (let [{:keys [language options lines pos_meta]} options
-                attr (if language
-                       {:data-lang language})
-                code (join-lines lines)]
-            (cond
-              html-export?
-              (highlight/html-export attr code)
-
-              :else
-              (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} language) "text/x-clojure" language)]
-                (if (:slide? config)
-                 (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
-                 [:div
-                  (lazy-editor/editor config (str (dc/squuid)) attr code pos_meta)
-                  (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
-                    (sci/eval-result code))])))))
+        (src-cp config options html-export?)
 
         :else
         "")

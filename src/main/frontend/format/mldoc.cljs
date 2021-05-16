@@ -1,6 +1,7 @@
 (ns frontend.format.mldoc
   (:require [frontend.format.protocol :as protocol]
             [frontend.util :as util]
+            [frontend.utf8 :as utf8]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer-macros [match]]
@@ -176,6 +177,19 @@
         original-ast))
     ast))
 
+(defn update-src-full-content
+  [ast content]
+  (let [content (utf8/encode content)]
+    (map (fn [[block pos-meta]]
+          (if (and (vector? block)
+                   (= "Src" (first block)))
+            (let [{:keys [start_pos end_pos]} pos-meta
+                  block ["Src" (assoc (second block)
+                                      :full_content
+                                      (utf8/substring content start_pos end_pos))]]
+              [block pos-meta])
+            [block pos-meta])) ast)))
+
 (defn ->edn
   [content config]
   (try
@@ -184,6 +198,7 @@
       (-> content
           (parse-json config)
           (util/json->clj)
+          (update-src-full-content content)
           (collect-page-properties)))
     (catch js/Error e
       (log/error :edn/convert-failed e)

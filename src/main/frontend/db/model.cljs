@@ -493,20 +493,6 @@
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 
-(defn get-block-page-end-pos
-  [repo page-name]
-  (or
-   (when-let [page-id (:db/id (db-utils/entity repo [:block/name (string/lower-case page-name)]))]
-     (when-let [db (conn/get-conn repo)]
-       (let [block-eids (->> (d/datoms db :avet :block/page page-id)
-                             (mapv :e))]
-         (when (seq block-eids)
-           (let [blocks (db-utils/pull-many repo '[:block/meta] block-eids)]
-             (-> (last (db-utils/sort-by-pos blocks))
-                 (get-in [:block/meta :end-pos])))))))
-   ;; TODO: need more thoughts
-   0))
-
 (defn get-blocks-by-priority
   [repo priority]
   (let [priority (string/capitalize priority)]

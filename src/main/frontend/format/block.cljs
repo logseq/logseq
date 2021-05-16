@@ -314,22 +314,6 @@
           refs (distinct (concat (:refs block) ref-blocks))]
       (assoc block :refs refs))))
 
-(defn update-src-pos-meta!
-  [{:keys [body] :as block}]
-  (let [body (walk/postwalk
-              (fn [form]
-                (if (and (vector? form)
-                         (= (first form) "Src")
-                         (map? (:pos_meta (second form))))
-                  (let [{:keys [start_pos end_pos]} (:pos_meta (second form))
-                        new_start_pos (- start_pos (get-in block [:meta :start-pos]))]
-                    ["Src" (assoc (second form)
-                                  :pos_meta {:start_pos new_start_pos
-                                             :end_pos (+ new_start_pos (- end_pos start_pos))})])
-                  form))
-              body)]
-    (assoc block :body body)))
-
 (defn block-keywordize
   [block]
   (medley/map-keys
@@ -478,8 +462,7 @@
                       block (-> block
                                 (with-page-refs with-id?)
                                 with-block-refs
-                                block-tags->pages
-                                update-src-pos-meta!)
+                                block-tags->pages)
                       last-pos' (get-in block [:meta :start-pos])]
                   (recur (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
 
