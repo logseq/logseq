@@ -62,8 +62,8 @@
   (or
    (some #(string/starts-with? path (str dir "/" %))
          ["." "assets" "node_modules"])
-   (some #(string/ends-with? path (str dir "/" %))
-         [".swap" ".crswap" ".tmp"])))
+   (some #(string/ends-with? path %)
+         [".swap" ".crswap" ".tmp" ".DS_Store"])))
 
 (defonce allowed-formats
   #{:org :markdown :md :edn :json :css :excalidraw})
@@ -137,6 +137,7 @@
       (send file-watcher-chan
             (bean/->js {:type type :payload payload}))))
 
+(defonce polling-interval 5000)
 (defn watch-dir!
   [win dir]
   (when (fs/existsSync dir)
@@ -144,8 +145,14 @@
                           (clj->js
                            {:ignored (partial ignored-path? dir)
                             :ignoreInitial true
+                            :ignorePermissionErrors true
+                            :interval polling-interval
+                            :binaryInterval polling-interval
                             :persistent true
+                            :disableGlobbing true
+
                             :awaitWriteFinish true}))]
+      ;; TODO: batch sender
       (.on watcher "add"
            (fn [path]
              (send-file-watcher! win "add"
