@@ -61,7 +61,7 @@
     (->>
      (map (fn [[repo k id]]
             (when (and (= repo current-repo)
-                       (= k :block/refed-blocks))
+                       (contains? #{:block/refed-blocks :block/unlinked-refs} k))
               [k id]))
        (keys @query-state))
      (remove nil?))))
@@ -289,7 +289,6 @@
   [repo-url {:keys [key data] :as handler-opts}]
   (let [related-keys (get-related-keys handler-opts)
         db (conn/get-conn repo-url)]
-    (util/pprint related-keys)
     (doseq [related-key related-keys]
       (let [related-key (vec (cons repo-url related-key))]
         (when-let [cache (get @query-state related-key)]

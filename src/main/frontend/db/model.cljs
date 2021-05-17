@@ -971,7 +971,7 @@
     (when-let [conn (conn/get-conn repo)]
       (let [page-id (:db/id (db-utils/entity [:block/name page]))
             pattern (re-pattern (str "(?i)(?<!#)(?<!\\[\\[)" page "(?!\\]\\])"))]
-        (->> (d/q
+        (->> (react/q repo [:block/unlinked-refs page-id] {}
                '[:find [(pull ?block ?block-attrs) ...]
                  :in $ ?pattern ?block-attrs ?page-id
                  :where
@@ -979,10 +979,10 @@
                  [?block :block/page ?page]
                  [(not= ?page ?page-id)]
                  [(re-find ?pattern ?content)]]
-               conn
                pattern
                block-attrs
                page-id)
+             react
              (sort-by-left-recursive)
              db-utils/group-by-page)))))
 
