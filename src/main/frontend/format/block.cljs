@@ -416,7 +416,7 @@
                         (remove-indentation-spaces content (:level block)))))]
       (if (= format :org)
         content
-        (text/->new-properties content)))))
+        (property/->new-properties content)))))
 
 (defn extract-blocks
   [blocks content with-id? format]
