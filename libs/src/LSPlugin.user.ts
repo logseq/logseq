@@ -296,8 +296,6 @@ export function setupPluginUserInstance (
 }
 
 if (window.__LSP__HOST__ == null) { // Entry of iframe mode
-  debug('Entry of iframe mode.')
-
   const caller = new LSPluginCaller(null)
   window.logseq = setupPluginUserInstance({} as any, caller)
 }

@@ -121,8 +121,12 @@ export function invokeHostExportedApi (
   ...args: Array<any>
 ) {
   const method1 = snakeCase(method)
-  const fn = window.api[method1] || window.apis[method1] ||
-    window.api[method] || window.apis[method]
+
+  // @ts-ignore
+  const logseqHostExportedApi = window.logseq?.api || {}
+
+  const fn = logseqHostExportedApi[method1] || window.apis[method1] ||
+    logseqHostExportedApi[method] || window.apis[method]
 
   if (!fn) {
     throw new Error(`Not existed method #${method}`)
