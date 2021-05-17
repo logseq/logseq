@@ -2543,24 +2543,22 @@
 
       (do
         ;; from external
-        (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
-              editing-block-content (:block/content (db/entity (:db/id (state/get-edit-block))))]
-          (when (empty? editing-block-content)
-            (match [format
-                    (nil? (re-find #"^\s*(?:[-+*]|#+)\s+" text))
-                    (nil? (re-find #"^\s*\*+\s+" text))]
-                   [:markdown false _]
-                   (paste-text-parseable format text)
+        (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
+          (match [format
+                  (nil? (re-find #"^\s*(?:[-+*]|#+)\s+" text))
+                  (nil? (re-find #"^\s*\*+\s+" text))]
+                 [:markdown false _]
+                 (paste-text-parseable format text)
 
-                   [:org _ false]
-                   (paste-text-parseable format text)
+                 [:org _ false]
+                 (paste-text-parseable format text)
 
-                   [:markdown true _]
-                   (paste-segmented-text format text)
+                 [:markdown true _]
+                 (paste-segmented-text format text)
 
-                   [:org _ true]
-                   (paste-segmented-text format text))
-            (util/stop e)))))))
+                 [:org _ true]
+                 (paste-segmented-text format text))
+          (util/stop e))))))
 
 (defn editor-on-paste!
   [id]
