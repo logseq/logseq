@@ -47,7 +47,7 @@
     ;;                      [?e ?a ?v]))]
     ])
 
-;; You can use it as a query input for re-use
+;; Use it as an input argument for datalog queries
 (defonce block-attrs
   '[:db/id
     :block/uuid
@@ -500,34 +500,6 @@
   [repo block-id]
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
     (db-utils/entity repo (:db/id (:block/page block)))))
-
-(defn get-page-properties-content
-  [page]
-  (when-let [content (let [blocks (get-page-blocks-no-cache page)]
-                       (and (:block/pre-block? (first blocks))
-                            (:block/content (first blocks))))]
-    (let [format (get-page-format page)]
-      (case format
-        :org
-        (->> (string/split-lines content)
-             (take-while (fn [line]
-                           (or (string/blank? line)
-                               (string/starts-with? line "#+")
-                               (re-find #"^:.+?:" line))))
-             (string/join "\n"))
-
-        :markdown
-        (let [[m leading-spaces first-dashes] (re-find #"(\s*)(---\n)" content)]
-          (if m
-            (let [begin (count leading-spaces)
-                  begin-inner (+ begin (count first-dashes))
-                  second-dashes "\n---\n"
-                  end-inner (string/index-of content second-dashes begin-inner)
-                  end (if end-inner (+ end-inner (count second-dashes)) begin)]
-              (subs content begin end))
-            ""))
-
-        content))))
 
 (defn block-and-children-transform
   [result repo-url block-uuid]
@@ -998,25 +970,20 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (conn/get-conn repo)]
       (let [page-id (:db/id (db-utils/entity [:block/name page]))
-            ;; pages (page-alias-set repo page)
-            pattern (re-pattern (str "(?i)" page))]
+            pattern (re-pattern (str "(?i)(?<!#)(?<!\\[\\[)" page "(?!\\]\\])"))]
         (->> (d/q
                '[:find [(pull ?block ?block-attrs) ...]
-                 :in $ ?pattern ?block-attrs
+                 :in $ ?pattern ?block-attrs ?page-id
                  :where
                  [?block :block/content ?content]
+                 [?block :block/page ?page]
+                 [(not= ?page ?page-id)]
                  [(re-find ?pattern ?content)]]
                conn
                pattern
-               block-attrs)
+               block-attrs
+               page-id)
              (sort-by-left-recursive)
-             ;; (remove (fn [block]
-             ;;           (let [ref-pages (set (map :db/id (:block/refs block)))]
-             ;;             (or
-             ;;              (= (get-in block [:block/page :db/id]) page-id)
-             ;;              (seq (set/intersection
-             ;;                    ref-pages
-             ;;                    pages))))))
              db-utils/group-by-page)))))
 
 ;; TODO: Replace recursive queries with datoms index implementation
