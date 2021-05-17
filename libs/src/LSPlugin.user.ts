@@ -5,12 +5,12 @@ import {
   IEditorProxy,
   ILSPluginUser,
   LSPluginBaseInfo, LSPluginUserEvents, SlashCommandAction,
-  StyleOptions,
   StyleString,
   ThemeOptions,
   UIOptions
 } from './LSPlugin'
 import Debug from 'debug'
+import * as CSS from 'csstype'
 import { snakeCase } from 'snake-case'
 import EventEmitter from 'eventemitter3'
 
@@ -186,7 +186,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     this.caller.call('main-ui:attrs', attrs)
   }
 
-  setMainUIInlineStyle (style: StyleOptions): void {
+  setMainUIInlineStyle (style: CSS.Properties): void {
     this.caller.call('main-ui:style', style)
   }
 
