@@ -387,7 +387,7 @@
     [fst-block-text snd-block-text]))
 
 (defn outliner-insert-block!
-  [config current-block new-block child? sibling?]
+  [config current-block new-block sibling?]
   (let [ref-top-block? (and (:ref? config)
                             (not (:ref-child? config)))
         dummy? (:block/dummy? current-block)
@@ -399,11 +399,8 @@
                    ref-top-block?
                    false
 
-                   child?
-                   false
-
-                   (some? sibling?)
                    sibling?
+                   true
 
                    (:collapsed (:block/properties current-block))
                    true
@@ -483,14 +480,14 @@
         new-m {:block/uuid (db/new-block-id)
                :block/content fst-block-text}
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
-                                                  :block/page :block/level :block/file :block/journal?]) new-m)
+                                                  :block/page :block/file :block/journal?]) new-m)
                        (wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))
         _ (outliner-core/save-node (outliner-core/block current-block))
         sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
-                                   (outliner-insert-block! config left-block prev-block nil sibling?))]
+                                   (outliner-insert-block! config left-block prev-block sibling?))]
 
     (db/refresh! repo {:key :block/insert :data [prev-block left-block current-block]})
     (profile "ok handler" (ok-handler prev-block))))
@@ -514,11 +511,12 @@
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
-                                                  :block/page :block/level :block/file :block/journal?]) new-m)
+                                                  :block/page :block/file :block/journal?]) new-m)
                        (wrap-parse-block))
+        sibling? (when block-self? false)
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
-                                   (outliner-insert-block! config current-block next-block block-self? nil))
+                                   (outliner-insert-block! config current-block next-block sibling?))
         refresh-fn (fn []
                      (let [opts {:key :block/insert
                                  :data [current-block next-block]}]
@@ -618,6 +616,28 @@
              (edit-block! last-block 0 format id)
              (clear-when-saved!))}))))
    (state/set-editor-op! nil)))
+
+(defn api-insert-new-block!
+  [content {:keys [page block-uuid sibling? attributes]}]
+  (when (or page block-uuid)
+    (when-let [block (if block-uuid
+                       (db/entity [:block/uuid block-uuid])
+                       (let [page (db/entity [:block/name (string/lower-case page)])
+                             block-uuid (:block/uuid page)
+                             children (:block/_parent page)
+                             blocks (db/sort-by-left children page)
+                             last-block-id (or (:db/id (last blocks))
+                                               (:db/id page))]
+                         (db/pull last-block-id)))]
+      ;; TODO: DRY
+      (let [new-block (-> (select-keys block [:block/parent :block/left :block/format
+                                              :block/page :block/file :block/journal?])
+                          (assoc :block/content content)
+                          (wrap-parse-block))
+            repo (state/get-current-repo)]
+        (outliner-insert-block! {} block new-block sibling?)
+        (db/refresh! repo {:key :block/insert
+                           :data [new-block]})))))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker] :as block} content]

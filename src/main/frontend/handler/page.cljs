@@ -315,27 +315,13 @@
 
 (defn handle-add-page-to-contents!
   [page-name]
-  (let [last-block (last (db/get-page-blocks (state/get-current-repo) "contents"))
-        last-empty? (>= 3 (count (:block/content last-block)))
-        heading-pattern (config/get-block-pattern (state/get-preferred-format))
-        pre-str (str heading-pattern heading-pattern)
-        new-content (if last-empty?
-                      (str pre-str " [[" page-name "]]")
-                      (str (string/trimr (:block/content last-block))
-                           "\n"
-                           pre-str " [[" page-name "]]"))]
-    (editor-handler/insert-new-block-aux!
-     {}
-     last-block
-     new-content
-     {:create-new-block? false
-      :ok-handler
-      (fn [_]
-        (notification/show! "Added to contents!" :success)
-        (editor-handler/clear-when-saved!))
-      :with-level? true
-      :new-level 2
-      :current-page "Contents"})))
+  (let [content (str "[[" page-name "]]")]
+    (editor-handler/api-insert-new-block!
+     content
+     {:page "Contents"
+      :sibling? true})
+    (notification/show! "Added to contents!" :success)
+    (editor-handler/clear-when-saved!)))
 
 (defn has-more-journals?
   []
