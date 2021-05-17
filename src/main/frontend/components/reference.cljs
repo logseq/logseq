@@ -84,7 +84,9 @@
                     (->> (group-by second filter-state)
                          (medley/map-vals #(map first %))))
           filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
-          n-ref (count filtered-ref-blocks)]
+          n-ref (apply +
+                 (for [[_ rfs] filtered-ref-blocks]
+                   (count rfs)))]
       (when (or (> n-ref 0)
                 (seq scheduled-or-deadlines)
                 (seq filter-state))
@@ -135,7 +137,10 @@
   < rum/reactive db-mixins/query
   [state page-name n-ref]
   (let [ref-blocks (db/get-page-unlinked-references page-name)]
-    (when (nil? @n-ref) (reset! n-ref (count ref-blocks)))
+    (when (nil? @n-ref) (reset! n-ref
+                                (apply +
+                                       (for [[_ rfs] ref-blocks]
+                                         (count rfs)))))
     [:div.references-blocks
      (let [ref-hiccup (block/->hiccup ref-blocks
                                       {:id (str page-name "-unlinked-")
