@@ -1,4 +1,5 @@
 import EventEmitter from 'eventemitter3'
+import * as CSS from 'csstype';
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginUser } from './LSPlugin.user'
 
@@ -13,11 +14,8 @@ type ThemeOptions = {
   [key: string]: any
 }
 
-type StyleString = string
-type StyleOptions = {
-  key?: string
-  style: StyleString
-}
+type StyleString = string;
+type StyleOptions = CSS.Properties;
 
 type UIBaseOptions = {
   key?: string
@@ -35,7 +33,7 @@ type UISlotIdentity = {
 
 type UISlotOptions = UIBaseOptions & UISlotIdentity
 type UIPathOptions = UIBaseOptions & UIPathIdentity
-type UIOptions = UIPathOptions & UISlotOptions
+type UIOptions = UIPathOptions | UISlotOptions
 
 interface LSPluginPkgConfig {
   id: PluginLocalIdentity
@@ -214,7 +212,7 @@ interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    */
   setMainUIAttrs (attrs: Record<string, any>): void
 
-  setMainUIInlineStyle (style: CSSStyleDeclaration): void
+  setMainUIInlineStyle (style: StyleOptions): void
 
   showMainUI (): void
 
