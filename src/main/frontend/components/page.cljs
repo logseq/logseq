@@ -39,6 +39,7 @@
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [frontend.text :as text]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.block :as block-handler]))
 
 (defn- get-page-name
@@ -156,6 +157,7 @@
           (t :cancel)]]]])))
 
 (rum/defcs rename-page-dialog-inner <
+  (shortcut/disable-all-shortcuts)
   (rum/local "" ::input)
   [state title page-name close-fn]
   (let [input (get state ::input)]
