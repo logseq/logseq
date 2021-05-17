@@ -79,6 +79,7 @@
           transition: none;
           opacity: .2;
           position: relative;
+          z-index: var(--ls-z-index-level-2);
 
           .menu-list {
             @apply shadow-md rounded-sm absolute hidden list-none overflow-hidden m-0 p-0;
@@ -90,7 +91,7 @@
 
             > li {
               margin: 0;
-              padding: 3px;
+              padding: 5px;
               transition: background-color .2s;
               user-select: none;
               opacity: .8;

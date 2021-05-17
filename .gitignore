@@ -32,3 +32,4 @@ resources/electron.js
 .clj-kondo/
 .lsp/
 /libs/dist/
+charlie/

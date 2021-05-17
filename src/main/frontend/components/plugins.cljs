@@ -94,6 +94,7 @@
          [:strong svg/settings-sm]
          [:ul.menu-list
           [:li {:on-click #(if usf (js/apis.openPath usf))} "Open settings"]
+          [:li {:on-click #(js/apis.openPath url)} "Open plugin root"]
           [:li {:on-click
                 #(let [confirm-fn
                        (ui/make-confirm-modal

@@ -16,6 +16,12 @@
   (and (util/electron?)
        (= (storage/get "developer-mode") "true")))
 
+(defn invoke-exported-api
+  [type & args]
+  (try
+    (apply js-invoke js/logseq.api type args)
+    (catch js/Error e (js/console.error e))))
+
 ;; state handlers
 (defn register-plugin
   [pl]
@@ -61,7 +67,7 @@
 (defn open-readme!
   [url display]
   (when url
-    (-> (p/let [content (js/api.load_plugin_readme url)]
+    (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)]
           (state/set-state! :plugin/active-readme content)
           (state/set-modal! display))
         (p/catch #(notifications/show! "No README file." :warn)))))
