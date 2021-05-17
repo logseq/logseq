@@ -2552,7 +2552,10 @@
             selected-end (.-selectionEnd input)]
         (if (= selected-start selected-end)
           (copy-current-block-ref)
-          (js/document.execCommand "copy"))))))
+          (js/document.execCommand "copy")))
+
+      :else
+      (js/document.execCommand "copy"))))
 
 
 (defn shortcut-cut
