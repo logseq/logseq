@@ -135,12 +135,18 @@
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
+  {:wrap-render
+   (fn [render-fn]
+     (fn [state]
+       (reset! (second (:rum/args state))
+               (apply +
+                      (for [[_ rfs]
+                            (db/get-page-unlinked-references
+                             (first (:rum/args state)))]
+                        (count rfs))))
+       (render-fn state)))}
   [state page-name n-ref]
   (let [ref-blocks (db/get-page-unlinked-references page-name)]
-    (when (nil? @n-ref) (reset! n-ref
-                                (apply +
-                                       (for [[_ rfs] ref-blocks]
-                                         (count rfs)))))
     [:div.references-blocks
      (let [ref-hiccup (block/->hiccup ref-blocks
                                       {:id (str page-name "-unlinked-")
