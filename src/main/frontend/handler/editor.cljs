@@ -745,26 +745,33 @@
       (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
             page-blocks-count (and page-id (db/get-page-blocks-count repo page-id))]
         (when (> page-blocks-count 1)
-          (do
-            (let [block (db/pull [:block/uuid block-id])
-                  block-parent (gdom/getElement block-parent-id)
-                  sibling-block (get-prev-block-non-collapsed block-parent)]
-              (delete-block-aux! block dummy? delete-children?)
-              (when (and repo sibling-block)
-                (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-                  (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
-                    (let [original-content (util/trim-safe (:block/content block))
-                          new-value (str original-content " " (string/triml value))
-                          tail-len (count (string/triml value))
-                          pos (max
-                               (if original-content
-                                 (utf8/length (utf8/encode original-content))
-                                 0)
-                               0)]
-                      (edit-block! block pos format id
-                                   {:custom-content new-value
-                                    :tail-len tail-len
-                                    :move-cursor? false})))))))))))))
+          (let [block (db/entity [:block/uuid block-id])
+                has-children? (seq (:block/_parent block))
+                block (db/pull (:db/id block))
+                left (tree/-get-left (outliner-core/block block))
+                left-has-children? (and left
+                                        (when-let [block-id (:block/uuid (:data left))]
+                                          (let [block (db/entity [:block/uuid block-id])]
+                                            (seq (:block/_parent block)))))]
+            (when-not (and has-children? left-has-children?)
+              (let [block-parent (gdom/getElement block-parent-id)
+                    sibling-block (get-prev-block-non-collapsed block-parent)]
+                (delete-block-aux! block dummy? delete-children?)
+                (when (and repo sibling-block)
+                  (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
+                    (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+                      (let [original-content (util/trim-safe (:block/content block))
+                            new-value (str original-content " " (string/triml value))
+                            tail-len (count (string/triml value))
+                            pos (max
+                                 (if original-content
+                                   (utf8/length (utf8/encode original-content))
+                                   0)
+                                 0)]
+                        (edit-block! block pos format id
+                                     {:custom-content new-value
+                                      :tail-len tail-len
+                                      :move-cursor? false}))))))))))))))
 
 (defn- get-end-block-parent
   [end-block blocks]
