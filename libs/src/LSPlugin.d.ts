@@ -15,7 +15,10 @@ type ThemeOptions = {
 }
 
 type StyleString = string;
-type StyleOptions = CSS.Properties;
+type StyleOptions = {
+  key?: string
+  style: StyleString
+}
 
 type UIBaseOptions = {
   key?: string
@@ -212,7 +215,7 @@ interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    */
   setMainUIAttrs (attrs: Record<string, any>): void
 
-  setMainUIInlineStyle (style: StyleOptions): void
+  setMainUIInlineStyle (style: CSS.Properties): void
 
   showMainUI (): void
 
