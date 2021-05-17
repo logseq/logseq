@@ -508,6 +508,7 @@
          parents [{:page/id page-id     ; db id or lookup ref [:block/name "xxx"]
                    :block/level 0
                    :block/level-spaces 0}]
+         sibling nil
          result []]
     (if (empty? blocks)
       (map #(dissoc % :block/level-spaces) result)
@@ -515,7 +516,7 @@
             level-spaces (:block/level-spaces block)
             {:block/keys [uuid level parent unordered] :as last-parent} (last parents)
             parent-spaces (:block/level-spaces last-parent)
-            [blocks parents result]
+            [blocks parents sibling result]
             (cond
               (= level-spaces parent-spaces)        ; sibling
               (let [block (assoc block
@@ -525,7 +526,7 @@
                                  )
                     parents' (conj (vec (butlast parents)) block)
                     result' (conj result block)]
-                [others parents' result'])
+                [others parents' block result'])
 
               (> level-spaces parent-spaces)         ; child
               (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
@@ -542,14 +543,29 @@
                             (assoc :block/level (inc level)))
                     parents' (conj parents block)
                     result' (conj result block)]
-                [others parents' result'])
+                [others parents' block result'])
+
+              ;; - a
+              ;;    - b
+              ;;  - c
+              (and (>= (count parents) 2)
+                   (< level-spaces parent-spaces)
+                   (> level-spaces (:block/level-spaces (nth parents (- (count parents) 2)))))
+              (let [block (assoc block
+                                 :block/parent parent
+                                 :block/left [:block/uuid uuid]
+                                 :block/level level
+                                 :block/level-spaces parent-spaces)
+                    parents' (conj (vec (butlast parents)) block)
+                    result' (conj result block)]
+                [others parents' block result'])
 
               (< level-spaces parent-spaces)         ; outdent
               (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
                     blocks (cons (assoc (first blocks) :block/level (dec level))
                                  (rest blocks))]
-                [blocks parents' result]))]
-        (recur blocks parents result)))))
+                [blocks parents' (last parents') result]))]
+        (recur blocks parents sibling result)))))
 
 (defn parse-block
   ([block]
