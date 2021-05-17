@@ -1063,34 +1063,45 @@
            {:page page}))))))
 
 (defn zoom-in! []
-  (if-let [block (state/get-edit-block)]
-    (when-let [id (-> (db/entity [:block/uuid (:block/uuid block)])
-                      :block/uuid)]
-      (route-handler/redirect! {:to :page
-                                :path-params {:name (str id)}}))
+  (if (state/editing?)
+    (when-let [id (some-> (state/get-edit-block)
+                          :block/uuid
+                          ((fn [id] [:block/uuid id]))
+                          db/entity
+                          :block/uuid)]
+      (let [pos (state/get-edit-pos)]
+        (route-handler/redirect! {:to          :page
+                                  :path-params {:name (str id)}})
+        (edit-block! {:block/uuid id} pos nil id)))
     (js/window.history.forward)))
-
-(defn zoom-out! []
-  (let [page (state/get-current-page)
-        block-id (and
-                  (string? page)
-                  (util/uuid-string? page)
-                  (medley/uuid page))]
-    (if block-id
-      (let [repo (state/get-current-repo)
-            block-parent (db/get-block-parent repo block-id)]
-        (if-let [id (and
-                      (nil? (:block/name block-parent))
-                      (:block/uuid block-parent))]
-          (route-handler/redirect! {:to :page
-                                    :path-params {:name (str id)}})
-          (let [page-id (-> (db/entity [:block/uuid block-id])
-                            :block/page
-                            :db/id)]
-            (when-let [page-name (:block/name (db/entity repo page-id))]
+(defn zoom-out!
+  []
+  (if (state/editing?)
+    (let [page (state/get-current-page)
+          block-id (and
+                    (string? page)
+                    (util/uuid-string? page)
+                    (medley/uuid page))]
+      (when block-id
+        (let [block-parent (db/get-block-parent block-id)]
+          (if-let [id (and
+                       (nil? (:block/name block-parent))
+                       (:block/uuid block-parent))]
+            (do
               (route-handler/redirect! {:to :page
-                                        :path-params {:name page-name}})))))
-      (js/window.history.back))))
+                                        :path-params {:name (str id)}})
+
+              (edit-block! {:block/uuid block-id} :max nil block-id))
+            (let [page-id (some-> (db/entity [:block/uuid block-id])
+                                  :block/page
+                                  :db/id
+
+                                  )]
+              (when-let [page-name (:block/name (db/entity page-id))]
+                (route-handler/redirect! {:to :page
+                                          :path-params {:name page-name}})
+                (edit-block! {:block/uuid block-id} :max nil block-id)))))))
+    (js/window.history.back)))
 
 (defn cut-block!
   [block-id]

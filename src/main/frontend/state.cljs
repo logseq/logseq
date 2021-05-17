@@ -509,13 +509,9 @@
          (fn [m]
            (and input-id {input-id true}))))
 
-(defn set-edit-pos!
-  [pos]
-  (set-state! :editor/pos pos))
-
 (defn get-edit-pos
   []
-  (:editor/pos @state))
+  (.-selectionStart (get-input)))
 
 (defn set-selection-start-block!
   [start-block]

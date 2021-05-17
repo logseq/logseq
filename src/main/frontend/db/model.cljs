@@ -449,10 +449,12 @@
     (count (d/datoms db :avet :block/page page-id))))
 
 (defn get-block-parent
-  [repo block-id]
-  (when-let [conn (conn/get-conn repo)]
-    (when-let [block (d/entity conn [:block/uuid block-id])]
-      (:block/parent block))))
+  ([block-id]
+   (get-block-parent (state/get-current-repo) block-id))
+  ([repo block-id]
+   (when-let [conn (conn/get-conn repo)]
+     (when-let [block (d/entity conn [:block/uuid block-id])]
+       (:block/parent block)))))
 
 ;; non recursive query
 (defn get-block-parents
