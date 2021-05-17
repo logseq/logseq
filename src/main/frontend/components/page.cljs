@@ -208,6 +208,7 @@
 
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
+  #_
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
                 state)
