@@ -1902,7 +1902,8 @@
                   (db/entity [:block/original-name (state/get-current-page)])
                   (:block/page (db/entity (:db/id (state/get-edit-block)))))
          file (:block/file page)]
-     (when-let [editing-block (db/entity (:db/id (state/get-edit-block)))]
+     (when-let [editing-block (or (db/entity (:db/id (state/get-edit-block)))
+                                  (when (:block/dummy? (state/get-edit-block)) (state/get-edit-block)))]
        (let [parent (:block/parent editing-block)
              left (:block/left editing-block)
              sibling? (not= parent left)
