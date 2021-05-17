@@ -945,7 +945,7 @@
 
 (defn- blocks-with-level
   [blocks]
-  (let [level-blocks (mapv #(assoc % :level 0) blocks)
+  (let [level-blocks (mapv #(assoc % :level 1) blocks)
         level-blocks-map (into {} (mapv (fn [b] [(:db/id b) b]) level-blocks))
         [level-blocks-map _]
         (reduce (fn [[r state] [id block]]
@@ -962,7 +962,7 @@
                       (let [loc*
                             (loop [loc (zip/vector-zip (zip/root loc))
                                    level level]
-                              (if (> level 0)
+                              (if (> level 1)
                                 (if-let [down (zip/rightmost (zip/down loc))]
                                   (recur down (dec level))
                                   loc)
@@ -1969,7 +1969,7 @@
           blocks (if including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
           level-blocks (vals (blocks-with-level blocks))
           grouped-blocks (group-by #(= db-id (:db/id %)) level-blocks)
-          root-block (or (first (get grouped-blocks true)) (assoc (db/pull db-id) :level 0))
+          root-block (or (first (get grouped-blocks true)) (assoc (db/pull db-id) :level 1))
           blocks-exclude-root (get grouped-blocks false)
           sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
           result-blocks (if including-parent? sorted-blocks (drop 1 sorted-blocks))
@@ -2492,22 +2492,66 @@
   (when-let [page (state/get-current-page)]
     (db/get-page-format page)))
 
+(defn- paste-text-parseable
+  [format text]
+  (let [tree (->>
+              (block/extract-blocks
+               (mldoc/->edn text (mldoc/default-config format)) text true format)
+              (mapv #(assoc % :level (:block/level %)))
+              (blocks-vec->tree))]
+    (paste-block-tree-at-point tree [])))
+
+(defn- paste-segmented-text
+  [format text]
+  (let [paragraphs (string/split text #"(?:\r?\n){2,}")
+        updated-paragraphs
+        (string/join "\n"
+                     (mapv (fn [p] (->> (string/trim p)
+                                        ((fn [p]
+                                           (if (re-find (if (= format :org)
+                                                          #"\s*\*+\s+"
+                                                          #"\s*-\s+") p)
+                                             p
+                                             (str (if (= format :org) "* " "- ") p))))))
+                           paragraphs))]
+    (paste-text-parseable format updated-paragraphs)))
+
 (defn- paste-text
   [text e]
   (let [repo (state/get-current-repo)
         page (or (db/entity [:block/name (state/get-current-page)])
                  (db/entity [:block/original-name (state/get-current-page)])
-                 (:block/page (db/entity (:db/id(state/get-edit-block)))))
+                 (:block/page (db/entity (:db/id (state/get-edit-block)))))
         file (:block/file page)
         copied-blocks (state/get-copied-blocks)
         copied-block-tree (:copy/block-tree copied-blocks)]
-    (when (and
-           (:copy/content copied-blocks)
-           (not (string/blank? text))
-           (= (string/trim text) (string/trim (:copy/content copied-blocks))))
-      ;; copy from logseq internally
-      (paste-block-tree-at-point copied-block-tree [])
-      (util/stop e))))
+    (if (and
+         (:copy/content copied-blocks)
+         (not (string/blank? text))
+         (= (string/trim text) (string/trim (:copy/content copied-blocks))))
+      (do
+        ;; copy from logseq internally
+        (paste-block-tree-at-point copied-block-tree [])
+        (util/stop e))
+
+      (do
+        ;; from external
+        (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
+          (match [format
+                  (nil? (re-find #"^\s*(?:[-+*]|#+)\s+" text))
+                  (nil? (re-find #"^\s*\*+\s+" text))]
+            [:markdown false _]
+            (paste-text-parseable format text)
+
+            [:org _ false]
+            (paste-text-parseable format text)
+
+            [:markdown true _]
+            (paste-segmented-text format text)
+
+            [:org _ true]
+            (paste-segmented-text format text))
+          (util/stop e))))))
 
 (defn editor-on-paste!
   [id]

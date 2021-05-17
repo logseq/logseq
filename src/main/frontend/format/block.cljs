@@ -385,6 +385,39 @@
                               [:block/name (string/lower-case tag)]) tags))
     block))
 
+(defn- remove-indentation-spaces
+  [s level]
+  (let [level (inc level)
+        lines (string/split-lines s)
+        [f & r] lines
+        body (map (fn [line]
+                    (if (string/blank? (util/safe-subs line 0 level))
+                      (util/safe-subs line level)
+                      line))
+                  r)
+        content (cons f body)]
+    (string/join "\n" content)))
+
+(defn- get-block-content
+  [utf8-content block format]
+  (def aaa [utf8-content block format])
+  (let [meta (:meta block)
+        content (if-let [end-pos (:end-pos meta)]
+                  (utf8/substring utf8-content
+                                  (:start-pos meta)
+                                  end-pos)
+                  (utf8/substring utf8-content
+                                  (:start-pos meta)))]
+    (let [content (when content
+                    (let [content (text/remove-level-spaces content format)]
+                      (if (or (:pre-block? block)
+                              (= (:format block) :org))
+                        content
+                        (remove-indentation-spaces content (:level block)))))]
+      (if (= format :org)
+        content
+        (text/->new-properties content)))))
+
 (defn extract-blocks
   [blocks content with-id? format]
   (let [encoded-content (utf8/encode content)
@@ -456,7 +489,10 @@
                                        :refs ref-pages-in-properties
                                        :children (or current-block-children []))
                                 (assoc-in [:meta :start-pos] start_pos)
-                                (assoc-in [:meta :end-pos] last-pos))
+                                (assoc-in [:meta :end-pos] last-pos)
+                                ((fn [block]
+                                   (assoc block
+                                          :content (get-block-content encoded-content block format)))))
                       block (if (seq timestamps)
                               (merge block (timestamps->scheduled-and-deadline timestamps))
                               block)
