@@ -933,7 +933,12 @@
                                    level level]
                               (if (> level 1)
                                 (if-let [down (zip/rightmost (zip/down loc))]
-                                  (recur down (dec level))
+                                  (let [down-node (zip/node down)]
+                                    (if (or (and (vector? down-node)
+                                                 (>= (:level (first down-node)) (:level block)))
+                                            (>= (:level down-node) (:level block)))
+                                      down
+                                      (recur down (dec level))))
                                   loc)
                                 loc))
                             loc**
@@ -951,7 +956,9 @@
         unordered? (:block/unordered (first blocks))
         format (:block/format (first blocks))
         level-blocks-map (blocks-with-level blocks)
-        tree (blocks-vec->tree (vals level-blocks-map))
+        level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
+        level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids)
+        tree (blocks-vec->tree level-blocks)
         contents
         (mapv (fn [[id block]]
                 (let [header
@@ -2506,22 +2513,24 @@
 
       (do
         ;; from external
-        (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
-          (match [format
-                  (nil? (re-find #"^\s*(?:[-+*]|#+)\s+" text))
-                  (nil? (re-find #"^\s*\*+\s+" text))]
-            [:markdown false _]
-            (paste-text-parseable format text)
+        (let [format (or (db/get-page-format (state/get-current-page)) :markdown)
+              editing-block-content (:block/content (db/entity (:db/id (state/get-edit-block))))]
+          (when (empty? editing-block-content)
+            (match [format
+                    (nil? (re-find #"^\s*(?:[-+*]|#+)\s+" text))
+                    (nil? (re-find #"^\s*\*+\s+" text))]
+                   [:markdown false _]
+                   (paste-text-parseable format text)
 
-            [:org _ false]
-            (paste-text-parseable format text)
+                   [:org _ false]
+                   (paste-text-parseable format text)
 
-            [:markdown true _]
-            (paste-segmented-text format text)
+                   [:markdown true _]
+                   (paste-segmented-text format text)
 
-            [:org _ true]
-            (paste-segmented-text format text))
-          (util/stop e))))))
+                   [:org _ true]
+                   (paste-segmented-text format text))
+            (util/stop e)))))))
 
 (defn editor-on-paste!
   [id]
