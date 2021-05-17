@@ -1084,10 +1084,12 @@
 
 (defn- build-id
   [config]
-  (let [k (pr-str config)
+  (let [ref? (:ref? config)
+        sidebar? (:sidebar? config)
+        k (pr-str config)
         n (or
            (get @container-ids k)
-           (let [n' (swap! container-idx inc)]
+           (let [n' (if (and ref? (not sidebar?)) @container-idx (swap! container-idx inc))]
              (swap! container-ids assoc k n')
              n'))]
     (str n "-")))

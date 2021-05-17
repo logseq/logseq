@@ -729,7 +729,7 @@
           (util/nth-safe blocks idx))))))
 
 (defn delete-block-aux!
-  [{:block/keys [uuid content repo ref-pages ref-blocks] :as block} dummy? children?]
+  [{:block/keys [uuid content repo refs] :as block} dummy? children?]
   (when-not dummy?
     (let [repo (or repo (state/get-current-repo))
           block (db/pull repo '[*] [:block/uuid uuid])]
@@ -737,9 +737,7 @@
         (->
          (outliner-core/block block)
          (outliner-core/delete-node children?))
-        (db/refresh! repo {:key :block/change :data [block]})
-        (when (or (seq ref-pages) (seq ref-blocks))
-          (ui-handler/re-render-root!))))))
+        (db/refresh! repo {:key :block/change :data [block]})))))
 
 (defn delete-block!
   ([repo e]
@@ -815,7 +813,8 @@
           (when (outliner-core/delete-nodes start-node end-node lookup-refs)
             (let [opts {:key :block/change
                         :data blocks}]
-              (db/refresh! repo opts))))))))
+              (db/refresh! repo opts)
+              (ui-handler/re-render-root!))))))))
 
 (defn- block-property-aux!
   [block-id key value]
