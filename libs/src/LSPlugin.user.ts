@@ -5,6 +5,7 @@ import {
   IEditorProxy,
   ILSPluginUser,
   LSPluginBaseInfo, LSPluginUserEvents, SlashCommandAction,
+  StyleOptions,
   StyleString,
   ThemeOptions,
   UIOptions
@@ -185,7 +186,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     this.caller.call('main-ui:attrs', attrs)
   }
 
-  setMainUIInlineStyle (style: CSSStyleDeclaration): void {
+  setMainUIInlineStyle (style: StyleOptions): void {
     this.caller.call('main-ui:style', style)
   }
 
