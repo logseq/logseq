@@ -1058,7 +1058,7 @@
                    :clj nil))
 
 #?(:cljs
-   (defn is-absolute-path
+   (defn absolute-path?
      [path]
      (try
        (js/window.apis.isAbsolutePath path)
