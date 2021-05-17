@@ -487,7 +487,8 @@
                                        :body (vec (reverse block-body))
                                        :properties (:properties properties)
                                        :refs ref-pages-in-properties
-                                       :children (or current-block-children []))
+                                       :children (or current-block-children [])
+                                       :format format)
                                 (assoc-in [:meta :start-pos] start_pos)
                                 (assoc-in [:meta :end-pos] last-pos)
                                 ((fn [block]

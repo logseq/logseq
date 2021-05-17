@@ -319,7 +319,7 @@
            down-node (tree/-get-down target-node)]
        ;; update node's left&parent after inserted nodes
        (cond
-         (and (not sibling?) (some? right-node))
+         (and (not sibling?) (some? right-node) (nil? down-node))
          nil            ;ignore
          (and sibling? (some? right-node) topmost-last-loc) ;; right-node.left=N
          (let [topmost-last-node (zip/node topmost-last-loc)
