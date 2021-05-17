@@ -1064,7 +1064,8 @@
 
 (defn zoom-in! []
   (if-let [block (state/get-edit-block)]
-    (when-let [id (:block/uuid block)]
+    (when-let [id (-> (db/entity [:block/uuid (:block/uuid block)])
+                      :block/uuid)]
       (route-handler/redirect! {:to :page
                                 :path-params {:name (str id)}}))
     (js/window.history.forward)))
