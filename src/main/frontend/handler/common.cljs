@@ -15,7 +15,8 @@
             [cljs-time.format :as tf]
             [frontend.config :as config]
             ["ignore" :as Ignore]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [frontend.date :as date]))
 
 (defn get-ref
   [repo-url]
@@ -160,3 +161,9 @@
                    (do (log/error :token/failed-get-token token-m)
                        (reject)))))
              nil))))))))
+
+(defn get-page-default-properties
+  [page-name]
+  {:title page-name
+   ;; :date (date/get-date-time-string)
+   })

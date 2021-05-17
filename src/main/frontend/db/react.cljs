@@ -234,11 +234,14 @@
                                 [:page/mentioned-pages current-page-id]])
 
                              (apply concat
-                                    (for [{:block/keys [refs]} blocks]
-                                      (map (fn [page]
-                                             (when-let [page (db-utils/entity [:block/name (:block/name page)])]
-                                               [:block/refed-blocks (:db/id page)]))
-                                        refs))))
+                               (for [{:block/keys [refs]} blocks]
+                                 (mapcat (fn [ref]
+                                           (when-let [block (if (and (map? ref) (:block/name ref))
+                                                              (db-utils/entity [:block/name (:block/name ref)])
+                                                              (db-utils/entity ref))]
+                                             [[:page/blocks (:db/id (:block/page block))]
+                                              [:block/refed-blocks (:db/id block)]]))
+                                         refs))))
                             (distinct))
               refed-pages (map
                            (fn [[k page-id]]

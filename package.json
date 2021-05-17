@@ -60,6 +60,7 @@
     "dependencies": {
         "@excalidraw/excalidraw": "^0.4.2",
         "@kanru/rage-wasm": "^0.2.1",
+        "@tippyjs/react": "^4.2.5",
         "chokidar": "^3.5.1",
         "chrono-node": "^2.2.1",
         "codemirror": "^5.58.1",
@@ -75,10 +76,11 @@
         "jszip": "^3.5.0",
         "mldoc": "0.6.16",
         "path": "^0.12.7",
-        "react": "^17.0.1",
-        "react-dom": "^17.0.1",
+        "react": "^17.0.2",
+        "react-dom": "^17.0.2",
         "react-resize-context": "^3.0.0",
         "react-textarea-autosize": "^8.0.1",
+        "react-tippy": "^1.4.0",
         "react-transition-group": "^4.3.0",
         "url": "^0.11.0",
         "yargs-parser": "^20.2.4"

@@ -1,4 +1,4 @@
-(ns frontend.util.marker_test
+(ns frontend.util.marker-test
   (:require [cljs.test :refer [deftest is are testing]]
             [frontend.util.marker :as marker]))
 

@@ -22,10 +22,6 @@
             @conn parent-id left-id)]
     (ffirst r)))
 
-(defn get-first-child
-  [conn parent-id]
-  (get-by-parent-&-left conn parent-id parent-id))
-
 ;; key [:block/children parent-id]
 
 (def get-by-parent-id

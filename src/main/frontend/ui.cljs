@@ -4,6 +4,7 @@
             ["react-transition-group" :refer [TransitionGroup CSSTransition]]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-resize-context" :as Resize]
+            ["react-tippy" :as react-tippy]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
@@ -23,6 +24,7 @@
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 (def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
+(def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 
 (rum/defc ls-textarea < rum/reactive
   [{:keys [on-change] :as props}]
@@ -314,20 +316,14 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     (rum/fragment
      body
-     [:a.fade-link.text-link.font-bold.text-4xl
-      {:on-click on-load
-       :disabled (not has-more)
-       :class (when (not has-more) "cursor-not-allowed ")}
-      (t (if has-more :page/earlier :page/no-more-journals))])))
+     (when has-more
+       [:a.fade-link.text-link.font-bold.text-4xl
+        {:on-click on-load}
+        (t :page/earlier)]))))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
-  (mixins/shortcuts
-   #(shortcut/install-shortcut! % {})
-   :shortcut-listener/auto-complete
-   {:auto-complete/prev ui-handler/auto-complete-prev
-    :auto-complete/next ui-handler/auto-complete-next
-    :auto-complete/complete ui-handler/auto-complete-complete})
+  (shortcut/mixin :shortcut.handler/auto-complete)
   [state matched {:keys [on-chosen
                          on-shift-chosen
                          on-enter
@@ -368,18 +364,6 @@
      [:span.switcher.transform.transition.ease-in-out.duration-200
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
-
-(defn tooltip
-  ([label children]
-   (tooltip label children {}))
-  ([label children {:keys [label-style]}]
-   [:div.Tooltip {:style {:display "inline"}}
-    [:div (cond->
-           {:class "Tooltip__label"}
-            label-style
-            (assoc :style label-style))
-     label]
-    children]))
 
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
@@ -585,3 +569,8 @@
                 selected
                 (assoc :selected selected))
       label])])
+
+(rum/defc tippy
+  [opts child]
+  (Tippy (merge {:arrow true} opts)
+         child))

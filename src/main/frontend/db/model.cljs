@@ -467,24 +467,31 @@
           (recur (:block/uuid parent) (conj parents parent) (inc d))
           parents)))))
 
+(comment
+  (defn get-immediate-children-v2
+    [repo block-id]
+    (d/pull (conn/get-conn repo)
+            '[:block/_parent]
+            [:block/uuid block-id])))
+
+;; Use built-in recursive
+(defn get-block-parents-v2
+  [repo block-id]
+  (d/pull (conn/get-conn repo)
+          '[:db/id :block/properties {:block/parent ...}]
+          [:block/uuid block-id]))
+
+(defn parents-collapsed?
+  [repo block-id]
+  (when-let [block (:block/parent (get-block-parents-v2 repo block-id))]
+    (->> (tree-seq map? (fn [x] [(:block/parent x)]) block)
+         (map (comp :collapsed :block/properties))
+         (some true?))))
+
 (defn get-block-page
   [repo block-id]
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
     (db-utils/entity repo (:db/id (:block/page block)))))
-
-(defn get-block-page-end-pos
-  [repo page-name]
-  (or
-   (when-let [page-id (:db/id (db-utils/entity repo [:block/name (string/lower-case page-name)]))]
-     (when-let [db (conn/get-conn repo)]
-       (let [block-eids (->> (d/datoms db :avet :block/page page-id)
-                             (mapv :e))]
-         (when (seq block-eids)
-           (let [blocks (db-utils/pull-many repo '[:block/meta] block-eids)]
-             (-> (last (db-utils/sort-by-pos blocks))
-                 (get-in [:block/meta :end-pos])))))))
-   ;; TODO: need more thoughts
-   0))
 
 (defn get-blocks-by-priority
   [repo priority]
@@ -667,13 +674,6 @@
               (db-utils/entity [:block/original-name page-name]))
           :block/file))
 
-(defn get-block-file
-  [block-id]
-  (let [page-id (some-> (db-utils/entity [:block/uuid block-id])
-                        :block/page
-                        :db/id)]
-    (:block/file (db-utils/entity page-id))))
-
 (defn get-file-page-id
   [file-path]
   (when-let [repo (state/get-current-repo)]
@@ -700,27 +700,6 @@
   (and
    (vector? block)
    (= "Heading" (first block))))
-
-(defn get-page-name
-  [file ast]
-  ;; headline
-  (let [ast (map first ast)]
-    (if (string/includes? file "pages/contents.")
-      "Contents"
-      (let [first-block (last (first (filter heading-block? ast)))
-            property-name (when (and (= "Properties" (ffirst ast))
-                                     (not (string/blank? (:title (last (first ast))))))
-                            (:title (last (first ast))))
-            first-block-name (let [title (last (first (:title first-block)))]
-                               (and first-block
-                                    (string? title)
-                                    title))
-            file-name (when-let [file-name (last (string/split file #"/"))]
-                        (first (util/split-last "." file-name)))]
-        (or property-name
-            (if (= (state/page-name-order) "heading")
-              (or first-block-name file-name)
-              (or file-name first-block-name)))))))
 
 (defn get-page-original-name
   [page-name]
@@ -801,7 +780,7 @@
         [?b :block/path-refs ?p]
         [?b :block/refs ?other-p]
         [(not= ?p ?other-p)]
-        [?other-p :block/name ?ref-page]]
+        [?other-p :block/original-name ?ref-page]]
       conn
       rules
       page)
@@ -1042,17 +1021,18 @@
   [block-uuid]
   (when-let [repo (state/get-current-repo)]
     (when (conn/get-conn repo)
-      (->> (react/q repo [:block/refed-blocks block-uuid] {}
-                    '[:find (pull ?ref-block [*])
-                      :in $ ?block-uuid
-                      :where
-                      [?block :block/uuid ?block-uuid]
-                      [?ref-block :block/refs ?block]]
-                    block-uuid)
-           react
-           db-utils/seq-flatten
-           sort-blocks
-           db-utils/group-by-page))))
+      (let [block (db-utils/entity [:block/uuid block-uuid])]
+        (->> (react/q repo [:block/refed-blocks (:db/id block)] {}
+              '[:find (pull ?ref-block [*])
+                :in $ ?block-uuid
+                :where
+                [?block :block/uuid ?block-uuid]
+                [?ref-block :block/refs ?block]]
+              block-uuid)
+            react
+            db-utils/seq-flatten
+            sort-blocks
+            db-utils/group-by-page)))))
 
 (defn get-matched-blocks
   [match-fn limit]
@@ -1164,6 +1144,7 @@
                 (let [e (db-utils/entity [:block/uuid id])]
                   {:db/id (:db/id e)
                    :block/uuid id
+                   :block/page (:db/id (:block/page e))
                    :block/content (:block/content e)
                    :block/format (:block/format e)}))))))
 
@@ -1282,29 +1263,3 @@
            (conn/get-conn repo)
            page-id)
       ffirst))
-
-(comment
-  (def page-names ["foo" "bar"])
-
-  (def page-ids (set (get-page-ids-by-names page-names)))
-
-  (d/q '[:find [(pull ?b [*]) ...]
-         :in $ % ?refs
-         :where
-         [?b :block/refs ?p]
-         ;; Filter other blocks
-         [(contains? ?refs ?p)]
-         (or-join [?b ?refs]
-                  (matches-all ?b :block/refs ?refs)
-                  (and
-                   (parent ?p ?b)
-                   ;; FIXME: not working
-                   ;; (matches-all (union ?p ?b) :block/refs ?refs)
-                   [?p :block/refs ?p-ref]
-                   [?b :block/refs ?b-ref]
-                   [(not= ?p-ref ?b-ref)]
-                   [(contains? ?refs ?p-ref)]
-                   [(contains? ?refs ?b-ref)]))]
-       (conn/get-conn)
-       rules
-       page-ids))

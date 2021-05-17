@@ -45,9 +45,6 @@
     :search/mode :global
     :search/result nil
 
-    ;; custom shortcuts
-    :shortcuts {:editor/new-block "enter"}
-
     ;; modals
     :modal/show? false
 
@@ -70,7 +67,8 @@
 
     :github/contents {}
     :config {}
-    :editor/code-mode? false
+    :block/component-editing-mode? false
+    :editor/draw-mode? false
     :editor/show-page-search? false
     :editor/show-page-search-hashtag? false
     :editor/show-date-picker? false
@@ -128,7 +126,9 @@
     :graph/syncing? false
 
     ;; copied blocks
-    :copy/blocks {:copy/content nil :copy/block-tree nil}}))
+    :copy/blocks {:copy/content nil :copy/block-tree nil}
+
+    :date-picker/date nil}))
 
 (defn get-route-match
   []
@@ -475,8 +475,7 @@
 
 (defn set-editor-show-page-search!
   [value]
-  (set-state! :editor/show-page-search? value)
-  (set-state! :editor/show-page-search-hashtag? false))
+  (set-state! :editor/show-page-search? value))
 
 (defn get-editor-show-page-search?
   []
@@ -669,7 +668,7 @@
                                         ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
-    (when-let [elem (gdom/getElement "right-sidebar-container")]
+    (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scollable")]
       (util/scroll-to elem 0))))
 
 (defn sidebar-remove-block!
@@ -765,6 +764,10 @@
   [theme]
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
+
+(defn dark?
+  []
+  (= "dark" (:ui/theme @state)))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]
@@ -1220,13 +1223,13 @@
   [args]
   (set-state! :editor/args args))
 
-(defn code-mode?
+(defn block-component-editing?
   []
-  (:editor/code-mode? @state))
+  (:block/component-editing-mode? @state))
 
-(defn go-to-code-mode!
-  []
-  (set-state! :editor/code-mode? true))
+(defn set-block-component-editing-mode!
+  [value]
+  (set-state! :block/component-editing-mode? value))
 
 (defn get-editor-args
   []

@@ -37,7 +37,8 @@
     :http-root    "public"
     :http-port    3001
     :watch-path   "static"
-    :preloads     [devtools.preload]}}
+    :preloads     [devtools.preload
+                   shadow.remote.runtime.cljs.browser]}}
 
   :electron {:target :node-script
              :output-to "static/electron.js"

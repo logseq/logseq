@@ -105,7 +105,9 @@
 
      (page/today-queries repo today? false)
 
-     (reference/references title false)
+     (rum/with-key
+       (reference/references title false)
+       (str title "-refs"))
 
      (when intro? (onboarding/intro))]))
 

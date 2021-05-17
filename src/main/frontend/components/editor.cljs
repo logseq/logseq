@@ -14,7 +14,6 @@
             [frontend.mixins :as mixins]
             [frontend.ui :as ui]
             [frontend.db :as db]
-            [frontend.modules.shortcut.handler :as shortcut-handler]
             [dommy.core :as d]
             [goog.object :as gobj]
             [goog.dom :as gdom]
@@ -78,7 +77,7 @@
           input (gdom/getElement id)]
       (when input
         (let [current-pos (:pos (util/get-caret-pos input))
-              edit-content (state/sub [:editor/content id])
+              edit-content (or (state/sub [:editor/content id]) "")
               edit-block (state/sub :editor/block)
               q (or
                  @editor-handler/*selected-text
@@ -382,10 +381,7 @@
                 (state/set-editor-args! (:rum/args state))
                 state)}
   (mixins/event-mixin setup-key-listener!)
-  (mixins/shortcuts
-   #(shortcut/install-shortcut! % {})
-   :shortcut-listener/editor-prevent-default
-   shortcut-handler/editing-only-prevent-default)
+  (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
   [state {:keys [on-hide dummy? node format block block-parent-id heading-level]
           :or   {dummy? false}

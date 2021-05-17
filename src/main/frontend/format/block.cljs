@@ -41,7 +41,8 @@
                      (when (and (not (util/starts-with? page "http:"))
                                 (not (util/starts-with? page "https:"))
                                 (not (util/starts-with? page "file:"))
-                                (or (= ext :excalidraw) (not (contains? (config/supported-formats) ext))))
+                                (or (= ext :excalidraw)
+                                    (not (contains? (config/supported-formats) ext))))
                        page)))
 
                   (and
@@ -108,10 +109,12 @@
 
                         (and (vector? block)
                              (= "Link" (first block))
-                             (map? (second block))
-                             (= "id" (:protocol (second (:url (second block))))))
-
-                        (:link (second (:url (second block))))
+                             (map? (second block)))
+                        (if (= "id" (:protocol (second (:url (second block)))))
+                          (:link (second (:url (second block))))
+                          (let [id (second (:url (second block)))]
+                            (when (text/block-ref? id)
+                             (text/block-ref-un-brackets! id))))
 
                         :else
                         nil)]
@@ -143,13 +146,6 @@
   (and
    (vector? block)
    (= "Timestamp" (first block))))
-
-(defn properties-block?
-  [block]
-  (and
-   (vector? block)
-   (contains? #{"Property_Drawer" "Properties"}
-              (first block))))
 
 (defn definition-list-block?
   [block]
@@ -183,8 +179,7 @@
                                            (let [k (name k)
                                                 v (string/trim v)
                                                 k (string/replace k " " "-")
-                                                k (string/replace k "_" "-")
-                                                k (string/lower-case k)
+                                                 k (string/lower-case k)
                                                 v (cond
                                                     (= v "true")
                                                     true
@@ -201,14 +196,12 @@
                                                     v
 
                                                     :else
-                                                    (let [v' v
-                                                          ;; built-in collections
-                                                          comma? (contains? #{"tags" "alias"} k)]
+                                                    (let [v' v]
                                                       (if (and k v'
                                                                (contains? config/markers k)
                                                                (util/safe-parse-int v'))
                                                         (util/safe-parse-int v')
-                                                        (text/split-page-refs-without-brackets v' comma?))))]
+                                                        (text/split-page-refs-without-brackets v' true))))]
                                             [(keyword k) v])))))]
     {:properties properties
      :page-refs page-refs}))
@@ -274,8 +267,8 @@
         (assoc m :block/journal? false)))))
 
 (defn with-page-refs
-  [{:keys [title body tags refs] :as block} with-id?]
-  (let [refs (->> (concat tags refs)
+  [{:keys [title body tags refs marker priority] :as block} with-id?]
+  (let [refs (->> (concat tags refs [marker priority])
                   (remove string/blank?)
                   (distinct))
         refs (atom refs)]
@@ -299,7 +292,7 @@
                                       refs)
                               (remove string/blank?))
           refs (->> (distinct (concat refs children-pages))
-                         (remove nil?))
+                    (remove nil?))
           refs (map (fn [ref] (page-name->map ref with-id?)) refs)]
       (assoc block :refs refs))))
 
@@ -320,22 +313,6 @@
                        ref-blocks)
           refs (distinct (concat (:refs block) ref-blocks))]
       (assoc block :refs refs))))
-
-(defn update-src-pos-meta!
-  [{:keys [body] :as block}]
-  (let [body (walk/postwalk
-              (fn [form]
-                (if (and (vector? form)
-                         (= (first form) "Src")
-                         (map? (:pos_meta (second form))))
-                  (let [{:keys [start_pos end_pos]} (:pos_meta (second form))
-                        new_start_pos (- start_pos (get-in block [:meta :start-pos]))]
-                    ["Src" (assoc (second form)
-                                  :pos_meta {:start_pos new_start_pos
-                                             :end_pos (+ new_start_pos (- end_pos start_pos))})])
-                  form))
-              body)]
-    (assoc block :body body)))
 
 (defn block-keywordize
   [block]
@@ -434,7 +411,7 @@
                                       (drop-while #(= ["Break_Line"] %)))]
                   (recur headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
 
-                (properties-block? block)
+                (text/properties-block? block)
                 (let [properties (extract-properties block start_pos end_pos)]
                   (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
@@ -485,8 +462,7 @@
                       block (-> block
                                 (with-page-refs with-id?)
                                 with-block-refs
-                                block-tags->pages
-                                update-src-pos-meta!)
+                                block-tags->pages)
                       last-pos' (get-in block [:meta :start-pos])]
                   (recur (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children))
 
@@ -497,7 +473,8 @@
               (when (seq block-body)
                 (reset! pre-block-body (reverse block-body)))
               (when (seq properties)
-                (reset! pre-block-properties (:properties properties)))
+                (let [properties (:properties properties)]
+                  (reset! pre-block-properties properties)))
               (-> (reverse headings)
                   safe-blocks))))]
     (let [first-block (first blocks)

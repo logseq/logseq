@@ -1,30 +1,31 @@
 (ns frontend.handler.repo
   (:refer-clojure :exclude [clone])
-  (:require [frontend.util :as util :refer-macros [profile]]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
+            [frontend.config :as config]
+            [frontend.date :as date]
+            [frontend.db :as db]
+            [frontend.dicts :as dicts]
+            [frontend.encrypt :as encrypt]
+            [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
-            [promesa.core :as p]
-            [lambdaisland.glogi :as log]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.idb :as idb]
             [frontend.git :as git]
-            [cljs-bean.core :as bean]
-            [frontend.date :as date]
-            [frontend.config :as config]
-            [frontend.format :as format]
-            [frontend.search :as search]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.git :as git-handler]
-            [frontend.handler.file :as file-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.extract :as extract-handler]
-            [clojure.string :as string]
-            [frontend.dicts :as dicts]
+            [frontend.handler.file :as file-handler]
+            [frontend.handler.git :as git-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.idb :as idb]
+            [frontend.search :as search]
             [frontend.spec :as spec]
-            [frontend.encrypt :as encrypt]))
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]
+            [shadow.resource :as rc]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -54,10 +55,8 @@
                   (config/get-file-extension format))
         file-path (str "/" path)
         default-content (case (name format)
-                          "org"
-                          "* What's **Contents**?\n** It's a normal page called [[Contents]], you can use it for:\n*** 1. table of content/index/MOC\n*** 2. pinning/bookmarking favorites pages/blocks (e.g. [[Logseq]])\n*** 3. You can also put many different things, depending on your personal workflow."
-                          "markdown"
-                          "- What's **Contents**?\n    - It's a normal page called [[Contents]], you can use it for:\n    - 1. table of content/index/MOC\n    - 2. pinning/bookmarking favorites pages/blocks (e.g. [[Logseq]])\n    - 3. You can also put many different things, depending on your personal workflow."
+                          "org" (rc/inline "contents.org")
+                          "markdown" (rc/inline "contents.md")
                           "")]
     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
             file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
@@ -237,6 +236,7 @@
       (if db-encrypted?
         (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)]
           (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
+                             db-encrypted-secret
                              close-fn]))
         (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)))))
 

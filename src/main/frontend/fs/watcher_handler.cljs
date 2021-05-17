@@ -21,9 +21,9 @@
         (cond
           (= "add" type)
           (when-not (db/file-exists? repo path)
-              (let [_ (file-handler/alter-file repo path content {:re-render-root? true
-                                                                  :from-disk? true})]
-             (db/set-file-last-modified-at! repo path mtime)))
+            (let [_ (file-handler/alter-file repo path content {:re-render-root? true
+                                                                :from-disk? true})]
+              (db/set-file-last-modified-at! repo path mtime)))
 
           (and (= "change" type)
                (not (db/file-exists? repo path)))

@@ -51,23 +51,32 @@
      (remove string/blank?)
      (map string/trim))))
 
+(defn- not-matched-nested-pages
+  [s]
+  (and (string? s)
+       (> (count (re-seq #"\[\[" s))
+          (count (re-seq #"\]\]" s)))))
+
 (defn- concat-nested-pages
   [coll]
-  (loop [coll coll
-         result []]
-    (if (seq coll)
-      (let [item (first coll)]
-        (if (= item "]]")
-          (recur (rest coll)
-                 (conj
-                  (vec (butlast result))
-                  (str (last result) item)))
-          (recur (rest coll) (conj result item))))
-      result)))
+  (first
+   (reduce (fn [[acc not-matched-s] s]
+             (cond
+               (and not-matched-s (= s "]]"))
+               [(conj acc (str not-matched-s s)) nil]
+
+               not-matched-s
+               [acc (str not-matched-s s)]
+
+               (not-matched-nested-pages s)
+               [acc s]
+
+               :else
+               [(conj acc s) not-matched-s])) [[] nil] coll)))
 
 (defn split-page-refs-without-brackets
   ([s]
-   (split-page-refs-without-brackets s false))
+   (split-page-refs-without-brackets s true))
   ([s comma?]
    (cond
      (and (string? s)
@@ -75,8 +84,12 @@
             (or (re-find page-ref-re s)
                 (re-find (if comma? #"[\,|，|#]+" #"#") s)))
      (let [result (->> (string/split s page-ref-re-2)
-                       (remove string/blank?)
+                       (map (fn [s] (if (string/ends-with? (string/trimr s) "]],")
+                                     (let [s (string/trimr s)]
+                                       (subs s 0 (dec (count s))))
+                                     s)))
                        concat-nested-pages
+                       (remove string/blank?)
                        (mapcat (fn [s]
                                  (if (page-ref? s)
                                    [(page-ref-un-brackets! s)]
@@ -126,22 +139,11 @@
      :else
      (remove-level-space-aux! text (config/get-block-pattern format) space?))))
 
-(defn append-newline-after-level-spaces
-  [text format]
-  (if-not (string/blank? text)
-    (let [pattern (util/format
-                   "^[%s]+\\s?\n?"
-                   (config/get-block-pattern format))
-          matched-text (re-find (re-pattern pattern) text)]
-      (if matched-text
-        (string/replace-first text matched-text (str (string/trimr matched-text) "\n"))
-        text))))
-
 ;; properties
 
 (def built-in-properties
   (set/union
-   #{:id :custom-id :background-color :heading :collapsed :created-at :last-modified-at :created_at :last_modified_at}
+   #{:id :custom_id :custom-id :background-color :heading :collapsed :created-at :last-modified-at :created_at :last_modified_at}
    (set (map keyword config/markers))))
 
 (defn properties-built-in?
@@ -217,14 +219,21 @@
       content)))
 
 (defn build-properties-str
-  [format properties]
-  (when (seq properties)
-    (let [org? (= format :org)
-          kv-format (if org? ":%s: %s" "%s:: %s")
-          full-format (if org? ":PROPERTIES:\n%s\n:END:\n" "%s\n")
-          properties-content (->> (map (fn [[k v]] (util/format kv-format k v)) properties)
-                                  (string/join "\n"))]
-      (util/format full-format properties-content))))
+  ([format properties]
+   (build-properties-str format properties false))
+  ([format properties front-matter?]
+   (when (seq properties)
+     (let [org? (= format :org)
+           [kv-format wrapper] (cond
+                                 org?
+                                 [":%s: %s" ":PROPERTIES:\n%s\n:END:"]
+                                 front-matter?
+                                 ["%s: %s" "---\n%s\n---"]
+                                 :else
+                                 ["%s:: %s" "%s"])
+           properties-content (->> (map (fn [[k v]] (util/format kv-format (name k) v)) properties)
+                                   (string/join "\n"))]
+       (util/format wrapper properties-content)))))
 
 ;; title properties body
 (defn with-built-in-properties
@@ -433,3 +442,10 @@
 (defn image-link?
   [img-formats s]
   (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
+
+(defn properties-block?
+  [block]
+  (and
+   (vector? block)
+   (contains? #{"Property_Drawer" "Properties"}
+              (first block))))

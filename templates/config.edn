@@ -1,0 +1,74 @@
+{;; Currently, we support either "Markdown" or "Org".
+ ;; This can overwrite your global preference so that
+ ;; maybe your personal preferred format is Org but you'd
+ ;; need to use Markdown for some projects.
+ ;; :preferred-format ""
+
+ ;; Preferred workflow style.
+ ;; Value is either ":now" for NOW/LATER style,
+ ;; or ":todo" for TODO/DOING style.
+ :preferred-workflow :now
+
+ ;; Git settings
+ :git-pull-secs 60
+ :git-push-secs 10
+ :git-auto-push true
+
+ ;; The app will ignore those directories or files.
+ ;; E.g. "/archived" "/test.md"
+ :hidden []
+
+ ;; When creating the new journal page, the app will use your template content here.
+ ;; Example for Markdown users: "[[Work]]\n  -\n- [[Family]]\n  -\n"
+ ;; Example for Org mode users: "** [[Work]]\n***\n** [[Family]]\n***\n"
+ :default-templates
+ {:journals ""}
+
+ ;; The app will show those queries in today's journal page,
+ ;; the "NOW" query asks the tasks which need to be finished "now",
+ ;; the "NEXT" query asks the future tasks.
+ :default-queries
+ {:journals
+  [{:title "🔨 NOW"
+    :query [:find (pull ?h [*])
+            :in $ ?start ?today
+            :where
+            [?h :block/marker ?marker]
+            [?h :block/page ?p]
+            [?p :block/journal? true]
+            [?p :block/journal-day ?d]
+            [(>= ?d ?start)]
+            [(<= ?d ?today)]
+            [(contains? #{"NOW" "DOING"} ?marker)]]
+    :inputs [:14d :today]
+    :result-transform (fn [result]
+                        (sort-by (fn [h]
+                                   (get h :block/priority "Z")) result))
+    :collapsed? false}
+   {:title "📅 NEXT"
+    :query [:find (pull ?h [*])
+            :in $ ?start ?next
+            :where
+            [?h :block/marker ?marker]
+            [?h :block/ref-pages ?p]
+            [?p :block/journal? true]
+            [?p :block/journal-day ?d]
+            [(> ?d ?start)]
+            [(< ?d ?next)]
+            [(contains? #{"NOW" "LATER" "TODO"} ?marker)]]
+    :inputs [:today :7d-after]
+    :collapsed? false}]}
+
+ ;; Add your own commands to speedup.
+ ;; E.g. [["js" "Javascript"]]
+ :commands
+ []
+
+ ;; Macros replace texts and will make you more productive.
+ ;; For example:
+ ;; Add this to the macros below:
+ ;; {"poem" "Rose is $1, violet's $2. Life's ordered: Org assists you."}
+ ;; input "{{{poem red,blue}}}"
+ ;; becomes
+ ;; Rose is red, violet's blue. Life's ordered: Org assists you.
+ :macros {}}

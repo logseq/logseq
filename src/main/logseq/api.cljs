@@ -1,4 +1,4 @@
-(ns ^:no-doc api
+(ns ^:no-doc logseq.api
   (:require [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]

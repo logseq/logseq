@@ -182,10 +182,14 @@
 
                         :block
                         (let [block-uuid (uuid (:block/uuid data))
-                              page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
-                          (route/redirect! {:to :page
-                                            :path-params {:name page}
-                                            :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))
+                              collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)]
+                          (if collapsed?
+                            (route/redirect! {:to :page
+                                              :path-params {:name (str block-uuid)}})
+                            (let [page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
+                             (route/redirect! {:to :page
+                                               :path-params {:name page}
+                                               :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))))
                         nil))
          :on-shift-chosen (fn [{:keys [type data]}]
                             (case type
@@ -206,7 +210,8 @@
                                  :block
                                  block))
 
-                              nil))
+                              nil)
+                            (search-handler/clear-search!))
          :item-render (fn [{:keys [type data]}]
                         (let [search-mode (state/get-search-mode)]
                           [:div {:class "py-2"} (case type
@@ -282,7 +287,7 @@
                           (js/clearTimeout @search-timeout))
                         (let [value (util/evalue e)]
                           (if (string/blank? value)
-                            (search-handler/clear-search!)
+                            (search-handler/clear-search! false)
                             (let [search-mode (state/get-search-mode)
                                   opts (if (= :page search-mode)
                                          (let [current-page (or (state/get-current-page)

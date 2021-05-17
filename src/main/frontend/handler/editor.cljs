@@ -304,7 +304,10 @@
         content (string/triml content)
         content (string/replace content (util/format "((%s))" (str uuid)) "")
         [content content'] (cond
-                             (or properties? (and markdown-heading? top-level?))
+                             (and first-block? properties?)
+                             [content content]
+
+                             (and markdown-heading? top-level?)
                              [content content]
 
                              markdown-heading?
@@ -314,8 +317,9 @@
                              :else
                              (let [content' (str (config/get-block-pattern format) (if heading? " " "\n") content)]
                                [content content']))
-        block (block/parse-block (-> (assoc block :block/content content')
-                                     (dissoc :block/properties)))
+        block (assoc block :block/content content')
+        block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
+        block (block/parse-block block)
         block (if (and first-block? (:block/pre-block? block))
                 block
                 (dissoc block :block/pre-block?))
@@ -353,12 +357,13 @@
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [{:block/keys [uuid content file page format repo content properties]} block
+   (let [{:block/keys [uuid file page format repo content properties]} block
          repo (or repo (state/get-current-repo))
          e (db/entity repo [:block/uuid uuid])
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
-         block-id (when (map? properties) (get properties :id))]
+         block-id (when (map? properties) (get properties :id))
+         content (text/remove-built-in-properties! format content)]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
@@ -381,7 +386,7 @@
     [fst-block-text snd-block-text]))
 
 (defn outliner-insert-block!
-  [current-block new-block child?]
+  [current-block new-block child? sibling?]
   (let [dummy? (:block/dummy? current-block)
         [current-node new-node]
         (mapv outliner-core/block [current-block new-block])
@@ -390,6 +395,9 @@
         sibling? (cond
                    child?
                    false
+
+                   (some? sibling?)
+                   sibling?
 
                    (:collapsed (:block/properties current-block))
                    true
@@ -451,6 +459,36 @@
       (when blocks-atom
         (reset! blocks-atom blocks)))))
 
+(defn insert-new-block-before-block-aux!
+  [config
+   {:block/keys [uuid content repo format page dummy?]
+    db-id :db/id
+    :as block}
+   value
+   {:keys [ok-handler]
+    :as opts}]
+  (let [input (gdom/getElement (state/get-edit-input-id))
+        pos (util/get-input-pos input)
+        repo (or repo (state/get-current-repo))
+        [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
+        current-block (assoc block :block/content snd-block-text)
+        current-block (apply dissoc current-block db-schema/retract-attributes)
+        current-block (wrap-parse-block current-block)
+        new-m {:block/uuid (db/new-block-id)
+               :block/content fst-block-text}
+        prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
+                                                  :block/page :block/level :block/file :block/journal?]) new-m)
+                       (wrap-parse-block))
+        left-block (db/pull (:db/id (:block/left block)))
+        _ (outliner-core/save-node (outliner-core/block current-block))
+        sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))
+        {:keys [sibling? blocks]} (profile
+                                   "outliner insert block"
+                                   (outliner-insert-block! left-block prev-block nil sibling?))]
+
+    (db/refresh! repo {:key :block/insert :data [prev-block left-block current-block]})
+    (profile "ok handler" (ok-handler prev-block))))
+
 (defn insert-new-block-aux!
   [config
    {:block/keys [uuid content repo format page dummy?]
@@ -474,7 +512,7 @@
                        (wrap-parse-block))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
-                                   (outliner-insert-block! current-block next-block block-self?))
+                                   (outliner-insert-block! current-block next-block block-self? nil))
         refresh-fn (fn []
                      (let [opts {:key :block/insert
                                  :data [current-block next-block]}]
@@ -554,9 +592,17 @@
              block (or (db/pull [:block/uuid block-id])
                        block)
              repo (or (:block/repo block) (state/get-current-repo))
-             [properties value] (with-timetracking-properties block value)]
-         ;; save the current block and insert a new block
-         (insert-new-block-aux!
+             [properties value] (with-timetracking-properties block value)
+             block-self? (block-self-alone-when-insert? config block-id)
+             input (gdom/getElement (state/get-edit-input-id))
+             pos (util/get-input-pos input)
+             repo (or repo (state/get-current-repo))
+             [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
+             insert-fn (match (mapv boolean [block-self? (seq fst-block-text) (seq snd-block-text)])
+                         [true _ _] insert-new-block-aux!
+                         [_ false true] insert-new-block-before-block-aux!
+                         [_ _ _] insert-new-block-aux!)]
+         (insert-fn
           config
           (assoc block :block/properties properties)
           value
@@ -949,12 +995,15 @@
   [copy?]
   (when copy? (copy-selection-blocks))
   (when-let [blocks (seq (get-selected-blocks-with-children))]
-    (let [repo (dom/attr (first blocks) "repo")
-          ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))
-          ids (if (= :up (state/get-selection-direction))
-                (reverse ids)
-                ids)]
-      (delete-blocks! repo ids))))
+    ;; remove embeds and references
+    (let [blocks (remove (fn [block] (= "true" (dom/attr block "data-transclude"))) blocks)]
+      (when (seq blocks)
+        (let [repo (dom/attr (first blocks) "repo")
+             ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))
+             ids (if (= :up (state/get-selection-direction))
+                   (reverse ids)
+                   ids)]
+         (delete-blocks! repo ids))))))
 
 (defn- get-nearest-page
   []
@@ -1224,17 +1273,16 @@
 
 (defn save-assets!
   ([{block-id :block/uuid} repo files]
-   (when-let [block-file (db-model/get-block-file block-id)]
-     (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
-       (save-assets! repo repo-dir assets-dir files
-                     (fn [index file-base]
-                       ;; TODO: maybe there're other chars we need to handle?
-                       (let [file-base (-> file-base
-                                           (string/replace " " "_")
-                                           (string/replace "%" "_")
-                                           (string/replace "/" "_"))
-                             file-name (str file-base "_" (.now js/Date) "_" index)]
-                         (string/replace file-name #"_+" "_")))))))
+   (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
+     (save-assets! repo repo-dir assets-dir files
+                   (fn [index file-base]
+                     ;; TODO: maybe there're other chars we need to handle?
+                     (let [file-base (-> file-base
+                                         (string/replace " " "_")
+                                         (string/replace "%" "_")
+                                         (string/replace "/" "_"))
+                           file-name (str file-base "_" (.now js/Date) "_" index)]
+                       (string/replace file-name #"_+" "_"))))))
   ([repo dir path files gen-filename]
    (p/all
     (for [[index ^js file] (map-indexed vector files)]
@@ -1686,7 +1734,7 @@
     (when-let [input (gdom/getElement id)]
       (let [current-pos (:pos (util/get-caret-pos input))
             pos (:editor/last-saved-cursor @state/state)
-            edit-content (state/sub [:editor/content id])]
+            edit-content (or (state/sub [:editor/content id]) "")]
         (or
          @*selected-text
          (util/safe-subs edit-content pos current-pos))))))
@@ -1829,7 +1877,7 @@
                                                                                        (mldoc/->edn (str (case format
                                                                                                            :markdown "- "
                                                                                                            :org "* ")
-                                                                                                         (if (:block/title %) "" "\n")
+                                                                                                         (if (seq (:block/title %)) "" "\n")
                                                                                                          new-content)
                                                                                                     (mldoc/default-config format)))))
                                                                       (:block/title %))]
@@ -2085,7 +2133,7 @@
         right (outliner-core/get-right-node (outliner-core/block current-block))
         current-block-has-children? (db/has-children? repo (:block/uuid current-block))
         collapsed? (:collapsed (:block/properties current-block))
-        first-child (outliner-db/get-first-child (db/get-conn repo false) (:db/id current-block))
+        first-child (:data (tree/-get-down (outliner-core/block current-block)))
         next-block (if (or collapsed? (not current-block-has-children?))
                      (:data right)
                      first-child)]
@@ -2277,15 +2325,6 @@
               (= "#" (util/nth-safe value (dec pos)))))
         (state/set-editor-show-page-search-hashtag! false)
 
-        (or
-         (surround-by? input "#" " ")
-         (surround-by? input "#" :end)
-         (= key "#"))
-        (do
-          (commands/handle-step [:editor/search-page-hashtag])
-          (state/set-last-pos! (:pos (util/get-caret-pos input)))
-          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
-
         (and
          (contains? (set/difference (set (keys reversed-autopair-map))
                                     #{"`"})
@@ -2310,6 +2349,15 @@
               (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
             :else
             nil))
+
+        (or
+         (surround-by? input "#" " ")
+         (surround-by? input "#" :end)
+         (= key "#"))
+        (do
+          (commands/handle-step [:editor/search-page-hashtag])
+          (state/set-last-pos! (:pos (util/get-caret-pos input)))
+          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
         (let [sym "$"]
           (and (= key sym)
@@ -2344,9 +2392,10 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (and (= c " ")
-                   (not (state/get-editor-show-page-search?)))
-          (state/set-editor-show-page-search-hashtag! false))
+        (when (= c " ")
+          (when (or (= (util/nth-safe value (dec (dec current-pos))) "#")
+                    (not (state/get-editor-show-page-search?)))
+            (state/set-editor-show-page-search-hashtag! false)))
 
         (when (and @*show-commands (not= key-code 191)) ; not /
           (let [matched-commands (get-matched-commands input)]

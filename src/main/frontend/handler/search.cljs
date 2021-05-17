@@ -18,12 +18,10 @@
             :as opts}]
    (let [page-db-id (if (string? page-db-id)
                       (:db/id (db/entity repo [:block/name (string/lower-case page-db-id)]))
-                      page-db-id)]
+                      page-db-id)
+         opts (if page-db-id (assoc opts :page (str page-db-id)) opts)]
      (p/let [blocks (search/block-search repo q opts)]
-      (let [blocks (if page-db-id
-                     (filter (fn [block] (= (get-in block [:block/page :db/id]) page-db-id)) blocks)
-                     blocks)
-            result (merge
+      (let [result (merge
                     {:blocks blocks
                      :has-more? (= limit (count blocks))}
                     (when-not page-db-id
@@ -33,13 +31,16 @@
         (swap! state/state assoc search-key result))))))
 
 (defn clear-search!
-  []
-  (swap! state/state assoc
-         :search/result nil
-         :search/q ""
-         :search/mode :global)
-  (when-let [input (gdom/getElement "search-field")]
-    (gobj/set input "value" "")))
+  ([]
+   (clear-search! true))
+  ([clear-search-mode?]
+   (let [m (cond-> {:search/result nil
+                    :search/q ""}
+             clear-search-mode?
+             (assoc :search/mode :global))]
+     (swap! state/state merge m))
+   (when-let [input (gdom/getElement "search-field")]
+     (gobj/set input "value" ""))))
 
 (defn rebuild-indices!
   []

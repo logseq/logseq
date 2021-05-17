@@ -81,7 +81,7 @@
         (svg/horizontal-dots nil)])
      (->>
       [(when-not (util/mobile?)
-         {:title (t :help/toggle-right-sidebar)
+         {:title (t :shortcut.ui/toggle-right-sidebar)
           :options {:on-click state/toggle-sidebar-open?!}})
 
        (when current-repo

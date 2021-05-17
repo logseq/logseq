@@ -16,6 +16,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.commands :as commands]
             [frontend.date :as date]
             [clojure.walk :as walk]
@@ -48,18 +49,49 @@
   ([page-name] (when-let [page (db/entity [:block/name page-name])]
                  (:file/path (:block/file page)))))
 
+(defn default-properties-block
+  [title format page]
+  (let [properties (common-handler/get-page-default-properties title)
+        content (text/build-properties-str format properties)]
+    {:block/pre-block? true
+     :block/uuid (db/new-block-id)
+     :block/properties properties
+     :block/left page
+     :block/format format
+     :block/content content
+     :block/parent page
+     :block/unordered true
+     :block/page page}))
+
 (defn create!
   ([title]
    (create! title {}))
   ([title {:keys [redirect?]
            :or {redirect? true}}]
    (let [title (string/trim title)
-         page (string/lower-case title)]
-     (let [tx (block/page-name->map title true)]
-       (db/transact! [tx]))
+         page (string/lower-case title)
+         tx (block/page-name->map title true)
+         format (state/get-preferred-format)
+         page-entity [:block/uuid (:block/uuid tx)]
+         create-title-property? (util/include-windows-reserved-chars? title)
+         default-properties (default-properties-block title format page-entity)
+         empty-block {:block/uuid (db/new-block-id)
+                      :block/left [:block/uuid (:block/uuid default-properties)]
+                      :block/format format
+                      :block/content ""
+                      :block/parent page-entity
+                      :block/unordered true
+                      :block/page page-entity}
+         txs (if create-title-property?
+               [tx default-properties empty-block]
+               [tx])]
+     (db/transact! txs)
      (when redirect?
       (route-handler/redirect! {:to :page
-                                :path-params {:name page}})))))
+                                :path-params {:name page}})
+      (when create-title-property?
+        (js/setTimeout (fn []
+                        (editor-handler/edit-block! empty-block 0 format (:block/uuid empty-block))) 50))))))
 
 (defn page-add-property!
   [page-name key value]
@@ -173,12 +205,12 @@
 (defn rename-file!
   [file new-name ok-handler]
   (let [repo (state/get-current-repo)
+        file (db/pull (:db/id file))
         old-path (:file/path file)
         new-path (compute-new-file-path old-path new-name)]
     ;; update db
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
-
     (->
      (p/let [_ (fs/rename! repo
                            (if (util/electron?)
@@ -217,15 +249,26 @@
         (let [name-changed? (not= (string/lower-case (string/trim old-name))
                                   (string/lower-case (string/trim new-name)))]
           (when-let [repo (state/get-current-repo)]
-            (when-let [page (db/entity [:block/name (string/lower-case old-name)])]
+            (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
               (let [old-original-name (:block/original-name page)
                     file (:block/file page)
-                    journal? (:block/journal? page)]
-                (d/transact! (db/get-conn repo false)
-                             [{:db/id (:db/id page)
+                    journal? (:block/journal? page)
+                    properties-block (:data (outliner-tree/-get-down (outliner-core/block page)))
+                    properties-block-tx (when (and properties-block
+                                                   (string/includes? (string/lower-case (:block/content properties-block))
+                                                                     (string/lower-case old-name)))
+                                          {:db/id (:db/id properties-block)
+                                           :block/content (text/insert-property! (:block/format properties-block)
+                                                                                 (:block/content properties-block)
+                                                                                 :title
+                                                                                 new-name)})
+                    page-txs [{:db/id (:db/id page)
                                :block/uuid (:block/uuid page)
                                :block/name (string/lower-case new-name)
-                               :block/original-name new-name}])
+                               :block/original-name new-name}]
+                    page-txs (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
+
+                (d/transact! (db/get-conn repo false) page-txs)
 
                 (when (and file (not journal?) name-changed?)
                   (rename-file! file new-name (fn [] nil)))
@@ -254,7 +297,9 @@
                               (remove nil?))]
                   (db/transact! repo tx)
                   (doseq [page-id page-ids]
-                    (outliner-file/sync-to-file page-id))))
+                    (outliner-file/sync-to-file page-id)))
+
+                (outliner-file/sync-to-file page))
 
               ;; TODO: update browser history, remove the current one
 
@@ -361,18 +406,14 @@
   (->> (db/get-modified-pages repo)
        (remove util/file-page?)))
 
-(defonce filters-state (atom nil))
 (defn get-filters
   [page-name]
-  (let [properties (db/get-page-properties page-name)
-        filters (reader/read-string (get properties :filters "{}"))]
-    (reset! filters-state filters)
-    filters-state))
+  (let [properties (db/get-page-properties page-name)]
+    (reader/read-string (get properties :filters "{}"))))
 
 (defn save-filter!
   [page-name filter-state]
-  (page-add-property! page-name :filters filter-state)
-  (reset! filters-state (pr-str filter-state)))
+  (page-add-property! page-name :filters filter-state))
 
 (defn page-exists?
   [page-name]
@@ -412,16 +453,16 @@
     (if (state/sub :editor/show-page-search-hashtag?)
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
-        (let [chosen (if (re-find #"\s+" chosen)
+        (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
+              chosen (if (and (re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
                        chosen)]
           (editor-handler/insert-command! id
-                                          (str "#" chosen)
+                                          (str "#" (when wrapped? "[[") chosen)
                                           format
                                           {:last-pattern (let [q (if @editor-handler/*selected-text "" q)]
-                                                           (if (and q (string/starts-with? q "#"))
-                                                             q
-                                                             (str "#" q)))})))
+                                                           (str "#" (when wrapped? "[[") q))
+                                           :forward-pos (if wrapped? 3 2)})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [page-ref-text (get-page-ref-text chosen)]

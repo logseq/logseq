@@ -9,7 +9,7 @@
             [frontend.log]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
-            [api]))
+            [logseq.api]))
 
 (defn set-router!
   []

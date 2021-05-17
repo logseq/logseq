@@ -1,6 +1,8 @@
 (ns frontend.context.i18n
   (:require [frontend.dicts :as dicts]
+            [frontend.modules.shortcut.dict :as shortcut-dict]
             [rum.core :as rum]
+            [medley.core :refer [deep-merge]]
             [frontend.state :as state]))
 
 ;; TODO
@@ -18,7 +20,8 @@
 (rum/defc tongue-provider [children]
   (let [prefered-language (keyword (state/sub :preferred-language))
         set-preferred-language state/set-preferred-language!
-        t (partial dicts/translate prefered-language)]
+        all-dicts (deep-merge dicts/dicts shortcut-dict/dict)
+        t (partial (dicts/translate all-dicts) prefered-language)]
     (if (nil? prefered-language)
       (set-preferred-language (fetch-local-language))
       :ok)

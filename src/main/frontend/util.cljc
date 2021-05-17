@@ -1089,12 +1089,18 @@
          (when (uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
+(defonce windows-reserved-chars #"[\\/:\\*\\?\"<>|]+")
+
+(defn include-windows-reserved-chars?
+  [s]
+  (re-find windows-reserved-chars s))
+
 (defn page-name-sanity
   [page-name]
   (-> page-name
       (string/replace #"/" ".")
       ;; Windows reserved path characters
-      (string/replace #"[\\/:\\*\\?\"<>|]+" "_")))
+      (string/replace windows-reserved-chars "_")))
 
 (defn lowercase-first
   [s]
@@ -1141,7 +1147,10 @@
 ;; fs
 (defn get-file-ext
   [file]
-  (last (string/split file #"\.")))
+  (and
+   (string? file)
+   (string/includes? file ".")
+   (last (string/split file #"\."))))
 
 (defn get-dir-and-basename
   [path]

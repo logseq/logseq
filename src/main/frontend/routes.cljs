@@ -8,7 +8,8 @@
             [frontend.components.journal :as journal]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
-            [frontend.components.external :as external]))
+            [frontend.components.external :as external]
+            [frontend.components.shortcut :as shortcut]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -70,4 +71,8 @@
 
    ["/plugins"
     {:name :plugins
-     :view plugins/installed-page}]])
+     :view plugins/installed-page}]
+
+   ["/helper/shortcut"
+    {:name :shortcut
+     :view shortcut/shortcut}]])

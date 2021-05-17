@@ -80,6 +80,10 @@
         [:a.mr-2 {:on-click #(swap! *view-mode? not)}
          (util/format "View Mode (%s)" (if @*view-mode? "ON" "OFF"))]]
        [:div.draw-wrap
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (state/set-block-component-editing-mode! true))
+         :on-blur #(state/set-block-component-editing-mode! false)}
         (excalidraw
          (merge
           {:on-change (fn [elements state]

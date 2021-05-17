@@ -1,15 +1,9 @@
-(ns frontend.modules.shortcut.mixin
+(ns frontend.modules.shortcut.before
   (:require [frontend.config :as config]
             [frontend.state :as state]
             [frontend.util :as util]))
 
-(defn before [f shortcut-map]
-  (reduce-kv (fn [r k v]
-               (assoc r k (f v)))
-             {}
-             shortcut-map))
-
-;; middleware for before function
+;; before function
 (defn prevent-default-behavior
   [f]
   (fn [e]
@@ -28,10 +22,16 @@
 
 (defn enable-when-editing-mode!
   [f]
-  (fn [state e]
+  (fn [e]
     (when (state/editing?)
       (util/stop e)
-      (f state e))))
+      (f e))))
+
+(defn enable-when-not-component-editing!
+  [f]
+  (fn [e]
+    (when-not (state/block-component-editing?)
+      (f e))))
 
 (defn only-enable-when-dev!
   [_]

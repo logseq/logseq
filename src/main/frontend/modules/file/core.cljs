@@ -114,7 +114,7 @@
                 "/"
                 (if journal-page?
                   (date/journal-title->default title)
-                  (-> (:block/name page)
+                  (-> (or (:block/original-name page) (:block/name page))
                       (util/page-name-sanity))) "."
                 (if (= format "markdown") "md" format))
           file-path (str "/" path)
