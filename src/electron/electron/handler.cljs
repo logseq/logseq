@@ -124,8 +124,8 @@
   (async/put! state/persistent-dbs-chan true )
   true)
 
-(defmethod handle :search-blocks [window [_ repo q limit]]
-  (search/search-blocks repo q limit))
+(defmethod handle :search-blocks [window [_ repo q opts]]
+  (search/search-blocks repo q opts))
 
 (defmethod handle :rebuild-blocks-indice [window [_ repo data]]
   (search/truncate-blocks-table! repo)

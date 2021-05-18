@@ -399,8 +399,8 @@
                    ref-top-block?
                    false
 
+                   (boolean? sibling?)
                    sibling?
-                   true
 
                    (:collapsed (:block/properties current-block))
                    true
@@ -621,7 +621,7 @@
   [content {:keys [page block-uuid sibling? attributes]}]
   (when (or page block-uuid)
     (when-let [block (if block-uuid
-                       (db/entity [:block/uuid block-uuid])
+                       (db/pull [:block/uuid block-uuid])
                        (let [page (db/entity [:block/name (string/lower-case page)])
                              block-uuid (:block/uuid page)
                              children (:block/_parent page)
