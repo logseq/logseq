@@ -66,6 +66,7 @@ Logseq is also made possible by the following projects:
 - Our blog: https://logseq.com/blog - Please be sure to visit our [About page](https://logseq.com/blog/about) for the latest updates of the app
 - Twitter: https://twitter.com/logseq
 - Discord: https://discord.gg/KpN4eHY - Where we answer questions, discuss workflows and share tips
+- 中文 Discord：https://discord.gg/yhNKeUdj
 - Github: https://github.com/logseq/logseq - everyone is encouraged to report issues!
 
 ---
