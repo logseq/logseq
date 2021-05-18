@@ -400,7 +400,6 @@
 
 (defn- get-block-content
   [utf8-content block format]
-  (def aaa [utf8-content block format])
   (let [meta (:meta block)
         content (if-let [end-pos (:end-pos meta)]
                   (utf8/substring utf8-content

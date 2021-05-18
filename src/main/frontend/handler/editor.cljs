@@ -1863,6 +1863,56 @@
     (state/set-editor-show-block-search! false)
     (util/cursor-move-forward input 2)))
 
+(defn- get-block-tree-insert-pos-at-point
+  "return [target-block sibling?]"
+  []
+  (when-let [editing-block (or (db/pull (:db/id (state/get-edit-block)))
+                               (when (:block/dummy? (state/get-edit-block)) (state/get-edit-block)))]
+    (let [dummy? (:block/dummy? editing-block)
+          input (gdom/getElement (state/get-edit-input-id))
+          pos (util/get-input-pos input)
+          value (:value (get-state))
+          [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
+          parent (:db/id (:block/parent editing-block))
+          parent-block (db/pull parent)
+          left (:db/id (:block/left editing-block))
+          left-block (db/pull left)
+          [_ _ config] (state/get-editor-args)
+          block-id (:block/uuid editing-block)
+          block-self? (block-self-alone-when-insert? config block-id)
+          has-children? (db/has-children? (state/get-current-repo)
+                                          (:block/uuid editing-block))
+          collapsed? (:collapsed (:block/properties editing-block))]
+      (match (mapv boolean [dummy? (seq fst-block-text) (seq snd-block-text)
+                           block-self? has-children? (= parent left) collapsed?])
+        ;; if editing-block is dummy, insert after page-block
+        [true _ _ _ _ _ _]
+        [parent-block false]
+
+        ;; when zoom at editing-block
+        [false _ _ true _ _ _]
+        [editing-block false]
+
+        ;; insert after editing-block
+        [false true _ false true _ false]
+        [editing-block false]
+        [false true _ false true _ true]
+        [editing-block true]
+        [false true _ false false _ _]
+        [editing-block true]
+        [false false false false true _ false]
+        [editing-block false]
+        [false false false false true _ true]
+        [editing-block true]
+        [false false false false false _ _]
+        [editing-block true]
+
+        ;; insert before editing-block
+        [false false true false _ true _]
+        [parent-block false]
+        [false false true false _ false _]
+        [left-block true]))))
+
 (defn- paste-block-tree-at-point
   ([tree exclude-properties] (paste-block-tree-at-point tree exclude-properties nil))
   ([tree exclude-properties content-update-fn]
@@ -1871,12 +1921,8 @@
                   (db/entity [:block/original-name (state/get-current-page)])
                   (:block/page (db/entity (:db/id (state/get-edit-block)))))
          file (:block/file page)]
-     (when-let [editing-block (or (db/entity (:db/id (state/get-edit-block)))
-                                  (when (:block/dummy? (state/get-edit-block)) (state/get-edit-block)))]
-       (let [parent (:block/parent editing-block)
-             left (:block/left editing-block)
-             sibling? (not= parent left)
-             target-block (outliner-core/block (db/pull (if sibling? (:db/id left) (:db/id parent))))
+     (when-let [[target-block sibling?] (get-block-tree-insert-pos-at-point)]
+       (let [target-block (outliner-core/block target-block)
              format (or (:block/format target-block) (state/get-preferred-format))
              new-block-uuids (atom #{})
              metadata-replaced-blocks
@@ -1914,8 +1960,8 @@
                                                    :block/file (select-keys file [:db/id])
                                                    :block/format format
                                                    :block/properties (apply dissoc (:block/properties %)
-                                                                       (concat [:id :custom_id :custom-id]
-                                                                               exclude-properties))
+                                                                            (concat [:id :custom_id :custom-id]
+                                                                                    exclude-properties))
                                                    :block/meta (dissoc (:block/meta %) :start-pos :end-pos)
                                                    :block/content new-content
                                                    :block/title new-title}
