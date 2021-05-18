@@ -33,7 +33,7 @@
 (defn- get-directory
   [journal?]
   (if journal?
-    config/default-journals-directory
+    (config/default-journals-directory)
     (config/get-pages-directory)))
 
 (defn- get-file-name

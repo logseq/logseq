@@ -16,7 +16,8 @@
             [cljs-time.coerce :as tc]
             [medley.core :as medley]
             [clojure.walk :as walk]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.config :as config]))
 
 (defn- extract-page-list
   [content]
@@ -176,7 +177,7 @@
   ([repo-url file content utf8-content]
    (if (string/blank? content)
      []
-     (let [journal? (util/journal? file)
+     (let [journal? (config/journal? file)
            format (format/get-format file)
            ast (mldoc/->edn content
                             (mldoc/default-config format))

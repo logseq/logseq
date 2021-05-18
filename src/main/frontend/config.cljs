@@ -273,9 +273,17 @@
   []
   (or (state/get-pages-directory) default-pages-directory))
 
+(defn get-journals-directory
+  []
+  (or (state/get-journals-directory) default-journals-directory))
+
 (defn draw?
   [path]
   (util/starts-with? path default-draw-directory))
+
+(defn journal?
+  [path]
+  (string/includes? path (str (get-journals-directory) "/")))
 
 (defonce local-repo "local")
 (defonce local-assets-dir "assets")

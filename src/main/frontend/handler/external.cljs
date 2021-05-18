@@ -21,7 +21,7 @@
                            journal? (date/valid-journal-title? title)]
                        (when-let [text (:text file)]
                          (let [path (str (if journal?
-                                           config/default-journals-directory
+                                           (config/default-journals-directory)
                                            (config/get-pages-directory))
                                          "/"
                                          (if journal?

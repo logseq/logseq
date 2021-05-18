@@ -136,8 +136,8 @@
                                                          (let [last-part (last (string/split path "/"))]
                                                            (contains? #{config/app-name
                                                                         config/default-draw-directory
-                                                                        config/default-journals-directory
-                                                                        config/default-pages-directory}
+                                                                        (config/default-journals-directory)
+                                                                        (config/default-pages-directory)}
                                                                       last-part)))))
                                               (into {})))))
 

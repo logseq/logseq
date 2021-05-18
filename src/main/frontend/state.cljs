@@ -280,6 +280,13 @@
      (:pages-directory (get-config repo)))
    "pages"))
 
+(defn get-journals-directory
+  []
+  (or
+   (when-let [repo (get-current-repo)]
+     (:journals-directory (get-config repo)))
+   "journals"))
+
 (defn org-mode-file-link?
   [repo]
   (:org-mode/insert-file-link? (get-config repo)))
