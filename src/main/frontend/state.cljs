@@ -29,6 +29,7 @@
     :repo/changed-files nil
     :nfs/user-granted? {}
     :nfs/refreshing? nil
+    :sentry/disabled? (storage/get "sentry-disabled")
     ;; TODO: how to detect the network reliably?
     :network/online? true
     :indexeddb/support? true
@@ -1214,6 +1215,17 @@
 (defn set-block-component-editing-mode!
   [value]
   (set-state! :block/component-editing-mode? value))
+
+(defn sentry-disabled?
+  []
+  (:sentry/disabled? @state))
+
+(defn set-sentry-disabled!
+  [value]
+  (set-state! :sentry/disabled? value)
+  (storage/set "sentry-disabled" value)
+  (when value
+    (.close js/window.Sentry)))
 
 (defn get-editor-args
   []

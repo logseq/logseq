@@ -144,6 +144,7 @@
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
+        sentry-disabled? (state/sub :sentry/disabled?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         enable-block-time? (state/enable-block-time?)
         show-brackets? (state/show-brackets?)
@@ -343,6 +344,13 @@
          [:div.wrap.sm:mt-0.sm:col-span-2
           [:div.ver version]
           (if (util/electron?) (app-updater))]]
+
+        (toggle "disable_sentry"
+                (t :settings-page/disable-sentry)
+                sentry-disabled?
+                (fn []
+                  (let [value (not sentry-disabled?)]
+                    (state/set-sentry-disabled! value))))
 
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.block.text-sm.font-medium.leading-5.opacity-70
