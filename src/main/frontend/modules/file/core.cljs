@@ -109,7 +109,7 @@
           journal-page? (date/valid-journal-title? title)
           path (str
                 (if journal-page?
-                  (config/default-journals-directory)
+                  (config/get-journals-directory)
                   (config/get-pages-directory))
                 "/"
                 (if journal-page?

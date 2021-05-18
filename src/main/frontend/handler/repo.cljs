@@ -110,7 +110,7 @@
 
                      :else
                      default-content)
-           path (str (config/default-journals-directory) "/" file-name "."
+           path (str (config/get-journals-directory) "/" file-name "."
                      (config/get-file-extension format))
            file-path (str "/" path)
            page-exists? (db/entity repo-url [:block/name (string/lower-case title)])
@@ -118,7 +118,7 @@
        (when (or empty-blocks?
                  (not page-exists?))
          (p/let [_ (nfs/check-directory-permission! repo-url)
-                 _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/default-journals-directory)))
+                 _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
                  file-exists? (fs/file-exists? repo-dir file-path)]
            (when-not file-exists?
              (file-handler/reset-file! repo-url path content)
