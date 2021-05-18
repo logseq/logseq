@@ -22,7 +22,7 @@
             [clojure.walk :as walk]
             [frontend.git :as git]
             [frontend.fs :as fs]
-            [frontend.text :as text]
+            [frontend.util.property :as property]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.format.block :as block]
@@ -33,7 +33,7 @@
 (defn- get-directory
   [journal?]
   (if journal?
-    config/default-journals-directory
+    (config/get-journals-directory)
     (config/get-pages-directory)))
 
 (defn- get-file-name
@@ -52,7 +52,7 @@
 (defn default-properties-block
   [title format page]
   (let [properties (common-handler/get-page-default-properties title)
-        content (text/build-properties-str format properties)]
+        content (property/build-properties-str format properties)]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties
@@ -107,8 +107,8 @@
         (let [properties (:block/properties pre-block)
               new-properties (assoc properties key value)
               content (:block/content pre-block)
-              front-matter? (text/front-matter? content)
-              new-content (text/insert-property! format content key value front-matter?)
+              front-matter? (property/front-matter? content)
+              new-content (property/insert-property format content key value front-matter?)
               block {:db/id (:db/id pre-block)
                      :block/properties new-properties
                      :block/content new-content
@@ -258,7 +258,7 @@
                                                    (string/includes? (string/lower-case (:block/content properties-block))
                                                                      (string/lower-case old-name)))
                                           {:db/id (:db/id properties-block)
-                                           :block/content (text/insert-property! (:block/format properties-block)
+                                           :block/content (property/insert-property (:block/format properties-block)
                                                                                  (:block/content properties-block)
                                                                                  :title
                                                                                  new-name)})
@@ -315,27 +315,13 @@
 
 (defn handle-add-page-to-contents!
   [page-name]
-  (let [last-block (last (db/get-page-blocks (state/get-current-repo) "contents"))
-        last-empty? (>= 3 (count (:block/content last-block)))
-        heading-pattern (config/get-block-pattern (state/get-preferred-format))
-        pre-str (str heading-pattern heading-pattern)
-        new-content (if last-empty?
-                      (str pre-str " [[" page-name "]]")
-                      (str (string/trimr (:block/content last-block))
-                           "\n"
-                           pre-str " [[" page-name "]]"))]
-    (editor-handler/insert-new-block-aux!
-     {}
-     last-block
-     new-content
-     {:create-new-block? false
-      :ok-handler
-      (fn [_]
-        (notification/show! "Added to contents!" :success)
-        (editor-handler/clear-when-saved!))
-      :with-level? true
-      :new-level 2
-      :current-page "Contents"})))
+  (let [content (str "[[" page-name "]]")]
+    (editor-handler/api-insert-new-block!
+     content
+     {:page "Contents"
+      :sibling? true})
+    (notification/show! "Added to contents!" :success)
+    (editor-handler/clear-when-saved!)))
 
 (defn has-more-journals?
   []

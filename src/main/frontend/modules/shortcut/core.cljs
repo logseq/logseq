@@ -50,7 +50,7 @@
           install-id (medley/random-uuid)
           data       {install-id
                       {:group      handler-id
-                       :dispath-fn f
+                       :dispatch-fn f
                        :handler    handler}}]
 
       (events/listen handler EventType/SHORTCUT_TRIGGERED f)
@@ -97,3 +97,22 @@
      (-> (get state :shortcut-key)
          uninstall-shortcut!)
      (dissoc state :shortcut-key))})
+
+(defn unlisten-all []
+  (doseq [{:keys [handler]} (vals @*installed)]
+    (.removeAllListeners handler)))
+
+(defn listen-all []
+  (doseq [{:keys [handler dispatch-fn]} (vals @*installed)]
+    (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
+
+(defn disable-all-shortcuts []
+  {:did-mount
+   (fn [state]
+     (unlisten-all)
+     state)
+
+   :will-unmount
+   (fn [state]
+     (listen-all)
+     state)})

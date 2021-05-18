@@ -1,5 +1,6 @@
 (ns frontend.handler.block
   (:require [frontend.util :as util]
+            [frontend.util.property :as property]
             [clojure.walk :as walk]
             [frontend.db :as db]
             [frontend.state :as state]
@@ -43,7 +44,7 @@
                        (let [title (or (:block/original-name page-block)
                                        (:block/name page-block))
                              properties (common-handler/get-page-default-properties title)]
-                         (text/build-properties-str format properties))
+                         (property/build-properties-str format properties))
                        "")
              page-id {:db/id (:db/id page-block)}
              dummy (merge {:block/uuid (db/new-block-id)

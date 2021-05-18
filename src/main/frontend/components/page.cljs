@@ -40,6 +40,7 @@
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [frontend.text :as text]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.block :as block-handler]))
 
 (defn- get-page-name
@@ -157,6 +158,7 @@
           (t :cancel)]]]])))
 
 (rum/defcs rename-page-dialog-inner <
+  (shortcut/disable-all-shortcuts)
   (rum/local "" ::input)
   [state title page-name close-fn]
   (let [input (get state ::input)]
@@ -209,6 +211,7 @@
 
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
+  #_
   {:did-mount (fn [state]
                 (ui-handler/scroll-and-highlight! state)
                 state)
@@ -396,8 +399,10 @@
               (reference/references route-page-name false)
               (str route-page-name "-refs"))]
 
-           [:div {:key "page-unlinked-references"}
-            (reference/unlinked-references route-page-name)]])))))
+          ;; TODO: or we can lazy load them
+          (when-not sidebar?
+            [:div {:key "page-unlinked-references"}
+             (reference/unlinked-references route-page-name)])])))))
 
 (defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
 

@@ -39,6 +39,7 @@
             [frontend.handler.image :as image-handler]
             [frontend.format.mldoc :as mldoc]
             [frontend.text :as text]
+            [frontend.util.property :as property]
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
             [frontend.security :as security]
@@ -1034,15 +1035,37 @@
       (route-handler/redirect! {:to :page
                                 :path-params {:name (str uuid)}}))))
 
+(rum/defc block-children < rum/reactive
+  [config children collapsed? *ref-collapsed?]
+  (let [ref? (:ref? config)
+        collapsed? (if ref? (rum/react *ref-collapsed?) collapsed?)]
+    (when (and (seq children) (not collapsed?))
+      (let [doc-mode? (:document/mode? config)]
+       [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
+                                     :display (if collapsed? "none" "")}}
+        (for [child children]
+          (when (map? child)
+            (let [child (dissoc child :block/meta)
+                  config (cond->
+                           (-> config
+                               (assoc :block/uuid (:block/uuid child))
+                               (dissoc :breadcrumb-show?))
+                           ref?
+                           (assoc :ref-child? true))]
+              (rum/with-key (block-container config child)
+                (:block/uuid child)))))]))))
+
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children dummy? *control-show?]
+  [state config block uuid block-id body children dummy? collapsed? *ref-collapsed? *control-show?]
   (let [has-child? (and
                     (not (:pre-block? block))
                     (or (seq children)
                         (seq body)))
-        collapsed? (get (:block/properties block) :collapsed)
         control-show? (util/react *control-show?)
-        dark? (= "dark" (state/sub :ui/theme))]
+        ref-collapsed? (util/react *ref-collapsed?)
+        dark? (= "dark" (state/sub :ui/theme))
+        ref? (:ref? config)
+        collapsed? (if ref? ref-collapsed? collapsed?)]
     [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
               :margin-top 0
@@ -1056,7 +1079,9 @@
        :on-click (fn [e]
                    (util/stop e)
                    (when-not (and (not collapsed?) (not has-child?))
-                     (editor-handler/set-block-property! uuid :collapsed (not collapsed?))))}
+                     (if ref?
+                       (swap! *ref-collapsed? not)
+                       (editor-handler/set-block-property! uuid :collapsed (not collapsed?)))))}
       (cond
         (and control-show? collapsed?)
         (svg/caret-right)
@@ -1083,10 +1108,12 @@
 
 (defn- build-id
   [config]
-  (let [k (pr-str config)
+  (let [ref? (:ref? config)
+        sidebar? (:sidebar? config)
+        k (pr-str config)
         n (or
            (get @container-ids k)
-           (let [n' (swap! container-idx inc)]
+           (let [n' (if (and ref? (not sidebar?)) @container-idx (swap! container-idx inc))]
              (swap! container-ids assoc k n')
              n'))]
     (str n "-")))
@@ -1320,7 +1347,7 @@
 (rum/defc properties-cp
   [config block]
   (let [properties (walk/keywordize-keys (:block/properties block))
-        properties (apply dissoc properties text/built-in-properties)
+        properties (apply dissoc properties property/built-in-properties)
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
                      (dissoc properties :title :filters)
@@ -1391,7 +1418,7 @@
         (editor-handler/unhighlight-blocks!)
         (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
               f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
-                       content (text/remove-built-in-properties! (:block/format block)
+                       content (property/remove-built-in-properties (:block/format block)
                                                                  content)]
                    (state/set-editing!
                     edit-input-id
@@ -1471,7 +1498,7 @@
           (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
       (when (and (seq properties)
-                 (let [hidden? (text/properties-built-in? properties)]
+                 (let [hidden? (property/properties-built-in? properties)]
                    (not hidden?))
                  (not (:slide? config)))
         (properties-cp config block))
@@ -1675,17 +1702,35 @@
         data-refs-self (text/build-data-value refs)]
     [data-refs data-refs-self]))
 
+;; (rum/defc block-immediate-children < rum/reactive
+;;   [repo config uuid ref? collapsed?]
+;;   (when (and ref? (not collapsed?))
+;;     (let [children (db/get-block-immediate-children repo uuid)
+;;           children (block-handler/filter-blocks repo children (:filters config) false)]
+;;       (when (seq children)
+;;         [:div.ref-children {:style {:margin-left "1.8rem"}}
+;;          (blocks-container children (assoc config
+;;                                            :breadcrumb-show? false
+;;                                            :ref? true
+;;                                            :ref-child? true))]))))
+
 (rum/defcs block-container < rum/static
   {:init (fn [state]
-           (assoc state
-                  ::control-show? (atom false)))
+           (let [[config block] (:rum/args state)
+                 ref-collpased? (boolean
+                                 (and (:ref? config)
+                                      (seq (:block/children block))))]
+             (assoc state
+                    ::control-show? (atom false)
+                    ::ref-collapsed? (atom ref-collpased?))))
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
   [state config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? top? properties refs-with-children heading-level level type] :as block}]
   (let [heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
-        collapsed? (get properties :collapsed)
+        *ref-collapsed? (get state ::ref-collapsed?)
+        collapsed? (or @*ref-collapsed? (get properties :collapsed))
         ref? (boolean (:ref? config))
         breadcrumb-show? (:breadcrumb-show? config)
         sidebar? (boolean (:sidebar? config))
@@ -1730,28 +1775,12 @@
 
      [:div.flex.flex-row {:class (if heading? "items-center" "")}
       (when (not slide?)
-        (block-control config block uuid block-id body children dummy? *control-show?))
+        (block-control config block uuid block-id body children dummy? collapsed? *ref-collapsed? *control-show?))
 
       (let [edit-input-id (str "edit-block-" unique-dom-id uuid)]
         (block-content-or-editor config block edit-input-id block-id slide? heading-level))]
 
-     (when (seq children)
-       [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
-                                     :display (if collapsed? "none" "")}}
-        (for [child children]
-          (when (map? child)
-            (let [child (dissoc child :block/meta)]
-              (rum/with-key (block-container (assoc config :block/uuid (:block/uuid child)) child)
-                (:block/uuid child)))))])
-
-     (when ref?
-       (let [children (db/get-block-immediate-children repo uuid)
-             children (block-handler/filter-blocks repo children (:filters config) false)]
-         (when (seq children)
-           [:div.ref-children {:style {:margin-left "1.8rem"}}
-            (blocks-container children (assoc config
-                                              :breadcrumb-show? false
-                                              :ref? true))])))
+     (block-children config children collapsed? *ref-collapsed?)
 
      (dnd-separator-wrapper block slide? false)]))
 
@@ -2251,12 +2280,12 @@
 
 (defn blocks-container
   [blocks config]
-  (let [blocks (map #(dissoc % :block/children) blocks)
+  (let [
+        ;; blocks (map #(dissoc % :block/children) blocks)
         sidebar? (:sidebar? config)
         ref? (:ref? config)
         custom-query? (:custom-query? config)
         blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree % (:id config)))
-        ;; FIXME: blocks->vec-tree not working for the block container (zoom view)
         blocks' (blocks->vec-tree blocks)
         blocks (if (seq blocks') blocks' blocks)]
     (when (seq blocks)

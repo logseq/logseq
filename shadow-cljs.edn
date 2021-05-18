@@ -2,6 +2,8 @@
 {:deps     true
  :nrepl        {:port 8701}
 
+ :http {:host "192.168.2.227"}
+
  :builds
  {:app
   {:target :browser

@@ -1,6 +1,7 @@
 (ns frontend.search.db
   (:refer-clojure :exclude [empty?])
   (:require [frontend.text :as text]
+            [frontend.util.property :as property]
             [frontend.db :as db]
             [frontend.state :as state]
             [cljs-bean.core :as bean]
@@ -16,7 +17,7 @@
 (defn block->index
   [{:block/keys [uuid content format page] :as block}]
   (when-let [result (->> (text/remove-level-spaces content format)
-                         (text/remove-id-property! format))]
+                         (property/remove-id-property format))]
     {:id (:db/id block)
      :uuid (str uuid)
      :page page

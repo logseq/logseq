@@ -290,6 +290,13 @@
      (:pages-directory (get-config repo)))
    "pages"))
 
+(defn get-journals-directory
+  []
+  (or
+   (when-let [repo (get-current-repo)]
+     (:journals-directory (get-config repo)))
+   "journals"))
+
 (defn org-mode-file-link?
   [repo]
   (:org-mode/insert-file-link? (get-config repo)))
@@ -519,13 +526,9 @@
          (fn [m]
            (and input-id {input-id true}))))
 
-(defn set-edit-pos!
-  [pos]
-  (set-state! :editor/pos pos))
-
 (defn get-edit-pos
   []
-  (:editor/pos @state))
+  (.-selectionStart (get-input)))
 
 (defn set-selection-start-block!
   [start-block]

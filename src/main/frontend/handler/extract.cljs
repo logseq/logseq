@@ -7,6 +7,7 @@
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
             [frontend.text :as text]
+            [frontend.util.property :as property]
             [clojure.string :as string]
             [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
@@ -15,7 +16,8 @@
             [cljs-time.coerce :as tc]
             [medley.core :as medley]
             [clojure.walk :as walk]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.config :as config]))
 
 (defn- extract-page-list
   [content]
@@ -94,7 +96,7 @@
                               content (get-block-content utf8-content block format)
                               content (if (= format :org)
                                         content
-                                        (text/->new-properties content))]
+                                        (property/->new-properties content))]
                           (when block-ref-pages
                             (swap! ref-pages set/union (set block-ref-pages)))
                           (-> block
@@ -175,12 +177,12 @@
   ([repo-url file content utf8-content]
    (if (string/blank? content)
      []
-     (let [journal? (util/journal? file)
+     (let [journal? (config/journal? file)
            format (format/get-format file)
            ast (mldoc/->edn content
                             (mldoc/default-config format))
            first-block (ffirst ast)
-           properties (let [properties (and (text/properties-block? first-block)
+           properties (let [properties (and (property/properties-ast? first-block)
                                             (->> (last first-block)
                                                  (into {})
                                                  (walk/keywordize-keys)))]

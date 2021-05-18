@@ -84,7 +84,9 @@
                     (->> (group-by second filter-state)
                          (medley/map-vals #(map first %))))
           filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
-          n-ref (count filtered-ref-blocks)]
+          n-ref (apply +
+                 (for [[_ rfs] filtered-ref-blocks]
+                   (count rfs)))]
       (when (or (> n-ref 0)
                 (seq scheduled-or-deadlines)
                 (seq filter-state))
@@ -103,41 +105,48 @@
                 (content/content page-name
                                  {:hiccup ref-hiccup}))]))
 
-          (ui/foldable
-           [:div.flex.flex-row.flex-1.justify-between
-            [:h2.font-bold.opacity-50 (let []
-                                        (str n-ref " Linked Reference"
-                                             (if (> n-ref 1) "s")))]
-            [:a.opacity-50.hover:opacity-100
-             {:title "Filter"
-              :on-click #(state/set-modal! (filter-dialog filters-atom references page-name))}
-             (svg/filter-icon (cond
-                                (empty? filter-state) nil
-                                (every? true? (vals filter-state)) "text-green-400"
-                                (every? false? (vals filter-state)) "text-red-400"
-                                :else "text-yellow-400"))]]
+          (when (or (> n-ref 0)
+                    (seq filter-state))
+            (ui/foldable
+             [:div.flex.flex-row.flex-1.justify-between
+              [:h2.font-bold.opacity-50 (let []
+                                          (str n-ref " Linked Reference"
+                                               (if (> n-ref 1) "s")))]
+              [:a.opacity-50.hover:opacity-100
+               {:title "Filter"
+                :on-click #(state/set-modal! (filter-dialog filters-atom references page-name))}
+               (svg/filter-icon (cond
+                                  (empty? filter-state) nil
+                                  (every? true? (vals filter-state)) "text-green-400"
+                                  (every? false? (vals filter-state)) "text-red-400"
+                                  :else "text-yellow-400"))]]
 
-           [:div.references-blocks
-            (let [ref-hiccup (block/->hiccup filtered-ref-blocks
-                                             {:id page-name
-                                              :ref? true
-                                              :breadcrumb-show? true
-                                              :group-by-page? true
-                                              :editor-box editor/box
-                                              :filters filters}
-                                             {})]
-              (content/content page-name
-                               {:hiccup ref-hiccup}))])]]))))
+             [:div.references-blocks
+              (let [ref-hiccup (block/->hiccup filtered-ref-blocks
+                                               {:id page-name
+                                                :ref? true
+                                                :breadcrumb-show? true
+                                                :group-by-page? true
+                                                :editor-box editor/box
+                                                :filters filters}
+                                               {})]
+                (content/content page-name
+                                 {:hiccup ref-hiccup}))]))]]))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
-  {:will-mount (fn [state]
-                 (let [[page-name n-ref] (:rum/args state)
-                       ref-blocks (db/get-page-unlinked-references page-name)]
-                   (reset! n-ref (count ref-blocks))
-                   (assoc state ::ref-blocks ref-blocks)))}
+  {:wrap-render
+   (fn [render-fn]
+     (fn [state]
+       (reset! (second (:rum/args state))
+               (apply +
+                      (for [[_ rfs]
+                            (db/get-page-unlinked-references
+                             (first (:rum/args state)))]
+                        (count rfs))))
+       (render-fn state)))}
   [state page-name n-ref]
-  (let [ref-blocks (::ref-blocks state)]
+  (let [ref-blocks (db/get-page-unlinked-references page-name)]
     [:div.references-blocks
      (let [ref-hiccup (block/->hiccup ref-blocks
                                       {:id (str page-name "-unlinked-")

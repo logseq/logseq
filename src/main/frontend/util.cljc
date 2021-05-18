@@ -466,10 +466,6 @@
   [s substr]
   (string/starts-with? s substr))
 
-(defn journal?
-  [path]
-  (string/includes? path "journals/"))
-
 (defn drop-first-line
   [s]
   (let [lines (string/split-lines s)
