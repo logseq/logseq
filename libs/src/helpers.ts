@@ -185,7 +185,13 @@ export function setupInjectedUI (
   attrs: Record<string, any>
 ) {
   const pl = this
-  const selector = ui.path || `#${ui.slot}`
+  let selector = ''
+
+  if ('slot' in ui) {
+    selector = `#${ui.slot}`
+  } else {
+    selector = ui.path
+  }
 
   const target = selector && document.querySelector(selector)
   if (!target) {
