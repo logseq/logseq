@@ -151,7 +151,7 @@
       border: 1px solid transparent;
       transition: background-color .3s;
 
-      &:hover, &.selected {
+      &:hover, &.is-selected {
         background-color: var(--ls-quaternary-background-color);
       }
     }

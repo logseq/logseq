@@ -14,14 +14,16 @@
   < rum/reactive
   []
   (let [themes (state/sub :plugin/installed-themes)
-        selected (state/sub :plugin/selected-theme)]
+        selected (state/sub :plugin/selected-theme)
+        themes (cons {:name "Default Theme" :url nil :description "Logseq default light/dark theme."} themes)]
+
     [:div.cp__themes-installed
      [:h2.mb-4.text-xl "Installed Themes"]
      (for [opt themes]
        (let [current-selected (= selected (:url opt))]
          [:div.it.flex.px-3.py-2.mb-2.rounded-sm.justify-between
           {:key   (:url opt)
-           :class [(if current-selected "selected")]
+           :class [(if current-selected "is-selected")]
            :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
                           (state/set-modal! nil))}
           [:section
