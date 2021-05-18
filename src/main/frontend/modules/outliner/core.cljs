@@ -237,6 +237,7 @@
         (tree/-save node txs-state)
         [node]))))
 
+
 (defn- insert-node-aux
   ([new-node target-node sibling? txs-state]
    (insert-node-aux new-node target-node sibling? txs-state nil))
@@ -247,6 +248,17 @@
      (when blocks-atom
        (swap! blocks-atom concat result))
      (first result))))
+
+;; TODO: refactor, move to insert-node
+(defn insert-node-as-last-child
+  [txs-state node target-node]
+  []
+  {:pre [(every? tree/satisfied-inode? [node target-node])]}
+  (let [children (tree/-get-children target-node)
+        [target-node sibling?] (if (seq children)
+                                 [(last children) true]
+                                 [target-node false])]
+    (insert-node-aux node target-node sibling? txs-state)))
 
 (defn insert-node
   ([new-node target-node sibling?]
@@ -345,22 +357,44 @@
   {:pre [(tree/satisfied-inode? node)]}
   (ds/auto-transact!
     [txs-state (ds/new-outliner-txs-state)] {:outliner-op :move-node}
-    (let [[up-node down-node] (if up?
-                                (let [left (tree/-get-left node)
-                                      parent? (= left (tree/-get-parent node))]
-                                  [(when-not parent? left) node])
-                                [node (tree/-get-right node)])]
+    (let [left (tree/-get-left node)
+          move-to-another-parent? (if up?
+                                    (= left (tree/-get-parent node))
+                                    (and (tree/-get-parent node)
+                                         (nil? (tree/-get-right node))))
+          [up-node down-node] (if up?
+                                [left node]
+                                (let [down-node (if move-to-another-parent?
+                                                  (tree/-get-right (tree/-get-parent node))
+                                                  (tree/-get-right node))]
+                                  [node down-node]))]
       (when (and up-node down-node)
-        (let [down-node-right (tree/-get-right down-node)
-              up-node-left (tree/-get-left-id up-node)
-              ;; swap up-node and down-node
-              down-node (tree/-set-left-id down-node up-node-left)
-              up-node (tree/-set-left-id up-node (tree/-get-id down-node))]
-          (tree/-save down-node txs-state)
-          (tree/-save up-node txs-state)
-          (when down-node-right
-            (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id up-node))]
-              (tree/-save down-node-right txs-state))))))))
+        (let [up-node-left (tree/-get-left-id up-node)]
+          (cond
+            (and move-to-another-parent? up?)
+            (when-let [target-node (tree/-get-left up-node)]
+              (when (and (not (:block/name (:data target-node))) ; page root block
+                         (not (= target-node
+                                 (when-let [parent (tree/-get-parent node)]
+                                   (tree/-get-parent parent)))))
+                (insert-node-as-last-child txs-state down-node target-node)
+                (when-let [down-node-right (tree/-get-right down-node)]
+                  (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id (tree/-get-parent node)))]
+                    (tree/-save down-node-right txs-state)))))
+
+            (and move-to-another-parent? (not up?))
+            (when down-node
+              (insert-node-as-first-child txs-state node down-node))
+
+            :else
+            ;; swap up-node and down-node
+            (let [down-node (tree/-set-left-id down-node up-node-left)
+                  up-node (tree/-set-left-id up-node (tree/-get-id down-node))]
+              (tree/-save down-node txs-state)
+              (tree/-save up-node txs-state)
+              (when-let [down-node-right (tree/-get-right down-node)]
+                (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id up-node))]
+                  (tree/-save down-node-right txs-state))))))))))
 
 (defn delete-node
   "Delete node from the tree."
