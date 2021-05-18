@@ -40,15 +40,15 @@
     END;"
                   "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
     BEGIN
-        INSERT INTO blocks_fts (rowid, uuid, content)
-        VALUES (new.id, new.uuid, new.content);
+        INSERT INTO blocks_fts (rowid, uuid, content, page)
+        VALUES (new.id, new.uuid, new.content, new.page);
     END;
 "
                   "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
     BEGIN
         DELETE from blocks_fts where rowid = old.id;
-        INSERT INTO blocks_fts (rowid, uuid, content)
-        VALUES (new.id, new.uuid, new.content);
+        INSERT INTO blocks_fts (rowid, uuid, content, page)
+        VALUES (new.id, new.uuid, new.content, new.page);
     END;"
                   ]]
     (doseq [trigger triggers]
@@ -60,12 +60,13 @@
   (let [stmt (prepare db "CREATE TABLE IF NOT EXISTS blocks (
                         id INTEGER PRIMARY KEY,
                         uuid TEXT NOT NULL,
-                        content TEXT NOT NULL)")]
+                        content TEXT NOT NULL,
+                        page INTEGER)")]
     (.run ^object stmt)))
 
 (defn create-blocks-fts-table!
   [db]
-  (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(uuid, content)")]
+  (let [stmt (prepare db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(uuid, content, page)")]
     (.run ^object stmt)))
 
 (defn get-search-dir
@@ -105,7 +106,7 @@
   [repo blocks]
   (if-let [db (get-db repo)]
     ;; TODO: what if a CONFLICT on uuid
-    (let [insert (prepare db "INSERT INTO blocks (id, uuid, content) VALUES (@id, @uuid, @content) ON CONFLICT (id) DO UPDATE SET content = @content")
+    (let [insert (prepare db "INSERT INTO blocks (id, uuid, content, page) VALUES (@id, @uuid, @content, @page) ON CONFLICT (id) DO UPDATE SET content = @content")
           insert-many (.transaction ^object db
                                     (fn [blocks]
                                       (doseq [block blocks]
@@ -132,7 +133,7 @@
 ;;       (js->clj (.all ^object stmt q) :keywordize-keys true))))
 
 (defn search-blocks
-  [repo q limit]
+  [repo q {:keys [limit page]}]
   (when-let [database (get-db repo)]
     (when-not (string/blank? q)
       (let [match? (or
@@ -142,23 +143,30 @@
                     (string/includes? q " | ")
                     ;; (string/includes? q " not ")
                     )
-            q (if match?
-                (-> q
-                    (string/replace " and " " AND ")
-                    (string/replace " & " " AND ")
-                    (string/replace " or " " OR ")
-                    (string/replace " | " " OR ")
-                    (string/replace " not " " NOT "))
-                q)
-            limit (or limit 20)
-            [sql input] (if match?
-                          ["select rowid, uuid, content from blocks_fts where content match ? order by rank limit ?"
-                           q]
-                          (let [q (string/replace q #"\s+" "%")]
-                            ["select rowid, uuid, content from blocks_fts where content like ? limit ?"
-                             (str "%" q "%")]))
-            stmt (prepare database sql)]
-        (js->clj (.all ^object stmt input limit) :keywordize-keys true)))))
+            input  (if match?
+                         (-> q
+                             (string/replace " and " " AND ")
+                             (string/replace " & " " AND ")
+                             (string/replace " or " " OR ")
+                             (string/replace " | " " OR ")
+                             (string/replace " not " " NOT "))
+                         (str "%" (string/replace q #"\s+" "%") "%"))
+            limit  (or limit 20)
+            select "select rowid, uuid, content, page from blocks_fts where "
+            pg-sql (if page "page = ? and" "")
+            sql    (if match?
+                     (str select
+                          pg-sql
+                          " content match ? order by rank limit ?")
+                     (str select
+                          pg-sql
+                          " content like ? limit ?"))
+            stmt   (prepare database sql)]
+        (js->clj
+         (if page
+           (.all ^object stmt (int page) input limit)
+           (.all ^object stmt  input limit))
+          :keywordize-keys true)))))
 
 (defn truncate-blocks-table!
   [repo]
