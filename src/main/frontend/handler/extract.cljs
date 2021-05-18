@@ -28,34 +28,7 @@
          (map string/lower-case)
          (distinct))))
 
-(defn- remove-indentation-spaces
-  [s level]
-  (let [level (inc level)
-        lines (string/split-lines s)
-        [f & r] lines
-        body (map (fn [line]
-                    (if (string/blank? (util/safe-subs line 0 level))
-                      (util/safe-subs line level)
-                      line))
-                  r)
-        content (cons f body)]
-    (string/join "\n" content)))
 
-(defn- get-block-content
-  [utf8-content block format]
-  (let [meta (:block/meta block)
-        content (if-let [end-pos (:end-pos meta)]
-                  (utf8/substring utf8-content
-                                  (:start-pos meta)
-                                  end-pos)
-                  (utf8/substring utf8-content
-                                  (:start-pos meta)))]
-    (when content
-      (let [content (text/remove-level-spaces content format)]
-        (if (or (:block/pre-block? block)
-                (= (:block/format block) :org))
-          content
-          (remove-indentation-spaces content (:block/level block)))))))
 
 (defn get-page-name
   [file ast]
@@ -92,17 +65,12 @@
           ref-tags (atom #{})
           blocks (map (fn [block]
                         (let [block-ref-pages (seq (:block/refs block))
-                              block-path-ref-pages (seq (:block/path-refs block))
-                              content (get-block-content utf8-content block format)
-                              content (if (= format :org)
-                                        content
-                                        (property/->new-properties content))]
+                              block-path-ref-pages (seq (:block/path-refs block))]
                           (when block-ref-pages
                             (swap! ref-pages set/union (set block-ref-pages)))
                           (-> block
                               (dissoc :ref-pages)
-                              (assoc :block/content content
-                                     :block/file [:file/path file]
+                              (assoc :block/file [:file/path file]
                                      :block/format format
                                      :block/page [:block/name (string/lower-case page)]
                                      :block/refs block-ref-pages
