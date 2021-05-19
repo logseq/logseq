@@ -991,15 +991,15 @@
         level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids)
         tree (blocks-vec->tree level-blocks)
         contents
-        (mapv (fn [[id block]]
+        (mapv (fn [block]
                 (let [header
                       (if (and unordered? (= format :markdown))
-                        (str (string/join (repeat (:level block) "  ")) "-")
+                        (str (string/join (repeat (- (:level block) 1) "  ")) "-")
                         (let [header-char (if (= format :markdown) "#" "*")
                               init-char (if (= format :markdown) "##" "*")]
                           (str (string/join (repeat (:level block) header-char)) init-char)))]
                   (str header " " (:block/content block) "\n")))
-              level-blocks-map)
+              level-blocks)
         content-without-properties
         (mapv
          (fn [content]
