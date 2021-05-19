@@ -366,30 +366,17 @@
            distinct
            (remove #(= (string/lower-case %) (string/lower-case page-name)))))))
 
-(defn get-block-refs-count
-  [repo]
-  (->> (d/q
-        '[:find ?id2 ?id1
-          :where
-          [?id1 :block/refs ?id2]]
-        (conn/get-conn repo))
-       (map first)
-       (frequencies)))
-
 (defn with-block-refs-count
   [repo blocks]
-  (let [db-ids (map :db/id blocks)
-        refs (get-block-refs-count repo)]
-    (map (fn [block]
-           (assoc block :block/block-refs-count
-                  (get refs (:db/id block))))
-         blocks)))
+  (map (fn [block]
+         (let [refs-count (count (:block/_refs (db-utils/entity (:db/id block))))]
+           (assoc block :block/block-refs-count refs-count)))
+    blocks))
 
 (defn page-blocks-transform
   [repo-url result]
-  (let [result (db-utils/seq-flatten result)]
-    (->> (db-utils/with-repo repo-url result)
-         (with-block-refs-count repo-url))))
+  (->> (db-utils/with-repo repo-url result)
+       (with-block-refs-count repo-url)))
 
 (defn with-pages
   [blocks]
