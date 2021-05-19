@@ -12,20 +12,25 @@
 ;; fuse.js
 
 (defn search-blocks
-  [repo q {:keys [limit]
+  [repo q {:keys [limit page]
             :or {limit 20}
             :as option}]
   (let [indice (or (get-in @indices [repo :blocks])
                    (search-db/make-blocks-indice! repo))
-        result (.search indice q (clj->js {:limit limit}))
+        result
+        (if page
+          (.search indice
+                   (clj->js {:$and [{"page" page} {"content" q}]})
+                   (clj->js {:limit limit}))
+          (.search indice q (clj->js {:limit limit})))
         result (bean/->clj result)]
     (->>
      (map
        (fn [{:keys [item matches] :as block}]
-         (let [{:keys [content uuid]} item]
+         (let [{:keys [content uuid page]} item]
            {:block/uuid uuid
             :block/content content
-            :block/page (:block/page (db/entity [:block/uuid (medley/uuid (str uuid))]))
+            :block/page page
             :search/matches matches}))
        result)
      (remove nil?))))

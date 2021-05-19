@@ -52,10 +52,11 @@
 
 (defn- uuid-or-asset?
   [id]
-  (or (util/uuid-string? id)
-      (string/starts-with? id "../assets/")
-      (= id "..")
-      (string/starts-with? id "assets/")))
+  (let [id (str id)]
+    (or (util/uuid-string? id)
+       (string/starts-with? id "../assets/")
+       (= id "..")
+       (string/starts-with? id "assets/"))))
 
 (defn- remove-uuids-and-files!
   [nodes]
@@ -70,10 +71,14 @@
                                     (map :source links)
                                     (map :target links)]))
                        (map string/lower-case))
-        names (db/pull-many '[:page/name :page/original-name] (mapv (fn [page] [:page/name page]) all-pages))
-        names (zipmap (map :page/name names)
-                      (map (fn [x] (get x :page/original-name (:page/name x))) names))
-        nodes (mapv (fn [node] (assoc node :id (get names (:id node)))) nodes)
+        names (db/pull-many '[:block/name :block/original-name] (mapv (fn [page]
+                                                                        (if (util/uuid-string? page)
+                                                                          [:block/uuid (uuid page)]
+                                                                          [:block/name page])) all-pages))
+        names (zipmap (map (fn [x] (get x :block/name)) names)
+                      (map (fn [x]
+                             (get x :block/original-name (:block/name x))) names))
+        nodes (mapv (fn [node] (assoc node :id (get names (:id node) (:id node)))) nodes)
         links (->>
                (mapv (fn [{:keys [source target]}]
                        (when (and (not (uuid-or-asset? source))
@@ -89,7 +94,7 @@
 (defn build-global-graph
   [theme show-journal?]
   (let [dark? (= "dark" theme)
-        current-page (:page/name (db/get-current-page))]
+        current-page (:block/name (db/get-current-page))]
     (when-let [repo (state/get-current-repo)]
       (let [relation (db/get-pages-relation repo show-journal?)
             tagged-pages (db/get-all-tagged-pages repo)
@@ -128,9 +133,9 @@
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
       (let [page (string/lower-case page)
-            page-entity (db/entity [:page/name page])
-            original-page-name (:page/original-name page-entity)
-            tags (:tags (:page/properties page-entity))
+            page-entity (db/entity [:block/name page])
+            original-page-name (:block/original-name page-entity)
+            tags (:tags (:block/properties page-entity))
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page)
             mentioned-pages (db/get-pages-that-mentioned-page repo page)

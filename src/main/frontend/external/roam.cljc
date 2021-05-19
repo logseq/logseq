@@ -85,7 +85,7 @@
         level-pattern (apply str (repeat level "#"))
         properties (when (contains? @all-refed-uids uid)
                      (str
-                      (util/format ":PROPERTIES:\n:ID:%s\n:END:"
+                      (util/format "id:: %s"
                                    (str (get @uid->uuid uid)))
                       "\n"))]
     (if string

@@ -57,9 +57,13 @@
 }
 
 .ui__modal {
-  @apply fixed bottom-0 inset-x-0
-  sm:inset-0 sm:flex sm:items-center sm:justify-center
-  px-4 pb-4;
+  @apply fixed bottom-0 inset-x-0 px-4 pb-4;
+
+  @screen sm {
+    & {
+      @apply inset-0 flex items-center justify-center;
+    }
+  }
 
   &-overlay {
     @apply fixed inset-0 transition-opacity;

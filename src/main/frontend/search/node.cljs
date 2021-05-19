@@ -9,13 +9,13 @@
 
 (defrecord Node [repo]
   protocol/Engine
-  (query [this q {:keys [limit]}]
-    (p/let [result (ipc/ipc "search-blocks" repo q limit)
+  (query [this q opts]
+    (p/let [result (ipc/ipc "search-blocks" repo q opts)
             result (bean/->clj result)]
-      (map (fn [{:keys [content id uuid]}]
+      (map (fn [{:keys [content id uuid page]}]
              {:block/uuid uuid
               :block/content content
-              :block/page (:block/page (db/entity id))}) result)))
+              :block/page page}) result)))
   (rebuild-blocks-indice! [this]
     (let [indice (search-db/build-blocks-indice repo)]
       (ipc/ipc "rebuild-blocks-indice" repo indice)))

@@ -18,14 +18,14 @@
        (let [target (.-target e)]
          (if (d/has-class? target "bottom-action") ;; FIXME: not particular case
            (.preventDefault e)
-           (let [{:keys [on-hide format value block id repo dummy?]} (editor-handler/get-state state)]
+           (let [{:keys [on-hide format value block id repo dummy?]} (editor-handler/get-state)]
              (when on-hide
                (on-hide value event))
              (when
               (or (= event :esc)
                   (= event :visibilitychange)
                   (and (= event :click)
-                       (not (editor-handler/in-auto-complete? (gobj/get target "id")))))
+                       (not (editor-handler/auto-complete?))))
                (state/clear-edit!))))))
      :node (gdom/getElement id)
     ;; :visibilitychange? true

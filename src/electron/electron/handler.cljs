@@ -2,6 +2,7 @@
   (:require ["electron" :refer [ipcMain dialog app]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
+            ["fs-extra" :as fs-extra]
             ["path" :as path]
             ["chokidar" :as watcher]
             [promesa.core :as p]
@@ -62,8 +63,8 @@
   (or
    (some #(string/starts-with? path (str dir "/" %))
          ["." "assets" "node_modules"])
-   (some #(string/ends-with? path (str dir "/" %))
-         [".swap" ".crswap" ".tmp"])))
+   (some #(string/ends-with? path %)
+         [".swap" ".crswap" ".tmp" ".DS_Store"])))
 
 (defonce allowed-formats
   #{:org :markdown :md :edn :json :css :excalidraw})
@@ -105,8 +106,8 @@
   (async/put! state/persistent-dbs-chan true )
   true)
 
-(defmethod handle :search-blocks [window [_ repo q limit]]
-  (search/search-blocks repo q limit))
+(defmethod handle :search-blocks [window [_ repo q opts]]
+  (search/search-blocks repo q opts))
 
 (defmethod handle :rebuild-blocks-indice [window [_ repo data]]
   (search/truncate-blocks-table! repo)
@@ -127,6 +128,21 @@
 (defmethod handle :remove-db [window [_ repo]]
   (search/delete-db! repo))
 
+(defn clear-cache!
+  []
+  (let [path (.getPath ^object app "userData")]
+    (doseq [dir ["search" "IndexedDB" "Local Storage" "databases" "cache"]]
+      (let [path (path/join path dir)]
+        (try
+          (fs-extra/removeSync path)
+          (catch js/Error e
+            (js/console.error e)))))))
+
+(defmethod handle :clearCache [_window _]
+  (search/close!)
+  (clear-cache!)
+  (search/ensure-search-dir!))
+
 (defn- get-file-ext
   [file]
   (last (string/split file #"\.")))
@@ -137,6 +153,7 @@
       (send file-watcher-chan
             (bean/->js {:type type :payload payload}))))
 
+(defonce polling-interval 5000)
 (defn watch-dir!
   [win dir]
   (when (fs/existsSync dir)
@@ -144,8 +161,14 @@
                           (clj->js
                            {:ignored (partial ignored-path? dir)
                             :ignoreInitial true
+                            :ignorePermissionErrors true
+                            :interval polling-interval
+                            :binaryInterval polling-interval
                             :persistent true
+                            :disableGlobbing true
+
                             :awaitWriteFinish true}))]
+      ;; TODO: batch sender
       (.on watcher "add"
            (fn [path]
              (send-file-watcher! win "add"

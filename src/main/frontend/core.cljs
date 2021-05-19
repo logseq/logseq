@@ -8,7 +8,7 @@
             [frontend.log]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
-            [api]))
+            [logseq.api]))
 
 (defn set-router!
   []
@@ -55,4 +55,5 @@
 (defn stop []
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
+  (handler/stop!)
   (js/console.log "stop"))

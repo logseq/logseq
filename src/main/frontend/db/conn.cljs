@@ -23,18 +23,9 @@
   (when repo
     (str config/idb-db-prefix (get-repo-path repo))))
 
-(defn datascript-files-db
-  [repo]
-  (when repo
-    (str "logseq-files-db/" (get-repo-path repo))))
-
 (defn remove-db!
   [repo]
   (idb/remove-item! (datascript-db repo)))
-
-(defn remove-files-db!
-  [repo]
-  (idb/remove-item! (datascript-files-db repo)))
 
 (defn get-conn
   ([]
@@ -50,19 +41,12 @@
          @conn
          conn)))))
 
-(defn get-files-conn
-  ([]
-   (get-files-conn (state/get-current-repo)))
-  ([repo]
-   (get @conns (datascript-files-db repo))))
-
 (defn reset-conn! [conn db]
   (reset! conn db))
 
 (defn remove-conn!
   [repo]
-  (swap! conns dissoc (datascript-db repo))
-  (swap! conns dissoc (datascript-files-db repo)))
+  (swap! conns dissoc (datascript-db repo)))
 
 (defn me-tx
   [db {:keys [name email avatar]}]
@@ -74,11 +58,8 @@
   ([me repo]
    (start! me repo {}))
   ([me repo {:keys [db-type listen-handler]}]
-   (let [files-db-name (datascript-files-db repo)
-         files-db-conn (d/create-conn db-schema/files-db-schema)
-         db-name (datascript-db repo)
+   (let [db-name (datascript-db repo)
          db-conn (d/create-conn db-schema/schema)]
-     (swap! conns assoc files-db-name files-db-conn)
      (swap! conns assoc db-name db-conn)
      (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
                              db-type

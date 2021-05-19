@@ -111,10 +111,10 @@ jobs:
         working-directory: ./static
 
       - name: Change Artifact Name For ZIP File
-        run: mv static/out/make/zip/linux/x64/Logseq-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
+        run: mv static/out/make/zip/linux/x64/*-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
 
       - name: Change Artifact Name For AppImage File
-        run: mv static/out/make/Logseq-*.AppImage  static/out/make/Logseq-linux.AppImage
+        run: mv static/out/make/*-*.AppImage  static/out/make/Logseq-linux.AppImage
 
       - name: Cache Artifact With ZIP format
         uses: actions/upload-artifact@v1
@@ -210,13 +210,19 @@ jobs:
         working-directory: ./static
 
       - name: Change DMG Name
-        run: mv static/out/make/Logseq.dmg static/out/make/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+        run: mv static/out/make/*.dmg static/out/make/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
 
       - name: Cache Artifact DMG
         uses: actions/upload-artifact@v1
         with:
           name: Logseq-x64.dmg
           path: static/out/make/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+
+      - name: ls files
+        run: du -a static/out/
+
+      - name: Change zip Name
+        run: mv static/out/make/zip/darwin/x64/*.zip static/out/make/zip/darwin/x64/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
 
       - name: Cache Artifact ZIP
         uses: actions/upload-artifact@v1

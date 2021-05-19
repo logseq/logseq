@@ -143,7 +143,7 @@
                      (let [page-name (string/lower-case (gobj/get node "id"))]
                        (if (gobj/get event "shiftKey")
                          (let [repo (state/get-current-repo)
-                               page (db/entity repo [:page/name page-name])]
+                               page (db/entity repo [:block/name page-name])]
                            (state/sidebar-add-block!
                             repo
                             (:db/id page)

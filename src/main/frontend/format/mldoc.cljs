@@ -1,6 +1,7 @@
 (ns frontend.format.mldoc
   (:require [frontend.format.protocol :as protocol]
             [frontend.util :as util]
+            [frontend.utf8 :as utf8]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer-macros [match]]
@@ -15,6 +16,7 @@
 (defonce parseHtml (gobj/get Mldoc "parseHtml"))
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
+(defonce astExportMarkdown (gobj/get Mldoc "astExportMarkdown"))
 
 (defn default-config
   ([format]
@@ -27,13 +29,22 @@
         :heading_number false
         :keep_line_break true
         :format format
-        :heading_to_list export-heading-to-list?})))))
+        :heading_to_list export-heading-to-list?}))))
+  ([format export-heading-to-list? exporting-keep-properties?]
+   (let [format (string/capitalize (name (or format :markdown)))]
+     (js/JSON.stringify
+      (bean/->js
+       {:toc false
+        :heading_number false
+        :keep_line_break true
+        :format format
+        :heading_to_list export-heading-to-list?
+        :exporting_keep_properties exporting-keep-properties?})))))
 
 (def default-references
   (js/JSON.stringify
    (clj->js {:embed_blocks []
-             :embed_pages []
-             :refer_blocks []})))
+             :embed_pages []})))
 
 (defn parse-json
   [content config]
@@ -48,6 +59,12 @@
   (parseAndExportMarkdown content
                           (or config default-config)
                           (or references default-references)))
+
+(defn ast-export-markdown
+  [ast config references]
+  (astExportMarkdown ast
+                     (or config default-config)
+                     (or references default-references)))
 
 ;; Org-roam
 (defn get-tags-from-definition
@@ -106,10 +123,9 @@
           properties (->> (map first directive-ast)
                           (map (fn [[_ k v]]
                                  (let [k (keyword (string/lower-case k))
-                                       comma? (contains? #{:tags :alias :roam_tags} k)
                                        v (if (contains? #{:title :description :roam_tags} k)
                                            v
-                                           (text/split-page-refs-without-brackets v comma?))]
+                                           (text/split-page-refs-without-brackets v true))]
                                    [k v])))
                           (reverse)
                           (into {}))
@@ -161,6 +177,19 @@
         original-ast))
     ast))
 
+(defn update-src-full-content
+  [ast content]
+  (let [content (utf8/encode content)]
+    (map (fn [[block pos-meta]]
+          (if (and (vector? block)
+                   (= "Src" (first block)))
+            (let [{:keys [start_pos end_pos]} pos-meta
+                  block ["Src" (assoc (second block)
+                                      :full_content
+                                      (utf8/substring content start_pos end_pos))]]
+              [block pos-meta])
+            [block pos-meta])) ast)))
+
 (defn ->edn
   [content config]
   (try
@@ -169,6 +198,7 @@
       (-> content
           (parse-json config)
           (util/json->clj)
+          (update-src-full-content content)
           (collect-page-properties)))
     (catch js/Error e
       (log/error :edn/convert-failed e)
@@ -196,22 +226,8 @@
   (lazyLoad [this ok-handler]
     true)
   (exportMarkdown [this content config references]
-    (parse-export-markdown content config references))
-  )
+    (parse-export-markdown content config references)))
 
 (defn plain->text
   [plains]
   (string/join (map last plains)))
-
-(defn parse-properties
-  [content format]
-  (let [ast (->> (->edn content
-                        (default-config format))
-                 (map first))
-        properties (collect-page-properties ast)
-        properties (let [properties (and (seq ast)
-                                         (= "Properties" (ffirst ast))
-                                         (last (first ast)))]
-                     (if (and properties (seq properties))
-                       properties))]
-    (into {} properties)))

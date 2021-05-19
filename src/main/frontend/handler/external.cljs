@@ -7,12 +7,11 @@
             [frontend.date :as date]
             [frontend.config :as config]
             [clojure.string :as string]
-            [promesa.core :as p]
             [frontend.db :as db]))
 
 (defonce debug-files (atom nil))
 (defn index-files!
-  [repo files git-add-cb]
+  [repo files finish-handler]
   (let [titles (->> files
                     (map :title)
                     (map :text)
@@ -22,7 +21,7 @@
                            journal? (date/valid-journal-title? title)]
                        (when-let [text (:text file)]
                          (let [path (str (if journal?
-                                           config/default-journals-directory
+                                           (config/get-journals-directory)
                                            (config/get-pages-directory))
                                          "/"
                                          (if journal?
@@ -39,14 +38,14 @@
       (file-handler/alter-files repo files {:add-history? false
                                             :update-db? false
                                             :update-status? false
-                                            :git-add-cb git-add-cb}))
+                                            :finish-handler finish-handler}))
     (let [journal-pages-tx (let [titles (filter date/valid-journal-title? titles)]
                              (map
                               (fn [title]
                                 (let [page-name (string/lower-case title)]
-                                  {:page/name page-name
-                                   :page/journal? true
-                                   :page/journal-day (date/journal-title->int title)}))
+                                  {:block/name page-name
+                                   :block/journal? true
+                                   :block/journal-day (date/journal-title->int title)}))
                               titles))]
       (when (seq journal-pages-tx)
         (db/transact! repo journal-pages-tx)))))

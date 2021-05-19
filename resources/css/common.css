@@ -34,7 +34,7 @@ html[data-theme='dark'] {
   --ls-table-tr-even-background-color: #03333f;
   --ls-active-primary-color: #8ec2c2;
   --ls-active-secondary-color: #d0e8e8;
-  --ls-block-properties-background-color: #02222a;
+  --ls-block-properties-background-color: #06323e;
   --ls-block-ref-link-text-color: #1a6376;
   --ls-search-background-color: linear-gradient(
     to right,
@@ -396,7 +396,7 @@ li p:first-child,
 }
 
 li p:last-child,
-.block-body p:last-child {
+.block-body p:last-child, .block-body ul:last-child, .block-body ol:last-child, .block-body dl:last-child {
   margin-bottom: 0;
 }
 

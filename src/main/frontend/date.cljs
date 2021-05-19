@@ -20,7 +20,7 @@
   (when-let [formatter-string (state/get-date-formatter)]
     (tf/unparse (tf/formatter formatter-string) date)))
 
-(def custom-formatter (tf/formatter "yyyy-MM-dd HH:mm:ssZ"))
+(def custom-formatter (tf/formatter "yyyy-MM-dd'T'HH:mm:ssZZ"))
 
 (defn journal-title-formatters
   []
@@ -44,8 +44,24 @@
      "yyyy年MM月dd日"}
    (state/get-date-formatter)))
 
-(defn get-date-time-string [date-time]
-  (tf/unparse custom-formatter date-time))
+(defn get-date-time-string
+  ([]
+   (get-date-time-string (t/now)))
+  ([date-time]
+   (tf/unparse custom-formatter date-time)))
+
+(defn get-locale-string
+  [s]
+  (try
+    (->> (tf/parse (tf/formatters :date-time-no-ms) s)
+        (t/to-default-time-zone)
+        (tf/unparse (tf/formatter "MMM do, yyyy")))
+    (catch js/Error e
+      nil)))
+
+(defn ISO-string
+  []
+  (.toISOString (js/Date.)))
 
 (defn get-local-date-time-string
   []
@@ -169,6 +185,11 @@
   (when journal-title
     (let [journal-title (util/capitalize-all journal-title)]
       (journal-title-> journal-title #(util/parse-int (tf/unparse (tf/formatter "yyyyMMdd") %))))))
+
+(defn int->journal-title
+  [day]
+  (when day
+    (format (tf/parse (tf/formatter "yyyyMMdd") (str day)))))
 
 (defn journal-title->long
   [journal-title]

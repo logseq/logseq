@@ -1,100 +1,141 @@
 (ns frontend.db-schema)
 
-(defonce version "0.0.1")
+(defonce version "0.0.2")
 
-(def files-db-schema
-  {:file/path {:db/unique :db.unique/identity}
-   :file/content {}
-   :file/size {}
-   :file/handle {}})
-
-;; A page can corresponds to multiple files (same title),
-;; a month journal file can have multiple pages,
-;; also, each block can be treated as a page too.
+;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def schema
   {:schema/version  {}
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
+
    :db/encrypted?    {}
    :db/encryption-keys {}
+
    ;; user
-   :me/name  {}
+   :me/name {}
    :me/email {}
    :me/avatar {}
 
    ;; Git
-   :repo/url        {:db/unique :db.unique/identity}
-   :repo/cloned?    {}
+   :repo/url {:db/unique :db.unique/identity}
+
+   :recent/pages {}
+
+   :block/type {}
+   :block/uuid {:db/unique :db.unique/identity}
+   :block/parent {:db/valueType :db.type/ref}
+   :block/left {:db/valueType :db.type/ref}
+
+   ;; :markdown, :org
+   :block/format {}
+
+   ;; mldoc parsed ast
+   :block/title {}
+
+   ;; belongs to which page
+   :block/page {:db/valueType :db.type/ref
+                :db/index true}
+   ;; reference blocks
+   :block/refs {:db/valueType :db.type/ref
+                :db/cardinality :db.cardinality/many}
+   ;; referenced pages inherited from the parents
+   :block/path-refs {:db/valueType   :db.type/ref
+                     :db/cardinality :db.cardinality/many}
+
+   ;; for pages
+   :block/tags {:db/valueType :db.type/ref
+                :db/cardinality :db.cardinality/many}
+
+   ;; for pages
+   :block/alias {:db/valueType :db.type/ref
+                 :db/cardinality :db.cardinality/many}
+
+   ;; full-text for current block
+   :block/content {}
+
+   ;; todo keywords, e.g. "TODO", "DOING", "DONE"
+   :block/marker {}
+
+   ;; "A", "B", "C"
+   :block/priority {}
+
+   ;; TODO: remove
+   ;; 1, 2, 3, etc.
+   :block/level {}
+   ;; TODO: remove
+   :block/meta {}
+
+   ;; block key value properties
+   :block/properties {}
+
+   ;; parsed ast
+   :block/body {}
+
+   ;; first block that's not a heading or unordered list
+   :block/pre-block? {}
+
+   ;; scheduled day
+   :block/scheduled {}
+
+   ;; deadline day
+   :block/deadline {}
+
+   ;; whether blocks is a repeated block (usually a task)
+   :block/repeated? {}
+
+   :block/created-at {}
+   :block/updated-at {}
+
+   ;; page additional attributes
+   ;; page's name, lowercase
+   :block/name {:db/unique :db.unique/identity}
+   ;; page's original name
+   :block/original-name {:db/unique :db.unique/identity}
+   ;; whether page's is a journal
+   :block/journal? {}
+   :block/journal-day {}
+
+   ;; block's file
+   :block/file {:db/valueType :db.type/ref}
+
+   ;; file
+   :file/path {:db/unique :db.unique/identity}
+   ;; only store the content of logseq's files
+   :file/content {}
+   :file/handle {}
+   ;; :file/created-at {}
+   ;; :file/last-modified-at {}
+   ;; :file/size {}
+   ;; :file/handle {}
+
+   ;; git
+   :repo/cloned? {}
    :git/status {}
    :git/last-pulled-at {}
    ;; last error, better we should record all the errors
    :git/error {}
 
-   ;; file
-   :file/path       {:db/unique :db.unique/identity}
-   :file/created-at {}
-   :file/last-modified-at {}
+   })
 
-   ;; toggle to comment this line to force to clone
-   :release/re-clone? {}
-
-   :recent/pages    {}
-
-   :page/name       {:db/unique      :db.unique/identity}
-   :page/original-name {:db/unique      :db.unique/identity}
-   :page/file       {:db/valueType   :db.type/ref}
-   :page/properties {}
-   :page/alias      {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many}
-   :page/tags       {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many}
-   :page/journal?   {}
-   :page/journal-day {}
-
-   ;; block
-   :block/uuid   {:db/unique      :db.unique/identity}
-   :block/file   {:db/valueType   :db.type/ref}
-   :block/format {}
-   :block/title {}
-   ;; belongs to which page
-   :block/page   {:db/valueType   :db.type/ref
-                  :db/index       true}
-   ;; referenced pages
-   :block/ref-pages {:db/valueType   :db.type/ref
-                     :db/cardinality :db.cardinality/many}
-   ;; referenced pages inherited from the parents
-   :block/path-ref-pages {:db/valueType   :db.type/ref
-                          :db/cardinality :db.cardinality/many}
-
-   ;; Referenced pages
-   ;; Notice: it's only for org mode, :tag1:tag2:
-   ;; Markdown tags will be only stored in :block/ref-pages
-   :block/tags {:db/valueType   :db.type/ref
-                :db/cardinality :db.cardinality/many}
-
-   ;; referenced blocks
-   :block/ref-blocks {:db/valueType   :db.type/ref
-                      :db/cardinality :db.cardinality/many}
-   :block/embed-blocks {:db/valueType   :db.type/ref
-                        :db/cardinality :db.cardinality/many}
-   :block/embed-pages {:db/valueType   :db.type/ref
-                       :db/cardinality :db.cardinality/many}
-   :block/content {}
-   :block/anchor {}
-   :block/marker {}
-   :block/priority {}
-   :block/level {}
-   ;; :start-pos :end-pos
-   :block/meta {}
-   :block/properties {}
-   :block/body {}
-   :block/pre-block? {}
-   :block/collapsed? {}
-   :block/children {:db/valueType   :db.type/ref
-                    :db/cardinality :db.cardinality/many
-                    :db/unique :db.unique/identity}
-   :block/scheduled {}
-   :block/scheduled-ast {}
-   :block/deadline {}
-   :block/deadline-ast {}
-   :block/repeated? {}})
+(def retract-attributes
+  #{
+    :block/refs
+    :block/path-refs
+    :block/tags
+    :block/alias
+    :block/marker
+    :block/priority
+    :block/scheduled
+    :block/deadline
+    :block/repeated?
+    :block/pre-block?
+    :block/level
+    :block/heading-level
+    :block/type
+    :block/title
+    :block/body
+    :block/properties
+    :block/created-at
+    :block/updated-at
+    }
+  )

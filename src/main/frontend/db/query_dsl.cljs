@@ -27,7 +27,7 @@
 ;;            (between last-modified-at -1d today)
 ;; [[page-ref]]
 ;; property (block)
-;; todo (block)
+;; task (block)
 ;; priority (block)
 ;; page
 ;; page-property (page)
@@ -138,7 +138,7 @@
          page-ref? (text/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
-               (contains? #{'between 'property 'todo 'priority 'sort-by 'page} fe))
+               (contains? #{'between 'property 'todo 'task 'priority 'sort-by 'page} fe))
        (reset! blocks? true))
      (cond
        (nil? e)
@@ -147,7 +147,7 @@
        page-ref?
        (let [page-name (-> (text/page-ref-un-brackets! e)
                            (string/lower-case))]
-         [['?b :block/path-ref-pages [:page/name page-name]]])
+         [['?b :block/path-refs [:block/name page-name]]])
 
        (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map (fn [form]
@@ -193,8 +193,8 @@
              end (->journal-day-int (nth e 2))
              [start end] (sort [start end])]
          [['?b :block/page '?p]
-          ['?p :page/journal? true]
-          ['?p :page/journal-day '?d]
+          ['?p :block/journal? true]
+          ['?p :block/journal-day '?d]
           [(list '>= '?d start)]
           [(list '<= '?d end)]])
 
@@ -224,7 +224,7 @@
                    '?v
                      (uniq-symbol counter "?v"))]
          [['?b :block/properties '?prop]
-          [(list 'get '?prop (name (nth e 1))) sym]
+          [(list 'get '?prop (keyword (nth e 1))) sym]
           (list
            'or
            [(list '= sym v)]
@@ -233,9 +233,9 @@
        (and (= 'property fe)
             (= 2 (count e)))
        [['?b :block/properties '?prop]
-        [(list 'get '?prop (name (nth e 1)))]]
+        [(list 'get '?prop (keyword (nth e 1)))]]
 
-       (= 'todo fe)
+       (or (= 'todo fe) (= 'task fe))
        (let [markers (if (coll? (first (rest e)))
                        (first (rest e))
                        (rest e))]
@@ -274,7 +274,7 @@
        (= 'page fe)
        (let [page-name (string/lower-case (first (rest e)))
              page-name (text/page-ref-un-brackets! page-name)]
-         [['?b :block/page [:page/name page-name]]])
+         [['?b :block/page [:block/name page-name]]])
 
        (= 'page-property fe)
        (let [[k v] (rest e)]
@@ -282,13 +282,14 @@
            (let [v (some->> (name (nth e 2))
                             (text/page-ref-un-brackets!))
                  sym '?v]
-             [['?p :page/properties '?prop]
+             [['?p :block/name]
+              ['?p :block/properties '?prop]
               [(list 'get '?prop (keyword (nth e 1))) sym]
               (list
                'or
                [(list '= sym v)]
                [(list 'contains? sym v)])])
-           [['?p :page/properties '?prop]
+           [['?p :block/properties '?prop]
             [(list 'get '?prop (keyword (nth e 1)))]]))
 
        (= 'page-tags fe)
@@ -301,12 +302,12 @@
              (let [tags (set (map (comp text/page-ref-un-brackets! string/lower-case name) tags))]
                (let [sym-1 (uniq-symbol counter "?t")
                      sym-2 (uniq-symbol counter "?tag")]
-                 [['?p :page/tags sym-1]
-                  [sym-1 :page/name sym-2]
+                 [['?p :block/tags sym-1]
+                  [sym-1 :block/name sym-2]
                   [(list 'contains? tags sym-2)]])))))
 
        (= 'all-page-tags fe)
-       [['?e :page/tags '?p]]
+       [['?e :block/tags '?p]]
 
        :else
        nil))))
@@ -335,13 +336,13 @@
     (if not?
       (cond
         (and b? p?)
-        (concat [['?b :block/uuid] ['?p :page/name] ['?b :block/page '?p]] q)
+        (concat [['?b :block/uuid] ['?p :block/name] ['?b :block/page '?p]] q)
 
         b?
         (concat [['?b :block/uuid]] q)
 
         p?
-        (concat [['?p :page/name]] q)
+        (concat [['?p :block/name]] q)
 
         :else
         q)
@@ -437,7 +438,7 @@
 
   (query "(and [[some page]] (property foo bar))")
 
-  (query "(and [[some page]] (todo now later))")
+  (query "(and [[some page]] (task now later))")
 
   (query "(and [[some page]] (priority A))")
 

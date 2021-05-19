@@ -21,11 +21,8 @@
   conns
   get-repo-path
   datascript-db
-  datascript-files-db
   remove-db!
-  remove-files-db!
   get-conn
-  get-files-conn
   me-tx
   remove-conn!]
 
@@ -37,29 +34,29 @@
   entity pull pull-many transact! get-key-value]
 
  [frontend.db.model
-  add-properties! block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks
+  block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
   delete-file! delete-file-blocks! delete-file-pages! delete-file-tx delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
-  get-all-templates get-block-and-children get-block-and-children-no-cache get-block-by-uuid get-block-children
-  get-block-children-ids get-block-content get-block-file get-block-immediate-children get-block-page
-  get-block-page-end-pos get-block-parent get-block-parents get-block-referenced-blocks get-block-refs-count
-  get-blocks-by-priority get-blocks-contents get-collapsed-blocks get-custom-css
-  get-date-scheduled-or-deadlines get-db-type get-empty-pages get-file get-file-after-blocks get-file-after-blocks-meta
-  get-file-blocks get-file-contents get-file-last-modified-at get-file-no-sub get-file-page get-file-page-id
+  get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
+  get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
+  get-block-children-ids get-block-immediate-children get-block-page
+  get-blocks-contents get-custom-css
+  get-date-scheduled-or-deadlines get-db-type get-empty-pages get-file
+  get-file-blocks get-file-contents get-file-last-modified-at get-file-no-sub get-file-page get-file-page-id file-exists?
   get-file-pages get-files get-files-blocks get-files-full get-files-that-referenced-page get-journals-length
-  get-latest-journals get-marker-blocks get-matched-blocks get-page get-page-alias get-page-alias-names get-page-blocks get-page-linked-refs-refed-pages
-  get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-name get-page-properties
-  get-page-properties-content get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references
+  get-latest-journals get-matched-blocks get-page get-page-alias get-page-alias-names get-page-blocks get-page-linked-refs-refed-pages
+  get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
+  get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
   get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
   set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages page-empty? get-alias-source-page
-  set-file-content!]
+  set-file-content! has-children?]
 
  [frontend.db.react
-  get-current-marker get-current-page get-current-priority get-handler-keys set-key-value
+  get-current-marker get-current-page get-current-priority set-key-value
   transact-react! remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   clear-query-state-without-refs-and-embeds! get-block-blocks-cache-atom get-page-blocks-cache-atom kv q
-  query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value]
+  query-state query-components query-entity-in-component remove-custom-query! set-new-result! sub-key-value refresh!]
 
  [frontend.db.query-custom
   custom-query]
@@ -70,18 +67,13 @@
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]
-  (let [file-key (datascript-files-db repo)
-        non-file-key (datascript-db repo)
-        files-conn (get-files-conn repo)
-        file-db (when files-conn (d/db files-conn))
-        non-file-conn (get-conn repo false)
-        non-file-db (when non-file-conn (d/db non-file-conn))
-        file-db-str (if file-db (db->string file-db) "")
-        non-file-db-str (if non-file-db (db->string non-file-db) "")]
-    (p/let [_ (idb/set-batch! [{:key file-key :value file-db-str}
-                               {:key non-file-key :value non-file-db-str}])]
-      (state/set-last-persist-transact-id! repo true (get-max-tx-id file-db))
-      (state/set-last-persist-transact-id! repo false (get-max-tx-id non-file-db)))))
+  (let [key (datascript-db repo)
+        conn (get-conn repo false)]
+    (when conn
+      (let [db (d/db conn)
+            db-str (if db (db->string db) "")]
+        (p/let [_ (idb/set-batch! [{:key key :value db-str}])]
+          (state/set-last-persist-transact-id! repo false (get-max-tx-id db)))))))
 
 (defonce persistent-jobs (atom {}))
 
@@ -110,31 +102,27 @@
 ;; TODO: pass as a parameter
 (defonce *sync-search-indice-f (atom nil))
 (defn- repo-listen-to-tx!
-  [repo conn files-db?]
+  [repo conn]
   (d/listen! conn :persistence
              (fn [tx-report]
                (when-not (util/electron?)
                 (let [tx-id (get-tx-id tx-report)]
                   (state/set-last-transact-time! repo (util/time-ms))
-                  ;; (state/persist-transaction! repo files-db? tx-id (:tx-data tx-report))
                   (persist-if-idle! repo)))
 
                ;; rebuild search indices
-               (when-not files-db?
-                 (let [data (:tx-data tx-report)
-                       datoms (filter
-                               (fn [datom]
-                                 (contains? #{:page/name :block/content} (:a datom)))
-                               data)]
-                   (when-let [f @*sync-search-indice-f]
-                     (f datoms)))))))
+               (let [data (:tx-data tx-report)
+                     datoms (filter
+                             (fn [datom]
+                               (contains? #{:block/name :block/content} (:a datom)))
+                             data)]
+                 (when-let [f @*sync-search-indice-f]
+                   (f datoms))))))
 
 (defn- listen-and-persist!
   [repo]
-  (when-let [conn (get-files-conn repo)]
-    (repo-listen-to-tx! repo conn true))
   (when-let [conn (get-conn repo false)]
-    (repo-listen-to-tx! repo conn false)))
+    (repo-listen-to-tx! repo conn)))
 
 (defn start-db-conn!
   ([me repo]
@@ -149,17 +137,8 @@
   (let [logged? (:name me)]
     (doall
      (for [{:keys [url]} repos]
-       (let [repo url
-             db-name (datascript-files-db repo)
-             db-conn (d/create-conn db-schema/files-db-schema)]
-         (swap! conns assoc db-name db-conn)
-         (p/let [stored (idb/get-item db-name)
-                 _ (when stored
-                     (let [stored-db (string->db stored)
-                           attached-db (d/db-with stored-db
-                                                  [(me-tx stored-db me)])]
-                       (conn/reset-conn! db-conn attached-db)))
-                 db-name (datascript-db repo)
+       (let [repo url]
+         (p/let [db-name (datascript-db repo)
                  db-conn (d/create-conn db-schema/schema)
                  _ (d/transact! db-conn [{:schema/version db-schema/version}])
                  _ (swap! conns assoc db-name db-conn)
@@ -183,3 +162,7 @@
         (f))
       (recur))
     chan))
+
+(defn new-block-id
+  []
+  (d/squuid))

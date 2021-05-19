@@ -1,10 +1,8 @@
 (ns frontend.handler.editor.lifecycle
   (:require [frontend.state :as state]
-            [lambdaisland.glogi :as log]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [frontend.util :as util :refer-macros [profile]]
             [cljs-drag-n-drop.core :as dnd]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.handler.page :as page-handler]
@@ -22,11 +20,7 @@
         input (gdom/getElement id)]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
-    (if (= :indent-outdent (state/get-editor-op))
-      (when input
-        (when-let [pos (state/get-edit-pos)]
-          (util/set-caret-pos! input pos)))
-      (editor-handler/restore-cursor-pos! id content dummy?))
+    (editor-handler/restore-cursor-pos! id content dummy?)
 
     (when input
       (dnd/subscribe!
@@ -50,7 +44,7 @@
 
 (defn will-unmount
   [state]
-  (let [{:keys [id value format block repo dummy? config]} (get-state state)
+  (let [{:keys [id value format block repo dummy? config]} (get-state)
         file? (:file? config)]
     (when-let [input (gdom/getElement id)]
       ;; (.removeEventListener input "paste" (fn [event]
@@ -64,31 +58,9 @@
               input
               :upload-images))))
     (editor-handler/clear-when-saved!)
-    (if file?
-      (let [path (:file-path config)
-            content (db/get-file-no-sub path)
-            value (some-> (gdom/getElement path)
-                          (gobj/get "value"))]
-        (when (and
-               (not (string/blank? value))
-               (not= (string/trim value) (string/trim content)))
-          (let [old-page-name (db/get-file-page path false)
-                journal? (date/valid-journal-title? path)]
-            (p/let [[journal? new-name] (page-handler/rename-when-alter-title-property! old-page-name path format content value)]
-              (if (and journal? new-name (not= old-page-name (string/lower-case new-name)))
-                (notification/show! "Journal title can't be changed." :warning)
-                (let [new-name (if journal? (date/journal-title->default new-name) new-name)
-                      new-path (if new-name
-                                (if (and
-                                     new-name old-page-name
-                                     (= (string/lower-case new-name) (string/lower-case old-page-name)))
-                                  path
-                                  (page-handler/compute-new-file-path path new-name))
-                                path)]
-                  (file/alter-file (state/get-current-repo) new-path (string/trim value)
-                                   {:re-render-root? true})))))))
-      (when-not (contains? #{:insert :indent-outdent :auto-save} (state/get-editor-op))
-        (editor-handler/save-block! (get-state state) value))))
+    ;; TODO: ugly
+    (when-not (contains? #{:insert :indent-outdent :auto-save :undo :redo} (state/get-editor-op))
+      (editor-handler/save-block! (get-state) value)))
   state)
 
 (def lifecycle

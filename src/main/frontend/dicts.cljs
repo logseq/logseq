@@ -1,76 +1,15 @@
 (ns frontend.dicts
-  (:require [tongue.core :as tongue]
-            [frontend.config :as config]))
-
-;; TODO
-;; - [ ] Localizing Number Formats
-;; - [ ] Localizing Dates
-
+  (:require [frontend.config :as config]
+            [shadow.resource :as rc]
+            [tongue.core :as tongue]))
 
 (def dicts
-  {:en {:tutorial/text "---
-title: $today
----
-
-## Hi, welcome to Logseq!
-:PROPERTIES:
-:heading: true
-:END:
-## Logseq is a _privacy-first_, _open-source_ platform for _knowledge_ sharing and management.
-## This is a 3 minute tutorial on how to use Logseq. Let's get started!
-## (Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the **top-right** corner of the screen to connect Logseq to either Github or local directory.)
-## Here are some tips might be useful.
-#+BEGIN_TIP
-Click to edit any block.
-Type `Enter` to create a new block.
-Type `Shift+Enter` to create a new line.
-Type `/` to show all the commands.
-#+END_TIP
-## 1. Let's create a page called [[How to take dummy notes?]]. You can click it to go to that page, or you can `Shift+Click` to open it in the right sidebar! Now you should see both _Linked References_ and _Unlinked References_.
-## 2. Let's reference some blocks on [[How to take dummy notes?]], you can `Shift+Click` any block reference to open it in the right sidebar. Try making
-some changes on the right sidebar, those referenced blocks will be changed too!
-### ((5f713e91-8a3c-4b04-a33a-c39482428e2d)) : This is a block reference.
-### ((5f713ea8-8cba-403d-ac00-9964b1ec7190)) : This is another block reference.
-## 3. Do you support tags?
-### Of course, this is a #dummy tag.
-## 4. Do you support tasks like todo/doing/done and priorities?
-### Yes, type `/` and pick your favorite todo keyword or priority (A/B/C).
-### NOW [#A] A dummy tutorial on \"How to take dummy notes?\"
-### LATER [#A] Check out this awesome video by [:a {:href \"https://twitter.com/EdTravelling\" :target \"_blank\"} \"@EdTravelling\"], which shows how to use logseq to open your local directory.
-
-[:div.video-wrapper.mb-4
-        [:iframe
-         {:allowFullScreen \"allowfullscreen\"
-          :allow
-          \"accelerometer; autoplay; encrypted-media; gyroscope\"
-        :frameBorder \"0\"
-        :src \"https://www.youtube.com/embed/Afmqowr0qEQ\"
-        :height \"367\"
-        :width \"653\"}]]
-### DONE Create a page
-### CANCELED [#C] Write a page with more than 1000 blocks
-## That's it! You can create more bullets or open a local directory to import some notes now!
-## You can also download our desktop app at https://github.com/logseq/logseq/releases
-"
-        :tutorial/dummy-notes "---
-title: How to take dummy notes?
----
-
-## Hello, I'm a block!
-:PROPERTIES:
-:id: 5f713e91-8a3c-4b04-a33a-c39482428e2d
-:END:
-### I'm a child block!
-### I'm another child block!
-## Hey, I'm another block!
-:PROPERTIES:
-:id: 5f713ea8-8cba-403d-ac00-9964b1ec7190
-:END:
-"
+  {:en {:tutorial/text (rc/inline "tutorial-en.md")
+        :tutorial/dummy-notes (rc/inline "dummy-notes-en.md")
         :on-boarding/title "Hi, welcome to Logseq!"
         :on-boarding/sharing "sharing"
         :on-boarding/is-a " is a "
-        :on-boarding/vision "A privacy-first, open-source platform for knowledge sharing and management."
+        :on-boarding/vision "A privacy-first, open-source platform for knowledge management and collaboration."
         :on-boarding/local-first "local-first"
         :on-boarding/non-linear "non-linear"
         :on-boarding/outliner "outliner"
@@ -134,42 +73,15 @@ title: How to take dummy notes?
         :help/block-reference "Block Reference"
         :help/key-commands "Key Commands"
         :help/working-with-lists " (working with lists)"
-        :help/indent-block-tab "Indent Block Tab"
-        :help/unindent-block "Unindent Block"
-        :help/move-block-up "Move Block Up"
-        :help/move-block-down "Move Block Down"
-        :help/create-new-block "Create New Block"
-        :help/new-line-in-block "New Line in Block"
         :help/select-nfs-browser "Please use another browser (like latest chrome) which support NFS features to open local directory."
         :undo "Undo"
         :redo "Redo"
-        :help/zoom-in "Zoom In/Forward"
-        :help/zoom-out "Zoom out/Back"
-        :help/follow-link-under-cursor "Follow link under cursor"
-        :help/open-link-in-sidebar "Open link in Sidebar"
-        :expand "Expand"
-        :collapse "Collapse"
-        :select-block-above "Select Block Above"
-        :select-block-below "Select Block Below"
-        :select-all-blocks "Select All Blocks"
         :general "General"
         :more "More"
         :search/result-for "Search result for "
         :search/items "items"
-        :help/toggle "Toggle help"
-        :help/git-commit-message "Git commit message"
-        :help/full-text-search "Full Text Search"
-        :help/page-search "Search in the current page"
         :help/context-menu "Context Menu"
         :help/fold-unfold "Fold/Unfold blocks (when not in edit mode)"
-        :help/toggle-doc-mode "Toggle document mode"
-        :help/toggle-contents "Toggle Contents"
-        :help/toggle-theme "Toggle between dark/light theme"
-        :help/toggle-right-sidebar "Toggle right sidebar"
-        :help/toggle-settings "Toggle settings"
-        :help/toggle-insert-new-block "Toggle Enter/Alt+Enter for inserting new block"
-        :help/jump-to-journals "Jump to Journals"
-        :formatting "Formatting"
         :help/markdown-syntax "Markdown syntax"
         :help/org-mode-syntax "Org mode syntax"
         :bold "Bold"
@@ -222,12 +134,11 @@ title: How to take dummy notes?
         :project/location "All published pages will be located under"
         :project/sync-settings "Sync project settings"
         :page/presentation-mode "Presentation mode (Powered by Reveal.js)"
-        :page/edit-properties-placeholder "Click here to edit this page's properties"
+        :page/edit-properties-placeholder "Properties"
         :page/delete-success "Page {1} was deleted successfully!"
         :page/delete-confirmation "Are you sure you want to delete this page and its file?"
         :page/rename-to "Rename \"{1}\" to:"
         :page/priority "Priority \"{1}\""
-        :page/re-index "Re-index this page"
         :page/copy-to-json "Copy the whole page as JSON"
         :page/rename "Rename page"
         :page/open-in-finder "Open in directory"
@@ -244,7 +155,7 @@ title: How to take dummy notes?
         :page/show-journals "Show Journals"
         :page/show-name "Show page name"
         :page/hide-name "Hide page name"
-        :page/name "Page name"
+        :block/name "Page name"
         :page/last-modified "Last modified at"
         :page/new-title "What's your new page title?"
         :page/earlier "Earlier"
@@ -291,6 +202,8 @@ title: How to take dummy notes?
         :content/click-to-edit "Click to edit"
         :settings-page/edit-config-edn "Edit config.edn (for current repo)"
         :settings-page/show-brackets "Show brackets"
+        :settings-page/disable-sentry "Disable Sentry.io (for error tracking)"
+        :settings-page/preferred-outdenting "Enable logical outdenting"
         :settings-page/custom-date-format "Preferred journal format"
         :settings-page/preferred-file-format "Preferred file format"
         :settings-page/preferred-workflow "Preferred workflow"
@@ -300,6 +213,8 @@ title: How to take dummy notes?
         :settings-page/home-default-page "Set the default home page"
         :settings-page/enable-block-time "Enable block timestamps"
         :settings-page/dont-use-other-peoples-proxy-servers "Don't use other people's proxy servers. It's very dangerous, which could make your token and notes stolen. Logseq will not be responsible for this loss if you use other people's proxy servers. You can deploy it yourself, check "
+        :settings-page/clear-cache "Clear cache"
+        :settings-page/clear "Clear"
         :settings-page/custom-cors-proxy-server "Custom CORS proxy server"
         :settings-page/developer-mode "Developer mode"
         :settings-page/enable-developer-mode "Enable developer mode"
@@ -331,6 +246,7 @@ title: How to take dummy notes?
         :export-markdown "Export as Markdown"
         :export-public-pages "Export public pages"
         :export-edn "Export as EDN"
+        :convert-markdown "Convert Markdown headings to unordered lists (# -> -)"
         :all-graphs "All graphs"
         :all-pages "All pages"
         :all-files "All files"
@@ -362,7 +278,9 @@ title: How to take dummy notes?
         :open-a-directory "Open a local directory"
         :user/delete-account "Delete account"
         :user/delete-your-account "Delete your account"
-        :user/delete-account-notice "All your published pages on logseq.com will be deleted."}
+        :user/delete-account-notice "All your published pages on logseq.com will be deleted."
+
+        :help/shortcut-page-title "Learn & Customize Shortcuts"}
 
    :de {:help/about "Über Logseq"
         :help/bug "Fehlerbericht"
@@ -382,36 +300,12 @@ title: How to take dummy notes?
         :help/block-reference "Blockverweis"
         :help/key-commands "Tastenbefehle"
         :help/working-with-lists " (mit Listen arbeiten)"
-        :help/indent-block-tab "Block einrücken"
-        :help/unindent-block "Block ausrücken"
-        :help/move-block-up "Block nach oben verschieben"
-        :help/move-block-down "Block nach unten verschieben"
-        :help/create-new-block "Neuen Block erstellen"
-        :help/new-line-in-block "Neue Zeile innerhalb des Blocks erstellen"
         :help/select-nfs-browser "Bitte einen anderen Browser verwenden (z. B. den neuesten Chrome), der NFS-Funktionen unterstützt, um lokale Verzeichnisse zu öffnen."
         :undo "Rückgängig machen"
         :redo "Wiederholen"
-        :help/zoom-in "Heranzoomen"
-        :help/zoom-out "Herauszoomen"
-        :help/follow-link-under-cursor "Link unter dem Cursor folgen"
-        :help/open-link-in-sidebar "Link in Seitenleiste öffnen"
-        :expand "Erweitern"
-        :collapse "Zusammenklappen"
-        :select-block-above "Block oberhalb auswählen"
-        :select-block-below "Block unterhalb auswählen"
-        :select-all-blocks "Alle Blöcke auswählen"
         :general "Allgemein"
-        :help/toggle "Hilfe aktivieren"
-        :help/git-commit-message "Git Commit-Nachricht"
-        :help/full-text-search "Volltextsuche"
         :help/context-menu "Kontextmenü"
         :help/fold-unfold "Blöcke ein-/ausklappen (wenn nicht im Bearbeitungsmodus)"
-        :help/toggle-doc-mode "Dokumentenmodus umschalten"
-        :help/toggle-theme "Umschalten zwischen dunklem/hellem Thema"
-        :help/toggle-right-sidebar "Rechte Seitenleiste umschalten"
-        :help/toggle-insert-new-block "Umschalten von Enter/Alt+Enter zum Einfügen eines neuen Blocks"
-        :help/jump-to-journals "Zu Journalen springen"
-        :formatting "Formatierung"
         :help/markdown-syntax "Markdown-Syntax"
         :help/org-mode-syntax "Org-Mode-Syntax"
         :bold "Fett"
@@ -468,7 +362,6 @@ title: How to take dummy notes?
         :page/delete-confirmation "Diese Seite und die zugehörige Datei löschen?"
         :page/rename-to "\"{1}\" umbenennen nach:"
         :page/priority "Priorität \"{1}\""
-        :page/re-index "Diese Seite neu indizieren"
         :page/copy-to-json "Gesamte Seite als JSON kopieren"
         :page/rename "Seite umbenennen"
         :page/open-in-finder "Im Verzeichnis öffnen"
@@ -485,7 +378,7 @@ title: How to take dummy notes?
         :page/show-journals "Journal anzeigen"
         :page/show-name "Seitennamen anzeigen"
         :page/hide-name "Seitennamen verbergen"
-        :page/name "Seitenname"
+        :block/name "Seitenname"
         :page/last-modified "Zuletzt geändert am"
         :page/new-title "Wie lautet der neue Seitenname?"
         :publishing/pages "Seiten"
@@ -609,36 +502,12 @@ title: How to take dummy notes?
         :help/block-reference "Référence à un Bloc"
         :help/key-commands "Key Commands"
         :help/working-with-lists " (working with lists)"
-        :help/indent-block-tab "Indenter un Bloc vers la droite"
-        :help/unindent-block "Indenter un Bloc vers la gauche"
-        :help/move-block-up "Déplacer un bloc au dessus"
-        :help/move-block-down "Déplacer un bloc en dessous"
-        :help/create-new-block "Créer un nouveau bloc"
-        :help/new-line-in-block "Aller à la ligne dans un bloc"
         :help/select-nfs-browser "Please use another browser (like latest chrome) which support NFS features to open local directory."
         :undo "Annuler"
         :redo "Redo"
-        :help/zoom-in "Zoomer"
-        :help/zoom-out "Dézoomer"
-        :help/follow-link-under-cursor "Suivre le lien sous le curseur"
-        :help/open-link-in-sidebar "Ouvrir le lien dans la barre latérale"
-        :expand "Etendre"
-        :collapse "Réduire"
-        :select-block-above "Sélectionner le bloc au dessus"
-        :select-block-below "Sélectionner le bloc en dessous"
-        :select-all-blocks "Sélectionner tous les blocs"
         :general "Général"
-        :help/toggle "Afficher l'aide"
-        :help/git-commit-message "Message de commit Git"
-        :help/full-text-search "Recherche globale dans le texte"
         :help/context-menu "Menu contextuel"
         :help/fold-unfold "Plier/Déplier les blocs (hors mode édition)"
-        :help/toggle-doc-mode "Intervertir le mode document"
-        :help/toggle-theme "Intervertir le thème foncé/clair"
-        :help/toggle-right-sidebar "Afficher/cacher la barre latérale"
-        :help/toggle-insert-new-block "Activer Entreée ou Alt+Enter pour insérer un bloc"
-        :help/jump-to-journals "Aller au Journal"
-        :formatting "Formats"
         :help/markdown-syntax "Syntaxe Markdown"
         :help/org-mode-syntax "Syntaxe Org mode"
         :bold "Gras"
@@ -694,7 +563,6 @@ title: How to take dummy notes?
         :page/delete-confirmation "Etes-vous sûr de vouloir supprimer la page ?"
         :page/rename-to "Renommer \"{1}\" en:"
         :page/priority "Priorité \"{1}\""
-        :page/re-index "Indexer à nouveau cette page"
         :page/copy-to-json "Copier la page au format JSON"
         :page/rename "Renommer la page"
         :page/make-public "Rendre la page publique"
@@ -708,7 +576,7 @@ title: How to take dummy notes?
         :page/show-journals "Afficher le Journal"
         :page/show-name "Afficher le nom de la page"
         :page/hide-name "Cacher le nom de la page"
-        :page/name "Nom de la page"
+        :block/name "Nom de la page"
         :page/last-modified "Dernières modifications à"
         :page/new-title "Quel est le nouveau titre de la page ?"
         :publishing/pages "Pages"
@@ -858,51 +726,25 @@ title: How to take dummy notes?
            :help/shortcuts "快捷键"
            :help/shortcuts-triggers "触发"
            :help/shortcut "快捷键"
+           :help/shortcut-page-title "完整快捷键"
            :help/slash-autocomplete "Slash 自动提示"
            :help/block-content-autocomplete "块内容 (Src, Quote, Query 等) 自动完成"
            :help/reference-autocomplete "页面引用自动补全"
            :help/block-reference "块引用"
            :help/key-commands "关键命令"
            :help/working-with-lists " (与列表相关)"
-           :help/indent-block-tab "缩进块标签"
-           :help/unindent-block "取消缩进块"
-           :help/move-block-up "向上移动块"
-           :help/move-block-down "向下移动块"
-           :help/create-new-block "创建块"
-           :help/new-line-in-block "块中新建行"
            :help/select-nfs-browser "请选择支持nfs的浏览来使用logseq本地文件夹功能, 如最新的Chrome浏览器."
            :text/image "图片"
            :asset/confirm-delete "确定要删除{1}吗?"
            :asset/physical-delete "同时删除本地文件（目前不可撤销）"
            :undo "撤销"
            :redo "重做"
-           :help/zoom-in "聚焦"
-           :help/zoom-out "退出聚焦"
-           :help/follow-link-under-cursor "跟随光标下的链接"
-           :help/open-link-in-sidebar "在侧边栏打开"
-           :expand "展开"
-           :collapse "折叠"
-           :select-block-above "选择上方的块"
-           :select-block-below "选择下方的块"
-           :select-all-blocks "选择所有块"
            :general "常规​​​​​"
            :more "更多"
            :search/result-for "更多搜索结果 "
            :search/items "条目"
-           :help/toggle "显示/关闭帮助"
-           :help/git-commit-message "提交消息"
-           :help/full-text-search "全文搜索"
-           :help/page-search "在当前页面搜索"
            :help/context-menu "右键菜单"
            :help/fold-unfold "折叠/展开方块(不在编辑模式中)"
-           :help/toggle-doc-mode "切换文档模式"
-           :help/toggle-contents "打开/关闭目录"
-           :help/toggle-theme "“在暗色/亮色主题之间切换”"
-           :help/toggle-right-sidebar "启用/关闭右侧栏"
-           :help/toggle-settings "显示/关闭设置"
-           :help/toggle-insert-new-block "切换 Enter/Alt+Enter 以插入新块"
-           :help/jump-to-journals "跳转到日记"
-           :formatting "格式化"
            :help/markdown-syntax "Markdown 语法"
            :help/org-mode-syntax "Org Mode 语法"
            :bold "粗体"
@@ -960,7 +802,6 @@ title: How to take dummy notes?
            :page/delete-confirmation "您确定要删除此页面和文件吗？"
            :page/rename-to "重命名 \"{1}\" 至："
            :page/priority "优先级 \"{1}\""
-           :page/re-index "对此页面重新建立索引"
            :page/copy-to-json "将整页以 JSON 格式复制"
            :page/rename "重命名本页"
            :page/open-in-finder "打开文件对应目录"
@@ -977,7 +818,7 @@ title: How to take dummy notes?
            :page/show-journals "显示日志"
            :page/show-name "显示页面名"
            :page/hide-name "隐藏页面名"
-           :page/name "页面名称"
+           :block/name "页面名称"
            :page/last-modified "最后更改于"
            :page/new-title "请输入新页面的名字:"
            :page/earlier "之前"
@@ -1046,6 +887,7 @@ title: How to take dummy notes?
            :re-index "重新建立索引"
            :export-json "以 JSON 格式导出"
            :export-markdown "以 Markdown 格式导出"
+           :convert-markdown "转换 Markdown 格式(Unordered list 或 Heading)"
            :unlink "解除绑定"
            :search (if config/publishing?
                      "搜索"
@@ -1088,6 +930,7 @@ title: How to take dummy notes?
            :user/delete-account "删除帐号"
            :user/delete-your-account "删除你的帐号"
            :user/delete-account-notice "你在 logseq.com 发布的页面（假如有的话）也会被删除。"}
+
 
    :zh-Hant {:on-boarding/title "你好，歡迎使用 Logseq！"
              :on-boarding/sharing "分享"
@@ -1153,36 +996,12 @@ title: How to take dummy notes?
              :help/block-reference "塊引用"
              :help/key-commands "關鍵命令"
              :help/working-with-lists " (與列表相關)"
-             :help/indent-block-tab "縮進塊標簽"
-             :help/unindent-block "取消縮進塊"
-             :help/move-block-up "向上移動塊"
-             :help/move-block-down "向下移動塊"
-             :help/create-new-block "創建塊"
-             :help/new-line-in-block "塊中新建行"
              :help/select-nfs-browser "Please use another browser (like latest chrome) which support NFS features to open local directory."
              :undo "撤銷"
              :redo "重做"
-             :help/zoom-in "聚焦"
-             :help/zoom-out "推出聚焦"
-             :help/follow-link-under-cursor "跟隨光標下的鏈接"
-             :help/open-link-in-sidebar "在側邊欄打開"
-             :expand "展開"
-             :collapse "折疊"
-             :select-block-above "選擇上方的塊"
-             :select-block-below "選擇下方的塊"
-             :select-all-blocks "選擇所有塊"
              :general "常規​​​​​"
-             :help/toggle "顯示/關閉幫助"
-             :help/git-commit-message "提交消息"
-             :help/full-text-search "全文搜索"
              :help/context-menu "右鍵菜單"
              :help/fold-unfold "折疊/展開方塊(不在編輯模式中)"
-             :help/toggle-doc-mode "切換文檔模式"
-             :help/toggle-theme "“在暗色/亮色主題之間切換”"
-             :help/toggle-right-sidebar "啟用/關閉右側欄"
-             :help/toggle-insert-new-block "切換 Enter/Alt+Enter 以插入新塊"
-             :help/jump-to-journals "跳轉到日記"
-             :formatting "格式化"
              :help/markdown-syntax "Markdown 語法"
              :help/org-mode-syntax "Org Mode 語法"
              :bold "粗體"
@@ -1237,7 +1056,6 @@ title: How to take dummy notes?
              :page/delete-confirmation "您確定要刪除此頁面嗎？"
              :page/rename-to "重命名 \"{1}\" 至："
              :page/priority "優先級 \"{1}\""
-             :page/re-index "對此頁面重新建立索引"
              :page/copy-to-json "將整頁以 JSON 格式復制"
              :page/rename "重命名本頁"
              :page/make-public "導出 HTML 時發布本頁面"
@@ -1251,7 +1069,7 @@ title: How to take dummy notes?
              :page/show-journals "顯示日志"
              :page/show-name "顯示頁面名"
              :page/hide-name "隱藏頁面名"
-             :page/name "頁面名稱："
+             :block/name "頁面名稱："
              :page/last-modified "最後更改於"
              :page/new-title "請輸入新頁面的名字:"
              :page/load-more-journals "載入更多"
@@ -1312,6 +1130,7 @@ title: How to take dummy notes?
              :re-index "重新建立索引"
              :export-json "以 JSON 格式導出"
              :export-markdown "以 Markdown 格式導出"
+             :convert-markdown "轉換 Markdown 格式(Unordered list 或 Heading)"
              :unlink "解除綁定"
              :search (if config/publishing?
                        "搜索"
@@ -1406,36 +1225,12 @@ title: How to take dummy notes?
         :help/block-reference "Blok verwysing"
         :help/key-commands "Sleutel instruksies"
         :help/working-with-lists " (werk met lyste)"
-        :help/indent-block-tab "Ingekeepte blok oortjie"
-        :help/unindent-block "Oningekeepte blok"
-        :help/move-block-up "Skuif Blok Boontoe"
-        :help/move-block-down "Skuif Blok Ondertoe"
-        :help/create-new-block "Skep 'n nuwe blok"
-        :help/new-line-in-block "Nuwe lyn in blok"
         :help/select-nfs-browser "Please use another browser (like latest chrome) which support NFS features to open local directory."
         :undo "Ontdoen"
         :redo "Herdoen"
-        :help/zoom-in "Zoem in"
-        :help/zoom-out "Zoem uit"
-        :help/follow-link-under-cursor "Volg die skakel onder die wyser"
-        :help/open-link-in-sidebar "Maak skakel in kantlys oop"
-        :expand "Brei uit"
-        :collapse "Vou in"
-        :select-block-above "Kies blok bo"
-        :select-block-below "Kies blok onder"
-        :select-all-blocks "Kies alle blokke"
         :general "Algemeen"
-        :help/toggle "Wissel help"
-        :help/git-commit-message "Jou git stoor boodskap"
-        :help/full-text-search "Volteks soek"
         :help/context-menu "Konteks kaart"
         :help/fold-unfold "Vou/ontvou blokke (wanneer nie in wysigings modus)"
-        :help/toggle-doc-mode "Wissel dokument modus"
-        :help/toggle-theme "Wissel tussen donker/lig temas"
-        :help/toggle-right-sidebar "Wissel regter sybalk"
-        :help/toggle-insert-new-block "Wissel Enter/Alt+enter vir die byvoeging van nuwe blokke"
-        :help/jump-to-journals "Spring na joernale"
-        :formatting "Formatering"
         :help/markdown-syntax "Markdown sintaksis"
         :help/org-mode-syntax "Org mode sintaksis"
         :bold "Vetdruk"
@@ -1490,7 +1285,6 @@ title: How to take dummy notes?
         :page/delete-confirmation "Is jy seker jy wil die bladsy uitvee?"
         :page/rename-to "Hernoem \"{1}\" na:"
         :page/priority "Prioriteit \"{1}\""
-        :page/re-index "Re-index this page"
         :page/copy-to-json "Kopieer die hele bladsy as JSON"
         :page/rename "Hernoem die bladsy"
         :page/delete "Delete page (will delete the file too)"
@@ -1502,7 +1296,7 @@ title: How to take dummy notes?
         :page/show-journals "Wys joernale"
         :page/show-name "Wys blad naam"
         :page/hide-name "Steek bladnaam weg"
-        :page/name "Page name"
+        :block/name "Page name"
         :page/last-modified "Laaste verander op"
         :page/new-title "Wat is die nuwe blad se titel?"
         :publishing/pages "Pages"
@@ -1569,7 +1363,6 @@ title: How to take dummy notes?
         :settings "Verstellings"
         :import "Invoer"
         :join-community "Sluit by die gemeenskap aan"
-        :discord-title "Ons discord groep!"
         :sign-out "Teken af"
         :help-shortcut-title "Kliek op die kortpad en ander wenke"
         :loading "Laai tans"
@@ -1594,5 +1387,5 @@ title: How to take dummy notes?
                 {:label "繁體中文" :value :zh-Hant}
                 {:label "Afrikaans" :value :af}])
 
-(def translate
+(defn translate [dicts]
   (tongue/build-translate dicts))
