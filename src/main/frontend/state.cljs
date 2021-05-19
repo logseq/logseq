@@ -86,7 +86,6 @@
     :editor/last-input-time nil
     :editor/new-block-toggle? false
     :editor/args nil
-    :editor/logical-outdenting? false
     :db/last-transact-time {}
     :db/last-persist-transact-ids {}
     ;; whether database is persisted
