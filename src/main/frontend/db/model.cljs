@@ -17,7 +17,8 @@
             [cljs-time.coerce :as tc]
             [frontend.util :as util :refer [react] :refer-macros [profile]]
             [frontend.db-schema :as db-schema]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [clojure.string :as string]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; correponding handlers.
@@ -1115,6 +1116,19 @@
                    :block/content (:block/content e)
                    :block/format (:block/format e)}))))))
 
+(defn get-assets
+  [datoms]
+  (keep
+   (fn [datom]
+     (when (= :block/content (:a datom))
+       (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))
+             matched (get (into [] matched) 0)
+             path (get matched 1)]
+         (when (and (string? path)
+                    (not (string/ends-with? path ".js")))
+           path))))
+   datoms))
+
 (defn clean-export!
   [db]
   (let [remove? #(contains? #{"me" "recent" "file"} %)
@@ -1122,8 +1136,9 @@
                               (fn [db datom]
                                 (let [ns (namespace (:a datom))]
                                   (not (remove? ns)))))
-        datoms (d/datoms filtered-db :eavt)]
-    @(d/conn-from-datoms datoms db-schema/schema)))
+        datoms (d/datoms filtered-db :eavt)
+        assets (get-assets datoms)]
+    [@(d/conn-from-datoms datoms db-schema/schema) assets]))
 
 (defn filter-only-public-pages-and-blocks
   [db]
@@ -1143,19 +1158,8 @@
                                              (contains? public-pages (:e datom))
                                              (contains? public-pages (:db/id (:block/page (d/entity db (:e datom)))))))))))
             datoms (d/datoms filtered-db :eavt)
-            public-assets-filesnames
-            (keep
-             (fn [datom]
-
-               (if (= :block/content (:a datom))
-                 (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))
-
-                       path (get (get (into [] matched) 0) 1)]
-                   path)))
-             datoms)]
-
-
-        [@(d/conn-from-datoms datoms db-schema/schema) (into [] public-assets-filesnames)]))))
+            assets (get-assets datoms)]
+        [@(d/conn-from-datoms datoms db-schema/schema) assets]))))
 
 (defn delete-blocks
   [repo-url files]
