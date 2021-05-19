@@ -1680,6 +1680,7 @@
   [e]
   )
 
+;; selections
 (defn on-tab
   "direction = :left|:right, only indent or outdent when blocks are siblings"
   [direction]
@@ -2350,43 +2351,17 @@
         (util/stop e)
         (delete-and-update input (dec current-pos) current-pos)))))
 
-;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
-(defn indent-on-tab
-  [state]
-  (state/set-editor-op! :indent)
-  (profile "indent on tab"
-           (let [{:keys [block block-parent-id value config]} (get-state)]
-             (when block
-               (let [current-node (outliner-core/block block)
-                     first-child? (outliner-core/first-child? current-node)]
-                 (when-not first-child?
-                   (let [left (tree/-get-left current-node)
-                         children-of-left (tree/-get-children left)]
-                     (if (seq children-of-left)
-                       (let [target-node (last children-of-left)]
-                         (outliner-core/move-subtree current-node target-node true))
-                       (outliner-core/move-subtree current-node left false))
-                     (let [repo (state/get-current-repo)]
-                       (db/refresh! repo
-                                    {:key :block/change :data [(:data current-node)]}))))))))
-  (state/set-editor-op! :nil))
-
-(defn outdent-on-shift-tab
-  ([state]
-   (outdent-on-shift-tab state 100))
-  ([state retry-limit]
-   (state/set-editor-op! :outdent)
-   (let [{:keys [block block-parent-id value config]} (get-state)
-         {:block/keys [parent page]} block
-         current-node (outliner-core/block block)
-         parent-is-page? (= parent page)]
-     (when-not parent-is-page?
-       (let [parent (tree/-get-parent current-node)]
-         (outliner-core/move-subtree current-node parent true))
-       (let [repo (state/get-current-repo)]
-         (db/refresh! repo
-                      {:key :block/change :data [(:data current-node)]}))))
-   (state/set-editor-op! nil)))
+(defn indent-outdent
+  [state indent?]
+  (state/set-editor-op! :indent-outdent)
+  (let [{:keys [block block-parent-id value config]} (get-state)]
+    (when block
+      (let [current-node (outliner-core/block block)]
+        (outliner-core/indent-outdent-nodes [current-node] indent?)
+        (let [repo (state/get-current-repo)]
+          (db/refresh! repo
+                       {:key :block/change :data [(:data current-node)]}))))
+  (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
   [direction]
@@ -2396,12 +2371,10 @@
       (when (and (not (state/get-editor-show-input))
                  (not (state/get-editor-show-date-picker?))
                  (not (state/get-editor-show-template-search?)))
-        (do (if (= :left direction)
-              (outdent-on-shift-tab state)
-              (indent-on-tab state))
-            (and input pos
-                 (when-let [input (state/get-input)]
-                   (util/move-cursor-to input pos))))))))
+        (indent-outdent state (not (= :left direction)))
+        (and input pos
+             (when-let [input (state/get-input)]
+               (util/move-cursor-to input pos)))))))
 
 (defn keydown-not-matched-handler
   [format]

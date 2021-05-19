@@ -59,7 +59,7 @@
               :upload-images))))
     (editor-handler/clear-when-saved!)
     ;; TODO: ugly
-    (when-not (contains? #{:insert :indent :outdent :auto-save :undo :redo} (state/get-editor-op))
+    (when-not (contains? #{:insert :indent-outdent :auto-save :undo :redo} (state/get-editor-op))
       (editor-handler/save-block! (get-state) value)))
   state)
 
