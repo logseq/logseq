@@ -235,10 +235,6 @@
     {:desc    "Toggle whether to display brackets"
      :binding "mod+c mod+b"
      :fn      config-handler/toggle-ui-show-brackets!}
-    :editor/toggle-outdenting
-    {:desc    "Toggle outdenting behavior"
-     :binding "mod+c mod+o"
-     :fn      config-handler/toggle-logical-outdenting!}
     :go/search-in-page
     {:desc    "Search in the current page"
      :binding "mod+shift+u"
@@ -391,7 +387,6 @@
    [:ui/toggle-help
     :ui/toggle-new-block
     :ui/toggle-wide-mode
-    :editor/toggle-outdenting
     :ui/toggle-document-mode
     :ui/toggle-brackets
     :ui/toggle-theme
