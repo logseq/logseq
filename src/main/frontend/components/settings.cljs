@@ -145,8 +145,8 @@
    [:p "- Contributed by "
     [:a {:href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978/7"}
      "@cannibalox"]]
-   [:p "See more details at " [:a "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"] "."]
-   [:image {:src "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"}]])
+   [:p "See more details at " [:a {:href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"} "here"] "."]
+   [:img {:src "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"}]])
 
 (rum/defcs settings < rum/reactive
   []
