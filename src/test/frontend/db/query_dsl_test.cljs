@@ -22,24 +22,18 @@ title: Dec 26th, 2020
 tags: [[page-tag-1]], page-tag-2
 parent: [[child page 1]]
 ---
-## DONE 26-b1 [[page 1]]
-:PROPERTIES:
-:created_at: 1608968448113
-:last_modified_at: 1608968448113
-:prop_a: val_a
-:prop_c: [[page a]], [[page b]], [[page c]]
-:END:
-## LATER 26-b2-modified-later [[page 2]] #tag1
-:PROPERTIES:
-:created_at: 1608968448114
-:last_modified_at: 1608968448120
-:prop_b: val_b
-:END:
-## DONE [#A] 26-b3 [[page 1]]
-:PROPERTIES:
-:created_at: 1608968448115
-:last_modified_at: 1608968448115
-:END:
+- DONE 26-b1 [[page 1]]
+created_at:: 1608968448113
+last_modified_at:: 1608968448113
+prop_a:: val_a
+prop_c:: [[page a]], [[page b]], [[page c]]
+- LATER 26-b2-modified-later [[page 2]] #tag1
+created_at:: 1608968448114
+last_modified_at:: 1608968448120
+prop_b:: val_b
+- DONE [#A] 26-b3 [[page 1]]
+created_at:: 1608968448115
+last_modified_at:: 1608968448115
 "}
                {:file/path "journals/2020_12_27.md"
                 :file/content "---
@@ -47,53 +41,36 @@ title: Dec 27th, 2020
 tags: page-tag-2, [[page-tag-3]]
 parent: [[child page 1]], child page 2
 ---
-## NOW [#A] b1 [[page 1]]
-:PROPERTIES:
-:created_at: 1609052958714
-:last_modified_at: 1609052958714
-:END:
-## LATER [#B] b2-modified-later [[page 2]]
-:PROPERTIES:
-:created_at: 1609052959376
-:last_modified_at: 1609052974285
-:END:
-## b3 [[page 1]]
-:PROPERTIES:
-:created_at: 1609052959954
-:last_modified_at: 1609052959954
-:prop_a: val_a
-:END:
-## b4 [[page 2]]
-:PROPERTIES:
-:created_at: 1609052961569
-:last_modified_at: 1609052961569
-:END:
-## b5
-:PROPERTIES:
-:created_at: 1609052963089
-:last_modified_at: 1609052963089
-:END:"}
+- NOW [#A] b1 [[page 1]]
+created_at:: 1609052958714
+last_modified_at:: 1609052958714
+- LATER [#B] b2-modified-later [[page 2]]
+created_at:: 1609052959376
+last_modified_at:: 1609052974285
+- b3 [[page 1]]
+created_at:: 1609052959954
+last_modified_at:: 1609052959954
+prop_a:: val_a
+- b4 [[page 2]]
+created_at:: 1609052961569
+last_modified_at:: 1609052961569
+- b5
+created_at:: 1609052963089
+last_modified_at:: 1609052963089"}
                {:file/path "journals/2020_12_28.md"
                 :file/content "---
 title: Dec 28th, 2020
 parent: child page 2
 ---
-## 28-b1 [[page 1]]
-:PROPERTIES:
-:created_at: 1609084800000
-:last_modified_at: 1609084800000
-:END:
-## 28-b2-modified-later [[page 2]]
-:PROPERTIES:
-:created_at: 1609084800001
-:last_modified_at: 1609084800020
-:END:
-## 28-b3 [[page 1]]
-:PROPERTIES:
-:created_at: 1609084800002
-:last_modified_at: 1609084800002
-:END:
-"}]]
+- 28-b1 [[page 1]]
+created_at:: 1609084800000
+last_modified_at:: 1609084800000
+- 28-b2-modified-later [[page 2]]
+created_at:: 1609084800001
+last_modified_at:: 1609084800020
+- 28-b3 [[page 1]]
+created_at:: 1609084800002
+last_modified_at:: 1609084800002"}]]
     (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})))
 
 (def parse (partial dsl/parse test-db))
@@ -136,18 +113,18 @@ parent: child page 2
   (testing "Single page query"
     (are [x y] (= (q-count x) y)
       "[[page 1]]"
-      {:query '[[?b :block/path-ref-pages [:page/name "page 1"]]]
+      {:query '[[?b :block/path-refs [:block/name "page 1"]]]
        :count 6}
 
       "[[page 2]]"
-      {:query '[[?b :block/path-ref-pages [:page/name "page 2"]]]
+      {:query '[[?b :block/path-refs [:block/name "page 2"]]]
        :count 4}))
 
   (testing "Block properties query"
     (are [x y] (= (q-count x) y)
       "(property prop_a val_a)"
       {:query '[[?b :block/properties ?prop]
-                [(get ?prop "prop_a") ?v]
+                [(get ?prop :prop_a) ?v]
                 (or
                  [(= ?v "val_a")]
                  [(contains? ?v "val_a")])]
@@ -155,7 +132,7 @@ parent: child page 2
 
       "(property prop_b val_b)"
       {:query '[[?b :block/properties ?prop]
-                [(get ?prop "prop_b") ?v]
+                [(get ?prop :prop_b) ?v]
                 (or
                  [(= ?v "val_b")]
                  [(contains? ?v "val_b")])]
@@ -163,7 +140,7 @@ parent: child page 2
 
       "(and (property prop_b val_b))"
       {:query '[[?b :block/properties ?prop]
-                [(get ?prop "prop_b") ?v]
+                [(get ?prop :prop_b) ?v]
                 (or
                  [(= ?v "val_b")]
                  [(contains? ?v "val_b")])]
@@ -171,7 +148,7 @@ parent: child page 2
 
       "(and (property prop_c \"page c\"))"
       {:query '[[?b :block/properties ?prop]
-                [(get ?prop "prop_c") ?v]
+                [(get ?prop :prop_c) ?v]
                 (or
                  [(= ?v "page c")]
                  [(contains? ?v "page c")])]
@@ -180,44 +157,44 @@ parent: child page 2
       ;; TODO: optimize
       "(and (property prop_c \"page c\") (property prop_c \"page b\"))"
       {:query '([?b :block/properties ?prop]
-                [(get ?prop "prop_c") ?v]
+                [(get ?prop :prop_c) ?v]
                 (or [(= ?v "page c")] [(contains? ?v "page c")])
-                [(get ?prop "prop_c") ?v1]
+                [(get ?prop :prop_c) ?v1]
                 (or [(= ?v1 "page b")] [(contains? ?v1 "page b")]))
        :count 1}
 
       "(or (property prop_c \"page c\") (property prop_b val_b))"
       {:query '(or (and [?b :block/properties ?prop]
-                        [(get ?prop "prop_c") ?v]
+                        [(get ?prop :prop_c) ?v]
                         (or [(= ?v "page c")] [(contains? ?v "page c")]))
                    (and [?b :block/properties ?prop]
-                        [(get ?prop "prop_b") ?v]
+                        [(get ?prop :prop_b) ?v]
                         (or [(= ?v "val_b")] [(contains? ?v "val_b")])))
        :count 2}))
 
-  (testing "TODO queries"
+  (testing "task queries"
     (are [x y] (= (q-count x) y)
-      "(todo now)"
+      "(task now)"
       {:query '[[?b :block/marker ?marker]
                 [(contains? #{"NOW"} ?marker)]]
        :count 1}
 
-      "(todo NOW)"
+      "(task NOW)"
       {:query '[[?b :block/marker ?marker]
                 [(contains? #{"NOW"} ?marker)]]
        :count 1}
 
-      "(todo later)"
+      "(task later)"
       {:query '[[?b :block/marker ?marker]
                 [(contains? #{"LATER"} ?marker)]]
        :count 2}
 
-      "(todo now later)"
+      "(task now later)"
       {:query '[[?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER"} ?marker)]]
        :count 3}
 
-      "(todo [now later])"
+      "(task [now later])"
       {:query '[[?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER"} ?marker)]]
        :count 3}))
@@ -252,45 +229,46 @@ parent: child page 2
   (testing "all-page-tags queries"
     (are [x y] (= (q-count x) y)
       "(all-page-tags)"
-      {:query '[[?e :page/tags ?p]]
+      {:query '[[?e :block/tags ?p]]
        :count 3}))
 
   (testing "page-tags queries"
     (are [x y] (= (q-count x) y)
       "(page-tags [[page-tag-1]])"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-1"} ?tag1)]]
        :count 1}
 
       "(page-tags page-tag-2)"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-2"} ?tag1)]]
        :count 2}
 
       "(page-tags page-tag-1 page-tag-2)"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}
 
       "(page-tags page-TAG-1 page-tag-2)"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}
 
       "(page-tags [page-tag-1 page-tag-2])"
-      {:query '[[?p :page/tags ?t]
-                [?t :page/name ?tag1]
+      {:query '[[?p :block/tags ?t]
+                [?t :block/name ?tag1]
                 [(contains? #{"page-tag-1" "page-tag-2"} ?tag1)]]
        :count 2}))
 
   (testing "page-property queries"
     (are [x y] (= (q-count x) y)
       "(page-property parent [[child page 1]])"
-      {:query '[[?p :page/properties ?prop]
+      {:query '[[?p :block/name]
+                [?p :block/properties ?prop]
                 [(get ?prop :parent) ?v]
                 (or
                  [(= ?v "child page 1")]
@@ -298,7 +276,8 @@ parent: child page 2
        :count 2}
 
       "(page-property parent \"child page 1\")"
-      {:query '[[?p :page/properties ?prop]
+      {:query '[[?p :block/name]
+                [?p :block/properties ?prop]
                 [(get ?prop :parent) ?v]
                 (or
                  [(= ?v "child page 1")]
@@ -306,7 +285,8 @@ parent: child page 2
        :count 2}
 
       "(and (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
-      {:query '([?p :page/properties ?prop]
+      {:query '([?p :block/name]
+                [?p :block/properties ?prop]
                 [(get ?prop :parent) ?v]
                 (or [(= ?v "child page 1")] [(contains? ?v "child page 1")])
                 (or [(= ?v "child page 2")] [(contains? ?v "child page 2")]))
@@ -314,11 +294,13 @@ parent: child page 2
 
       "(or (page-property parent [[child page 1]]) (page-property parent [[child page 2]]))"
       {:query '(or (and
-                    [?p :page/properties ?prop]
+                    [?p :block/name]
+                    [?p :block/properties ?prop]
                     [(get ?prop :parent) ?v]
                     (or [(= ?v "child page 1")] [(contains? ?v "child page 1")]))
                    (and
-                    [?p :page/properties ?prop]
+                    [?p :block/name]
+                    [?p :block/properties ?prop]
                     [(get ?prop :parent) ?v]
                     (or [(= ?v "child page 2")] [(contains? ?v "child page 2")])))
        :count 3}))
@@ -327,47 +309,48 @@ parent: child page 2
   (testing "AND queries"
     (are [x y] (= (q-count x) y)
       "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/path-ref-pages [:page/name "tag1"]]
-                [?b :block/path-ref-pages [:page/name "page 2"]])
+      {:query '([?b :block/path-refs [:block/name "tag1"]]
+                [?b :block/path-refs [:block/name "page 2"]])
        :count 1})
 
     (are [x y] (= (q-count x) y)
       "(and [[tag1]] [[page 2]])"
-      {:query '([?b :block/path-ref-pages [:page/name "tag1"]]
-                [?b :block/path-ref-pages [:page/name "page 2"]])
+      {:query '([?b :block/path-refs [:block/name "tag1"]]
+                [?b :block/path-refs [:block/name "page 2"]])
        :count 1}))
 
   (testing "OR queries"
     (are [x y] (= (q-count x) y)
       "(or [[tag1]] [[page 2]])"
       {:query '(or
-                (and [?b :block/path-ref-pages [:page/name "tag1"]])
-                (and [?b :block/path-ref-pages [:page/name "page 2"]]))
+                (and [?b :block/path-refs [:block/name "tag1"]])
+                (and [?b :block/path-refs [:block/name "page 2"]]))
        :count 4}))
 
   (testing "NOT queries"
     (are [x y] (= (q-count x) y)
       "(not [[page 1]])"
       {:query '([?b :block/uuid]
-                (not [?b :block/path-ref-pages [:page/name "page 1"]]))
-       :count 8}))
+                (not [?b :block/path-refs [:block/name "page 1"]]))
+       :count 25}))
 
   (testing "Between query"
     (are [x y] (= (count-only x) y)
-      "(and (todo now later done) (between [[Dec 26th, 2020]] tomorrow))"
+      "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
       5
 
       ;; between with journal pages
-      "(and (todo now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
+      "(and (task now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
       2
 
-      ;; between with created_at
-      "(and (todo now later done) (between created_at [[Dec 26th, 2020]] tomorrow))"
-      5
+      ;; ;; between with created_at
+      ;; "(and (task now later done) (between created_at [[Dec 26th, 2020]] tomorrow))"
+      ;; 5
 
-      ;; between with last_modified_at
-      "(and (todo now later done) (between last_modified_at [[Dec 26th, 2020]] tomorrow))"
-      5))
+      ;; ;; between with last_modified_at
+      ;; "(and (task now later done) (between last_modified_at [[Dec 26th, 2020]] tomorrow))"
+      ;; 5
+      ))
 
   (testing "Nested boolean queries"
     (are [x y] (= (q-count x) y)
@@ -375,15 +358,15 @@ parent: child page 2
       {:query '([?b :block/uuid]
                 [?b :block/marker ?marker]
                 [(contains? #{"DONE"} ?marker)]
-                (not [?b :block/path-ref-pages [:page/name "page 1"]]))
+                (not [?b :block/path-refs [:block/name "page 1"]]))
        :count 0})
 
     (are [x y] (= (q-count x) y)
       "(and (todo now later) (or [[page 1]] [[page 2]]))"
       {:query '([?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER"} ?marker)]
-                (or (and [?b :block/path-ref-pages [:page/name "page 1"]])
-                    (and [?b :block/path-ref-pages [:page/name "page 2"]])))
+                (or (and [?b :block/path-refs [:block/name "page 1"]])
+                    (and [?b :block/path-refs [:block/name "page 2"]])))
        :count 3})
 
     (are [x y] (= (q-count x) y)
@@ -393,9 +376,9 @@ parent: child page 2
                  [?b :block/marker ?marker]
                  [(contains? #{"NOW" "LATER"} ?marker)]
                  (or
-                  (and [?b :block/path-ref-pages [:page/name "page 1"]])
-                  (and [?b :block/path-ref-pages [:page/name "page 2"]]))))
-       :count 11})
+                  (and [?b :block/path-refs [:block/name "page 1"]])
+                  (and [?b :block/path-refs [:block/name "page 2"]]))))
+       :count 28})
 
     ;; FIXME: not working
     ;; (are [x y] (= (q-count x) y)
@@ -412,69 +395,70 @@ parent: child page 2
                 [?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
                 (or
-                 (and [?b :block/path-ref-pages [:page/name "page 1"]])
-                 (and (not [?b :block/path-ref-pages [:page/name "page 1"]]))))
+                 (and [?b :block/path-refs [:block/name "page 1"]])
+                 (and (not [?b :block/path-refs [:block/name "page 1"]]))))
        :count 5}))
 
-  (testing "sort-by (created_at defaults to desc)"
-    (db/clear-query-state!)
-    (let [result (->> (q "(and (todo now later done)
-                               (sort-by created_at))")
-                      :result
-                      deref
-                      (map #(get-in % [:block/properties "created_at"])))]
-      (is (= result
-             '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
+  ;; (testing "sort-by (created_at defaults to desc)"
+  ;;   (db/clear-query-state!)
+  ;;   (let [result (->> (q "(and (task now later done)
+  ;;                              (sort-by created_at))")
+  ;;                     :result
+  ;;                     deref
+  ;;                     (map #(get-in % [:block/properties "created_at"])))]
+  ;;     (is (= result
+  ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
-  (testing "sort-by (created_at desc)"
-    (db/clear-query-state!)
-    (let [result (->> (q "(and (todo now later done)
-                               (sort-by created_at desc))")
-                      :result
-                      deref
-                      (map #(get-in % [:block/properties "created_at"])))]
-      (is (= result
-             '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
+  ;; (testing "sort-by (created_at desc)"
+  ;;   (db/clear-query-state!)
+  ;;   (let [result (->> (q "(and (todo now later done)
+  ;;                              (sort-by created_at desc))")
+  ;;                     :result
+  ;;                     deref
+  ;;                     (map #(get-in % [:block/properties "created_at"])))]
+  ;;     (is (= result
+  ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
-  (testing "sort-by (created_at asc)"
-    (db/clear-query-state!)
-    (let [result (->> (q "(and (todo now later done)
-                               (sort-by created_at asc))")
-                      :result
-                      deref
-                      (map #(get-in % [:block/properties "created_at"])))]
-      (is (= result
-             '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
+  ;; (testing "sort-by (created_at asc)"
+  ;;   (db/clear-query-state!)
+  ;;   (let [result (->> (q "(and (todo now later done)
+  ;;                              (sort-by created_at asc))")
+  ;;                     :result
+  ;;                     deref
+  ;;                     (map #(get-in % [:block/properties "created_at"])))]
+  ;;     (is (= result
+  ;;            '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
 
-  (testing "sort-by (last_modified_at defaults to desc)"
-    (db/clear-query-state!)
-    (let [result (->> (q "(and (todo now later done)
-                               (sort-by last_modified_at))")
-                      :result
-                      deref
-                      (map #(get-in % [:block/properties "last_modified_at"])))]
-      (is (= result
-             '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
+  ;; (testing "sort-by (last_modified_at defaults to desc)"
+  ;;   (db/clear-query-state!)
+  ;;   (let [result (->> (q "(and (todo now later done)
+  ;;                              (sort-by last_modified_at))")
+  ;;                     :result
+  ;;                     deref
+  ;;                     (map #(get-in % [:block/properties "last_modified_at"])))]
+  ;;     (is (= result
+  ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
-  (testing "sort-by (last_modified_at desc)"
-    (db/clear-query-state!)
-    (let [result (->> (q "(and (todo now later done)
-                               (sort-by last_modified_at desc))")
-                      :result
-                      deref
-                      (map #(get-in % [:block/properties "last_modified_at"])))]
-      (is (= result
-             '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
+  ;; (testing "sort-by (last_modified_at desc)"
+  ;;   (db/clear-query-state!)
+  ;;   (let [result (->> (q "(and (todo now later done)
+  ;;                              (sort-by last_modified_at desc))")
+  ;;                     :result
+  ;;                     deref
+  ;;                     (map #(get-in % [:block/properties "last_modified_at"])))]
+  ;;     (is (= result
+  ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
-  (testing "sort-by (last_modified_at desc)"
-    (db/clear-query-state!)
-    (let [result (->> (q "(and (todo now later done)
-                               (sort-by last_modified_at asc))")
-                      :result
-                      deref
-                      (map #(get-in % [:block/properties "last_modified_at"])))]
-      (is (= result
-             '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285))))))
+  ;; (testing "sort-by (last_modified_at desc)"
+  ;;   (db/clear-query-state!)
+  ;;   (let [result (->> (q "(and (todo now later done)
+  ;;                              (sort-by last_modified_at asc))")
+  ;;                     :result
+  ;;                     deref
+  ;;                     (map #(get-in % [:block/properties "last_modified_at"])))]
+  ;;     (is (= result
+  ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))
+  )
 
 (use-fixtures :once
   {:before (fn []

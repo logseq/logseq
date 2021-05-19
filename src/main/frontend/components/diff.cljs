@@ -6,6 +6,7 @@
             [frontend.handler.file :as file]
             [frontend.handler.notification :as notification]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.file :as file-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -49,9 +50,16 @@
                     :style {:background-color bg-color}}
         value]))])
 
-(rum/defc file < rum/reactive
-  [repo type path contents remote-oid]
-  (let [{:keys [collapse? resolved?]} (util/react (rum/cursor diff-state path))
+(rum/defcs file < rum/reactive
+  {:will-mount (fn [state]
+                 (let [*local-content (atom "")
+                       [repo _ path & _others] (:rum/args state)]
+                   (p/let [content (file-handler/load-file repo path )]
+                     (reset! *local-content content))
+                   (assoc state ::local-content *local-content)))}
+  [state repo type path contents remote-oid]
+  (let [local-content (rum/react (get state ::local-content))
+        {:keys [collapse? resolved?]} (util/react (rum/cursor diff-state path))
         edit? (util/react *edit?)
         delete? (= type "remove")]
     [:div.cp__diff-file
@@ -70,74 +78,73 @@
      (let [content (get contents path)]
        (if (or (and delete? (nil? content))
                content)
-         (let [local-content (db/get-file path)]
-           (if (not= content local-content)
-             (let [local-content (or local-content "")
-                   content (or content "")
-                   diff (medley/indexed (diff/diff local-content content))
-                   diff? (some (fn [[_idx {:keys [added removed]}]]
-                                 (or added removed))
-                               diff)]
-               [:div.pre-line-white-space.p-2 {:class (if collapse? "hidden")
-                                               :style {:overflow "auto"}}
-                (if edit?
-                  [:div.grid.grid-cols-2.gap-1
-                   (diff-cp diff)
-                   (ui/textarea
-                    {:default-value local-content
-                     :on-change (fn [e]
-                                  (reset! *edit-content (util/evalue e)))})]
-                  (diff-cp diff))
+         (if (not= content local-content)
+           (let [local-content (or local-content "")
+                 content (or content "")
+                 diff (medley/indexed (diff/diff local-content content))
+                 diff? (some (fn [[_idx {:keys [added removed]}]]
+                               (or added removed))
+                             diff)]
+             [:div.pre-line-white-space.p-2 {:class (if collapse? "hidden")
+                                             :style {:overflow "auto"}}
+              (if edit?
+                [:div.grid.grid-cols-2.gap-1
+                 (diff-cp diff)
+                 (ui/textarea
+                  {:default-value local-content
+                   :on-change (fn [e]
+                                (reset! *edit-content (util/evalue e)))})]
+                (diff-cp diff))
 
-                (cond
-                  edit?
-                  [:div.mt-2
-                   (ui/button "Save"
-                              :on-click
-                              (fn []
-                                (reset! *edit? false)
-                                (let [new-content @*edit-content]
-                                  (file/alter-file repo path new-content
-                                                   {:commit? false
-                                                    :re-render-root? true})
-                                  (swap! state/state
-                                         assoc-in [:github/contents repo remote-oid path] new-content)
-                                  (mark-as-resolved path))))]
+              (cond
+                edit?
+                [:div.mt-2
+                 (ui/button "Save"
+                   :on-click
+                   (fn []
+                     (reset! *edit? false)
+                     (let [new-content @*edit-content]
+                       (file/alter-file repo path new-content
+                                        {:commit? false
+                                         :re-render-root? true})
+                       (swap! state/state
+                              assoc-in [:github/contents repo remote-oid path] new-content)
+                       (mark-as-resolved path))))]
 
-                  diff?
-                  [:div.mt-2
-                   (ui/button "Use remote"
-                              :on-click
-                              (fn []
-                                ;; overwrite the file
-                                (if delete?
-                                  (file/remove-file! repo path)
-                                  (file/alter-file repo path content
-                                                   {:commit? false
-                                                    :re-render-root? true}))
-                                (mark-as-resolved path))
-                              :background "green")
+                diff?
+                [:div.mt-2
+                 (ui/button "Use remote"
+                   :on-click
+                   (fn []
+                     ;; overwrite the file
+                     (if delete?
+                       (file/remove-file! repo path)
+                       (file/alter-file repo path content
+                                        {:commit? false
+                                         :re-render-root? true}))
+                     (mark-as-resolved path))
+                   :background "green")
 
-                   [:span.pl-2.pr-2 "or"]
+                 [:span.pl-2.pr-2 "or"]
 
-                   (ui/button "Keep local"
-                              :on-click
-                              (fn []
-                                ;; overwrite the file
-                                (swap! state/state
-                                       assoc-in [:github/contents repo remote-oid path] local-content)
-                                (mark-as-resolved path))
-                              :background "pink")
+                 (ui/button "Keep local"
+                   :on-click
+                   (fn []
+                     ;; overwrite the file
+                     (swap! state/state
+                            assoc-in [:github/contents repo remote-oid path] local-content)
+                     (mark-as-resolved path))
+                   :background "pink")
 
-                   [:span.pl-2.pr-2 "or"]
+                 [:span.pl-2.pr-2 "or"]
 
-                   (ui/button "Edit"
-                              :on-click
-                              (fn []
-                                (reset! *edit? true)))]
+                 (ui/button "Edit"
+                   :on-click
+                   (fn []
+                     (reset! *edit? true)))]
 
-                  :else
-                  nil)])))
+                :else
+                nil)]))
          [:div "loading..."]))]))
 
 ;; TODO: `n` shortcut for next diff, `p` for previous diff

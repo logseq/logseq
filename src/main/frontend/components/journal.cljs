@@ -46,9 +46,7 @@
                      false)))
                 state)}
   [blocks page document-mode?]
-  (let [start-level (or (:block/level (first blocks)) 1)
-        config {:id page
-                :start-level 2
+  (let [config {:id page
                 :editor-box editor/box
                 :document/mode? document-mode?}]
     (content/content
@@ -61,7 +59,8 @@
   (let [raw-blocks (db/get-page-blocks repo page)
         document-mode? (state/sub :document/mode?)
         blocks (->>
-                (block-handler/with-dummy-block raw-blocks format nil {:journal? true})
+                (block-handler/with-dummy-block raw-blocks format nil {:journal? true
+                                                                       :page-name page})
                 (db/with-block-refs-count repo))]
     (blocks-inner blocks page document-mode?)))
 
@@ -76,9 +75,9 @@
                     (not (config/local-db? repo))
                     (not config/publishing?)
                     today?)
-        page-entity (db/pull [:page/name (string/lower-case title)])
-        data-page-tags (when (seq (:page/tags page-entity))
-                         (let [page-names (model/get-page-names-by-ids (map :db/id (:page/tags page)))]
+        page-entity (db/pull [:block/name (string/lower-case title)])
+        data-page-tags (when (seq (:block/tags page-entity))
+                         (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                            (text/build-data-value page-names)))]
     [:div.flex-1.journal.page (cond->
                                {:class (if intro? "intro" "")}
@@ -106,7 +105,9 @@
 
      (page/today-queries repo today? false)
 
-     (reference/references title false)
+     (rum/with-key
+       (reference/references title false)
+       (str title "-refs"))
 
      (when intro? (onboarding/intro))]))
 

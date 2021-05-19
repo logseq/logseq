@@ -26,33 +26,35 @@
                      *angle-bracket-caret-pos
                      *matched-block-commands
                      *show-block-commands]]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [frontend.modules.shortcut.core :as shortcut]))
 
 (rum/defc commands < rum/reactive
   [id format]
-  (when (and (util/react *show-commands)
-             @*slash-caret-pos
-             (not (state/sub :editor/show-page-search?))
-             (not (state/sub :editor/show-block-search?))
-             (not (state/sub :editor/show-template-search?))
-             (not (state/sub :editor/show-input))
-             (not (state/sub :editor/show-date-picker?)))
-    (let [matched (util/react *matched-commands)]
-      (ui/auto-complete
-       (map first matched)
-       {:on-chosen (fn [chosen]
-                     (reset! commands/*current-command chosen)
-                     (let [command-steps (get (into {} matched) chosen)
-                           restore-slash? (or
-                                           (contains? #{"Today" "Yesterday" "Tomorrow"} chosen)
-                                           (and
-                                            (not (fn? command-steps))
-                                            (not (contains? (set (map first command-steps)) :editor/input))
-                                            (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled" "Upload an image"} chosen))))]
-                       (editor-handler/insert-command! id command-steps
-                                                       format
-                                                       {:restore? restore-slash?})))
-        :class     "black"}))))
+  (let [show-commands? (util/react *show-commands)]
+    (when (and show-commands?
+              @*slash-caret-pos
+              (not (state/sub :editor/show-page-search?))
+              (not (state/sub :editor/show-block-search?))
+              (not (state/sub :editor/show-template-search?))
+              (not (state/sub :editor/show-input))
+              (not (state/sub :editor/show-date-picker?)))
+     (let [matched (util/react *matched-commands)]
+       (ui/auto-complete
+        (map first matched)
+        {:on-chosen (fn [chosen]
+                      (reset! commands/*current-command chosen)
+                      (let [command-steps (get (into {} matched) chosen)
+                            restore-slash? (or
+                                            (contains? #{"Today" "Yesterday" "Tomorrow"} chosen)
+                                            (and
+                                             (not (fn? command-steps))
+                                             (not (contains? (set (map first command-steps)) :editor/input))
+                                             (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled" "Upload an image"} chosen))))]
+                        (editor-handler/insert-command! id command-steps
+                                                        format
+                                                        {:restore? restore-slash?})))
+         :class     "black"})))))
 
 (rum/defc block-commands < rum/reactive
   [id format]
@@ -75,7 +77,7 @@
           input (gdom/getElement id)]
       (when input
         (let [current-pos (:pos (util/get-caret-pos input))
-              edit-content (state/sub [:editor/content id])
+              edit-content (or (state/sub [:editor/content id]) "")
               edit-block (state/sub :editor/block)
               q (or
                  @editor-handler/*selected-text
@@ -114,8 +116,8 @@
         :on-enter    non-exist-block-handler
         :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a block"]
         :item-render (fn [{:block/keys [content page uuid] :as item}]
-                       (let [page (or (:page/original-name page)
-                                      (:page/name page))
+                       (let [page (or (:block/original-name page)
+                                      (:block/name page))
                              repo (state/sub :git/current-repo)
                              format (db/get-page-format page)]
 
@@ -172,16 +174,16 @@
   [parent-state parent-id]
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
    [:button.bottom-action
-    {:on-click #(editor-handler/adjust-block-level! parent-state :right)}
+    {:on-click #(editor-handler/indent-outdent parent-state true)}
     svg/indent-block]
    [:button.bottom-action
-    {:on-click #(editor-handler/adjust-block-level! parent-state :left)}
+    {:on-click #(editor-handler/indent-outdent parent-state false)}
     svg/outdent-block]
    [:button.bottom-action
-    {:on-click #(editor-handler/move-up-down % true)}
+    {:on-click (editor-handler/move-up-down true)}
     svg/move-up-block]
    [:button.bottom-action
-    {:on-click #(editor-handler/move-up-down % false)}
+    {:on-click (editor-handler/move-up-down false)}
     svg/move-down-block]
    [:button.bottom-action
     {:on-click #(commands/simple-insert! parent-id "\n" {})}
@@ -337,24 +339,11 @@
         *slash-caret-pos)))])
 
 (defn- set-up-key-down!
-  [repo state input input-id format]
+  [repo state format]
   (mixins/on-key-down
    state
-   {;; enter
-    13 (editor-handler/keydown-enter-handler state input)
-    ;; up
-    38 (editor-handler/keydown-up-down-handler input true)
-    ;; down
-    40 (editor-handler/keydown-up-down-handler input false)
-    ;; left
-    37 (editor-handler/keydown-arrow-handler input :left)
-    ;; right
-    39 (editor-handler/keydown-arrow-handler input :right)
-    ;; backspace
-    8 (editor-handler/keydown-backspace-handler repo input input-id)
-    ;; tab
-    9 (editor-handler/keydown-tab-handler input input-id)}
-   {:not-matched-handler (editor-handler/keydown-not-matched-handler input input-id format)}))
+   {}
+   {:not-matched-handler (editor-handler/keydown-not-matched-handler format)}))
 
 (defn- set-up-key-up!
   [state input input-id search-timeout]
@@ -367,32 +356,50 @@
 
 (defn- setup-key-listener!
   [state]
-  (let [{:keys [id format block]} (get-state state)
+  (let [{:keys [id format block]} (get-state)
         input-id id
         input (gdom/getElement input-id)
         repo (:block/repo block)]
-    (set-up-key-down! repo state input input-id format)
+    (set-up-key-down! repo state format)
     (set-up-key-up! state input input-id search-timeout)))
 
+(defn- get-editor-style
+  [heading-level]
+  (case heading-level
+    1 {:font-size "2em" :font-weight "bold" :margin "0.67em 0"}
+    2 {:font-size "1.5em" :font-weight "bold" :margin "0.75em 0"}
+    3 {:font-size "1.17em" :font-weight "bold" :margin "0.83em 0"}
+    4 {:font-weight "bold" :margin "1.12em 0"}
+    5 {:font-size "0.83em" :font-weight "bold" :margin "1.5em 0"}
+    6 {:font-size "0.75em" :font-weight "bold" :margin "1.67em 0"}
+    nil))
+
 (rum/defcs box < rum/reactive
+  {:init (fn [state]
+           (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
+   :did-mount (fn [state]
+                (state/set-editor-args! (:rum/args state))
+                state)}
   (mixins/event-mixin setup-key-listener!)
+  (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [on-hide dummy? node format block block-parent-id]
+  [state {:keys [on-hide dummy? node format block block-parent-id heading-level]
           :or   {dummy? false}
           :as   option} id config]
-  (let [content (state/get-edit-content)]
+  (let [content (state/get-edit-content)
+        heading-level (get state ::heading-level)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
-       :class             "mousetrap"
        :cacheMeasurements true
        :default-value     (or content "")
        :minRows           (if (state/enable-grammarly?) 2 1)
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
-       :auto-focus        false})
+       :auto-focus        false
+       :style             (get-editor-style heading-level)})
 
      ;; TODO: how to render the transitions asynchronously?
      (transition-cp

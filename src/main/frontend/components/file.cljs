@@ -1,7 +1,6 @@
 (ns frontend.components.file
   (:require [rum.core :as rum]
             [frontend.util :as util]
-            [frontend.handler.project :as project]
             [frontend.handler.export :as export-handler]
             [frontend.config :as config]
             [frontend.state :as state]
@@ -82,7 +81,7 @@
                                   :href (rfe/href :page {:name page})
                                   :on-click (fn [e]
                                               (when (gobj/get e "shiftKey")
-                                                (when-let [page (db/entity [:page/name (string/lower-case page)])]
+                                                (when-let [page (db/entity [:block/name (string/lower-case page)])]
                                                   (state/sidebar-add-block!
                                                    (state/get-current-repo)
                                                    (:db/id page)
@@ -97,9 +96,6 @@
                                 :display "inline-block"}})
           [:span.ml-1 "Please don't remove the page's title property (you can still modify it)."]])
 
-       (when (and config? (state/logged?))
-         [:a.mb-8.block {:on-click (fn [_e] (project/sync-project-settings!))}
-          (tongue :project/sync-settings)])
        (cond
          ;; image type
          (and format (contains? (config/img-formats) format))
@@ -119,7 +115,7 @@
                  mode (util/get-file-ext path)
                  mode (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} mode) "text/x-clojure" mode)]
              (lazy-editor/editor {:file? true
-                                  :file-path path} path {:data-lang mode} content nil)))
+                                  :file-path path} path {:data-lang mode} content {})))
 
          :else
          [:div (tongue :file/format-not-supported (name format))])])))

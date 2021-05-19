@@ -1,8 +1,6 @@
 (ns frontend.mixins
   (:require [rum.core :as rum]
             [goog.dom :as dom]
-            [goog.object :as gobj]
-            [frontend.keyboard :as keyboard]
             [frontend.util :refer-macros [profile]])
   (:import [goog.events EventHandler]))
 
@@ -163,32 +161,6 @@
   {:will-mount (fn [state]
                  (handler (:rum/args state))
                  state)})
-
-(defn keyboard-mixin
-  "Triggers f when key is pressed while the component is mounted.
-   if target is a function it will be called AFTER the component mounted
-   with state and should return a dom node that is the target of the listener.
-   If no target is given it is defaulted to js/window (global handler)
-   Ex:
-     (keyboard-mixin \"esc\" #(browse-to :home/home))"
-  ([key f] (keyboard-mixin key f js/window))
-  ([key f target]
-   (let [target-fn (if (fn? target) target (fn [_] target))]
-     {:did-mount
-      (fn [state]
-        (assoc state (str (name ::keyboard-listener) key)
-               (keyboard/install-shortcut! key
-                                           (fn [e] (f state e))
-                                           false
-                                           (target-fn state))))
-      :will-unmount
-      (fn [state]
-        (let [k (str (name ::keyboard-listener) key)]
-          (when-let [f (get state k)]
-            (f))
-          (dissoc state k)))})))
-
-;; also, from https://github.com/tonsky/rum/blob/75174b9ea0cf4b7a761d9293929bd40c95d35f74/doc/useful-mixins.md
 
 
 (defn perf-measure-mixin

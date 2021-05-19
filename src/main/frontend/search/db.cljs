@@ -1,6 +1,7 @@
 (ns frontend.search.db
   (:refer-clojure :exclude [empty?])
   (:require [frontend.text :as text]
+            [frontend.util.property :as property]
             [frontend.db :as db]
             [frontend.state :as state]
             [cljs-bean.core :as bean]
@@ -14,11 +15,12 @@
   (nil? (get @indices repo)))
 
 (defn block->index
-  [{:block/keys [uuid content format] :as block}]
+  [{:block/keys [uuid content format page] :as block}]
   (when-let [result (->> (text/remove-level-spaces content format)
-                         (text/remove-properties!))]
+                         (property/remove-id-property format))]
     {:id (:db/id block)
      :uuid (str uuid)
+     :page page
      :content result}))
 
 (defn build-blocks-indice
@@ -32,10 +34,10 @@
   [repo]
   (let [blocks (build-blocks-indice repo)
         indice (fuse. blocks
-                      (clj->js {:keys ["uuid" "content"]
+                      (clj->js {:keys ["uuid" "content" "page"]
                                 :shouldSort true
                                 :tokenize true
-                                :minMatchCharLength 2
+                                :minMatchCharLength 1
                                 :distance 1000
                                 :threshold 0.35}))]
     (swap! indices assoc-in [repo :blocks] indice)
@@ -52,7 +54,7 @@
                         (clj->js {:keys ["name"]
                                   :shouldSort true
                                   :tokenize true
-                                  :minMatchCharLength 2
+                                  :minMatchCharLength 1
                                   :distance 1000
                                   :threshold 0.35
                                   }))]

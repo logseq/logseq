@@ -8,6 +8,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler :as handler]
             [frontend.state :as state]
             [frontend.version :refer [version]]
             [frontend.util :as util]
@@ -134,6 +135,15 @@
          :on-click close-fn}
         "Cancel"]]]]))
 
+(rum/defc outdenting-hint
+  []
+  [:div
+   [:p "See more details at " [:a {:href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"} "here"] "."]
+   [:p "default(left) vs logical(right)"]
+   [:img {:src "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"
+          :width 500
+          :height 500}]])
+
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (state/get-preferred-format)
@@ -144,6 +154,8 @@
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
+        sentry-disabled? (state/sub :sentry/disabled?)
+        logical-outdenting? (state/logical-outdenting?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         enable-block-time? (state/enable-block-time?)
         show-brackets? (state/show-brackets?)
@@ -271,6 +283,15 @@
                  "NOW/LATER"
                  "TODO/DOING")])]]]]
 
+        (toggle "preferred_outdenting"
+                (ui/tippy {:html (outdenting-hint)
+                           :interactive true
+                           :theme "customized"}
+                          (t :settings-page/preferred-outdenting))
+                logical-outdenting?
+                (fn []
+                  (config-handler/toggle-logical-outdenting!)))
+
         (toggle "enable_timetracking"
                 (t :settings-page/enable-timetracking)
                 enable-timetracking?
@@ -337,12 +358,31 @@
        [:hr]
 
        [:div.panel-wrap
+
+        [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+         [:label.block.text-sm.font-medium.leading-5.opacity-70
+          {:for "clear_cache"}
+          (t :settings-page/clear-cache)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          [:div.max-w-lg.rounded-md.sm:max-w-xs
+           (ui/button (t :settings-page/clear)
+             :on-click (fn []
+                         (handler/clear-cache!)))]]]]
+
+       [:div.panel-wrap
         [:div.it.app-updater.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.block.text-sm.font-medium.leading-5.opacity-70
           (t :settings-page/current-version)]
          [:div.wrap.sm:mt-0.sm:col-span-2
           [:div.ver version]
           (if (util/electron?) (app-updater))]]
+
+        (toggle "disable_sentry"
+                (t :settings-page/disable-sentry)
+                sentry-disabled?
+                (fn []
+                  (let [value (not sentry-disabled?)]
+                    (state/set-sentry-disabled! value))))
 
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.block.text-sm.font-medium.leading-5.opacity-70

@@ -40,7 +40,6 @@
                                                                 (merge
                                                                  config
                                                                  {:id "slide"
-                                                                  :start-level 2
                                                                   :page-name page-name})
                                                                 build-block)]
                        (slide/slide-content false "" sections))

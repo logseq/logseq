@@ -24,10 +24,15 @@
            (str "/" (string/replace path #"^/" ""))))))
 
 (defn- write-file-impl!
-  [repo dir path content {:keys [ok-handler error-handler] :as opts} stat]
+  [this repo dir path content {:keys [ok-handler error-handler] :as opts} stat]
   (p/let [disk-mtime (when stat (gobj/get stat "mtime"))
-          db-mtime (db/get-file-last-modified-at repo path)]
-    (if (not= disk-mtime db-mtime)
+          db-mtime (db/get-file-last-modified-at repo path)
+          old-content nil
+          old-content (-> (protocol/read-file this dir path nil)
+                          (p/catch (fn [error]
+                                     "")))]
+    (if (and (not= disk-mtime db-mtime)
+             (not= (string/trim old-content) (string/trim content)))
       (js/alert (str "The file has been modified on your local disk! File path: " path
                      ", please save your changes and click the refresh button to reload it."))
       (->
@@ -57,14 +62,10 @@
       (ipc/ipc "readFile" path)))
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
     (let [path (concat-path dir path)]
-      (->
-       (p/let [stat (protocol/stat this dir path)]
-         ;; update
-         (write-file-impl! repo dir path content opts stat))
-       (p/catch
-        (fn [_error]
-             ;; create
-          (write-file-impl! repo dir path content opts nil))))))
+      (p/let [stat (p/catch
+                       (protocol/stat this dir path)
+                       (fn [_e] nil))]
+        (write-file-impl! this repo dir path content opts stat))))
   (rename! [this repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
   (stat [this dir path]

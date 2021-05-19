@@ -37,8 +37,10 @@
 
 (defn group-by-page
   [blocks]
-  (some->> blocks
-           (group-by :block/page)))
+  (if (:block/page (first blocks))
+    (some->> blocks
+             (group-by :block/page))
+    blocks))
 
 (defn group-by-file
   [blocks]
@@ -114,3 +116,8 @@
    (when-let [db (conn/get-conn repo-url)]
      (some-> (d/entity db key)
              key))))
+
+(defn q
+  [query & inputs]
+  (when-let [repo (state/get-current-repo)]
+    (apply d/q query (conn/get-conn repo) inputs)))

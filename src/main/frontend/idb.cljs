@@ -18,10 +18,12 @@
 
 (defn clear-idb!
   []
-  (p/let [_ (idb-keyval/clear store)
-          dbs (js/window.indexedDB.databases)]
-    (doseq [db dbs]
-      (js/window.indexedDB.deleteDatabase (gobj/get db "name")))))
+  (->
+   (p/let [_ (idb-keyval/clear store)
+           dbs (js/window.indexedDB.databases)]
+     (doseq [db dbs]
+       (js/window.indexedDB.deleteDatabase (gobj/get db "name"))))
+   (p/catch (fn [_e]))))
 
 (defn clear-local-storage-and-idb!
   []

@@ -67,6 +67,7 @@
 (defn recent-pages
   []
   (let [pages (->> (db/get-key-value :recent/pages)
+                   (remove nil?)
                    (remove #(= (string/lower-case %) "contents")))]
     [:div.recent-pages.text-sm.flex-col.flex.ml-3.mt-2
      (if (seq pages)
@@ -75,7 +76,7 @@
                    :href     (rfe/href :page {:name page})
                    :on-click (fn [e]
                                (when (gobj/get e "shiftKey")
-                                 (when-let [page (db/pull [:page/name (string/lower-case page)])]
+                                 (when-let [page (db/pull [:block/name (string/lower-case page)])]
                                    (state/sidebar-add-block!
                                     (state/get-current-repo)
                                     (:db/id page)
@@ -87,7 +88,7 @@
 (rum/defc contents < rum/reactive db-mixins/query
   []
   [:div.contents.flex-col.flex.ml-3
-   (when-let [contents (db/entity [:page/name "contents"])]
+   (when-let [contents (db/entity [:block/name "contents"])]
      (page/contents-page contents))])
 
 (defn build-sidebar-item
@@ -96,7 +97,7 @@
     :contents
     [[:a {:on-click (fn [e]
                       (util/stop e)
-                      (if-not (db/entity [:page/name "contents"])
+                      (if-not (db/entity [:block/name "contents"])
                         (page-handler/create! "contents")
                         (route-handler/redirect! {:to          :page
                                                   :path-params {:name "contents"}})))}
@@ -135,7 +136,7 @@
           (block-cp repo idx block-data)]]))
 
     :page
-    (let [page-name (:page/name block-data)]
+    (let [page-name (:block/name block-data)]
       [[:a {:href     (rfe/href :page {:name page-name})
             :on-click (fn [e]
                         (when (gobj/get e "shiftKey")
@@ -145,14 +146,13 @@
         (page-cp repo page-name)]])
 
     :page-presentation
-    (let [page-name (get-in block-data [:page :page/name])
+    (let [page-name (get-in block-data [:page :block/name])
           journal? (:journal? block-data)
           blocks (db/get-page-blocks repo page-name)
           blocks (if journal?
                    (rest blocks)
                    blocks)
           sections (block/build-slide-sections blocks {:id          "slide-reveal-js"
-                                                       :start-level 2
                                                        :slide?      true
                                                        :sidebar?    true
                                                        :page-name   page-name})]
@@ -297,7 +297,8 @@
               (t :right-side-bar/help)]]]
 
            (when sidebar-open?
-             [:div.mr-1.flex.align-items {:style {:z-index 999}}
+             [:div.flex.align-items {:style {:z-index 999
+                                             :margin-right 2}}
               (toggle)])]
 
            [:.sidebar-item-list.flex-1

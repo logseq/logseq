@@ -1,4 +1,4 @@
-(ns ^:no-doc api
+(ns ^:no-doc logseq.api
   (:require [frontend.db :as db]
             [frontend.state :as state]
             [datascript.core :as d]

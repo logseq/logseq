@@ -4,7 +4,7 @@
             [cljs-bean.core :as bean]
             [promesa.core :as p]
             [frontend.util :as util]
-            [frontend.text :as text]
+            [frontend.util.property :as property]
             [frontend.git :as git]
             [frontend.db :as db]
             [frontend.encrypt :as e]
@@ -15,7 +15,8 @@
             [cljs-time.format :as tf]
             [frontend.config :as config]
             ["ignore" :as Ignore]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [frontend.date :as date]))
 
 (defn get-ref
   [repo-url]
@@ -55,8 +56,8 @@
                  (js/console.dir error)))))))
 
 (defn copy-to-clipboard-without-id-property!
-  [content]
-  (util/copy-to-clipboard! (text/remove-id-property content)))
+  [format content]
+  (util/copy-to-clipboard! (property/remove-id-property format content)))
 
 (defn config-with-document-mode
   [config]
@@ -160,3 +161,9 @@
                    (do (log/error :token/failed-get-token token-m)
                        (reject)))))
              nil))))))))
+
+(defn get-page-default-properties
+  [page-name]
+  {:title page-name
+   ;; :date (date/get-date-time-string)
+   })

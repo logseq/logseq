@@ -105,8 +105,7 @@
         (and local-file (.text local-file)))))
 
   (write-file! [this repo dir path content opts]
-    (let [{:keys [old-content]} opts
-          last-modified-at (db/get-file-last-modified-at repo path)
+    (let [last-modified-at (db/get-file-last-modified-at repo path)
           parts (string/split path "/")
           basename (last parts)
           sub-dir (->> (butlast parts)
@@ -135,23 +134,22 @@
                              (config/get-file-format))
                   pending-writes (state/get-write-chan-length)
                   draw? (and path (string/ends-with? path ".excalidraw"))]
-            (if (and local-content (or old-content
-                                       ;; temporally fix
-                                       draw?) new?
-                     (or
-                      draw?
-                      ;; Writing not finished
-                      (> pending-writes 0)
-                      ;; not changed by other editors
-                      not-changed?
-                      new-created?))
-              (do
+            (p/let [_ (verify-permission repo file-handle true)
+                    _ (utils/writeFile file-handle content)
+                    file (.getFile file-handle)]
+              (if (and local-content new?
+                       (or
+                        draw?
+                        ;; Writing not finished
+                        (> pending-writes 0)
+                        ;; not changed by other editors
+                        not-changed?
+                        new-created?))
                 (p/let [_ (verify-permission repo file-handle true)
                         _ (utils/writeFile file-handle content)
                         file (.getFile file-handle)]
                   (when file
-                    (nfs-saved-handler repo path file))))
-              (do
+                    (nfs-saved-handler repo path file)))
                 (js/alert (str "The file has been modified on your local disk! File path: " path
                                ", please save your changes and click the refresh button to reload it.")))))
            ;; create file handle

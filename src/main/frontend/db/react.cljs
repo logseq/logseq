@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.date :as date]
             [frontend.util :as util :refer-macros [profile] :refer [react]]
+            [frontend.util.marker :as marker]
             [clojure.string :as string]
             [frontend.config :as config]
             [datascript.core :as d]
@@ -53,6 +54,17 @@
                              (contains? #{:blocks :block/block :custom} k)) state)
                    (into {}))]
     (reset! query-state state)))
+
+(defn get-current-repo-refs-keys
+  []
+  (when-let [current-repo (state/get-current-repo)]
+    (->>
+     (map (fn [[repo k id]]
+            (when (and (= repo current-repo)
+                       (contains? #{:block/refed-blocks :block/unlinked-refs} k))
+              [k id]))
+       (keys @query-state))
+     (remove nil?))))
 
 ;; TODO: Add components which subscribed to a specific query
 (defn add-q!
@@ -119,16 +131,12 @@
          (add-q! k nil nil result-atom identity identity identity))))))
 
 (defn q
-  [repo k {:keys [use-cache? files-db? transform-fn query-fn inputs-fn]
+  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn]
            :or {use-cache? true
-                files-db? false
                 transform-fn identity}} query & inputs]
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))]
-    (when-let [conn (if files-db?
-                      (when-let [files-conn (conn/get-files-conn repo)]
-                        (deref files-conn))
-                      (conn/get-conn repo))]
+    (when-let [conn (conn/get-conn repo)]
       (let [result-atom (:result (get @query-state k))]
         (when-let [component *query-component*]
           (add-query-component! k component))
@@ -175,7 +183,7 @@
                (date/journal-name))]
     (when page
       (let [page-name (string/lower-case page)]
-        (db-utils/entity [:page/name page-name])))))
+        (db-utils/entity [:block/name page-name])))))
 
 (defn get-current-priority
   []
@@ -192,10 +200,10 @@
         route-name (get-in match [:data :name])]
     (when (= route-name :page)
       (when-let [page-name (get-in match [:path-params :name])]
-        (and (util/marker? page-name)
+        (and (marker/marker? page-name)
              (string/upper-case page-name))))))
 
-(defn get-handler-keys
+(defn get-related-keys
   [{:keys [key data]}]
   (cond
     (coll? key)
@@ -210,7 +218,7 @@
               current-marker (get-current-marker)
               current-page-id (:db/id (get-current-page))
               {:block/keys [page]} (first blocks)
-              handler-keys (->>
+              related-keys (->>
                             (util/concat-without-nil
                              (mapcat
                               (fn [block]
@@ -233,29 +241,26 @@
 
                              (when current-page-id
                                [[:page/ref-pages current-page-id]
-                                [:page/refed-blocks current-page-id]
+                                ;; [:block/refed-blocks current-page-id]
                                 [:page/mentioned-pages current-page-id]])
 
-                             ;; refed-pages
                              (apply concat
-                                    (for [{:block/keys [ref-pages]} blocks]
-                                      (map (fn [page]
-                                             (when-let [page (db-utils/entity [:page/name (:page/name page)])]
-                                               [:page/refed-blocks (:db/id page)]))
-                                           ref-pages)))
-
-                             ;; refed-blocks
-                             (apply concat
-                                    (for [{:block/keys [ref-blocks]} blocks]
-                                      (map (fn [ref-block]
-                                             [:block/refed-blocks (last ref-block)])
-                                           ref-blocks))))
+                               (for [{:block/keys [refs]} blocks]
+                                 (mapcat (fn [ref]
+                                           (when-let [block (if (and (map? ref) (:block/name ref))
+                                                              (db-utils/entity [:block/name (:block/name ref)])
+                                                              (db-utils/entity ref))]
+                                             [[:page/blocks (:db/id (:block/page block))]
+                                              ;; [:block/refed-blocks (:db/id block)]
+                                              ]))
+                                         refs))))
                             (distinct))
               refed-pages (map
                            (fn [[k page-id]]
-                             (if (= k :page/refed-blocks)
+                             (if (= k :block/refed-blocks)
                                [:page/ref-pages page-id]))
-                           handler-keys)
+                            related-keys)
+              all-refed-blocks (get-current-repo-refs-keys)
               custom-queries (some->>
                               (filter (fn [v]
                                         (and (= (first v) (state/get-current-repo))
@@ -272,53 +277,57 @@
                                    (vec (drop 1 v)))))]
           (->>
            (util/concat-without-nil
-            handler-keys
+            related-keys
             refed-pages
+            all-refed-blocks
             custom-queries
             block-blocks)
            distinct)))
       [[key]])))
 
+(defn refresh!
+  [repo-url {:keys [key data] :as handler-opts}]
+  (let [related-keys (get-related-keys handler-opts)
+        db (conn/get-conn repo-url)]
+    (doseq [related-key related-keys]
+      (let [related-key (vec (cons repo-url related-key))]
+        (when-let [cache (get @query-state related-key)]
+          (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
+            (when (or query query-fn)
+              (let [new-result (profile
+                                "takes"
+                                (->
+                                 (cond
+                                   query-fn
+                                   (profile
+                                    "Query:"
+                                    (doall (query-fn db)))
+
+                                   inputs-fn
+                                   (let [inputs (inputs-fn)]
+                                     (apply d/q query db inputs))
+
+                                   (keyword? query)
+                                   (db-utils/get-key-value repo-url query)
+
+                                   (seq inputs)
+                                   (apply d/q query db inputs)
+
+                                   :else
+                                   (d/q query db))
+                                 transform-fn))]
+                (set-new-result! related-key new-result)))))))))
+
 (defn transact-react!
-  [repo-url tx-data {:keys [key data files-db?] :as handler-opts
-                     :or {files-db? false}}]
+  [repo-url tx-data {:keys [key data] :as handler-opts}]
   (when-not config/publishing?
     (let [repo-url (or repo-url (state/get-current-repo))
           tx-data (->> (util/remove-nils tx-data)
                        (remove nil?))
-          get-conn (fn [] (if files-db?
-                            (conn/get-files-conn repo-url)
-                            (conn/get-conn repo-url false)))]
+          get-conn (fn [] (conn/get-conn repo-url false))]
       (when (and (seq tx-data) (get-conn))
-        (let [tx-result (d/transact! (get-conn) (vec tx-data))
-              db (:db-after tx-result)
-              handler-keys (get-handler-keys handler-opts)]
-          (doseq [handler-key handler-keys]
-            (let [handler-key (vec (cons repo-url handler-key))]
-              (when-let [cache (get @query-state handler-key)]
-                (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
-                  (when (or query query-fn)
-                    (let [new-result (->
-                                      (cond
-                                        query-fn
-                                        (profile
-                                         "Query:"
-                                         (doall (query-fn db)))
-
-                                        inputs-fn
-                                        (let [inputs (inputs-fn)]
-                                          (apply d/q query db inputs))
-
-                                        (keyword? query)
-                                        (db-utils/get-key-value repo-url query)
-
-                                        (seq inputs)
-                                        (apply d/q query db inputs)
-
-                                        :else
-                                        (d/q query db))
-                                      transform-fn)]
-                      (set-new-result! handler-key new-result))))))))))))
+        (d/transact! (get-conn) (vec tx-data))
+        (refresh! repo-url handler-opts)))))
 
 (defn set-key-value
   [repo-url key value]

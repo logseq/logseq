@@ -18,6 +18,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.handler.events :as events]
             [frontend.fs.watcher-handler :as fs-watcher-handler]
             [frontend.ui :as ui]
             [goog.object :as gobj]
@@ -25,6 +27,7 @@
             [lambdaisland.glogi :as log]
             [frontend.handler.common :as common-handler]
             [electron.listener :as el]
+            [electron.ipc :as ipc]
             [frontend.version :as version]))
 
 (defn- watch-for-date!
@@ -44,11 +47,6 @@
   []
   (storage/set :db-schema db-schema/schema))
 
-(defn schema-changed?
-  []
-  (when-let [schema (storage/get :db-schema)]
-    (not= schema db-schema/schema)))
-
 (defn- get-me-and-repos
   []
   (let [me (and js/window.user (bean/->clj js/window.user))
@@ -59,14 +57,6 @@
     {:me me
      :logged? logged?
      :repos repos}))
-
-(declare restore-and-setup!)
-
-(defn clear-stores-and-refresh!
-  []
-  (p/let [_ (idb/clear-local-storage-and-idb!)]
-    (let [{:keys [me logged? repos]} (get-me-and-repos)]
-      (js/window.location.reload))))
 
 (defn restore-and-setup!
   [me repos logged?]
@@ -97,7 +87,7 @@
                                false)
                               (store-schema!))
 
-                            (nfs/ask-permission-if-local?)
+                            (state/pub-event! [:modal/nfs-ask-permission])
 
                             (page-handler/init-commands!)
                             (when (seq (:repos me))
@@ -148,16 +138,24 @@
 
 (defn init-sentry
   []
-  (let [cfg
-        {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
-         :release (util/format "logseq@%s" version/version)}]
-    (.init js/window.Sentry (clj->js cfg))))
+  (when-not (state/sentry-disabled?)
+    (let [cfg
+          {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
+           :release (util/format "logseq@%s" version/version)}]
+      (.init js/window.Sentry (clj->js cfg)))))
 
 (defn on-load-events
   []
   (let [f (fn []
             (when-not config/dev? (init-sentry)))]
     (set! js/window.onload f)))
+
+(defn clear-cache!
+  []
+  (p/let [_ (idb/clear-local-storage-and-idb!)
+          _ (when (util/electron?)
+              (ipc/ipc "clearCache"))]
+    (js/window.location.reload)))
 
 (defn start!
   [render]
@@ -173,12 +171,18 @@
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
        (state/set-indexedb-support! false)))
 
+    (events/run!)
+
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
       (restore-and-setup! me repos logged?))
+
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
-    (editor-handler/periodically-save!)
+    (shortcut/install-shortcuts!)
     (when (util/electron?)
       (el/listen!))))
+
+(defn stop! []
+  (prn "stop!"))

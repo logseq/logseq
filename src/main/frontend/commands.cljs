@@ -1,9 +1,12 @@
 (ns frontend.commands
   (:require [frontend.util :as util]
+            [frontend.util.marker :as marker]
+            [frontend.util.priority :as priority]
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.config :as config]
+            [frontend.db :as db]
             [clojure.string :as string]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -89,6 +92,20 @@
        ["NOW" (->marker "NOW")]])))
 
 ;; Credits to roamresearch.com
+
+(defn- ->heading
+  [heading]
+  [[:editor/clear-current-slash]
+   [:editor/set-heading heading]
+   [:editor/move-cursor-to-end]])
+
+(defn- markdown-headings
+  []
+  (let [format (state/get-preferred-format)]
+    (when (= (name format) "markdown")
+      (mapv (fn [level]
+              (let [heading (str "h" level)]
+                [heading (->heading (apply str (repeat level "#")))])) (range 1 7)))))
 (defn commands-map
   [get-page-ref-text]
   (->>
@@ -157,7 +174,8 @@
 
      ;; TODO:
      ;; ["Upload a file" nil]
-]
+     ]
+    (markdown-headings)
     ;; Allow user to modify or extend, should specify how to extend.
     (state/get-commands))
    (remove nil?)
@@ -176,9 +194,20 @@
   ([type]
    (->block type nil))
   ([type optional]
-   (let [left (util/format "#+BEGIN_%s"
-                           (string/upper-case type))
-         right (util/format "\n#+END_%s" (string/upper-case type))
+   (let [format (get state/get-edit-block :block/format :markdown)
+         org? (= format :org)
+         t (string/lower-case type)
+         markdown-src? (and (= format :markdown) (= t "src"))
+         left (cond
+                markdown-src?
+                "```"
+
+                :else
+                (util/format "#+BEGIN_%s"
+                             (string/upper-case type)))
+         right (if markdown-src?
+                 (str "\n```")
+                 (util/format "\n#+END_%s" (string/upper-case type)))
          template (str
                    left
                    (if optional (str " " optional) "")
@@ -207,7 +236,8 @@
      ["Src" (->block "src" "")]
      ["Query" (->block "query")]
      ["Latex export" (->block "export" "latex")]
-     ["Properties" (->properties)]
+     (when-not (= :markdown (state/get-preferred-format))
+       ["Properties" (->properties)])
      ["Note" (->block "note")]
      ["Tip" (->block "tip")]
      ["Important" (->block "important")]
@@ -243,34 +273,38 @@
    {:keys [last-pattern postfix-fn backward-pos forward-pos]
     :or {last-pattern slash}
     :as option}]
-  (let [input (gdom/getElement id)
-        edit-content (gobj/get input "value")
-        current-pos (:pos (util/get-caret-pos input))
-        prefix (subs edit-content 0 current-pos)
-        space? (when last-pattern
-                 (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
-                           (util/safe-subs prefix 0 last-index))]
-                   (not (and (string/ends-with? s "(")
-                             (or (string/starts-with? last-pattern "((")
-                                 (string/starts-with? last-pattern "[["))))))
-        prefix (if (string/blank? last-pattern)
-                 (if space?
-                   (util/concat-without-spaces prefix value)
-                   (str prefix value))
-                 (util/replace-last last-pattern prefix value space?))
-        postfix (subs edit-content current-pos)
-        postfix (if postfix-fn (postfix-fn postfix) postfix)
-        new-value (if space?
-                    (util/concat-without-spaces prefix postfix)
-                    (str prefix postfix))
-        new-pos (- (+ (count prefix)
-                      (or forward-pos 0))
-                   (or backward-pos 0))]
-    (state/set-block-content-and-last-pos! id new-value new-pos)
-    (util/move-cursor-to input
-                         (if (or backward-pos forward-pos)
-                           new-pos
-                           (+ new-pos 1)))))
+  (when-let [input (gdom/getElement id)]
+    (let [edit-content (gobj/get input "value")
+          current-pos (:pos (util/get-caret-pos input))
+          prefix (subs edit-content 0 current-pos)
+          space? (when (and last-pattern prefix)
+                   (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
+                             (util/safe-subs prefix 0 last-index))]
+                     (not (and s
+                               (string/ends-with? s "(")
+                               (or (string/starts-with? last-pattern "((")
+                                   (string/starts-with? last-pattern "[["))))))
+          space? (if (and space? (string/starts-with? last-pattern "#[["))
+                   false
+                   space?)
+          prefix (if (string/blank? last-pattern)
+                   (if space?
+                     (util/concat-without-spaces prefix value)
+                     (str prefix value))
+                   (util/replace-last last-pattern prefix value space?))
+          postfix (subs edit-content current-pos)
+          postfix (if postfix-fn (postfix-fn postfix) postfix)
+          new-value (if space?
+                      (util/concat-without-spaces prefix postfix)
+                      (str prefix postfix))
+          new-pos (- (+ (count prefix)
+                        (or forward-pos 0))
+                     (or backward-pos 0))]
+      (state/set-block-content-and-last-pos! id new-value new-pos)
+      (util/move-cursor-to input
+                           (if (or backward-pos forward-pos)
+                             new-pos
+                             (+ new-pos 1))))))
 
 (defn simple-insert!
   [id value
@@ -402,7 +436,7 @@
 
 (defn compute-pos-delta-when-change-marker
   [current-input edit-content new-value marker pos]
-  (let [old-marker (some->> (first (re-find format/bare-marker-pattern edit-content))
+  (let [old-marker (some->> (first (re-find marker/bare-marker-pattern edit-content))
                             (string/trim))
         old-marker (if old-marker old-marker "")
         pos-delta (- (count marker)
@@ -427,7 +461,7 @@
                     (count (re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
-                                                 format/marker-pattern
+                                                 marker/marker-pattern
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)
         (let [new-pos (compute-pos-delta-when-change-marker
@@ -438,24 +472,28 @@
 (defmethod handle-step :editor/set-priority [[_ priority] format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+            edit-content (gobj/get current-input "value")
+            new-priority (util/format "[#%s]" priority)
+            new-value (string/trim (priority/add-or-update-priority edit-content format new-priority))]
+        (state/set-edit-content! input-id new-value)))))
+
+(defmethod handle-step :editor/set-heading [[_ heading]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (gobj/get current-input "value")
             slash-pos (:pos @*slash-caret-pos)
-            priority-pattern  #"\[#[A|B|C]{1}\]"
+            heading-pattern  #"^#\+"
             prefix (subs edit-content 0 (dec slash-pos))
-            pos (count (re-find priority-pattern prefix))
-            new-priority (util/format "[#%s]" priority)
+            pos (count (re-find heading-pattern prefix))
             new-value (cond
-                        (re-find priority-pattern prefix)
+                        (re-find heading-pattern prefix)
                         (str (subs edit-content 0 pos)
                              (string/replace-first (subs edit-content pos)
-                                                   priority-pattern
-                                                   new-priority))
-                        (re-find format/marker-pattern edit-content)
-                        (string/replace-first edit-content format/marker-pattern
-                                              (fn [marker] (str marker new-priority " ")))
-
+                                                   heading-pattern
+                                                   heading))
                         :else
-                        (str new-priority " " (string/triml edit-content)))]
+                        (str heading " " (string/triml edit-content)))]
         (state/set-edit-content! input-id new-value)))))
 
 (defmethod handle-step :editor/search-page [[_]]

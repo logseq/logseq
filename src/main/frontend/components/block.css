@@ -74,7 +74,7 @@
 
   .resize {
     display: inline-flex;
-    /* Fix chrome missing resize handle issue. Ref: https://github.com/logseq/logseq/pull/1692/files */
+    /* Fix chrome missing resize handle issue https://bugs.chromium.org/p/chromium/issues/detail?id=1135676&q=css%20resize%20type%3DBug&can=2.*/
     transform: translate3d(0, 0, 0);
   }
 
@@ -99,6 +99,10 @@
     margin-top: 8px;
     margin-bottom: 8px;
   }
+}
+
+.block-body ul, .block-body ol, .block-body dl {
+    margin-bottom: 2em;
 }
 
 .block-children {
@@ -157,25 +161,16 @@
 }
 
 .blocks-properties {
+  padding: 4px 8px;
   background-color: var(--ls-block-properties-background-color, #f0f8ff);
 }
 
 .marker-switch {
-  font-size: 85%;
-  margin-right: 6px;
-  margin-left: 2px;
-  border-radius: 3px;
-  font-weight: 500;
-  display: inline-block;
-  text-align: center;
-  width: 16px;
-  height: 18px;
+  padding: 2px 4px;
   opacity: 0.5;
-  padding: 0 2px 0 2px;
-  border: 1px solid;
-  line-height: 1.3;
-  color: var(--ls-link-text-color, #045591);
-  cursor: pointer;
+  font-size: 85%;
+  margin: 0 2px 0 0px;
+  font-weight: 600;
 
   &:hover {
     color: var(--ls-link-text-hover-color);

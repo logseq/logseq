@@ -6,13 +6,8 @@
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.handler.file :as file-handler]
-            [frontend.handler.git :as git-handler]
             [frontend.date :as date]
-            [frontend.config :as config]
-            [frontend.storage :as storage]
-            [clojure.string :as string]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [frontend.config :as config]))
 
 (defn create-draws-directory!
   [repo]
@@ -33,12 +28,11 @@
          (p/do!
           (create-draws-directory! repo)
           (fs/write-file! repo repo-dir path data nil)
-          (git-handler/git-add repo path)
           (db/transact! repo
                         [{:file/path path
-                          :page/name file
-                          :page/file [:file/path path]
-                          :page/journal? false}]))
+                          :block/name file
+                          :block/file [:file/path path]
+                          :block/journal? false}]))
          (p/catch (fn [error]
                     (prn "Write file failed, path: " path ", data: " data)
                     (js/console.dir error))))))))

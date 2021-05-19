@@ -5,7 +5,6 @@
             [frontend.components.svg :as svg]
             [frontend.handler.route :as route]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.file :as file-handler]
             [frontend.db :as db]
             [frontend.handler.search :as search-handler]
             [frontend.ui :as ui]
@@ -141,10 +140,7 @@
 (rum/defc search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (let [new-file (when-let [ext (util/get-file-ext search-q)]
-                     (when (contains? config/mldoc-support-formats (keyword (string/lower-case ext)))
-                       [{:type :new-file}]))
-          pages (when-not all? (map (fn [page] {:type :page :data page}) pages))
+    (let [pages (when-not all? (map (fn [page] {:type :page :data page}) pages))
           files (when-not all? (map (fn [file] {:type :file :data file}) files))
           blocks (map (fn [block] {:type :block :data block}) blocks)
           search-mode (state/get-search-mode)
@@ -153,13 +149,12 @@
                              (= (string/lower-case search-q)
                                 (string/lower-case (:data (first pages)))))
                         (nil? result)
-                        (not= :global search-mode)
                         all?)
                      []
                      [{:type :new-page}])
           result (if config/publishing?
                    (concat pages files blocks)
-                   (concat new-page pages new-file files blocks))]
+                   (concat new-page pages files blocks))]
       [:div.rounded-md.shadow-lg
        {:style (merge
                 {:top 48
@@ -180,24 +175,25 @@
                         (route/redirect! {:to :page
                                           :path-params {:name data}})
 
-                        :new-file
-                        (file-handler/create! search-q)
-
                         :file
                         (route/redirect! {:to :file
                                           :path-params {:path data}})
 
                         :block
                         (let [block-uuid (uuid (:block/uuid data))
-                              page (:page/name (:block/page (db/entity [:block/uuid block-uuid])))]
-                          (route/redirect! {:to :page
-                                            :path-params {:name page}
-                                            :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))
+                              collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)]
+                          (if collapsed?
+                            (route/redirect! {:to :page
+                                              :path-params {:name (str block-uuid)}})
+                            (let [page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
+                             (route/redirect! {:to :page
+                                               :path-params {:name page}
+                                               :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))))
                         nil))
          :on-shift-chosen (fn [{:keys [type data]}]
                             (case type
                               :page
-                              (let [page (db/entity [:page/name (string/lower-case data)])]
+                              (let [page (db/entity [:block/name (string/lower-case data)])]
                                 (state/sidebar-add-block!
                                  (state/get-current-repo)
                                  (:db/id page)
@@ -213,16 +209,13 @@
                                  :block
                                  block))
 
-                              nil))
+                              nil)
+                            (search-handler/clear-search!))
          :item-render (fn [{:keys [type data]}]
                         (let [search-mode (state/get-search-mode)]
                           [:div {:class "py-2"} (case type
                                                   :new-page
                                                   [:div.text.font-bold (str (t :new-page) ": ")
-                                                   [:span.ml-1 (str "\"" search-q "\"")]]
-
-                                                  :new-file
-                                                  [:div.text.font-bold (str (t :new-file) ": ")
                                                    [:span.ml-1 (str "\"" search-q "\"")]]
 
                                                   :page
@@ -233,8 +226,8 @@
 
                                                   :block
                                                   (let [{:block/keys [page content uuid]} data
-                                                        page (or (:page/original-name page)
-                                                                 (:page/name page))
+                                                        page (or (:block/original-name page)
+                                                                 (:block/name page))
                                                         repo (state/sub :git/current-repo)
                                                         format (db/get-page-format page)]
                                                     (search-result-item "Block" (block-search-result-item repo uuid format content search-q search-mode)))
@@ -293,12 +286,12 @@
                           (js/clearTimeout @search-timeout))
                         (let [value (util/evalue e)]
                           (if (string/blank? value)
-                            (search-handler/clear-search!)
+                            (search-handler/clear-search! false)
                             (let [search-mode (state/get-search-mode)
                                   opts (if (= :page search-mode)
                                          (let [current-page (or (state/get-current-page)
                                                                 (date/today))]
-                                           {:page-db-id (:db/id (db/entity [:page/name (string/lower-case current-page)]))})
+                                           {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
                                          {})]
                               (state/set-q! value)
                               (reset! search-timeout

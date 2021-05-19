@@ -1,57 +1,59 @@
 (ns frontend.util
   #?(:clj (:refer-clojure :exclude [format]))
   (:require
-      #?(:cljs [cljs-bean.core :as bean])
-      #?(:cljs [cljs-time.coerce :as tc])
-      #?(:cljs [cljs-time.core :as t])
-      #?(:cljs [cljs-time.format :as format])
-      #?(:cljs [dommy.core :as d])
-      #?(:cljs ["/frontend/caret_pos" :as caret-pos])
-      #?(:cljs ["/frontend/selection" :as selection])
-      #?(:cljs ["/frontend/utils" :as utils])
-      #?(:cljs ["path" :as nodePath])
-      #?(:cljs [goog.dom :as gdom])
-      #?(:cljs [goog.object :as gobj])
-      #?(:cljs [goog.string :as gstring])
-      #?(:cljs [goog.string.format])
-      #?(:cljs [goog.userAgent])
-      [clojure.string :as string]
-      [clojure.pprint :refer [pprint]]
-      [clojure.walk :as walk]
-      [frontend.regex :as regex]
-      [promesa.core :as p]))
+   #?(:cljs [cljs-bean.core :as bean])
+   #?(:cljs [cljs-time.coerce :as tc])
+   #?(:cljs [cljs-time.core :as t])
+   #?(:cljs [dommy.core :as d])
+   #?(:cljs ["/frontend/caret_pos" :as caret-pos])
+   #?(:cljs ["/frontend/selection" :as selection])
+   #?(:cljs ["/frontend/utils" :as utils])
+   #?(:cljs ["path" :as nodePath])
+   #?(:cljs [goog.dom :as gdom])
+   #?(:cljs [goog.object :as gobj])
+   #?(:cljs [goog.string :as gstring])
+   #?(:cljs [goog.string.format])
+   #?(:cljs [goog.userAgent])
+   #?(:cljs [rum.core])
+   #?(:cljs [frontend.react-impls :as react-impls])
+   [clojure.string :as string]
+   [clojure.core.async :as async]
+   [clojure.pprint]
+   [clojure.walk :as walk]
+   [frontend.regex :as regex]
+   [promesa.core :as p]))
 
 #?(:cljs (goog-define NODETEST false)
    :clj (def NODETEST false))
 (defonce node-test? NODETEST)
 
 #?(:cljs
-    (extend-protocol IPrintWithWriter
-      js/Symbol
-      (-pr-writer [sym writer _]
-        (-write writer (str "\"" (.toString sym) "\"")))))
+   (extend-protocol IPrintWithWriter
+     js/Symbol
+     (-pr-writer [sym writer _]
+       (-write writer (str "\"" (.toString sym) "\"")))))
 
 #?(:cljs (defonce ^js node-path nodePath))
 #?(:cljs (defn app-scroll-container-node []
            (gdom/getElement "left-container")))
 
 #?(:cljs
-    (defn ios?
-      []
-      (utils/ios)))
+   (defn ios?
+     []
+     (utils/ios)))
 
 #?(:cljs
-    (defn safari?
-      []
-      (let [ua (string/lower-case js/navigator.userAgent)]
-        (and (string/includes? ua "webkit")
-             (not (string/includes? ua "chrome"))))))
+   (defn safari?
+     []
+     (let [ua (string/lower-case js/navigator.userAgent)]
+       (and (string/includes? ua "webkit")
+            (not (string/includes? ua "chrome"))))))
 
 #?(:cljs
-    (defn mobile?
-      []
-      (when-not node-test?
-        (re-find #"Mobi" js/navigator.userAgent))))
+   (defn mobile?
+     []
+     (when-not node-test?
+       (re-find #"Mobi" js/navigator.userAgent))))
 
 #?(:cljs
    (defn electron?
@@ -71,32 +73,32 @@
      :clj (apply clojure.core/format fmt args)))
 
 #?(:cljs
-    (defn evalue
-      [event]
-      (gobj/getValueByKeys event "target" "value")))
+   (defn evalue
+     [event]
+     (gobj/getValueByKeys event "target" "value")))
 
 #?(:cljs
-    (defn set-change-value
-      "compatible change event for React"
-      [node value]
-      (utils/triggerInputChange node value)))
+   (defn set-change-value
+     "compatible change event for React"
+     [node value]
+     (utils/triggerInputChange node value)))
 
 #?(:cljs
-    (defn p-handle
-      ([p ok-handler]
-       (p-handle p ok-handler (fn [error]
-                                (js/console.error error))))
-      ([p ok-handler error-handler]
-       (-> p
-           (p/then (fn [result]
-                     (ok-handler result)))
-           (p/catch (fn [error]
-                      (error-handler error)))))))
+   (defn p-handle
+     ([p ok-handler]
+      (p-handle p ok-handler (fn [error]
+                               (js/console.error error))))
+     ([p ok-handler error-handler]
+      (-> p
+          (p/then (fn [result]
+                    (ok-handler result)))
+          (p/catch (fn [error]
+                     (error-handler error)))))))
 
 #?(:cljs
-    (defn get-width
-      []
-      (gobj/get js/window "innerWidth")))
+   (defn get-width
+     []
+     (gobj/get js/window "innerWidth")))
 
 (defn indexed
   [coll]
@@ -127,19 +129,23 @@
 (defn json->clj
   [json-string]
   #?(:cljs
-      (-> json-string
-          (js/JSON.parse)
-          (js->clj :keywordize-keys true))))
+     (-> json-string
+         (js/JSON.parse)
+         (js->clj :keywordize-keys true))))
 
 (defn remove-nils
-  "remove pairs of key-value that has nil value from a (possibly nested) map. also transform map to nil if all of its value are nil"
+  "remove pairs of key-value that has nil value from a (possibly nested) map."
   [nm]
   (walk/postwalk
    (fn [el]
      (if (map? el)
-       (not-empty (into {} (remove (comp nil? second)) el))
+       (into {} (remove (comp nil? second)) el)
        el))
    nm))
+
+(defn remove-nils-non-nested
+  [nm]
+  (into {} (remove (comp nil? second)) nm))
 
 (defn remove-nils-or-empty
   [nm]
@@ -217,28 +223,28 @@
 (defn post
   [url body on-ok on-failed]
   #?(:cljs
-      (fetch url {:method "post"
-                  :headers {:Content-Type "application/json"}
-                  :body (js/JSON.stringify (clj->js body))}
-             on-ok
-             on-failed)))
+     (fetch url {:method "post"
+                 :headers {:Content-Type "application/json"}
+                 :body (js/JSON.stringify (clj->js body))}
+            on-ok
+            on-failed)))
 
 (defn patch
   [url body on-ok on-failed]
   #?(:cljs
-      (fetch url {:method "patch"
-                  :headers {:Content-Type "application/json"}
-                  :body (js/JSON.stringify (clj->js body))}
-             on-ok
-             on-failed)))
+     (fetch url {:method "patch"
+                 :headers {:Content-Type "application/json"}
+                 :body (js/JSON.stringify (clj->js body))}
+            on-ok
+            on-failed)))
 
 (defn delete
   [url on-ok on-failed]
   #?(:cljs
-      (fetch url {:method "delete"
-                  :headers {:Content-Type "application/json"}}
-             on-ok
-             on-failed)))
+     (fetch url {:method "delete"
+                 :headers {:Content-Type "application/json"}}
+            on-ok
+            on-failed)))
 
 (defn zero-pad
   [n]
@@ -268,62 +274,70 @@
                nil)))))
 
 #?(:cljs
-    (defn debounce
-      "Returns a function that will call f only after threshold has passed without new calls
+   (defn debounce
+     "Returns a function that will call f only after threshold has passed without new calls
       to the function. Calls prep-fn on the args in a sync way, which can be used for things like
       calling .persist on the event object to be able to access the event attributes in f"
-      ([threshold f] (debounce threshold f (constantly nil)))
-      ([threshold f prep-fn]
-       (let [t (atom nil)]
-         (fn [& args]
-           (when @t (js/clearTimeout @t))
-           (apply prep-fn args)
-           (reset! t (js/setTimeout #(do
-                                       (reset! t nil)
-                                       (apply f args))
-                                    threshold)))))))
+     ([threshold f] (debounce threshold f (constantly nil)))
+     ([threshold f prep-fn]
+      (let [t (atom nil)]
+        (fn [& args]
+          (when @t (js/clearTimeout @t))
+          (apply prep-fn args)
+          (reset! t (js/setTimeout #(do
+                                      (reset! t nil)
+                                      (apply f args))
+                                   threshold)))))))
 
 ;; Caret
 #?(:cljs
-    (defn caret-range [node]
-      (let [doc (or (gobj/get node "ownerDocument")
-                    (gobj/get node "document"))
-            win (or (gobj/get doc "defaultView")
-                    (gobj/get doc "parentWindow"))
-            selection (.getSelection win)]
-        (if selection
-          (let [range-count (gobj/get selection "rangeCount")]
-            (when (> range-count 0)
-              (let [range (-> (.getSelection win)
-                              (.getRangeAt 0))
-                    pre-caret-range (.cloneRange range)]
-                (.selectNodeContents pre-caret-range node)
-                (.setEnd pre-caret-range
-                         (gobj/get range "endContainer")
-                         (gobj/get range "endOffset"))
-                (.toString pre-caret-range))))
-          (when-let [selection (gobj/get doc "selection")]
-            (when (not= "Control" (gobj/get selection "type"))
-              (let [text-range (.createRange selection)
-                    pre-caret-text-range (.createTextRange (gobj/get doc "body"))]
-                (.moveToElementText pre-caret-text-range node)
-                (.setEndPoint pre-caret-text-range "EndToEnd" text-range)
-                (gobj/get pre-caret-text-range "text"))))))))
+   (defn caret-range [node]
+     (let [doc (or (gobj/get node "ownerDocument")
+                   (gobj/get node "document"))
+           win (or (gobj/get doc "defaultView")
+                   (gobj/get doc "parentWindow"))
+           selection (.getSelection win)]
+       (if selection
+         (let [range-count (gobj/get selection "rangeCount")]
+           (when (> range-count 0)
+             (let [range (-> (.getSelection win)
+                             (.getRangeAt 0))
+                   pre-caret-range (.cloneRange range)]
+               (.selectNodeContents pre-caret-range node)
+               (.setEnd pre-caret-range
+                        (gobj/get range "endContainer")
+                        (gobj/get range "endOffset"))
+               (.toString pre-caret-range))))
+         (when-let [selection (gobj/get doc "selection")]
+           (when (not= "Control" (gobj/get selection "type"))
+             (let [text-range (.createRange selection)
+                   pre-caret-text-range (.createTextRange (gobj/get doc "body"))]
+               (.moveToElementText pre-caret-text-range node)
+               (.setEndPoint pre-caret-text-range "EndToEnd" text-range)
+               (gobj/get pre-caret-text-range "text"))))))))
 
 #?(:cljs
-    (defn set-caret-pos!
-      [input pos]
-      (.setSelectionRange input pos pos)))
+   (defn set-caret-pos!
+     [input pos]
+     (.setSelectionRange input pos pos)))
 
 #?(:cljs
-    (defn get-caret-pos
-      [input]
-      (try
-        (let [pos ((gobj/get caret-pos "position") input)]
-          (set! pos -rect (.. input (getBoundingClientRect) (toJSON)))
-          (bean/->clj pos))
-        (catch js/Error e
-          (js/console.error e)))))
+   (defn get-caret-pos
+     [input]
+     (when input
+       (try
+         (let [pos ((gobj/get caret-pos "position") input)]
+           (set! pos -rect (.. input (getBoundingClientRect) (toJSON)))
+           (bean/->clj pos))
+         (catch js/Error e
+           (js/console.error e))))))
+
+(defn get-first-or-last-line-pos
+  [input]
+  (let [pos (.-selectionStart input)
+        value (.-value input)
+        last-newline-pos (or (string/last-index-of value \newline (dec pos)) -1)]
+    (- pos last-newline-pos 1)))
 
 (defn minimize-html
   [s]
@@ -333,17 +347,17 @@
        (string/join "")))
 
 #?(:cljs
-    (defn stop [e]
-      (doto e (.preventDefault) (.stopPropagation))))
+   (defn stop [e]
+     (doto e (.preventDefault) (.stopPropagation))))
 
 #?(:cljs
-    (defn get-fragment
-      []
-      (when-let [hash js/window.location.hash]
-        (when (> (count hash) 2)
-          (-> (subs hash 1)
-              (string/split #"\?")
-              (first))))))
+   (defn get-fragment
+     []
+     (when-let [hash js/window.location.hash]
+       (when (> (count hash) 2)
+         (-> (subs hash 1)
+             (string/split #"\?")
+             (first))))))
 
 #?(:cljs
    (defn fragment-with-anchor
@@ -366,26 +380,26 @@
                      "locked-scroll"))))
 
 #?(:cljs
-    (defn element-top [elem top]
-      (when elem
-        (if (.-offsetParent elem)
-          (let [client-top (or (.-clientTop elem) 0)
-                offset-top (.-offsetTop elem)]
-            (+ top client-top offset-top (element-top (.-offsetParent elem) top)))
-          top))))
+   (defn element-top [elem top]
+     (when elem
+       (if (.-offsetParent elem)
+         (let [client-top (or (.-clientTop elem) 0)
+               offset-top (.-offsetTop elem)]
+           (+ top client-top offset-top (element-top (.-offsetParent elem) top)))
+         top))))
 
 #?(:cljs
-    (defn scroll-to-element
-      [elem-id]
-      (when-not (re-find #"^/\d+$" elem-id)
-        (when elem-id
-          (when-let [elem (gdom/getElement elem-id)]
-            (.scroll (app-scroll-container-node)
-                     #js {:top (let [top (element-top elem 0)]
-                                 (if (< top 256)
-                                   0
-                                   (- top 80)))
-                          :behavior "smooth"}))))))
+   (defn scroll-to-element
+     [elem-id]
+     (when-not (re-find #"^/\d+$" elem-id)
+       (when elem-id
+         (when-let [elem (gdom/getElement elem-id)]
+           (.scroll (app-scroll-container-node)
+                    #js {:top (let [top (element-top elem 0)]
+                                (if (< top 256)
+                                  0
+                                  (- top 80)))
+                         :behavior "smooth"}))))))
 
 #?(:cljs
    (defn scroll-to
@@ -399,9 +413,9 @@
                     :behavior (if animate? "smooth" "auto")}))))
 
 #?(:cljs
-    (defn scroll-to-top
-      []
-      (scroll-to (app-scroll-container-node) 0 false)))
+   (defn scroll-to-top
+     []
+     (scroll-to (app-scroll-container-node) 0 false)))
 
 (defn url-encode
   [string]
@@ -412,49 +426,45 @@
   #?(:cljs (some-> string str (js/decodeURIComponent))))
 
 #?(:cljs
-    (defn link?
-      [node]
-      (contains?
-       #{"A" "BUTTON"}
-       (gobj/get node "tagName"))))
+   (defn link?
+     [node]
+     (contains?
+      #{"A" "BUTTON"}
+      (gobj/get node "tagName"))))
 
 #?(:cljs
-    (defn sup?
-      [node]
-      (contains?
-       #{"SUP"}
-       (gobj/get node "tagName"))))
+   (defn sup?
+     [node]
+     (contains?
+      #{"SUP"}
+      (gobj/get node "tagName"))))
 
 #?(:cljs
-    (defn input?
-      [node]
-      (when node
-        (contains?
-         #{"INPUT" "TEXTAREA"}
-         (gobj/get node "tagName")))))
+   (defn input?
+     [node]
+     (when node
+       (contains?
+        #{"INPUT" "TEXTAREA"}
+        (gobj/get node "tagName")))))
 
 #?(:cljs
-    (defn select?
-      [node]
-      (when node
-        (= "SELECT" (gobj/get node "tagName")))))
+   (defn select?
+     [node]
+     (when node
+       (= "SELECT" (gobj/get node "tagName")))))
 
 #?(:cljs
-    (defn details-or-summary?
-      [node]
-      (when node
-        (contains?
-         #{"DETAILS" "SUMMARY"}
-         (gobj/get node "tagName")))))
+   (defn details-or-summary?
+     [node]
+     (when node
+       (contains?
+        #{"DETAILS" "SUMMARY"}
+        (gobj/get node "tagName")))))
 
 ;; Debug
 (defn starts-with?
   [s substr]
   (string/starts-with? s substr))
-
-(defn journal?
-  [path]
-  (string/includes? path "journals/"))
 
 (defn drop-first-line
   [s]
@@ -493,38 +503,38 @@
   (take-last 2 (string/split repo-url #"/")))
 
 #?(:cljs
-    (defn get-textarea-height
-      [input]
-      (some-> input
-              (d/style)
-              (gobj/get "height")
-              (string/split #"\.")
-              first
-              (parse-int))))
+   (defn get-textarea-height
+     [input]
+     (some-> input
+             (d/style)
+             (gobj/get "height")
+             (string/split #"\.")
+             first
+             (parse-int))))
 
 #?(:cljs
-    (defn get-textarea-line-height
-      [input]
-      (try
-        (some-> input
-                (d/style)
-                (gobj/get "lineHeight")
+   (defn get-textarea-line-height
+     [input]
+     (try
+       (some-> input
+               (d/style)
+               (gobj/get "lineHeight")
                 ;; TODO: is this cross-platform?
-                (string/replace "px" "")
-                (parse-int))
-        (catch js/Error _e
-          24))))
+               (string/replace "px" "")
+               (parse-int))
+       (catch js/Error _e
+         24))))
 
 #?(:cljs
-    (defn textarea-cursor-first-row?
-      [input line-height]
-      (<= (:top (get-caret-pos input)) line-height)))
+   (defn textarea-cursor-first-row?
+     [input line-height]
+     (<= (:top (get-caret-pos input)) line-height)))
 
 #?(:cljs
-    (defn textarea-cursor-end-row?
-      [input line-height]
-      (>= (+ (:top (get-caret-pos input)) line-height)
-          (get-textarea-height input))))
+   (defn textarea-cursor-end-row?
+     [input line-height]
+     (>= (+ (:top (get-caret-pos input)) line-height)
+         (get-textarea-height input))))
 
 (defn safe-split-first [pattern s]
   (if-let [first-index (string/index-of s pattern)]
@@ -576,12 +586,12 @@
 (defn join-newline
   [& col]
   #?(:cljs
-      (let [col (remove nil? col)]
-        (reduce (fn [acc s]
-                  (if (or (= acc "") (= "\n" (last acc)))
-                    (str acc s)
-                    (str acc "\n"
-                         (.replace s #"^[\n]+" "")))) "" col))))
+     (let [col (remove nil? col)]
+       (reduce (fn [acc s]
+                 (if (or (= acc "") (= "\n" (last acc)))
+                   (str acc s)
+                   (str acc "\n"
+                        (.replace s #"^[\n]+" "")))) "" col))))
 
 ;; Add documentation
 (defn replace-first [pattern s new-value]
@@ -600,59 +610,108 @@
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
-    (defn re-pos [re s]
-      (let [re (js/RegExp. (.-source re) "g")]
-        (loop [res []]
-          (if-let [m (.exec re s)]
-            (recur (conj res [(.-index m) (first m)]))
-            res)))))
+   (defn re-pos [re s]
+     (let [re (js/RegExp. (.-source re) "g")]
+       (loop [res []]
+         (if-let [m (.exec re s)]
+           (recur (conj res [(.-index m) (first m)]))
+           res)))))
 
 #?(:cljs
-    (defn cursor-move-back [input n]
-      (let [{:keys [pos]} (get-caret-pos input)]
-        (set! (.-selectionStart input) (- pos n))
-        (set! (.-selectionEnd input) (- pos n)))))
+   (defn cursor-move-back [input n]
+     (let [{:keys [pos]} (get-caret-pos input)
+           pos (- pos n)]
+       (.setSelectionRange input pos pos))))
 
 #?(:cljs
-    (defn cursor-move-forward [input n]
-      (let [{:keys [pos]} (get-caret-pos input)]
-        (set! (.-selectionStart input) (+ pos n))
-        (set! (.-selectionEnd input) (+ pos n)))))
+   (defn cursor-move-forward [input n]
+     (when input
+       (let [{:keys [pos]} (get-caret-pos input)
+             pos (+ pos n)]
+         (.setSelectionRange input pos pos)))))
 
 #?(:cljs
-    (defn move-cursor-to [input n]
-      (set! (.-selectionStart input) n)
-      (set! (.-selectionEnd input) n)))
+   (defn move-cursor-to [input n]
+     (.setSelectionRange input n n)))
 
 #?(:cljs
-    (defn move-cursor-to-end
-      [input]
-      (let [pos (count (gobj/get input "value"))]
-        (move-cursor-to input pos))))
+   (defn move-cursor-to-end
+     [input]
+     (let [pos (count (gobj/get input "value"))]
+       (move-cursor-to input pos))))
+
+#?(:cljs
+   (defn kill-line-before!
+     [input]
+     (let [val (.-value input)
+           end (.-selectionStart input)
+           n-pos (string/last-index-of val \newline (dec end))
+           start (if n-pos (inc n-pos) 0)]
+       (.setRangeText input "" start end))))
+
+#?(:cljs
+   (defn kill-line-after!
+     [input]
+     (let [val   (.-value input)
+           start (.-selectionStart input)
+           end   (or (string/index-of val \newline start)
+                     (count val))]
+       (.setRangeText input "" start end))))
+
+#?(:cljs
+   (defn move-cursor-up
+     "Move cursor up. If EOL, always move cursor to previous EOL."
+     [input]
+     (let [val (gobj/get input "value")
+           pos (.-selectionStart input)
+           prev-idx (string/last-index-of val \newline pos)
+           pprev-idx (or (string/last-index-of val \newline (dec prev-idx)) -1)
+           cal-idx (+ pprev-idx pos (- prev-idx))]
+       (if (or (== pos (count val))
+               (> (- pos prev-idx) (- prev-idx pprev-idx)))
+         (move-cursor-to input prev-idx)
+         (move-cursor-to input cal-idx)))))
+
+#?(:cljs
+   (defn move-cursor-down
+     "Move cursor down by calculating current cursor line pos.
+  If EOL, always move cursor to next EOL."
+     [input]
+     (let [val (gobj/get input "value")
+           pos (.-selectionStart input)
+           prev-idx (or (string/last-index-of val \newline pos) -1)
+           next-idx (or (string/index-of val \newline (inc pos))
+                        (count val))
+           nnext-idx (or (string/index-of val \newline (inc next-idx))
+                        (count val))
+           cal-idx (+ next-idx pos (- prev-idx))]
+       (if (> (- pos prev-idx) (- nnext-idx next-idx))
+         (move-cursor-to input nnext-idx)
+         (move-cursor-to input cal-idx)))))
 
 ;; copied from re_com
 #?(:cljs
-    (defn deref-or-value
-      "Takes a value or an atom
+   (defn deref-or-value
+     "Takes a value or an atom
       If it's a value, returns it
       If it's a Reagent object that supports IDeref, returns the value inside it by derefing
       "
-      [val-or-atom]
-      (if (satisfies? IDeref val-or-atom)
-        @val-or-atom
-        val-or-atom)))
+     [val-or-atom]
+     (if (satisfies? IDeref val-or-atom)
+       @val-or-atom
+       val-or-atom)))
 
 ;; copied from re_com
 #?(:cljs
-    (defn now->utc
-      "Return a goog.date.UtcDateTime based on local date/time."
-      []
-      (let [local-date-time (js/goog.date.DateTime.)]
-        (js/goog.date.UtcDateTime.
-         (.getYear local-date-time)
-         (.getMonth local-date-time)
-         (.getDate local-date-time)
-         0 0 0 0))))
+   (defn now->utc
+     "Return a goog.date.UtcDateTime based on local date/time."
+     []
+     (let [local-date-time (js/goog.date.DateTime.)]
+       (js/goog.date.UtcDateTime.
+        (.getYear local-date-time)
+        (.getMonth local-date-time)
+        (.getDate local-date-time)
+        0 0 0 0))))
 
 (defn safe-subvec [xs start end]
   (if (or (neg? start)
@@ -669,69 +728,96 @@
      (subs s (min c start) (min c end)))))
 
 #?(:cljs
-    (defn get-nodes-between-two-nodes
-      [id1 id2 class]
-      (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
-        (let [id #(gobj/get % "id")
-              node-1 (gdom/getElement id1)
-              node-2 (gdom/getElement id2)
-              idx-1 (.indexOf nodes node-1)
-              idx-2 (.indexOf nodes node-2)
-              start (min idx-1 idx-2)
-              end (inc (max idx-1 idx-2))]
-          (safe-subvec (vec nodes) start end)))))
+   (defn get-nodes-between-two-nodes
+     [id1 id2 class]
+     (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
+       (let [id #(gobj/get % "id")
+             node-1 (gdom/getElement id1)
+             node-2 (gdom/getElement id2)
+             idx-1 (.indexOf nodes node-1)
+             idx-2 (.indexOf nodes node-2)
+             start (min idx-1 idx-2)
+             end (inc (max idx-1 idx-2))]
+         (safe-subvec (vec nodes) start end)))))
 
 #?(:cljs
-    (defn rec-get-block-node
-      [node]
-      (if (and node (d/has-class? node "ls-block"))
-        node
-        (and node
-             (rec-get-block-node (gobj/get node "parentNode"))))))
+   (defn get-direction-between-two-nodes
+     [id1 id2 class]
+     (when-let [nodes (array-seq (js/document.getElementsByClassName class))]
+       (let [node-1 (gdom/getElement id1)
+             node-2 (gdom/getElement id2)
+             idx-1 (.indexOf nodes node-1)
+             idx-2 (.indexOf nodes node-2)]
+         (if (>= idx-1 idx-2)
+           :up
+           :down)))))
 
 #?(:cljs
-    (defn rec-get-blocks-container
-      [node]
-      (if (and node (d/has-class? node "blocks-container"))
-        node
-        (and node
-             (rec-get-blocks-container (gobj/get node "parentNode"))))))
+   (defn rec-get-block-node
+     [node]
+     (if (and node (d/has-class? node "ls-block"))
+       node
+       (and node
+            (rec-get-block-node (gobj/get node "parentNode"))))))
 
 #?(:cljs
-    (defn rec-get-blocks-content-section
-      [node]
-      (if (and node (d/has-class? node "content"))
-        node
-        (and node
-             (rec-get-blocks-content-section (gobj/get node "parentNode"))))))
+   (defn rec-get-blocks-container
+     [node]
+     (if (and node (d/has-class? node "blocks-container"))
+       node
+       (and node
+            (rec-get-blocks-container (gobj/get node "parentNode"))))))
+
+#?(:cljs
+   (defn rec-get-blocks-content-section
+     [node]
+     (if (and node (d/has-class? node "content"))
+       node
+       (and node
+            (rec-get-blocks-content-section (gobj/get node "parentNode"))))))
+
+#?(:cljs
+   (defn node-in-viewpoint?
+     [node]
+     (let [rect (.getBoundingClientRect node)
+           height (or (.-innerHeight js/window)
+                      (.. js/document -documentElement -clientHeight))]
+       (and
+        (> (.-top rect) (.-clientHeight (d/by-id "head")))
+        (<= (.-bottom rect) height)))))
+
+#?(:cljs
+   (defn get-blocks-noncollapse []
+     (->> (d/by-class "ls-block")
+          (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
 
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
 #?(:cljs
-    (defn get-selected-nodes
-      [class-name]
-      (try
-        (when (gobj/get js/window "getSelection")
-          (let [selection (js/window.getSelection)
-                range (.getRangeAt selection 0)
-                container (-> (gobj/get range "commonAncestorContainer")
-                              (rec-get-blocks-container))
-                start-node (gobj/get range "startContainer")
-                container-nodes (array-seq (selection/getSelectedNodes container start-node))]
-            (map
-             (fn [node]
-               (if (or (= 3 (gobj/get node "nodeType"))
-                       (not (d/has-class? node class-name))) ;textnode
-                 (rec-get-block-node node)
-                 node))
-             container-nodes)))
-        (catch js/Error _e
-          nil))))
+   (defn get-selected-nodes
+     [class-name]
+     (try
+       (when (gobj/get js/window "getSelection")
+         (let [selection (js/window.getSelection)
+               range (.getRangeAt selection 0)
+               container (-> (gobj/get range "commonAncestorContainer")
+                             (rec-get-blocks-container))
+               start-node (gobj/get range "startContainer")
+               container-nodes (array-seq (selection/getSelectedNodes container start-node))]
+           (map
+            (fn [node]
+              (if (or (= 3 (gobj/get node "nodeType"))
+                      (not (d/has-class? node class-name))) ;textnode
+                (rec-get-block-node node)
+                node))
+            container-nodes)))
+       (catch js/Error _e
+         nil))))
 
 #?(:cljs
-    (defn get-input-pos
-      [input]
-      (and input (.-selectionStart input))))
+   (defn get-input-pos
+     [input]
+     (and input (.-selectionStart input))))
 
 #?(:cljs
    (defn input-start?
@@ -752,29 +838,24 @@
            (.-selectionEnd input))))
 
 #?(:cljs
-    (defn get-selected-text
-      []
-      (utils/getSelectionText)))
+   (defn get-selected-text
+     []
+     (utils/getSelectionText)))
 
 #?(:cljs (def clear-selection! selection/clearSelection))
 
 #?(:cljs
-    (defn copy-to-clipboard! [s]
-      (let [el (js/document.createElement "textarea")]
-        (set! (.-value el) s)
-        (.setAttribute el "readonly" "")
-        (set! (-> el .-style .-position) "absolute")
-        (set! (-> el .-style .-left) "-9999px")
-        (js/document.body.appendChild el)
-        (.select el)
-        (js/document.execCommand "copy")
-        (js/document.body.removeChild el))))
+   (defn copy-to-clipboard! [s]
+     (let [el (js/document.createElement "textarea")]
+       (set! (.-value el) s)
+       (.setAttribute el "readonly" "")
+       (set! (-> el .-style .-position) "absolute")
+       (set! (-> el .-style .-left) "-9999px")
+       (js/document.body.appendChild el)
+       (.select el)
+       (js/document.execCommand "copy")
+       (js/document.body.removeChild el))))
 
-(defn take-at-most
-  [s n]
-  (if (<= (count s) n)
-    s
-    (subs s 0 n)))
 (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
 (defonce exactly-uuid-pattern (re-pattern (str "^" uuid-pattern "$")))
 (defn uuid-string?
@@ -797,14 +878,11 @@
   [page-name]
   (when page-name (re-find #"\." page-name)))
 
-;; Remove rum *reactions* assert
 #?(:cljs
-    (defn react
-      "Works in conjunction with [[reactive]] mixin. Use this function instead of `deref` inside render, and your component will subscribe to changes happening to the derefed atom."
-      [ref]
-      (when rum.core/*reactions*
-        (vswap! rum.core/*reactions* conj ref))
-      (and ref @ref)))
+   (defn react
+     [ref]
+     (let [r @react-impls/react]
+       (r ref))))
 
 (defn time-ms
   []
@@ -823,71 +901,68 @@
        (remove nil?)))
 
 #?(:cljs
-    (defn set-title!
-      [title]
-      (set! (.-title js/document) title)))
+   (defn set-title!
+     [title]
+     (set! (.-title js/document) title)))
 
 #?(:cljs
-    (defn get-prev-block
-      [block]
-      (when-let [blocks (d/by-class "ls-block")]
-        (when-let [index (.indexOf blocks block)]
-          (when (> index 0)
-            (nth blocks (dec index)))))))
+   (defn get-prev-block
+     [block]
+     (when-let [blocks (d/by-class "ls-block")]
+       (when-let [index (.indexOf blocks block)]
+         (when (> index 0)
+           (nth blocks (dec index)))))))
 
 #?(:cljs
-    (defn get-next-block
-      [block]
-      (when-let [blocks (d/by-class "ls-block")]
-        (when-let [index (.indexOf blocks block)]
-          (when (> (count blocks) (inc index))
-            (nth blocks (inc index)))))))
+   (defn get-next-block
+     [block]
+     (when-let [blocks (d/by-class "ls-block")]
+       (when-let [index (.indexOf blocks block)]
+         (when (> (count blocks) (inc index))
+           (nth blocks (inc index)))))))
 
 #?(:cljs
-    (defn get-prev-block-with-same-level
-      [block]
-      (let [id (gobj/get block "id")
-            prefix (re-find #"ls-block-[\d]+" id)]
-        (when-let [blocks (d/by-class "ls-block")]
-          (when-let [index (.indexOf blocks block)]
-            (let [level (d/attr block "level")]
-              (when (> index 0)
-                (loop [idx (dec index)]
-                  (if (>= idx 0)
-                    (let [block (nth blocks idx)
-                          prefix-match? (starts-with? (gobj/get block "id") prefix)]
-                      (if (and prefix-match?
-                               (= level (d/attr block "level")))
-                        block
-                        (recur (dec idx))))
-                    nil)))))))))
+   (defn get-prev-block-with-same-level
+     [block]
+     (let [id (gobj/get block "id")
+           prefix (re-find #"ls-block-[\d]+" id)]
+       (when-let [blocks (d/by-class "ls-block")]
+         (when-let [index (.indexOf blocks block)]
+           (let [level (d/attr block "level")]
+             (when (> index 0)
+               (loop [idx (dec index)]
+                 (if (>= idx 0)
+                   (let [block (nth blocks idx)
+                         prefix-match? (starts-with? (gobj/get block "id") prefix)]
+                     (if (and prefix-match?
+                              (= level (d/attr block "level")))
+                       block
+                       (recur (dec idx))))
+                   nil)))))))))
 
 #?(:cljs
-    (defn get-next-block-with-same-level
-      [block]
-      (when-let [blocks (d/by-class "ls-block")]
-        (when-let [index (.indexOf blocks block)]
-          (let [level (d/attr block "level")]
-            (when (> (count blocks) (inc index))
-              (loop [idx (inc index)]
-                (if (< idx (count blocks))
-                  (let [block (nth blocks idx)]
-                    (if (= level (d/attr block "level"))
-                      block
-                      (recur (inc idx))))
-                  nil))))))))
+   (defn get-next-block-with-same-level
+     [block]
+     (when-let [blocks (d/by-class "ls-block")]
+       (when-let [index (.indexOf blocks block)]
+         (let [level (d/attr block "level")]
+           (when (> (count blocks) (inc index))
+             (loop [idx (inc index)]
+               (if (< idx (count blocks))
+                 (let [block (nth blocks idx)]
+                   (if (= level (d/attr block "level"))
+                     block
+                     (recur (inc idx))))
+                 nil))))))))
 
 #?(:cljs
-    (defn get-block-idx-inside-container
-      [block-element]
-      (when block-element
-        (when-let [section (some-> (rec-get-blocks-content-section block-element)
-                              (d/parent))]
-          (let [blocks (d/by-class section "ls-block")
-                idx (when (seq blocks) (.indexOf (array-seq blocks) block-element))]
-            (when (and idx section)
-             {:idx idx
-              :container (gdom/getElement section "id")}))))))
+   (defn get-block-container
+     [block-element]
+     (when block-element
+       (when-let [section (some-> (rec-get-blocks-content-section block-element)
+                                  (d/parent))]
+         (when section
+           (gdom/getElement section "id"))))))
 
 (defn nth-safe [c i]
   (if (or (< i 0) (>= i (count c)))
@@ -931,24 +1006,17 @@
     (url-encode s)))
 
 #?(:cljs
-    (defn- get-clipboard-as-html
-      [event]
-      (if-let [c (gobj/get event "clipboardData")]
-        [(.getData c "text/html") (.getData c "text")]
-        (if-let [c (gobj/getValueByKeys event "originalEvent" "clipboardData")]
-          [(.getData c "text/html") (.getData c "text")]
-          (if-let [c (gobj/get js/window "clipboardData")]
-            [(.getData c "Text") (.getData c "Text")])))))
-
-(defn marker?
-  [s]
-  (contains?
-   #{"NOW" "LATER" "TODO" "DOING"
-     "DONE" "WAIT" "WAITING" "CANCELED" "CANCELLED" "STARTED" "IN-PROGRESS"}
-   (string/upper-case s)))
+   (defn- get-clipboard-as-html
+     [event]
+     (if-let [c (gobj/get event "clipboardData")]
+       [(.getData c "text/html") (.getData c "text")]
+       (if-let [c (gobj/getValueByKeys event "originalEvent" "clipboardData")]
+         [(.getData c "text/html") (.getData c "text")]
+         (if-let [c (gobj/get js/window "clipboardData")]
+           [(.getData c "Text") (.getData c "Text")])))))
 
 (defn pp-str [x]
-  (with-out-str (pprint x)))
+  (with-out-str (clojure.pprint/pprint x)))
 
 (defn hiccup-keywordize
   [hiccup]
@@ -960,30 +1028,30 @@
    hiccup))
 
 #?(:cljs
-    (defn chrome?
-      []
-      (let [user-agent js/navigator.userAgent
-            vendor js/navigator.vendor]
-        (and (re-find #"Chrome" user-agent)
-             (re-find #"Google Inc" user-agent)))))
+   (defn chrome?
+     []
+     (let [user-agent js/navigator.userAgent
+           vendor js/navigator.vendor]
+       (and (re-find #"Chrome" user-agent)
+            (re-find #"Google Inc" user-agent)))))
 
 #?(:cljs
-    (defn indexeddb-check?
-      [error-handler]
-      (let [test-db "logseq-test-db-foo-bar-baz"
-            db (and js/window.indexedDB
-                    (js/window.indexedDB.open test-db))]
-        (when (and db (not (chrome?)))
-          (gobj/set db "onerror" error-handler)
-          (gobj/set db "onsuccess"
-                    (fn []
-                      (js/window.indexedDB.deleteDatabase test-db)))))))
+   (defn indexeddb-check?
+     [error-handler]
+     (let [test-db "logseq-test-db-foo-bar-baz"
+           db (and js/window.indexedDB
+                   (js/window.indexedDB.open test-db))]
+       (when (and db (not (chrome?)))
+         (gobj/set db "onerror" error-handler)
+         (gobj/set db "onsuccess"
+                   (fn []
+                     (js/window.indexedDB.deleteDatabase test-db)))))))
 
 (defonce mac? #?(:cljs goog.userAgent/MAC
                  :clj nil))
 
 (defonce win32? #?(:cljs goog.userAgent/WINDOWS
-                 :clj nil))
+                   :clj nil))
 
 (defn ->system-modifier
   [keyboard-shortcut]
@@ -994,42 +1062,33 @@
     keyboard-shortcut))
 
 (defn default-content-with-title
-  ([text-format title]
-   (default-content-with-title text-format title true))
-  ([text-format title new-block?]
-   (let [contents? (= (string/lower-case title) "contents")
-         properties (case (name text-format)
-                      "org"
-                      (format "#+TITLE: %s" title)
-                      "markdown"
-                      (format "---\ntitle: %s\n---" title)
-                      "")
-         new-block (case (name text-format)
-                     "org"
-                     "** "
+  [text-format]
+  (case (name text-format)
+    "org"
+    "* "
 
-                     "markdown"
-                     "## "
-
-                     "")]
-     (if contents?
-       new-block
-       (str properties "\n\n" (if new-block? new-block))))))
+    "- "))
 
 #?(:cljs
-    (defn get-first-block-by-id
-      [block-id]
-      (when block-id
-        (let [block-id (str block-id)]
-          (when (uuid-string? block-id)
-            (first (array-seq (js/document.getElementsByClassName block-id))))))))
+   (defn get-first-block-by-id
+     [block-id]
+     (when block-id
+       (let [block-id (str block-id)]
+         (when (uuid-string? block-id)
+           (first (array-seq (js/document.getElementsByClassName block-id))))))))
+
+(defonce windows-reserved-chars #"[\\/:\\*\\?\"<>|]+")
+
+(defn include-windows-reserved-chars?
+  [s]
+  (re-find windows-reserved-chars s))
 
 (defn page-name-sanity
   [page-name]
   (-> page-name
       (string/replace #"/" ".")
       ;; Windows reserved path characters
-      (string/replace #"[\\/:\\*\\?\"<>|]+" "_")))
+      (string/replace windows-reserved-chars "_")))
 
 (defn lowercase-first
   [s]
@@ -1038,25 +1097,25 @@
          (subs s 1))))
 
 #?(:cljs
-    (defn add-style!
-      [style]
-      (when (some? style)
-        (let [parent-node (d/sel1 :head)
-              id "logseq-custom-theme-id"
-              old-link-element (d/sel1 (str "#" id))
-              style (if (string/starts-with? style "http")
-                      style
-                      (str "data:text/css;charset=utf-8," (js/encodeURIComponent style)))]
-          (when old-link-element
-            (d/remove! old-link-element))
-          (let [link (->
-                      (d/create-element :link)
-                      (d/set-attr! :id id)
-                      (d/set-attr! :rel "stylesheet")
-                      (d/set-attr! :type "text/css")
-                      (d/set-attr! :href style)
-                      (d/set-attr! :media "all"))]
-            (d/append! parent-node link))))))
+   (defn add-style!
+     [style]
+     (when (some? style)
+       (let [parent-node (d/sel1 :head)
+             id "logseq-custom-theme-id"
+             old-link-element (d/sel1 (str "#" id))
+             style (if (string/starts-with? style "http")
+                     style
+                     (str "data:text/css;charset=utf-8," (js/encodeURIComponent style)))]
+         (when old-link-element
+           (d/remove! old-link-element))
+         (let [link (->
+                     (d/create-element :link)
+                     (d/set-attr! :id id)
+                     (d/set-attr! :rel "stylesheet")
+                     (d/set-attr! :type "text/css")
+                     (d/set-attr! :href style)
+                     (d/set-attr! :media "all"))]
+           (d/append! parent-node link))))))
 
 (defn ->platform-shortcut
   [keyboard-shortcut]
@@ -1076,7 +1135,10 @@
 ;; fs
 (defn get-file-ext
   [file]
-  (last (string/split file #"\.")))
+  (and
+   (string? file)
+   (string/includes? file ".")
+   (last (string/split file #"\."))))
 
 (defn get-dir-and-basename
   [path]
@@ -1104,13 +1166,13 @@
 ;; Copied from https://github.com/tonsky/datascript-todo
 (defmacro profile [k & body]
   #?(:clj
-      `(if goog.DEBUG
-         (let [k# ~k]
-           (.time js/console k#)
-           (let [res# (do ~@body)]
-             (.timeEnd js/console k#)
-             res#))
-         (do ~@body))))
+     `(if goog.DEBUG
+        (let [k# ~k]
+          (.time js/console k#)
+          (let [res# (do ~@body)]
+            (.timeEnd js/console k#)
+            res#))
+        (do ~@body))))
 
 ;; TODO: profile and profileEnd
 
@@ -1169,3 +1231,120 @@
 
   (= (get-relative-path "a/b/c/d/g.org" "a/b/c/e/f.org")
      "../e/f.org"))
+
+#?(:cljs
+   (defn select-highlight!
+     [blocks]
+     (doseq [block blocks]
+       (d/add-class! block "selected noselect"))))
+
+(defn keyname [key] (str (namespace key) "/" (name key)))
+
+(defn batch [in max-time idle? handler]
+  (async/go-loop [buf [] t (async/timeout max-time)]
+    (let [[v p] (async/alts! [in t])]
+      (cond
+        (= p t)
+        (let [timeout (async/timeout max-time)]
+          (if (idle?)
+           (do
+             (handler buf)
+             (recur [] timeout))
+           (recur buf timeout)))
+
+        (nil? v)                        ; stop
+        (when (seq buf)
+          (handler buf))
+
+        :else
+        (recur (conj buf v) t)))))
+
+#?(:cljs
+   (defn trace!
+     []
+     (js/console.trace)))
+
+(defn remove-first [pred coll]
+  ((fn inner [coll]
+     (lazy-seq
+      (when-let [[x & xs] (seq coll)]
+        (if (pred x)
+          xs
+          (cons x (inner xs))))))
+   coll))
+
+(def pprint clojure.pprint/pprint)
+
+#?(:cljs
+   (defn move-cursor-forward-by-word
+     [input]
+     (let [val   (.-value input)
+           current (.-selectionStart input)
+           current (loop [idx current]
+                     (if (#{\space \newline} (nth-safe val idx))
+                       (recur (inc idx))
+                       idx))
+           idx (or (->> [(string/index-of val \space current)
+                         (string/index-of val \newline current)]
+                        (remove nil?)
+                        (apply min))
+                   (count val))]
+       (move-cursor-to input idx))))
+
+#?(:cljs
+   (defn move-cursor-backward-by-word
+     [input]
+     (let [val     (.-value input)
+           current (.-selectionStart input)
+           prev    (or
+                    (->> [(string/last-index-of val \space (dec current))
+                          (string/last-index-of val \newline (dec current))]
+                         (remove nil?)
+                         (apply max))
+                    0)
+           idx     (if (zero? prev)
+                     0
+                     (->
+                      (loop [idx prev]
+                        (if (#{\space \newline} (nth-safe val idx))
+                          (recur (dec idx))
+                          idx))
+                      inc))]
+       (move-cursor-to input idx))))
+
+#?(:cljs
+   (defn backward-kill-word
+     [input]
+     (let [val     (.-value input)
+           current (.-selectionStart input)
+           prev    (or
+                    (->> [(string/last-index-of val \space (dec current))
+                          (string/last-index-of val \newline (dec current))]
+                         (remove nil?)
+                         (apply max))
+                    0)
+           idx     (if (zero? prev)
+                     0
+                     (->
+                      (loop [idx prev]
+                        (if (#{\space \newline} (nth-safe val idx))
+                          (recur (dec idx))
+                          idx))
+                      inc))]
+       (.setRangeText input "" idx current))))
+
+#?(:cljs
+   (defn forward-kill-word
+     [input]
+     (let [val   (.-value input)
+           current (.-selectionStart input)
+           current (loop [idx current]
+                     (if (#{\space \newline} (nth-safe val idx))
+                       (recur (inc idx))
+                       idx))
+           idx (or (->> [(string/index-of val \space current)
+                         (string/index-of val \newline current)]
+                        (remove nil?)
+                        (apply min))
+                   (count val))]
+       (.setRangeText input "" current (inc idx)))))

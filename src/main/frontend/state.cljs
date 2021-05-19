@@ -17,6 +17,7 @@
   (atom
    {:route-match nil
     :today nil
+    :system/events (async/chan 100)
     :db/batch-txs (async/chan 100)
     :file/writes (async/chan 100)
     :notification/show? false
@@ -28,6 +29,7 @@
     :repo/changed-files nil
     :nfs/user-granted? {}
     :nfs/refreshing? nil
+    :sentry/disabled? (storage/get "sentry-disabled")
     ;; TODO: how to detect the network reliably?
     :network/online? true
     :indexeddb/support? true
@@ -43,9 +45,6 @@
     :search/q ""
     :search/mode :global
     :search/result nil
-
-    ;; custom shortcuts
-    :shortcuts {:editor/new-block "enter"}
 
     ;; modals
     :modal/show? false
@@ -69,6 +68,8 @@
 
     :github/contents {}
     :config {}
+    :block/component-editing-mode? false
+    :editor/draw-mode? false
     :editor/show-page-search? false
     :editor/show-page-search-hashtag? false
     :editor/show-date-picker? false
@@ -78,12 +79,13 @@
     :editor/editing? nil
     :editor/last-edit-block-id nil
     :editor/in-composition? false
-    :editor/pos 0
     :editor/content {}
     :editor/block nil
     :editor/block-dom-id nil
     :editor/set-timestamp-block nil
     :editor/last-input-time nil
+    :editor/new-block-toggle? false
+    :editor/args nil
     :db/last-transact-time {}
     :db/last-persist-transact-ids {}
     ;; whether database is persisted
@@ -94,6 +96,9 @@
     :selection/mode false
     :selection/blocks []
     :selection/start-block nil
+    ;; either :up or :down, defaults to down
+    ;; used to determine selection direction when two or more blocks are selected
+    :selection/direction :down
     :custom-context-menu/show? false
     :custom-context-menu/links nil
 
@@ -109,7 +114,12 @@
 
     ;; all notification contents as k-v pairs
     :notification/contents {}
-    :graph/syncing? false}))
+    :graph/syncing? false
+
+    ;; copied blocks
+    :copy/blocks {:copy/content nil :copy/block-tree nil}
+
+    :date-picker/date nil}))
 
 (defn get-route-match
   []
@@ -187,6 +197,10 @@
   []
   (true? (:feature/enable-grammarly?
           (get (sub-config) (get-current-repo)))))
+
+(defn store-all-ids-in-text?
+  []
+  (true? (:text/store-all-ids (get-config))))
 
 (defn scheduled-deadlines-disabled?
   []
@@ -266,6 +280,13 @@
    (when-let [repo (get-current-repo)]
      (:pages-directory (get-config repo)))
    "pages"))
+
+(defn get-journals-directory
+  []
+  (or
+   (when-let [repo (get-current-repo)]
+     (:journals-directory (get-config repo)))
+   "journals"))
 
 (defn org-mode-file-link?
   [repo]
@@ -408,7 +429,8 @@
 
 (defn editing?
   []
-  (some? (get-edit-input-id)))
+  (let [input (get-input)]
+    (and input (= input (.-activeElement js/document)))))
 
 (defn get-edit-content
   []
@@ -451,16 +473,16 @@
 
 (defn set-editor-show-page-search!
   [value]
-  (set-state! :editor/show-page-search? value)
-  (set-state! :editor/show-page-search-hashtag? false))
-(defn set-editor-show-page-search-hashtag!
-  [value]
-  (set-state! :editor/show-page-search? value)
-  (set-state! :editor/show-page-search-hashtag? value))
+  (set-state! :editor/show-page-search? value))
 
 (defn get-editor-show-page-search?
   []
   (get @state :editor/show-page-search?))
+
+(defn set-editor-show-page-search-hashtag!
+  [value]
+  (set-state! :editor/show-page-search? value)
+  (set-state! :editor/show-page-search-hashtag? value))
 (defn get-editor-show-page-search-hashtag?
   []
   (get @state :editor/show-page-search-hashtag?))
@@ -495,13 +517,9 @@
          (fn [m]
            (and input-id {input-id true}))))
 
-(defn set-edit-pos!
-  [pos]
-  (set-state! :editor/pos pos))
-
 (defn get-edit-pos
   []
-  (:editor/pos @state))
+  (.-selectionStart (get-input)))
 
 (defn set-selection-start-block!
   [start-block]
@@ -512,12 +530,14 @@
   (get @state :selection/start-block))
 
 (defn set-selection-blocks!
-  [blocks]
-  (when (seq blocks)
-    (swap! state assoc
-           :selection/mode true
-           :selection/blocks blocks)))
-
+  ([blocks]
+   (set-selection-blocks! blocks :down))
+  ([blocks direction]
+   (when (seq blocks)
+     (swap! state assoc
+            :selection/mode true
+            :selection/blocks blocks
+            :selection/direction direction))))
 (defn into-selection-mode!
   []
   (swap! state assoc :selection/mode true))
@@ -527,7 +547,7 @@
   (swap! state assoc
          :selection/mode false
          :selection/blocks nil
-         :selection/up? nil))
+         :selection/direction :down))
 
 (defn clear-selection-blocks!
   []
@@ -541,29 +561,30 @@
   []
   (:selection/mode @state))
 
+(defn selection?
+  "True sense of selection mode with valid selected block"
+  []
+  (and (in-selection-mode?) (seq (get-selection-blocks))))
+
 (defn conj-selection-block!
-  [block up?]
+  [block direction]
   (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
          :selection/blocks (conj (:selection/blocks @state) block)
-         :selection/up? up?))
+         :selection/direction direction))
 
-(defn pop-selection-block!
+(defn drop-last-selection-block!
   []
-  (let [[first-block & others] (:selection/blocks @state)]
+  (let [last-block (peek (:selection/blocks @state))]
     (swap! state assoc
            :selection/mode true
-           :selection/blocks others)
-    first-block))
+           :selection/blocks (vec (pop (:selection/blocks @state))))
+    last-block))
 
-(defn selection-up?
+(defn get-selection-direction
   []
-  (:selection/up? @state))
-
-(defn set-selection-up!
-  [value]
-  (swap! state assoc :selection/up? value))
+  (:selection/direction @state))
 
 (defn show-custom-context-menu!
   [links]
@@ -641,7 +662,7 @@
                                         ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
-    (when-let [elem (gdom/getElement "right-sidebar-container")]
+    (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scollable")]
       (util/scroll-to elem 0))))
 
 (defn sidebar-remove-block!
@@ -666,36 +687,62 @@
   (when db-id
     (update-state! [:ui/sidebar-collapsed-blocks db-id] not)))
 
+(defn get-edit-block
+  []
+  (get @state :editor/block))
+
+(defn get-last-edit-block
+  []
+  (let [edit-input-id (get-edit-input-id)
+        edit-block (get-edit-block)
+        block-element (when edit-input-id (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block")))
+        container (when block-element
+                    (util/get-block-container block-element))]
+    (when container
+      {:last-edit-block edit-block
+       :container (gobj/get container "id")
+       :pos (util/get-input-pos (gdom/getElement edit-input-id))})))
+
 (defn set-editing!
-  [edit-input-id content block cursor-range]
-  (when edit-input-id
-    (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
-          {:keys [idx container]} (util/get-block-idx-inside-container block-element)
-          block (if (and idx container)
-                  (assoc block
-                         :block/idx idx
-                         :block/container (gobj/get container "id"))
-                  block)
-          content (or content "")]
-      (swap! state
-             (fn [state]
-               (-> state
-                   (assoc-in [:editor/content edit-input-id] (string/trim content))
-                   (assoc
-                    :editor/block block
-                    :editor/editing? {edit-input-id true}
-                    :editor/last-edit-block-id edit-input-id
-                    :cursor-range cursor-range)))))))
+  ([edit-input-id content block cursor-range]
+   (set-editing! edit-input-id content block cursor-range true))
+  ([edit-input-id content block cursor-range move-cursor?]
+   (when (and edit-input-id block)
+     (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
+           container (util/get-block-container block-element)
+           block (if container
+                   (assoc block
+                          :block/container (gobj/get container "id"))
+                   block)
+           content (string/trim (or content ""))]
+       (swap! state
+              (fn [state]
+                (-> state
+                    (assoc-in [:editor/content edit-input-id] content)
+                    (assoc
+                     :editor/block block
+                     :editor/editing? {edit-input-id true}
+                     :editor/last-edit-block-id edit-input-id
+                     :cursor-range cursor-range))))
+
+       (when-let [input (gdom/getElement edit-input-id)]
+         (let [pos (count cursor-range)]
+           (when content
+             (util/set-change-value input content)
+             ;; FIXME
+             ;; use set-change-value for now
+             ;; until somebody can figure out why set! value doesn't work here
+             ;; it seems to me textarea autoresize is completely broken
+             #_
+             (set! (.-value input) (string/trim content)))
+           (when move-cursor?
+             (util/move-cursor-to input pos))))))))
 
 (defn clear-edit!
   []
   (swap! state merge {:editor/editing? nil
                       :editor/block nil
                       :cursor-range nil}))
-
-(defn get-edit-block
-  []
-  (get @state :editor/block))
 
 (defn set-last-pos!
   [new-pos]
@@ -711,6 +758,10 @@
   [theme]
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
+
+(defn dark?
+  []
+  (= "dark" (:ui/theme @state)))
 
 (defn set-editing-block-dom-id!
   [block-dom-id]
@@ -946,36 +997,19 @@
   []
   (get @state :notification/contents))
 
-(defn get-new-block-shortcut
+(defn get-new-block-toggle?
   []
-  (let [shortcut (get-in @state [:shortcuts :editor/new-block])]
-    (if (and shortcut (contains? #{"enter" "alt+enter"} (string/lower-case shortcut)))
-      shortcut
-      "enter")))
-
-(defn set-new-block-shortcut!
-  [value]
-  (set-state! [:shortcuts :editor/new-block] value))
+  (get @state :editor/new-block-toggle?))
 
 (defn toggle-new-block-shortcut!
   []
-  (if-let [enter? (= "enter" (get-new-block-shortcut))]
-    (set-new-block-shortcut! "alt+enter")
-    (set-new-block-shortcut! "enter")))
+  (update-state! :editor/new-block-toggle? not))
 
 (defn set-config!
   [repo-url value]
-  (let [old-shortcuts (get-in @state [:config repo-url :shortcuts])]
-    (set-state! [:config repo-url] value)
-
-    ;; TODO: refactor. This seems useless as the default value has already been handled in
-    ;; `get-new-block-shortcut`.
-    (set-new-block-shortcut!
-     (or (get-shortcut repo-url :editor/new-block)
-         "enter"))
-
-    (let [shortcuts (or (:shortcuts value) {})]
-      (storage/set (str repo-url "-shortcuts") shortcuts))))
+  (set-state! [:config repo-url] value)
+  (let [shortcuts (or (:shortcuts value) {})]
+    (storage/set (str repo-url "-shortcuts") shortcuts)))
 
 (defn get-git-auto-push?
   ([]
@@ -1073,7 +1107,7 @@
     (or
      (when-let [last-time (get-in @state [:editor/last-input-time repo])]
        (let [now (util/time-ms)]
-         (>= (- now last-time) 1000)))
+         (>= (- now last-time) 500)))
       ;; not in editing mode
      (not (get-edit-input-id)))))
 
@@ -1151,4 +1185,65 @@
    (get-in @state [:me :settings :start-of-week])
    6))
 
+(defn get-events-chan
+  []
+  (:system/events @state))
+
+(defn pub-event!
+  [payload]
+  (let [chan (get-events-chan)]
+    (async/put! chan payload)))
+
 (defonce diffs (atom nil))
+
+(defn get-copied-blocks
+  []
+  (:copy/blocks @state))
+
+(defn set-copied-blocks
+  [content ids]
+  (set-state! :copy/blocks {:copy/content content :copy/block-tree ids}))
+
+(defn set-editor-args!
+  [args]
+  (set-state! :editor/args args))
+
+(defn block-component-editing?
+  []
+  (:block/component-editing-mode? @state))
+
+(defn set-block-component-editing-mode!
+  [value]
+  (set-state! :block/component-editing-mode? value))
+
+(defn sentry-disabled?
+  []
+  (:sentry/disabled? @state))
+
+(defn set-sentry-disabled!
+  [value]
+  (set-state! :sentry/disabled? value)
+  (storage/set "sentry-disabled" value)
+  (when value
+    (.close js/window.Sentry)))
+
+(defn logical-outdenting?
+  []
+  (:editor/logical-outdenting?
+   (get (sub-config) (get-current-repo))))
+
+(defn get-editor-args
+  []
+  (:editor/args @state))
+
+(defn get-export-bullet-indentation
+  []
+  (case (get (get-config) :export/bullet-indentation :two-spaces)
+    :eight-spaces
+    "        "
+    :four-spaces
+    "    "
+    :two-spaces
+    "  "
+    :tab
+    "\t"))

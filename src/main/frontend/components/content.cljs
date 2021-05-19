@@ -56,11 +56,7 @@
     (ui/menu-link
      {:key "copy"
       :on-click editor-handler/copy-selection-blocks}
-     "Copy")
-    (ui/menu-link
-     {:key "make-todos"
-      :on-click editor-handler/bulk-make-todos}
-     (str "Make " (state/get-preferred-todo) "s"))]])
+     "Copy")]])
 
 ;; FIXME: Make it configurable
 (def block-background-colors
@@ -117,9 +113,9 @@
                                        [:p "Template already exists!"]
                                        :error)
                                       (do
-                                        (editor-handler/set-block-property! block-id "template" title)
+                                        (editor-handler/set-block-property! block-id :template title)
                                         (when (false? including-parent?)
-                                          (editor-handler/set-block-property! block-id "including-parent" false))
+                                          (editor-handler/set-block-property! block-id :including-parent false))
                                         (state/hide-custom-context-menu!)))))))])
       (ui/menu-link
        {:key "Make template"
@@ -133,8 +129,7 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [properties (:block/properties block)
-            heading (get properties "heading")
-            heading? (= heading "true")]
+            heading? (true? (:heading properties))]
         [:div#custom-context-menu
          [:div.py-1.rounded-md.bg-base-3.shadow-xs
           [:div.flex-row.flex.justify-between.py-4.pl-2
@@ -142,57 +137,25 @@
             (for [color block-background-colors]
               [:a.m-2.shadow-sm
                {:on-click (fn [_e]
-                            (editor-handler/set-block-property! block-id "background_color" color))}
+                            (editor-handler/set-block-property! block-id "background-color" color))}
                [:div.heading-bg {:style {:background-color color}}]])]
            [:a.text-sm
             {:title (t :remove-background)
              :style {:margin-right 14
                      :margin-top 4}
              :on-click (fn [_e]
-                         (editor-handler/remove-block-property! block-id "background_color"))}
+                         (editor-handler/remove-block-property! block-id "background-color"))}
             "Clear"]]
+
           (ui/menu-link
            {:key "Convert heading"
             :on-click (fn [_e]
                         (if heading?
-                          (editor-handler/remove-block-property! block-id "heading")
-                          (editor-handler/set-block-as-a-heading! block-id true)))}
+                          (editor-handler/remove-block-property! block-id :heading)
+                          (editor-handler/set-block-property! block-id :heading true)))}
            (if heading?
              "Convert back to a block"
              "Convert to a heading"))
-
-          (let [empty-properties? (not (text/contains-properties? (:block/content block)))
-                all-hidden? (text/properties-hidden? (:block/properties block))]
-            (when (or empty-properties? all-hidden?)
-              (ui/menu-link
-               {:key "Add a property"
-                :on-click (fn [_e]
-                            (when-let [block-node (util/rec-get-block-node target)]
-                              (let [block-dom-id (gobj/get block-node "id")
-                                    edit-input-id (string/replace block-dom-id "ls-block" "edit-block")
-                                    content (:block/content block)
-                                    content (cond
-                                              empty-properties?
-                                              (text/rejoin-properties content {"" ""} {:remove-blank? false})
-                                              all-hidden?
-                                              (let [idx (string/index-of content "\n:END:")]
-                                                (str
-                                                 (subs content 0 idx)
-                                                 "\n:: "
-                                                 (subs content idx)))
-                                              :else
-                                              content)
-                                    content-without-level (text/remove-level-spaces content (:block/format block))
-                                    pos (string/index-of content-without-level ": \n:END:")]
-                                (editor-handler/edit-block! block
-                                                            pos
-                                                            (:block/format block)
-                                                            edit-input-id
-                                                            (cond-> {:custom-content content}
-                                                              all-hidden?
-                                                              (assoc :custom-properties
-                                                                     (assoc (:block/properties block) "" "")))))))}
-               "Add a property")))
 
           (ui/menu-link
            {:key "Open in sidebar"
@@ -251,27 +214,6 @@
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
-
-
-(defn- cut-blocks-and-clear-selections!
-  [copy?]
-  (editor-handler/cut-selection-blocks copy?)
-  (editor-handler/clear-selection! nil))
-
-(rum/defc hidden-selection < rum/reactive
-  (mixins/keyboard-mixin (util/->system-modifier "ctrl+c")
-                         (fn [_]
-                           (editor-handler/copy-selection-blocks)
-                           (editor-handler/clear-selection! nil)))
-  (mixins/keyboard-mixin (util/->system-modifier "ctrl+x")
-                         (fn [] (cut-blocks-and-clear-selections! true)))
-  (mixins/keyboard-mixin "backspace"
-                         (fn [] (cut-blocks-and-clear-selections! false)))
-  (mixins/keyboard-mixin "delete"
-                         (fn [] (cut-blocks-and-clear-selections! false)))
-  []
-  [:div#selection.hidden])
-
 (rum/defc hiccup-content < rum/static
   (mixins/event-mixin
    (fn [state]
@@ -282,8 +224,7 @@
                           (let [blocks (remove nil? blocks)
                                 blocks (remove #(d/has-class? % "dummy") blocks)]
                             (when (seq blocks)
-                              (doseq [block blocks]
-                                (d/add-class! block "selected noselect"))
+                              (util/select-highlight! blocks)
                               ;; TODO: We delay this so the following "click" event won't clear the selections.
                               ;; Needs more thinking.
                               (js/setTimeout #(state/set-selection-blocks! blocks)
@@ -306,8 +247,7 @@
                                               :left (str client-x "px")
                                               :top (str (+ scroll-y client-y) "px")))))
 
-                          (and (state/in-selection-mode?)
-                               (seq (state/get-selection-blocks)))
+                          (state/selection?)
                           (do
                             (util/stop e)
                             (let [client-x (gobj/get e "clientX")
@@ -395,8 +335,6 @@
         selected-blocks (state/sub :selection/blocks)]
     (if hiccup
       [:div
-       (hiccup-content id option)
-       (when (and in-selection-mode? (seq selected-blocks))
-         (hidden-selection))]
+       (hiccup-content id option)]
       (let [format (format/normalize format)]
         (non-hiccup-content id content on-click on-hide config format)))))

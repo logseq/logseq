@@ -47,31 +47,31 @@
   [query-result remove-blocks q]
   (try
     (let [repo (state/get-current-repo)
-         result (db-utils/seq-flatten query-result)
-         block? (:block/uuid (first result))]
-     (let [result (if block?
-                    (let [result (if (seq remove-blocks)
-                                   (let [remove-blocks (set remove-blocks)]
-                                     (remove (fn [h]
-                                               (contains? remove-blocks (:block/uuid h)))
-                                             result))
-                                   result)]
-                      (some->> result
-                               (db-utils/with-repo repo)
-                               (model/with-block-refs-count repo)
-                               (model/sort-blocks)))
-                    result)]
-       (if-let [result-transform (:result-transform q)]
-         (if-let [f (sci/eval-string (pr-str result-transform))]
-           (try
-             (sci/call-fn f result)
-             (catch js/Error e
-               (log/error :sci/call-error e)
-               result))
-           result)
-         (if block?
-           (db-utils/group-by-page result)
-           result))))
+          result (db-utils/seq-flatten query-result)
+          block? (:block/uuid (first result))]
+      (let [result (if block?
+                     (let [result (if (seq remove-blocks)
+                                    (let [remove-blocks (set remove-blocks)]
+                                      (remove (fn [h]
+                                                (contains? remove-blocks (:block/uuid h)))
+                                              result))
+                                    result)]
+                       (some->> result
+                                (db-utils/with-repo repo)
+                                (model/with-block-refs-count repo)
+                                (model/with-pages)))
+                     result)]
+        (if-let [result-transform (:result-transform q)]
+          (if-let [f (sci/eval-string (pr-str result-transform))]
+            (try
+              (sci/call-fn f result)
+              (catch js/Error e
+                (log/error :sci/call-error e)
+                result))
+            result)
+          (if block?
+            (db-utils/group-by-page result)
+            result))))
     (catch js/Error e
       (log/error :query/failed e))))
 
@@ -80,14 +80,25 @@
   (let [page-ref? #(and (string? %) (text/page-ref? %))]
     (walk/postwalk
      (fn [f]
-       (if (and (list? f)
-                (= (first f) '=)
-                (= 3 (count f))
-                (some page-ref? (rest f)))
+       (cond
+         ;; backward compatible
+         ;; 1. replace :page/ => :block/
+         (and (keyword? f) (= "page" (namespace f)))
+         (keyword "block" (name f))
+
+         (and (keyword? f) (contains? #{:block/ref-pages :block/ref-blocks} f))
+         :block/refs
+
+         (and (list? f)
+              (= (first f) '=)
+              (= 3 (count f))
+              (some page-ref? (rest f)))
          (let [[x y] (rest f)
                [page-ref sym] (if (page-ref? x) [x y] [y x])
                page-ref (string/lower-case page-ref)]
            (list 'contains? sym (text/page-ref-un-brackets! page-ref)))
+
+         :else
          f)) query)))
 
 (defn react-query

@@ -23,7 +23,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export]
             [frontend.config :as config]
-            [frontend.keyboards :as keyboards]
             [dommy.core :as d]
             [clojure.string :as string]
             [goog.object :as gobj]
@@ -136,11 +135,16 @@
                       :style {:margin-bottom (if global-graph-pages? 0 120)}}
           main-content])]]]))
 
+(rum/defc footer
+  []
+  (when-let [user-footer (and config/publishing? (get-in (state/get-config) [:publish-common-footer]))]
+    [:div.p-6 user-footer]))
+
 (defn get-default-home-if-valid
   []
   (when-let [default-home (state/get-default-home)]
     (when-let [page (:page default-home)]
-      (when (db/entity [:page/name (string/lower-case page)])
+      (when (db/entity [:block/name (string/lower-case page)])
         default-home))))
 
 (defonce sidebar-inited? (atom false))
@@ -229,11 +233,11 @@
                   :exit 300}}
        links
        ;; (custom-context-menu-content)
-       ))))
+))))
 
 (rum/defc new-block-mode < rum/reactive
   []
-  (when-let [alt-enter? (= "alt+enter" (state/sub [:shortcuts :editor/new-block]))]
+  (when (state/sub [:editor/new-block-toggle?])
     [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
      {:title "Click to switch to \"Enter\" for creating new block"
       :on-click state/toggle-new-block-shortcut!}
@@ -268,38 +272,13 @@
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
-  ;; TODO: move this to keyboards
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "click"
                     (fn [e]
                       ;; hide context menu
                       (state/hide-custom-context-menu!)
-
-                      (editor-handler/clear-selection! e)))
-
-     ;; TODO: move to keyboards
-     (mixins/on-key-down
-      state
-      {;; esc
-       27 (fn [_state e]
-            (editor-handler/clear-selection! e))
-
-       ;; shift+up
-       38 (fn [state e]
-            (editor-handler/on-select-block state e true))
-
-       ;; shift+down
-       40 (fn [state e]
-            (editor-handler/on-select-block state e false))
-
-       ;; ?
-       191 (fn [state e]
-             (when-not (util/input? (gobj/get e "target"))
-               (ui-handler/toggle-help!)))})))
-  {:did-mount (fn [state]
-                (keyboards/bind-shortcuts!)
-                state)}
+                      (editor-handler/clear-selection! e)))))
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
@@ -326,7 +305,7 @@
         :route         route-match
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
-        :on-click      editor-handler/unhighlight-block!}
+        :on-click      editor-handler/unhighlight-blocks!}
 
        [:div.theme-inner
         (sidebar-mobile-sidebar
@@ -354,7 +333,9 @@
                   :indexeddb-support?  indexeddb-support?
                   :white?              white?
                   :db-restoring?       db-restoring?
-                  :main-content        main-content})]]
+                  :main-content        main-content})
+
+           (footer)]]
          (right-sidebar/sidebar)]
 
         (ui/notification)
@@ -372,4 +353,4 @@
          ;;   :on-click (fn []
          ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
          ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-          )]))))
+)]))))
