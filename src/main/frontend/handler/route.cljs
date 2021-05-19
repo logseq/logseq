@@ -3,6 +3,7 @@
             [reitit.frontend.easy :as rfe]
             [reitit.frontend.history :as rfh]
             [frontend.state :as state]
+            [frontend.handler.plugin :as plugin-handler]
             [goog.dom :as gdom]
             [frontend.handler.ui :as ui-handler]
             [frontend.db :as db]
@@ -95,7 +96,8 @@
     (update-page-label! route)
     (when-let [anchor (get-in route [:query-params :anchor])]
       (jump-to-anchor! anchor)
-      (util/scroll-to-top))))
+      (util/scroll-to-top))
+    (plugin-handler/hook-plugin-app :route-changed (select-keys route [:template :path :parameters]))))
 
 (defn go-to-search!
   [search-mode]

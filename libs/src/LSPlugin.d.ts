@@ -61,15 +61,15 @@ type IHookEvent = {
   [key: string]: any
 }
 
-type IUserHook = (callback: (e: IHookEvent) => void) => void
-type IUserSlotHook = (callback: (e: IHookEvent & UISlotIdentity) => void) => void
+type IUserHook<E = any> = (callback: (e: IHookEvent & E) => void) => void
+type IUserSlotHook<E = any> = (callback: (e: IHookEvent & UISlotIdentity & E) => void) => void
 
 type BlockID = number
 type BlockUUID = string
 
 type IEntityID = { id: BlockID }
 
-interface AppConfigs {
+interface AppUserConfigs {
   preferredFormat: 'markdown' | 'org'
   preferredLanguage: string
   preferredWorkflow: string
@@ -99,12 +99,12 @@ interface BlockEntity {
 }
 
 type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
-type SlashCommandActionTag = 'editor/input' | 'editor/hook' | 'editor/clear-current-slash'
-type SlashCommandAction = [SlashCommandActionTag, ...args: any]
+type SlashCommandActionCmd = 'editor/input' | 'editor/hook' | 'editor/clear-current-slash'
+type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
 
 interface IAppProxy {
-  getUserState: () => Promise<any>
-  getAppConfigs: () => Promise<AppConfigs>
+  getUserInfo: () => Promise<any>
+  getUserConfigs: () => Promise<AppUserConfigs>
 
   // router
   pushState: (k: string, params?: {}) => void
@@ -118,6 +118,7 @@ interface IAppProxy {
   onThemeModeChanged: IUserHook
   onPageFileMounted: IUserSlotHook
   onBlockRendererMounted: IUserSlotHook
+  onRouteChanged: IUserHook<{ path: string, template: string }>
 }
 
 interface IEditorProxy {

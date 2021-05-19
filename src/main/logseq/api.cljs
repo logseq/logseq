@@ -43,7 +43,7 @@
         (js/console.error "[parse hiccup error]" e) input))))
 
 ;; base
-(def ^:export get_app_configs
+(def ^:export get_user_configs
   (fn []
     (bean/->js
       (normalize-keyword-for-json
