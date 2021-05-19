@@ -70,6 +70,7 @@
     :block/created-at
     :block/updated-at
     :block/file
+    :block/parent
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 
@@ -590,6 +591,13 @@
       (when (seq ids)
         (db-utils/pull-many repo '[*] ids)))))
 
+;; TODO: use the tree directly
+(defn- flatten-tree
+  [blocks-tree]
+  (if-let [children (:block/_parent blocks-tree)]
+    (cons (dissoc blocks-tree :block/_parent) (mapcat flatten-tree children))
+    [blocks-tree]))
+
 (defn get-block-and-children
   ([repo block-uuid]
    (get-block-and-children repo block-uuid true))
@@ -597,17 +605,15 @@
    (some-> (react/q repo [:block/block block-uuid]
              {:use-cache? use-cache?
               :transform-fn #(block-and-children-transform % repo block-uuid)}
-             '[:find (pull ?c [*])
-               :in $ ?id %
+             '[:find [(pull ?block ?block-attrs) ...]
+               :in $ ?id ?block-attrs
                :where
-               [?b :block/uuid ?id]
-               (or-join [?b ?c ?id]
-                        ;; including the parent
-                        [?c :block/uuid ?id]
-                        (parent ?b ?c))]
+               [?block :block/uuid ?id]]
              block-uuid
-             rules)
-           react)))
+             block-attrs)
+           react
+           first
+           flatten-tree)))
 
 (defn get-file-page
   ([file-path]
