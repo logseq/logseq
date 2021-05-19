@@ -2565,20 +2565,33 @@
         ;; from external
         (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
           (match [format
-                  (nil? (re-find #"^\s*(?:[-+*]|#+)\s+" text))
-                  (nil? (re-find #"^\s*\*+\s+" text))]
-                 [:markdown false _]
-                 (paste-text-parseable format text)
+                  (nil? (re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                  (nil? (re-find #"(?m)^\s*\*+\s+" text))
+                  (nil? (re-find #"(?:\r?\n){2,}" text))]
+            [:markdown false _ _]
+            (do
+              (paste-text-parseable format text)
+              (util/stop e))
 
-                 [:org _ false]
-                 (paste-text-parseable format text)
+            [:org _ false _]
+            (do
+              (paste-text-parseable format text)
+              (util/stop e))
 
-                 [:markdown true _]
-                 (paste-segmented-text format text)
+            [:markdown true _ false]
+            (do
+              (paste-segmented-text format text)
+              (util/stop e))
 
-                 [:org _ true]
-                 (paste-segmented-text format text))
-          (util/stop e))))))
+            [:markdown true _ true]
+            (do)
+
+            [:org _ true false]
+            (do
+              (paste-segmented-text format text)
+              (util/stop e))
+            [:org _ true true]
+            (do)))))))
 
 (defn editor-on-paste!
   [id]
