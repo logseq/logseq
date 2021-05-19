@@ -134,6 +134,20 @@
          :on-click close-fn}
         "Cancel"]]]]))
 
+(rum/defc outdenting-hint
+  []
+  [:div
+   [:blockquote
+    [:ol
+     [:li "Left (the default way to direct outdenting, unindent in place): it keeps the vertical position but can lead to mixed up categories (c becomes a sub-bullet of b)
+"]
+     [:li "right (logical outdenting, unindent puts items at the bottom) : bullet vertical order is lost but categories are preserved, maybe better in terms of logic, but with longer lists, that also involves a lot of scrolling"]]]
+   [:p "- Contributed by "
+    [:a {:href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978/7"}
+     "@cannibalox"]]
+   [:p "See more details at " [:a "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"] "."]
+   [:image {:src "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"}]])
+
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (state/get-preferred-format)
@@ -145,6 +159,7 @@
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
         sentry-disabled? (state/sub :sentry/disabled?)
+        logical-outdenting? (state/logical-outdenting?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         enable-block-time? (state/enable-block-time?)
         show-brackets? (state/show-brackets?)
@@ -271,6 +286,15 @@
                (if (= workflow :now)
                  "NOW/LATER"
                  "TODO/DOING")])]]]]
+
+        (toggle "preffered_outdenting"
+                (ui/tippy {:html (outdenting-hint)
+                           :interactive true
+                           :theme "customized"}
+                          (t :settings-page/preferred-outdenting))
+                logical-outdenting?
+                (fn []
+                  (config-handler/toggle-logical-outdenting!)))
 
         (toggle "enable_timetracking"
                 (t :settings-page/enable-timetracking)

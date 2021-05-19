@@ -86,6 +86,7 @@
     :editor/last-input-time nil
     :editor/new-block-toggle? false
     :editor/args nil
+    :editor/logical-outdenting? false
     :db/last-transact-time {}
     :db/last-persist-transact-ids {}
     ;; whether database is persisted
@@ -1226,6 +1227,11 @@
   (storage/set "sentry-disabled" value)
   (when value
     (.close js/window.Sentry)))
+
+(defn logical-outdenting?
+  []
+  (:editor/logical-outdenting?
+   (get (sub-config) (get-current-repo))))
 
 (defn get-editor-args
   []

@@ -478,10 +478,32 @@
   [node]
   (nil? (tree/-get-parent (tree/-get-parent node))))
 
+(defn get-right-siblings
+  [node]
+  {:pre [(tree/satisfied-inode? node)]}
+  (when-let [parent (tree/-get-parent node)]
+    (let [children (tree/-get-children parent)]
+      (->> (split-with #(not= (tree/-get-id node) (tree/-get-id %)) children)
+           last
+           rest))))
+
+(defn- logical-outdenting
+  [txs-state parent nodes first-node last-node last-node-right parent-parent-id parent-right]
+  (some-> last-node-right
+          (tree/-set-left-id (tree/-get-left-id first-node))
+          (tree/-save txs-state))
+  (let [first-node (tree/-set-left-id first-node (tree/-get-id parent))]
+    (doseq [node (cons first-node (rest nodes))]
+      (-> (tree/-set-parent-id node parent-parent-id)
+          (tree/-save txs-state))))
+  (some-> parent-right
+          (tree/-set-left-id (tree/-get-id last-node))
+          (tree/-save txs-state)))
+
 (defn indent-outdent-nodes
   [nodes indent?]
   (ds/auto-transact!
-    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :indent-outdent-nodes}
+   [txs-state (ds/new-outliner-txs-state)] {:outliner-op :indent-outdent-nodes}
    (let [first-node (first nodes)
          last-node (last nodes)]
      (if indent?
@@ -489,33 +511,41 @@
          (let [first-node-left-id (tree/-get-left-id first-node)
                last-node-right (tree/-get-right last-node)
                parent-or-last-child-id (or (-> (db/get-block-immediate-children (state/get-current-repo)
-                                                 first-node-left-id)
-                                             last
-                                             :block/uuid)
-                                         first-node-left-id)
+                                                                                first-node-left-id)
+                                               last
+                                               :block/uuid)
+                                           first-node-left-id)
                first-node (tree/-set-left-id first-node parent-or-last-child-id)]
            (doseq [node (cons first-node (rest nodes))]
              (-> (tree/-set-parent-id node first-node-left-id)
-               (tree/-save txs-state)))
+                 (tree/-save txs-state)))
            (some-> last-node-right
-             (tree/-set-left-id first-node-left-id)
-             (tree/-save txs-state))))
+                   (tree/-set-left-id first-node-left-id)
+                   (tree/-save txs-state))))
        (when-not (first-level? first-node)
          (let [parent (tree/-get-parent first-node)
                parent-parent-id (tree/-get-parent-id parent)
                parent-right (tree/-get-right parent)
-               last-node-right (tree/-get-right last-node)]
-           (some-> last-node-right
-             (tree/-set-left-id (tree/-get-left-id first-node))
-             (tree/-save txs-state))
-           (let [first-node (tree/-set-left-id first-node (tree/-get-id parent))]
-             (doseq [node (cons first-node (rest nodes))]
-               (-> (tree/-set-parent-id node parent-parent-id)
-                 (tree/-save txs-state))))
-           (some-> parent-right
-             (tree/-set-left-id (tree/-get-id last-node))
-             (tree/-save txs-state))))))))
-
+               last-node-right (tree/-get-right last-node)
+               last-node-id (tree/-get-id last-node)]
+           (logical-outdenting txs-state parent nodes first-node last-node last-node-right parent-parent-id parent-right)
+           (when-not (state/logical-outdenting?)
+             ;; direct outdenting (the old behavior)
+             (let [right-siblings (get-right-siblings last-node)
+                   right-siblings (doall
+                                   (map (fn [sibling right-siblings]
+                                          (some->
+                                           (tree/-set-parent-id sibling last-node-id)
+                                           (tree/-save txs-state)))
+                                     right-siblings))]
+               (when-let [last-node-right (first right-siblings)]
+                 (let [last-node-children (tree/-get-children last-node)
+                       left-id (if (seq last-node-children)
+                                 (tree/-get-id (last last-node-children))
+                                 last-node-id)]
+                   (when left-id
+                     (some-> (tree/-set-left-id last-node-right left-id)
+                             (tree/-save txs-state)))))))))))))
 
 (defn- set-nodes-page&file-aux
   [node page file txs-state]

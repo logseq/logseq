@@ -537,7 +537,10 @@
                          (->elem
                           :span.block-ref
                           (map-inline config title))))]
-           (ui/tippy {:html (block-container config block)
+           (ui/tippy {:html [:div.tippy-wrapper
+                             {:style {:width 780
+                                      :text-align "left"}}
+                             (block-container config block)]
                       :interactive true}
             (if label
               (->elem
