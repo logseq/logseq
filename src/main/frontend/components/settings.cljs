@@ -8,6 +8,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler :as handler]
             [frontend.state :as state]
             [frontend.version :refer [version]]
             [frontend.util :as util]
@@ -355,6 +356,18 @@
                       (config-handler/set-config! :git-auto-push value)))))]
 
        [:hr]
+
+       [:div.panel-wrap
+
+        [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+         [:label.block.text-sm.font-medium.leading-5.opacity-70
+          {:for "clear_cache"}
+          (t :settings-page/clear-cache)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          [:div.max-w-lg.rounded-md.sm:max-w-xs
+           (ui/button (t :settings-page/clear)
+             :on-click (fn []
+                         (handler/clear-cache!)))]]]]
 
        [:div.panel-wrap
         [:div.it.app-updater.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start

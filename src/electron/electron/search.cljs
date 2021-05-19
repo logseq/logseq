@@ -78,6 +78,11 @@
   []
   (fs/ensureDirSync (get-search-dir)))
 
+(defn rm-search-dir!
+  []
+  (let [search-dir (get-search-dir)]
+    (fs/removeSync search-dir)))
+
 (defn get-db-full-path
   [db-name]
   (let [db-name (normalize-db-name db-name)

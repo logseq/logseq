@@ -27,6 +27,7 @@
             [lambdaisland.glogi :as log]
             [frontend.handler.common :as common-handler]
             [electron.listener :as el]
+            [electron.ipc :as ipc]
             [frontend.version :as version]))
 
 (defn- watch-for-date!
@@ -149,9 +150,11 @@
             (when-not config/dev? (init-sentry)))]
     (set! js/window.onload f)))
 
-(defn clear-stores-and-refresh!
+(defn clear-cache!
   []
-  (p/let [_ (idb/clear-local-storage-and-idb!)]
+  (p/let [_ (idb/clear-local-storage-and-idb!)
+          _ (when (util/electron?)
+              (ipc/ipc "clearCache"))]
     (js/window.location.reload)))
 
 (defn start!

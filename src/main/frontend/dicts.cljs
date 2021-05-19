@@ -213,6 +213,8 @@
         :settings-page/home-default-page "Set the default home page"
         :settings-page/enable-block-time "Enable block timestamps"
         :settings-page/dont-use-other-peoples-proxy-servers "Don't use other people's proxy servers. It's very dangerous, which could make your token and notes stolen. Logseq will not be responsible for this loss if you use other people's proxy servers. You can deploy it yourself, check "
+        :settings-page/clear-cache "Clear cache"
+        :settings-page/clear "Clear"
         :settings-page/custom-cors-proxy-server "Custom CORS proxy server"
         :settings-page/developer-mode "Developer mode"
         :settings-page/enable-developer-mode "Enable developer mode"
