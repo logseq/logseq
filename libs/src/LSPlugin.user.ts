@@ -1,4 +1,4 @@
-import { deepMerge, invokeHostExportedApi } from './helpers'
+import { deepMerge } from './helpers'
 import { LSPluginCaller } from './LSPlugin.caller'
 import {
   IAppProxy, IDBProxy,

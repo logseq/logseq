@@ -10,6 +10,7 @@ const debug = Debug('LSPlugin:caller')
 type DeferredActor = ReturnType<typeof deferred>
 
 export const LSPMSG = '#lspmsg#'
+export const LSPMSG_ERROR_TAG = '#lspmsg#error#'
 export const LSPMSG_SETTINGS = '#lspmsg#settings#'
 export const LSPMSG_SYNC = '#lspmsg#reply#'
 export const LSPMSG_READY = '#lspmsg#ready#'
@@ -83,10 +84,19 @@ class LSPluginCaller extends EventEmitter {
 
       [LSPMSG_SYNC]: ({ _sync, result }: any) => {
         debug(`sync reply #${_sync}`, result)
+
         if (syncActors.has(_sync)) {
-          // TODO: handle exception
-          syncActors.get(_sync)?.resolve(result)
-          syncActors.delete(_sync)
+          const actor = syncActors.get(_sync)
+
+          if (actor) {
+            if (result?.hasOwnProperty(LSPMSG_ERROR_TAG)) {
+              actor.reject(result[LSPMSG_ERROR_TAG])
+            } else {
+              actor.resolve(result)
+            }
+
+            syncActors.delete(_sync)
+          }
         }
       },
 

@@ -10,7 +10,12 @@ import {
   isObject, withFileProtocol
 } from './helpers'
 import Debug from 'debug'
-import { LSPluginCaller, LSPMSG_READY, LSPMSG_SYNC, LSPMSG, LSPMSG_SETTINGS } from './LSPlugin.caller'
+import {
+  LSPluginCaller,
+  LSPMSG_READY, LSPMSG_SYNC,
+  LSPMSG, LSPMSG_SETTINGS,
+  LSPMSG_ERROR_TAG
+} from './LSPlugin.caller'
 import {
   ILSPluginThemeManager,
   LSPluginPkgConfig,
@@ -243,13 +248,22 @@ function initProviderHandlers (pluginLocal: PluginLocal) {
 function initApiProxyHandlers (pluginLocal: PluginLocal) {
   let _ = (label: string): any => `api:${label}`
 
-  pluginLocal.on(_('call'), (payload) => {
-    const rt = invokeHostExportedApi(payload.method, ...payload.args)
+  pluginLocal.on(_('call'), async (payload) => {
+    let ret: any
+
+    try {
+      ret = await invokeHostExportedApi(payload.method, ...payload.args)
+    } catch (e) {
+      ret = {
+        [LSPMSG_ERROR_TAG]: e,
+      }
+    }
+
     const { _sync } = payload
 
     if (pluginLocal.shadow) {
       if (payload.actor) {
-        payload.actor.resolve(rt)
+        payload.actor.resolve(ret)
       }
       return
     }
@@ -261,7 +275,7 @@ function initApiProxyHandlers (pluginLocal: PluginLocal) {
         })
       }
 
-      Promise.resolve(rt).then(reply, reply)
+      Promise.resolve(ret).then(reply, reply)
     }
   })
 }
