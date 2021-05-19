@@ -6,9 +6,9 @@
             [frontend.state :as state]))
 
 ;; TODO
-;; - [x] Get the preffered language from state
-;; - [x] Update the preffered language
-;; - [x] Create t functiona which takes a keyword and returns text with the current preffered language
+;; - [x] Get the prefered language from state
+;; - [x] Update the prefered language
+;; - [x] Create t functiona which takes a keyword and returns text with the current prefered language
 ;; - [x] Add fetch for local browser prefered language if user has set it already
 ;; - [ ] Fetch prefered language from backend if user is logged in
 

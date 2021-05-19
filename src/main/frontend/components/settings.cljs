@@ -287,7 +287,7 @@
                  "NOW/LATER"
                  "TODO/DOING")])]]]]
 
-        (toggle "preffered_outdenting"
+        (toggle "prefered_outdenting"
                 (ui/tippy {:html (outdenting-hint)
                            :interactive true
                            :theme "customized"}
