@@ -203,6 +203,7 @@
         :settings-page/edit-config-edn "Edit config.edn (for current repo)"
         :settings-page/show-brackets "Show brackets"
         :settings-page/disable-sentry "Disable Sentry.io (for error tracking)"
+        :settings-page/preferred-outdenting "Enable logical outdenting"
         :settings-page/custom-date-format "Preferred journal format"
         :settings-page/preferred-file-format "Preferred file format"
         :settings-page/preferred-workflow "Preferred workflow"
