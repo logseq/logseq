@@ -89,8 +89,9 @@
     (js-invoke js/LSPluginCore
                (str "hook" (string/capitalize (name tag)))
                (name type)
-               (if (map? payload)
-                 (bean/->js (into {} (for [[k v] payload] [(csk/->camelCase k) (if (uuid? v) (str v) v)]))))
+               (if (coll? payload)
+                 (bean/->js (into {} (for [[k v] payload] [(csk/->camelCase k) (if (uuid? v) (str v) v)])))
+                 payload)
                (if (keyword? plugin-id) (name plugin-id) plugin-id))))
 
 (defn hook-plugin-app

@@ -3,6 +3,7 @@
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.util :as util]
             [electron.ipc :as ipc]
@@ -16,6 +17,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
             [datascript.core :as d]
+            [medley.core :as medley]
             [frontend.fs :as fs]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -46,13 +48,13 @@
 (def ^:export get_user_configs
   (fn []
     (bean/->js
-      (normalize-keyword-for-json
-        {:preferred-language (:preferred-language @state/state)
-         :preferred-format   (state/get-preferred-format)
-         :preferred-workflow (state/get-preferred-workflow)
-         :preferred-todo     (state/get-preferred-todo)
-         :current-graph (state/get-current-repo)
-         :me (state/get-me)}))))
+     (normalize-keyword-for-json
+      {:preferred-language (:preferred-language @state/state)
+       :preferred-format   (state/get-preferred-format)
+       :preferred-workflow (state/get-preferred-workflow)
+       :preferred-todo     (state/get-preferred-todo)
+       :current-graph (state/get-current-repo)
+       :me (state/get-me)}))))
 
 (def ^:export show_themes
   (fn []
@@ -150,8 +152,21 @@
 ;; editor
 (def ^:export get_current_block
   (fn []
-    (when-let [block (state/get-edit-block)]
+    (let [block (state/get-edit-block)
+          block (or block (state/get-last-edit-block))]
       (bean/->js (normalize-keyword-for-json block)))))
+
+(def ^:export get_current_page
+  (fn []
+    (when-let [page (state/get-current-page)]
+      (when-let [page (db-model/get-page page)]
+        (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
+
+(def ^:export insert_block
+  (fn [block-uuid content ^js opts]
+    (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
+      (let [{:keys [before sibling props]} (bean/->clj opts)]
+        (editor-handler/api-insert-new-block! content {:block-uuid block-uuid :sibling? sibling})))))
 
 (def ^:export get_block
   (fn [id-or-uuid]

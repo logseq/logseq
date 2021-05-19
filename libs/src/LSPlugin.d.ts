@@ -1,5 +1,5 @@
 import EventEmitter from 'eventemitter3'
-import * as CSS from 'csstype';
+import * as CSS from 'csstype'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginUser } from './LSPlugin.user'
 
@@ -115,10 +115,11 @@ interface IAppProxy {
   setZoomFactor: (factor: number) => void
 
   // events
-  onThemeModeChanged: IUserHook
+  onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onPageFileMounted: IUserSlotHook
-  onBlockRendererMounted: IUserSlotHook
+  onBlockRendererMounted: IUserSlotHook<{ uuid: BlockUUID }>
   onRouteChanged: IUserHook<{ path: string, template: string }>
+  onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 }
 
 interface IEditorProxy {
@@ -126,6 +127,7 @@ interface IEditorProxy {
   registerBlockContextMenu: (this: LSPluginUser, tag: string, action: () => void) => boolean
 
   // TODO: Block related APIs
+  getCurrentPage: () => Promise<Partial<BlockEntity>>
   getCurrentBlock: () => Promise<BlockEntity>
   getCurrentPageBlocksTree: <T = any> () => Promise<T>
 

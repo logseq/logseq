@@ -305,6 +305,7 @@
         :route         route-match
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
+        :sidebar-open? sidebar-open?
         :on-click      editor-handler/unhighlight-blocks!}
 
        [:div.theme-inner
