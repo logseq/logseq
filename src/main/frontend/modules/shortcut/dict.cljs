@@ -32,7 +32,7 @@
      :shortcut.ui/toggle-theme                "在暗色/亮色主题之间切换"
      :shortcut.ui/toggle-right-sidebar        "启用/关闭右侧栏"
      :shortcut.ui/toggle-settings             "显示/关闭设置"
-     :shortcut.ui/toggle-new-block            "切换 Enter/Alt+Enter 以插入新块"
+     :shortcut.ui/toggle-new-block            "切换 Enter/Shift+Enter 以插入新块"
      :shortcut.go/journals                    "跳转到日记"
      ;; TODO translate those in fr/de/etc..
      :shortcut.category/basics                "基础操作"
@@ -96,7 +96,7 @@
      :shortcut.ui/toggle-document-mode        "切換文檔模式"
      :shortcut.ui/toggle-theme                "“在暗色/亮色主題之間切換”"
      :shortcut.ui/toggle-right-sidebar        "啟用/關閉右側欄"
-     :shortcut.ui/toggle-new-block            "切換 Enter/Alt+Enter 以插入新塊"
+     :shortcut.ui/toggle-new-block            "切換 Enter/Shift+Enter 以插入新塊"
      :shortcut.go/journals                    "跳轉到日記"
      :shortcut.category/formatting            "格式化"}
     :de
@@ -118,7 +118,7 @@
      :shortcut.ui/toggle-document-mode        "Dokumentenmodus umschalten"
      :shortcut.ui/toggle-theme                "Umschalten zwischen dunklem/hellem Thema"
      :shortcut.ui/toggle-right-sidebar        "Rechte Seitenleiste umschalten"
-     :shortcut.ui/toggle-new-block            "Umschalten von Enter/Alt+Enter zum Einfügen eines neuen Blocks"
+     :shortcut.ui/toggle-new-block            "Umschalten von Enter/Shift+Enter zum Einfügen eines neuen Blocks"
      :shortcut.go/journals                    "Zu Journalen springen"
      :shortcut.git/commit                     "Git Commit-Nachricht"
      :shortcut.editor/select-block-down       "Block unterhalb auswählen"
@@ -146,7 +146,7 @@
      :shortcut.ui/toggle-document-mode        "Intervertir le mode document"
      :shortcut.ui/toggle-theme                "Intervertir le thème foncé/clair"
      :shortcut.ui/toggle-right-sidebar        "Afficher/cacher la barre latérale"
-     :shortcut.ui/toggle-new-block            "Activer Entreée ou Alt+Enter pour insérer un bloc"
+     :shortcut.ui/toggle-new-block            "Activer Entreée ou Shift+Enter pour insérer un bloc"
      :shortcut.go/journals                    "Aller au Journal"
      :shortcut.category/formatting            "Formats"}
     :af
@@ -173,4 +173,4 @@
      :shortcut.category/formatting            "Formatering"
      :shortcut.ui/toggle-theme                "Wissel tussen donker/lig temas"
      :shortcut.ui/toggle-right-sidebar        "Wissel regter sybalk"
-     :shortcut.ui/toggle-new-block            "Wissel Enter/Alt+enter vir die byvoeging van nuwe blokke"}}))
+     :shortcut.ui/toggle-new-block            "Wissel Enter/Shift+enter vir die byvoeging van nuwe blokke"}}))
