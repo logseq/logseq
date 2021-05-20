@@ -218,8 +218,11 @@
 
        (and (= 'property fe)
             (= 3 (count e)))
-       (let [v (some-> (name (nth e 2))
-                       (text/page-ref-un-brackets!))
+       (let [v (nth e 2)
+             v (if (or (string? v) (symbol? v))
+                 (some-> (name v)
+                         (text/page-ref-un-brackets!))
+                 v)
              sym (if (= current-filter 'or)
                    '?v
                      (uniq-symbol counter "?v"))]
