@@ -378,7 +378,11 @@
   {:init (fn [state]
            (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
    :did-mount (fn [state]
-                (state/set-editor-args! (:rum/args state))
+                ;; TODO:
+                ;; if we quickly click into a block when editing another block,
+                ;; this will happen before the `will-unmount` event, which will
+                ;; lost the content in the editing block.
+                (js/setTimeout #(state/set-editor-args! (:rum/args state)) 20)
                 state)}
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
