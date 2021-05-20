@@ -77,7 +77,7 @@
             root-block (with-children-and-refs root-block result)]
         [root-block]))))
 
-(defn sort-blocks-aux
+(defn- sort-blocks-aux
   [parents parent-groups]
   (mapv (fn [parent]
           (let [parent-id {:db/id (:db/id parent)}
