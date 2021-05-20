@@ -7,7 +7,6 @@
             [frontend.config :as config]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.web.nfs :as web-nfs]

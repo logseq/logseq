@@ -1,7 +1,6 @@
 (ns frontend.handler.history
   (:require [frontend.state :as state]
             [frontend.db :as db]
-            [frontend.handler.file :as file]
             [frontend.handler.editor :as editor]
             [frontend.handler.ui :as ui-handler]
             [promesa.core :as p]
