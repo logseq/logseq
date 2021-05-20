@@ -39,7 +39,7 @@
      (if (seq blocks)
        blocks
        (let [page-block (when page-name (db/pull [:block/name (string/lower-case page-name)]))
-             create-title-property? (util/include-windows-reserved-chars? page-name)
+             create-title-property? (and page-name (util/include-windows-reserved-chars? page-name))
              content (if create-title-property?
                        (let [title (or (:block/original-name page-block)
                                        (:block/name page-block))
