@@ -6,6 +6,8 @@
             [electron.utils :refer [logger] :as utils]
             ["electron" :refer [app]]))
 
+(defonce version "0.0.1")
+
 (def error (partial (.-error logger) "[Search]"))
 
 (defonce databases (atom nil))
@@ -74,9 +76,35 @@
   (let [path (.getPath ^object app "userData")]
     (path/join path "search")))
 
+(defonce search-version "search.version")
+
+(defn get-search-version
+  []
+  (let [path (.getPath ^object app "userData")
+        path (path/join path search-version)]
+    (when (fs/existsSync path)
+      (.toString (fs/readFileSync path)))))
+
+(defn write-search-version!
+  []
+  (let [path (.getPath ^object app "userData")
+        path (path/join path search-version)]
+    (fs/writeFileSync path version)))
+
+(defn version-changed?
+  []
+  (not= version (get-search-version)))
+
 (defn ensure-search-dir!
   []
+  (write-search-version!)
   (fs/ensureDirSync (get-search-dir)))
+
+(defn rm-search-dir!
+  []
+  (let [search-dir (get-search-dir)]
+    (when (fs/existsSync search-dir)
+      (fs/removeSync search-dir))))
 
 (defn get-db-full-path
   [db-name]
@@ -90,8 +118,7 @@
         db (sqlite3 db-full-path nil)
         _ (create-blocks-table! db)
         _ (create-blocks-fts-table! db)
-        _ (add-triggers! db)
-        ]
+        _ (add-triggers! db)]
     (swap! databases assoc db-name db)))
 
 (defn open-dbs!

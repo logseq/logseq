@@ -19,9 +19,13 @@
    KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (defn install-shortcut!
-  [handler-id {:keys [set-global-keys? prevent-default? state]
+  [handler-id {:keys [set-global-keys?
+                      prevent-default?
+                      skip-installed?
+                      state]
                :or   {set-global-keys? true
-                      prevent-default? false}}]
+                      prevent-default? false
+                      skip-installed? false}}]
   (let [shortcut-map (dh/shortcut-map handler-id state)
         handler      (new KeyboardShortcutHandler js/window)]
      ;; set arrows enter, tab to global
@@ -55,12 +59,14 @@
 
       (events/listen handler EventType/SHORTCUT_TRIGGERED f)
 
-      (swap! *installed merge data)
+      (when-not skip-installed?
+        (swap! *installed merge data))
 
       install-id)))
 
 (defn install-shortcuts!
   []
+  (install-shortcut! :shortcut.handler/misc {:skip-installed? true})
   (->> [:shortcut.handler/editor-global
         :shortcut.handler/global-non-editing-only
         :shortcut.handler/global-prevent-default]

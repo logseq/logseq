@@ -111,10 +111,9 @@
           :options {:href (rfe/href :all-journals)}
           :icon svg/calendar-sm})
 
-       (when current-repo
-         {:title (t :settings)
-          :options {:on-click #(ui-handler/toggle-settings-modal!)}
-          :icon svg/settings-sm})
+       {:title (t :settings)
+        :options {:on-click #(ui-handler/toggle-settings-modal!)}
+        :icon svg/settings-sm}
 
        (when developer-mode?
          {:title (t :plugins)

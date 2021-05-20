@@ -34,12 +34,12 @@
             :in $ ?start ?today
             :where
             [?h :block/marker ?marker]
+            [(contains? #{"NOW" "DOING"} ?marker)]
             [?h :block/page ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(>= ?d ?start)]
-            [(<= ?d ?today)]
-            [(contains? #{"NOW" "DOING"} ?marker)]]
+            [(<= ?d ?today)]]
     :inputs [:14d :today]
     :result-transform (fn [result]
                         (sort-by (fn [h]
@@ -50,12 +50,12 @@
             :in $ ?start ?next
             :where
             [?h :block/marker ?marker]
+            [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
             [?h :block/ref-pages ?p]
             [?p :block/journal? true]
             [?p :block/journal-day ?d]
             [(> ?d ?start)]
-            [(< ?d ?next)]
-            [(contains? #{"NOW" "LATER" "TODO"} ?marker)]]
+            [(< ?d ?next)]]
     :inputs [:today :7d-after]
     :collapsed? false}]}
 

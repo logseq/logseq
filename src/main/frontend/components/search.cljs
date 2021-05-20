@@ -149,7 +149,6 @@
                              (= (string/lower-case search-q)
                                 (string/lower-case (:data (first pages)))))
                         (nil? result)
-                        (not= :global search-mode)
                         all?)
                      []
                      [{:type :new-page}])

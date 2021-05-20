@@ -2,6 +2,7 @@
   (:require ["electron" :refer [ipcMain dialog app]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
+            ["fs-extra" :as fs-extra]
             ["path" :as path]
             ["chokidar" :as watcher]
             [promesa.core :as p]
@@ -145,6 +146,21 @@
 
 (defmethod handle :remove-db [window [_ repo]]
   (search/delete-db! repo))
+
+(defn clear-cache!
+  []
+  (let [path (.getPath ^object app "userData")]
+    (doseq [dir ["search" "IndexedDB" "Local Storage" "databases" "cache"]]
+      (let [path (path/join path dir)]
+        (try
+          (fs-extra/removeSync path)
+          (catch js/Error e
+            (js/console.error e)))))))
+
+(defmethod handle :clearCache [_window _]
+  (search/close!)
+  (clear-cache!)
+  (search/ensure-search-dir!))
 
 (defn- get-file-ext
   [file]

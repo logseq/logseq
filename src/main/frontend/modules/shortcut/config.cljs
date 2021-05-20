@@ -256,6 +256,12 @@
      :binding "mod+c mod+r"
      :fn      #(repo-handler/re-index! nfs-handler/rebuild-index!)}}
 
+   :shortcut.handler/misc
+   ;; always overrides the copy due to "mod+c mod+s"
+   {:misc/copy
+    {:binding "mod+c"
+     :fn     (fn [] (js/document.execCommand "copy"))}}
+
    :shortcut.handler/global-non-editing-only
    ^{:before m/enable-when-not-editing-mode!}
    {:ui/toggle-document-mode

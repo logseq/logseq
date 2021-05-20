@@ -27,6 +27,7 @@
             [lambdaisland.glogi :as log]
             [frontend.handler.common :as common-handler]
             [electron.listener :as el]
+            [electron.ipc :as ipc]
             [frontend.version :as version]))
 
 (defn- watch-for-date!
@@ -137,10 +138,11 @@
 
 (defn init-sentry
   []
-  (let [cfg
-        {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
-         :release (util/format "logseq@%s" version/version)}]
-    (.init js/window.Sentry (clj->js cfg))))
+  (when-not (state/sentry-disabled?)
+    (let [cfg
+          {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
+           :release (util/format "logseq@%s" version/version)}]
+      (.init js/window.Sentry (clj->js cfg)))))
 
 (defn on-load-events
   []
@@ -148,9 +150,11 @@
             (when-not config/dev? (init-sentry)))]
     (set! js/window.onload f)))
 
-(defn clear-stores-and-refresh!
+(defn clear-cache!
   []
-  (p/let [_ (idb/clear-local-storage-and-idb!)]
+  (p/let [_ (idb/clear-local-storage-and-idb!)
+          _ (when (util/electron?)
+              (ipc/ipc "clearCache"))]
     (js/window.location.reload)))
 
 (defn start!

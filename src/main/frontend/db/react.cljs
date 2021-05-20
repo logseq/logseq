@@ -294,26 +294,28 @@
         (when-let [cache (get @query-state related-key)]
           (let [{:keys [query inputs transform-fn query-fn inputs-fn]} cache]
             (when (or query query-fn)
-              (let [new-result (->
-                                (cond
-                                  query-fn
-                                  (profile
-                                   "Query:"
-                                   (doall (query-fn db)))
+              (let [new-result (profile
+                                "takes"
+                                (->
+                                 (cond
+                                   query-fn
+                                   (profile
+                                    "Query:"
+                                    (doall (query-fn db)))
 
-                                  inputs-fn
-                                  (let [inputs (inputs-fn)]
-                                    (apply d/q query db inputs))
+                                   inputs-fn
+                                   (let [inputs (inputs-fn)]
+                                     (apply d/q query db inputs))
 
-                                  (keyword? query)
-                                  (db-utils/get-key-value repo-url query)
+                                   (keyword? query)
+                                   (db-utils/get-key-value repo-url query)
 
-                                  (seq inputs)
-                                  (apply d/q query db inputs)
+                                   (seq inputs)
+                                   (apply d/q query db inputs)
 
-                                  :else
-                                  (d/q query db))
-                                transform-fn)]
+                                   :else
+                                   (d/q query db))
+                                 transform-fn))]
                 (set-new-result! related-key new-result)))))))))
 
 (defn transact-react!

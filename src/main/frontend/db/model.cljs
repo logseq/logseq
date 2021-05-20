@@ -17,7 +17,8 @@
             [cljs-time.coerce :as tc]
             [frontend.util :as util :refer [react] :refer-macros [profile]]
             [frontend.db-schema :as db-schema]
-            [clojure.walk :as walk]))
+            [clojure.walk :as walk]
+            [clojure.string :as string]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; correponding handlers.
@@ -70,6 +71,7 @@
     :block/created-at
     :block/updated-at
     :block/file
+    :block/parent
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 
@@ -366,30 +368,17 @@
            distinct
            (remove #(= (string/lower-case %) (string/lower-case page-name)))))))
 
-(defn get-block-refs-count
-  [repo]
-  (->> (d/q
-        '[:find ?id2 ?id1
-          :where
-          [?id1 :block/refs ?id2]]
-        (conn/get-conn repo))
-       (map first)
-       (frequencies)))
-
 (defn with-block-refs-count
   [repo blocks]
-  (let [db-ids (map :db/id blocks)
-        refs (get-block-refs-count repo)]
-    (map (fn [block]
-           (assoc block :block/block-refs-count
-                  (get refs (:db/id block))))
-         blocks)))
+  (map (fn [block]
+         (let [refs-count (count (:block/_refs (db-utils/entity (:db/id block))))]
+           (assoc block :block/block-refs-count refs-count)))
+    blocks))
 
 (defn page-blocks-transform
   [repo-url result]
-  (let [result (db-utils/seq-flatten result)]
-    (->> (db-utils/with-repo repo-url result)
-         (with-block-refs-count repo-url))))
+  (->> (db-utils/with-repo repo-url result)
+       (with-block-refs-count repo-url)))
 
 (defn with-pages
   [blocks]
@@ -603,6 +592,13 @@
       (when (seq ids)
         (db-utils/pull-many repo '[*] ids)))))
 
+;; TODO: use the tree directly
+(defn- flatten-tree
+  [blocks-tree]
+  (if-let [children (:block/_parent blocks-tree)]
+    (cons (dissoc blocks-tree :block/_parent) (mapcat flatten-tree children))
+    [blocks-tree]))
+
 (defn get-block-and-children
   ([repo block-uuid]
    (get-block-and-children repo block-uuid true))
@@ -610,17 +606,15 @@
    (some-> (react/q repo [:block/block block-uuid]
              {:use-cache? use-cache?
               :transform-fn #(block-and-children-transform % repo block-uuid)}
-             '[:find (pull ?c [*])
-               :in $ ?id %
+             '[:find [(pull ?block ?block-attrs) ...]
+               :in $ ?id ?block-attrs
                :where
-               [?b :block/uuid ?id]
-               (or-join [?b ?c ?id]
-                        ;; including the parent
-                        [?c :block/uuid ?id]
-                        (parent ?b ?c))]
+               [?block :block/uuid ?id]]
              block-uuid
-             rules)
-           react)))
+             block-attrs)
+           react
+           first
+           flatten-tree)))
 
 (defn get-file-page
   ([file-path]
@@ -1122,6 +1116,19 @@
                    :block/content (:block/content e)
                    :block/format (:block/format e)}))))))
 
+(defn get-assets
+  [datoms]
+  (keep
+   (fn [datom]
+     (when (= :block/content (:a datom))
+       (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))
+             matched (get (into [] matched) 0)
+             path (get matched 1)]
+         (when (and (string? path)
+                    (not (string/ends-with? path ".js")))
+           path))))
+   datoms))
+
 (defn clean-export!
   [db]
   (let [remove? #(contains? #{"me" "recent" "file"} %)
@@ -1129,8 +1136,9 @@
                               (fn [db datom]
                                 (let [ns (namespace (:a datom))]
                                   (not (remove? ns)))))
-        datoms (d/datoms filtered-db :eavt)]
-    @(d/conn-from-datoms datoms db-schema/schema)))
+        datoms (d/datoms filtered-db :eavt)
+        assets (get-assets datoms)]
+    [@(d/conn-from-datoms datoms db-schema/schema) assets]))
 
 (defn filter-only-public-pages-and-blocks
   [db]
@@ -1150,19 +1158,8 @@
                                              (contains? public-pages (:e datom))
                                              (contains? public-pages (:db/id (:block/page (d/entity db (:e datom)))))))))))
             datoms (d/datoms filtered-db :eavt)
-            public-assets-filesnames
-            (keep
-             (fn [datom]
-
-               (if (= :block/content (:a datom))
-                 (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))
-
-                       path (get (get (into [] matched) 0) 1)]
-                   path)))
-             datoms)]
-
-
-        [@(d/conn-from-datoms datoms db-schema/schema) (into [] public-assets-filesnames)]))))
+            assets (get-assets datoms)]
+        [@(d/conn-from-datoms datoms db-schema/schema) assets]))))
 
 (defn delete-blocks
   [repo-url files]

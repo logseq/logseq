@@ -991,15 +991,15 @@
         level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids)
         tree (blocks-vec->tree level-blocks)
         contents
-        (mapv (fn [[id block]]
+        (mapv (fn [block]
                 (let [header
                       (if (and unordered? (= format :markdown))
-                        (str (string/join (repeat (:level block) "  ")) "-")
+                        (str (string/join (repeat (- (:level block) 1) "  ")) "-")
                         (let [header-char (if (= format :markdown) "#" "*")
                               init-char (if (= format :markdown) "##" "*")]
                           (str (string/join (repeat (:level block) header-char)) init-char)))]
                   (str header " " (:block/content block) "\n")))
-              level-blocks-map)
+              level-blocks)
         content-without-properties
         (mapv
          (fn [content]
@@ -1680,6 +1680,7 @@
   [e]
   )
 
+;; selections
 (defn on-tab
   "direction = :left|:right, only indent or outdent when blocks are siblings"
   [direction]
@@ -2350,43 +2351,17 @@
         (util/stop e)
         (delete-and-update input (dec current-pos) current-pos)))))
 
-;; TODO: merge indent-on-tab, outdent-on-shift-tab, on-tab
-(defn indent-on-tab
-  [state]
-  (state/set-editor-op! :indent)
-  (profile "indent on tab"
-           (let [{:keys [block block-parent-id value config]} (get-state)]
-             (when block
-               (let [current-node (outliner-core/block block)
-                     first-child? (outliner-core/first-child? current-node)]
-                 (when-not first-child?
-                   (let [left (tree/-get-left current-node)
-                         children-of-left (tree/-get-children left)]
-                     (if (seq children-of-left)
-                       (let [target-node (last children-of-left)]
-                         (outliner-core/move-subtree current-node target-node true))
-                       (outliner-core/move-subtree current-node left false))
-                     (let [repo (state/get-current-repo)]
-                       (db/refresh! repo
-                                    {:key :block/change :data [(:data current-node)]}))))))))
-  (state/set-editor-op! :nil))
-
-(defn outdent-on-shift-tab
-  ([state]
-   (outdent-on-shift-tab state 100))
-  ([state retry-limit]
-   (state/set-editor-op! :outdent)
-   (let [{:keys [block block-parent-id value config]} (get-state)
-         {:block/keys [parent page]} block
-         current-node (outliner-core/block block)
-         parent-is-page? (= parent page)]
-     (when-not parent-is-page?
-       (let [parent (tree/-get-parent current-node)]
-         (outliner-core/move-subtree current-node parent true))
-       (let [repo (state/get-current-repo)]
-         (db/refresh! repo
-                      {:key :block/change :data [(:data current-node)]}))))
-   (state/set-editor-op! nil)))
+(defn indent-outdent
+  [state indent?]
+  (state/set-editor-op! :indent-outdent)
+  (let [{:keys [block block-parent-id value config]} (get-state)]
+    (when block
+      (let [current-node (outliner-core/block block)]
+        (outliner-core/indent-outdent-nodes [current-node] indent?)
+        (let [repo (state/get-current-repo)]
+          (db/refresh! repo
+                       {:key :block/change :data [(:data current-node)]}))))
+  (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
   [direction]
@@ -2396,12 +2371,10 @@
       (when (and (not (state/get-editor-show-input))
                  (not (state/get-editor-show-date-picker?))
                  (not (state/get-editor-show-template-search?)))
-        (do (if (= :left direction)
-              (outdent-on-shift-tab state)
-              (indent-on-tab state))
-            (and input pos
-                 (when-let [input (state/get-input)]
-                   (util/move-cursor-to input pos))))))))
+        (indent-outdent state (not (= :left direction)))
+        (and input pos
+             (when-let [input (state/get-input)]
+               (util/move-cursor-to input pos)))))))
 
 (defn keydown-not-matched-handler
   [format]
@@ -2550,10 +2523,13 @@
   [format text]
   (let [tree (->>
               (block/extract-blocks
-               (mldoc/->edn text (mldoc/default-config format)) text true format)
-              (mapv #(assoc % :level (:block/level %)))
-              (blocks-vec->tree))]
-    (paste-block-tree-at-point tree [])))
+               (mldoc/->edn text (mldoc/default-config format)) text true format))
+        min-level (apply min (mapv #(:block/level %) tree))
+        prefix-level (if (> min-level 1) (- min-level 1) 0)
+        tree* (->> tree
+                   (mapv #(assoc % :level (- (:block/level %) prefix-level)))
+                   (blocks-vec->tree))]
+    (paste-block-tree-at-point tree* [])))
 
 (defn- paste-segmented-text
   [format text]
@@ -2592,20 +2568,33 @@
         ;; from external
         (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
           (match [format
-                  (nil? (re-find #"^\s*(?:[-+*]|#+)\s+" text))
-                  (nil? (re-find #"^\s*\*+\s+" text))]
-                 [:markdown false _]
-                 (paste-text-parseable format text)
+                  (nil? (re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                  (nil? (re-find #"(?m)^\s*\*+\s+" text))
+                  (nil? (re-find #"(?:\r?\n){2,}" text))]
+            [:markdown false _ _]
+            (do
+              (paste-text-parseable format text)
+              (util/stop e))
 
-                 [:org _ false]
-                 (paste-text-parseable format text)
+            [:org _ false _]
+            (do
+              (paste-text-parseable format text)
+              (util/stop e))
 
-                 [:markdown true _]
-                 (paste-segmented-text format text)
+            [:markdown true _ false]
+            (do
+              (paste-segmented-text format text)
+              (util/stop e))
 
-                 [:org _ true]
-                 (paste-segmented-text format text))
-          (util/stop e))))))
+            [:markdown true _ true]
+            (do)
+
+            [:org _ true false]
+            (do
+              (paste-segmented-text format text)
+              (util/stop e))
+            [:org _ true true]
+            (do)))))))
 
 (defn editor-on-paste!
   [id]
