@@ -169,7 +169,7 @@
           page-name (and isPageBlock block-uuid-or-page-name)
           block-uuid (if isPageBlock nil (medley/uuid block-uuid-or-page-name))
           new-block (editor-handler/api-insert-new-block!
-                      content {:block-uuid block-uuid :sibling? sibling :page page-name})]
+                     content {:block-uuid block-uuid :sibling? sibling :page page-name})]
 
       (bean/->js (normalize-keyword-for-json new-block)))))
 
@@ -197,12 +197,14 @@
       (editor-dnd-handler/move-block src-block-uuid target-block-uuid top? nested?))))
 
 (def ^:export get_block
-  (fn [id-or-uuid]
-    (when-let [ret (cond
-                     (number? id-or-uuid) (db-utils/pull id-or-uuid)
-                     (string? id-or-uuid) (db-model/query-block-by-uuid id-or-uuid))]
-      (when (contains? ret :block/uuid)
-        (bean/->js (normalize-keyword-for-json ret))))))
+  (fn [id-or-uuid ^js opts]
+    (when-let [block (cond
+                       (number? id-or-uuid) (db-utils/pull id-or-uuid)
+                       (string? id-or-uuid) (db-model/query-block-by-uuid id-or-uuid))]
+      (when-let [uuid (:block/uuid block)]
+        (let [{:keys [includeChildren]} (bean/->clj opts)
+              block (if (not includeChildren) block (first (outliner-tree/blocks->vec-tree [block] uuid)))]
+          (bean/->js (normalize-keyword-for-json block)))))))
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
@@ -226,12 +228,16 @@
   (fn []
     (when-let [page (state/get-current-page)]
       (let [blocks (db-model/get-page-blocks-no-cache page)
-            blocks (mapv #(-> %
-                              (dissoc :block/children)
-                              (assoc :block/uuid (str (:block/uuid %))))
-                         blocks)
-            blocks (outliner-tree/blocks->vec-tree blocks (:db/id (db/get-page (state/get-current-page))))
+            blocks (outliner-tree/blocks->vec-tree blocks page)
             ;; clean key
+            blocks (normalize-keyword-for-json blocks)]
+        (bean/->js blocks)))))
+
+(def ^:export get_page_blocks_tree
+  (fn [page-name]
+    (when-let [_ (db-model/get-page page-name)]
+      (let [blocks (db-model/get-page-blocks-no-cache page-name)
+            blocks (outliner-tree/blocks->vec-tree blocks page-name)
             blocks (normalize-keyword-for-json blocks)]
         (bean/->js blocks)))))
 

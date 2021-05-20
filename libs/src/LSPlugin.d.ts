@@ -66,6 +66,7 @@ type IUserSlotHook<E = any> = (callback: (e: IHookEvent & UISlotIdentity & E) =>
 
 type BlockID = number
 type BlockUUID = string
+type BlockUUIDTuple = ['uuid', BlockUUID]
 
 type IEntityID = { id: BlockID }
 
@@ -82,7 +83,7 @@ interface BlockEntity {
   uuid: string
   anchor: string
   body: any
-  children: any
+  children: Array<BlockEntity | BlockUUIDTuple>
   container: string
   content: string
   format: 'markdown' | 'org'
@@ -130,13 +131,14 @@ interface IEditorProxy {
   // block related APIs
   getCurrentPage: () => Promise<Partial<BlockEntity>>
   getCurrentBlock: () => Promise<BlockEntity>
-  getCurrentPageBlocksTree: <T = any> () => Promise<T>
+  getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
+  getPageBlocksTree: (pageName: BlockPageName) => Promise<Array<BlockEntity>>
 
-  insertBlock: (srcBlock: BlockIdentity | BlockPageName, content: string, opts: Partial<{ isPageBlock: boolean, before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
-  updateBlock: (srcBlock: BlockIdentity, content: string, opts: Partial<{ props: {} }>) => Promise<void>
-  removeBlock: (srcBlock: BlockIdentity, opts: Partial<{ includeChildren: boolean }>) => Promise<void>
-  getBlock: (srcBlock: BlockIdentity | BlockID) => Promise<BlockEntity>
-  moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts: Partial<{ before: boolean, children: boolean }>) => Promise<void>
+  insertBlock: (srcBlock: BlockIdentity | BlockPageName, content: string, opts?: Partial<{ isPageBlock: boolean, before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
+  updateBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ props: {} }>) => Promise<void>
+  removeBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<void>
+  getBlock: (srcBlock: BlockIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity>
+  moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts?: Partial<{ before: boolean, children: boolean }>) => Promise<void>
 
   upsertBlockProperty: (block: BlockIdentity, key: string, value: any) => Promise<void>
   removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
