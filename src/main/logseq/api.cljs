@@ -4,6 +4,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.util :as util]
             [electron.ipc :as ipc]
@@ -163,10 +164,37 @@
         (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
 
 (def ^:export insert_block
+  (fn [block-uuid-or-page-name content ^js opts]
+    (let [{:keys [before sibling isPageBlock props]} (bean/->clj opts)
+          page-name (and isPageBlock block-uuid-or-page-name)
+          block-uuid (if isPageBlock nil (medley/uuid block-uuid-or-page-name))
+          new-block (editor-handler/api-insert-new-block!
+                      content {:block-uuid block-uuid :sibling? sibling :page page-name})]
+
+      (bean/->js (normalize-keyword-for-json new-block)))))
+
+(def ^:export remove_block
+  (fn [block-uuid ^js opts]
+    (let [{:keys [includeChildren]} (bean/->clj opts)
+          repo (state/get-current-repo)]
+      (editor-handler/delete-block-aux!
+       {:block/uuid (medley/uuid block-uuid) :repo repo} false includeChildren))))
+
+(def ^:export update_block
   (fn [block-uuid content ^js opts]
-    (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
-      (let [{:keys [before sibling props]} (bean/->clj opts)]
-        (editor-handler/api-insert-new-block! content {:block-uuid block-uuid :sibling? sibling})))))
+    (let [opts (and opts (bean/->clj opts))
+          repo (state/get-current-repo)]
+      (editor-handler/save-block! repo (medley/uuid block-uuid) content))))
+
+(def ^:export move_block
+  (fn [src-block-uuid target-block-uuid ^js opts]
+
+    (let [{:keys [before children]} (bean/->clj opts)
+          top? (boolean before)
+          nested? (boolean children)
+          src-block-uuid (db-model/query-block-by-uuid (medley/uuid src-block-uuid))
+          target-block-uuid (db-model/query-block-by-uuid (medley/uuid target-block-uuid))]
+      (editor-dnd-handler/move-block src-block-uuid target-block-uuid top? nested?))))
 
 (def ^:export get_block
   (fn [id-or-uuid]
@@ -175,6 +203,24 @@
                      (string? id-or-uuid) (db-model/query-block-by-uuid id-or-uuid))]
       (when (contains? ret :block/uuid)
         (bean/->js (normalize-keyword-for-json ret))))))
+
+(def ^:export upsert_block_property
+  (fn [block-uuid key value]
+    (editor-handler/set-block-property! (medley/uuid block-uuid) key value)))
+
+(def ^:export remove_block_property
+  (fn [block-uuid key]
+    (editor-handler/remove-block-property! (medley/uuid block-uuid) key)))
+
+(def ^:export get_block_property
+  (fn [block-uuid key]
+    (when-let [block (db-model/query-block-by-uuid block-uuid)]
+      (get (:block/properties block) (keyword key)))))
+
+(def ^:export get_block_properties
+  (fn [block-uuid]
+    (when-let [block (db-model/query-block-by-uuid block-uuid)]
+      (bean/->js (normalize-keyword-for-json (:block/properties block))))))
 
 (def ^:export get_current_page_blocks_tree
   (fn []

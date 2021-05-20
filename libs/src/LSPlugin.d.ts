@@ -99,6 +99,7 @@ interface BlockEntity {
 }
 
 type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
+type BlockPageName = string
 type SlashCommandActionCmd = 'editor/input' | 'editor/hook' | 'editor/clear-current-slash'
 type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
 
@@ -126,19 +127,21 @@ interface IEditorProxy {
   registerSlashCommand: (this: LSPluginUser, tag: string, actions: Array<SlashCommandAction>) => boolean
   registerBlockContextMenu: (this: LSPluginUser, tag: string, action: () => void) => boolean
 
-  // TODO: Block related APIs
+  // block related APIs
   getCurrentPage: () => Promise<Partial<BlockEntity>>
   getCurrentBlock: () => Promise<BlockEntity>
   getCurrentPageBlocksTree: <T = any> () => Promise<T>
 
-  insertBlock: (srcBlock: BlockIdentity, content: string, opts: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockIdentity>
+  insertBlock: (srcBlock: BlockIdentity | BlockPageName, content: string, opts: Partial<{ isPageBlock: boolean, before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts: Partial<{ includeChildren: boolean }>) => Promise<void>
   getBlock: (srcBlock: BlockIdentity | BlockID) => Promise<BlockEntity>
-  moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts: Partial<{ before: boolean, sibling: boolean }>) => Promise<void>
+  moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts: Partial<{ before: boolean, children: boolean }>) => Promise<void>
 
   upsertBlockProperty: (block: BlockIdentity, key: string, value: any) => Promise<void>
-  removeBlockProperty: (block: BlockIdentity) => Promise<void>
+  removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
+  getBlockProperty: (block: BlockIdentity, key: string) => Promise<any>
+  getBlockProperties: (block: BlockIdentity) => Promise<any>
 }
 
 interface IDBProxy {

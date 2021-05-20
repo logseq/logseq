@@ -637,7 +637,8 @@
             repo (state/get-current-repo)]
         (outliner-insert-block! {} block new-block sibling?)
         (db/refresh! repo {:key :block/insert
-                           :data [new-block]})))))
+                           :data [new-block]})
+        new-block))))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker] :as block} content]
