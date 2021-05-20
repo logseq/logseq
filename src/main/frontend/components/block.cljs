@@ -249,11 +249,15 @@
     (if (and (config/local-asset? href)
              (config/local-db? (state/get-current-repo)))
       (asset-link config title href label metadata full_text)
-      (let [href (if config/publishing?
+      (let [href (cond
+                   (util/starts-with? href "http")
+                   href
+
+                   config/publishing?
                    (subs href 1)
-                   (if (util/starts-with? href "http")
-                     href
-                     (get-file-absolute-path config href)))]
+
+                   :else
+                   (get-file-absolute-path config href))]
         (resizable-image config title href metadata full_text false)))))
 
 (defn repetition-to-string
