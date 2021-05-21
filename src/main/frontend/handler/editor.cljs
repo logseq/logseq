@@ -989,7 +989,7 @@
                  (mapv (fn [b] (if (:collapsed (:block/properties b))
                                  (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
                                  [b])) blocks))
-        block-ids* (mapv #(:block/uuid %) blocks*)
+        block-ids* (mapv :block/uuid blocks*)
         unordered? (:block/unordered (first blocks*))
         format (:block/format (first blocks*))
         level-blocks-map (blocks-with-level blocks*)
@@ -2530,7 +2530,7 @@
   (let [tree (->>
               (block/extract-blocks
                (mldoc/->edn text (mldoc/default-config format)) text true format))
-        min-level (apply min (mapv #(:block/level %) tree))
+        min-level (apply min (mapv :block/level tree))
         prefix-level (if (> min-level 1) (- min-level 1) 0)
         tree* (->> tree
                    (mapv #(assoc % :level (- (:block/level %) prefix-level)))
