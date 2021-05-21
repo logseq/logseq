@@ -1623,7 +1623,10 @@
                           (let [parents (doall
                                          (for [{:block/keys [uuid title name]} parents]
                                            (when-not name ; not page
-                                             [:a {:href (rfe/href :page {:name uuid})}
+                                             [:a {:on-mouse-down (fn [e]
+                                                                   (util/stop e)
+                                                                   (route-handler/redirect! {:to :page
+                                                                                             :path-params {:name uuid}}))}
                                               (map-inline config title)])))
                                 parents (remove nil? parents)]
                             (reset! parents-atom parents)
