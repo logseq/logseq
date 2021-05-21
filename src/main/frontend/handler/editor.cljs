@@ -1570,7 +1570,7 @@
 (defn get-matched-commands
   [input]
   (try
-    (let [edit-content (gobj/get input "value")
+    (let [edit-content (or (gobj/get input "value") "")
           pos (util/get-input-pos input)
           last-slash-caret-pos (:pos @*slash-caret-pos)
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
