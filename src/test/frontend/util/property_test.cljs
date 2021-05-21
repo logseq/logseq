@@ -1,4 +1,4 @@
-(ns frontend.util.property_test
+(ns frontend.util.property-test
   (:require [cljs.test :refer [deftest is are testing]]
             [frontend.util.property :as property]))
 

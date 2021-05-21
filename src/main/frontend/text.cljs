@@ -136,18 +136,6 @@
      :else
      (remove-level-space-aux! text (config/get-block-pattern format) space?))))
 
-(defn append-newline-after-level-spaces
-  [text format]
-  (if-not (string/blank? text)
-    (let [pattern (util/format
-                   "^[%s]+\\s?\n?"
-                   (config/get-block-pattern format))
-          matched-text (re-find (re-pattern pattern) text)]
-      (if matched-text
-        (string/replace-first text matched-text (str (string/trimr matched-text) "\n"))
-        text))))
-
-
 (defn build-data-value
   [col]
   (let [items (map (fn [item] (str "\"" item "\"")) col)]
