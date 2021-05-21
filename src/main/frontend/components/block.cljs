@@ -1362,7 +1362,11 @@
         properties (sort properties)]
     (cond
       (seq properties)
-      [:div.blocks-properties
+      [:div.block-properties
+       {:class (when pre-block? "page-properties")
+        :title (if pre-block?
+                 "Click to edit this page's properties"
+                 "Click to edit this block's properties")}
        (for [[k v] properties]
          (rum/with-key (property-cp config block k v)
            (str (:block/uuid block) "-" k)))]
