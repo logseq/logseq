@@ -4,7 +4,7 @@
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
   --ls-font-family: 'Inter';
-  --ls-main-content-max-width: 700px;
+  --ls-main-content-max-width: 740px;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
 }
@@ -727,6 +727,11 @@ a.fade-link:hover {
   height: 20px;
 }
 
+.svg-small svg {
+    transform: scale(0.6);
+    display: inline;
+}
+
 /* < > buttons */
 
 a.navigation {
@@ -759,6 +764,7 @@ mark {
 
 .block-ref {
   padding: 2px 5px;
+  display: inline;
 }
 
 .block-ref .block-ref {

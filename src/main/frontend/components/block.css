@@ -1,6 +1,10 @@
 .blocks-container {
 }
 
+.block-content-wrapper {
+    width: 100%;
+}
+
 .block-content {
   min-height: 24px;
   max-width: 100%;
@@ -86,11 +90,10 @@
 }
 
 .open-block-ref-link {
-  @apply py-0 px-1 rounded opacity-50 hover:opacity-100;
-  font-size: 12px;
-  line-height: 1em;
-  position: relative;
-  right: -4px;
+  @apply opacity-30 hover:opacity-100;
+  background-color: var(--ls-page-properties-background-color);
+  padding: 1px 4px;
+  border-radius: 2px;
 }
 
 .block-body {

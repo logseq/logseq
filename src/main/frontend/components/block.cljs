@@ -532,25 +532,21 @@
                {:block block})
               (route-handler/redirect! {:to          :page
                                         :path-params {:name id}})))}
-
          (let [title (let [title (:block/title block)]
-                       (if (empty? title)
-                         ;; display the content
-                         [:div.block-ref
-                          (block-content config block nil (:block/uuid block) (:slide? config))]
-                         (->elem
-                          :span.block-ref
-                          (map-inline config title))))]
+                       [:span.block-ref
+                        (block-content (assoc config :block-ref? true)
+                                       block nil (:block/uuid block)
+                                       (:slide? config))])]
            (ui/tippy {:html [:div.tippy-wrapper
-                             {:style {:width 780
+                             {:style {:width 735
                                       :text-align "left"}}
                              (block-container config block)]
                       :interactive true}
-            (if label
-              (->elem
-               :span.block-ref
-               (map-inline config label))
-              title)))]
+                     (if label
+                       (->elem
+                        :span.block-ref
+                        (map-inline config label))
+                       title)))]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
@@ -1278,7 +1274,7 @@
                                2))
         elem (if heading-level
                (keyword (str "h" heading-level))
-               :div)]
+               :div.inline)]
     (->elem
      elem
      (merge
@@ -1472,6 +1468,7 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title body meta content marker dummy? page format repo children pre-block? properties idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
   (let [collapsed? (get properties :collapsed)
+        block-ref-with-title? (and (:block-ref? config) (seq title))
         dragging? (rum/react *dragging?)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
@@ -1483,12 +1480,17 @@
                                 (block-content-on-mouse-down e block block-id properties content format edit-input-id))
                :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
                :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
-               :on-drop       (fn [event] (block-content-on-drop event block uuid))}]
-    [:div.flex.relative {:style {:width "100%"}}
-     [:div.flex-1.flex-col.relative.block-content
-      (cond-> {:id (str "block-content-" uuid)}
-        (not slide?)
-        (merge attrs))
+               :on-drop       (fn [event] (block-content-on-drop event block uuid))
+               :style {:width "100%"}}]
+    [:div.block-content.inline
+     (cond-> {:id (str "block-content-" uuid)}
+       (not slide?)
+       (merge attrs))
+
+     [:span
+     ;; .flex.relative {:style {:width "100%"}}
+     [:span
+      ;; .flex-1.flex-col.relative.block-content
 
       (cond
         (seq title)
@@ -1514,47 +1516,17 @@
                  (not (:slide? config)))
         (properties-cp config block))
 
-      (when (seq body)
-        (do
-          [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
-          ;; TODO: consistent id instead of the idx (since it could be changed later)
-           (let [body (block/trim-break-lines! (:block/body block))]
-             (for [[idx child] (medley/indexed body)]
-               (when-let [block (markup-element-cp config child)]
-                 (rum/with-key (block-child block)
-                   (str uuid "-" idx)))))]))]
-     (when (and block-refs-count (> block-refs-count 0))
-       [:div
-        [:a.open-block-ref-link.bg-base-2
-         {:title "Open block references"
-          :style {:margin-top -1}
-          :on-click (fn []
-                      (state/sidebar-add-block!
-                       (state/get-current-repo)
-                       (:db/id block)
-                       :block-ref
-                       {:block block}))}
-         block-refs-count]])
-
-     (when (and (= marker "DONE")
-                (state/enable-timetracking?))
-       (let [start-time (or
-                         (get properties :now)
-                         (get properties :doing)
-                         (get properties :in-progress)
-                         (get properties :later)
-                         (get properties :todo))
-             finish-time (get properties :done)]
-         (when (and start-time finish-time (> finish-time start-time))
-           [:div.text-sm.absolute.time-spent {:style {:top 0
-                                                      :right 0
-                                                      :padding-left 2}
-                                              :title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))}
-            [:span.opacity-70
-             (utils/timeConversion (- finish-time start-time))]])))]))
+      (when (and (not block-ref-with-title?) (seq body))
+        [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
+         ;; TODO: consistent id instead of the idx (since it could be changed later)
+         (let [body (block/trim-break-lines! (:block/body block))]
+           (for [[idx child] (medley/indexed body)]
+             (when-let [block (markup-element-cp config child)]
+               (rum/with-key (block-child block)
+                 (str uuid "-" idx)))))])]]]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
+  [config {:block/keys [uuid title body meta content dummy? page format repo children marker properties block-refs-count pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
   (let [editor-box (get config :editor-box)
         edit? (state/sub [:editor/editing? edit-input-id])]
     (if (and edit? editor-box)
@@ -1570,7 +1542,46 @@
                                  (editor-handler/select-block! uuid)))}
                    edit-input-id
                    config)]
-      (block-content config block edit-input-id block-id slide?))))
+      [:div.flex.flex-row.block-content-wrapper
+       [:div.flex.flex-1
+        (block-content config block edit-input-id block-id slide?)]
+       [:div.flex.flex-row
+        (when (:embed? config)
+          [:a.opacity-30.hover:opacity-100.svg-small.inline
+           {:on-mouse-down (fn [e]
+                             (prn "stop e")
+                             (util/stop e)
+                             (when-let [block (:block config)]
+                               (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
+           svg/edit])
+
+        (when (and (= (:block/marker block) "DONE")
+                   (state/enable-timetracking?))
+          (let [start-time (or
+                            (get properties :now)
+                            (get properties :doing)
+                            (get properties :in-progress)
+                            (get properties :later)
+                            (get properties :todo))
+                finish-time (get properties :done)]
+            (when (and start-time finish-time (> finish-time start-time))
+              [:div.text-sm.time-spent.ml-1 {:title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))
+                                              :style {:padding-top 3}}
+               [:a.opacity-30.hover:opacity-100
+                (utils/timeConversion (- finish-time start-time))]])))
+
+        (when (and block-refs-count (> block-refs-count 0))
+          [:div
+           [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+            {:title "Open block references"
+             :style {:margin-top -1}
+             :on-click (fn []
+                         (state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id block)
+                          :block-ref
+                          {:block block}))}
+            block-refs-count]])]])))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block slide? top?]
