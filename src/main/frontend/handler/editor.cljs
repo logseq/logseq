@@ -979,7 +979,8 @@
                                   zip/up
                                   (zip/append-child [block])))]
                         loc**)) (zip/vector-zip []) blocks)]
-    (zip/root loc)))
+
+    (clojure.walk/postwalk (fn [e] (if (map? e) (dissoc e :level) e)) (zip/root loc))))
 
 (defn- compose-copied-blocks-contents-&-block-tree
   [repo block-ids]
