@@ -72,6 +72,7 @@
     :block/updated-at
     :block/file
     :block/parent
+    :block/unordered
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 
