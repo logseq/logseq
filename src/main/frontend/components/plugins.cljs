@@ -96,11 +96,11 @@
          [:strong svg/settings-sm]
          [:ul.menu-list
           [:li {:on-click #(if usf (js/apis.openPath usf))} "Open settings"]
-          [:li {:on-click #(js/apis.openPath url)} "Open plugin root"]
+          [:li {:on-click #(js/apis.openPath url)} "Open plugin package"]
           [:li {:on-click
                 #(let [confirm-fn
                        (ui/make-confirm-modal
-                        {:title      (str "Are you sure uninstall plugin - " name "?")
+                        {:title      (str "Are you sure uninstall plugin [" name "] ?")
                          :on-confirm (fn [_ {:keys [close-fn]}]
                                        (close-fn)
                                        (plugin-handler/unregister-plugin id))})]

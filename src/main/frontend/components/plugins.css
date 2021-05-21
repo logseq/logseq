@@ -79,7 +79,7 @@
           transition: none;
           opacity: .2;
           position: relative;
-          z-index: var(--ls-z-index-level-2);
+          z-index: var(--ls-z-index-level-1);
 
           .menu-list {
             @apply shadow-md rounded-sm absolute hidden list-none overflow-hidden m-0 p-0;
@@ -87,14 +87,15 @@
             background-color: var(--ls-primary-background-color);
             top: 20px;
             left: 0;
-            min-width: 100px;
+            min-width: 120px;
 
             > li {
               margin: 0;
               padding: 5px;
               transition: background-color .2s;
               user-select: none;
-              opacity: .8;
+              font-weight: bold;
+              opacity: .9;
 
               &:hover {
                 background-color: var(--ls-quaternary-background-color);
