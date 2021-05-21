@@ -14,7 +14,7 @@ import {
   LSPluginCaller,
   LSPMSG_READY, LSPMSG_SYNC,
   LSPMSG, LSPMSG_SETTINGS,
-  LSPMSG_ERROR_TAG
+  LSPMSG_ERROR_TAG, LSPMSG_BEFORE_UNLOAD, AWAIT_LSPMSGFn
 } from './LSPlugin.caller'
 import {
   ILSPluginThemeManager,
@@ -590,10 +590,11 @@ class PluginLocal
     try {
       this._status = PluginLocalLoadStatus.UNLOADING
 
-      const eventBeforeUnload = {}
+      const eventBeforeUnload = { unregister }
 
       // sync call
       try {
+        await this._caller?.callUserModel(AWAIT_LSPMSGFn(LSPMSG_BEFORE_UNLOAD), eventBeforeUnload)
         this.emit('beforeunload', eventBeforeUnload)
       } catch (e) {
         console.error('[beforeunload Error]', e)
@@ -689,7 +690,7 @@ class PluginLocal
   }
 
   get debugTag () {
-    return `[${this._options?.name} #${this._id}]`
+    return `#${this._id} [${this._options?.name}]`
   }
 
   get localRoot (): string {

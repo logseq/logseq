@@ -109,11 +109,21 @@ const KEY_MAIN_UI = 0
  */
 export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements ILSPluginUser {
   /**
-   * Indicate connected with host
    * @private
    */
   private _connected: boolean = false
+
+  /**
+   * ui frame identities
+   * @private
+   */
   private _ui = new Map<number, uiState>()
+
+  /**
+   * handler of before unload plugin
+   * @private
+   */
+  private _beforeunloadCallback?: (e: any) => Promise<void>
 
   /**
    * @param _baseInfo
@@ -129,6 +139,20 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
       const b = Object.assign({}, this.settings)
       const a = Object.assign(this._baseInfo.settings, payload)
       this.emit('settings:changed', { ...a }, b)
+    })
+
+    _caller.on('beforeunload', async (payload) => {
+      const { actor, ...rest } = payload
+      const cb = this._beforeunloadCallback
+      if (!cb || !actor) return
+
+      try {
+        cb && await cb(rest)
+        actor.resolve(null)
+      } catch (e) {
+        console.debug(`${_caller.debugTag} [beforeunload] `, e)
+        actor.reject(e)
+      }
     })
   }
 
@@ -151,10 +175,19 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
       this._connected = true
 
+      if (baseInfo?.id) {
+        this._caller.debugTag = `#${baseInfo.id} [${baseInfo.name}]`
+      }
+
       callback && callback.call(this, baseInfo)
     } catch (e) {
       console.error('[LSPlugin Ready Error]', e)
     }
+  }
+
+  beforeunload (callback: (e: any) => Promise<void>): void {
+    if (typeof callback !== 'function') return
+    this._beforeunloadCallback = callback
   }
 
   provideModel (model: Record<string, any>) {

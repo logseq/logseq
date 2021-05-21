@@ -9,12 +9,15 @@ const debug = Debug('LSPlugin:caller')
 
 type DeferredActor = ReturnType<typeof deferred>
 
+export const FLAG_AWAIT = '#await#response#'
 export const LSPMSG = '#lspmsg#'
 export const LSPMSG_ERROR_TAG = '#lspmsg#error#'
 export const LSPMSG_SETTINGS = '#lspmsg#settings#'
+export const LSPMSG_BEFORE_UNLOAD = '#lspmsg#beforeunload#'
 export const LSPMSG_SYNC = '#lspmsg#reply#'
 export const LSPMSG_READY = '#lspmsg#ready#'
 export const LSPMSGFn = (id: string) => `${LSPMSG}${id}`
+export const AWAIT_LSPMSGFn = (id: string) => `${FLAG_AWAIT}${id}`
 
 /**
  * Call between core and user
@@ -33,10 +36,16 @@ class LSPluginCaller extends EventEmitter {
   private _call?: (type: string, payload: any, actor?: DeferredActor) => Promise<any>
   private _callUserModel?: (type: string, payload: any) => Promise<any>
 
+  private _debugTag = ''
+
   constructor (
     private _pluginLocal: PluginLocal | null
   ) {
     super()
+
+    if (_pluginLocal) {
+      this._debugTag = _pluginLocal.debugTag
+    }
   }
 
   async connectToChild () {
@@ -67,12 +76,18 @@ class LSPluginCaller extends EventEmitter {
         await readyDeferred.resolve()
       },
 
+      [LSPMSG_BEFORE_UNLOAD]: async (e) => {
+        const actor = deferred(10 * 1000)
+        caller.emit('beforeunload', Object.assign({ actor }, e))
+        await actor.promise
+      },
+
       [LSPMSG_SETTINGS]: async ({ type, payload }) => {
         caller.emit('settings:changed', payload)
       },
 
       [LSPMSG]: async ({ ns, type, payload }: any) => {
-        debug(`[call from host #${this._pluginLocal?.id}]`, ns, type, payload)
+        debug(`${this._debugTag} [call from host]`, ns, type, payload)
 
         if (ns && ns.startsWith('hook')) {
           caller.emit(`${ns}:${type}`, payload)
@@ -160,8 +175,6 @@ class LSPluginCaller extends EventEmitter {
   }
 
   async call (type: any, payload: any = {}) {
-    // TODO: ?
-    this.emit(type, payload)
     return this._call?.call(this, type, payload)
   }
 
@@ -207,12 +220,17 @@ class LSPluginCaller extends EventEmitter {
         })
 
         this._call = async (...args: any) => {
-          // parent all will get message
+          // parent all will get message before handshaked
           await refChild.call(LSPMSGFn(pl.id), { type: args[0], payload: args[1] || {} })
         }
 
-        this._callUserModel = async (...args: any) => {
-          await refChild.call(args[0], args[1] || {})
+        this._callUserModel = async (type, payload: any) => {
+          if (type.startsWith(FLAG_AWAIT)) {
+            // TODO: attach payload
+            return await refChild.get(type.replace(FLAG_AWAIT, ''))
+          } else {
+            refChild.call(type, payload)
+          }
         }
 
         resolve(null)
@@ -252,7 +270,12 @@ class LSPluginCaller extends EventEmitter {
       }
 
       this._callUserModel = async (...args: any) => {
-        const type = args[0]
+        let type = args[0] as string
+
+        if (type?.startsWith(FLAG_AWAIT)) {
+          type = type.replace(FLAG_AWAIT, '')
+        }
+
         const payload = args[1] || {}
         const fn = this._userModel[type]
 
@@ -278,6 +301,10 @@ class LSPluginCaller extends EventEmitter {
 
   _getSandboxShadowContainer () {
     return this._shadow?.frame
+  }
+
+  set debugTag (value: string) {
+    this._debugTag = value
   }
 
   async destroy () {

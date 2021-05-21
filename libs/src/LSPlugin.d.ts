@@ -193,6 +193,11 @@ interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   ready (model?: Record<string, any>, callback?: (e: any) => void | {}): Promise<any>
 
   /**
+   * @param callback
+   */
+  beforeunload: (callback:() => Promise<void>) => void
+
+  /**
    * @param model
    */
   provideModel (model: Record<string, any>): this
