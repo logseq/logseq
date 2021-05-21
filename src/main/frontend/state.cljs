@@ -1238,7 +1238,7 @@
 
 (defn get-export-bullet-indentation
   []
-  (case (get (get-config) :export/bullet-indentation :two-spaces)
+  (case (get (get-config) :export/bullet-indentation :tab)
     :eight-spaces
     "        "
     :four-spaces
