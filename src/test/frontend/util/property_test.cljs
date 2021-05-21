@@ -90,5 +90,20 @@
     "hello\n:PROPERTIES:\n:foo: bar\n:nice\n:END:\nnice"
     "hello\nfoo:: bar\n:nice\nnice"))
 
+(deftest test-build-properties-str
+  (are [x y] (= (property/build-properties-str :mardown x) y)
+    {:title "a"}
+    "title:: a\n"
+    {:title "a/b/c"}
+    "title:: a/b/c\n"
+    {:title "a/b/c" :tags "d,e"}
+    "title:: a/b/c\ntags:: d,e\n")
+  (are [x y] (= (property/build-properties-str :org x) y)
+    {:title "a"}
+    ":PROPERTIES:\n:title: a\n:END:\n"
+    {:title "a/b/c"}
+    ":PROPERTIES:\n:title: a/b/c\n:END:\n"
+    {:title "a/b/c" :tags "d,e"}
+    ":PROPERTIES:\n:title: a/b/c\n:tags: d,e\n:END:\n"))
 
 #_(cljs.test/run-tests)

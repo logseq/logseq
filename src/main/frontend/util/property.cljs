@@ -92,7 +92,7 @@
     (let [org? (= format :org)
           kv-format (if org? ":%s: %s" "%s:: %s")
           full-format (if org? ":PROPERTIES:\n%s\n:END:\n" "%s\n")
-          properties-content (->> (map (fn [[k v]] (util/format kv-format k v)) properties)
+          properties-content (->> (map (fn [[k v]] (util/format kv-format (name k) v)) properties)
                                   (string/join "\n"))]
       (util/format full-format properties-content))))
 
