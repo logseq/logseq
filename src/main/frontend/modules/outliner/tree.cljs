@@ -90,5 +90,5 @@
 (defn sort-blocks
   "sort blocks by parent & left"
   [blocks-exclude-root root]
-  (let [parent-groups (atom (group-by #(:block/parent %) blocks-exclude-root))]
+  (let [parent-groups (atom (group-by :block/parent blocks-exclude-root))]
     (flatten (concat (sort-blocks-aux [root] parent-groups) (vals @parent-groups)))))
