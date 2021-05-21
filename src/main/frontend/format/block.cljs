@@ -159,7 +159,7 @@
   (atom #{"background-color" "background_color"}))
 
 (defn extract-properties
-  [[_ properties] _start-pos _end-pos]
+  [properties]
   (let [properties (into {} properties)
         page-refs (->>
                    (map (fn [v]
@@ -170,40 +170,46 @@
                                             (filter (fn [s] (= \# (first s))))
                                             (map (fn [s] (subs s 1))))]
                               (concat page-refs tags))))
-                        (vals properties))
+                     (vals properties))
                    (apply concat)
                    (remove string/blank?))
         properties (->> properties
                         (medley/map-kv (fn [k v]
-                                         (if (coll? v)
-                                           [(keyword k) v]
-                                           (let [k (name k)
-                                                v (string/trim v)
-                                                k (string/replace k " " "-")
-                                                 k (string/lower-case k)
-                                                v (cond
-                                                    (= v "true")
-                                                    true
-                                                    (= v "false")
-                                                    false
+                                         (let [v (if (coll? v)
+                                                   v
+                                                   (let [k (name k)
+                                                         v (string/trim v)
+                                                         k (string/replace k " " "-")
+                                                         k (string/lower-case k)
+                                                         v (cond
+                                                             (= v "true")
+                                                             true
+                                                             (= v "false")
+                                                             false
 
-                                                    (re-find #"^\d+$" v)
-                                                    (util/safe-parse-int v)
+                                                             (re-find #"^\d+$" v)
+                                                             (util/safe-parse-int v)
 
-                                                    (and (= "\"" (first v) (last v))) ; wrapped in ""
-                                                    (string/trim (subs v 1 (dec (count v))))
+                                                             (and (= "\"" (first v) (last v))) ; wrapped in ""
+                                                             (string/trim (subs v 1 (dec (count v))))
 
-                                                    (contains? @non-parsing-properties (string/lower-case k))
-                                                    v
+                                                             (contains? @non-parsing-properties (string/lower-case k))
+                                                             v
 
-                                                    :else
-                                                    (let [v' v]
-                                                      (if (and k v'
-                                                               (contains? config/markers k)
-                                                               (util/safe-parse-int v'))
-                                                        (util/safe-parse-int v')
-                                                        (text/split-page-refs-without-brackets v' true))))]
-                                            [(keyword k) v])))))]
+                                                             :else
+                                                             (if (and k v
+                                                                      (contains? config/markers k)
+                                                                      (util/safe-parse-int v))
+                                                               (util/safe-parse-int v)
+                                                               (text/split-page-refs-without-brackets v true)))]
+                                                     v))
+                                               k (keyword k)
+                                               v (if (and
+                                                      (string? v)
+                                                      (contains? #{:alias :aliases :tags} k))
+                                                   (set [v])
+                                                   v)]
+                                           [k v]))))]
     {:properties properties
      :page-refs page-refs}))
 
@@ -445,7 +451,7 @@
                   (recur headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children))
 
                 (property/properties-ast? block)
-                (let [properties (extract-properties block start_pos end_pos)]
+                (let [properties (extract-properties (second block))]
                   (recur headings block-body (rest blocks) timestamps properties last-pos last-level children))
 
                 (heading-block? block)
