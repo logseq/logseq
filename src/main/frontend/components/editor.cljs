@@ -286,6 +286,7 @@
                         (< delta-width (* max-width 0.5))))] ;; FIXME: for translateY layer
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:class (if x-overflow? "is-overflow-vw-x" "")
+      :on-mouse-down (fn [e] (.stopPropagation e))
       :style (merge
               {:top        (+ top offset-top)
                :max-height to-max-height
