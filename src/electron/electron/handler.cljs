@@ -4,7 +4,7 @@
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]
             ["path" :as path]
-            ["chokidar" :as watcher]
+            [electron.fs-watcher :as watcher]
             [promesa.core :as p]
             [goog.object :as gobj]
             [clojure.string :as string]
@@ -33,11 +33,8 @@
 (defmethod handle :unlink [_window [_ path]]
   (fs/unlinkSync path))
 
-(defn- read-file
-  [path]
-  (.toString (fs/readFileSync path)))
 (defmethod handle :readFile [_window [_ path]]
-  (read-file path))
+  (utils/read-file path))
 
 (defmethod handle :writeFile [_window [_ path content]]
   ;; TODO: handle error
@@ -50,21 +47,7 @@
 (defmethod handle :stat [_window [_ path]]
   (fs/statSync path))
 
-(defn- fix-win-path!
-  [path]
-  (when path
-    (if utils/win32?
-      (string/replace path "\\" "/")
-      path)))
 
-;; TODO: ignore according to mime types
-(defn ignored-path?
-  [dir path]
-  (or
-   (some #(string/starts-with? path (str dir "/" %))
-         ["." "assets" "node_modules"])
-   (some #(string/ends-with? path %)
-         [".swap" ".crswap" ".tmp" ".DS_Store"])))
 
 (defonce allowed-formats
   #{:org :markdown :md :edn :json :css :excalidraw})
@@ -79,16 +62,16 @@
   [path]
   (let [result (->>
                 (readdir path)
-                (remove (partial ignored-path? path))
+                (remove (partial utils/ignored-path? path))
                 (filter #(contains? allowed-formats (get-ext %)))
                 (map (fn [path]
                        (let [stat (fs/statSync path)]
                          (when-not (.isDirectory stat)
-                           {:path (fix-win-path! path)
-                            :content (read-file path)
+                           {:path (utils/fix-win-path! path)
+                            :content (utils/read-file path)
                             :stat stat}))))
                 (remove nil?))]
-    (vec (cons {:path (fix-win-path! path)} result))))
+    (vec (cons {:path (utils/fix-win-path! path)} result))))
 
 (defmethod handle :openDir [^js window _messages]
   (let [result (.showOpenDialogSync dialog (bean/->js
@@ -143,63 +126,9 @@
   (clear-cache!)
   (search/ensure-search-dir!))
 
-(defn- get-file-ext
-  [file]
-  (last (string/split file #"\.")))
-
-(defonce file-watcher-chan "file-watcher")
-(defn send-file-watcher! [^js win type payload]
-  (.. win -webContents
-      (send file-watcher-chan
-            (bean/->js {:type type :payload payload}))))
-
-(defonce polling-interval 5000)
-(defn watch-dir!
-  [win dir]
-  (when (fs/existsSync dir)
-    (let [watcher (.watch watcher dir
-                          (clj->js
-                           {:ignored (partial ignored-path? dir)
-                            :ignoreInitial true
-                            :ignorePermissionErrors true
-                            :interval polling-interval
-                            :binaryInterval polling-interval
-                            :persistent true
-                            :disableGlobbing true
-
-                            :awaitWriteFinish true}))]
-      ;; TODO: batch sender
-      (.on watcher "add"
-           (fn [path]
-             (send-file-watcher! win "add"
-                                 {:dir (fix-win-path! dir)
-                                  :path (fix-win-path! path)
-                                  :content (read-file path)
-                                  :stat (fs/statSync path)})))
-      (.on watcher "change"
-           (fn [path]
-             (send-file-watcher! win "change"
-                                 {:dir (fix-win-path! dir)
-                                  :path (fix-win-path! path)
-                                  :content (read-file path)
-                                  :stat (fs/statSync path)})))
-      ;; (.on watcher "unlink"
-      ;;      (fn [path]
-      ;;        (send-file-watcher! win "unlink"
-      ;;                            {:dir (fix-win-path! dir)
-      ;;                             :path (fix-win-path! path)})))
-      (.on watcher "error"
-           (fn [path]
-             (println "Watch error happened: "
-                      {:path path})))
-
-      (.on app "quit" #(.close watcher))
-
-      true)))
-
 (defmethod handle :addDirWatcher [window [_ dir]]
   (when dir
-    (watch-dir! window dir)))
+    (watcher/watch-dir! window dir)))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))

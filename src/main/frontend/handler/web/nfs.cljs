@@ -42,27 +42,29 @@
 
 (defn- ->db-files
   [electron? dir-name result]
-  (if electron?
-    (map (fn [{:keys [path stat content]}]
-           (let [{:keys [mtime size]} stat]
-             {:file/path             path
-              :file/last-modified-at mtime
-              :file/size             size
-              :file/content content}))
-         result)
-    (let [result (flatten (bean/->clj result))]
-      (map (fn [file]
-             (let [handle (gobj/get file "handle")
-                   get-attr #(gobj/get file %)
-                   path (-> (get-attr "webkitRelativePath")
-                            (string/replace-first (str dir-name "/") ""))]
-               {:file/name             (get-attr "name")
-                :file/path             path
-                :file/last-modified-at (get-attr "lastModified")
-                :file/size             (get-attr "size")
-                :file/type             (get-attr "type")
-                :file/file             file
-                :file/handle           handle})) result))))
+  (->>
+   (if electron?
+     (map (fn [{:keys [path stat content]}]
+            (let [{:keys [mtime size]} stat]
+              {:file/path             path
+               :file/last-modified-at mtime
+               :file/size             size
+               :file/content content}))
+       result)
+     (let [result (flatten (bean/->clj result))]
+       (map (fn [file]
+              (let [handle (gobj/get file "handle")
+                    get-attr #(gobj/get file %)
+                    path (-> (get-attr "webkitRelativePath")
+                             (string/replace-first (str dir-name "/") ""))]
+                {:file/name             (get-attr "name")
+                 :file/path             path
+                 :file/last-modified-at (get-attr "lastModified")
+                 :file/size             (get-attr "size")
+                 :file/type             (get-attr "type")
+                 :file/file             file
+                 :file/handle           handle})) result)))
+   (sort-by :file/path)))
 
 (defn- filter-markup-and-built-in-files
   [files]

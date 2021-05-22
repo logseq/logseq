@@ -106,9 +106,9 @@
   (d/listen! conn :persistence
              (fn [tx-report]
                (when-not (util/electron?)
-                (let [tx-id (get-tx-id tx-report)]
-                  (state/set-last-transact-time! repo (util/time-ms))
-                  (persist-if-idle! repo)))
+                 (let [tx-id (get-tx-id tx-report)]
+                   (state/set-last-transact-time! repo (util/time-ms))
+                   (persist-if-idle! repo)))
 
                ;; rebuild search indices
                (let [data (:tx-data tx-report)
