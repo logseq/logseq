@@ -491,6 +491,7 @@
          (blocks-container blocks (assoc config
                                          :id page-name
                                          :embed? true
+                                         :page-embed? true
                                          :ref? false))))]))
 
 (defn- get-label-text
@@ -1543,10 +1544,9 @@
        [:div.flex.flex-1
         (block-content config block edit-input-id block-id slide?)]
        [:div.flex.flex-row
-        (when (:embed? config)
+        (when (and (:embed? config) (not (:page-embed? config)))
           [:a.opacity-30.hover:opacity-100.svg-small.inline
            {:on-mouse-down (fn [e]
-                             (prn "stop e")
                              (util/stop e)
                              (when-let [block (:block config)]
                                (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
