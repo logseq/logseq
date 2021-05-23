@@ -1,4 +1,4 @@
-(ns frontend.text-test
+(ns frontend.format.block-test
   (:require [frontend.format.block :as block]
             [cljs.test :refer [deftest is are testing use-fixtures run-tests]]))
 
