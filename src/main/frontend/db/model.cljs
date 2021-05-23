@@ -317,9 +317,11 @@
 
 (defn get-page-format
   [page-name]
-  (when-let [file (:block/file (db-utils/entity [:block/name page-name]))]
-    (when-let [path (:file/path (db-utils/entity (:db/id file)))]
-      (format/get-format path))))
+  (or
+   (when-let [file (:block/file (db-utils/entity [:block/name page-name]))]
+     (when-let [path (:file/path (db-utils/entity (:db/id file)))]
+       (format/get-format path)))
+   :markdown))
 
 (defn page-alias-set
   [repo-url page]

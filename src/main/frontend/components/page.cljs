@@ -76,10 +76,25 @@
 
 (declare page)
 
+(defn- get-page-format
+  [page-name]
+  (let [block? (util/uuid-string? page-name)
+        block-id (and block? (uuid page-name))
+        page (if block-id
+               (:block/name (:block/page (db/entity [:block/uuid block-id])))
+               page-name)]
+    (db/get-page-format page)))
+
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
-  [repo page-e file-path page-name page-original-name encoded-page-name sidebar? journal? block? block-id format]
-  (let [raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
+  [repo page-e sidebar?]
+  (let [page-name (:block/name page-e)
+        page-original-name (or (:block/original-name page-e) page-name)
+        format (get-page-format page-name)
+        journal? (db/journal-page? page-name)
+        block? (util/uuid-string? page-name)
+        block-id (and block? (uuid page-name))
+        raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
         page-blocks (block-handler/with-dummy-block raw-page-blocks format
                       (if (empty? raw-page-blocks)
                         {:block/page {:db/id (:db/id page-e)}
@@ -96,11 +111,9 @@
     (page-blocks-inner page-name page-blocks hiccup sidebar?)))
 
 (defn contents-page
-  [{:block/keys [name original-name file] :as contents}]
+  [page]
   (when-let [repo (state/get-current-repo)]
-    (let [format (db/get-page-format name)
-          file-path (:file/path file)]
-      (page-blocks-cp repo contents file-path name original-name name true false false nil format))))
+    (page-blocks-cp repo page true)))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -210,13 +223,6 @@
 
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
-  #_
-  {:did-mount (fn [state]
-                (ui-handler/scroll-and-highlight! state)
-                state)
-   :did-update (fn [state]
-                 (ui-handler/scroll-and-highlight! state)
-                 state)}
   [state {:keys [repo page-name preview?] :as option}]
   (when-let [path-page-name (or page-name
                                 (get-page-name state)
@@ -248,8 +254,6 @@
              page-name (:block/name page)
              page-original-name (:block/original-name page)
              title (or title page-original-name page-name)
-             file (:block/file page)
-             file-path (and (:db/id file) (:file/path (db/entity repo (:db/id file))))
              today? (and
                      journal?
                      (= page-name (string/lower-case (date/journal-name))))
@@ -355,20 +359,6 @@
                                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
                      :z-index     1})]))])
            [:div
-            ;; [:div.content
-            ;;  (when (and file-path
-            ;;             (not sidebar?)
-            ;;             (not block?)
-            ;;             (not (state/hide-file?))
-            ;;             (not config/publishing?))
-            ;;    [:div.text-sm.ml-1.mb-4.flex-1.inline-flex
-            ;;     {:key "page-file"}
-            ;;     [:span.opacity-50 {:style {:margin-top 2}} (t :file/file)]
-            ;;     [:a.bg-base-2.px-1.ml-1.mr-3 {:style {:border-radius 4
-            ;;                                           :word-break    "break-word"}
-            ;;                                   :href  (rfe/href :file {:path file-path})}
-            ;;      file-path]])]
-
             (when (and repo (not block?))
               (let [alias (db/get-page-alias-names repo page-name)]
                 (when (seq alias)
@@ -385,7 +375,7 @@
                  (block/block-parents config repo block-id format)]))
 
             ;; blocks
-            (page-blocks-cp repo page file-path page-name page-original-name page-name sidebar? journal? block? block-id format)]]
+            (page-blocks-cp repo page sidebar?)]]
 
           (when-not block?
             (today-queries repo today? sidebar?))
