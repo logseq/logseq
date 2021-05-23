@@ -88,7 +88,8 @@
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
   [repo page-e sidebar?]
-  (let [page-name (:block/name page-e)
+  (let [page-name (or (:block/name page-e)
+                      (str (:block/uuid page-e)))
         page-original-name (or (:block/original-name page-e) page-name)
         format (get-page-format page-name)
         journal? (db/journal-page? page-name)
@@ -375,7 +376,10 @@
                  (block/block-parents config repo block-id format)]))
 
             ;; blocks
-            (page-blocks-cp repo page sidebar?)]]
+            (let [page (if block?
+                         (db/entity repo [:block/uuid block-id])
+                         page)]
+              (page-blocks-cp repo page sidebar?))]]
 
           (when-not block?
             (today-queries repo today? sidebar?))
