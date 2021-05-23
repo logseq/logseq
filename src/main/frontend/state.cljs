@@ -119,7 +119,9 @@
     ;; copied blocks
     :copy/blocks {:copy/content nil :copy/block-tree nil}
 
-    :date-picker/date nil}))
+    :date-picker/date nil
+
+    :view/components {}}))
 
 (defn get-route-match
   []
@@ -1247,3 +1249,19 @@
     "  "
     :tab
     "\t"))
+
+(defn set-page-blocks-cp!
+  [value]
+  (set-state! [:view/components :page-blocks] value))
+
+(defn get-page-blocks-cp
+  []
+  (get-in @state [:view/components :page-blocks]))
+
+(defn set-editor-cp!
+  [value]
+  (set-state! [:view/components :editor] value))
+
+(defn get-editor-cp
+  []
+  (get-in @state [:view/components :editor]))

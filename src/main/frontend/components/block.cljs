@@ -369,10 +369,10 @@
        (get page-entity :block/original-name page-name)))])
 
 (rum/defc page-cp
-  [{:keys [html-export? label children contents-page?] :as config} page]
+  [{:keys [html-export? label children contents-page? sidebar?] :as config} page]
   (when-let [page-name (:block/name page)]
-    (let [page-entity page
-          page (string/lower-case page-name)
+    (let [page (string/lower-case page-name)
+          page-entity (db/entity [:block/name page])
           redirect-page-name (cond
                                (:block/alias? config)
                                page
@@ -389,12 +389,18 @@
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config page-name href redirect-page-name page-entity contents-page? children html-export? label)]
-      inner
-      ;; (ui/tippy
-      ;;  {:interactive true
-      ;;   :html (page-preview page-name)}
-      ;;  inner)
-      )))
+      (ui/tippy {:html [:div.tippy-wrapper.overflow-y-auto
+                        {:style {:width 735
+                                 :text-align "left"
+                                 :font-weight 500
+                                 :max-height 600
+                                 :padding-bottom 200}}
+                        [:h2.font-bold.text-lg page-name]
+                        (let [page (db/entity [:block/name (string/lower-case page-name)])]
+                          ((state/get-page-blocks-cp) (state/get-current-repo) page (:sidebar? config)))]
+                 :interactive true
+                 :delay 1000}
+                inner))))
 
 (rum/defc asset-reference
   [title path]
@@ -538,11 +544,13 @@
                         (block-content (assoc config :block-ref? true)
                                        block nil (:block/uuid block)
                                        (:slide? config))])]
-           (ui/tippy {:html [:div.tippy-wrapper
+           (ui/tippy {:html [:div.tippy-wrapper.overflowy-y-auto
                              {:style {:width 735
-                                      :text-align "left"}}
+                                      :text-align "left"
+                                      :max-height 600}}
                              (block-container config block)]
-                      :interactive true}
+                      :interactive true
+                      :delay 1000}
                      (if label
                        (->elem
                         :span.block-ref
