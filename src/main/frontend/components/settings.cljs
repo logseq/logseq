@@ -372,8 +372,7 @@
          [:div.mt-1.sm:mt-0.sm:col-span-2
           [:div.max-w-lg.rounded-md.sm:max-w-xs
            (ui/button (t :settings-page/clear)
-             :on-click (fn []
-                         (handler/clear-cache!)))]]]]
+             :on-click handler/clear-cache!)]]]]
 
        [:div.panel-wrap
         [:div.it.app-updater.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start

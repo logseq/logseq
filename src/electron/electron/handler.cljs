@@ -114,7 +114,7 @@
 (defn clear-cache!
   []
   (let [path (.getPath ^object app "userData")]
-    (doseq [dir ["search" "IndexedDB" "Local Storage" "databases" "cache"]]
+    (doseq [dir ["search" "IndexedDB"]]
       (let [path (path/join path dir)]
         (try
           (fs-extra/removeSync path)
