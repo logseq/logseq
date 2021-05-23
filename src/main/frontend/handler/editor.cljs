@@ -301,7 +301,7 @@
         top-level? (= parent page)
         markdown-heading? (and (= format :markdown)
                                (= "Heading" first-elem-type))
-        heading? (= "Paragraph" first-elem-type)
+        block-with-title? (mldoc/block-with-title? first-elem-type)
         content (string/triml content)
         content (string/replace content (util/format "((%s))" (str uuid)) "")
         [content content'] (cond
@@ -316,7 +316,7 @@
                                [content (str (config/get-block-pattern format) " " content)])
 
                              :else
-                             (let [content' (str (config/get-block-pattern format) (if heading? " " "\n") content)]
+                             (let [content' (str (config/get-block-pattern format) (if block-with-title? " " "\n") content)]
                                [content content']))
         block (assoc block :block/content content')
         block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))

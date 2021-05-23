@@ -190,6 +190,12 @@
               [block pos-meta])
             [block pos-meta])) ast)))
 
+(defn block-with-title?
+  [type]
+  (contains? #{"Paragraph"
+               "Raw_Html"
+               "Hiccup"} type))
+
 (defn ->edn
   [content config]
   (try

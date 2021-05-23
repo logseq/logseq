@@ -19,10 +19,7 @@
       "hello\n\nworld"
 
       "hello\naa:: bb\nid:: f9873a81-07b9-4246-b910-53a6f5ec7e04\n\nworld"
-      "hello\naa:: bb\n\nworld"
-      )
-    )
-  )
+      "hello\naa:: bb\n\nworld")))
 
 (deftest test-remove-properties
   (testing "properties with non-blank lines"
@@ -61,11 +58,24 @@
     (property/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END:\n" "c" "d")
     "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:"
 
-    (property/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END: world\n" "c" "d")
-    "hello\n:PROPERTIES:\n:c: d\n:END:\n:PROPERTIES:\n:a: b\n:END: world\n"
+    (property/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
+    "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:\nworld"
+
+    (property/insert-property :org "#+BEGIN_QUOTE
+ hello world
+  #+END_QUOTE" "c" "d")
+    ":PROPERTIES:\n:c: d\n:END:\n#+BEGIN_QUOTE\n hello world\n  #+END_QUOTE"
 
     (property/insert-property :markdown "hello\na:: b\nworld\n" "c" "d")
-    "hello\na:: b\nc:: d\nworld"))
+    "hello\na:: b\nc:: d\nworld"
+
+    (property/insert-property :markdown "> quote" "c" "d")
+    "c:: d\n> quote"
+
+    (property/insert-property :markdown "#+BEGIN_QUOTE
+ hello world
+  #+END_QUOTE" "c" "d")
+    "c:: d\n#+BEGIN_QUOTE\n hello world\n  #+END_QUOTE"))
 
 (deftest test->new-properties
   (are [x y] (= (property/->new-properties x) y)

@@ -568,10 +568,7 @@
   (if macro-content
     (let [ast (->> (mldoc/->edn macro-content (mldoc/default-config format))
                    (map first))
-          block? (contains? #{"Paragraph"
-                              "Raw_Html"
-                              "Hiccup"}
-                            (ffirst ast))]
+          block? (mldoc/block-with-title? (ffirst ast))]
       (if block?
         [:div
          (markup-elements-cp (assoc config :block/format format) ast)]
