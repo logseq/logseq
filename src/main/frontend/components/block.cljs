@@ -697,7 +697,7 @@
                (not= \* (last s)))
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
-          (re-find #"(?i)^http[s]?://" s)
+          (util/safe-re-find #"(?i)^http[s]?://" s)
           (->elem :a {:href s
                       :data-href s
                       :target "_blank"}
@@ -850,7 +850,7 @@
             (when-let [youtube-id (cond
                                     (== 11 (count url)) url
                                     :else
-                                    (nth (re-find YouTube-regex url) 5))]
+                                    (nth (util/safe-re-find YouTube-regex url) 5))]
               (when-not (string/blank? youtube-id)
                 (let [width (min (- (util/get-width) 96)
                                  560)
@@ -867,7 +867,7 @@
         (= name "vimeo")
         (when-let [url (first arguments)]
           (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-            (when-let [vimeo-id (nth (re-find Vimeo-regex url) 5)]
+            (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
               (when-not (string/blank? vimeo-id)
                 (let [width (min (- (util/get-width) 96)
                                  560)
@@ -888,7 +888,7 @@
             (when-let [id (cond
                             (<= (count url) 15) url
                             :else
-                            (last (re-find id-regex url)))]
+                            (last (util/safe-re-find id-regex url)))]
               (when-not (string/blank? id)
                 (let [width (min (- (util/get-width) 96)
                                  560)
@@ -2148,7 +2148,7 @@
 
         ["Paragraph" l]
        ;; TODO: speedup
-        (if (re-find #"\"Export_Snippet\" \"embed\"" (str l))
+        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
           (->elem :div (map-inline config l))
           (->elem :div.is-paragraph (map-inline config l)))
 

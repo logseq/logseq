@@ -324,7 +324,7 @@
                                                  (remove string/blank?)
                                                  (map (fn [x]
                                                         (if (or (contains? #{"+" "-"} (first x))
-                                                                (and (re-find #"\d" (first x))
+                                                                (and (util/safe-re-find #"\d" (first x))
                                                                      (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
                                                           (keyword (name x))
                                                           x)))

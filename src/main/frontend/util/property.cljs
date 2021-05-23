@@ -24,34 +24,34 @@
 (defn contains-properties?
   [content]
   (and (string/includes? content properties-start)
-       (re-find properties-end-pattern content)))
+       (util/safe-re-find properties-end-pattern content)))
 
 (defn simplified-property?
   [line]
   (boolean
    (and (string? line)
-        (re-find #"^\s?[^ ]+:: " line))))
+        (util/safe-re-find #"^\s?[^ ]+:: " line))))
 
 (defn front-matter-property?
   [line]
   (boolean
    (and (string? line)
-        (re-find #"^\s*[^ ]+: " line))))
+        (util/safe-re-find #"^\s*[^ ]+: " line))))
 
 (defn get-property-key
   [line format]
   (and (string? line)
        (when-let [key (last
                        (if (= format :org)
-                         (re-find #"^\s*:([^: ]+): " line)
-                         (re-find #"^\s*([^ ]+):: " line)))]
+                         (util/safe-re-find #"^\s*:([^: ]+): " line)
+                         (util/safe-re-find #"^\s*([^ ]+):: " line)))]
          (keyword key))))
 
 (defn org-property?
   [line]
   (boolean
    (and (string? line)
-        (re-find #"^\s*:[^: ]+: " line)
+        (util/safe-re-find #"^\s*:[^: ]+: " line)
         (when-let [key (get-property-key line :org)]
           (not (contains? #{:PROPERTIES :END} key))))))
 

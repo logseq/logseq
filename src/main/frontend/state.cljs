@@ -303,7 +303,7 @@
    (or
     (when-let [workflow (:preferred-workflow (get-config))]
       (let [workflow (name workflow)]
-        (if (re-find #"now|NOW" workflow)
+        (if (util/safe-re-find #"now|NOW" workflow)
           :now
           :todo)))
     (get-in @state [:me :preferred_workflow] :now))))

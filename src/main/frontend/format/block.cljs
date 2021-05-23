@@ -187,7 +187,7 @@
                                                              (= v "false")
                                                              false
 
-                                                             (re-find #"^\d+$" v)
+                                                             (util/safe-re-find #"^\d+$" v)
                                                              (util/safe-parse-int v)
 
                                                              (and (= "\"" (first v) (last v))) ; wrapped in ""

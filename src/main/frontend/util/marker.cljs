@@ -26,7 +26,7 @@
         (if-let [matches (seq (util/re-pos new-line-re-pattern content))]
           (let [[start-pos content] (last matches)]
             (+ start-pos (count content)))
-          (count (re-find re-pattern content)))
+          (count (util/safe-re-find re-pattern content)))
         new-content
         (str (subs content 0 pos)
              (string/replace-first (subs content pos)

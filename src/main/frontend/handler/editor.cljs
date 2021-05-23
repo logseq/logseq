@@ -563,7 +563,7 @@
 
 (defn- with-timetracking-properties
   [block value]
-  (let [new-marker (first (re-find marker/bare-marker-pattern (or value "")))
+  (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
         new-marker (if new-marker (string/lower-case (string/trim new-marker)))
         new-marker? (and
                      new-marker
@@ -694,7 +694,7 @@
           format (or (db/get-page-format (state/get-current-page))
                      (state/get-preferred-format))
           cond-fn (fn [marker] (or (and (= :markdown format)
-                                        (re-find (re-pattern (str "#*\\s*" marker)) content))
+                                        (util/safe-re-find (re-pattern (str "#*\\s*" marker)) content))
                                      (util/starts-with? content "TODO")))
           [new-content marker] (cond
                                  (cond-fn "TODO")
@@ -2544,7 +2544,7 @@
         (string/join "\n"
                      (mapv (fn [p] (->> (string/trim p)
                                         ((fn [p]
-                                           (if (re-find (if (= format :org)
+                                           (if (util/safe-re-find (if (= format :org)
                                                           #"\s*\*+\s+"
                                                           #"\s*-\s+") p)
                                              p
@@ -2574,9 +2574,9 @@
         ;; from external
         (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
           (match [format
-                  (nil? (re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                  (nil? (re-find #"(?m)^\s*\*+\s+" text))
-                  (nil? (re-find #"(?:\r?\n){2,}" text))]
+                  (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                  (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                  (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
             [:markdown false _ _]
             (do
               (paste-text-parseable format text)
@@ -2614,7 +2614,7 @@
                                                       (string? existed-file-path)
                                                       (not util/mac?)
                                                       (not util/win32?)) ; FIXME: linux
-                                                   (when (re-find #"^(/[^/ ]*)+/?$" existed-file-path)
+                                                   (when (util/safe-re-find #"^(/[^/ ]*)+/?$" existed-file-path)
                                                      existed-file-path)
                                                    existed-file-path)
                                has-file-path? (not (string/blank? existed-file-path))
