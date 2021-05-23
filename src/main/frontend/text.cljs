@@ -145,3 +145,11 @@
 (defn image-link?
   [img-formats s]
   (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
+
+(defn scheduled-deadline-dash->star
+  [content]
+  (-> content
+      (string/replace "- TODO -> DONE [" "* TODO -> DONE [")
+      (string/replace "- DOING -> DONE [" "* DOING -> DONE [")
+      (string/replace "- LATER -> DONE [" "* LATER -> DONE [")
+      (string/replace "- NOW -> DONE [" "* NOW -> DONE [")))

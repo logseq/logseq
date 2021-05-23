@@ -163,7 +163,8 @@
               (let [path (string/lower-case path)]
                 (or (string/ends-with? path ".md")
                     (string/ends-with? path ".markdown"))))
-            (get-file-contents repo {:init-level 1 :heading-to-list? true}))))
+            (get-file-contents repo {:init-level 1
+                                     :heading-to-list? true}))))
 
 (defn- get-embed-and-refs-blocks-pages-aux []
   (let [mem (atom {})]

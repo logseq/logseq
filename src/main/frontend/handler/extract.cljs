@@ -28,8 +28,6 @@
          (map string/lower-case)
          (distinct))))
 
-
-
 (defn get-page-name
   [file ast]
   ;; headline
@@ -191,7 +189,9 @@
                        (fn [{:file/keys [path content]} contents]
                          (println "Parsing : " path)
                          (when content
-                           (let [utf8-content (utf8/encode content)]
+                           ;; TODO: remove `text/scheduled-deadline-dash->star` once migration is done
+                           (let [content (text/scheduled-deadline-dash->star content)
+                                 utf8-content (utf8/encode content)]
                              (extract-blocks-pages repo-url path content utf8-content)))))
                       (remove empty?))]
       (when (seq result)

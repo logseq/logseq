@@ -21,68 +21,70 @@
     (string/join (str "\n" spaces-tabs) lines)))
 
 (defn transform-content
-  [{:block/keys [format pre-block? title content unordered body heading-level left page]} level heading-to-list?]
+  [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline]} level {:keys [heading-to-list?]}]
   (let [content (or content "")
         heading-with-title? (seq title)
         first-block? (= left page)
         pre-block? (and first-block? pre-block?)
-        markdown-heading? (and (= format :markdown) (not unordered) (not heading-to-list?))]
-    (cond
-      (and first-block? pre-block?)
-      (let [content (-> (string/trim content)
-                        ;; FIXME: should only works with :filters
-                        (string/replace "\"" "\\\""))]
-        (str content "\n"))
-
-      :else
-      (let [[prefix spaces-tabs]
-            (cond
-              (= format :org)
-              [(->>
-                (repeat level "*")
-                (apply str)) ""]
-
-              markdown-heading?
-              ["" ""]
-
-              :else
-              (let [level (if (and heading-to-list? heading-level)
-                            (if (> heading-level 1)
-                              (dec heading-level)
-                              heading-level)
-                            level)
-                    spaces-tabs (->>
-                                 (repeat (dec level) (state/get-export-bullet-indentation))
-                                 (apply str))]
-                [(str spaces-tabs "-") (str spaces-tabs "  ")]))
-            content (if heading-to-list?
-                      (-> (string/replace content #"^\s?#+\s+" "")
-                          (string/replace #"^\s?#+\s?$" ""))
-                      content)
-            new-content (indented-block-content (string/trim content) spaces-tabs)
-            sep (cond
-                  markdown-heading?
-                  ""
-
-                  heading-with-title?
-                  " "
-
-                  (string/blank? new-content)
-                  ""
+        markdown-heading? (and (= format :markdown) (not unordered) (not heading-to-list?))
+        content (cond
+                  (and first-block? pre-block?)
+                  (let [content (-> (string/trim content)
+                                    ;; FIXME: should only works with :filters
+                                    (string/replace "\"" "\\\""))]
+                    (str content "\n"))
 
                   :else
-                  (str "\n" spaces-tabs))]
-        (str prefix sep new-content)))))
+                  (let [[prefix spaces-tabs]
+                        (cond
+                          (= format :org)
+                          [(->>
+                            (repeat level "*")
+                            (apply str)) ""]
+
+                          markdown-heading?
+                          ["" ""]
+
+                          :else
+                          (let [level (if (and heading-to-list? heading-level)
+                                        (if (> heading-level 1)
+                                          (dec heading-level)
+                                          heading-level)
+                                        level)
+                                spaces-tabs (->>
+                                             (repeat (dec level) (state/get-export-bullet-indentation))
+                                             (apply str))]
+                            [(str spaces-tabs "-") (str spaces-tabs "  ")]))
+                        content (if heading-to-list?
+                                  (-> (string/replace content #"^\s?#+\s+" "")
+                                      (string/replace #"^\s?#+\s?$" ""))
+                                  content)
+                        new-content (indented-block-content (string/trim content) spaces-tabs)
+                        sep (cond
+                              markdown-heading?
+                              ""
+
+                              heading-with-title?
+                              " "
+
+                              (string/blank? new-content)
+                              ""
+
+                              :else
+                              (str "\n" spaces-tabs))]
+                    (str prefix sep new-content)))]
+    content))
 
 (defn tree->file-content
   [tree {:keys [init-level heading-to-list?]
-         :or {heading-to-list? false}}]
+         :or {heading-to-list? false}
+         :as opts}]
   (loop [block-contents []
          [f & r] tree
          level init-level]
     (if (nil? f)
       (string/join "\n" block-contents)
-      (let [content (transform-content f level heading-to-list?)
+      (let [content (transform-content f level opts)
             new-content
             (if-let [children (seq (:block/children f))]
               [content (tree->file-content children {:init-level (inc level)})]
