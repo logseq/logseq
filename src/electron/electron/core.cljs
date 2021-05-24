@@ -28,9 +28,8 @@
         win-opts (cond->
                   {:width         (.-width win-state)
                    :height        (.-height win-state)
-                   :frame         (not mac?)
+                   :frame         true
                    :autoHideMenuBar (not mac?)
-                   :titleBarStyle (if mac? "hidden" nil)
                    :webPreferences
                    {:plugins                 true ; pdf
                     :nodeIntegration         false
