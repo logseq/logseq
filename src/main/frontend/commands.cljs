@@ -236,7 +236,8 @@
      ["Src" (->block "src" "")]
      ["Query" (->block "query")]
      ["Latex export" (->block "export" "latex")]
-     (when-not (= :markdown (state/get-preferred-format))
+     ;; FIXME: current page's format
+     (when (= :org (state/get-preferred-format))
        ["Properties" (->properties)])
      ["Note" (->block "note")]
      ["Tip" (->block "tip")]
