@@ -16,3 +16,7 @@
 (defn toggle-logical-outdenting! []
   (let [logical-outdenting? (state/logical-outdenting?)]
     (set-config! :editor/logical-outdenting? (not logical-outdenting?))))
+
+(defn toggle-ui-enable-tooltip! []
+  (let [enable-tooltip? (state/enable-tooltip?)]
+    (set-config! :ui/enable-tooltip? (not enable-tooltip?))))

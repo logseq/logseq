@@ -208,6 +208,7 @@
         :settings-page/preferred-file-format "Preferred file format"
         :settings-page/preferred-workflow "Preferred workflow"
         :settings-page/enable-timetracking "Enable timetracking"
+        :settings-page/enable-tooltip "Enable tooltip"
         :settings-page/enable-journals "Enable journals"
         :settings-page/enable-encryption "Enable encryption feature"
         :settings-page/home-default-page "Set the default home page"

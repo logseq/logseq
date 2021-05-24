@@ -572,5 +572,6 @@
 
 (rum/defc tippy
   [opts child]
-  (Tippy (merge {:arrow true} opts)
+  (Tippy (merge {:arrow true
+                 :disabled (not (state/enable-tooltip?))} opts)
          child))
