@@ -190,9 +190,12 @@
                          (println "Parsing : " path)
                          (when content
                            ;; TODO: remove `text/scheduled-deadline-dash->star` once migration is done
-                           (let [content (text/scheduled-deadline-dash->star content)
-                                 utf8-content (utf8/encode content)]
-                             (extract-blocks-pages repo-url path content utf8-content)))))
+                           (let [org? (= "org" (string/lower-case (util/get-file-ext path)))]
+                             (let [content (if org?
+                                             content
+                                             (text/scheduled-deadline-dash->star content))
+                                   utf8-content (utf8/encode content)]
+                              (extract-blocks-pages repo-url path content utf8-content))))))
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)

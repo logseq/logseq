@@ -227,7 +227,7 @@
                           :else
                           (subs content 0 pos))
              content (property/remove-built-in-properties (:block/format block)
-                                                       content)]
+                                                          content)]
          (clear-selection! nil)
          (state/set-editing! edit-input-id content block text-range move-cursor?))))))
 
@@ -640,7 +640,7 @@
                            :data [new-block]})))))
 
 (defn update-timestamps-content!
-  [{:block/keys [repeated? marker] :as block} content]
+  [{:block/keys [repeated? marker format] :as block} content]
   (if repeated?
     (let [scheduled-ast (block-handler/get-scheduled-ast block)
           deadline-ast (block-handler/get-deadline-ast block)
@@ -654,7 +654,7 @@
       (when content
         (str (string/trimr content)
              "\n"
-             (util/format "* %s -> DONE [%s]"
+             (util/format (str (if (= format :org) "-" "*") " %s -> DONE [%s]")
                           marker
                           (date/get-local-date-time-string)))))
     content))
