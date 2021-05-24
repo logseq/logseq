@@ -125,8 +125,8 @@ interface IAppProxy {
 }
 
 interface IEditorProxy {
-  registerSlashCommand: (this: LSPluginUser, tag: string, actions: Array<SlashCommandAction>) => boolean
-  registerBlockContextMenu: (this: LSPluginUser, tag: string, action: () => void) => boolean
+  registerSlashCommand: (tag: string, actions: Array<SlashCommandAction>) => boolean
+  registerBlockContextMenu: (tag: string, action: () => void) => boolean
 
   // block related APIs
   getCurrentPage: () => Promise<Partial<BlockEntity>>

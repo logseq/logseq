@@ -154,7 +154,8 @@
 (def ^:export get_current_block
   (fn []
     (let [block (state/get-edit-block)
-          block (or block (state/get-last-edit-block))]
+          block (or block (state/get-last-edit-block))
+          block (and block (db-utils/pull (:db/id block)))]
       (bean/->js (normalize-keyword-for-json block)))))
 
 (def ^:export get_current_page
@@ -183,8 +184,12 @@
 (def ^:export update_block
   (fn [block-uuid content ^js opts]
     (let [opts (and opts (bean/->clj opts))
-          repo (state/get-current-repo)]
-      (editor-handler/save-block! repo (medley/uuid block-uuid) content))))
+          repo (state/get-current-repo)
+          editing? (string/ends-with? (state/get-edit-input-id) block-uuid)]
+
+      (if editing?
+        (state/set-edit-content! (state/get-edit-input-id) content)
+        (editor-handler/save-block! repo (medley/uuid block-uuid) content)))))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]

@@ -690,7 +690,8 @@ class PluginLocal
   }
 
   get debugTag () {
-    return `#${this._id} [${this._options?.name}]`
+    const name = this._options?.name
+    return `#${this._id} ${name ?? ''}`
   }
 
   get localRoot (): string {
@@ -802,7 +803,7 @@ class LSPluginCore
         const { url } = pluginOptions as PluginLocalOptions
         const pluginLocal = new PluginLocal(pluginOptions as PluginLocalOptions, this, this)
 
-        const timeLabel = `Load plugin #${pluginLocal.id}`
+        const timeLabel = `[LOAD Plugin] ${pluginLocal.debugTag}`
         console.time(timeLabel)
 
         await pluginLocal.load(readyIndicator)
@@ -810,7 +811,7 @@ class LSPluginCore
         const { loadErr } = pluginLocal
 
         if (loadErr) {
-          debug(`Failed load plugin #`, pluginOptions)
+          debug(`[Failed LOAD Plugin] #`, pluginOptions)
 
           this.emit('error', loadErr)
 
