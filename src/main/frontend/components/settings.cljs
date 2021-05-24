@@ -157,6 +157,7 @@
         enable-encryption? (state/enable-encryption? current-repo)
         sentry-disabled? (state/sub :sentry/disabled?)
         logical-outdenting? (state/logical-outdenting?)
+        enable-tooltip? (state/enable-tooltip?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         enable-block-time? (state/enable-block-time?)
         show-brackets? (state/show-brackets?)
@@ -292,11 +293,18 @@
         (toggle "preferred_outdenting"
                 (ui/tippy {:html (outdenting-hint)
                            :interactive true
-                           :theme "customized"}
+                           :theme "customized"
+                           :disabled false}
                           (t :settings-page/preferred-outdenting))
                 logical-outdenting?
                 (fn []
                   (config-handler/toggle-logical-outdenting!)))
+
+        (toggle "enable-tooltip"
+                (t :settings-page/enable-tooltip)
+                enable-tooltip?
+                (fn []
+                  (config-handler/toggle-ui-enable-tooltip!)))
 
         (toggle "enable_timetracking"
                 (t :settings-page/enable-timetracking)
