@@ -15,9 +15,9 @@
      [:div.flex-1
       [:div.flex.flex-col.pl-1.ls-block
        [:hr {:style {:margin-top 200}}]
-       [:div.flex.flex-row.admonitionblock.align-items {:class "warning"}
+       [:div.flex.flex-row.admonitionblock.align-items {:class "important"}
         [:div.pr-4.admonition-icon.flex.flex-col.justify-center
-         {:title "Warning"} (svg/warning)]
+         {:title "Important"} (svg/tip)]
         [:div.ml-4.text-lg
          (t :on-boarding/notice)]]
        [:p
@@ -210,6 +210,10 @@
        [:a {:href "/blog/terms"
             :target "_blank"}
         (t :help/terms)]]
+      [:li
+       [:a {:href "https://github.com/logseq/awesome-logseq"
+            :target "_blank"}
+        (t :help/awesome-logseq)]]
       [:li
        [:a {:href "https://discord.gg/KpN4eHY"
             :target "_blank"}
