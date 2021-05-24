@@ -394,7 +394,7 @@
                                  :text-align "left"
                                  :font-weight 500
                                  :max-height 600
-                                 :padding-bottom 200}}
+                                 :padding-bottom 64}}
                         [:h2.font-bold.text-lg page-name]
                         (let [page (db/entity [:block/name (string/lower-case page-name)])]
                           ((state/get-page-blocks-cp) (state/get-current-repo) page (:sidebar? config)))]

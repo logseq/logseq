@@ -81,27 +81,42 @@
     (swap! *installed dissoc install-id)))
 
 
+;; Sometimes backspace removes two chars instead of one
+;; https://github.com/logseq/logseq/issues/1965
+;; A workaround to ensure each shortcut group is only registered once
+
+(defonce *registered-shortcuts-state (atom nil))
+
+(defn- uninstall-shortcut-aux!
+  [state handler-id]
+  (some-> (get state :shortcut-key)
+          uninstall-shortcut!)
+  (swap! *registered-shortcuts-state dissoc handler-id))
+
+(defn- install-shortcut-aux!
+  [state handler-id]
+  (if (get @*registered-shortcuts-state handler-id)
+    state
+    (let [install-id (-> handler-id
+                        (install-shortcut! {:state state}))]
+     (swap! *registered-shortcuts-state assoc handler-id install-id)
+     (assoc state :shortcut-key install-id))))
+
 (defn mixin [handler-id]
   {:did-mount
    (fn [state]
-     (let [install-id (-> handler-id
-                          (install-shortcut! {:state state}))]
-       (assoc state :shortcut-key install-id)))
+     (install-shortcut-aux! state handler-id))
 
    :did-remount (fn [old-state new-state]
 
                   ;; uninstall
-                  (-> (get old-state :shortcut-key)
-                      uninstall-shortcut!)
+                  (uninstall-shortcut-aux! old-state handler-id)
 
                   ;; update new states
-                  (let [install-id (-> handler-id
-                                       (install-shortcut! {:state new-state}))]
-                    (assoc new-state :shortcut-key install-id)))
+                  (install-shortcut-aux! new-state handler-id))
    :will-unmount
    (fn [state]
-     (-> (get state :shortcut-key)
-         uninstall-shortcut!)
+     (uninstall-shortcut-aux! state handler-id)
      (dissoc state :shortcut-key))})
 
 (defn unlisten-all []
