@@ -85,8 +85,7 @@
 (defonce virtual-list-scroll-step 450)
 (defonce virtual-list-previous 50)
 
-(defonce container-ids (atom {}))
-(defonce container-idx (atom 0))
+(defonce *blocks-container-id (atom 0))
 
 ;; TODO:
 ;; add `key`
@@ -397,7 +396,7 @@
                                  :padding-bottom 64}}
                         [:h2.font-bold.text-lg page-name]
                         (let [page (db/entity [:block/name (string/lower-case page-name)])]
-                          ((state/get-page-blocks-cp) (state/get-current-repo) page (:sidebar? config)))]
+                          ((state/get-page-blocks-cp) (state/get-current-repo) page {:sidebar? (:sidebar? config)}))]
                  :interactive true
                  :delay 1000}
                 inner))))
@@ -476,6 +475,7 @@
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :id (str id)
+                                      :embed-id id
                                       :embed? true
                                       :ref? false))]]))
 
@@ -548,7 +548,7 @@
                              {:style {:width 735
                                       :text-align "left"
                                       :max-height 600}}
-                             (block-container config block)]
+                             (blocks-container [block] config)]
                       :interactive true
                       :delay 1000}
                      (if label
@@ -1115,18 +1115,6 @@
                       "hide-inner-bullet"))}
        [:span.bullet {:blockid (str uuid)}]]]]))
 
-(defn- build-id
-  [config]
-  (let [ref? (:ref? config)
-        sidebar? (:sidebar? config)
-        k (pr-str config)
-        n (or
-           (get @container-ids k)
-           (let [n' (if (and ref? (not sidebar?)) @container-idx (swap! container-idx inc))]
-             (swap! container-ids assoc k n')
-             n'))]
-    (str n "-")))
-
 (rum/defc dnd-separator
   [block margin-left bottom top? nested?]
   (let [id (str (:block/uuid block)
@@ -1534,9 +1522,10 @@
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid title body meta content dummy? page format repo children marker properties block-refs-count pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
   (let [editor-box (get config :editor-box)
-        edit? (state/sub [:editor/editing? edit-input-id])]
+        edit? (state/sub [:editor/editing? edit-input-id])
+        editor-id (str "editor-" edit-input-id)]
     (if (and edit? editor-box)
-      [:div.editor-wrapper {:id (str "editor-" edit-input-id)}
+      [:div.editor-wrapper {:id editor-id}
        (editor-box {:block block
                     :block-id uuid
                     :block-parent-id block-id
@@ -1552,7 +1541,9 @@
        [:div.flex.flex-1
         (block-content config block edit-input-id block-id slide?)]
        [:div.flex.flex-row
-        (when (and (:embed? config) (not (:page-embed? config)))
+        (when (and (:embed? config)
+                   (not (:page-embed? config))
+                   (= (:embed-id config) uuid))
           [:a.opacity-30.hover:opacity-100.svg-small.inline
            {:on-mouse-down (fn [e]
                              (util/stop e)
@@ -1757,7 +1748,8 @@
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
   [state config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? top? properties refs-with-children heading-level level type] :as block}]
-  (let [heading? (and (= type :heading) heading-level (<= heading-level 6))
+  (let [blocks-container-id (:blocks-container-id config)
+        heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
         *ref-collapsed? (get state ::ref-collapsed?)
         collapsed? (or @*ref-collapsed? (get properties :collapsed))
@@ -1768,8 +1760,7 @@
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         reference? (:reference? config)
-        unique-dom-id (build-id (dissoc config :block/uuid))
-        block-id (str "ls-block-" unique-dom-id uuid)
+        block-id (str "ls-block-" blocks-container-id "-" uuid)
         has-child? (boolean
                     (and
                      (not pre-block?)
@@ -1807,7 +1798,7 @@
       (when (not slide?)
         (block-control config block uuid block-id body children dummy? collapsed? *ref-collapsed? *control-show?))
 
-      (let [edit-input-id (str "edit-block-" unique-dom-id uuid)]
+      (let [edit-input-id (str "edit-block-" blocks-container-id "-" uuid)]
         (block-content-or-editor config block edit-input-id block-id slide? heading-level))]
 
      (block-children config children collapsed? *ref-collapsed?)
@@ -2308,16 +2299,23 @@
                      blocks)]
        sections))))
 
-(defn blocks-container
-  [blocks config]
-  (let [
-        ;; blocks (map #(dissoc % :block/children) blocks)
+(rum/defcs blocks-container <
+  {:init (fn [state]
+           (assoc state ::init-blocks-container-id (atom nil)))}
+  [state blocks config]
+  (let [*init-blocks-container-id (::init-blocks-container-id state)
+        blocks-container-id (if @*init-blocks-container-id
+                              @*init-blocks-container-id
+                              (let [id' (swap! *blocks-container-id inc)]
+                                (reset! *init-blocks-container-id id')
+                                id'))
         sidebar? (:sidebar? config)
         ref? (:ref? config)
         custom-query? (:custom-query? config)
         blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree % (:id config)))
         blocks' (blocks->vec-tree blocks)
-        blocks (if (seq blocks') blocks' blocks)]
+        blocks (if (seq blocks') blocks' blocks)
+        config (assoc config :blocks-container-id blocks-container-id)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:style {:margin-left (cond
