@@ -10,7 +10,9 @@
             [frontend.routes :as routes]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
-            [cljs.reader :as reader]))
+            [cljs.reader :as reader]
+            [frontend.components.page :as component-page]
+            [frontend.components.editor :as component-editor]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -56,10 +58,16 @@
     (set-router!)
     (rum/mount (page/current-page) node)))
 
+(defn- register-components-fns!
+  []
+  (state/set-page-blocks-cp! component-page/page-blocks-cp)
+  (state/set-editor-cp! component-editor/box))
+
 (defn ^:export init []
   ;; init is called ONCE when the page loads
   ;; this is called in the index.html and must be exported
   ;; so it is available even in :advanced release builds
+  (register-components-fns!)
   (restore-from-transit-str!)
   (restore-state!)
   (start))

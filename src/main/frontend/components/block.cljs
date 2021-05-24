@@ -396,7 +396,8 @@
                                  :padding-bottom 64}}
                         [:h2.font-bold.text-lg page-name]
                         (let [page (db/entity [:block/name (string/lower-case page-name)])]
-                          ((state/get-page-blocks-cp) (state/get-current-repo) page {:sidebar? (:sidebar? config)}))]
+                          (when-let [f (state/get-page-blocks-cp)]
+                            (f (state/get-current-repo) page {:sidebar? (:sidebar? config)})))]
                  :interactive true
                  :delay 1000}
                 inner))))
