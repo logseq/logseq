@@ -300,7 +300,7 @@
                 (fn []
                   (config-handler/toggle-logical-outdenting!)))
 
-        (toggle "enable-tooltip"
+        (toggle "enable_tooltip"
                 (t :settings-page/enable-tooltip)
                 enable-tooltip?
                 (fn []
