@@ -1280,7 +1280,7 @@
                                2))
         elem (if heading-level
                (keyword (str "h" heading-level))
-               :div.inline)]
+               :span.inline)]
     (->elem
      elem
      (merge

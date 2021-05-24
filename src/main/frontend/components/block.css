@@ -10,6 +10,8 @@
   max-width: 100%;
   overflow: initial;
   cursor: text;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
   word-break: break-word;
 
   img {
