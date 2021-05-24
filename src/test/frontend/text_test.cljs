@@ -83,16 +83,4 @@
       "**foobar" "foobar"
       "*********************foobar" "foobar")))
 
-(deftest append-newline-after-level-spaces
-  []
-  (are [x y] (= (text/append-newline-after-level-spaces x :markdown) y)
-    "# foobar" "#\nfoobar"
-    "# foobar\nfoo" "#\nfoobar\nfoo"
-    "## foobar\nfoo" "##\nfoobar\nfoo")
-
-  (are [x y] (= (text/append-newline-after-level-spaces x :org) y)
-    "* foobar" "*\nfoobar"
-    "* foobar\nfoo" "*\nfoobar\nfoo"
-    "** foobar\nfoo" "**\nfoobar\nfoo"))
-
 #_(cljs.test/test-ns 'frontend.text-test)

@@ -101,7 +101,7 @@
 
 (def mobile?
   (when-not util/node-test?
-    (re-find #"Mobi" js/navigator.userAgent)))
+    (util/safe-re-find #"Mobi" js/navigator.userAgent)))
 
 ;; TODO: protocol design for future formats support
 
@@ -309,7 +309,7 @@
 
 (defn local-asset?
   [s]
-  (re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
+  (util/safe-re-find (re-pattern (str "^[./]*" local-assets-dir)) s))
 
 (defn get-local-asset-absolute-path
   [s]

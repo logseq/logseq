@@ -33,7 +33,7 @@
           lc-content (string/lower-case content)
           lc-q (string/lower-case q)]
       (if (or (string/includes? lc-content lc-q)
-              (not (re-find #" " q)))
+              (not (util/safe-re-find #" " q)))
         (let [i (string/index-of lc-content lc-q)
               [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
           [:p

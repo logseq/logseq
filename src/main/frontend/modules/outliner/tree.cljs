@@ -77,7 +77,7 @@
             root-block (with-children-and-refs root-block result)]
         [root-block]))))
 
-(defn sort-blocks-aux
+(defn- sort-blocks-aux
   [parents parent-groups]
   (mapv (fn [parent]
           (let [parent-id {:db/id (:db/id parent)}
@@ -90,5 +90,5 @@
 (defn sort-blocks
   "sort blocks by parent & left"
   [blocks-exclude-root root]
-  (let [parent-groups (atom (group-by #(:block/parent %) blocks-exclude-root))]
+  (let [parent-groups (atom (group-by :block/parent blocks-exclude-root))]
     (flatten (concat (sort-blocks-aux [root] parent-groups) (vals @parent-groups)))))

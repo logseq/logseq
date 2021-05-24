@@ -286,6 +286,7 @@
                         (< delta-width (* max-width 0.5))))] ;; FIXME: for translateY layer
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:class (if x-overflow? "is-overflow-vw-x" "")
+      :on-mouse-down (fn [e] (.stopPropagation e))
       :style (merge
               {:top        (+ top offset-top)
                :max-height to-max-height
@@ -378,7 +379,12 @@
   {:init (fn [state]
            (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
    :did-mount (fn [state]
+                ;; TODO:
+                ;; if we quickly click into a block when editing another block,
+                ;; this will happen before the `will-unmount` event, which will
+                ;; lost the content in the editing block.
                 (state/set-editor-args! (:rum/args state))
+                ;; (js/setTimeout #(state/set-editor-args! (:rum/args state)) 20)
                 state)}
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)

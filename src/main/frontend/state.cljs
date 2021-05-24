@@ -129,7 +129,9 @@
     ;; copied blocks
     :copy/blocks {:copy/content nil :copy/block-tree nil}
 
-    :date-picker/date nil}))
+    :date-picker/date nil
+
+    :view/components {}}))
 
 (defn get-route-match
   []
@@ -313,7 +315,7 @@
    (or
     (when-let [workflow (:preferred-workflow (get-config))]
       (let [workflow (name workflow)]
-        (if (re-find #"now|NOW" workflow)
+        (if (util/safe-re-find #"now|NOW" workflow)
           :now
           :todo)))
     (get-in @state [:me :preferred_workflow] :now))))
@@ -1257,7 +1259,7 @@
 
 (defn get-export-bullet-indentation
   []
-  (case (get (get-config) :export/bullet-indentation :two-spaces)
+  (case (get (get-config) :export/bullet-indentation :tab)
     :eight-spaces
     "        "
     :four-spaces
@@ -1266,3 +1268,19 @@
     "  "
     :tab
     "\t"))
+
+(defn set-page-blocks-cp!
+  [value]
+  (set-state! [:view/components :page-blocks] value))
+
+(defn get-page-blocks-cp
+  []
+  (get-in @state [:view/components :page-blocks]))
+
+(defn set-editor-cp!
+  [value]
+  (set-state! [:view/components :editor] value))
+
+(defn get-editor-cp
+  []
+  (get-in @state [:view/components :editor]))

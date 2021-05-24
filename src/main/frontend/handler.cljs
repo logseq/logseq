@@ -28,7 +28,9 @@
             [frontend.handler.common :as common-handler]
             [electron.listener :as el]
             [electron.ipc :as ipc]
-            [frontend.version :as version]))
+            [frontend.version :as version]
+            [frontend.components.page :as page]
+            [frontend.components.editor :as editor]))
 
 (defn- watch-for-date!
   []
@@ -157,10 +159,16 @@
               (ipc/ipc "clearCache"))]
     (js/window.location.reload)))
 
+(defn- register-components-fns!
+  []
+  (state/set-page-blocks-cp! page/page-blocks-cp)
+  (state/set-editor-cp! editor/box))
+
 (defn start!
   [render]
   (let [{:keys [me logged? repos]} (get-me-and-repos)]
     (when me (state/set-state! :me me))
+    (register-components-fns!)
     (state/set-db-restoring! true)
     (render)
     (on-load-events)

@@ -301,7 +301,7 @@
         top-level? (= parent page)
         markdown-heading? (and (= format :markdown)
                                (= "Heading" first-elem-type))
-        heading? (= "Paragraph" first-elem-type)
+        block-with-title? (mldoc/block-with-title? first-elem-type)
         content (string/triml content)
         content (string/replace content (util/format "((%s))" (str uuid)) "")
         [content content'] (cond
@@ -316,7 +316,7 @@
                                [content (str (config/get-block-pattern format) " " content)])
 
                              :else
-                             (let [content' (str (config/get-block-pattern format) (if heading? " " "\n") content)]
+                             (let [content' (str (config/get-block-pattern format) (if block-with-title? " " "\n") content)]
                                [content content']))
         block (assoc block :block/content content')
         block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
@@ -563,7 +563,7 @@
 
 (defn- with-timetracking-properties
   [block value]
-  (let [new-marker (first (re-find marker/bare-marker-pattern (or value "")))
+  (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
         new-marker (if new-marker (string/lower-case (string/trim new-marker)))
         new-marker? (and
                      new-marker
@@ -695,7 +695,7 @@
           format (or (db/get-page-format (state/get-current-page))
                      (state/get-preferred-format))
           cond-fn (fn [marker] (or (and (= :markdown format)
-                                        (re-find (re-pattern (str "#*\\s*" marker)) content))
+                                        (util/safe-re-find (re-pattern (str "#*\\s*" marker)) content))
                                      (util/starts-with? content "TODO")))
           [new-content marker] (cond
                                  (cond-fn "TODO")
@@ -980,16 +980,22 @@
                                   zip/up
                                   (zip/append-child [block])))]
                         loc**)) (zip/vector-zip []) blocks)]
-    (zip/root loc)))
+
+    (clojure.walk/postwalk (fn [e] (if (map? e) (dissoc e :level) e)) (zip/root loc))))
 
 (defn- compose-copied-blocks-contents-&-block-tree
   [repo block-ids]
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
-        unordered? (:block/unordered (first blocks))
-        format (:block/format (first blocks))
-        level-blocks-map (blocks-with-level blocks)
+        blocks* (flatten
+                 (mapv (fn [b] (if (:collapsed (:block/properties b))
+                                 (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
+                                 [b])) blocks))
+        block-ids* (mapv :block/uuid blocks*)
+        unordered? (:block/unordered (first blocks*))
+        format (:block/format (first blocks*))
+        level-blocks-map (blocks-with-level blocks*)
         level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
-        level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids)
+        level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
         tree (blocks-vec->tree level-blocks)
         contents
         (mapv (fn [block]
@@ -1565,7 +1571,7 @@
 (defn get-matched-commands
   [input]
   (try
-    (let [edit-content (gobj/get input "value")
+    (let [edit-content (or (gobj/get input "value") "")
           pos (util/get-input-pos input)
           last-slash-caret-pos (:pos @*slash-caret-pos)
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
@@ -2525,7 +2531,7 @@
   (let [tree (->>
               (block/extract-blocks
                (mldoc/->edn text (mldoc/default-config format)) text true format))
-        min-level (apply min (mapv #(:block/level %) tree))
+        min-level (apply min (mapv :block/level tree))
         prefix-level (if (> min-level 1) (- min-level 1) 0)
         tree* (->> tree
                    (mapv #(assoc % :level (- (:block/level %) prefix-level)))
@@ -2539,7 +2545,7 @@
         (string/join "\n"
                      (mapv (fn [p] (->> (string/trim p)
                                         ((fn [p]
-                                           (if (re-find (if (= format :org)
+                                           (if (util/safe-re-find (if (= format :org)
                                                           #"\s*\*+\s+"
                                                           #"\s*-\s+") p)
                                              p
@@ -2569,9 +2575,9 @@
         ;; from external
         (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
           (match [format
-                  (nil? (re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                  (nil? (re-find #"(?m)^\s*\*+\s+" text))
-                  (nil? (re-find #"(?:\r?\n){2,}" text))]
+                  (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                  (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                  (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
             [:markdown false _ _]
             (do
               (paste-text-parseable format text)
@@ -2609,7 +2615,7 @@
                                                       (string? existed-file-path)
                                                       (not util/mac?)
                                                       (not util/win32?)) ; FIXME: linux
-                                                   (when (re-find #"^(/[^/ ]*)+/?$" existed-file-path)
+                                                   (when (util/safe-re-find #"^(/[^/ ]*)+/?$" existed-file-path)
                                                      existed-file-path)
                                                    existed-file-path)
                                has-file-path? (not (string/blank? existed-file-path))

@@ -8,6 +8,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler :as handler]
             [frontend.state :as state]
             [frontend.version :refer [version]]
@@ -253,7 +254,12 @@
             {:on-change (fn [e]
                           (let [format (util/evalue e)]
                             (when-not (string/blank? format)
-                              (config-handler/set-config! :date-formatter format))))}
+                              (config-handler/set-config! :date-formatter format)
+                              (notification/show!
+                               [:div "You need to re-index your graph to make the change works"]
+                               :success)
+                              (state/close-modal!)
+                              (route-handler/redirect! {:to :repos}))))}
             (for [format (sort (date/journal-title-formatters))]
               [:option (cond->
                         {:key format}
@@ -366,8 +372,7 @@
          [:div.mt-1.sm:mt-0.sm:col-span-2
           [:div.max-w-lg.rounded-md.sm:max-w-xs
            (ui/button (t :settings-page/clear)
-             :on-click (fn []
-                         (handler/clear-cache!)))]]]]
+             :on-click handler/clear-cache!)]]]]
 
        [:div.panel-wrap
         [:div.it.app-updater.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start

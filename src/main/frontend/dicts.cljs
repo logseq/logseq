@@ -243,7 +243,7 @@
         :publishing "Publishing"
         :export "Export"
         :export-json "Export as JSON"
-        :export-markdown "Export as Markdown"
+        :export-markdown "Export as standard Markdown (no block properties)"
         :export-public-pages "Export public pages"
         :export-edn "Export as EDN"
         :convert-markdown "Convert Markdown headings to unordered lists (# -> -)"

@@ -78,8 +78,8 @@
    (cond
      (and (string? s)
             ;; Either a page ref, a tag or a comma separated collection
-            (or (re-find page-ref-re s)
-                (re-find (if comma? #"[\,|，|#]+" #"#") s)))
+            (or (util/safe-re-find page-ref-re s)
+                (util/safe-re-find (if comma? #"[\,|，|#]+" #"#") s)))
      (let [result (->> (string/split s page-ref-re-2)
                        (map (fn [s] (if (string/ends-with? (string/trimr s) "]],")
                                      (let [s (string/trimr s)]
@@ -109,7 +109,7 @@
     (let [pattern (util/format
                    "^[%s]+\\s?"
                    (config/get-block-pattern format))]
-      (re-find (re-pattern pattern) text))
+      (util/safe-re-find (re-pattern pattern) text))
     ""))
 
 (defn- remove-level-space-aux!
@@ -136,18 +136,6 @@
      :else
      (remove-level-space-aux! text (config/get-block-pattern format) space?))))
 
-(defn append-newline-after-level-spaces
-  [text format]
-  (if-not (string/blank? text)
-    (let [pattern (util/format
-                   "^[%s]+\\s?\n?"
-                   (config/get-block-pattern format))
-          matched-text (re-find (re-pattern pattern) text)]
-      (if matched-text
-        (string/replace-first text matched-text (str (string/trimr matched-text) "\n"))
-        text))))
-
-
 (defn build-data-value
   [col]
   (let [items (map (fn [item] (str "\"" item "\"")) col)]
@@ -156,4 +144,12 @@
 
 (defn image-link?
   [img-formats s]
-  (some (fn [fmt] (re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
+  (some (fn [fmt] (util/safe-re-find (re-pattern (str "(?i)\\." fmt "(?:\\?([^#]*))?(?:#(.*))?$")) s)) img-formats))
+
+(defn scheduled-deadline-dash->star
+  [content]
+  (-> content
+      (string/replace "- TODO -> DONE [" "* TODO -> DONE [")
+      (string/replace "- DOING -> DONE [" "* DOING -> DONE [")
+      (string/replace "- LATER -> DONE [" "* LATER -> DONE [")
+      (string/replace "- NOW -> DONE [" "* NOW -> DONE [")))

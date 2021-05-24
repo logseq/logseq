@@ -118,15 +118,21 @@
           directive?
           (fn [[item _]] (= "directive" (string/lower-case (first item))))
           grouped-ast (group-by directive? original-ast)
-          [directive-ast other-ast]
-          [(get grouped-ast true) (get grouped-ast false)]
-          properties (->> (map first directive-ast)
-                          (map (fn [[_ k v]]
-                                 (let [k (keyword (string/lower-case k))
-                                       v (if (contains? #{:title :description :roam_tags} k)
-                                           v
-                                           (text/split-page-refs-without-brackets v true))]
-                                   [k v])))
+          directive-ast (get grouped-ast true)
+          [properties-ast other-ast] (if (= "Property_Drawer" (ffirst ast))
+                                       [(last (first ast))
+                                        (rest original-ast)]
+                                       [(->> (map first directive-ast)
+                                             (map rest))
+                                        (get grouped-ast false)])
+          properties (->>
+                      properties-ast
+                      (map (fn [[k v]]
+                             (let [k (keyword (string/lower-case k))
+                                   v (if (contains? #{:title :description :roam_tags} k)
+                                       v
+                                       (text/split-page-refs-without-brackets v true))]
+                               [k v])))
                           (reverse)
                           (into {}))
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
@@ -189,6 +195,12 @@
                                       (utf8/substring content start_pos end_pos))]]
               [block pos-meta])
             [block pos-meta])) ast)))
+
+(defn block-with-title?
+  [type]
+  (contains? #{"Paragraph"
+               "Raw_Html"
+               "Hiccup"} type))
 
 (defn ->edn
   [content config]

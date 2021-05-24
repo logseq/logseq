@@ -340,12 +340,12 @@
              {:id       (str "ac-" idx)
               :class    (when (= @current-idx idx)
                           "chosen")
-               ;; :tab-index -1
-              :on-click (fn [e]
-                          (.preventDefault e)
-                          (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                            (on-shift-chosen item)
-                            (on-chosen item)))}
+              ;; :tab-index -1
+              :on-mouse-down (fn [e]
+                               (util/stop e)
+                               (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                 (on-shift-chosen item)
+                                 (on-chosen item)))}
              (if item-render (item-render item) item))
             idx))]
        (when empty-div

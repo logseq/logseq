@@ -77,7 +77,7 @@
                              :a (let [href (:href attrs)
                                       title (:title attrs)
                                       label (map-join children)
-                                      has-img-tag? (re-find #"\[:img" (str x))]
+                                      has-img-tag? (util/safe-re-find #"\[:img" (str x))]
                                   (if has-img-tag?
                                     (export-hiccup x)
                                     (case format

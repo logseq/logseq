@@ -15,7 +15,6 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.components.editor :as editor]
-            [frontend.components.plugins :as plugins]
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.components.export :as export]
@@ -64,7 +63,6 @@
     (when (:block/dummy? block)
       (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))
   state)
-
 (rum/defc page-blocks-inner <
   {:did-mount open-first-block!
    :did-update open-first-block!}
@@ -90,29 +88,28 @@
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
   [repo page-e sidebar?]
-  (when page-e
-    (let [page-name (or (:block/name page-e)
-                        (str (:block/uuid page-e)))
-          page-original-name (or (:block/original-name page-e) page-name)
-          format (get-page-format page-name)
-          journal? (db/journal-page? page-name)
-          block? (util/uuid-string? page-name)
-          block-id (and block? (uuid page-name))
-          raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
-          page-blocks (block-handler/with-dummy-block raw-page-blocks format
-                        (if (empty? raw-page-blocks)
-                          {:block/page {:db/id (:db/id page-e)}
-                           :block/file {:db/id (:db/id (:block/file page-e))}})
-                        {:journal? journal?
-                         :page-name page-name})
-          hiccup-config {:id (if block? (str block-id) page-name)
-                         :sidebar? sidebar?
-                         :block? block?
-                         :editor-box editor/box
-                         :page page}
-          hiccup-config (common-handler/config-with-document-mode hiccup-config)
-          hiccup (block/->hiccup page-blocks hiccup-config {})]
-      (page-blocks-inner page-name page-blocks hiccup sidebar?))))
+  (let [page-name (or (:block/name page-e)
+                      (str (:block/uuid page-e)))
+        page-original-name (or (:block/original-name page-e) page-name)
+        format (get-page-format page-name)
+        journal? (db/journal-page? page-name)
+        block? (util/uuid-string? page-name)
+        block-id (and block? (uuid page-name))
+        raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
+        page-blocks (block-handler/with-dummy-block raw-page-blocks format
+                      (if (empty? raw-page-blocks)
+                        {:block/page {:db/id (:db/id page-e)}
+                         :block/file {:db/id (:db/id (:block/file page-e))}})
+                      {:journal? journal?
+                       :page-name page-name})
+        hiccup-config {:id (if block? (str block-id) page-name)
+                       :sidebar? sidebar?
+                       :block? block?
+                       :editor-box editor/box
+                       :page page}
+        hiccup-config (common-handler/config-with-document-mode hiccup-config)
+        hiccup (block/->hiccup page-blocks hiccup-config {})]
+    (page-blocks-inner page-name page-blocks hiccup sidebar?)))
 
 (defn contents-page
   [page]
@@ -232,22 +229,22 @@
                                 (get-page-name state)
                                 (state/get-current-page))]
     (let [current-repo (state/sub :git/current-repo)
-          repo (or repo current-repo)
-          page-name (string/lower-case path-page-name)
-          block? (util/uuid-string? page-name)
-          block-id (and block? (uuid page-name))
-          format (let [page (if block-id
-                              (:block/name (:block/page (db/entity [:block/uuid block-id])))
-                              page-name)]
-                   (db/get-page-format page))
-          journal? (db/journal-page? page-name)
-          sidebar? (:sidebar? option)]
-      (rum/with-context [[t] i18n/*tongue-context*]
-        (let [route-page-name path-page-name
-              page (if block?
-                     (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
-                          (db/entity repo))
-                     (db/entity repo [:block/name page-name]))
+         repo (or repo current-repo)
+         page-name (string/lower-case path-page-name)
+         block? (util/uuid-string? page-name)
+         block-id (and block? (uuid page-name))
+         format (let [page (if block-id
+                             (:block/name (:block/page (db/entity [:block/uuid block-id])))
+                             page-name)]
+                  (db/get-page-format page))
+         journal? (db/journal-page? page-name)
+         sidebar? (:sidebar? option)]
+     (rum/with-context [[t] i18n/*tongue-context*]
+       (let [route-page-name path-page-name
+             page (if block?
+                    (->> (:db/id (:block/page (db/entity repo [:block/uuid block-id])))
+                         (db/entity repo))
+                    (db/entity repo [:block/name page-name]))
              ;; TODO: replace page with frontend.format.block/page->map
              page (if page page (do
                                   (db/transact! repo [{:block/name page-name
@@ -384,16 +381,16 @@
                          page)]
               (page-blocks-cp repo page sidebar?))]]
 
-           (when-not block?
-             (today-queries repo today? sidebar?))
+          (when-not block?
+            (today-queries repo today? sidebar?))
 
-           (tagged-pages repo page-name)
+          (tagged-pages repo page-name)
 
           ;; referenced blocks
-           [:div {:key "page-references"}
-            (rum/with-key
-              (reference/references route-page-name false)
-              (str route-page-name "-refs"))]
+          [:div {:key "page-references"}
+           (rum/with-key
+             (reference/references route-page-name false)
+             (str route-page-name "-refs"))]
 
           ;; TODO: or we can lazy load them
           (when-not sidebar?

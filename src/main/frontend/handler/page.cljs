@@ -7,7 +7,6 @@
             [frontend.config :as config]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.file :as file-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.web.nfs :as web-nfs]
@@ -73,7 +72,7 @@
          tx (block/page-name->map title true)
          format (state/get-preferred-format)
          page-entity [:block/uuid (:block/uuid tx)]
-         create-title-property? (util/include-windows-reserved-chars? title)
+         create-title-property? (and title (util/include-windows-reserved-chars? title))
          default-properties (default-properties-block title format page-entity)
          empty-block {:block/uuid (db/new-block-id)
                       :block/left [:block/uuid (:block/uuid default-properties)]
@@ -440,15 +439,21 @@
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
-              chosen (if (and (re-find #"\s+" chosen) (not wrapped?))
+              chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
-                       chosen)]
+                       chosen)
+              q (if @editor-handler/*selected-text "" q)
+              [last-pattern forward-pos] (if wrapped?
+                                           [q 3]
+                                           (if (= \# (first q))
+                                             [(subs q 1) 1]
+                                             [q 2]))
+              last-pattern (str "#" (when wrapped? "[[") last-pattern)]
           (editor-handler/insert-command! id
                                           (str "#" (when wrapped? "[[") chosen)
                                           format
-                                          {:last-pattern (let [q (if @editor-handler/*selected-text "" q)]
-                                                           (str "#" (when wrapped? "[[") q))
-                                           :forward-pos (if wrapped? 3 2)})))
+                                          {:last-pattern last-pattern
+                                           :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [page-ref-text (get-page-ref-text chosen)]

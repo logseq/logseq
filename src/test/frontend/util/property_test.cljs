@@ -1,4 +1,4 @@
-(ns frontend.util.property_test
+(ns frontend.util.property-test
   (:require [cljs.test :refer [deftest is are testing]]
             [frontend.util.property :as property]))
 
@@ -19,10 +19,7 @@
       "hello\n\nworld"
 
       "hello\naa:: bb\nid:: f9873a81-07b9-4246-b910-53a6f5ec7e04\n\nworld"
-      "hello\naa:: bb\n\nworld"
-      )
-    )
-  )
+      "hello\naa:: bb\n\nworld")))
 
 (deftest test-remove-properties
   (testing "properties with non-blank lines"
@@ -61,11 +58,24 @@
     (property/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END:\n" "c" "d")
     "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:"
 
-    (property/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END: world\n" "c" "d")
-    "hello\n:PROPERTIES:\n:c: d\n:END:\n:PROPERTIES:\n:a: b\n:END: world\n"
+    (property/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
+    "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:\nworld"
+
+    (property/insert-property :org "#+BEGIN_QUOTE
+ hello world
+  #+END_QUOTE" "c" "d")
+    ":PROPERTIES:\n:c: d\n:END:\n#+BEGIN_QUOTE\n hello world\n  #+END_QUOTE"
 
     (property/insert-property :markdown "hello\na:: b\nworld\n" "c" "d")
-    "hello\na:: b\nc:: d\nworld"))
+    "hello\na:: b\nc:: d\nworld"
+
+    (property/insert-property :markdown "> quote" "c" "d")
+    "c:: d\n> quote"
+
+    (property/insert-property :markdown "#+BEGIN_QUOTE
+ hello world
+  #+END_QUOTE" "c" "d")
+    "c:: d\n#+BEGIN_QUOTE\n hello world\n  #+END_QUOTE"))
 
 (deftest test->new-properties
   (are [x y] (= (property/->new-properties x) y)
@@ -90,5 +100,20 @@
     "hello\n:PROPERTIES:\n:foo: bar\n:nice\n:END:\nnice"
     "hello\nfoo:: bar\n:nice\nnice"))
 
+(deftest test-build-properties-str
+  (are [x y] (= (property/build-properties-str :mardown x) y)
+    {:title "a"}
+    "title:: a\n"
+    {:title "a/b/c"}
+    "title:: a/b/c\n"
+    {:title "a/b/c" :tags "d,e"}
+    "title:: a/b/c\ntags:: d,e\n")
+  (are [x y] (= (property/build-properties-str :org x) y)
+    {:title "a"}
+    ":PROPERTIES:\n:title: a\n:END:\n"
+    {:title "a/b/c"}
+    ":PROPERTIES:\n:title: a/b/c\n:END:\n"
+    {:title "a/b/c" :tags "d,e"}
+    ":PROPERTIES:\n:title: a/b/c\n:tags: d,e\n:END:\n"))
 
 #_(cljs.test/run-tests)

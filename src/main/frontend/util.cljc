@@ -49,11 +49,20 @@
        (and (string/includes? ua "webkit")
             (not (string/includes? ua "chrome"))))))
 
+(defn safe-re-find
+  [pattern s]
+  #?(:cljs
+     (when-not (string? s)
+       ;; TODO: sentry
+       (js/console.trace)))
+  (when (string? s)
+    (re-find pattern s)))
+
 #?(:cljs
    (defn mobile?
      []
      (when-not node-test?
-       (re-find #"Mobi" js/navigator.userAgent))))
+       (safe-re-find #"Mobi" js/navigator.userAgent))))
 
 #?(:cljs
    (defn electron?
@@ -292,29 +301,29 @@
 ;; Caret
 #?(:cljs
    (defn caret-range [node]
-     (let [doc (or (gobj/get node "ownerDocument")
-                   (gobj/get node "document"))
-           win (or (gobj/get doc "defaultView")
-                   (gobj/get doc "parentWindow"))
-           selection (.getSelection win)]
-       (if selection
-         (let [range-count (gobj/get selection "rangeCount")]
-           (when (> range-count 0)
-             (let [range (-> (.getSelection win)
-                             (.getRangeAt 0))
-                   pre-caret-range (.cloneRange range)]
-               (.selectNodeContents pre-caret-range node)
-               (.setEnd pre-caret-range
-                        (gobj/get range "endContainer")
-                        (gobj/get range "endOffset"))
-               (.toString pre-caret-range))))
-         (when-let [selection (gobj/get doc "selection")]
-           (when (not= "Control" (gobj/get selection "type"))
-             (let [text-range (.createRange selection)
-                   pre-caret-text-range (.createTextRange (gobj/get doc "body"))]
-               (.moveToElementText pre-caret-text-range node)
-               (.setEndPoint pre-caret-text-range "EndToEnd" text-range)
-               (gobj/get pre-caret-text-range "text"))))))))
+     (when-let [doc (or (gobj/get node "ownerDocument")
+                        (gobj/get node "document"))]
+       (let [win (or (gobj/get doc "defaultView")
+                     (gobj/get doc "parentWindow"))
+             selection (.getSelection win)]
+         (if selection
+           (let [range-count (gobj/get selection "rangeCount")]
+             (when (> range-count 0)
+               (let [range (-> (.getSelection win)
+                               (.getRangeAt 0))
+                     pre-caret-range (.cloneRange range)]
+                 (.selectNodeContents pre-caret-range node)
+                 (.setEnd pre-caret-range
+                          (gobj/get range "endContainer")
+                          (gobj/get range "endOffset"))
+                 (.toString pre-caret-range))))
+           (when-let [selection (gobj/get doc "selection")]
+             (when (not= "Control" (gobj/get selection "type"))
+               (let [text-range (.createRange selection)
+                     pre-caret-text-range (.createTextRange (gobj/get doc "body"))]
+                 (.moveToElementText pre-caret-text-range node)
+                 (.setEndPoint pre-caret-text-range "EndToEnd" text-range)
+                 (gobj/get pre-caret-text-range "text")))))))))
 
 #?(:cljs
    (defn set-caret-pos!
@@ -391,7 +400,7 @@
 #?(:cljs
    (defn scroll-to-element
      [elem-id]
-     (when-not (re-find #"^/\d+$" elem-id)
+     (when-not (safe-re-find #"^/\d+$" elem-id)
        (when elem-id
          (when-let [elem (gdom/getElement elem-id)]
            (.scroll (app-scroll-container-node)
@@ -860,11 +869,11 @@
 (defonce exactly-uuid-pattern (re-pattern (str "^" uuid-pattern "$")))
 (defn uuid-string?
   [s]
-  (re-find exactly-uuid-pattern s))
+  (safe-re-find exactly-uuid-pattern s))
 
 (defn extract-uuid
   [s]
-  (re-find (re-pattern uuid-pattern) s))
+  (safe-re-find (re-pattern uuid-pattern) s))
 
 (defn drop-nth [n coll]
   (keep-indexed #(if (not= %1 n) %2) coll))
@@ -876,7 +885,7 @@
 
 (defn file-page?
   [page-name]
-  (when page-name (re-find #"\." page-name)))
+  (when page-name (safe-re-find #"\." page-name)))
 
 #?(:cljs
    (defn react
@@ -925,7 +934,7 @@
    (defn get-prev-block-with-same-level
      [block]
      (let [id (gobj/get block "id")
-           prefix (re-find #"ls-block-[\d]+" id)]
+           prefix (safe-re-find #"ls-block-[\d]+" id)]
        (when-let [blocks (d/by-class "ls-block")]
          (when-let [index (.indexOf blocks block)]
            (let [level (d/attr block "level")]
@@ -996,8 +1005,8 @@
   [tag-name]
   (when tag-name
     (and
-     (not (re-find #"#" tag-name))
-     (re-find regex/valid-tag-pattern tag-name))))
+     (not (safe-re-find #"#" tag-name))
+     (safe-re-find regex/valid-tag-pattern tag-name))))
 
 (defn encode-str
   [s]
@@ -1032,8 +1041,8 @@
      []
      (let [user-agent js/navigator.userAgent
            vendor js/navigator.vendor]
-       (and (re-find #"Chrome" user-agent)
-            (re-find #"Google Inc" user-agent)))))
+       (and (safe-re-find #"Chrome" user-agent)
+            (safe-re-find #"Google Inc" user-agent)))))
 
 #?(:cljs
    (defn indexeddb-check?
@@ -1089,7 +1098,7 @@
 
 (defn include-windows-reserved-chars?
   [s]
-  (re-find windows-reserved-chars s))
+  (safe-re-find windows-reserved-chars s))
 
 (defn page-name-sanity
   [page-name]

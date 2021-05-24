@@ -441,7 +441,7 @@
 
 (defn compute-pos-delta-when-change-marker
   [current-input edit-content new-value marker pos]
-  (let [old-marker (some->> (first (re-find marker/bare-marker-pattern edit-content))
+  (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
                             (string/trim))
         old-marker (if old-marker old-marker "")
         pos-delta (- (count marker)
@@ -463,7 +463,7 @@
                   (if-let [matches (seq (util/re-pos new-line-re-pattern prefix))]
                     (let [[start-pos content] (last matches)]
                       (+ start-pos (count content)))
-                    (count (re-find re-pattern prefix))))
+                    (count (util/safe-re-find re-pattern prefix))))
             new-value (str (subs edit-content 0 pos)
                            (string/replace-first (subs edit-content pos)
                                                  marker/marker-pattern
@@ -490,9 +490,9 @@
             slash-pos (:pos @*slash-caret-pos)
             heading-pattern  #"^#\+"
             prefix (subs edit-content 0 (dec slash-pos))
-            pos (count (re-find heading-pattern prefix))
+            pos (count (util/safe-re-find heading-pattern prefix))
             new-value (cond
-                        (re-find heading-pattern prefix)
+                        (util/safe-re-find heading-pattern prefix)
                         (str (subs edit-content 0 pos)
                              (string/replace-first (subs edit-content pos)
                                                    heading-pattern

@@ -3,7 +3,8 @@
             [frontend.util :as util]
             [clojure.set :as set]
             [frontend.config :as config]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.format.mldoc :as mldoc]))
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")
@@ -24,34 +25,34 @@
 (defn contains-properties?
   [content]
   (and (string/includes? content properties-start)
-       (re-find properties-end-pattern content)))
+       (util/safe-re-find properties-end-pattern content)))
 
 (defn simplified-property?
   [line]
   (boolean
    (and (string? line)
-        (re-find #"^\s?[^ ]+:: " line))))
+        (util/safe-re-find #"^\s?[^ ]+:: " line))))
 
 (defn front-matter-property?
   [line]
   (boolean
    (and (string? line)
-        (re-find #"^\s*[^ ]+: " line))))
+        (util/safe-re-find #"^\s*[^ ]+: " line))))
 
 (defn get-property-key
   [line format]
   (and (string? line)
        (when-let [key (last
                        (if (= format :org)
-                         (re-find #"^\s*:([^: ]+): " line)
-                         (re-find #"^\s*([^ ]+):: " line)))]
+                         (util/safe-re-find #"^\s*:([^: ]+): " line)
+                         (util/safe-re-find #"^\s*([^ ]+):: " line)))]
          (keyword key))))
 
 (defn org-property?
   [line]
   (boolean
    (and (string? line)
-        (re-find #"^\s*:[^: ]+: " line)
+        (util/safe-re-find #"^\s*:[^: ]+: " line)
         (when-let [key (get-property-key line :org)]
           (not (contains? #{:PROPERTIES :END} key))))))
 
@@ -92,7 +93,7 @@
     (let [org? (= format :org)
           kv-format (if org? ":%s: %s" "%s:: %s")
           full-format (if org? ":PROPERTIES:\n%s\n:END:\n" "%s\n")
-          properties-content (->> (map (fn [[k v]] (util/format kv-format k v)) properties)
+          properties-content (->> (map (fn [[k v]] (util/format kv-format (name k) v)) properties)
                                   (string/join "\n"))]
       (util/format full-format properties-content))))
 
@@ -141,19 +142,26 @@
   ([format content key value]
    (insert-property format content key value false))
   ([format content key value front-matter?]
-   (when (and (not (string/blank? (name key)))
+   (when (and (string? content)
+              (not (string/blank? (name key)))
               (not (string/blank? (str value))))
-     (let [org? (= :org format)
+     (let [ast (mldoc/->edn content (mldoc/default-config format))
+           title? (mldoc/block-with-title? (ffirst (map first ast)))
+           lines (string/split-lines content)
+           [title body] (if title?
+                          [(first lines) (string/join "\n" (rest lines))]
+                          [nil (string/join "\n" lines)])
+           org? (= :org format)
            key (string/lower-case (name key))
            value (string/trim (str value))
-           lines (string/split-lines content)
            start-idx (.indexOf lines properties-start)
            end-idx (.indexOf lines properties-end)]
        (cond
          (and org? (not (contains-properties? content)))
-         (let [properties (build-properties-str format {key value})
-               [title body] (util/safe-split-first "\n" content)]
-           (str title "\n" properties body))
+         (let [properties (build-properties-str format {key value})]
+           (if title
+             (str title "\n" properties body)
+             (str properties content)))
 
          (and (>= start-idx 0) (> end-idx 0) (> end-idx start-idx))
          (let [exists? (atom false)
@@ -198,9 +206,15 @@
                                  lines))
                              groups)
                lines (if no-properties?
-                       (if (string/blank? content)
+                       (cond
+                         (string/blank? content)
                          [new-property-s]
-                         (cons (first lines) (cons new-property-s (rest lines))))
+
+                         title?
+                         (cons (first lines) (cons new-property-s (rest lines)))
+
+                         :else
+                         (cons new-property-s lines))
                        lines)]
            (string/join "\n" lines))
 

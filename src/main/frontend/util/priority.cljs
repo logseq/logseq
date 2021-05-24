@@ -14,7 +14,7 @@
         (if-let [matches (seq (util/re-pos new-line-re-pattern content))]
           (let [[start-pos content] (last matches)]
             (+ start-pos (count content)))
-          (count (re-find re-pattern content)))
+          (count (util/safe-re-find re-pattern content)))
         skip-marker-pos
         (if-let [matches (seq (util/re-pos marker/bare-marker-pattern (subs content skip-hash-pos)))]
           (let [[start-pos content] (last matches)]

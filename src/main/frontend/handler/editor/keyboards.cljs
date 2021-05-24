@@ -21,11 +21,7 @@
            (let [{:keys [on-hide format value block id repo dummy?]} (editor-handler/get-state)]
              (when on-hide
                (on-hide value event))
-             (when
-              (or (= event :esc)
-                  (= event :visibilitychange)
-                  (and (= event :click)
-                       (not (editor-handler/auto-complete?))))
+             (when (contains? #{:esc :visibilitychange :click} event)
                (state/clear-edit!))))))
      :node (gdom/getElement id)
     ;; :visibilitychange? true

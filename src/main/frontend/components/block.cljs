@@ -249,11 +249,15 @@
     (if (and (config/local-asset? href)
              (config/local-db? (state/get-current-repo)))
       (asset-link config title href label metadata full_text)
-      (let [href (if config/publishing?
+      (let [href (cond
+                   (util/starts-with? href "http")
+                   href
+
+                   config/publishing?
                    (subs href 1)
-                   (if (util/starts-with? href "http")
-                     href
-                     (get-file-absolute-path config href)))]
+
+                   :else
+                   (get-file-absolute-path config href))]
         (resizable-image config title href metadata full_text false)))))
 
 (defn repetition-to-string
@@ -365,10 +369,10 @@
        (get page-entity :block/original-name page-name)))])
 
 (rum/defc page-cp
-  [{:keys [html-export? label children contents-page?] :as config} page]
+  [{:keys [html-export? label children contents-page? sidebar?] :as config} page]
   (when-let [page-name (:block/name page)]
-    (let [page-entity page
-          page (string/lower-case page-name)
+    (let [page (string/lower-case page-name)
+          page-entity (db/entity [:block/name page])
           redirect-page-name (cond
                                (:block/alias? config)
                                page
@@ -385,12 +389,18 @@
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config page-name href redirect-page-name page-entity contents-page? children html-export? label)]
-      inner
-      ;; (ui/tippy
-      ;;  {:interactive true
-      ;;   :html (page-preview page-name)}
-      ;;  inner)
-      )))
+      (ui/tippy {:html [:div.tippy-wrapper.overflow-y-auto
+                        {:style {:width 735
+                                 :text-align "left"
+                                 :font-weight 500
+                                 :max-height 600
+                                 :padding-bottom 200}}
+                        [:h2.font-bold.text-lg page-name]
+                        (let [page (db/entity [:block/name (string/lower-case page-name)])]
+                          ((state/get-page-blocks-cp) (state/get-current-repo) page (:sidebar? config)))]
+                 :interactive true
+                 :delay 1000}
+                inner))))
 
 (rum/defc asset-reference
   [title path]
@@ -487,6 +497,7 @@
          (blocks-container blocks (assoc config
                                          :id page-name
                                          :embed? true
+                                         :page-embed? true
                                          :ref? false))))]))
 
 (defn- get-label-text
@@ -528,25 +539,23 @@
                {:block block})
               (route-handler/redirect! {:to          :page
                                         :path-params {:name id}})))}
-
          (let [title (let [title (:block/title block)]
-                       (if (empty? title)
-                         ;; display the content
-                         [:div.block-ref
-                          (block-content config block nil (:block/uuid block) (:slide? config))]
-                         (->elem
-                          :span.block-ref
-                          (map-inline config title))))]
-           (ui/tippy {:html [:div.tippy-wrapper
-                             {:style {:width 780
-                                      :text-align "left"}}
+                       [:span.block-ref
+                        (block-content (assoc config :block-ref? true)
+                                       block nil (:block/uuid block)
+                                       (:slide? config))])]
+           (ui/tippy {:html [:div.tippy-wrapper.overflowy-y-auto
+                             {:style {:width 735
+                                      :text-align "left"
+                                      :max-height 600}}
                              (block-container config block)]
-                      :interactive true}
-            (if label
-              (->elem
-               :span.block-ref
-               (map-inline config label))
-              title)))]
+                      :interactive true
+                      :delay 1000}
+                     (if label
+                       (->elem
+                        :span.block-ref
+                        (map-inline config label))
+                       title)))]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
@@ -568,10 +577,7 @@
   (if macro-content
     (let [ast (->> (mldoc/->edn macro-content (mldoc/default-config format))
                    (map first))
-          block? (contains? #{"Paragraph"
-                              "Raw_Html"
-                              "Hiccup"}
-                            (ffirst ast))]
+          block? (mldoc/block-with-title? (ffirst ast))]
       (if block?
         [:div
          (markup-elements-cp (assoc config :block/format format) ast)]
@@ -697,7 +703,7 @@
                (not= \* (last s)))
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
-          (re-find #"(?i)^http[s]?://" s)
+          (util/safe-re-find #"(?i)^http[s]?://" s)
           (->elem :a {:href s
                       :data-href s
                       :target "_blank"}
@@ -850,7 +856,7 @@
             (when-let [youtube-id (cond
                                     (== 11 (count url)) url
                                     :else
-                                    (nth (re-find YouTube-regex url) 5))]
+                                    (nth (util/safe-re-find YouTube-regex url) 5))]
               (when-not (string/blank? youtube-id)
                 (let [width (min (- (util/get-width) 96)
                                  560)
@@ -867,7 +873,7 @@
         (= name "vimeo")
         (when-let [url (first arguments)]
           (let [Vimeo-regex #"^((?:https?:)?//)?((?:www).)?((?:player.vimeo.com|vimeo.com)?)((?:/video/)?)([\w-]+)(\S+)?$"]
-            (when-let [vimeo-id (nth (re-find Vimeo-regex url) 5)]
+            (when-let [vimeo-id (nth (util/safe-re-find Vimeo-regex url) 5)]
               (when-not (string/blank? vimeo-id)
                 (let [width (min (- (util/get-width) 96)
                                  560)
@@ -888,7 +894,7 @@
             (when-let [id (cond
                             (<= (count url) 15) url
                             :else
-                            (last (re-find id-regex url)))]
+                            (last (util/safe-re-find id-regex url)))]
               (when-not (string/blank? id)
                 (let [width (min (- (util/get-width) 96)
                                  560)
@@ -1274,7 +1280,7 @@
                                2))
         elem (if heading-level
                (keyword (str "h" heading-level))
-               :div)]
+               :span.inline)]
     (->elem
      elem
      (merge
@@ -1358,7 +1364,11 @@
         properties (sort properties)]
     (cond
       (seq properties)
-      [:div.blocks-properties
+      [:div.block-properties
+       {:class (when pre-block? "page-properties")
+        :title (if pre-block?
+                 "Click to edit this page's properties"
+                 "Click to edit this block's properties")}
        (for [[k v] properties]
          (rum/with-key (property-cp config block k v)
            (str (:block/uuid block) "-" k)))]
@@ -1464,6 +1474,7 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title body meta content marker dummy? page format repo children pre-block? properties idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
   (let [collapsed? (get properties :collapsed)
+        block-ref-with-title? (and (:block-ref? config) (seq title))
         dragging? (rum/react *dragging?)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
@@ -1475,12 +1486,17 @@
                                 (block-content-on-mouse-down e block block-id properties content format edit-input-id))
                :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
                :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
-               :on-drop       (fn [event] (block-content-on-drop event block uuid))}]
-    [:div.flex.relative {:style {:width "100%"}}
-     [:div.flex-1.flex-col.relative.block-content
-      (cond-> {:id (str "block-content-" uuid)}
-        (not slide?)
-        (merge attrs))
+               :on-drop       (fn [event] (block-content-on-drop event block uuid))
+               :style {:width "100%"}}]
+    [:div.block-content.inline
+     (cond-> {:id (str "block-content-" uuid)}
+       (not slide?)
+       (merge attrs))
+
+     [:span
+     ;; .flex.relative {:style {:width "100%"}}
+     [:span
+      ;; .flex-1.flex-col.relative.block-content
 
       (cond
         (seq title)
@@ -1506,47 +1522,17 @@
                  (not (:slide? config)))
         (properties-cp config block))
 
-      (when (seq body)
-        (do
-          [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
-          ;; TODO: consistent id instead of the idx (since it could be changed later)
-           (let [body (block/trim-break-lines! (:block/body block))]
-             (for [[idx child] (medley/indexed body)]
-               (when-let [block (markup-element-cp config child)]
-                 (rum/with-key (block-child block)
-                   (str uuid "-" idx)))))]))]
-     (when (and block-refs-count (> block-refs-count 0))
-       [:div
-        [:a.open-block-ref-link.bg-base-2
-         {:title "Open block references"
-          :style {:margin-top -1}
-          :on-click (fn []
-                      (state/sidebar-add-block!
-                       (state/get-current-repo)
-                       (:db/id block)
-                       :block-ref
-                       {:block block}))}
-         block-refs-count]])
-
-     (when (and (= marker "DONE")
-                (state/enable-timetracking?))
-       (let [start-time (or
-                         (get properties :now)
-                         (get properties :doing)
-                         (get properties :in-progress)
-                         (get properties :later)
-                         (get properties :todo))
-             finish-time (get properties :done)]
-         (when (and start-time finish-time (> finish-time start-time))
-           [:div.text-sm.absolute.time-spent {:style {:top 0
-                                                      :right 0
-                                                      :padding-left 2}
-                                              :title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))}
-            [:span.opacity-70
-             (utils/timeConversion (- finish-time start-time))]])))]))
+      (when (and (not block-ref-with-title?) (seq body))
+        [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
+         ;; TODO: consistent id instead of the idx (since it could be changed later)
+         (let [body (block/trim-break-lines! (:block/body block))]
+           (for [[idx child] (medley/indexed body)]
+             (when-let [block (markup-element-cp config child)]
+               (rum/with-key (block-child block)
+                 (str uuid "-" idx)))))])]]]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
+  [config {:block/keys [uuid title body meta content dummy? page format repo children marker properties block-refs-count pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
   (let [editor-box (get config :editor-box)
         edit? (state/sub [:editor/editing? edit-input-id])]
     (if (and edit? editor-box)
@@ -1562,7 +1548,45 @@
                                  (editor-handler/select-block! uuid)))}
                    edit-input-id
                    config)]
-      (block-content config block edit-input-id block-id slide?))))
+      [:div.flex.flex-row.block-content-wrapper
+       [:div.flex.flex-1
+        (block-content config block edit-input-id block-id slide?)]
+       [:div.flex.flex-row
+        (when (and (:embed? config) (not (:page-embed? config)))
+          [:a.opacity-30.hover:opacity-100.svg-small.inline
+           {:on-mouse-down (fn [e]
+                             (util/stop e)
+                             (when-let [block (:block config)]
+                               (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
+           svg/edit])
+
+        (when (and (= (:block/marker block) "DONE")
+                   (state/enable-timetracking?))
+          (let [start-time (or
+                            (get properties :now)
+                            (get properties :doing)
+                            (get properties :in-progress)
+                            (get properties :later)
+                            (get properties :todo))
+                finish-time (get properties :done)]
+            (when (and start-time finish-time (> finish-time start-time))
+              [:div.text-sm.time-spent.ml-1 {:title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))
+                                              :style {:padding-top 3}}
+               [:a.opacity-30.hover:opacity-100
+                (utils/timeConversion (- finish-time start-time))]])))
+
+        (when (and block-refs-count (> block-refs-count 0))
+          [:div
+           [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+            {:title "Open block references"
+             :style {:margin-top -1}
+             :on-click (fn []
+                         (state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id block)
+                          :block-ref
+                          {:block block}))}
+            block-refs-count]])]])))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block slide? top?]
@@ -1604,7 +1628,10 @@
                           (let [parents (doall
                                          (for [{:block/keys [uuid title name]} parents]
                                            (when-not name ; not page
-                                             [:a {:href (rfe/href :page {:name uuid})}
+                                             [:a {:on-mouse-down (fn [e]
+                                                                   (util/stop e)
+                                                                   (route-handler/redirect! {:to :page
+                                                                                             :path-params {:name uuid}}))}
                                               (map-inline config title)])))
                                 parents (remove nil? parents)]
                             (reset! parents-atom parents)
@@ -2126,7 +2153,7 @@
 
         ["Paragraph" l]
        ;; TODO: speedup
-        (if (re-find #"\"Export_Snippet\" \"embed\"" (str l))
+        (if (util/safe-re-find #"\"Export_Snippet\" \"embed\"" (str l))
           (->elem :div (map-inline config l))
           (->elem :div.is-paragraph (map-inline config l)))
 

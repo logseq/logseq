@@ -23,7 +23,9 @@
           (when-not (db/file-exists? repo path)
             (let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                                 :from-disk? true})]
-              (db/set-file-last-modified-at! repo path mtime)))
+              (db/set-file-last-modified-at! repo path mtime)
+              ;; return nil, otherwise the entire db will be transfered by ipc
+              nil))
 
           (and (= "change" type)
                (not (db/file-exists? repo path)))
@@ -34,7 +36,8 @@
                  (> mtime last-modified-at)))
           (let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                               :from-disk? true})]
-            (db/set-file-last-modified-at! repo path mtime))
+            (db/set-file-last-modified-at! repo path mtime)
+            nil)
 
           (contains? #{"add" "change" "unlink"} type)
           nil

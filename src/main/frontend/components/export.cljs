@@ -14,6 +14,9 @@
        [:h1.title "Export"]
 
        [:ul.mr-1
+        [:li.mb-4
+         [:a.font-medium {:on-click #(export/convert-repo-markdown-v2! current-repo)}
+          (t :convert-markdown)]]
         (when (util/electron?)
           [:li.mb-4
            [:a.font-medium {:on-click #(export/export-repo-as-html! current-repo)}
@@ -21,9 +24,6 @@
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-markdown! current-repo)}
           (t :export-markdown)]]
-        [:li.mb-4
-         [:a.font-medium {:on-click #(export/convert-repo-markdown-v2! current-repo)}
-          (t :convert-markdown)]]
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-edn! current-repo)}
           (t :export-edn)]]]

@@ -218,8 +218,11 @@
 
        (and (= 'property fe)
             (= 3 (count e)))
-       (let [v (some-> (name (nth e 2))
-                       (text/page-ref-un-brackets!))
+       (let [v (nth e 2)
+             v (if (or (string? v) (symbol? v))
+                 (some-> (name v)
+                         (text/page-ref-un-brackets!))
+                 v)
              sym (if (= current-filter 'or)
                    '?v
                      (uniq-symbol counter "?v"))]
@@ -321,7 +324,7 @@
                                                  (remove string/blank?)
                                                  (map (fn [x]
                                                         (if (or (contains? #{"+" "-"} (first x))
-                                                                (and (re-find #"\d" (first x))
+                                                                (and (util/safe-re-find #"\d" (first x))
                                                                      (some #(string/ends-with? x %) ["y" "m" "d" "h" "min"])))
                                                           (keyword (name x))
                                                           x)))
