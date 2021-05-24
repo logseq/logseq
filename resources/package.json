@@ -1,6 +1,6 @@
 {
-  "name": "Logseq-Canary",
-  "version": "0.0.1",
+  "name": "Logseq",
+  "version": "0.1.0",
   "main": "electron.js",
   "author": "Logseq",
   "description": "A privacy-first, open-source platform for knowledge management and collaboration.",
