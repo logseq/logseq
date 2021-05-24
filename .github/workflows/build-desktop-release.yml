@@ -23,7 +23,7 @@ on:
 
 jobs:
   compile-cljs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     steps:
       - name: Check out Git repository
         uses: actions/checkout@v1
@@ -82,7 +82,7 @@ jobs:
           path: static.zip
 
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
@@ -232,7 +232,7 @@ jobs:
 
   release:
     needs: [ build-macos, build-linux, build-windows ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18.04
 
     steps:
       - name: Download The MacOS X64 DMG Artifact
