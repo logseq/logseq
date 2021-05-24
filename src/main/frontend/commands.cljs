@@ -194,7 +194,7 @@
   ([type]
    (->block type nil))
   ([type optional]
-   (let [format (get state/get-edit-block :block/format :markdown)
+   (let [format (get (state/get-edit-block) :block/format :markdown)
          org? (= format :org)
          t (string/lower-case type)
          markdown-src? (and (= format :markdown) (= t "src"))

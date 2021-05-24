@@ -69,8 +69,9 @@
            :or {redirect? true}}]
    (let [title (string/trim title)
          page (string/lower-case title)
-         tx (block/page-name->map title true)
          format (state/get-preferred-format)
+         tx (-> (block/page-name->map title true)
+                (assoc :block/format format))
          page-entity [:block/uuid (:block/uuid tx)]
          create-title-property? (and title (util/include-windows-reserved-chars? title))
          default-properties (default-properties-block title format page-entity)
