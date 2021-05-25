@@ -129,7 +129,7 @@
                       properties-ast
                       (map (fn [[k v]]
                              (let [k (keyword (string/lower-case k))
-                                   v (if (contains? #{:title :description :roam_tags} k)
+                                   v (if (contains? #{:title :description :filters :roam_tags} k)
                                        v
                                        (text/split-page-refs-without-brackets v true))]
                                [k v])))
