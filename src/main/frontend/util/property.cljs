@@ -4,7 +4,8 @@
             [clojure.set :as set]
             [frontend.config :as config]
             [medley.core :as medley]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [frontend.text :as text]))
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")
@@ -321,3 +322,29 @@
    (vector? block)
    (contains? #{"Property_Drawer" "Properties"}
               (first block))))
+
+(defonce non-parsing-properties
+  (atom #{"background-color" "background_color"}))
+
+(defn parse-property
+  [k v]
+  (let [k (name k)
+        v (if (or (symbol? v) (keyword? v)) (name v) (str v))
+        v (string/trim v)]
+    (cond
+      (= v "true")
+      true
+      (= v "false")
+      false
+
+      (util/safe-re-find #"^\d+$" v)
+      (util/safe-parse-int v)
+
+      (and (= "\"" (first v) (last v))) ; wrapped in ""
+      (string/trim (subs v 1 (dec (count v))))
+
+      (contains? @non-parsing-properties (string/lower-case k))
+      v
+
+      :else
+      (text/split-page-refs-without-brackets v true))))

@@ -183,29 +183,7 @@
                                                    k)
                                                v (if (coll? v)
                                                    v
-                                                   (let [v (string/trim v)
-                                                         v (cond
-                                                             (= v "true")
-                                                             true
-                                                             (= v "false")
-                                                             false
-
-                                                             (util/safe-re-find #"^\d+$" v)
-                                                             (util/safe-parse-int v)
-
-                                                             (and (= "\"" (first v) (last v))) ; wrapped in ""
-                                                             (string/trim (subs v 1 (dec (count v))))
-
-                                                             (contains? @non-parsing-properties (string/lower-case k))
-                                                             v
-
-                                                             :else
-                                                             (if (and k v
-                                                                      (contains? config/markers k)
-                                                                      (util/safe-parse-int v))
-                                                               (util/safe-parse-int v)
-                                                               (text/split-page-refs-without-brackets v true)))]
-                                                     v))
+                                                   (property/parse-property k v))
                                                k (keyword k)
                                                v (if (and
                                                       (string? v)

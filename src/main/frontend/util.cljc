@@ -417,9 +417,10 @@
      ([node pos]
       (scroll-to node pos true))
      ([node pos animate?]
-      (.scroll node
-               #js {:top      pos
-                    :behavior (if animate? "smooth" "auto")}))))
+      (when node
+        (.scroll node
+                 #js {:top      pos
+                      :behavior (if animate? "smooth" "auto")})))))
 
 #?(:cljs
    (defn scroll-to-top

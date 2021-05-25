@@ -14,7 +14,8 @@
             [clojure.walk :as walk]
             [clojure.core]
             [clojure.set :as set]
-            [frontend.template :as template]))
+            [frontend.template :as template]
+            [frontend.util.property :as property]))
 
 ;; Query fields:
 
@@ -218,16 +219,18 @@
 
        (and (= 'property fe)
             (= 3 (count e)))
-       (let [v (nth e 2)
-             v (if (or (string? v) (symbol? v))
-                 (some-> (name v)
-                         (text/page-ref-un-brackets!))
+       (let [k (string/replace (name (nth e 1)) "_" "-")
+             v (nth e 2)
+             v (if-not (nil? v)
+                 (property/parse-property k v)
                  v)
+             v (if (coll? v) (first v) v)
              sym (if (= current-filter 'or)
                    '?v
-                     (uniq-symbol counter "?v"))]
+                   (uniq-symbol counter "?v"))]
          [['?b :block/properties '?prop]
-          [(list 'get '?prop (keyword (nth e 1))) sym]
+          [(list 'missing? '$ '?b :block/name)]
+          [(list 'get '?prop (keyword k)) sym]
           (list
            'or
            [(list '= sym v)]
@@ -235,8 +238,11 @@
 
        (and (= 'property fe)
             (= 2 (count e)))
-       [['?b :block/properties '?prop]
-        [(list 'get '?prop (keyword (nth e 1)))]]
+       (let [k (string/replace (name (nth e 1)) "_" "-")]
+         [['?b :block/properties '?prop]
+          [(list 'missing? '$ '?b :block/name)]
+          [(list 'get '?prop (keyword k)) '?prop-v]
+          [true]])
 
        (or (= 'todo fe) (= 'task fe))
        (let [markers (if (coll? (first (rest e)))
@@ -280,20 +286,23 @@
          [['?b :block/page [:block/name page-name]]])
 
        (= 'page-property fe)
-       (let [[k v] (rest e)]
-         (if v
-           (let [v (some->> (name (nth e 2))
-                            (text/page-ref-un-brackets!))
+       (let [[k v] (rest e)
+             k (string/replace (name k) "_" "-")]
+         (if-not (nil? v)
+           (let [v (property/parse-property k v)
+                 v (if (coll? v) (first v) v)
                  sym '?v]
              [['?p :block/name]
               ['?p :block/properties '?prop]
-              [(list 'get '?prop (keyword (nth e 1))) sym]
+              [(list 'get '?prop (keyword k)) sym]
               (list
                'or
                [(list '= sym v)]
                [(list 'contains? sym v)])])
-           [['?p :block/properties '?prop]
-            [(list 'get '?prop (keyword (nth e 1)))]]))
+           [['?p :block/name]
+            ['?p :block/properties '?prop]
+            [(list 'get '?prop (keyword k)) '?prop-v]
+            [true]]))
 
        (= 'page-tags fe)
        (do

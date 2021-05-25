@@ -1048,7 +1048,8 @@
 (rum/defc block-children < rum/reactive
   [config children collapsed? *ref-collapsed?]
   (let [ref? (:ref? config)
-        collapsed? (if ref? (rum/react *ref-collapsed?) collapsed?)]
+        collapsed? (if ref? (rum/react *ref-collapsed?) collapsed?)
+        children (filter map? children)]
     (when (and (seq children) (not collapsed?))
       (let [doc-mode? (:document/mode? config)]
        [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
