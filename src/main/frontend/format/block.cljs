@@ -175,12 +175,15 @@
                    (remove string/blank?))
         properties (->> properties
                         (medley/map-kv (fn [k v]
-                                         (let [v (if (coll? v)
+                                         (let [k (-> (string/lower-case (name k))
+                                                     (string/replace " " "-")
+                                                     (string/replace "_" "-"))
+                                               k (if (contains? #{"custom_id" "custom-id"} k)
+                                                   "id"
+                                                   k)
+                                               v (if (coll? v)
                                                    v
-                                                   (let [k (name k)
-                                                         v (string/trim v)
-                                                         k (string/replace k " " "-")
-                                                         k (string/lower-case k)
+                                                   (let [v (string/trim v)
                                                          v (cond
                                                              (= v "true")
                                                              true

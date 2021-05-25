@@ -265,7 +265,9 @@
                           (map (fn [text]
                                  (let [[k v] (util/split-first ":" (subs text 1))]
                                    (if (and k v)
-                                     (str k ":: " (string/trim v))
+                                     (let [k (string/replace k "_" "-")
+                                           k (if (contains? #{:id :custom_id :custom-id} (string/lower-case k)) "id" k)]
+                                       (str k ":: " (string/trim v)))
                                      text)))))
               after (subvec lines (inc end-idx))
               lines (concat before middle after)]
