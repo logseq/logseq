@@ -363,15 +363,6 @@
                                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
                      :z-index     1})]))])
            [:div
-            (when (and repo (not block?))
-              (let [alias (db/get-page-alias-names repo page-name)]
-                (when (seq alias)
-                  [:div.text-sm.ml-1.mb-4 {:key "page-file"}
-                   [:span.opacity-50 "Alias: "]
-                   (for [item alias]
-                     [:a.ml-1.mr-1 {:href (rfe/href :page {:name item})}
-                      item])])))
-
             (when (and block? (not sidebar?))
               (let [config {:id "block-parent"
                             :block? true}]

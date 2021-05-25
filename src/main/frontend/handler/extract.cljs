@@ -100,7 +100,7 @@
                                            aliases (if (seq aliases)
                                                      (map
                                                        (fn [alias]
-                                                         {:block/name alias})
+                                                         {:block/name (string/lower-case alias)})
                                                        aliases))]
                                        (if (seq aliases)
                                          {:block/name page-name
