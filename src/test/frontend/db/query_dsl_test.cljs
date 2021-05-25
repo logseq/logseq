@@ -372,10 +372,13 @@ last-modified-at:: 1609084800002"}]]
     ;; FIXME: not working
     ;; (are [x y] (= (q-count x) y)
     ;;   "(or (priority a) (not (priority a)))"
-    ;;   {:query '(or
-    ;;             (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
-    ;;             (and (not [?b :block/priority ?priority]
-    ;;                       [(contains? #{"A"} ?priority)])))
+    ;;   {:query '[(or-join [?b]
+    ;;                      (and
+    ;;                       [?b :block/priority ?priority]
+    ;;                       [(contains? #{"A"} ?priority)])
+    ;;                      (not-join [?b]
+    ;;                                [?b :block/priority ?priority]
+    ;;                                [(contains? #{"A"} ?priority)]))]
     ;;    :count 5})
 
     (are [x y] (= (q-count x) y)
