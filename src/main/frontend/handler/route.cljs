@@ -16,8 +16,12 @@
   [{:keys [to path-params query-params push]
     :or {push true}}]
   (if push
-    (rfe/push-state to path-params query-params)
-    (rfe/replace-state to path-params query-params)))
+    (do
+      (rfe/push-state to path-params query-params)
+      (util/scroll-to-top))
+    (do
+      (rfe/replace-state to path-params query-params)
+      (util/scroll-to-top))))
 
 (defn redirect-to-home!
   []
