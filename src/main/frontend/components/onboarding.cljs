@@ -254,7 +254,7 @@
          "(println \"Hello world!\")")]]
          [:tr [:td "[label](https://www.example.com)"]
           [:td.text-right
-           [:a {:href "https://www.example.com"}
+           [:a {:href "https://www.example.com" :target "_blank"}
             "label"]]]
          [:tr [:td "![image](https://asset.logseq.com/static/img/logo.png)"]
           [:td.text-right
