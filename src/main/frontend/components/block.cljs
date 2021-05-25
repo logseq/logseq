@@ -1713,17 +1713,12 @@
    :on-mouse-leave (fn [e]
                      (block-mouse-leave e has-child? *control-show? block-id doc-mode?))})
 
-(defn- get-data-refs-and-self
-  [block refs-with-children]
+(defn- build-refs-data-value
+  [block refs]
   (let [refs (model/get-page-names-by-ids
-              (->> (map :db/id refs-with-children)
-                   (remove nil?)))
-        data-refs (text/build-data-value refs)
-        refs (model/get-page-names-by-ids
-              (->> (map :db/id (:block/ref-pages block))
-                   (remove nil?)))
-        data-refs-self (text/build-data-value refs)]
-    [data-refs data-refs-self]))
+              (->> (map :db/id refs)
+                   (remove nil?)))]
+    (text/build-data-value refs)))
 
 ;; (rum/defc block-immediate-children < rum/reactive
 ;;   [repo config uuid ref? collapsed?]
@@ -1749,7 +1744,7 @@
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [state config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? top? properties refs-with-children heading-level level type] :as block}]
+  [state config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? top? properties refs path-refs heading-level level type] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
@@ -1769,7 +1764,8 @@
                      (or (seq children)
                          (seq body))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?)
-        [data-refs data-refs-self] (get-data-refs-and-self block refs-with-children)]
+        data-refs (build-refs-data-value block (remove (set refs) path-refs))
+        data-refs-self (build-refs-data-value block refs)]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
       {:id block-id
