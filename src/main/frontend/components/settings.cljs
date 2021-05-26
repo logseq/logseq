@@ -1,25 +1,25 @@
 (ns frontend.components.settings
-  (:require [rum.core :as rum]
-            [frontend.ui :as ui]
+  (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.user :as user-handler]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.repo :as repo-handler]
+            [frontend.config :as config]
+            [frontend.context.i18n :as i18n]
+            [frontend.date :as date]
+            [frontend.dicts :as dicts]
+            [frontend.handler :as handler]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler :as handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
+            [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.state :as state]
-            [frontend.version :refer [version]]
+            [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.config :as config]
-            [frontend.dicts :as dicts]
-            [clojure.string :as string]
+            [frontend.version :refer [version]]
             [goog.object :as gobj]
-            [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
-            [frontend.date :as date]))
+            [rum.core :as rum]))
 
 (rum/defcs set-email < (rum/local "" ::email)
   [state]
@@ -145,15 +145,9 @@
           :width 500
           :height 500}]])
 
-(defn monitoring-opted-out
-  []
-  (.. js/window -posthog has_opted_out_capturing))
-
 (defn set-sentry-disabled!
   [value]
-  (if value
-    (.. js/window -posthog opt_out_capturing)
-    (.. js/window -posthog opt_in_capturing))
+  (posthog/opt-out value)
   (state/set-sentry-disabled! value))
 
 (rum/defcs settings < rum/reactive

@@ -1,36 +1,31 @@
 (ns frontend.handler
-  (:require [frontend.state :as state]
+  (:require [cljs-bean.core :as bean]
+            [electron.ipc :as ipc]
+            [electron.listener :as el]
+            [frontend.components.editor :as editor]
+            [frontend.components.page :as page]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
-            [frontend.util :as util :refer-macros [profile]]
-            [frontend.config :as config]
-            [frontend.storage :as storage]
-            [clojure.string :as string]
-            [promesa.core :as p]
-            [cljs-bean.core :as bean]
-            [frontend.date :as date]
-            [frontend.search :as search]
-            [frontend.search.db :as search-db]
+            [frontend.handler.common :as common-handler]
+            [frontend.handler.events :as events]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file :as file-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.web.nfs :as nfs]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.handler.events :as events]
-            [frontend.fs.watcher-handler :as fs-watcher-handler]
-            [frontend.ui :as ui]
-            [goog.object :as gobj]
             [frontend.idb :as idb]
-            [lambdaisland.glogi :as log]
-            [frontend.handler.common :as common-handler]
-            [electron.listener :as el]
-            [electron.ipc :as ipc]
+            [frontend.modules.instrumentation.posthog :as posthog]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.search :as search]
+            [frontend.search.db :as search-db]
+            [frontend.state :as state]
+            [frontend.storage :as storage]
+            [frontend.util :as util]
             [frontend.version :as version]
-            [frontend.components.page :as page]
-            [frontend.components.editor :as editor]))
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]))
 
 (defn set-global-error-notification!
   []
@@ -203,7 +198,8 @@
     (file-handler/run-writes-chan!)
     (shortcut/install-shortcuts!)
     (when (util/electron?)
-      (el/listen!))))
+      (el/listen!))
+    (posthog/init)))
 
 (defn stop! []
   (prn "stop!"))
