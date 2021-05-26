@@ -1,11 +1,12 @@
 (ns frontend.components.theme
   (:require [rum.core :as rum]
             [frontend.util :as util]
+            [frontend.ui :as ui]
             [frontend.handler.route :as route-handler]
             [frontend.components.svg :as svg]))
 
 (rum/defc container
-  [{:keys [route theme on-click nfs-granted? db-restoring?] :as props} child]
+  [{:keys [route theme on-click nfs-granted? db-restoring? system-theme?] :as props} child]
   (rum/use-effect!
    #(let [doc js/document.documentElement
           cls (.-classList doc)]
@@ -22,6 +23,11 @@
         (when (or nfs-granted? db-restored?)
           (route-handler/update-page-title! route))))
    [nfs-granted? db-restoring? route])
+
+  (rum/use-effect!
+   #(when system-theme?
+      (ui/setup-system-theme-effect!))
+   [system-theme?])
 
   [:div
    {:class    (str theme "-theme")

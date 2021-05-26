@@ -54,6 +54,7 @@
     :ui/sidebar-open? false
     :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
+    :ui/system-theme? (or (storage/get :ui/system-theme?) true)
     :ui/wide-mode? false
     ;; :show-all, :hide-block-body, :hide-block-children
     :ui/cycle-collapse :show-all
@@ -735,8 +736,7 @@
              ;; use set-change-value for now
              ;; until somebody can figure out why set! value doesn't work here
              ;; it seems to me textarea autoresize is completely broken
-             #_
-             (set! (.-value input) (string/trim content)))
+             #_(set! (.-value input) (string/trim content)))
            (when move-cursor?
              (util/move-cursor-to input pos))))))))
 
@@ -760,6 +760,22 @@
   [theme]
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
+
+(defn sync-system-theme!
+  []
+  (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
+    (set-theme! (if system-dark? "dark" "white"))
+    (set-state! :ui/system-theme? true)
+    (storage/set :ui/system-theme? true)))
+
+(defn use-theme-mode!
+  [theme-mode]
+  (if-not (= theme-mode "system")
+    (do
+      (set-theme! (if (= theme-mode "light") "white" "dark"))
+      (set-state! :ui/system-theme? false)
+      (storage/set :ui/system-theme? false))
+    (sync-system-theme!)))
 
 (defn dark?
   []

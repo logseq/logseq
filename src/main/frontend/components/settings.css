@@ -58,6 +58,55 @@
         @apply text-sm;
       }
     }
+
+    .theme-modes-options {
+      @apply flex items-center list-none m-0;
+
+      > li {
+        @apply m-0 pr-2 opacity-90 hover:opacity-100;
+
+        &:hover {
+          cursor: pointer;
+        }
+
+        &.active {
+          @apply opacity-100;
+          cursor: inherit;
+
+          > i {
+            border-color: var(--ls-link-text-color);
+            border-width: 2px;
+          }
+        }
+
+        > i {
+          display: block;
+          width: 80px;
+          height: 57px;
+          background-color: #a4b5b6;
+          background: url("../img/theme-modes.png") no-repeat;
+          background-size: 355%;
+          border-radius: 4px;
+          overflow: hidden;
+          border-width: 0;
+          border-style: solid;
+          border-color: transparent;
+
+
+          &.mode-dark {
+            background-position-x: -97px;
+          }
+
+          &.mode-system {
+            background-position-x: -194px;
+          }
+        }
+
+        > strong {
+          @apply block pr-2 pt-1.5 text-center text-xs font-medium;
+        }
+      }
+    }
   }
 
   &-app-updater {

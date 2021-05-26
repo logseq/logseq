@@ -284,6 +284,13 @@
         (.removeEventListener viewport "resize" handler)
         (.removeEventListener viewport "scroll" handler)))))
 
+(defn setup-system-theme-effect!
+  []
+  (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
+    (.addEventListener schemaMedia "change" state/sync-system-theme!)
+    (state/sync-system-theme!)
+    #(.removeEventListener schemaMedia "change" state/sync-system-theme!)))
+
 (defn on-scroll
   [node on-load on-top-reached]
   (let [full-height (gobj/get node "scrollHeight")
