@@ -1358,3 +1358,18 @@
                         (apply min))
                    (count val))]
        (.setRangeText input "" current (inc idx)))))
+
+(defn classnames
+  "Like react classnames utility:
+
+     ```
+      [:div {:class (classnames [:a :b {:c true}])}
+     ```
+  "
+  [args]
+  (into #{} (mapcat
+              #(if (map? %)
+                 (for [[k v] %]
+                   (when v (name k)))
+                 (name %))
+              args)))

@@ -288,6 +288,7 @@
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
+        system-theme? (state/sub :ui/system-theme?)
         white? (= "white" (state/sub :ui/theme))
         settings-open? (state/sub :ui/settings-open?)
         sidebar-open?  (state/sub :ui/sidebar-open?)
@@ -305,6 +306,7 @@
         :route         route-match
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
+        :system-theme? system-theme?
         :on-click      editor-handler/unhighlight-blocks!}
 
        [:div.theme-inner
