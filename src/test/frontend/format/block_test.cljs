@@ -13,8 +13,7 @@
     [["year" "1000"] ["tags" "name/with space, another"]] {:year 1000, :tags #{"name/with space" "another"}}
     [["year" "1000"] ["alias" "name/with space, another"]] {:year 1000, :alias #{"name/with space" "another"}}
     [["year" "1000"] ["alias" "name/with space, [[another [[nested]]]]"]] {:year 1000, :alias #{"name/with space" "another [[nested]]"}}
-    ;; FIXME:
-    ;; [["year" "1000"] ["alias" "name/with space, [[[[nested]] another]]"]] {:year 1000, :alias #{"name/with space" "[[nested]] another"}}
+    [["year" "1000"] ["alias" "name/with space, [[[[nested]] another]]"]] {:year 1000, :alias #{"name/with space" "[[nested]] another"}}
     [["foo" "bar"]] {:foo "bar"}
     [["foo" "bar, baz"]] {:foo #{"bar" "baz"}}
     [["foo" "bar, [[baz]]"]] {:foo #{"bar" "baz"}}
@@ -27,10 +26,8 @@
   (are [x y] (= (vec (:page-refs (block/extract-properties x))) y)
     [["year" "1000"]] []
     [["year" "\"1000\""]] []
-    [["foo" "[[bar]] test"]] ["bar"]
-    [["foo" "[[bar]] test [[baz]]"]] ["bar" "baz"]
-    ;; FIXME:
-    ;; [["foo" "[[bar]] test [[baz]] [[nested [[baz]]]]"]] ["bar" "baz" "nested [[baz]]"]
-    ))
+    [["foo" "[[bar]] test"]] ["bar" "test"]
+    [["foo" "[[bar]] test [[baz]]"]] ["bar" "test" "baz"]
+    [["foo" "[[bar]] test [[baz]] [[nested [[baz]]]]"]] ["bar" "test" "baz" "nested [[baz]]"]))
 
 #_(run-tests)

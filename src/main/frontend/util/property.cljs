@@ -347,4 +347,4 @@
       v
 
       :else
-      (text/split-page-refs-without-brackets v true))))
+      (text/split-page-refs-without-brackets v))))

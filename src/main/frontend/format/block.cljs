@@ -158,18 +158,17 @@
 (defonce non-parsing-properties
   (atom #{"background-color" "background_color"}))
 
+;; TODO: we should move this to mldoc
 (defn extract-properties
   [properties]
   (let [properties (into {} properties)
         page-refs (->>
                    (map (fn [v]
                           (when (string? v)
-                            (let [page-refs (->> (re-seq text/page-ref-re v)
-                                                 (map second))
-                                  tags (->> (string/split v #",")
-                                            (filter (fn [s] (= \# (first s))))
-                                            (map (fn [s] (subs s 1))))]
-                              (concat page-refs tags))))
+                            (let [result (text/split-page-refs-without-brackets v {:un-brackets? false})]
+                              (if (coll? result)
+                                (map text/page-ref-un-brackets! result)
+                                []))))
                      (vals properties))
                    (apply concat)
                    (remove string/blank?))

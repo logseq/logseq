@@ -131,7 +131,7 @@
                              (let [k (keyword (string/lower-case k))
                                    v (if (contains? #{:title :description :filters :roam_tags} k)
                                        v
-                                       (text/split-page-refs-without-brackets v true))]
+                                       (text/split-page-refs-without-brackets v))]
                                [k v])))
                           (reverse)
                           (into {}))
