@@ -10,14 +10,13 @@
 (defn register []
   (posthog/register
    (clj->js
-    (cond->
-        {:app_type (if (util/electron?) "electron" "web")
-         :app_env (if cfg/dev? "development" "production")
-         :app_ver version
-         :schema_ver 0
-         ;; hack, did not find ways to hack data on-the-fly with posthog-js
-         :$ip masked
-         :$current_url masked}))))
+    {:app_type (if (util/electron?) "electron" "web")
+     :app_env (if cfg/dev? "development" "production")
+     :app_ver version
+     :schema_ver 0
+     ;; hack, did not find ways to hack data on-the-fly with posthog-js
+     :$ip masked
+     :$current_url masked})))
 
 (def config
   {:api_host "https://app.posthog.com"
