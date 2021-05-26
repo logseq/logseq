@@ -455,7 +455,7 @@
         :new-file "Neue Datei"
         :graph "Graph"
         :publishing "Veröffentlichung"
-        :export "Öffentliche Seiten exportieren"
+        :export "Exportieren"
         :all-graphs "Alle Graphen"
         :all-pages "Alle Seiten"
         :all-files "Alle Dateien"
