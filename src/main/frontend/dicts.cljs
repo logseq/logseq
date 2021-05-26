@@ -203,7 +203,7 @@
         :content/click-to-edit "Click to edit"
         :settings-page/edit-config-edn "Edit config.edn (for current repo)"
         :settings-page/show-brackets "Show brackets"
-        :settings-page/disable-sentry "Disable Sentry.io (for error tracking)"
+        :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
         :settings-page/preferred-outdenting "Enable logical outdenting"
         :settings-page/custom-date-format "Preferred journal format"
         :settings-page/preferred-file-format "Preferred file format"

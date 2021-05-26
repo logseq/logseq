@@ -1231,9 +1231,7 @@
 (defn set-sentry-disabled!
   [value]
   (set-state! :sentry/disabled? value)
-  (storage/set "sentry-disabled" value)
-  (when value
-    (.close js/window.Sentry)))
+  (storage/set "sentry-disabled" value))
 
 (defn logical-outdenting?
   []

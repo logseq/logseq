@@ -145,6 +145,17 @@
           :width 500
           :height 500}]])
 
+(defn monitoring-opted-out
+  []
+  (.. js/window -posthog has_opted_out_capturing))
+
+(defn set-sentry-disabled!
+  [value]
+  (if value
+    (.. js/window -posthog opt_out_capturing)
+    (.. js/window -posthog opt_in_capturing))
+  (state/set-sentry-disabled! value))
+
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (state/get-preferred-format)
@@ -372,6 +383,15 @@
        [:hr]
 
        [:div.panel-wrap
+        [:p "Logseq will never collect your local graph database or sell your data."]
+        (toggle "usage-diagnostics"
+                (t :settings-page/disable-sentry)
+                (not sentry-disabled?)
+                (fn [] (set-sentry-disabled! (not sentry-disabled?))))]
+
+       [:hr]
+
+       [:div.panel-wrap
 
         [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
          [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -389,13 +409,6 @@
          [:div.wrap.sm:mt-0.sm:col-span-2
           [:div.ver version]
           (if (util/electron?) (app-updater))]]
-
-        (toggle "disable_sentry"
-                (t :settings-page/disable-sentry)
-                sentry-disabled?
-                (fn []
-                  (let [value (not sentry-disabled?)]
-                    (state/set-sentry-disabled! value))))
 
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.block.text-sm.font-medium.leading-5.opacity-70

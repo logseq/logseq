@@ -32,6 +32,16 @@
             [frontend.components.page :as page]
             [frontend.components.editor :as editor]))
 
+(defn set-global-error-notification!
+  []
+  (set! js/window.onerror
+        (fn [message, source, lineno, colno, error]
+          (notification/show!
+           (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
+           :error
+           ;; Don't auto-hide
+           false))))
+
 (defn- watch-for-date!
   []
   (let [f (fn []
@@ -138,19 +148,21 @@
         [{:url config/local-repo
           :example? true}]))))
 
-(defn init-sentry
+(defn init-sentry!
   []
   (when-not (state/sentry-disabled?)
     (let [cfg
           {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
-           :release (util/format "logseq@%s" version/version)}]
+           :release (util/format "logseq@%s" version/version)
+           :environment (if config/dev? "development" "production")
+           :tracesSampleRate 1.0}]
       (.init js/window.Sentry (clj->js cfg)))))
 
 (defn on-load-events
   []
-  (let [f (fn []
-            (when-not config/dev? (init-sentry)))]
-    (set! js/window.onload f)))
+  (set! js/window.onload
+        (fn []
+          (when-not config/dev? (init-sentry!)))))
 
 (defn clear-cache!
   []
@@ -166,6 +178,7 @@
 
 (defn start!
   [render]
+  (set-global-error-notification!)
   (let [{:keys [me logged? repos]} (get-me-and-repos)]
     (when me (state/set-state! :me me))
     (register-components-fns!)
