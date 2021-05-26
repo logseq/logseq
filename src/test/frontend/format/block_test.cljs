@@ -28,6 +28,8 @@
     [["year" "\"1000\""]] []
     [["foo" "[[bar]] test"]] ["bar" "test"]
     [["foo" "[[bar]] test [[baz]]"]] ["bar" "test" "baz"]
-    [["foo" "[[bar]] test [[baz]] [[nested [[baz]]]]"]] ["bar" "test" "baz" "nested [[baz]]"]))
+    [["foo" "[[bar]] test [[baz]] [[nested [[baz]]]]"]] ["bar" "test" "baz" "nested [[baz]]"]
+    [["foo" "#bar, #baz"]] ["bar" "baz"]
+    [["foo" "[[nested [[page]]]], test"]] ["nested [[page]]" "test"]))
 
 #_(run-tests)

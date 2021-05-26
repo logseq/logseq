@@ -93,10 +93,13 @@
             (or (util/safe-re-find page-ref-re s)
                 (util/safe-re-find #"[\,|，|#]+" s)))
      (let [result (->> (string/split s page-ref-re-2)
-                       (map (fn [s] (if (string/ends-with? (string/trimr s) "]],")
-                                     (let [s (string/trimr s)]
-                                       (subs s 0 (dec (count s))))
-                                     s)))
+                       (mapcat (fn [s] (if (string/includes? (string/trimr s) "]],")
+                                        (let [idx (string/index-of s "]],")]
+                                          [(subs s 0 idx)
+                                           "]]"
+                                           (subs s (+ idx 3))])
+                                        [s])))
+                       (remove #(= % ""))
                        (mapcat (fn [s] (if (string/ends-with? s "]]")
                                         [(subs s 0 (- (count s) 2))
                                          "]]"]
