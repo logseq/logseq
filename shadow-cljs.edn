@@ -22,10 +22,6 @@
    :release {:asset-path "https://asset.logseq.com/static/js"}
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es-next
-                      ;; this cross-chunk-method-motion is needed
-                      ;; idue to ssue related with
-                      ;; https://github.com/thheller/shadow-cljs/issues/611
-                      :cross-chunk-method-motion false
                       :source-map true
                       :externs ["datascript/externs.js"
                                 "externs.js"]

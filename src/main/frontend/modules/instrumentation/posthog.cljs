@@ -26,9 +26,7 @@
    :loaded (fn [_] (register))})
 
 (defn init []
-  (posthog/init token (clj->js config))
-  (when cfg/dev?
-    (posthog/debug)))
+  (posthog/init token (clj->js config)))
 
 (defn opt-out [opt-out?]
   (if opt-out?
@@ -36,3 +34,6 @@
     (do
       (init)
       (posthog/opt_in_capturing))))
+
+(comment
+  (posthog/debug))
