@@ -12,7 +12,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
-            [frontend.modules.instrumentation.posthog :as posthog]
+            [frontend.modules.instrumentation.core :as instrument]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -145,11 +145,6 @@
           :width 500
           :height 500}]])
 
-(defn set-sentry-disabled!
-  [value]
-  (posthog/opt-out value)
-  (state/set-sentry-disabled! value))
-
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (state/get-preferred-format)
@@ -160,7 +155,7 @@
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
-        sentry-disabled? (state/sub :sentry/disabled?)
+        instrument-disabled? (state/sub :instrument/disabled?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
@@ -380,8 +375,9 @@
         [:p "Logseq will never collect your local graph database or sell your data."]
         (toggle "usage-diagnostics"
                 (t :settings-page/disable-sentry)
-                (not sentry-disabled?)
-                (fn [] (set-sentry-disabled! (not sentry-disabled?))))]
+                (not instrument-disabled?)
+                (fn [] (instrument/disable-instrument
+                        (not instrument-disabled?))))]
 
        [:hr]
 
