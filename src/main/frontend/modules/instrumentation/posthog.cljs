@@ -33,4 +33,6 @@
 (defn opt-out [opt-out?]
   (if opt-out?
     (posthog/opt_out_capturing)
-    (posthog/opt_in_capturing)))
+    (do
+      (init)
+      (posthog/opt_in_capturing))))

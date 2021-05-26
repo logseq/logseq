@@ -15,7 +15,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.idb :as idb]
-            [frontend.modules.instrumentation.posthog :as posthog]
+            [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
             [frontend.search.db :as search-db]
@@ -143,21 +143,11 @@
         [{:url config/local-repo
           :example? true}]))))
 
-(defn init-sentry!
-  []
-  (when-not (state/sentry-disabled?)
-    (let [cfg
-          {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
-           :release (util/format "logseq@%s" version/version)
-           :environment (if config/dev? "development" "production")
-           :tracesSampleRate 1.0}]
-      (.init js/window.Sentry (clj->js cfg)))))
-
 (defn on-load-events
   []
   (set! js/window.onload
         (fn []
-          (when-not config/dev? (init-sentry!)))))
+          (instrument/init))))
 
 (defn clear-cache!
   []
@@ -198,8 +188,7 @@
     (file-handler/run-writes-chan!)
     (shortcut/install-shortcuts!)
     (when (util/electron?)
-      (el/listen!))
-    (posthog/init)))
+      (el/listen!))))
 
 (defn stop! []
   (prn "stop!"))
