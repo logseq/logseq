@@ -151,12 +151,12 @@
         repo-name (str owner "-" repo-name)]
     (when (seq files)
       (p/let [zipfile (zip/make-zip repo-name files repo)]
-        (when-let [anchor (gdom/getElement "download-as-zip")]
+        (when-let [anchor (gdom/getElement "download")]
           (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
           (.setAttribute anchor "download" (.-name zipfile))
           (.click anchor))))))
 
-(defn- get-md-file-contents
+(defn get-md-file-contents
   [repo]
   (let [conn (db/get-conn repo)]
     (filter (fn [[path _]]

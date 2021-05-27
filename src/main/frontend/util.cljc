@@ -1096,11 +1096,17 @@
          (when (uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
-(defonce windows-reserved-chars #"[\\/:\\*\\?\"<>|]+")
+(def windows-reserved-chars #"[\\/:\\*\\?\"<>|]+")
 
 (defn include-windows-reserved-chars?
   [s]
   (safe-re-find windows-reserved-chars s))
+
+(defn create-title-property?
+  [s]
+  (and (string? s)
+       (or (include-windows-reserved-chars? s)
+           (string/includes? s "."))))
 
 (defn page-name-sanity
   [page-name]
