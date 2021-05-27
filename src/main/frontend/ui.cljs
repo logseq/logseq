@@ -288,7 +288,7 @@
   []
   (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
     (.addEventListener schemaMedia "change" state/sync-system-theme!)
-    (state/sync-system-theme!)
+    ;; (state/sync-system-theme!)
     #(.removeEventListener schemaMedia "change" state/sync-system-theme!)))
 
 (defn on-scroll
