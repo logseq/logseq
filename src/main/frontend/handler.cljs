@@ -165,35 +165,36 @@
 (defn start!
   [render]
   (set-global-error-notification!)
-  (if (:block/name (storage/get :db-schema))
-    (let [{:keys [me logged? repos]} (get-me-and-repos)]
-      (when me (state/set-state! :me me))
-      (register-components-fns!)
-      (state/set-db-restoring! true)
-      (render)
-      (on-load-events)
-      (set-network-watcher!)
+  (let [db-schema (storage/get :db-schema)]
+    (if (or (nil? db-schema) (:block/name db-schema))
+      (let [{:keys [me logged? repos]} (get-me-and-repos)]
+        (when me (state/set-state! :me me))
+        (register-components-fns!)
+        (state/set-db-restoring! true)
+        (render)
+        (on-load-events)
+        (set-network-watcher!)
 
-      (util/indexeddb-check?
-       (fn [_error]
-         (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
-         (state/set-indexedb-support! false)))
+        (util/indexeddb-check?
+         (fn [_error]
+           (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
+           (state/set-indexedb-support! false)))
 
-      (events/run!)
+        (events/run!)
 
-      (p/let [repos (get-repos)]
-        (state/set-repos! repos)
-        (restore-and-setup! me repos logged?))
+        (p/let [repos (get-repos)]
+          (state/set-repos! repos)
+          (restore-and-setup! me repos logged?))
 
-      (reset! db/*sync-search-indice-f search/sync-search-indice!)
-      (db/run-batch-txs!)
-      (file-handler/run-writes-chan!)
-      (shortcut/install-shortcuts!)
-      (when (util/electron?)
-        (el/listen!)))
+        (reset! db/*sync-search-indice-f search/sync-search-indice!)
+        (db/run-batch-txs!)
+        (file-handler/run-writes-chan!)
+        (shortcut/install-shortcuts!)
+        (when (util/electron?)
+          (el/listen!)))
 
-    ;; before refactoring
-    (clear-cache!)))
+      ;; before refactoring
+      (clear-cache!))))
 
 (defn stop! []
   (prn "stop!"))
