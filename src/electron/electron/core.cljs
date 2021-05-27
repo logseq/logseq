@@ -36,9 +36,6 @@
                     :nodeIntegrationInWorker false
                     :contextIsolation        true
                     :spellcheck              true
-                    ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
-                    ;; to use `scollbar-gutter` after the feature is implemented in browsers.
-                    :enableBlinkFeatures     'OverlayScrollbars'
                     :preload                 (path/join js/__dirname "js/preload.js")}}
                    linux?
                    (assoc :icon (path/join js/__dirname "icons/logseq.png")))
