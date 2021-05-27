@@ -384,6 +384,10 @@
         content (cons f body)]
     (string/join "\n" content)))
 
+(defn src-block?
+  [block]
+  (some (fn [x] (and (vector? x) (= "Src" (first x)))) (:body block)))
+
 (defn- get-block-content
   [utf8-content block format]
   (let [meta (:meta block)
@@ -392,11 +396,13 @@
                                   (:start-pos meta)
                                   end-pos)
                   (utf8/substring utf8-content
-                                  (:start-pos meta)))]
+                                  (:start-pos meta)))
+        content-orig content]
     (let [content (when content
                     (let [content (text/remove-level-spaces content format)]
                       (if (or (:pre-block? block)
-                              (= (:format block) :org))
+                              (= (:format block) :org)
+                              (src-block? block))
                         content
                         (remove-indentation-spaces content (:level block)))))]
       (if (= format :org)

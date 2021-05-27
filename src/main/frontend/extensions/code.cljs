@@ -64,7 +64,7 @@
                   fl (first lines)
                   ll (last lines)]
               (when (and fl ll)
-                (let [value' (str fl "\n" value "\n" ll)
+                (let [value' (str (string/trim fl) "\n" value "\n" (string/trim ll))
                       ;; FIXME: What if there're multiple code blocks with the same value?
                       content' (string/replace-first content full-content value')]
                   (editor-handler/save-block-if-changed! block content'))))))
