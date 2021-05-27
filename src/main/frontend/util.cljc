@@ -35,7 +35,7 @@
 
 #?(:cljs (defonce ^js node-path nodePath))
 #?(:cljs (defn app-scroll-container-node []
-           (gdom/getElement "left-container")))
+           (gdom/getElement "main-container")))
 
 #?(:cljs
    (defn ios?
