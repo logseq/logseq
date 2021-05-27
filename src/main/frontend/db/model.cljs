@@ -523,9 +523,7 @@
 ;; FIXME: alert
 (defn- keep-only-one-file
   [blocks parent]
-  (if-let [file (:db/id (:block/file parent))]
-    (filter (fn [b] (= (:db/id (:block/file b)) file)) blocks)
-    blocks))
+  (filter (fn [b] (= (:block/file b) (:block/file (first blocks)))) blocks))
 
 (defn sort-by-left
   [blocks parent]
