@@ -155,7 +155,7 @@
   (p/let [_ (idb/clear-local-storage-and-idb!)
           _ (when (util/electron?)
               (ipc/ipc "clearCache"))]
-    (js/window.location.reload)))
+    (js/setTimeout #(js/window.location.reload %) 3000)))
 
 (defn- register-components-fns!
   []
