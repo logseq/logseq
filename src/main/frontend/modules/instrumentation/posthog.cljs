@@ -21,6 +21,8 @@
 (def config
   {:api_host "https://app.posthog.com"
    :persistence "localStorage"
+   :autocapture false
+   :disable_session_recording: true
    :mask_all_text true
    :mask_all_element_attributes true
    :loaded (fn [_] (register))})
