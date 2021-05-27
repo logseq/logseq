@@ -30,9 +30,13 @@
           old-content nil
           old-content (-> (protocol/read-file this dir path nil)
                           (p/catch (fn [error]
-                                     "")))]
-    (if (and (not= disk-mtime db-mtime)
-             (not= (string/trim old-content) (string/trim content)))
+                                     "")))
+          ext (string/lower-case (util/get-file-ext path))]
+    (if (and
+         (and (not= disk-mtime db-mtime)
+              (not= (string/trim old-content) (string/trim content)))
+         ;; FIXME:
+         (not (contains? #{"excalidraw" "edn"} ext)))
       (js/alert (str "The file has been modified on your local disk! File path: " path
                      ", please save your changes and click the refresh button to reload it."))
       (->

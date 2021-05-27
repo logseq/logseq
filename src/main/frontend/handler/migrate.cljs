@@ -43,7 +43,7 @@
                   (config-handler/set-config! :markdown/version 2)))
     [:hr]
 
-    [:p "Firstly, let's download this graph as a zipfile."]
+    [:p "Otherwise, let's make a backup first."]
     [:p
      (ui/button "Download this graph"
        :on-click (fn []

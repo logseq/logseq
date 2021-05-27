@@ -125,8 +125,7 @@
           :icon svg/import-sm})
 
        (when (and current-repo
-                  ;; (not (:markdown/version (state/get-config)))
-                  )
+                  (not (:markdown/version (state/get-config))))
          {:title "Convert to more standard Markdown"
           :options {:on-click (fn [] (migrate/show-convert-notification! current-repo))}
           :icon svg/import-sm})
