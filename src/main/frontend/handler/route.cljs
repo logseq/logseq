@@ -17,8 +17,7 @@
     :or {push true}}]
   (let [route-fn (if push rfe/push-state rfe/replace-state)]
     (state/save-scroll-position! (util/scroll-top))
-    (route-fn to path-params query-params)
-    (util/scroll-to (state/get-saved-scroll-position))))
+    (route-fn to path-params query-params)))
 
 (defn redirect-to-home!
   []
@@ -88,9 +87,11 @@
   (let [route route]
     (swap! state/state assoc :route-match route)
     (update-page-title! route)
-    (when-let [anchor (get-in route [:query-params :anchor])]
+    (if-let [anchor (get-in route [:query-params :anchor])]
       (jump-to-anchor! anchor)
-      (util/scroll-to-top))))
+      (util/scroll-to (util/app-scroll-container-node)
+                      (state/get-saved-scroll-position)
+                      false))))
 
 (defn go-to-search!
   [search-mode]

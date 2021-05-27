@@ -65,8 +65,8 @@
     :ui/show-recent? false
     :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
                             false)
-    ;; remember scroll positions of visited pages
-    :ui/pages-scroll-positions {}
+    ;; remember scroll positions of visited paths
+    :ui/paths-scroll-positions {}
 
     :document/mode? (or (storage/get :document/mode?) false)
 
@@ -862,15 +862,15 @@
 
 (defn save-scroll-position!
   ([value]
-   (save-scroll-position! value (get-current-page)))
-  ([value page]
-   (set-state! [:ui/page-scroll-positions page] value)))
+   (save-scroll-position! value js/window.location.hash))
+  ([value path]
+   (set-state! [:ui/paths-scroll-positions path] value)))
 
 (defn get-saved-scroll-position
   ([]
-   (get-saved-scroll-position (get-current-page)))
-  ([page]
-   (get-in @state [:ui/page-scroll-positions page] 0)))
+   (get-saved-scroll-position js/window.location.hash))
+  ([path]
+   (get-in @state [:ui/paths-scroll-positions path] 0)))
 
 (defn get-journal-template
   []

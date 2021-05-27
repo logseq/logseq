@@ -434,7 +434,7 @@
      ([]
       (scroll-top (app-scroll-container-node)))
      ([node]
-      (.-scrollTop node))))
+      (when node (.-scrollTop node)))))
 
 (defn url-encode
   [string]
