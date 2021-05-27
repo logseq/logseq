@@ -1122,7 +1122,7 @@
        [:span.bullet {:blockid (str uuid)}]]]]))
 
 (rum/defc dnd-separator
-  [block margin-left bottom top? nested?]
+  [block top? nested?]
   (let [id (str (:block/uuid block)
                 (cond nested?
                       "-nested"
@@ -1134,7 +1134,7 @@
      {:id id
       :style (merge
               {:position "absolute"
-               :left margin-left
+               :left (if nested? 40 20)
                :width "100%"
                :z-index 3}
               (if top?
@@ -1500,7 +1500,7 @@
         nil)
 
       (when (and dragging? (not slide?) (not dummy?))
-        (dnd-separator block 0 -4 false true))
+        (dnd-separator block false true))
 
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
@@ -1592,7 +1592,7 @@
                (not slide?)
                (not (:block/dummy? block))
                (not (:block/pre-block? block)))
-      (dnd-separator block 20 0 top? false))))
+      (dnd-separator block top? false))))
 
 (defn non-dragging?
   [e]
