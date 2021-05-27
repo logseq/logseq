@@ -429,6 +429,8 @@
 
 #?(:cljs
    (defn scroll-top
+     "Returns the scroll top position of the `node`. If `node` is not specified,
+     returns the scroll top position of the `app-scroll-container-node`."
      ([]
       (scroll-top (app-scroll-container-node)))
      ([node]
