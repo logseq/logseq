@@ -427,6 +427,13 @@
      []
      (scroll-to (app-scroll-container-node) 0 false)))
 
+#?(:cljs
+   (defn scroll-top
+     ([]
+      (scroll-top (app-scroll-container-node)))
+     ([node]
+      (.-scrollTop node))))
+
 (defn url-encode
   [string]
   #?(:cljs (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
