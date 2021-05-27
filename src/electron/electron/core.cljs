@@ -36,6 +36,9 @@
                     :nodeIntegrationInWorker false
                     :contextIsolation        true
                     :spellcheck              true
+                    ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
+                    ;; to use `scollbar-gutter` after the feature is implemented in browsers.
+                    :enableBlinkFeatures     'OverlayScrollbars'
                     :preload                 (path/join js/__dirname "js/preload.js")}}
                    linux?
                    (assoc :icon (path/join js/__dirname "icons/logseq.png")))
@@ -48,11 +51,10 @@
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
-  ;;(when-not linux?
-  ;;  (init-updater {:repo   "logseq/logseq"
-  ;;                 :logger logger
-  ;;                 :win    win}))
-  )
+  (when-not linux?
+    (init-updater {:repo   "logseq/logseq"
+                   :logger logger
+                   :win    win})))
 
 (defn setup-interceptor! []
   (.registerFileProtocol

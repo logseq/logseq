@@ -60,6 +60,7 @@
     "dependencies": {
         "@excalidraw/excalidraw": "^0.4.2",
         "@kanru/rage-wasm": "^0.2.1",
+        "@sentry/browser": "^6.4.1",
         "@tippyjs/react": "^4.2.5",
         "chokidar": "^3.5.1",
         "chrono-node": "^2.2.4",
@@ -74,8 +75,9 @@
         "ignore": "^5.1.8",
         "is-svg": "4.2.2",
         "jszip": "^3.5.0",
-        "mldoc": "0.6.18",
+        "mldoc": "0.6.22",
         "path": "^0.12.7",
+        "posthog-js": "^1.10.2",
         "react": "^17.0.2",
         "react-dom": "^17.0.2",
         "react-resize-context": "^3.0.0",

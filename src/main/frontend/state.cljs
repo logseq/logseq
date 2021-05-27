@@ -29,7 +29,7 @@
     :repo/changed-files nil
     :nfs/user-granted? {}
     :nfs/refreshing? nil
-    :sentry/disabled? (storage/get "sentry-disabled")
+    :instrument/disabled? (storage/get "instrument-disabled")
     ;; TODO: how to detect the network reliably?
     :network/online? true
     :indexeddb/support? true
@@ -54,6 +54,7 @@
     :ui/sidebar-open? false
     :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
+    :ui/system-theme? ((fnil identity true) (storage/get :ui/system-theme?))
     :ui/wide-mode? false
     ;; :show-all, :hide-block-body, :hide-block-children
     :ui/cycle-collapse :show-all
@@ -745,8 +746,7 @@
              ;; use set-change-value for now
              ;; until somebody can figure out why set! value doesn't work here
              ;; it seems to me textarea autoresize is completely broken
-             #_
-             (set! (.-value input) (string/trim content)))
+             #_(set! (.-value input) (string/trim content)))
            (when move-cursor?
              (util/move-cursor-to input pos))))))))
 
@@ -770,6 +770,22 @@
   [theme]
   (set-state! :ui/theme theme)
   (storage/set :ui/theme theme))
+
+(defn sync-system-theme!
+  []
+  (let [system-dark? (.-matches (js/window.matchMedia "(prefers-color-scheme: dark)"))]
+    (set-theme! (if system-dark? "dark" "white"))
+    (set-state! :ui/system-theme? true)
+    (storage/set :ui/system-theme? true)))
+
+(defn use-theme-mode!
+  [theme-mode]
+  (if-not (= theme-mode "system")
+    (do
+      (set-theme! (if (= theme-mode "light") "white" "dark"))
+      (set-state! :ui/system-theme? false)
+      (storage/set :ui/system-theme? false))
+    (sync-system-theme!)))
 
 (defn dark?
   []
@@ -1017,6 +1033,12 @@
   []
   (update-state! :editor/new-block-toggle? not))
 
+(defn enable-tooltip?
+  []
+  (get (get (sub-config) (get-current-repo))
+       :ui/enable-tooltip?
+       true))
+
 (defn set-config!
   [repo-url value]
   (set-state! [:config repo-url] value)
@@ -1236,17 +1258,6 @@
 (defn set-block-component-editing-mode!
   [value]
   (set-state! :block/component-editing-mode? value))
-
-(defn sentry-disabled?
-  []
-  (:sentry/disabled? @state))
-
-(defn set-sentry-disabled!
-  [value]
-  (set-state! :sentry/disabled? value)
-  (storage/set "sentry-disabled" value)
-  (when value
-    (.close js/window.Sentry)))
 
 (defn logical-outdenting?
   []

@@ -196,7 +196,7 @@
   ([type]
    (->block type nil))
   ([type optional]
-   (let [format (get state/get-edit-block :block/format :markdown)
+   (let [format (get (state/get-edit-block) :block/format :markdown)
          org? (= format :org)
          t (string/lower-case type)
          markdown-src? (and (= format :markdown) (= t "src"))
@@ -238,7 +238,8 @@
      ["Src" (->block "src" "")]
      ["Query" (->block "query")]
      ["Latex export" (->block "export" "latex")]
-     (when-not (= :markdown (state/get-preferred-format))
+     ;; FIXME: current page's format
+     (when (= :org (state/get-preferred-format))
        ["Properties" (->properties)])
      ["Note" (->block "note")]
      ["Tip" (->block "tip")]

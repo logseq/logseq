@@ -288,6 +288,7 @@
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
+        system-theme? (state/sub :ui/system-theme?)
         white? (= "white" (state/sub :ui/theme))
         settings-open? (state/sub :ui/settings-open?)
         sidebar-open?  (state/sub :ui/sidebar-open?)
@@ -306,6 +307,7 @@
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
         :sidebar-open? sidebar-open?
+        :system-theme? system-theme?
         :on-click      editor-handler/unhighlight-blocks!}
 
        [:div.theme-inner
@@ -315,7 +317,7 @@
           :route-match route-match})
         [:div.#app-container.h-screen.flex
          [:div.flex-1.h-full.flex.flex-col.overflow-y-auto#left-container.relative
-          [:div
+          [:div.scrollbar-spacing#main-container
            (header/header {:open-fn        open-fn
                            :white?         white?
                            :current-repo   current-repo

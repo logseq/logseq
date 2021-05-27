@@ -69,8 +69,9 @@
            :or {redirect? true}}]
    (let [title (string/trim title)
          page (string/lower-case title)
-         tx (block/page-name->map title true)
          format (state/get-preferred-format)
+         tx (-> (block/page-name->map title true)
+                (assoc :block/format format))
          page-entity [:block/uuid (:block/uuid tx)]
          create-title-property? (and title (util/include-windows-reserved-chars? title))
          default-properties (default-properties-block title format page-entity)
@@ -393,8 +394,11 @@
 
 (defn get-filters
   [page-name]
-  (let [properties (db/get-page-properties page-name)]
-    (reader/read-string (get properties :filters "{}"))))
+  (let [properties (db/get-page-properties page-name)
+        properties-str (get properties :filters "{}")]
+    (try (reader/read-string properties-str)
+         (catch js/Error e
+           (log/error :syntax/filters e)))))
 
 (defn save-filter!
   [page-name filter-state]

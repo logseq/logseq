@@ -115,7 +115,8 @@
                                          :file/content content})]
                     (ok-handler file-contents))))
         (p/catch (fn [error]
-                   (log/error :load-files-error error))))))
+                   (log/error :nfs/load-files-error repo-url)
+                   (log/error :exception error))))))
 
 (defn reset-file!
   [repo-url file content]

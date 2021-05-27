@@ -89,7 +89,7 @@
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
-  [repo page-e sidebar?]
+  [repo page-e {:keys [sidebar? preview?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
@@ -105,11 +105,12 @@
                            :block/file {:db/id (:db/id (:block/file page-e))}})
                         {:journal? journal?
                          :page-name page-name})
-          hiccup-config {:id (if block? (str block-id) page-name)
-                         :sidebar? sidebar?
-                         :block? block?
-                         :editor-box editor/box
-                         :page page}
+          hiccup-config (merge
+                         {:id (if block? (str block-id) page-name)
+                          :block? block?
+                          :editor-box editor/box
+                          :page page}
+                         config)
           hiccup-config (common-handler/config-with-document-mode hiccup-config)
           hiccup (block/->hiccup page-blocks hiccup-config {})]
       (page-blocks-inner page-name page-blocks hiccup sidebar?))))
@@ -117,7 +118,7 @@
 (defn contents-page
   [page]
   (when-let [repo (state/get-current-repo)]
-    (page-blocks-cp repo page true)))
+    (page-blocks-cp repo page {:sidebar? true})))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -363,15 +364,6 @@
                                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
                      :z-index     1})]))])
            [:div
-            (when (and repo (not block?))
-              (let [alias (db/get-page-alias-names repo page-name)]
-                (when (seq alias)
-                  [:div.text-sm.ml-1.mb-4 {:key "page-file"}
-                   [:span.opacity-50 "Alias: "]
-                   (for [item alias]
-                     [:a.ml-1.mr-1 {:href (rfe/href :page {:name item})}
-                      item])])))
-
             (when (and block? (not sidebar?))
               (let [config {:id "block-parent"
                             :block? true}]
@@ -382,7 +374,7 @@
             (let [page (if block?
                          (db/entity repo [:block/uuid block-id])
                          page)]
-              (page-blocks-cp repo page sidebar?))]]
+              (page-blocks-cp repo page {:sidebar? sidebar?}))]]
 
            (when-not block?
              (today-queries repo today? sidebar?))

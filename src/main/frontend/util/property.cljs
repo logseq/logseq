@@ -4,7 +4,8 @@
             [clojure.set :as set]
             [frontend.config :as config]
             [medley.core :as medley]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [frontend.text :as text]))
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")
@@ -115,7 +116,7 @@
                                                            (or (simplified-property? s)
                                                                (and org? (org-property? s)))) properties-and-body)
             body (if org?
-                   (remove (fn [s] (= (string/trim s) properties-start)) body)
+                   (remove (fn [s] (contains? #{properties-start properties-end} (string/trim s))) body)
                    body)
             properties-in-content (->> (map #(get-property-key % format) properties-lines)
                                        (remove nil?)
@@ -129,6 +130,8 @@
                          (when org? [properties-start])
                          built-in-properties-area
                          properties-lines
+                         (when org?
+                           [properties-end])
                          body)]
         (string/join "\n" body))
       content)))
@@ -244,8 +247,11 @@
 
 (defn remove-built-in-properties
   [format content]
-  (reduce (fn [content key]
-            (remove-property format key content)) content built-in-properties))
+  (let [content (reduce (fn [content key]
+                          (remove-property format key content)) content built-in-properties)]
+    (if (= format :org)
+      (string/replace-first content ":PROPERTIES:\n:END:" "")
+      content)))
 
 (defn ->new-properties
   "New syntax: key:: value"
@@ -260,7 +266,9 @@
                           (map (fn [text]
                                  (let [[k v] (util/split-first ":" (subs text 1))]
                                    (if (and k v)
-                                     (str k ":: " (string/trim v))
+                                     (let [k (string/replace k "_" "-")
+                                           k (if (contains? #{:id :custom_id :custom-id} (string/lower-case k)) "id" k)]
+                                       (str k ":: " (string/trim v)))
                                      text)))))
               after (subvec lines (inc end-idx))
               lines (concat before middle after)]
@@ -314,3 +322,29 @@
    (vector? block)
    (contains? #{"Property_Drawer" "Properties"}
               (first block))))
+
+(defonce non-parsing-properties
+  (atom #{"background-color" "background_color"}))
+
+(defn parse-property
+  [k v]
+  (let [k (name k)
+        v (if (or (symbol? v) (keyword? v)) (name v) (str v))
+        v (string/trim v)]
+    (cond
+      (= v "true")
+      true
+      (= v "false")
+      false
+
+      (util/safe-re-find #"^\d+$" v)
+      (util/safe-parse-int v)
+
+      (and (= "\"" (first v) (last v))) ; wrapped in ""
+      (string/trim (subs v 1 (dec (count v))))
+
+      (contains? @non-parsing-properties (string/lower-case k))
+      v
+
+      :else
+      (text/split-page-refs-without-brackets v))))

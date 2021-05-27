@@ -158,51 +158,31 @@
 (defonce non-parsing-properties
   (atom #{"background-color" "background_color"}))
 
+;; TODO: we should move this to mldoc
 (defn extract-properties
   [properties]
   (let [properties (into {} properties)
         page-refs (->>
                    (map (fn [v]
                           (when (string? v)
-                            (let [page-refs (->> (re-seq text/page-ref-re v)
-                                                 (map second))
-                                  tags (->> (string/split v #",")
-                                            (filter (fn [s] (= \# (first s))))
-                                            (map (fn [s] (subs s 1))))]
-                              (concat page-refs tags))))
+                            (let [result (text/split-page-refs-without-brackets v {:un-brackets? false})]
+                              (if (coll? result)
+                                (map text/page-ref-un-brackets! result)
+                                []))))
                      (vals properties))
                    (apply concat)
                    (remove string/blank?))
         properties (->> properties
                         (medley/map-kv (fn [k v]
-                                         (let [v (if (coll? v)
+                                         (let [k (-> (string/lower-case (name k))
+                                                     (string/replace " " "-")
+                                                     (string/replace "_" "-"))
+                                               k (if (contains? #{"custom_id" "custom-id"} k)
+                                                   "id"
+                                                   k)
+                                               v (if (coll? v)
                                                    v
-                                                   (let [k (name k)
-                                                         v (string/trim v)
-                                                         k (string/replace k " " "-")
-                                                         k (string/lower-case k)
-                                                         v (cond
-                                                             (= v "true")
-                                                             true
-                                                             (= v "false")
-                                                             false
-
-                                                             (util/safe-re-find #"^\d+$" v)
-                                                             (util/safe-parse-int v)
-
-                                                             (and (= "\"" (first v) (last v))) ; wrapped in ""
-                                                             (string/trim (subs v 1 (dec (count v))))
-
-                                                             (contains? @non-parsing-properties (string/lower-case k))
-                                                             v
-
-                                                             :else
-                                                             (if (and k v
-                                                                      (contains? config/markers k)
-                                                                      (util/safe-parse-int v))
-                                                               (util/safe-parse-int v)
-                                                               (text/split-page-refs-without-brackets v true)))]
-                                                     v))
+                                                   (property/parse-property k v))
                                                k (keyword k)
                                                v (if (and
                                                       (string? v)
@@ -404,6 +384,10 @@
         content (cons f body)]
     (string/join "\n" content)))
 
+(defn src-block?
+  [block]
+  (some (fn [x] (and (vector? x) (= "Src" (first x)))) (:body block)))
+
 (defn- get-block-content
   [utf8-content block format]
   (let [meta (:meta block)
@@ -412,11 +396,13 @@
                                   (:start-pos meta)
                                   end-pos)
                   (utf8/substring utf8-content
-                                  (:start-pos meta)))]
+                                  (:start-pos meta)))
+        content-orig content]
     (let [content (when content
                     (let [content (text/remove-level-spaces content format)]
                       (if (or (:pre-block? block)
-                              (= (:format block) :org))
+                              (= (:format block) :org)
+                              (src-block? block))
                         content
                         (remove-indentation-spaces content (:level block)))))]
       (if (= format :org)

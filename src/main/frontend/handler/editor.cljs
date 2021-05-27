@@ -227,7 +227,7 @@
                           :else
                           (subs content 0 pos))
              content (property/remove-built-in-properties (:block/format block)
-                                                       content)]
+                                                          content)]
          (clear-selection! nil)
          (state/set-editing! edit-input-id content block text-range move-cursor?))))))
 
@@ -641,7 +641,7 @@
         new-block))))
 
 (defn update-timestamps-content!
-  [{:block/keys [repeated? marker] :as block} content]
+  [{:block/keys [repeated? marker format] :as block} content]
   (if repeated?
     (let [scheduled-ast (block-handler/get-scheduled-ast block)
           deadline-ast (block-handler/get-deadline-ast block)
@@ -655,7 +655,7 @@
       (when content
         (str (string/trimr content)
              "\n"
-             (util/format "* %s -> DONE [%s]"
+             (util/format (str (if (= format :org) "-" "*") " %s -> DONE [%s]")
                           marker
                           (date/get-local-date-time-string)))))
     content))
@@ -1922,35 +1922,36 @@
           has-children? (db/has-children? (state/get-current-repo)
                                           (:block/uuid editing-block))
           collapsed? (:collapsed (:block/properties editing-block))]
-      (match (mapv boolean [dummy? (seq fst-block-text) (seq snd-block-text)
-                           block-self? has-children? (= parent left) collapsed?])
-        ;; if editing-block is dummy, insert after page-block
-        [true _ _ _ _ _ _]
-        [parent-block false]
+      (conj (match (mapv boolean [dummy? (seq fst-block-text) (seq snd-block-text)
+                                  block-self? has-children? (= parent left) collapsed?])
+                   ;; if editing-block is dummy, insert after page-block
+                   [true _ _ _ _ _ _]
+                   [parent-block false]
 
-        ;; when zoom at editing-block
-        [false _ _ true _ _ _]
-        [editing-block false]
+                   ;; when zoom at editing-block
+                   [false _ _ true _ _ _]
+                   [editing-block false]
 
-        ;; insert after editing-block
-        [false true _ false true _ false]
-        [editing-block false]
-        [false true _ false true _ true]
-        [editing-block true]
-        [false true _ false false _ _]
-        [editing-block true]
-        [false false false false true _ false]
-        [editing-block false]
-        [false false false false true _ true]
-        [editing-block true]
-        [false false false false false _ _]
-        [editing-block true]
+                   ;; insert after editing-block
+                   [false true _ false true _ false]
+                   [editing-block false]
+                   [false true _ false true _ true]
+                   [editing-block true]
+                   [false true _ false false _ _]
+                   [editing-block true]
+                   [false false false false true _ false]
+                   [editing-block false]
+                   [false false false false true _ true]
+                   [editing-block true]
+                   [false false false false false _ _]
+                   [editing-block true]
 
-        ;; insert before editing-block
-        [false false true false _ true _]
-        [parent-block false]
-        [false false true false _ false _]
-        [left-block true]))))
+                   ;; insert before editing-block
+                   [false false true false _ true _]
+                   [parent-block false]
+                   [false false true false _ false _]
+                   [left-block true])
+            editing-block))))
 
 (defn- paste-block-tree-at-point
   ([tree exclude-properties] (paste-block-tree-at-point tree exclude-properties nil))
@@ -1960,8 +1961,9 @@
                   (db/entity [:block/original-name (state/get-current-page)])
                   (:block/page (db/entity (:db/id (state/get-edit-block)))))
          file (:block/file page)]
-     (when-let [[target-block sibling?] (get-block-tree-insert-pos-at-point)]
+     (when-let [[target-block sibling? editing-block] (get-block-tree-insert-pos-at-point)]
        (let [target-block (outliner-core/block target-block)
+             editing-block (outliner-core/block editing-block)
              format (or (:block/format target-block) (state/get-preferred-format))
              new-block-uuids (atom #{})
              metadata-replaced-blocks
@@ -2017,6 +2019,7 @@
                                                           :block/meta
                                                           :block/content
                                                           :block/title))))))))))))
+             _ (outliner-core/save-node editing-block)
              _ (outliner-core/insert-nodes metadata-replaced-blocks target-block sibling?)
              new-blocks (db/pull-many repo '[*] (map (fn [id] [:block/uuid id]) @new-block-uuids))]
          (db/refresh! repo {:key :block/insert :data new-blocks}))))))

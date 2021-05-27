@@ -81,27 +81,31 @@
     (swap! *installed dissoc install-id)))
 
 
+(defn- uninstall-shortcut-aux!
+  [state handler-id]
+  (some-> (get state :shortcut-key)
+          uninstall-shortcut!))
+
+(defn- install-shortcut-aux!
+  [state handler-id]
+  (let [install-id (-> handler-id
+                       (install-shortcut! {:state state}))]
+    (assoc state :shortcut-key install-id)))
+
 (defn mixin [handler-id]
   {:did-mount
    (fn [state]
-     (let [install-id (-> handler-id
-                          (install-shortcut! {:state state}))]
-       (assoc state :shortcut-key install-id)))
+     (install-shortcut-aux! state handler-id))
 
    :did-remount (fn [old-state new-state]
-
                   ;; uninstall
-                  (-> (get old-state :shortcut-key)
-                      uninstall-shortcut!)
+                  (uninstall-shortcut-aux! old-state handler-id)
 
                   ;; update new states
-                  (let [install-id (-> handler-id
-                                       (install-shortcut! {:state new-state}))]
-                    (assoc new-state :shortcut-key install-id)))
+                  (install-shortcut-aux! new-state handler-id))
    :will-unmount
    (fn [state]
-     (-> (get state :shortcut-key)
-         uninstall-shortcut!)
+     (uninstall-shortcut-aux! state handler-id)
      (dissoc state :shortcut-key))})
 
 (defn unlisten-all []

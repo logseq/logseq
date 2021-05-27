@@ -164,7 +164,8 @@
                        (when (util/electron?)
                          (fs/watch-dir! dir-name)))))
            (p/catch (fn [error]
-                      (log/error :nfs/load-files-error error)))))
+                      (log/error :nfs/load-files-error repo)
+                      (log/error :exception error)))))
      (p/catch (fn [error]
                 (if (contains? #{"AbortError" "Error"} (gobj/get error "name"))
                   (state/set-loading-files! false)
@@ -278,7 +279,8 @@
                         (set-files! @path-handles))]
               (handle-diffs! repo nfs? old-files new-files handle-path path-handles re-index?))))
         (p/catch (fn [error]
-                   (log/error :nfs/load-files-error error)))
+                   (log/error :nfs/load-files-error repo)
+                   (log/error :exception error)))
         (p/finally (fn [_]
                      (state/set-graph-syncing? false))))))))
 

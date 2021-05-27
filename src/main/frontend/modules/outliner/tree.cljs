@@ -33,13 +33,9 @@
     (reset! blocks (remove (set children) @blocks))
     children))
 
-(defn- with-children-and-refs
+(defn- with-children
   [block children]
-  (let [all-refs (->> (mapcat :block/refs children)
-                      (distinct))]
-    (assoc block
-           :block/children children
-           :block/refs-with-children all-refs)))
+  (assoc block :block/children children))
 
 (defn- blocks->vec-tree-aux
   [blocks root]
@@ -48,7 +44,7 @@
      (get-children blocks root)
      (map (fn [block]
             (let [children (blocks->vec-tree-aux blocks block)]
-              (with-children-and-refs block children)))))))
+              (with-children block children)))))))
 
 (defn- get-root-and-page
   [root-id]
@@ -74,7 +70,7 @@
 
       :else                             ; include root block
       (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) @blocks)
-            root-block (with-children-and-refs root-block result)]
+            root-block (with-children root-block result)]
         [root-block]))))
 
 (defn- sort-blocks-aux

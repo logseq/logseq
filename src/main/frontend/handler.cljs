@@ -1,36 +1,41 @@
 (ns frontend.handler
-  (:require [frontend.state :as state]
+  (:require [cljs-bean.core :as bean]
+            [electron.ipc :as ipc]
+            [electron.listener :as el]
+            [frontend.components.editor :as editor]
+            [frontend.components.page :as page]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
-            [frontend.util :as util :refer-macros [profile]]
-            [frontend.config :as config]
-            [frontend.storage :as storage]
-            [clojure.string :as string]
-            [promesa.core :as p]
-            [cljs-bean.core :as bean]
-            [frontend.date :as date]
-            [frontend.search :as search]
-            [frontend.search.db :as search-db]
+            [frontend.handler.common :as common-handler]
+            [frontend.handler.events :as events]
+            [frontend.handler.file :as file-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file :as file-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.web.nfs :as nfs]
-            [frontend.modules.shortcut.core :as shortcut]
-            [frontend.handler.events :as events]
-            [frontend.fs.watcher-handler :as fs-watcher-handler]
-            [frontend.ui :as ui]
-            [goog.object :as gobj]
             [frontend.idb :as idb]
-            [lambdaisland.glogi :as log]
-            [frontend.handler.common :as common-handler]
-            [electron.listener :as el]
-            [electron.ipc :as ipc]
+            [frontend.modules.instrumentation.core :as instrument]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.search :as search]
+            [frontend.search.db :as search-db]
+            [frontend.state :as state]
+            [frontend.storage :as storage]
+            [frontend.util :as util]
             [frontend.version :as version]
-            [frontend.components.page :as page]
-            [frontend.components.editor :as editor]))
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]))
+
+(defn set-global-error-notification!
+  []
+  (set! js/window.onerror
+        (fn [message, source, lineno, colno, error]
+          (notification/show!
+           (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
+           :error
+           ;; Don't auto-hide
+           false))))
 
 (defn- watch-for-date!
   []
@@ -138,19 +143,11 @@
         [{:url config/local-repo
           :example? true}]))))
 
-(defn init-sentry
-  []
-  (when-not (state/sentry-disabled?)
-    (let [cfg
-          {:dsn "https://636e9174ffa148c98d2b9d3369661683@o416451.ingest.sentry.io/5311485"
-           :release (util/format "logseq@%s" version/version)}]
-      (.init js/window.Sentry (clj->js cfg)))))
-
 (defn on-load-events
   []
-  (let [f (fn []
-            (when-not config/dev? (init-sentry)))]
-    (set! js/window.onload f)))
+  (set! js/window.onload
+        (fn []
+          (instrument/init))))
 
 (defn clear-cache!
   []
@@ -166,6 +163,7 @@
 
 (defn start!
   [render]
+  (set-global-error-notification!)
   (let [{:keys [me logged? repos]} (get-me-and-repos)]
     (when me (state/set-state! :me me))
     (register-components-fns!)

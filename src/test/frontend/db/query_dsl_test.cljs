@@ -23,17 +23,17 @@ tags: [[page-tag-1]], page-tag-2
 parent: [[child page 1]]
 ---
 - DONE 26-b1 [[page 1]]
-created_at:: 1608968448113
-last_modified_at:: 1608968448113
-prop_a:: val_a
-prop_c:: [[page a]], [[page b]], [[page c]]
+created-at:: 1608968448113
+last-modified-at:: 1608968448113
+prop-a:: val-a
+prop-c:: [[page a]], [[page b]], [[page c]]
 - LATER 26-b2-modified-later [[page 2]] #tag1
-created_at:: 1608968448114
-last_modified_at:: 1608968448120
-prop_b:: val_b
+created-at:: 1608968448114
+last-modified-at:: 1608968448120
+prop-b:: val-b
 - DONE [#A] 26-b3 [[page 1]]
-created_at:: 1608968448115
-last_modified_at:: 1608968448115
+created-at:: 1608968448115
+last-modified-at:: 1608968448115
 "}
                {:file/path "journals/2020_12_27.md"
                 :file/content "---
@@ -42,35 +42,35 @@ tags: page-tag-2, [[page-tag-3]]
 parent: [[child page 1]], child page 2
 ---
 - NOW [#A] b1 [[page 1]]
-created_at:: 1609052958714
-last_modified_at:: 1609052958714
+created-at:: 1609052958714
+last-modified-at:: 1609052958714
 - LATER [#B] b2-modified-later [[page 2]]
-created_at:: 1609052959376
-last_modified_at:: 1609052974285
+created-at:: 1609052959376
+last-modified-at:: 1609052974285
 - b3 [[page 1]]
-created_at:: 1609052959954
-last_modified_at:: 1609052959954
-prop_a:: val_a
+created-at:: 1609052959954
+last-modified-at:: 1609052959954
+prop-a:: val-a
 - b4 [[page 2]]
-created_at:: 1609052961569
-last_modified_at:: 1609052961569
+created-at:: 1609052961569
+last-modified-at:: 1609052961569
 - b5
-created_at:: 1609052963089
-last_modified_at:: 1609052963089"}
+created-at:: 1609052963089
+last-modified-at:: 1609052963089"}
                {:file/path "journals/2020_12_28.md"
                 :file/content "---
 title: Dec 28th, 2020
 parent: child page 2
 ---
 - 28-b1 [[page 1]]
-created_at:: 1609084800000
-last_modified_at:: 1609084800000
+created-at:: 1609084800000
+last-modified-at:: 1609084800000
 - 28-b2-modified-later [[page 2]]
-created_at:: 1609084800001
-last_modified_at:: 1609084800020
+created-at:: 1609084800001
+last-modified-at:: 1609084800020
 - 28-b3 [[page 1]]
-created_at:: 1609084800002
-last_modified_at:: 1609084800002"}]]
+created-at:: 1609084800002
+last-modified-at:: 1609084800002"}]]
     (repo-handler/parse-files-and-load-to-db! test-db files {:re-render? false})))
 
 (def parse (partial dsl/parse test-db))
@@ -80,7 +80,7 @@ last_modified_at:: 1609084800002"}]]
   (db/clear-query-state!)
   (let [parse-result (parse s)
         query (:query parse-result)]
-    {:query query
+    {:query (if (seq query) (vec query) query)
      :result (dsl/query test-db s)}))
 
 (defn q-count
@@ -122,54 +122,39 @@ last_modified_at:: 1609084800002"}]]
 
   (testing "Block properties query"
     (are [x y] (= (q-count x) y)
-      "(property prop_a val_a)"
-      {:query '[[?b :block/properties ?prop]
-                [(get ?prop :prop_a) ?v]
-                (or
-                 [(= ?v "val_a")]
-                 [(contains? ?v "val_a")])]
+      "(property prop-a val-a)"
+      {:query '[[?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-a) ?v] (or [(= ?v "val-a")] [(contains? ?v "val-a")])]
        :count 2}
 
-      "(property prop_b val_b)"
-      {:query '[[?b :block/properties ?prop]
-                [(get ?prop :prop_b) ?v]
-                (or
-                 [(= ?v "val_b")]
-                 [(contains? ?v "val_b")])]
+      "(property prop-b val-b)"
+      {:query '[[?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")])]
        :count 1}
 
-      "(and (property prop_b val_b))"
-      {:query '[[?b :block/properties ?prop]
-                [(get ?prop :prop_b) ?v]
-                (or
-                 [(= ?v "val_b")]
-                 [(contains? ?v "val_b")])]
+      "(and (property prop-b val-b))"
+      {:query '([?b :block/properties ?prop]
+                [(missing? $ ?b :block/name)]
+                [(get ?prop :prop-b) ?v]
+                (or [(= ?v "val-b")] [(contains? ?v "val-b")]))
        :count 1}
 
-      "(and (property prop_c \"page c\"))"
-      {:query '[[?b :block/properties ?prop]
-                [(get ?prop :prop_c) ?v]
-                (or
-                 [(= ?v "page c")]
-                 [(contains? ?v "page c")])]
+      "(and (property prop-c \"page c\"))"
+      {:query '[[?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")])]
        :count 1}
 
       ;; TODO: optimize
-      "(and (property prop_c \"page c\") (property prop_c \"page b\"))"
-      {:query '([?b :block/properties ?prop]
-                [(get ?prop :prop_c) ?v]
+      "(and (property prop-c \"page c\") (property prop-c \"page b\"))"
+      {:query '[[?b :block/properties ?prop]
+                [(missing? $ ?b :block/name)]
+                [(get ?prop :prop-c) ?v]
                 (or [(= ?v "page c")] [(contains? ?v "page c")])
-                [(get ?prop :prop_c) ?v1]
-                (or [(= ?v1 "page b")] [(contains? ?v1 "page b")]))
+                [(get ?prop :prop-c) ?v1]
+                (or [(= ?v1 "page b")] [(contains? ?v1 "page b")])]
        :count 1}
 
-      "(or (property prop_c \"page c\") (property prop_b val_b))"
-      {:query '(or (and [?b :block/properties ?prop]
-                        [(get ?prop :prop_c) ?v]
-                        (or [(= ?v "page c")] [(contains? ?v "page c")]))
-                   (and [?b :block/properties ?prop]
-                        [(get ?prop :prop_b) ?v]
-                        (or [(= ?v "val_b")] [(contains? ?v "val_b")])))
+      "(or (property prop-c \"page c\") (property prop-b val-b))"
+      {:query '[or
+                (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")]))
+                (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")]))]
        :count 2}))
 
   (testing "task queries"
@@ -266,13 +251,17 @@ last_modified_at:: 1609084800002"}]]
 
   (testing "page-property queries"
     (are [x y] (= (q-count x) y)
+      "(page-property parent)"
+      {:query '[[?p :block/name]
+                [?p :block/properties ?prop]
+                [(get ?prop :parent) ?prop-v]
+                [true]], :count 3}
+
       "(page-property parent [[child page 1]])"
       {:query '[[?p :block/name]
                 [?p :block/properties ?prop]
                 [(get ?prop :parent) ?v]
-                (or
-                 [(= ?v "child page 1")]
-                 [(contains? ?v "child page 1")])]
+                (or [(= ?v "child page 1")] [(contains? ?v "child page 1")])]
        :count 2}
 
       "(page-property parent \"child page 1\")"
@@ -343,12 +332,12 @@ last_modified_at:: 1609084800002"}]]
       "(and (task now later done) (between [[Dec 27th, 2020]] [[Dec 28th, 2020]]))"
       2
 
-      ;; ;; between with created_at
-      ;; "(and (task now later done) (between created_at [[Dec 26th, 2020]] tomorrow))"
+      ;; ;; between with created-at
+      ;; "(and (task now later done) (between created-at [[Dec 26th, 2020]] tomorrow))"
       ;; 5
 
-      ;; ;; between with last_modified_at
-      ;; "(and (task now later done) (between last_modified_at [[Dec 26th, 2020]] tomorrow))"
+      ;; ;; between with last-modified-at
+      ;; "(and (task now later done) (between last-modified-at [[Dec 26th, 2020]] tomorrow))"
       ;; 5
       ))
 
@@ -383,10 +372,13 @@ last_modified_at:: 1609084800002"}]]
     ;; FIXME: not working
     ;; (are [x y] (= (q-count x) y)
     ;;   "(or (priority a) (not (priority a)))"
-    ;;   {:query '(or
-    ;;             (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
-    ;;             (and (not [?b :block/priority ?priority]
-    ;;                       [(contains? #{"A"} ?priority)])))
+    ;;   {:query '[(or-join [?b]
+    ;;                      (and
+    ;;                       [?b :block/priority ?priority]
+    ;;                       [(contains? #{"A"} ?priority)])
+    ;;                      (not-join [?b]
+    ;;                                [?b :block/priority ?priority]
+    ;;                                [(contains? #{"A"} ?priority)]))]
     ;;    :count 5})
 
     (are [x y] (= (q-count x) y)
@@ -399,63 +391,63 @@ last_modified_at:: 1609084800002"}]]
                  (and (not [?b :block/path-refs [:block/name "page 1"]]))))
        :count 5}))
 
-  ;; (testing "sort-by (created_at defaults to desc)"
+  ;; (testing "sort-by (created-at defaults to desc)"
   ;;   (db/clear-query-state!)
   ;;   (let [result (->> (q "(and (task now later done)
-  ;;                              (sort-by created_at))")
+  ;;                              (sort-by created-at))")
   ;;                     :result
   ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "created_at"])))]
+  ;;                     (map #(get-in % [:block/properties "created-at"])))]
   ;;     (is (= result
   ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
-  ;; (testing "sort-by (created_at desc)"
+  ;; (testing "sort-by (created-at desc)"
   ;;   (db/clear-query-state!)
   ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by created_at desc))")
+  ;;                              (sort-by created-at desc))")
   ;;                     :result
   ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "created_at"])))]
+  ;;                     (map #(get-in % [:block/properties "created-at"])))]
   ;;     (is (= result
   ;;            '(1609052959376 1609052958714 1608968448115 1608968448114 1608968448113)))))
 
-  ;; (testing "sort-by (created_at asc)"
+  ;; (testing "sort-by (created-at asc)"
   ;;   (db/clear-query-state!)
   ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by created_at asc))")
+  ;;                              (sort-by created-at asc))")
   ;;                     :result
   ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "created_at"])))]
+  ;;                     (map #(get-in % [:block/properties "created-at"])))]
   ;;     (is (= result
   ;;            '(1608968448113 1608968448114 1608968448115 1609052958714 1609052959376)))))
 
-  ;; (testing "sort-by (last_modified_at defaults to desc)"
+  ;; (testing "sort-by (last-modified-at defaults to desc)"
   ;;   (db/clear-query-state!)
   ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by last_modified_at))")
+  ;;                              (sort-by last-modified-at))")
   ;;                     :result
   ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "last_modified_at"])))]
+  ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
   ;;     (is (= result
   ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
-  ;; (testing "sort-by (last_modified_at desc)"
+  ;; (testing "sort-by (last-modified-at desc)"
   ;;   (db/clear-query-state!)
   ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by last_modified_at desc))")
+  ;;                              (sort-by last-modified-at desc))")
   ;;                     :result
   ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "last_modified_at"])))]
+  ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
   ;;     (is (= result
   ;;            '(1609052974285 1609052958714 1608968448120 1608968448115 1608968448113)))))
 
-  ;; (testing "sort-by (last_modified_at desc)"
+  ;; (testing "sort-by (last-modified-at desc)"
   ;;   (db/clear-query-state!)
   ;;   (let [result (->> (q "(and (todo now later done)
-  ;;                              (sort-by last_modified_at asc))")
+  ;;                              (sort-by last-modified-at asc))")
   ;;                     :result
   ;;                     deref
-  ;;                     (map #(get-in % [:block/properties "last_modified_at"])))]
+  ;;                     (map #(get-in % [:block/properties "last-modified-at"])))]
   ;;     (is (= result
   ;;            '(1608968448113 1608968448115 1608968448120 1609052958714 1609052974285)))))
   )
@@ -479,10 +471,10 @@ last_modified_at:: 1609084800002"}]]
   ;; FIXME: Error: Insufficient bindings: #{?priority} not bound in [(contains? #{"A"} ?priority)]
   (pprint/pprint
    (d/q
-    '[:find (pull ?b [*])
-      :where
-      [?b :block/uuid]
-      (or (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
-          (not [?b :block/priority #{"A"}]
-               [(contains? #{"A"} ?priority)]))]
-    (frontend.db/get-conn test-db))))
+     '[:find (pull ?b [*])
+       :where
+       [?b :block/uuid]
+       (or (and [?b :block/priority ?priority] [(contains? #{"A"} ?priority)])
+           (not [?b :block/priority #{"A"}]
+                [(contains? #{"A"} ?priority)]))]
+     (frontend.db/get-conn test-db))))

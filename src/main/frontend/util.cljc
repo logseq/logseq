@@ -35,7 +35,7 @@
 
 #?(:cljs (defonce ^js node-path nodePath))
 #?(:cljs (defn app-scroll-container-node []
-           (gdom/getElement "left-container")))
+           (gdom/getElement "main-container")))
 
 #?(:cljs
    (defn ios?
@@ -417,9 +417,10 @@
      ([node pos]
       (scroll-to node pos true))
      ([node pos animate?]
-      (.scroll node
-               #js {:top      pos
-                    :behavior (if animate? "smooth" "auto")}))))
+      (when node
+        (.scroll node
+                 #js {:top      pos
+                      :behavior (if animate? "smooth" "auto")})))))
 
 #?(:cljs
    (defn scroll-to-top
@@ -1365,3 +1366,18 @@
                         (apply min))
                    (count val))]
        (.setRangeText input "" current (inc idx)))))
+
+(defn classnames
+  "Like react classnames utility:
+
+     ```
+      [:div {:class (classnames [:a :b {:c true}])}
+     ```
+  "
+  [args]
+  (into #{} (mapcat
+              #(if (map? %)
+                 (for [[k v] %]
+                   (when v (name k)))
+                 (name %))
+              args)))
