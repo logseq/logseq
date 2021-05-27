@@ -7,6 +7,10 @@
   (let [contents (state/get-notification-contents)]
     (state/set-state! :notification/contents (dissoc contents uid))))
 
+(defn clear-all!
+  []
+  (state/set-state! :notification/contents nil))
+
 (defn show!
   ([content status]
    (show! content status true nil))

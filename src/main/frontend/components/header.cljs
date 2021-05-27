@@ -19,7 +19,8 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.handler.migrate :as migrate]))
 
 (rum/defc logo < rum/reactive
   [{:keys [white?]}]
@@ -122,6 +123,14 @@
          {:title (t :import)
           :options {:href (rfe/href :import)}
           :icon svg/import-sm})
+
+       (when (and current-repo
+                  ;; (not (:markdown/version (state/get-config)))
+                  )
+         {:title "Convert to more standard Markdown"
+          :options {:on-click (fn [] (migrate/show-convert-notification! current-repo))}
+          :icon svg/import-sm})
+
        {:title [:div.flex-row.flex.justify-between.items-center
                 [:span (t :join-community)]]
         :options {:href "https://discord.gg/KpN4eHY"

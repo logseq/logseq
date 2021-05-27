@@ -429,25 +429,12 @@
                         (and (not= status :pushing)
                              changed-files?)))
            (git-handler/set-git-status! repo-url :pushing)
-           (util/p-handle
+           (->
             (git/push repo-url token merge-push-no-diff?)
-            (fn [_result]
-              (git-handler/set-git-status! repo-url nil)
-              (git-handler/set-git-error! repo-url nil)
-              (common-handler/check-changed-files-status repo-url))
-            (fn [error]
-              (log/error :git/push-error error)
-              (js/console.error error)
-              (common-handler/check-changed-files-status repo-url)
-
-              (git-handler/set-git-status! repo-url :push-failed)
-              (git-handler/set-git-error! repo-url error)
-
-              (if (state/online?)
-                (pull repo-url {:force-pull? true
-                                :show-diff? true})
-                (when custom-commit?
-                  (p/rejected error)))))))
+            (p/then (fn []
+                      (git-handler/set-git-status! repo-url nil)
+                      (git-handler/set-git-error! repo-url nil)
+                      (common-handler/check-changed-files-status repo-url))))))
        (p/catch (fn [error]
                   (log/error :repo/push-error error)
                   (git-handler/set-git-status! repo-url :push-failed)

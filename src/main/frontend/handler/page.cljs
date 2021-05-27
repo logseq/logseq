@@ -73,7 +73,7 @@
          tx (-> (block/page-name->map title true)
                 (assoc :block/format format))
          page-entity [:block/uuid (:block/uuid tx)]
-         create-title-property? (and title (util/include-windows-reserved-chars? title))
+         create-title-property? (util/create-title-property? title)
          default-properties (default-properties-block title format page-entity)
          empty-block {:block/uuid (db/new-block-id)
                       :block/left [:block/uuid (:block/uuid default-properties)]
