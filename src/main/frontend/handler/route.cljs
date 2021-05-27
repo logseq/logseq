@@ -15,13 +15,10 @@
   "If `push` is truthy, previous page will be left in history."
   [{:keys [to path-params query-params push]
     :or {push true}}]
-  (if push
-    (do
-      (rfe/push-state to path-params query-params)
-      (util/scroll-to-top))
-    (do
-      (rfe/replace-state to path-params query-params)
-      (util/scroll-to-top))))
+  (let [route-fn (if push rfe/push-state rfe/replace-state)]
+    (state/save-scroll-position! (util/scroll-top))
+    (route-fn to path-params query-params)
+    (util/scroll-to (state/get-saved-scroll-position))))
 
 (defn redirect-to-home!
   []

@@ -65,6 +65,9 @@
     :ui/show-recent? false
     :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
                             false)
+    ;; remember scroll positions of visited pages
+    :ui/pages-scroll-positions {}
+
     :document/mode? (or (storage/get :document/mode?) false)
 
     :github/contents {}
@@ -856,6 +859,18 @@
 (defn get-custom-query-components
   []
   (vals (get @state :ui/custom-query-components)))
+
+(defn save-scroll-position!
+  ([value]
+   (save-scroll-position! value (get-current-page)))
+  ([value page]
+   (set-state! [:ui/page-scroll-positions page] value)))
+
+(defn get-saved-scroll-position
+  ([]
+   (get-saved-scroll-position (get-current-page)))
+  ([page]
+   (get-in @state [:ui/page-scroll-positions page] 0)))
 
 (defn get-journal-template
   []
