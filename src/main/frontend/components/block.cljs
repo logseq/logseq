@@ -368,7 +368,7 @@
        (get page-entity :block/original-name page-name)))])
 
 (rum/defc page-cp
-  [{:keys [html-export? label children contents-page? sidebar?] :as config} page]
+  [{:keys [html-export? label children contents-page? sidebar? preview?] :as config} page]
   (when-let [page-name (:block/name page)]
     (let [page (string/lower-case page-name)
           page-entity (db/entity [:block/name page])
@@ -388,19 +388,21 @@
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config page-name href redirect-page-name page-entity contents-page? children html-export? label)]
-      (ui/tippy {:html [:div.tippy-wrapper.overflow-y-auto
-                        {:style {:width 735
-                                 :text-align "left"
-                                 :font-weight 500
-                                 :max-height 600
-                                 :padding-bottom 64}}
-                        [:h2.font-bold.text-lg page-name]
-                        (let [page (db/entity [:block/name (string/lower-case page-name)])]
-                          (when-let [f (state/get-page-blocks-cp)]
-                            (f (state/get-current-repo) page {:sidebar? (:sidebar? config)})))]
-                 :interactive true
-                 :delay 1000}
-                inner))))
+      (if-not preview?
+        (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
+                                 {:style {:width          735
+                                          :text-align     "left"
+                                          :font-weight    500
+                                          :max-height     600
+                                          :padding-bottom 64}}
+                                 [:h2.font-bold.text-lg page-name]
+                                 (let [page (db/entity [:block/name (string/lower-case page-name)])]
+                                   (when-let [f (state/get-page-blocks-cp)]
+                                     (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]
+                   :interactive true
+                   :delay       1000}
+                  inner)
+        inner))))
 
 (rum/defc asset-reference
   [title path]
@@ -544,19 +546,21 @@
                        [:span.block-ref
                         (block-content (assoc config :block-ref? true)
                                        block nil (:block/uuid block)
-                                       (:slide? config))])]
-           (ui/tippy {:html [:div.tippy-wrapper.overflowy-y-auto
-                             {:style {:width 735
-                                      :text-align "left"
-                                      :max-height 600}}
-                             (blocks-container [block] config)]
-                      :interactive true
-                      :delay 1000}
-                     (if label
+                                       (:slide? config))])
+               inner (if label
                        (->elem
-                        :span.block-ref
-                        (map-inline config label))
-                       title)))]
+                         :span.block-ref
+                         (map-inline config label))
+                       title)]
+           (if-not (:preview? config)
+             (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
+                                      {:style {:width      735
+                                               :text-align "left"
+                                               :max-height 600}}
+                                      (blocks-container [block] (assoc config :preview? true))]
+                        :interactive true
+                        :delay       1000} inner)
+             inner))]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
