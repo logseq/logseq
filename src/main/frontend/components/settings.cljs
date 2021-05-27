@@ -15,7 +15,7 @@
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.util :as util]
+            [frontend.util :refer [classnames] :as util]
             [frontend.version :refer [version]]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
@@ -167,23 +167,31 @@
         developer-mode? (state/sub [:ui/developer-mode?])
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
+        system-theme? (state/sub :ui/system-theme?)
         switch-theme (if dark? "white" "dark")]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#settings.cp__settings-main
        [:h1.title (t :settings)]
 
        [:div.panel-wrap
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+
+        ;;; theme modes
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
          [:label.block.text-sm.font-medium.leading-5.opacity-70
           {:for "toggle_theme"}
           (t :right-side-bar/switch-theme (string/capitalize switch-theme))]
-         [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-2
+         [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-1
           [:div.rounded-md.sm:max-w-xs
-           (ui/toggle dark?
-                      (fn []
-                        (state/set-theme! switch-theme))
-                      true)]
-          [:span.ml-4.opacity-50.text-sm "t t"]]]
+
+           [:ul.theme-modes-options
+            [:li {:on-click (partial state/use-theme-mode! "light")
+                  :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
+            [:li {:on-click (partial state/use-theme-mode! "dark")
+                  :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
+            [:li {:on-click (partial state/use-theme-mode! "system")
+                  :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]]
+
+         [:span.ml-4.opacity-50.text-sm.px-5 "t t"]]
 
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.block.text-sm.font-medium.leading-5.opacity-70
