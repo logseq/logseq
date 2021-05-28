@@ -175,7 +175,7 @@
 
      ;; TODO:
      ;; ["Upload a file" nil]
-     ]
+]
     (markdown-headings)
     ;; Allow user to modify or extend, should specify how to extend.
     (state/get-commands)
@@ -405,8 +405,8 @@
 
 (defmulti handle-step first)
 
-(defmethod handle-step :editor/hook [[_ event {:keys [pid] :as payload}]]
-  (plugin-handler/hook-plugin-editor event payload pid))
+(defmethod handle-step :editor/hook [[_ event {:keys [pid] :as payload}] format]
+  (plugin-handler/hook-plugin-editor event (merge payload {:format format :uuid (:block/uuid (state/get-edit-block))}) pid))
 
 (defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]
