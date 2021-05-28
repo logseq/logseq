@@ -427,6 +427,15 @@
      []
      (scroll-to (app-scroll-container-node) 0 false)))
 
+#?(:cljs
+   (defn scroll-top
+     "Returns the scroll top position of the `node`. If `node` is not specified,
+     returns the scroll top position of the `app-scroll-container-node`."
+     ([]
+      (scroll-top (app-scroll-container-node)))
+     ([node]
+      (when node (.-scrollTop node)))))
+
 (defn url-encode
   [string]
   #?(:cljs (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
@@ -1095,11 +1104,17 @@
          (when (uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
-(defonce windows-reserved-chars #"[\\/:\\*\\?\"<>|]+")
+(def windows-reserved-chars #"[\\/:\\*\\?\"<>|]+")
 
 (defn include-windows-reserved-chars?
   [s]
   (safe-re-find windows-reserved-chars s))
+
+(defn create-title-property?
+  [s]
+  (and (string? s)
+       (or (include-windows-reserved-chars? s)
+           (string/includes? s "."))))
 
 (defn page-name-sanity
   [page-name]

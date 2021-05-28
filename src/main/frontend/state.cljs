@@ -54,7 +54,7 @@
     :ui/sidebar-open? false
     :ui/left-sidebar-open? false
     :ui/theme (or (storage/get :ui/theme) "dark")
-    :ui/system-theme? ((fnil identity true) (storage/get :ui/system-theme?))
+    :ui/system-theme? ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
     :ui/wide-mode? false
     ;; :show-all, :hide-block-body, :hide-block-children
     :ui/cycle-collapse :show-all
@@ -65,6 +65,9 @@
     :ui/show-recent? false
     :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
                             false)
+    ;; remember scroll positions of visited paths
+    :ui/paths-scroll-positions {}
+
     :document/mode? (or (storage/get :document/mode?) false)
 
     :github/contents {}
@@ -866,6 +869,18 @@
 (defn get-custom-query-components
   []
   (vals (get @state :ui/custom-query-components)))
+
+(defn save-scroll-position!
+  ([value]
+   (save-scroll-position! value js/window.location.hash))
+  ([value path]
+   (set-state! [:ui/paths-scroll-positions path] value)))
+
+(defn get-saved-scroll-position
+  ([]
+   (get-saved-scroll-position js/window.location.hash))
+  ([path]
+   (get-in @state [:ui/paths-scroll-positions path] 0)))
 
 (defn get-journal-template
   []

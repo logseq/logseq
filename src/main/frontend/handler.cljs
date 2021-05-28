@@ -25,7 +25,8 @@
             [frontend.version :as version]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.ui :as ui]))
 
 (defn set-global-error-notification!
   []
@@ -52,7 +53,8 @@
 
 (defn store-schema!
   []
-  (storage/set :db-schema db-schema/schema))
+  (storage/set :db-schema (assoc db-schema/schema
+                                 :db/version db-schema/version)))
 
 (defn- get-me-and-repos
   []
@@ -66,16 +68,18 @@
      :repos repos}))
 
 (defn restore-and-setup!
-  [me repos logged?]
+  [me repos logged? old-db-schema]
   (let [interval (atom nil)
         inner-fn (fn []
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
                      (reset! interval nil)
-                     (-> (p/all (db/restore! (assoc me :repos repos)
-                                             (fn [repo]
-                                               (file-handler/restore-config! repo false)
-                                               (ui-handler/add-style-if-exists!))))
+                     (-> (p/all (db/restore!
+                                 (assoc me :repos repos)
+                                 old-db-schema
+                                 (fn [repo]
+                                   (file-handler/restore-config! repo false)
+                                   (ui-handler/add-style-if-exists!))))
                          (p/then
                           (fn []
                             (cond
@@ -87,16 +91,13 @@
 
                               :else
                               (state/set-db-restoring! false))
-                            (if false   ; FIXME: incompatible changes
-                              (notification/show!
-                               [:p "Database schema changed, please export your notes as a zip file, and re-index your repos."]
-                               :warning
-                               false)
-                              (store-schema!))
+
+                            (store-schema!)
 
                             (state/pub-event! [:modal/nfs-ask-permission])
 
                             (page-handler/init-commands!)
+
                             (when (seq (:repos me))
                               ;; FIXME: handle error
                               (common-handler/request-app-tokens!
@@ -154,7 +155,7 @@
   (p/let [_ (idb/clear-local-storage-and-idb!)
           _ (when (util/electron?)
               (ipc/ipc "clearCache"))]
-    (js/window.location.reload)))
+    (js/setTimeout #(js/window.location.reload %) 3000)))
 
 (defn- register-components-fns!
   []
@@ -164,7 +165,8 @@
 (defn start!
   [render]
   (set-global-error-notification!)
-  (let [{:keys [me logged? repos]} (get-me-and-repos)]
+  (let [db-schema (storage/get :db-schema)
+        {:keys [me logged? repos]} (get-me-and-repos)]
     (when me (state/set-state! :me me))
     (register-components-fns!)
     (state/set-db-restoring! true)
@@ -181,7 +183,7 @@
 
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
-      (restore-and-setup! me repos logged?))
+      (restore-and-setup! me repos logged? db-schema))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)

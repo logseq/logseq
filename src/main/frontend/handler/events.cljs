@@ -8,7 +8,8 @@
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.components.encryption :as encryption]
-            [frontend.fs.nfs :as nfs]))
+            [frontend.fs.nfs :as nfs]
+            [frontend.handler.migrate :as migrate]))
 
 ;; TODO: should we move all events here?
 
@@ -45,6 +46,19 @@
     db-encrypted-secret
     close-fn)))
 
+(defmethod handle :graph/added [[_ repo]]
+  (js/setTimeout
+   (fn []
+     (when (not (:markdown/version (state/get-config)))
+       (migrate/show-convert-notification! repo)))
+   5000))
+
+(defmethod handle :graph/migrated [[_ repo]]
+  (js/setTimeout
+   (fn []
+     (when (not (:markdown/version (state/get-config)))
+       (migrate/show-migrated-notification! repo)))
+   5000))
 
 (defn get-local-repo
   []

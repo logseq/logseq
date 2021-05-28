@@ -31,8 +31,7 @@
        [:a#download-as-html.hidden]
        [:a#download-as-zip.hidden]
        [:a#export-as-markdown.hidden]
-       [:a#convert-markdown-to-unordered-list-or-heading.hidden]
-       ])))
+       [:a#convert-markdown-to-unordered-list-or-heading.hidden]])))
 
 
 (rum/defc export-page

@@ -109,7 +109,7 @@
    opts))
 
 (defn button
-  [text & {:keys [background href class intent]
+  [text & {:keys [background href class intent on-click]
            :as   option}]
   (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700")
         klass (if background (string/replace klass "indigo" background) klass)]
@@ -288,7 +288,7 @@
   []
   (let [^js schemaMedia (js/window.matchMedia "(prefers-color-scheme: dark)")]
     (.addEventListener schemaMedia "change" state/sync-system-theme!)
-    (state/sync-system-theme!)
+    ;; (state/sync-system-theme!)
     #(.removeEventListener schemaMedia "change" state/sync-system-theme!)))
 
 (defn on-scroll
@@ -580,5 +580,7 @@
 (rum/defc tippy
   [opts child]
   (Tippy (merge {:arrow true
+                 :sticky true
+                 :theme (:ui/theme @state/state)
                  :disabled (not (state/enable-tooltip?))} opts)
          child))

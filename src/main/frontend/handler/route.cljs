@@ -16,9 +16,9 @@
   "If `push` is truthy, previous page will be left in history."
   [{:keys [to path-params query-params push]
     :or {push true}}]
-  (if push
-    (rfe/push-state to path-params query-params)
-    (rfe/replace-state to path-params query-params)))
+  (let [route-fn (if push rfe/push-state rfe/replace-state)]
+    (state/save-scroll-position! (util/scroll-top))
+    (route-fn to path-params query-params)))
 
 (defn redirect-to-home!
   []
@@ -93,10 +93,11 @@
   (let [route route]
     (swap! state/state assoc :route-match route)
     (update-page-title! route)
-    (update-page-label! route)
-    (when-let [anchor (get-in route [:query-params :anchor])]
+    (if-let [anchor (get-in route [:query-params :anchor])]
       (jump-to-anchor! anchor)
-      (util/scroll-to-top))
+      (util/scroll-to (util/app-scroll-container-node)
+                      (state/get-saved-scroll-position)
+                      false))
     (plugin-handler/hook-plugin-app :route-changed (select-keys route [:template :path :parameters]))))
 
 (defn go-to-search!

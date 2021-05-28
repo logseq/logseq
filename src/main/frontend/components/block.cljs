@@ -354,7 +354,7 @@
                            (state/get-left-sidebar-open?))
                   (ui-handler/close-left-sidebar!)))}
 
-   (if (seq children)
+   (if (and (coll? children) (seq children))
      (for [child children]
        (if (= (first child) "Label")
          (last child)
@@ -368,7 +368,7 @@
        (get page-entity :block/original-name page-name)))])
 
 (rum/defc page-cp
-  [{:keys [html-export? label children contents-page? sidebar?] :as config} page]
+  [{:keys [html-export? label children contents-page? sidebar? preview?] :as config} page]
   (when-let [page-name (:block/name page)]
     (let [page (string/lower-case page-name)
           page-entity (db/entity [:block/name page])
@@ -388,19 +388,21 @@
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config page-name href redirect-page-name page-entity contents-page? children html-export? label)]
-      (ui/tippy {:html [:div.tippy-wrapper.overflow-y-auto
-                        {:style {:width 735
-                                 :text-align "left"
-                                 :font-weight 500
-                                 :max-height 600
-                                 :padding-bottom 64}}
-                        [:h2.font-bold.text-lg page-name]
-                        (let [page (db/entity [:block/name (string/lower-case page-name)])]
-                          (when-let [f (state/get-page-blocks-cp)]
-                            (f (state/get-current-repo) page {:sidebar? (:sidebar? config)})))]
-                 :interactive true
-                 :delay 1000}
-                inner))))
+      (if-not preview?
+        (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
+                                 {:style {:width          735
+                                          :text-align     "left"
+                                          :font-weight    500
+                                          :max-height     600
+                                          :padding-bottom 64}}
+                                 [:h2.font-bold.text-lg page-name]
+                                 (let [page (db/entity [:block/name (string/lower-case page-name)])]
+                                   (when-let [f (state/get-page-blocks-cp)]
+                                     (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]
+                   :interactive true
+                   :delay       1000}
+                  inner)
+        inner))))
 
 (rum/defc asset-reference
   [title path]
@@ -544,19 +546,21 @@
                        [:span.block-ref
                         (block-content (assoc config :block-ref? true)
                                        block nil (:block/uuid block)
-                                       (:slide? config))])]
-           (ui/tippy {:html [:div.tippy-wrapper.overflowy-y-auto
-                             {:style {:width 735
-                                      :text-align "left"
-                                      :max-height 600}}
-                             (blocks-container [block] config)]
-                      :interactive true
-                      :delay 1000}
-                     (if label
+                                       (:slide? config))])
+               inner (if label
                        (->elem
-                        :span.block-ref
-                        (map-inline config label))
-                       title)))]
+                         :span.block-ref
+                         (map-inline config label))
+                       title)]
+           (if-not (:preview? config)
+             (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
+                                      {:style {:width      735
+                                               :text-align "left"
+                                               :max-height 600}}
+                                      (blocks-container [block] (assoc config :preview? true))]
+                        :interactive true
+                        :delay       1000} inner)
+             inner))]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
@@ -1049,8 +1053,10 @@
   [config children collapsed? *ref-collapsed?]
   (let [ref? (:ref? config)
         collapsed? (if ref? (rum/react *ref-collapsed?) collapsed?)
-        children (filter map? children)]
-    (when (and (seq children) (not collapsed?))
+        children (and (coll? children) (filter map? children))]
+    (when (and (coll? children)
+               (seq children)
+               (not collapsed?))
       (let [doc-mode? (:document/mode? config)]
        [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
                                      :display (if collapsed? "none" "")}}
@@ -1070,7 +1076,7 @@
   [state config block uuid block-id body children dummy? collapsed? *ref-collapsed? *control-show?]
   (let [has-child? (and
                     (not (:pre-block? block))
-                    (or (seq children)
+                    (or (and (coll? children) (seq children))
                         (seq body)))
         control-show? (util/react *control-show?)
         ref-collapsed? (util/react *ref-collapsed?)
@@ -1118,7 +1124,7 @@
        [:span.bullet {:blockid (str uuid)}]]]]))
 
 (rum/defc dnd-separator
-  [block margin-left bottom top? nested?]
+  [block top? nested?]
   (let [id (str (:block/uuid block)
                 (cond nested?
                       "-nested"
@@ -1130,7 +1136,7 @@
      {:id id
       :style (merge
               {:position "absolute"
-               :left margin-left
+               :left (if nested? 40 20)
                :width "100%"
                :z-index 3}
               (if top?
@@ -1496,7 +1502,7 @@
         nil)
 
       (when (and dragging? (not slide?) (not dummy?))
-        (dnd-separator block 0 -4 false true))
+        (dnd-separator block false true))
 
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
@@ -1588,7 +1594,7 @@
                (not slide?)
                (not (:block/dummy? block))
                (not (:block/pre-block? block)))
-      (dnd-separator block 20 0 top? false))))
+      (dnd-separator block top? false))))
 
 (defn non-dragging?
   [e]
@@ -1761,7 +1767,7 @@
         has-child? (boolean
                     (and
                      (not pre-block?)
-                     (or (seq children)
+                     (or (and (coll? children) (seq children))
                          (seq body))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?)
         data-refs (build-refs-data-value block (remove (set refs) path-refs))
