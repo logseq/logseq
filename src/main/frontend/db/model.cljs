@@ -1151,14 +1151,15 @@
             filtered-db (d/filter db
                                   (fn [db datom]
                                     (let [ns (namespace (:a datom))]
-                                      (or
-                                       (not (exported-namespace? ns))
-                                       ;; (and (= ns "page")
-                                       ;;      (contains? public-pages (:e datom)))
-                                       (and (= ns "block")
-                                            (or
-                                             (contains? public-pages (:e datom))
-                                             (contains? public-pages (:db/id (:block/page (d/entity db (:e datom)))))))))))
+                                      (and
+                                       (not (contains? #{:block/file} (:a datom)))
+                                       (not= ns "file")
+                                       (or
+                                        (not (exported-namespace? ns))
+                                        (and (= ns "block")
+                                             (or
+                                              (contains? public-pages (:e datom))
+                                              (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))))
             datoms (d/datoms filtered-db :eavt)
             assets (get-assets datoms)]
         [@(d/conn-from-datoms datoms db-schema/schema) assets]))))

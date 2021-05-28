@@ -4,8 +4,6 @@
             [frontend.db-schema :as db-schema]
             [frontend.state :as state]))
 
-(defonce debug-db (atom nil))
-
 (defn- migrate-attribute
   [f]
   (if (and (keyword? f) (= "page" (namespace f)))
@@ -27,7 +25,5 @@
 
 (defn migrate
   [repo db]
-  (prn "Migrate DB")
-  (reset! debug-db db)
   (state/pub-event! [:graph/migrated repo])
   (with-schema db db-schema/schema))
