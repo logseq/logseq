@@ -73,7 +73,7 @@
          tx (if page-map
               page-map
               (-> (block/page-name->map title true)
-                 (assoc :block/format format)))
+                  (assoc :block/format format)))
          page-entity [:block/uuid (:block/uuid tx)]
          create-title-property? (util/create-title-property? title)
          default-properties (default-properties-block title format page-entity)
@@ -86,6 +86,7 @@
                       :block/parent page-entity
                       :block/unordered true
                       :block/page page-entity}
+
          txs (if create-title-property?
                [tx default-properties empty-block]
                [tx empty-block])]
