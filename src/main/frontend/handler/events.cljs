@@ -53,6 +53,13 @@
        (migrate/show-convert-notification! repo)))
    5000))
 
+(defmethod handle :graph/migrated [[_ repo]]
+  (js/setTimeout
+   (fn []
+     (when (not (:markdown/version (state/get-config)))
+       (migrate/show-migrated-notification! repo)))
+   5000))
+
 (defn get-local-repo
   []
   (when-let [repo (state/get-current-repo)]

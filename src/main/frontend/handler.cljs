@@ -53,7 +53,8 @@
 
 (defn store-schema!
   []
-  (storage/set :db-schema db-schema/schema))
+  (storage/set :db-schema (assoc db-schema/schema
+                                 :db/version db-schema/version)))
 
 (defn- get-me-and-repos
   []

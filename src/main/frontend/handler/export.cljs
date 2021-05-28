@@ -14,6 +14,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.extensions.zip :as zip]
             [frontend.modules.file.core :as outliner-file]
+            [frontend.handler.file :as file-handler]
             [frontend.modules.outliner.tree :as outliner-tree]
             [promesa.core :as p]))
 
@@ -149,6 +150,20 @@
   (let [files (get-file-contents repo)
         [owner repo-name] (util/get-git-owner-and-repo repo)
         repo-name (str owner "-" repo-name)]
+    (when (seq files)
+      (p/let [zipfile (zip/make-zip repo-name files repo)]
+        (when-let [anchor (gdom/getElement "download")]
+          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+          (.setAttribute anchor "download" (.-name zipfile))
+          (.click anchor))))))
+
+(defn export-git-repo-as-zip!
+  [repo]
+  (p/let [files (file-handler/load-files repo)
+          contents (file-handler/load-multiple-files repo files)
+          files (zipmap files contents)
+          [owner repo-name] (util/get-git-owner-and-repo repo)
+          repo-name (str owner "-" repo-name)]
     (when (seq files)
       (p/let [zipfile (zip/make-zip repo-name files repo)]
         (when-let [anchor (gdom/getElement "download")]

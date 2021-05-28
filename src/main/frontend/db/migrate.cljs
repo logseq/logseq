@@ -29,5 +29,5 @@
   [repo db]
   (prn "Migrate DB")
   (reset! debug-db db)
-  (state/pub-event! [:graph/added repo])
+  (state/pub-event! [:graph/migrated repo])
   (with-schema db db-schema/schema))
