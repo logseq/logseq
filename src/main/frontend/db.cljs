@@ -137,7 +137,7 @@
   [{:keys [repos] :as me} old-db-schema restore-config-handler]
   (let [logged? (:name me)
         ;; TODO: switch to use the db version
-        old-db? (and old-db-schema (:block/name old-db-schema))]
+        old-db? (and old-db-schema (not (:block/name old-db-schema)))]
     (doall
      (for [{:keys [url]} repos]
        (let [repo url]
@@ -148,7 +148,7 @@
                  stored (idb/get-item db-name)
                  _ (if stored
                      (let [stored-db (string->db stored)
-                           stored-db (if old-db? (migrate/migrate stored-db) stored-db)
+                           stored-db (if old-db? (migrate/migrate url stored-db) stored-db)
                            attached-db (d/db-with stored-db (concat
                                                              [(me-tx stored-db me)]
                                                              default-db/built-in-pages))]

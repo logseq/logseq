@@ -354,7 +354,7 @@
                            (state/get-left-sidebar-open?))
                   (ui-handler/close-left-sidebar!)))}
 
-   (if (seq children)
+   (if (and (coll? children) (seq children))
      (for [child children]
        (if (= (first child) "Label")
          (last child)
@@ -1053,8 +1053,10 @@
   [config children collapsed? *ref-collapsed?]
   (let [ref? (:ref? config)
         collapsed? (if ref? (rum/react *ref-collapsed?) collapsed?)
-        children (filter map? children)]
-    (when (and (seq children) (not collapsed?))
+        children (and (coll? children) (filter map? children))]
+    (when (and (coll? children)
+               (seq children)
+               (not collapsed?))
       (let [doc-mode? (:document/mode? config)]
        [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
                                      :display (if collapsed? "none" "")}}
@@ -1074,7 +1076,7 @@
   [state config block uuid block-id body children dummy? collapsed? *ref-collapsed? *control-show?]
   (let [has-child? (and
                     (not (:pre-block? block))
-                    (or (seq children)
+                    (or (and (coll? children) (seq children))
                         (seq body)))
         control-show? (util/react *control-show?)
         ref-collapsed? (util/react *ref-collapsed?)
@@ -1765,7 +1767,7 @@
         has-child? (boolean
                     (and
                      (not pre-block?)
-                     (or (seq children)
+                     (or (and (coll? children) (seq children))
                          (seq body))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?)
         data-refs (build-refs-data-value block (remove (set refs) path-refs))

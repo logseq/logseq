@@ -34,6 +34,8 @@
   [repo]
   (notification/show!
    [:div
+    [:h1 (str "Graph: " repo)]
+
     [:p "Previously Logseq uses `#` Markdown heading as outliner bullets, since beta, we've changed to use more standard `-` unordered list as outliner bullets."]
 
     [:p.mt-2 "If you've converted this graph before, click on this button so that you won't see this notification again."]

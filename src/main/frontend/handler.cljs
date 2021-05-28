@@ -74,8 +74,8 @@
                      (js/clearInterval @interval)
                      (reset! interval nil)
                      (-> (p/all (db/restore!
-                                 old-db-schema
                                  (assoc me :repos repos)
+                                 old-db-schema
                                  (fn [repo]
                                    (file-handler/restore-config! repo false)
                                    (ui-handler/add-style-if-exists!))))
@@ -90,16 +90,13 @@
 
                               :else
                               (state/set-db-restoring! false))
-                            (if false   ; FIXME: incompatible changes
-                              (notification/show!
-                               [:p "Database schema changed, please backup your notes first, and re-index/re-link your graphs."]
-                               :warning
-                               false)
-                              (store-schema!))
+
+                            (store-schema!)
 
                             (state/pub-event! [:modal/nfs-ask-permission])
 
                             (page-handler/init-commands!)
+
                             (when (seq (:repos me))
                               ;; FIXME: handle error
                               (common-handler/request-app-tokens!
