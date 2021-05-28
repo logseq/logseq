@@ -785,7 +785,7 @@
   [theme-mode]
   (if-not (= theme-mode "system")
     (do
-      (set-theme! (if (= theme-mode "light") "white" "dark"))
+      (set-theme! (if (= theme-mode "light") "white" theme-mode))
       (set-state! :ui/system-theme? false)
       (storage/set :ui/system-theme? false))
     (sync-system-theme!)))
@@ -806,7 +806,7 @@
   []
   (let [theme (:ui/theme @state)
         theme' (if (= theme "dark") "white" "dark")]
-    (set-theme! theme')))
+    (use-theme-mode! theme')))
 
 (defn- file-content-key
   [repo path]
