@@ -1955,6 +1955,54 @@
                    [left-block true false])
             editing-block))))
 
+(defn- paste-block-tree-at-point-edit-aux
+  [uuid file page exclude-properties format content-update-fn]
+  (fn [block]
+    (outliner-core/block
+     (let [[new-content new-title]
+           (if content-update-fn
+             (let [new-content (content-update-fn (:block/content block))
+                   new-title (or (->> (mldoc/->edn
+                                       (str (case format
+                                              :markdown "- "
+                                              :org "* ")
+                                            (if (seq (:block/title block)) "" "\n")
+                                            new-content)
+                                       (mldoc/default-config format))
+                                      (ffirst)
+                                      (second)
+                                      (:title))
+                                 (:block/title block))]
+               [new-content new-title])
+             [(:block/content block) (:block/title block)])
+           new-content
+           (->> new-content
+                (property/remove-property format "id")
+                (property/remove-property format "custom_id"))]
+       (conj {:block/uuid uuid
+              :block/page (select-keys page [:db/id])
+              :block/file (select-keys file [:db/id])
+              :block/format format
+              :block/properties (apply dissoc (:block/properties block)
+                                       (concat [:id :custom_id :custom-id]
+                                               exclude-properties))
+              :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
+              :block/content new-content
+              :block/title new-title}
+             (dissoc block
+                     :block/pre-block?
+                     :block/uuid
+                     :block/page
+                     :block/file
+                     :db/id
+                     :block/left
+                     :block/parent
+                     :block/format
+                     :block/properties
+                     :block/meta
+                     :block/content
+                     :block/title))))))
+
 (defn- paste-block-tree-at-point
   ([tree exclude-properties] (paste-block-tree-at-point tree exclude-properties nil))
   ([tree exclude-properties content-update-fn]
@@ -1978,50 +2026,10 @@
                     (recur (zip/next loc))
                     (let [uuid (random-uuid)]
                       (swap! new-block-uuids (fn [acc uuid] (conj acc uuid)) uuid)
-
                       (recur (zip/next (zip/edit
                                         loc
-                                        #(outliner-core/block
-                                          (let [[new-content new-title]
-                                                (if content-update-fn
-                                                  (let [new-content (content-update-fn (:block/content %))
-                                                        new-title (or (:title (second (ffirst
-                                                                                       (mldoc/->edn (str (case format
-                                                                                                           :markdown "- "
-                                                                                                           :org "* ")
-                                                                                                         (if (seq (:block/title %)) "" "\n")
-                                                                                                         new-content)
-                                                                                                    (mldoc/default-config format)))))
-                                                                      (:block/title %))]
-                                                    [new-content new-title])
-                                                  [(:block/content %) (:block/title %)])
-                                                new-content
-                                                (->> new-content
-                                                     (property/remove-property format "id")
-                                                     (property/remove-property format "custom_id"))]
-                                            (conj {:block/uuid uuid
-                                                   :block/page (select-keys page [:db/id])
-                                                   :block/file (select-keys file [:db/id])
-                                                   :block/format format
-                                                   :block/properties (apply dissoc (:block/properties %)
-                                                                            (concat [:id :custom_id :custom-id]
-                                                                                    exclude-properties))
-                                                   :block/meta (dissoc (:block/meta %) :start-pos :end-pos)
-                                                   :block/content new-content
-                                                   :block/title new-title}
-                                                  (dissoc %
-                                                          :block/pre-block?
-                                                          :block/uuid
-                                                          :block/page
-                                                          :block/file
-                                                          :db/id
-                                                          :block/left
-                                                          :block/parent
-                                                          :block/format
-                                                          :block/properties
-                                                          :block/meta
-                                                          :block/content
-                                                          :block/title))))))))))))
+                                        (paste-block-tree-at-point-edit-aux
+                                         uuid file page exclude-properties format content-update-fn)))))))))
              _ (outliner-core/save-node editing-block)
              _ (outliner-core/insert-nodes metadata-replaced-blocks target-block sibling?)
              _ (when delete-editing-block?
