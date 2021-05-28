@@ -758,6 +758,7 @@
   ([repo e]
    (delete-block! repo e true))
   ([repo e delete-children?]
+   (state/set-editor-op! :delete)
    (let [{:keys [id block-id block-parent-id value format]} (get-state)]
     (when block-id
       (let [page-id (:db/id (:block/page (db/entity [:block/uuid block-id])))
@@ -789,7 +790,8 @@
                         (edit-block! block pos format id
                                      {:custom-content new-value
                                       :tail-len tail-len
-                                      :move-cursor? false}))))))))))))))
+                                      :move-cursor? false}))))))))))))
+   (state/set-editor-op! nil)))
 
 (defn- get-end-block-parent
   [end-block blocks]

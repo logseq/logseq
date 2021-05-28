@@ -83,8 +83,7 @@
        (d/pull conn
                selector
                eid)
-       (catch js/Error e
-         (js/console.error e)
+       (catch js/Error _e
          nil)))))
 
 (defn pull-many
