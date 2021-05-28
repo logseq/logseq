@@ -4,7 +4,10 @@ import {
   IAppProxy, IDBProxy,
   IEditorProxy,
   ILSPluginUser,
-  LSPluginBaseInfo, LSPluginUserEvents, SlashCommandAction,
+  LSPluginBaseInfo,
+  LSPluginUserEvents,
+  SlashCommandAction,
+  BlockCommandCallback,
   StyleString,
   ThemeOptions,
   UIOptions
@@ -31,9 +34,13 @@ const editor: Partial<IEditorProxy> = {
   registerSlashCommand (
     this: LSPluginUser,
     tag: string,
-    actions: Array<SlashCommandAction>
+    actions: BlockCommandCallback | Array<SlashCommandAction>
   ) {
     debug('Register slash command #', this.baseInfo.id, tag, actions)
+
+    if (typeof actions === 'function') {
+      actions = [['editor/clear-current-slash'], ['editor/hook', actions]]
+    }
 
     actions = actions.map((it) => {
       const [tag, ...args] = it
@@ -73,7 +80,7 @@ const editor: Partial<IEditorProxy> = {
   registerBlockContextMenu (
     this: LSPluginUser,
     tag: string,
-    action: () => void
+    action: BlockCommandCallback
   ): boolean {
     if (typeof action !== 'function') {
       return false

@@ -103,6 +103,7 @@ type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
 type BlockPageName = string
 type SlashCommandActionCmd = 'editor/input' | 'editor/hook' | 'editor/clear-current-slash'
 type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
+type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
 
 interface IAppProxy {
   getUserInfo: () => Promise<any>
@@ -125,8 +126,8 @@ interface IAppProxy {
 }
 
 interface IEditorProxy {
-  registerSlashCommand: (tag: string, actions: Array<SlashCommandAction>) => boolean
-  registerBlockContextMenu: (tag: string, action: () => void) => boolean
+  registerSlashCommand: (tag: string, action: BlockCommandCallback | Array<SlashCommandAction>) => boolean
+  registerBlockContextMenu: (tag: string, action: BlockCommandCallback) => boolean
 
   // block related APIs
   getCurrentPage: () => Promise<Partial<BlockEntity>>
@@ -195,7 +196,7 @@ interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   /**
    * @param callback
    */
-  beforeunload: (callback:() => Promise<void>) => void
+  beforeunload: (callback: () => Promise<void>) => void
 
   /**
    * @param model
