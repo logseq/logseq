@@ -67,16 +67,18 @@
      :repos repos}))
 
 (defn restore-and-setup!
-  [me repos logged?]
+  [me repos logged? old-db-schema]
   (let [interval (atom nil)
         inner-fn (fn []
                    (when (and @interval js/window.pfs)
                      (js/clearInterval @interval)
                      (reset! interval nil)
-                     (-> (p/all (db/restore! (assoc me :repos repos)
-                                             (fn [repo]
-                                               (file-handler/restore-config! repo false)
-                                               (ui-handler/add-style-if-exists!))))
+                     (-> (p/all (db/restore!
+                                 old-db-schema
+                                 (assoc me :repos repos)
+                                 (fn [repo]
+                                   (file-handler/restore-config! repo false)
+                                   (ui-handler/add-style-if-exists!))))
                          (p/then
                           (fn []
                             (cond
@@ -165,36 +167,32 @@
 (defn start!
   [render]
   (set-global-error-notification!)
-  (let [db-schema (storage/get :db-schema)]
-    (if (or (nil? db-schema) (:block/name db-schema))
-      (let [{:keys [me logged? repos]} (get-me-and-repos)]
-        (when me (state/set-state! :me me))
-        (register-components-fns!)
-        (state/set-db-restoring! true)
-        (render)
-        (on-load-events)
-        (set-network-watcher!)
+  (let [db-schema (storage/get :db-schema)
+        {:keys [me logged? repos]} (get-me-and-repos)]
+    (when me (state/set-state! :me me))
+    (register-components-fns!)
+    (state/set-db-restoring! true)
+    (render)
+    (on-load-events)
+    (set-network-watcher!)
 
-        (util/indexeddb-check?
-         (fn [_error]
-           (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
-           (state/set-indexedb-support! false)))
+    (util/indexeddb-check?
+     (fn [_error]
+       (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
+       (state/set-indexedb-support! false)))
 
-        (events/run!)
+    (events/run!)
 
-        (p/let [repos (get-repos)]
-          (state/set-repos! repos)
-          (restore-and-setup! me repos logged?))
+    (p/let [repos (get-repos)]
+      (state/set-repos! repos)
+      (restore-and-setup! me repos logged? db-schema))
 
-        (reset! db/*sync-search-indice-f search/sync-search-indice!)
-        (db/run-batch-txs!)
-        (file-handler/run-writes-chan!)
-        (shortcut/install-shortcuts!)
-        (when (util/electron?)
-          (el/listen!)))
-
-      ;; before refactoring
-      (clear-cache!))))
+    (reset! db/*sync-search-indice-f search/sync-search-indice!)
+    (db/run-batch-txs!)
+    (file-handler/run-writes-chan!)
+    (shortcut/install-shortcuts!)
+    (when (util/electron?)
+      (el/listen!))))
 
 (defn stop! []
   (prn "stop!"))

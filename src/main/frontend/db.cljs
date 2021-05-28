@@ -6,6 +6,7 @@
             [frontend.db.react]
             [frontend.db.query-custom]
             [frontend.db.query-react]
+            [frontend.db.migrate :as migrate]
             [frontend.util :as util]
             [datascript.core :as d]
             [frontend.state :as state]
@@ -133,8 +134,10 @@
                        :listen-handler listen-and-persist!))))
 
 (defn restore!
-  [{:keys [repos] :as me} restore-config-handler]
-  (let [logged? (:name me)]
+  [{:keys [repos] :as me} old-db-schema restore-config-handler]
+  (let [logged? (:name me)
+        ;; TODO: switch to use the db version
+        old-db? (and old-db-schema (:block/name old-db-schema))]
     (doall
      (for [{:keys [url]} repos]
        (let [repo url]
@@ -145,6 +148,7 @@
                  stored (idb/get-item db-name)
                  _ (if stored
                      (let [stored-db (string->db stored)
+                           stored-db (if old-db? (migrate/migrate stored-db) stored-db)
                            attached-db (d/db-with stored-db (concat
                                                              [(me-tx stored-db me)]
                                                              default-db/built-in-pages))]
