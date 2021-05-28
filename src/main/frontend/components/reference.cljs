@@ -112,7 +112,7 @@
               [:h2.font-bold.opacity-50 (let []
                                           (str n-ref " Linked Reference"
                                                (if (> n-ref 1) "s")))]
-              [:a.opacity-50.hover:opacity-100
+              [:a.opacity-50.hover:opacity-100.filter
                {:title "Filter"
                 :on-click #(state/set-modal! (filter-dialog filters-atom references page-name))}
                (svg/filter-icon (cond
