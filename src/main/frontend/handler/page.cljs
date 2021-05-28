@@ -65,18 +65,22 @@
 (defn create!
   ([title]
    (create! title {}))
-  ([title {:keys [redirect?]
+  ([title {:keys [redirect? page-map]
            :or {redirect? true}}]
    (let [title (string/trim title)
          page (string/lower-case title)
          format (state/get-preferred-format)
-         tx (-> (block/page-name->map title true)
-                (assoc :block/format format))
+         tx (if page-map
+              page-map
+              (-> (block/page-name->map title true)
+                 (assoc :block/format format)))
          page-entity [:block/uuid (:block/uuid tx)]
          create-title-property? (util/create-title-property? title)
          default-properties (default-properties-block title format page-entity)
          empty-block {:block/uuid (db/new-block-id)
-                      :block/left [:block/uuid (:block/uuid default-properties)]
+                      :block/left (if create-title-property?
+                                    [:block/uuid (:block/uuid default-properties)]
+                                    page-entity)
                       :block/format format
                       :block/content ""
                       :block/parent page-entity
@@ -84,14 +88,13 @@
                       :block/page page-entity}
          txs (if create-title-property?
                [tx default-properties empty-block]
-               [tx])]
+               [tx empty-block])]
      (db/transact! txs)
      (when redirect?
       (route-handler/redirect! {:to :page
                                 :path-params {:name page}})
-      (when create-title-property?
-        (js/setTimeout (fn []
-                        (editor-handler/edit-block! empty-block 0 format (:block/uuid empty-block))) 50))))))
+      (js/setTimeout (fn []
+                       (editor-handler/edit-block! empty-block 0 format (:block/uuid empty-block))) 50)))))
 
 (defn page-add-property!
   [page-name key value]

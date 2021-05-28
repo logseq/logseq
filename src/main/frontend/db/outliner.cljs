@@ -32,7 +32,7 @@
 
 (defn save-block
   [conn block-m]
-  (let [tx (-> (dissoc block-m :block/children :block/dummy? :block/level :block/meta)
+  (let [tx (-> (dissoc block-m :block/children :block/level :block/meta)
              (util/remove-nils))
         block-id (:block/uuid block-m)]
     (d/transact! conn [tx])

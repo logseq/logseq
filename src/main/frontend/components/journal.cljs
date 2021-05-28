@@ -58,10 +58,7 @@
   [repo page format]
   (let [raw-blocks (db/get-page-blocks repo page)
         document-mode? (state/sub :document/mode?)
-        blocks (->>
-                (block-handler/with-dummy-block raw-blocks format nil {:journal? true
-                                                                       :page-name page})
-                (db/with-block-refs-count repo))]
+        blocks (db/with-block-refs-count repo raw-blocks)]
     (blocks-inner blocks page document-mode?)))
 
 (rum/defc journal-cp < rum/reactive

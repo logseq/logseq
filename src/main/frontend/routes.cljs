@@ -36,10 +36,6 @@
     {:name :search
      :view search/more}]
 
-   ["/new-page"
-    {:name :new-page
-     :view page/new}]
-
    ["/page/:name"
     {:name :page
      :view page/page}]

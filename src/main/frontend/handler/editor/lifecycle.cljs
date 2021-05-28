@@ -14,12 +14,12 @@
 
 (defn did-mount!
   [state]
-  (let [[{:keys [dummy? format block-parent-id]} id] (:rum/args state)
+  (let [[{:keys [format block-parent-id]} id] (:rum/args state)
         content (get-in @state/state [:editor/content id])
         input (gdom/getElement id)]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
-    (editor-handler/restore-cursor-pos! id content dummy?)
+    (editor-handler/restore-cursor-pos! id content)
 
     (when input
       (dnd/subscribe!
@@ -43,7 +43,7 @@
 
 (defn will-unmount
   [state]
-  (let [{:keys [id value format block repo dummy? config]} (get-state)
+  (let [{:keys [id value format block repo config]} (get-state)
         file? (:file? config)]
     (when-let [input (gdom/getElement id)]
       ;; (.removeEventListener input "paste" (fn [event]

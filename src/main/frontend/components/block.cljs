@@ -376,7 +376,7 @@
                                (:block/alias? config)
                                page
 
-                               (db/page-empty? (state/get-current-repo) page)
+                               (db/page-empty? (state/get-current-repo) (:db/id page-entity))
                                (let [source-page (model/get-alias-source-page (state/get-current-repo)
                                                                               (string/lower-case page-name))]
                                  (or (when source-page (:block/name source-page))
@@ -1073,7 +1073,7 @@
                 (:block/uuid child)))))]))))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children dummy? collapsed? *ref-collapsed? *control-show?]
+  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show?]
   (let [has-child? (and
                     (not (:pre-block? block))
                     (or (and (coll? children) (seq children))
@@ -1108,9 +1108,8 @@
 
         :else
         [:span ""])]
-     [:a (if (not dummy?)
-           {:href (rfe/href :page {:name uuid})
-            :on-click (fn [e] (bullet-on-click e block config uuid))})
+     [:a {:href (rfe/href :page {:name uuid})
+          :on-click (fn [e] (bullet-on-click e block config uuid))}
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true
@@ -1250,7 +1249,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority anchor meta format content pre-block? dummy? block-refs-count page properties unordered level heading-level]
+  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority anchor meta format content pre-block? block-refs-count page properties unordered level heading-level]
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1457,8 +1456,7 @@
 (defn- block-content-on-drop
   [event block uuid]
   (util/stop event)
-  (when (and (not (dnd-same-block? uuid))
-             (not (:block/dummy? block)))
+  (when (not (dnd-same-block? uuid))
     (dnd/move-block @*dragging-block
                     block
                     false
@@ -1468,7 +1466,7 @@
   (editor-handler/unhighlight-blocks!))
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title body meta content marker dummy? page format repo children pre-block? properties idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title body meta content marker page format repo children pre-block? properties idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
   (let [collapsed? (get properties :collapsed)
         block-ref-with-title? (and (:block-ref? config) (seq title))
         dragging? (rum/react *dragging?)
@@ -1501,7 +1499,7 @@
         :else
         nil)
 
-      (when (and dragging? (not slide?) (not dummy?))
+      (when (and dragging? (not slide?))
         (dnd-separator block false true))
 
       (when deadline
@@ -1528,7 +1526,7 @@
                  (str uuid "-" idx)))))])]]]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid title body meta content dummy? page format repo children marker properties block-refs-count pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
+  [config {:block/keys [uuid title body meta content page format repo children marker properties block-refs-count pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
   (let [editor-box (get config :editor-box)
         edit? (state/sub [:editor/editing? edit-input-id])
         editor-id (str "editor-" edit-input-id)]
@@ -1538,7 +1536,6 @@
                     :block-id uuid
                     :block-parent-id block-id
                     :format format
-                    :dummy? dummy?
                     :heading-level heading-level
                     :on-hide (fn [value event]
                                (when (= event :esc)
@@ -1592,7 +1589,6 @@
   (let [dragging? (rum/react *dragging?)]
     (when (and dragging?
                (not slide?)
-               (not (:block/dummy? block))
                (not (:block/pre-block? block)))
       (dnd-separator block top? false))))
 
@@ -1750,7 +1746,7 @@
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [state config {:block/keys [uuid title body meta content dummy? page format repo children pre-block? top? properties refs path-refs heading-level level type] :as block}]
+  [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
@@ -1779,7 +1775,6 @@
        :data-refs-self data-refs-self
        :style {:position "relative"}
        :class (str uuid
-                   (when dummy? " dummy")
                    (when (and collapsed? has-child?) " collapsed")
                    (when pre-block? " pre-block"))
        :blockid (str uuid)
@@ -1800,7 +1795,7 @@
 
      [:div.flex.flex-row {:class (if heading? "items-center" "")}
       (when (not slide?)
-        (block-control config block uuid block-id body children dummy? collapsed? *ref-collapsed? *control-show?))
+        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show?))
 
       (let [edit-input-id (str "edit-block-" blocks-container-id "-" uuid)]
         (block-content-or-editor config block edit-input-id block-id slide? heading-level))]
@@ -2331,9 +2326,7 @@
              first-id (:block/uuid (first blocks))]
          (for [[idx item] (medley/indexed blocks)]
            (let [item (->
-                       (if (:block/dummy? item)
-                         item
-                         (dissoc item :block/meta))
+                       (dissoc item :block/meta)
                        (assoc :block/top? (zero? idx)))
                  config (assoc config :block/uuid (:block/uuid item))]
              (rum/with-key

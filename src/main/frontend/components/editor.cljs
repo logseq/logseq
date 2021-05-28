@@ -389,8 +389,7 @@
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [on-hide dummy? node format block block-parent-id heading-level]
-          :or   {dummy? false}
+  [state {:keys [on-hide node format block block-parent-id heading-level]
           :as   option} id config]
   (let [content (state/get-edit-content)
         heading-level (get state ::heading-level)]

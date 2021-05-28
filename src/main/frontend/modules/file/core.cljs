@@ -102,7 +102,7 @@
         (when chan-callback
           (chan-callback))))))
 
-(defn- create-file-if-not-exists!
+(defn- transact-file-tx-if-not-exists!
   [page ok-handler]
   (when-let [repo (state/get-current-repo)]
     (let [format (name (get page :block/format
@@ -128,9 +128,16 @@
             (util/format "File %s already exists!" file-path)]
            :error)
           (let [file-path (config/get-file-path repo path)
-                tx [{:file/path file-path}
-                    {:block/name (:block/name page)
-                     :block/file [:file/path file-path]}]]
+                page-blocks (db/get-page-blocks-no-cache (:block/name page))
+                tx (->>
+                    (concat
+                     [{:file/path file-path}
+                      {:block/name (:block/name page)
+                       :block/file [:file/path file-path]}]
+                     (map (fn [block] {:db/id (:db/id block)
+                                      :block/file [:file/path file-path]})
+                       page-blocks))
+                    (remove nil?))]
             (db/transact! tx)
             (when ok-handler (ok-handler))))))))
 
@@ -154,4 +161,4 @@
                    (:block/file (db-utils/entity page))))]
     (if file
       (ok-handler)
-      (create-file-if-not-exists! page-block ok-handler))))
+      (transact-file-tx-if-not-exists! page-block ok-handler))))

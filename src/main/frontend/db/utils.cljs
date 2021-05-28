@@ -84,6 +84,7 @@
                selector
                eid)
        (catch js/Error e
+         (js/console.error e)
          nil)))))
 
 (defn pull-many

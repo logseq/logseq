@@ -452,6 +452,10 @@
   (when-let [db (conn/get-conn repo)]
     (count (d/datoms db :avet :block/page page-id))))
 
+(defn page-empty?
+  [repo page-id]
+  (zero? (get-page-blocks-count repo page-id)))
+
 (defn get-block-parent
   ([block-id]
    (get-block-parent (state/get-current-repo) block-id))
@@ -777,10 +781,6 @@
       conn)
      (db-utils/seq-flatten)
      (distinct))))
-
-(defn page-empty?
-  [repo page]
-  (nil? (:block/file (db-utils/entity repo [:block/name (string/lower-case page)]))))
 
 (defn get-pages-relation
   [repo with-journal?]
