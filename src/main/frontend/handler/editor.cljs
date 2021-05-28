@@ -1902,7 +1902,7 @@
     (util/cursor-move-forward input 2)))
 
 (defn- get-block-tree-insert-pos-at-point
-  "return [target-block sibling?]"
+  "return [target-block sibling? delete-editing-block? editing-block]"
   []
   (when-let [editing-block (or (db/pull (:db/id (state/get-edit-block)))
                                (when (:block/dummy? (state/get-edit-block)) (state/get-edit-block)))]
@@ -1924,32 +1924,35 @@
       (conj (match (mapv boolean [dummy? (seq fst-block-text) (seq snd-block-text)
                                   block-self? has-children? (= parent left) collapsed?])
                    ;; if editing-block is dummy, insert after page-block
+                   [true false false _ _ _ _]
+                   [parent-block false true]
+
                    [true _ _ _ _ _ _]
-                   [parent-block false]
+                   [parent-block false false]
 
                    ;; when zoom at editing-block
                    [false _ _ true _ _ _]
-                   [editing-block false]
+                   [editing-block false false]
 
                    ;; insert after editing-block
                    [false true _ false true _ false]
-                   [editing-block false]
+                   [editing-block false false]
                    [false true _ false true _ true]
-                   [editing-block true]
+                   [editing-block true false]
                    [false true _ false false _ _]
-                   [editing-block true]
+                   [editing-block true false]
                    [false false false false true _ false]
-                   [editing-block false]
+                   [editing-block false false]
                    [false false false false true _ true]
-                   [editing-block true]
+                   [editing-block true false]
                    [false false false false false _ _]
-                   [editing-block true]
+                   [editing-block true true]
 
                    ;; insert before editing-block
                    [false false true false _ true _]
-                   [parent-block false]
+                   [parent-block false false]
                    [false false true false _ false _]
-                   [left-block true])
+                   [left-block true false])
             editing-block))))
 
 (defn- paste-block-tree-at-point
@@ -1960,7 +1963,8 @@
                   (db/entity [:block/original-name (state/get-current-page)])
                   (:block/page (db/entity (:db/id (state/get-edit-block)))))
          file (:block/file page)]
-     (when-let [[target-block sibling? editing-block] (get-block-tree-insert-pos-at-point)]
+     (when-let [[target-block sibling? delete-editing-block? editing-block]
+                (get-block-tree-insert-pos-at-point)]
        (let [target-block (outliner-core/block target-block)
              editing-block (outliner-core/block editing-block)
              format (or (:block/format target-block) (state/get-preferred-format))
@@ -2020,6 +2024,9 @@
                                                           :block/title))))))))))))
              _ (outliner-core/save-node editing-block)
              _ (outliner-core/insert-nodes metadata-replaced-blocks target-block sibling?)
+             _ (when delete-editing-block?
+                 (when-let [id (:db/id (outliner-core/get-data editing-block))]
+                   (outliner-core/delete-node (outliner-core/block (db/pull id)) true)))
              new-blocks (db/pull-many repo '[*] (map (fn [id] [:block/uuid id]) @new-block-uuids))]
          (db/refresh! repo {:key :block/insert :data new-blocks}))))))
 
@@ -2038,6 +2045,7 @@
           sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
           result-blocks (if including-parent? sorted-blocks (drop 1 sorted-blocks))
           tree (blocks-vec->tree result-blocks)]
+      (insert-command! id "" format {})
       (paste-block-tree-at-point tree [:template :including-parent]
                                  (fn [content]
                                    (->> content
@@ -2045,7 +2053,6 @@
                                         (property/remove-property format "including-parent")
                                         template/resolve-dynamic-template!)))
       (clear-when-saved!)
-      (insert-command! id "" format {})
       (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]}))
     (when-let [input (gdom/getElement id)]
       (.focus input))))
