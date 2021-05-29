@@ -1377,7 +1377,7 @@
 #?(:cljs
    (defn fix-open-external-with-shift!
      [^js/MouseEvent e]
-     (when (and (.-shiftKey e) util/win32? (util/electron?)
+     (when (and (.-shiftKey e) win32? (electron?)
                 (= (string/lower-case (.. e -target -nodeName)) "a")
                 (string/starts-with? (.. e -target -href) "file:"))
        (.preventDefault e))))
