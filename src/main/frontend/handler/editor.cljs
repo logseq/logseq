@@ -1918,27 +1918,27 @@
       (conj (match (mapv boolean [(seq fst-block-text) (seq snd-block-text)
                                   block-self? has-children? (= parent left) collapsed?])
                    ;; when zoom at editing-block
-                   [false _ _ true _ _ _]
+                   [_ _ true _ _ _]
                    [editing-block false false]
 
                    ;; insert after editing-block
-                   [false true _ false true _ false]
+                   [true _ false true _ false]
                    [editing-block false false]
-                   [false true _ false true _ true]
+                   [true _ false true _ true]
                    [editing-block true false]
-                   [false true _ false false _ _]
+                   [true _ false false _ _]
                    [editing-block true false]
-                   [false false false false true _ false]
+                   [false false false true _ false]
                    [editing-block false false]
-                   [false false false false true _ true]
+                   [false false false true _ true]
                    [editing-block true false]
-                   [false false false false false _ _]
+                   [false false false false _ _]
                    [editing-block true true]
 
                    ;; insert before editing-block
-                   [false false true false _ true _]
+                   [false true false _ true _]
                    [parent-block false false]
-                   [false false true false _ false _]
+                   [false true false _ false _]
                    [left-block true false])
             editing-block))))
 
