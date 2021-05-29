@@ -1374,6 +1374,14 @@
                    (count val))]
        (.setRangeText input "" current (inc idx)))))
 
+#?(:cljs
+   (defn fix-open-external-with-shift!
+     [^js/MouseEvent e]
+     (when (and (.-shiftKey e) util/win32? (util/electron?)
+                (= (string/lower-case (.. e -target -nodeName)) "a")
+                (string/starts-with? (.. e -target -href) "file:"))
+       (.preventDefault e))))
+
 (defn classnames
   "Like react classnames utility:
 
