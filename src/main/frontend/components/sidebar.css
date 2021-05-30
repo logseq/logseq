@@ -167,10 +167,6 @@
     background: var(--ls-right-sidebar-code-bg-color);
   }
 
-  pre.CodeMirror-line {
-    background: #fff;
-  }
-
   .references {
     margin-left: 12px;
   }
@@ -210,4 +206,3 @@
     overflow-y: overlay;
   }
 }
-
