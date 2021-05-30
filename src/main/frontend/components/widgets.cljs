@@ -91,8 +91,8 @@
            {:on-click page-handler/ls-dir-files!})
          [:div
           [:h1.title "Open a local directory"]
-          [:p "Logseq supports both Markdown and Org-mode, you can open an existing directory or creating a new one. Your data will be stored only on this device."]
-          [:p "After you opened your directory, it will create three sub-directories in that directory:"]
+          [:p "Logseq supports both Markdown and Org-mode. You can open an existing directory or create a new one on your device, a directory is also known simply as a folder. Your data will be stored only on this device."]
+          [:p "After you have opened your directory, it will create three folders in that directory:"]
           [:ul
            [:li "/journals - store your journal pages"]
            [:li "/pages - store the other pages"]
