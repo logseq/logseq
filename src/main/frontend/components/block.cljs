@@ -1529,7 +1529,8 @@
   [config {:block/keys [uuid title body meta content page format repo children marker properties block-refs-count pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
   (let [editor-box (get config :editor-box)
         edit? (state/sub [:editor/editing? edit-input-id])
-        editor-id (str "editor-" edit-input-id)]
+        editor-id (str "editor-" edit-input-id)
+        slide? (:slide? config)]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
        (editor-box {:block block
@@ -1543,7 +1544,7 @@
                    edit-input-id
                    config)]
       [:div.flex.flex-row.block-content-wrapper
-       [:div.flex.flex-1
+       [:div.flex-1 {:display (if (:slide? config) "block" "flex")}
         (block-content config block edit-input-id block-id slide?)]
        [:div.flex.flex-row
         (when (and (:embed? config)
