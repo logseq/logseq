@@ -74,7 +74,9 @@
               page-map
               (-> (block/page-name->map title true)
                   (assoc :block/format format)))
-         page-entity [:block/uuid (:block/uuid tx)]
+         page-entity (if (:block/uuid tx)
+                       [:block/uuid (:block/uuid tx)]
+                       (:db/id tx))
          create-title-property? (util/create-title-property? title)
          default-properties (default-properties-block title format page-entity)
          empty-block {:block/uuid (db/new-block-id)
