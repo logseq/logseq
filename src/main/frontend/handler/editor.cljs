@@ -1942,7 +1942,7 @@
             editing-block))))
 
 (defn- paste-block-tree-at-point-edit-aux
-  [uuid file page exclude-properties format content-update-fn]
+  [uuid page exclude-properties format content-update-fn]
   (fn [block]
     (outliner-core/block
      (let [[new-content new-title]
@@ -1967,7 +1967,6 @@
                 (property/remove-property format "custom_id"))]
        (conj {:block/uuid uuid
               :block/page (select-keys page [:db/id])
-              :block/file (select-keys file [:db/id])
               :block/format format
               :block/properties (apply dissoc (:block/properties block)
                                        (concat [:id :custom_id :custom-id]
@@ -1979,7 +1978,6 @@
                      :block/pre-block?
                      :block/uuid
                      :block/page
-                     :block/file
                      :db/id
                      :block/left
                      :block/parent
@@ -1993,10 +1991,7 @@
   ([tree exclude-properties] (paste-block-tree-at-point tree exclude-properties nil))
   ([tree exclude-properties content-update-fn]
    (let [repo (state/get-current-repo)
-         page (or (db/entity [:block/name (state/get-current-page)])
-                  (db/entity [:block/original-name (state/get-current-page)])
-                  (:block/page (db/entity (:db/id (state/get-edit-block)))))
-         file (:block/file page)]
+         page (:block/page (db/entity (:db/id (state/get-edit-block))))]
      (when-let [[target-block sibling? delete-editing-block? editing-block]
                 (get-block-tree-insert-pos-at-point)]
        (let [target-block (outliner-core/block target-block)
@@ -2015,7 +2010,7 @@
                       (recur (zip/next (zip/edit
                                         loc
                                         (paste-block-tree-at-point-edit-aux
-                                         uuid file page exclude-properties format content-update-fn)))))))))
+                                         uuid page exclude-properties format content-update-fn)))))))))
              _ (outliner-core/save-node editing-block)
              _ (outliner-core/insert-nodes metadata-replaced-blocks target-block sibling?)
              _ (when delete-editing-block?
@@ -2562,7 +2557,6 @@
         page (or (db/entity [:block/name (state/get-current-page)])
                  (db/entity [:block/original-name (state/get-current-page)])
                  (:block/page (db/entity (:db/id (state/get-edit-block)))))
-        file (:block/file page)
         copied-blocks (state/get-copied-blocks)
         copied-block-tree (:copy/block-tree copied-blocks)]
     (if (and
