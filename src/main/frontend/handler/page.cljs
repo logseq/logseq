@@ -384,7 +384,8 @@
 (defn get-pages-with-modified-at
   [repo]
   (->> (db/get-modified-pages repo)
-       (remove util/file-page?)))
+       (remove util/file-page?)
+       (remove util/uuid-string?)))
 
 (defn get-filters
   [page-name]
