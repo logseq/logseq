@@ -79,25 +79,13 @@
                        (:db/id tx))
          create-title-property? (util/create-title-property? title)
          default-properties (default-properties-block title format page-entity)
-         empty-block {:block/uuid (db/new-block-id)
-                      :block/left (if create-title-property?
-                                    [:block/uuid (:block/uuid default-properties)]
-                                    page-entity)
-                      :block/format format
-                      :block/content ""
-                      :block/parent page-entity
-                      :block/unordered true
-                      :block/page page-entity}
-
          txs (if create-title-property?
-               [tx default-properties empty-block]
-               [tx empty-block])]
+               [tx default-properties]
+               [tx])]
      (db/transact! txs)
      (when redirect?
       (route-handler/redirect! {:to :page
-                                :path-params {:name page}})
-      (js/setTimeout (fn []
-                       (editor-handler/edit-block! empty-block 0 format (:block/uuid empty-block))) 50)))))
+                                :path-params {:name page}})))))
 
 (defn page-add-property!
   [page-name key value]

@@ -99,12 +99,34 @@
           block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
-          page-blocks raw-page-blocks
+          page-e (if (and page-e (:db/id page-e))
+                   {:db/id (:db/id page-e)}
+                   page-e)
+          page-blocks (cond
+                        (seq raw-page-blocks)
+                        raw-page-blocks
+
+                        page-e
+                        (let [empty-block {:block/uuid (db/new-block-id)
+                                           :block/left page-e
+                                           :block/format format
+                                           :block/content ""
+                                           :block/parent page-e
+                                           :block/unordered true
+                                           :block/page page-e}]
+                          (when (db/page-empty? repo (:db/id page-e))
+                            (db/transact! [empty-block]))
+                          [empty-block])
+
+                        :else
+                        nil)
+          document-mode? (state/sub :document/mode?)
           hiccup-config (merge
                          {:id (if block? (str block-id) page-name)
                           :block? block?
                           :editor-box editor/box
-                          :page page}
+                          :page page
+                          :document/mode? document-mode?}
                          config)
           hiccup-config (common-handler/config-with-document-mode hiccup-config)
           hiccup (block/->hiccup page-blocks hiccup-config {})]

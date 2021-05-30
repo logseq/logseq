@@ -25,41 +25,11 @@
             [frontend.handler.block :as block-handler]
             [frontend.text :as text]))
 
-(rum/defc blocks-inner < rum/static
-  {:did-mount (fn [state]
-                (let [[blocks page] (:rum/args state)
-                      first-title (second (first (:block/title (first blocks))))
-                      journal? (and (string? first-title)
-                                    (date/valid-journal-title? first-title))]
-                  (when (and journal?
-                             (= (string/lower-case first-title) (string/lower-case page)))
-                    (notification/show!
-                     [:div
-                      [:p
-                       (util/format
-                        "It seems that you have multiple journals for the same day \"%s\"."
-                        first-title)]
-                      (ui/button "Go to files"
-                                 :href "/all-files"
-                                 :on-click notification/clear!)]
-                     :error
-                     false)))
-                state)}
-  [blocks page document-mode?]
-  (let [config {:id page
-                :editor-box editor/box
-                :document/mode? document-mode?}]
-    (content/content
-     page
-     {:hiccup (block/->hiccup blocks config {})})))
-
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
   [repo page format]
-  (let [raw-blocks (db/get-page-blocks repo page)
-        document-mode? (state/sub :document/mode?)
-        blocks (db/with-block-refs-count repo raw-blocks)]
-    (blocks-inner blocks page document-mode?)))
+  (when-let [page-e (db/pull [:block/name (string/lower-case page)])]
+    (page/page-blocks-cp repo page-e {})))
 
 (rum/defc journal-cp < rum/reactive
   [[title format]]
