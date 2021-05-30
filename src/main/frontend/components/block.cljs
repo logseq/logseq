@@ -1209,10 +1209,12 @@
 
 (rum/defc set-priority
   [block priority]
-  [:ul
-   (for [p (remove #(= priority %) ["A" "B" "C"])]
-     [:a.mr-2.text-base.tooltip-priority {:priority p
-                                          :on-click (fn [] (editor-handler/set-priority block p))}])])
+  [:div
+   (let [priorities (sort (remove #(= priority %) ["A" "B" "C"]))]
+     (for [p priorities]
+       [:a.mr-2.text-base.tooltip-priority {:key (str (random-uuid))
+                                            :priority p
+                                            :on-click (fn [] (editor-handler/set-priority block p))}]))])
 
 (rum/defc priority-text
   [priority]
