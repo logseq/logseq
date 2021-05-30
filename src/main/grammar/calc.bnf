@@ -1,0 +1,24 @@
+<start> = assignment | expr
+expr = add-sub
+<add-sub> = pow-log | mul-div | add | sub |  variable
+add = add-sub <'+'> mul-div
+sub = add-sub <'-'> mul-div
+<mul-div> = pow-log | mul | div
+mul = mul-div <'*'> pow-log
+div = mul-div <'/'> pow-log
+<trig> = sin | cos | tan | acos | asin | atan
+<pow-log> = term | pow | log | ln | trig
+pow = pow-log <'^'> term
+log = <#'\s*'> <'log('> expr <')'> <#'\s*'>
+ln = <#'\s*'> <'ln('> expr <')'> <#'\s*'>
+sin = <#'\s*'> <'sin('> expr <')'> <#'\s*'>
+cos = <#'\s*'> <'cos('> expr <')'> <#'\s*'>
+tan = <#'\s*'> <'tan('> expr <')'> <#'\s*'>
+atan = <#'\s*'> <'atan('> expr <')'> <#'\s*'>
+acos = <#'\s*'> <'acos('> expr <')'> <#'\s*'>
+asin = <#'\s*'> <'asin('> expr <')'> <#'\s*'>
+<term> = number | variable | <#'\s*'> <'('> expr <')'> <#'\s*'>
+number = #'\s*[0-9]+\.?[0-9]*()\s*'
+variable = #'\s*[a-zA-Z]+\s*'
+toassign =  #'\s*[a-zA-Z]+\s*'
+assignment = toassign <#'\s*'> <'='> <#'\s*'> expr
