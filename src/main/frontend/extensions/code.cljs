@@ -107,7 +107,8 @@
 (defn render!
   [state]
   (let [editor-atom (:editor-atom state)
-        esc-pressed? (atom nil)]
+        esc-pressed? (atom nil)
+        dark? (state/dark?)]
     (if @editor-atom
       (let [editor @editor-atom
             doc (.getDoc editor)
@@ -126,6 +127,7 @@
                     (when textarea
                       (from-textarea textarea
                                      #js {:mode mode
+                                          :theme (if dark? "solarized dark" "solarized")
                                           :matchBrackets lisp?
                                           :autoCloseBrackets true
                                           :lineNumbers true
