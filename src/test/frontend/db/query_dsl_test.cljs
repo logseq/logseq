@@ -7,7 +7,7 @@
             [frontend.db-schema :as schema]
             [frontend.handler.repo :as repo-handler]
             [promesa.core :as p]
-            [cljs.test :refer [deftest is are testing use-fixtures]]))
+            [cljs.test :refer [deftest is are testing use-fixtures run-tests]]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
@@ -321,7 +321,7 @@ last-modified-at:: 1609084800002"}]]
       "(not [[page 1]])"
       {:query '([?b :block/uuid]
                 (not [?b :block/path-refs [:block/name "page 1"]]))
-       :count 25}))
+       :count 31}))
 
   (testing "Between query"
     (are [x y] (= (count-only x) y)
@@ -367,7 +367,7 @@ last-modified-at:: 1609084800002"}]]
                  (or
                   (and [?b :block/path-refs [:block/name "page 1"]])
                   (and [?b :block/path-refs [:block/name "page 2"]]))))
-       :count 28})
+       :count 34})
 
     ;; FIXME: not working
     ;; (are [x y] (= (q-count x) y)
@@ -458,7 +458,7 @@ last-modified-at:: 1609084800002"}]]
              (import-test-data!))
    :after config/destroy-test-db!})
 
-#_(cljs.test/test-ns 'frontend.db.query-dsl-test)
+#_(run-tests)
 
 (comment
   (require '[clojure.pprint :as pprint])
