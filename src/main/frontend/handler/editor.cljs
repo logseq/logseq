@@ -1264,8 +1264,7 @@
                     (or
                      (not= (string/trim db-content-without-heading)
                            (string/trim value))))
-               (save-block-aux! db-block value (:block/format db-block) opts))
-             )
+               (save-block-aux! db-block value (:block/format db-block) opts)))
            (catch js/Error error
              (log/error :save-block-failed error))))))))
 

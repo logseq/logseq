@@ -60,7 +60,8 @@
   [state]
   (let [blocks (nth (:rum/args state) 1)
         block (first blocks)]
-    (when (= (count blocks) 1)
+    (when (and (= (count blocks) 1)
+               (string/blank? (:block/content block)))
       (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))
   state)
 
