@@ -1942,7 +1942,7 @@
             editing-block))))
 
 (defn- paste-block-tree-at-point-edit-aux
-  [uuid page exclude-properties format content-update-fn]
+  [uuid file page exclude-properties format content-update-fn]
   (fn [block]
     (outliner-core/block
      (let [[new-content new-title]
@@ -1964,34 +1964,33 @@
            new-content
            (->> new-content
                 (property/remove-property format "id")
-                (property/remove-property format "custom_id"))]
-       (conj {:block/uuid uuid
-              :block/page (select-keys page [:db/id])
-              :block/format format
-              :block/properties (apply dissoc (:block/properties block)
-                                       (concat [:id :custom_id :custom-id]
-                                               exclude-properties))
-              :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
-              :block/content new-content
-              :block/title new-title}
-             (dissoc block
-                     :block/pre-block?
-                     :block/uuid
-                     :block/page
-                     :db/id
-                     :block/left
-                     :block/parent
-                     :block/format
-                     :block/properties
-                     :block/meta
-                     :block/content
-                     :block/title))))))
+                (property/remove-property format "custom_id"))
+           m (merge (dissoc block
+                            :block/pre-block?
+                            :block/uuid
+                            :db/id
+                            :block/left
+                            :block/parent
+                            :block/file)
+                    {:block/uuid uuid
+                     :block/page (select-keys page [:db/id])
+                     :block/format format
+                     :block/properties (apply dissoc (:block/properties block)
+                                         (concat [:id :custom_id :custom-id]
+                                                 exclude-properties))
+                     :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
+                     :block/content new-content
+                     :block/title new-title})]
+       (if file
+         (assoc m :block/file (select-keys file [:db/id]))
+         m)))))
 
 (defn- paste-block-tree-at-point
   ([tree exclude-properties] (paste-block-tree-at-point tree exclude-properties nil))
   ([tree exclude-properties content-update-fn]
    (let [repo (state/get-current-repo)
-         page (:block/page (db/entity (:db/id (state/get-edit-block))))]
+         page (:block/page (db/entity (:db/id (state/get-edit-block))))
+         file (:block/file page)]
      (when-let [[target-block sibling? delete-editing-block? editing-block]
                 (get-block-tree-insert-pos-at-point)]
        (let [target-block (outliner-core/block target-block)
@@ -2010,7 +2009,7 @@
                       (recur (zip/next (zip/edit
                                         loc
                                         (paste-block-tree-at-point-edit-aux
-                                         uuid page exclude-properties format content-update-fn)))))))))
+                                         uuid file page exclude-properties format content-update-fn)))))))))
              _ (outliner-core/save-node editing-block)
              _ (outliner-core/insert-nodes metadata-replaced-blocks target-block sibling?)
              _ (when delete-editing-block?

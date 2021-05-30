@@ -769,19 +769,6 @@
      (distinct))))
 
 ;; Ignore files with empty blocks for now
-(defn get-empty-pages
-  [repo]
-  (when-let [conn (conn/get-conn repo)]
-    (->
-     (d/q
-      '[:find ?page
-        :where
-        [?p :block/name ?page]
-        (not [?p :block/file])]
-      conn)
-     (db-utils/seq-flatten)
-     (distinct))))
-
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [conn (conn/get-conn repo)]
@@ -949,22 +936,6 @@
                react
                (sort-by-left-recursive)
                db-utils/group-by-page))))))
-
-(defn get-files-that-referenced-page
-  [page-id]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [db (conn/get-conn repo)]
-      (->> (d/q
-            '[:find ?path
-              :in $ ?page-id
-              :where
-              [?block :block/refs ?page-id]
-              [?block :block/page ?p]
-              [?p :block/file ?f]
-              [?f :file/path ?path]]
-            db
-            page-id)
-           (db-utils/seq-flatten)))))
 
 (defn get-page-unlinked-references
   [page]

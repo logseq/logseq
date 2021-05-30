@@ -31,7 +31,7 @@
           (db/transact! repo
                         [{:file/path path
                           :block/name file
-                          :block/file [:file/path path]
+                          :block/file {:file/path path}
                           :block/journal? false}]))
          (p/catch (fn [error]
                     (prn "Write file failed, path: " path ", data: " data)
