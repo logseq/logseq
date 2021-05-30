@@ -121,25 +121,19 @@
                 (if (= format "markdown") "md" format))
           file-path (str "/" path)
           dir (config/get-repo-dir repo)]
-      (p/let [exists? (fs/file-exists? dir file-path)]
-        (if exists?
-          (notification/show!
-           [:p.content
-            (util/format "File %s already exists!" file-path)]
-           :error)
-          (let [file-path (config/get-file-path repo path)
-                page-blocks (db/get-page-blocks-no-cache (:block/name page))
-                tx (->>
-                    (concat
-                     [{:file/path file-path}
-                      {:block/name (:block/name page)
-                       :block/file [:file/path file-path]}]
-                     (map (fn [block] {:db/id (:db/id block)
-                                      :block/file [:file/path file-path]})
-                       page-blocks))
-                    (remove nil?))]
-            (db/transact! tx)
-            (when ok-handler (ok-handler))))))))
+      (let [file-path (config/get-file-path repo path)
+            page-blocks (db/get-page-blocks-no-cache (:block/name page))
+            tx (->>
+                (concat
+                 [{:file/path file-path}
+                  {:block/name (:block/name page)
+                   :block/file [:file/path file-path]}]
+                 (map (fn [block] {:db/id (:db/id block)
+                                   :block/file [:file/path file-path]})
+                   page-blocks))
+                (remove nil?))]
+        (db/transact! tx)
+        (when ok-handler (ok-handler))))))
 
 (defn save-tree-aux!
   [page-block tree]
