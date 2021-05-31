@@ -220,7 +220,7 @@
      ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
      ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
      ["Current Time" #(date/get-current-time) "Insert current time"]
-     ["Date Picker" [[:editor/show-date-picker]]] "Pick a date and insert here"]
+     ["Date Picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
 
     ;; task management
     (get-preferred-workflow)
