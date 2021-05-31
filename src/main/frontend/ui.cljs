@@ -335,6 +335,8 @@
    matched
    {:keys [on-chosen
            on-shift-chosen
+           on-mouse-enter
+           on-mouse-leave
            get-group-name
            empty-div
            item-render
@@ -352,6 +354,8 @@
                    {:id       (str "ac-" idx)
                     :class    (when (= @current-idx idx)
                                 "chosen")
+                    :on-mouse-enter (fn [] (on-mouse-enter item))
+                    :on-mouse-leave (fn [] (on-mouse-leave item))
                     :on-mouse-down (fn [e]
                                      (util/stop e)
                                      (if (and (gobj/get e "shiftKey") on-shift-chosen)

@@ -47,14 +47,11 @@
          {:get-group-name
           (fn [item]
             (get *first-command-group (first item)))
-          :item-render
-          (fn [item]
-            (let [command-name (first item)
-                  command-doc (get item 2)]
-              [:div
-               {:on-mouse-enter (fn [] (reset! *hovering-command-doc command-doc))
-                :on-mouse-leave (fn [] (reset! *hovering-command-doc nil))}
-               command-name]))
+
+          :on-mouse-enter (fn [item] (reset! *hovering-command-doc (get item 2)))
+          :on-mouse-leave (fn [_item] (reset! *hovering-command-doc nil))
+          :item-render (fn [item] (first item))
+
           :on-chosen
           (fn [chosen-item]
             (let [command (first chosen-item)]
