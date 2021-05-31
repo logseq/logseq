@@ -46,7 +46,11 @@
            [:a.font-medium {:on-click #(export/export-page-as-markdown! page)}
             (t :export-markdown)]]
           [:li.mb-4
+           [:a.font-medium {:on-click #(export/export-page-as-opml! page)}
+            (t :export-opml)]]
+          [:li.mb-4
            [:a.font-medium {:on-click #(export/convert-page-markdown-unordered-list-or-heading! page)}
             (t :convert-markdown)]]]
          [:a#export-page-as-markdown.hidden]
+         [:a#export-page-as-opml.hidden]
          [:a#convert-markdown-to-unordered-list-or-heading.hidden]]))))

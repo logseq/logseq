@@ -16,6 +16,7 @@
 (defonce parseHtml (gobj/get Mldoc "parseHtml"))
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
+(defonce parseAndExportOPML (gobj/get Mldoc "parseAndExportOPML"))
 (defonce astExportMarkdown (gobj/get Mldoc "astExportMarkdown"))
 
 (defn default-config
@@ -48,22 +49,26 @@
 
 (defn parse-json
   [content config]
-  (parseJson content (or config default-config)))
+  (parseJson content config))
 
 (defn inline-parse-json
   [text config]
-  (parseInlineJson text (or config default-config)))
+  (parseInlineJson text config))
 
 (defn parse-export-markdown
   [content config references]
   (parseAndExportMarkdown content
-                          (or config default-config)
+                          config
                           (or references default-references)))
+
+(defn parse-export-opml
+  [content config]
+  (parseAndExportOPML content config))
 
 (defn ast-export-markdown
   [ast config references]
   (astExportMarkdown ast
-                     (or config default-config)
+                     config
                      (or references default-references)))
 
 ;; Org-roam
@@ -238,7 +243,9 @@
   (lazyLoad [this ok-handler]
     true)
   (exportMarkdown [this content config references]
-    (parse-export-markdown content config references)))
+    (parse-export-markdown content config references))
+  (exportOPML [this content config]
+    (parse-export-opml content config)))
 
 (defn plain->text
   [plains]
