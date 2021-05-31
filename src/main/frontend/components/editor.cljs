@@ -21,7 +21,9 @@
             [promesa.core :as p]
             [frontend.commands :as commands
              :refer [*show-commands
+                     *hovering-command-doc
                      *matched-commands
+                     *first-command-group
                      *slash-caret-pos
                      *angle-bracket-caret-pos
                      *matched-block-commands
@@ -33,28 +35,42 @@
   [id format]
   (let [show-commands? (util/react *show-commands)]
     (when (and show-commands?
-              @*slash-caret-pos
-              (not (state/sub :editor/show-page-search?))
-              (not (state/sub :editor/show-block-search?))
-              (not (state/sub :editor/show-template-search?))
-              (not (state/sub :editor/show-input))
-              (not (state/sub :editor/show-date-picker?)))
-     (let [matched (util/react *matched-commands)]
-       (ui/auto-complete
-        (map first matched)
-        {:on-chosen (fn [chosen]
-                      (reset! commands/*current-command chosen)
-                      (let [command-steps (get (into {} matched) chosen)
-                            restore-slash? (or
-                                            (contains? #{"Today" "Yesterday" "Tomorrow"} chosen)
-                                            (and
-                                             (not (fn? command-steps))
-                                             (not (contains? (set (map first command-steps)) :editor/input))
-                                             (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled" "Upload an image"} chosen))))]
-                        (editor-handler/insert-command! id command-steps
-                                                        format
-                                                        {:restore? restore-slash?})))
-         :class     "black"})))))
+               @*slash-caret-pos
+               (not (state/sub :editor/show-page-search?))
+               (not (state/sub :editor/show-block-search?))
+               (not (state/sub :editor/show-template-search?))
+               (not (state/sub :editor/show-input))
+               (not (state/sub :editor/show-date-picker?)))
+      (let [matched (util/react *matched-commands)]
+        (ui/auto-complete
+         matched
+         {:get-group-name
+          (fn [item]
+            (get *first-command-group (first item)))
+          :item-render
+          (fn [item]
+            (let [command-name (first item)
+                  command-doc (get item 2)]
+              [:div
+               {:on-mouse-enter (fn [] (reset! *hovering-command-doc command-doc))
+                :on-mouse-leave (fn [] (reset! *hovering-command-doc nil))}
+               command-name]))
+          :on-chosen
+          (fn [chosen-item]
+            (let [command (first chosen-item)]
+              (reset! commands/*current-command command)
+              (let [command-steps (get (into {} matched) command)
+                    restore-slash? (or
+                                    (contains? #{"Today" "Yesterday" "Tomorrow"} command)
+                                    (and
+                                     (not (fn? command-steps))
+                                     (not (contains? (set (map first command-steps)) :editor/input))
+                                     (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
+                (editor-handler/insert-command! id command-steps
+                                                format
+                                                {:restore? restore-slash?}))))
+          :class
+          "black"})))))
 
 (rum/defc block-commands < rum/reactive
   [id format]
@@ -269,7 +285,7 @@
               (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
-  [cp set-default-width? {:keys [top left rect]}]
+  [cp set-default-width? {:keys [top left rect]} secondary-cp]
   (let [max-height 500
         max-width 300
         offset-top 24
@@ -284,32 +300,42 @@
         x-overflow? (if (and (seq rect) (> vw-width max-width))
                       (let [delta-width (- vw-width (+ (:left rect) left))]
                         (< delta-width (* max-width 0.5))))] ;; FIXME: for translateY layer
-    [:div.absolute.rounded-md.shadow-lg.absolute-modal
-     {:class (if x-overflow? "is-overflow-vw-x" "")
-      :on-mouse-down (fn [e] (.stopPropagation e))
-      :style (merge
-              {:top        (+ top offset-top)
-               :max-height to-max-height
-               :max-width 700
-               ;; TODO: auto responsive fixed size
-               :min-width 300
-               :z-index    11}
-              (if set-default-width?
-                {:width max-width})
-              (if config/mobile?
-                {:left 0}
-                {:left left}))}
-     cp]))
+
+    [:div.absolute-modal
+     {:style
+      (merge
+       {:top        (+ top offset-top)
+        :max-height to-max-height
+        :z-index    11}
+
+       (if config/mobile?
+         {:left 0}
+         {:left left}))}
+
+     [:div.absolute-modal__primary
+      {:style
+       (merge
+        {:max-width 700
+         :min-width 300}
+        (when set-default-width?
+          {:width max-width}))
+
+       :class (if x-overflow? "is-overflow-vw-x" "")
+
+       :on-mouse-down (fn [e] (.stopPropagation e))}
+      cp]
+
+     (when secondary-cp [:div.absolute-modal__secondary secondary-cp])]))
 
 (rum/defc transition-cp < rum/reactive
-  [cp set-default-width? pos]
+  [cp set-default-width? pos secondary-cp]
   (when pos
     (when-let [pos (rum/react pos)]
       (ui/css-transition
        {:class-names "fade"
         :timeout     {:enter 500
                       :exit  300}}
-       (absolute-modal cp set-default-width? pos)))))
+       (absolute-modal cp set-default-width? pos secondary-cp)))))
 
 (rum/defc image-uploader < rum/reactive
   {:did-mount    (fn [state]
@@ -392,7 +418,8 @@
   [state {:keys [on-hide node format block block-parent-id heading-level]
           :as   option} id config]
   (let [content (state/get-edit-content)
-        heading-level (get state ::heading-level)]
+        heading-level (get state ::heading-level)
+        hovering-command-doc (util/react *hovering-command-doc)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
@@ -410,7 +437,8 @@
      (transition-cp
       (commands id format)
       true
-      *slash-caret-pos)
+      *slash-caret-pos
+      (when hovering-command-doc [:div hovering-command-doc]))
 
      (transition-cp
       (block-commands id format)

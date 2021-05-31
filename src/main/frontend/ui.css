@@ -12,8 +12,13 @@
   }
 }
 
+.ui__ac-group-name {
+  @apply p-2 text-xs;
+  color: var(--ls-block-ref-link-text-color);
+}
+
 .search-all #ui__ac-inner {
-    max-height: none;
+  max-height: none;
 }
 
 .ui__notifications {

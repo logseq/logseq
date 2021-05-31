@@ -38,8 +38,21 @@
   overflow: auto;
   background: var(--ls-primary-background-color);
 
+  @apply absolute flex flex-row items-center;
+
   &.is-overflow-vw-x {
     transform: translateX(calc(-100% + 1rem));
+  }
+
+  &__primary {
+    @apply rounded-md mr-2 shadow-lg;
+  }
+
+  &__secondary {
+    @apply p-8;
+    min-width: 300px;
+    color: var(--ls-secondary-text-colo);
+    background: var(--ls-secondary-background-color);
   }
 }
 

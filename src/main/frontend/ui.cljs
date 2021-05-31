@@ -101,7 +101,7 @@
                      [:div {:style {:margin-right "8px"}} title]
                       ;; [:div {:style {:position "absolute" :right "8px"}}
                       ;;  icon]
-]]
+                     ]]
           (rum/with-key
             (menu-link new-options child)
             title)))
@@ -331,30 +331,42 @@
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
   (shortcut/mixin :shortcut.handler/auto-complete)
-  [state matched {:keys [on-chosen
-                         on-shift-chosen
-                         on-enter
-                         empty-div
-                         item-render
-                         class]}]
+  [state
+   matched
+   {:keys [on-chosen
+           on-shift-chosen
+           get-group-name
+           empty-div
+           item-render
+           class]}]
   (let [current-idx (get state ::current-idx)]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
         (for [[idx item] (medley/indexed matched)]
-          (rum/with-key
-            (menu-link
-             {:id       (str "ac-" idx)
-              :class    (when (= @current-idx idx)
-                          "chosen")
-              ;; :tab-index -1
-              :on-mouse-down (fn [e]
-                               (util/stop e)
-                               (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                 (on-shift-chosen item)
-                                 (on-chosen item)))}
-             (if item-render (item-render item) item))
-            idx))]
+          [:<>
+           {:key idx}
+           (let [item-cp
+                 [:div {:key idx}
+                  (menu-link
+                   {:id       (str "ac-" idx)
+                    :class    (when (= @current-idx idx)
+                                "chosen")
+                    :on-mouse-down (fn [e]
+                                     (util/stop e)
+                                     (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                       (on-shift-chosen item)
+                                       (on-chosen item)))}
+                   (if item-render (item-render item) item))]]
+
+             (if get-group-name
+               (if-let [group-name (get-group-name item)]
+                 [:div
+                  [:div.ui__ac-group-name group-name]
+                  item-cp]
+                 item-cp)
+
+               item-cp))])]
        (when empty-div
          empty-div))]))
 
