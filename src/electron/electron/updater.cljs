@@ -56,6 +56,11 @@
        (emit "checking-for-update" nil)
        (-> (p/let
             [artifact (get-latest-artifact-info repo)
+
+             artifact (when-let [remote-version (and artifact (re-find #"\d+.\d+.\d+" (:url artifact)))]
+                        (if (and (. semver valid remote-version)
+                                 (. semver lt electron-version remote-version)) artifact))
+
              url (if-not artifact (do (emit "update-not-available" nil) (throw nil)) (:url artifact))
              _ (if url (emit "update-available" (bean/->js artifact)) (throw (js/Error. "download url not exists")))
                ;; start download FIXME: user's preference about auto download
