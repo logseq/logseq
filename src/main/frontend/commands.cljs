@@ -106,10 +106,7 @@
     (when (= (name format) "markdown")
       (mapv (fn [level]
               (let [heading (str "h" level)]
-                [heading (->heading (apply str (repeat level "#")))])) (range 1 7)))))
-
-
-
+                [heading (->heading (apply str (repeat level "#"))) (str "Create a h" level " markdown heading")])) (range 1 7)))))
 
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
@@ -219,11 +216,11 @@
 
     ;; time & date
 
-    [["Tomorrow" #(get-page-ref-text (date/tomorrow))]
-     ["Yesterday" #(get-page-ref-text (date/yesterday))]
-     ["Today" #(get-page-ref-text (date/today))]
-     ["Current Time" #(date/get-current-time)]
-     ["Date Picker" [[:editor/show-date-picker]]]]
+    [["Tomorrow" #(get-page-ref-text (date/tomorrow)) "Insert the date of tomorrow"]
+     ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
+     ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
+     ["Current Time" #(date/get-current-time) "Insert current time"]
+     ["Date Picker" [[:editor/show-date-picker]]] "Pick a date and insert here"]
 
     ;; task management
     (get-preferred-workflow)
@@ -248,7 +245,7 @@
                      text (util/format "[[%s]]" path)]
                  (p/let [_ (draw/create-draw-with-default-content path)]
                    (println "draw file created, " path))
-                 text)) "Draw anything with Excalidraw"]
+                 text)) "Draw a graph with Excalidraw"]
 
 
 
@@ -258,25 +255,16 @@
      (when (util/zh-CN-supported?)
        ["Embed Bilibili Video" [[:editor/input "{{bilibili }}" {:last-pattern slash
                                                                 :backward-pos 2}]]])
+     ["Embed HTML " (->inline "html")]
 
      ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
                                                             :backward-pos 2}]]]
 
      ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
-                                                        :backward-pos 2}]]]
-
-
-
-     ["Embed HTML " (->inline "html")]]
-
+                                                        :backward-pos 2}]]]]
 
     ;; Allow user to modify or extend, should specify how to extend.
-    (state/get-commands)
-
-
-    ;; org-mode block
-    ;; (block-commands-map)
-    )
+    (state/get-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
 
