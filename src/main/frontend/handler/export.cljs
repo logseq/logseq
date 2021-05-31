@@ -424,6 +424,15 @@
                                              (clj->js (f (first names)))))])))
          (remove nil?))))
 
+(defn- export-files-as-opml
+  [repo files]
+  (->> files
+       (mapv (fn [{:keys [path content names format]}]
+               (when (first names)
+                 [path (fp/exportOPML f/mldoc-record content
+                                      (f/get-default-config format))])))
+       (remove nil?)))
+
 (defn- convert-md-files-unordered-list-or-heading
   [repo files heading-to-list?]
   (->> files
@@ -481,6 +490,25 @@
                   (.setAttribute anchor "href" url)
                   (.setAttribute anchor "download" path)
                   (.click anchor))))))))))
+
+(defn export-page-as-opml!
+  [page-name]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [file (db/get-page-file page-name)]
+      (when-let [path (:file/path file)]
+        (when-let [content (get-page-content page-name)]
+          (let [names [page-name]
+                format (f/get-format path)
+                files [{:path path :content content :names names :format format}]]
+            (let [files (export-files-as-opml repo files)]
+              (let [data (js/Blob. [(second (first files))]
+                                   (clj->js {:type "text/plain;charset=utf-8,"}))]
+                (let [anchor (gdom/getElement "export-page-as-opml")
+                      url (js/window.URL.createObjectURL data)]
+                  (.setAttribute anchor "href" url)
+                  (.setAttribute anchor "download" path)
+                  (.click anchor))))))))))
+
 
 (defn convert-page-markdown-unordered-list-or-heading!
   [page-name]

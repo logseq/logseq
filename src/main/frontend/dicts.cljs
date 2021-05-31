@@ -246,6 +246,7 @@
         :export "Export"
         :export-json "Export as JSON"
         :export-markdown "Export as standard Markdown (no block properties)"
+        :export-opml "Export as OPML"
         :export-public-pages "Export public pages"
         :export-edn "Export as EDN"
         :convert-markdown "Convert Markdown headings to unordered lists (# -> -)"
@@ -889,6 +890,7 @@
            :re-index "重新建立索引"
            :export-json "以 JSON 格式导出"
            :export-markdown "以 Markdown 格式导出"
+           :export-opml "以 OPML 格式导出"
            :convert-markdown "转换 Markdown 格式(Unordered list 或 Heading)"
            :unlink "解除绑定"
            :search (if config/publishing?
@@ -1131,6 +1133,7 @@
              :re-index "重新建立索引"
              :export-json "以 JSON 格式導出"
              :export-markdown "以 Markdown 格式導出"
+             :export-opml "以 OPML 格式導出"
              :convert-markdown "轉換 Markdown 格式(Unordered list 或 Heading)"
              :unlink "解除綁定"
              :search (if config/publishing?

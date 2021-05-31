@@ -28,4 +28,6 @@
      "https://cdnjs.cloudflare.com/ajax/libs/asciidoctor.js/1.5.9/asciidoctor.min.js"
      ok-handler))
   (exportMarkdown [this content config references]
+    (throw "not support"))
+  (exportOPML [this content config]
     (throw "not support")))
