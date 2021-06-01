@@ -93,6 +93,7 @@
   (let [route route]
     (swap! state/state assoc :route-match route)
     (update-page-title! route)
+    (update-page-label! route)
     (if-let [anchor (get-in route [:query-params :anchor])]
       (jump-to-anchor! anchor)
       (util/scroll-to (util/app-scroll-container-node)

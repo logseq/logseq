@@ -158,6 +158,10 @@
           block (and block (db-utils/pull (:db/id block)))]
       (bean/->js (normalize-keyword-for-json block)))))
 
+(def ^:export get_edit_block_content
+  (fn []
+    (state/get-edit-content)))
+
 (def ^:export get_current_page
   (fn []
     (when-let [page (state/get-current-page)]
@@ -179,7 +183,7 @@
     (let [{:keys [includeChildren]} (bean/->clj opts)
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-       {:block/uuid (medley/uuid block-uuid) :repo repo} false includeChildren))))
+       {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]

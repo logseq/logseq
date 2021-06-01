@@ -130,6 +130,7 @@ interface IEditorProxy {
   registerBlockContextMenu: (tag: string, action: BlockCommandCallback) => boolean
 
   // block related APIs
+  getEditBlockContent: () => Promise<string>
   getCurrentPage: () => Promise<Partial<BlockEntity>>
   getCurrentBlock: () => Promise<BlockEntity>
   getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
