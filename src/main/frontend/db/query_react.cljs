@@ -4,6 +4,7 @@
             [frontend.db.utils :as db-utils :refer [date->int]]
             [frontend.db.model :as model]
             [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
             [frontend.state :as state]
             [clojure.string :as string]
             [cljs.reader :as reader]
@@ -17,6 +18,10 @@
 (defn- resolve-input
   [input]
   (cond
+    (= :right-now-ms input) (util/time-ms)
+    (= :start-of-today-ms input) (util/today-at-local-ms 0 0 0 0)
+    (= :end-of-today-ms input) (util/today-at-local-ms 24 0 0 0)
+
     (= :today input)
     (date->int (t/today))
     (= :yesterday input)
@@ -110,5 +115,4 @@
           k [:custom query']]
       (apply react/q repo k query-opts query inputs))
     (catch js/Error e
-      (println "Custom query failed: " {:query query'})
       (js/console.dir e))))
