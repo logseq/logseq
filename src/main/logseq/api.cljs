@@ -16,6 +16,7 @@
             [frontend.state :as state]
             [frontend.components.plugins :as plugins]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.commands :as commands]
             [frontend.handler.notification :as notification]
             [datascript.core :as d]
             [medley.core :as medley]
@@ -151,6 +152,16 @@
      (keyword k) (bean/->clj params))))
 
 ;; editor
+(def ^:export check_editing
+  (fn []
+    (if (state/get-edit-input-id)
+      (str (:block/uuid (state/get-edit-block))) false)))
+
+(def ^:export insert_at_editing_cursor
+  (fn [content]
+    (when-let [input-id (state/get-edit-input-id)]
+      (commands/simple-insert! input-id content {}))))
+
 (def ^:export get_current_block
   (fn []
     (let [block (state/get-edit-block)
@@ -158,7 +169,7 @@
           block (and block (db-utils/pull (:db/id block)))]
       (bean/->js (normalize-keyword-for-json block)))))
 
-(def ^:export get_edit_block_content
+(def ^:export get_current_block_content
   (fn []
     (state/get-edit-content)))
 
@@ -167,6 +178,12 @@
     (when-let [page (state/get-current-page)]
       (when-let [page (db-model/get-page page)]
         (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
+
+(def ^:export edit_block
+  (fn [block-uuid {:keys [pos] :or {pos :max} :as opts}]
+    (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
+      (when-let [block (db-model/query-block-by-uuid block-uuid)]
+        (editor-handler/edit-block! block pos nil block-uuid)))))
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]

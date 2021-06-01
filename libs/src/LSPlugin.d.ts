@@ -101,7 +101,11 @@ interface BlockEntity {
 
 type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
 type BlockPageName = string
-type SlashCommandActionCmd = 'editor/input' | 'editor/hook' | 'editor/clear-current-slash'
+type SlashCommandActionCmd =
+  'editor/input'
+  | 'editor/hook'
+  | 'editor/clear-current-slash'
+  | 'editor/restore-saved-cursor'
 type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
 type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
 
@@ -119,7 +123,6 @@ interface IAppProxy {
 
   // events
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
-  onPageFileMounted: IUserSlotHook
   onBlockRendererMounted: IUserSlotHook<{ uuid: BlockUUID }>
   onRouteChanged: IUserHook<{ path: string, template: string }>
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
@@ -130,17 +133,20 @@ interface IEditorProxy {
   registerBlockContextMenu: (tag: string, action: BlockCommandCallback) => boolean
 
   // block related APIs
-  getEditBlockContent: () => Promise<string>
-  getCurrentPage: () => Promise<Partial<BlockEntity>>
-  getCurrentBlock: () => Promise<BlockEntity>
+  checkEditing: () => Promise<BlockUUID | boolean>
+  insertAtEditingCursor: (content: string) => Promise<void>
+  getCurrentPage: () => Promise<Partial<BlockEntity> | null>
+  getCurrentBlock: () => Promise<BlockEntity | null>
+  getCurrentBlockContent: () => Promise<string>
   getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
   getPageBlocksTree: (pageName: BlockPageName) => Promise<Array<BlockEntity>>
 
-  insertBlock: (srcBlock: BlockIdentity | BlockPageName, content: string, opts?: Partial<{ isPageBlock: boolean, before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
+  insertBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<void>
-  getBlock: (srcBlock: BlockIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity>
+  getBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity>
   moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts?: Partial<{ before: boolean, children: boolean }>) => Promise<void>
+  editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
 
   upsertBlockProperty: (block: BlockIdentity, key: string, value: any) => Promise<void>
   removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>

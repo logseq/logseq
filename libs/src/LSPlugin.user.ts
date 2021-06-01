@@ -39,7 +39,11 @@ const editor: Partial<IEditorProxy> = {
     debug('Register slash command #', this.baseInfo.id, tag, actions)
 
     if (typeof actions === 'function') {
-      actions = [['editor/clear-current-slash'], ['editor/hook', actions]]
+      actions = [
+        ['editor/clear-current-slash', false],
+        ['editor/restore-saved-cursor'],
+        ['editor/hook', actions]
+      ]
     }
 
     actions = actions.map((it) => {

@@ -427,13 +427,18 @@
     (when-let [current-input (gdom/getElement input-id)]
       (util/move-cursor-to-end current-input))))
 
-(defmethod handle-step :editor/clear-current-slash [[_]]
+(defmethod handle-step :editor/restore-saved-cursor [[_]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (util/move-cursor-to current-input (:editor/last-saved-cursor @state/state)))))
+
+(defmethod handle-step :editor/clear-current-slash [[_ space?]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (gobj/get current-input "value")
             current-pos (:pos (util/get-caret-pos current-input))
             prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last slash prefix "")
+            prefix (util/replace-last slash prefix "" (boolean space?))
             new-value (str prefix
                            (subs edit-content current-pos))]
         (state/set-block-content-and-last-pos! input-id
