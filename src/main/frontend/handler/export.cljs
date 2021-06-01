@@ -504,9 +504,10 @@
               (let [data (js/Blob. [(second (first files))]
                                    (clj->js {:type "text/plain;charset=utf-8,"}))]
                 (let [anchor (gdom/getElement "export-page-as-opml")
-                      url (js/window.URL.createObjectURL data)]
+                      url (js/window.URL.createObjectURL data)
+                      opml-path (string/replace path #"(.+)\.(md|org)$" "$1.opml")]
                   (.setAttribute anchor "href" url)
-                  (.setAttribute anchor "download" path)
+                  (.setAttribute anchor "download" opml-path)
                   (.click anchor))))))))))
 
 
