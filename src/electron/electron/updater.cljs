@@ -57,7 +57,7 @@
        (-> (p/let
             [artifact (get-latest-artifact-info repo)
 
-             artifact (when-let [remote-version (and artifact (re-find #"\d+.\d+.\d+" (:url artifact)))]
+             artifact (when-let [remote-version (and artifact (re-find #"\d+\.\d+\.\d+" (:url artifact)))]
                         (if (and (. semver valid remote-version)
                                  (. semver lt electron-version remote-version)) artifact))
 
@@ -113,7 +113,7 @@
   [repo]
   (when (.valid semver electron-version)
     (p/let [info (get-latest-artifact-info repo)]
-      (when-let [remote-version (and info (re-find #"\d+.\d+.\d+" (:url info)))]
+      (when-let [remote-version (and info (re-find #"\d+\.\d+\.\d+" (:url info)))]
         (if (and (. semver valid remote-version)
                  (. semver lt electron-version remote-version))
 
