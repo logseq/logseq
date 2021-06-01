@@ -6,4 +6,4 @@
   (loaded? [this])
   (lazyLoad [this ok-handler])
   (exportMarkdown [this content config references])
-  (exportOPML [this content config]))
+  (exportOPML [this content config title]))

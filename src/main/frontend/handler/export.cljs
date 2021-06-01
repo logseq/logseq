@@ -430,7 +430,8 @@
        (mapv (fn [{:keys [path content names format]}]
                (when (first names)
                  [path (fp/exportOPML f/mldoc-record content
-                                      (f/get-default-config format))])))
+                                      (f/get-default-config format)
+                                      (first names))])))
        (remove nil?)))
 
 (defn- convert-md-files-unordered-list-or-heading
