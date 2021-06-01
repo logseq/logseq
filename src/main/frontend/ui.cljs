@@ -354,8 +354,8 @@
                    {:id       (str "ac-" idx)
                     :class    (when (= @current-idx idx)
                                 "chosen")
-                    :on-mouse-enter (fn [] (on-mouse-enter item))
-                    :on-mouse-leave (fn [] (on-mouse-leave item))
+                    :on-mouse-enter (when on-mouse-enter (fn [] (on-mouse-enter item)))
+                    :on-mouse-leave (when on-mouse-enter (fn [] (on-mouse-leave item)))
                     :on-mouse-down (fn [e]
                                      (util/stop e)
                                      (if (and (gobj/get e "shiftKey") on-shift-chosen)
