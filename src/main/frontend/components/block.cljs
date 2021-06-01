@@ -2008,7 +2008,7 @@
        [:div.custom-query.mt-2 (get config :attr {})
         (when-not (and built-in? (empty? result))
           (ui/foldable
-           [:div.opacity-70
+           [:div.opacity-70.custom-query-title
             title]
            (cond
              (and (seq result) view-f)
