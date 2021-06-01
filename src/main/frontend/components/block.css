@@ -365,3 +365,7 @@ a:hover > .bullet-container .bullet {
 .embed-header {
   font-weight: 600;
 }
+
+a.filter svg {
+    transform: scale(0.9);
+}

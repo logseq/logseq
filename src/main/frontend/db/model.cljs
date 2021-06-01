@@ -452,6 +452,10 @@
   (when-let [db (conn/get-conn repo)]
     (count (d/datoms db :avet :block/page page-id))))
 
+(defn page-empty?
+  [repo page-id]
+  (zero? (get-page-blocks-count repo page-id)))
+
 (defn get-block-parent
   ([block-id]
    (get-block-parent (state/get-current-repo) block-id))
@@ -765,23 +769,6 @@
      (distinct))))
 
 ;; Ignore files with empty blocks for now
-(defn get-empty-pages
-  [repo]
-  (when-let [conn (conn/get-conn repo)]
-    (->
-     (d/q
-      '[:find ?page
-        :where
-        [?p :block/name ?page]
-        (not [?p :block/file])]
-      conn)
-     (db-utils/seq-flatten)
-     (distinct))))
-
-(defn page-empty?
-  [repo page]
-  (nil? (:block/file (db-utils/entity repo [:block/name (string/lower-case page)]))))
-
 (defn get-pages-relation
   [repo with-journal?]
   (when-let [conn (conn/get-conn repo)]
@@ -949,22 +936,6 @@
                react
                (sort-by-left-recursive)
                db-utils/group-by-page))))))
-
-(defn get-files-that-referenced-page
-  [page-id]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [db (conn/get-conn repo)]
-      (->> (d/q
-            '[:find ?path
-              :in $ ?page-id
-              :where
-              [?block :block/refs ?page-id]
-              [?block :block/page ?p]
-              [?p :block/file ?f]
-              [?f :file/path ?path]]
-            db
-            page-id)
-           (db-utils/seq-flatten)))))
 
 (defn get-page-unlinked-references
   [page]
@@ -1151,14 +1122,15 @@
             filtered-db (d/filter db
                                   (fn [db datom]
                                     (let [ns (namespace (:a datom))]
-                                      (or
-                                       (not (exported-namespace? ns))
-                                       ;; (and (= ns "page")
-                                       ;;      (contains? public-pages (:e datom)))
-                                       (and (= ns "block")
-                                            (or
-                                             (contains? public-pages (:e datom))
-                                             (contains? public-pages (:db/id (:block/page (d/entity db (:e datom)))))))))))
+                                      (and
+                                       (not (contains? #{:block/file} (:a datom)))
+                                       (not= ns "file")
+                                       (or
+                                        (not (exported-namespace? ns))
+                                        (and (= ns "block")
+                                             (or
+                                              (contains? public-pages (:e datom))
+                                              (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))))
             datoms (d/datoms filtered-db :eavt)
             assets (get-assets datoms)]
         [@(d/conn-from-datoms datoms db-schema/schema) assets]))))

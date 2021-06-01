@@ -18,7 +18,7 @@
        (let [target (.-target e)]
          (if (d/has-class? target "bottom-action") ;; FIXME: not particular case
            (.preventDefault e)
-           (let [{:keys [on-hide format value block id repo dummy?]} (editor-handler/get-state)]
+           (let [{:keys [on-hide format value block id repo]} (editor-handler/get-state)]
              (when on-hide
                (on-hide value event))
              (when (contains? #{:esc :visibilitychange :click} event)

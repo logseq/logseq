@@ -95,13 +95,7 @@
   [repo idx db-id block-type block-data t]
   (case block-type
     :contents
-    [[:a {:on-click (fn [e]
-                      (util/stop e)
-                      (if-not (db/entity [:block/name "contents"])
-                        (page-handler/create! "contents")
-                        (route-handler/redirect! {:to          :page
-                                                  :path-params {:name "contents"}})))}
-      (t :right-side-bar/contents)]
+    [(t :right-side-bar/contents)
      (contents)]
 
     :recent

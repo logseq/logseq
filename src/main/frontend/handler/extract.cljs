@@ -68,7 +68,7 @@
                             (swap! ref-pages set/union (set block-ref-pages)))
                           (-> block
                               (dissoc :ref-pages)
-                              (assoc :block/file [:file/path file]
+                              (assoc :block/file {:file/path file}
                                      :block/format format
                                      :block/page [:block/name (string/lower-case page)]
                                      :block/refs block-ref-pages
@@ -84,7 +84,7 @@
                           (util/remove-nils
                            (assoc
                             (block/page-name->map page false)
-                            :block/file [:file/path file]))
+                            :block/file {:file/path file}))
                           (seq properties)
                           (assoc :block/properties properties)
 

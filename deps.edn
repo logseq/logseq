@@ -35,7 +35,8 @@
   expound/expound             {:mvn/version "0.8.6"}
   com.lambdaisland/glogi      {:mvn/version "1.0.116"}
   binaryage/devtools          {:mvn/version "1.0.2"}
-  camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.2"}}
+  camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.2"}
+  instaparse/instaparse       {:mvn/version "1.4.10"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.844"}

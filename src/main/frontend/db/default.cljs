@@ -5,5 +5,6 @@
   (mapv (fn [p]
           {:block/name (string/lower-case p)
            :block/original-name p
-           :block/journal? false})
+           :block/journal? false
+           :block/uuid (random-uuid)})
         #{"NOW" "LATER" "DOING" "DONE" "IN-PROGRESS" "TODO" "WAIT" "WAITING" "A" "B" "C"}))

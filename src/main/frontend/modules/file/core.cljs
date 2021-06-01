@@ -102,7 +102,7 @@
         (when chan-callback
           (chan-callback))))))
 
-(defn- create-file-if-not-exists!
+(defn- transact-file-tx-if-not-exists!
   [page ok-handler]
   (when-let [repo (state/get-current-repo)]
     (let [format (name (get page :block/format
@@ -121,18 +121,20 @@
                 (if (= format "markdown") "md" format))
           file-path (str "/" path)
           dir (config/get-repo-dir repo)]
-      (p/let [exists? (fs/file-exists? dir file-path)]
-        (if exists?
-          (notification/show!
-           [:p.content
-            (util/format "File %s already exists!" file-path)]
-           :error)
-          (let [file-path (config/get-file-path repo path)
-                tx [{:file/path file-path}
-                    {:block/name (:block/name page)
-                     :block/file [:file/path file-path]}]]
-            (db/transact! tx)
-            (when ok-handler (ok-handler))))))))
+      (let [file-path (config/get-file-path repo path)
+            page-blocks (db/get-page-blocks-no-cache (:block/name page))
+            file {:file/path file-path}
+            tx (->>
+                (concat
+                 [{:file/path file-path}
+                  {:block/name (:block/name page)
+                   :block/file file}]
+                 (map (fn [block] {:db/id (:db/id block)
+                                  :block/file file})
+                   page-blocks))
+                (remove nil?))]
+        (db/transact! tx)
+        (when ok-handler (ok-handler))))))
 
 (defn save-tree-aux!
   [page-block tree]
@@ -154,4 +156,4 @@
                    (:block/file (db-utils/entity page))))]
     (if file
       (ok-handler)
-      (create-file-if-not-exists! page-block ok-handler))))
+      (transact-file-tx-if-not-exists! page-block ok-handler))))

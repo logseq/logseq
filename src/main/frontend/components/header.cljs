@@ -102,7 +102,7 @@
           :options {:href (rfe/href :all-pages)}
           :icon svg/pages-sm})
 
-       (when current-repo
+       (when (and current-repo (not config/publishing?))
          {:title (t :all-files)
           :options {:href (rfe/href :all-files)}
           :icon svg/folder-sm})

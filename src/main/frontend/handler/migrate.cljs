@@ -17,7 +17,8 @@
     (let [files (export/get-md-file-contents repo)]
       (when (seq files)
         (-> (p/all (for [[path content] files]
-                     (file/alter-file repo path content {:add-history? false})))
+                     (file/alter-file repo path content {:add-history? false
+                                                         :reset? false})))
             (p/then (fn []
                       (config-handler/set-config! :markdown/version 2)
 

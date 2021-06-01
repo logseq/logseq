@@ -5,11 +5,19 @@
 
 (def keys-of-deleted-entity 1)
 
+(defn safe-pull
+  [db selector eid]
+  (try
+    (d/pull db selector eid)
+    (catch js/Error e
+      (js/console.error e)
+      nil)))
+
 (defn get-entity-from-db-after-or-before
   [db-before db-after db-id]
-  (let [r (d/pull db-after '[*] db-id)]
+  (let [r (safe-pull db-after '[*] db-id)]
     (if (= keys-of-deleted-entity (count r))
-      (let [r (d/pull db-before '[*] db-id)]
+      (let [r (safe-pull db-before '[*] db-id)]
         (when (= keys-of-deleted-entity (count r))
           ;; TODO: What can cause this happen?
           (log/error :outliner-pipeline/cannot-find-entity {:entity r}))

@@ -42,11 +42,6 @@
              (group-by :block/page))
     blocks))
 
-(defn group-by-file
-  [blocks]
-  (some->> blocks
-           (group-by :block/file)))
-
 (defn get-tx-id [tx-report]
   (get-in tx-report [:tempids :db/current-tx]))
 
@@ -83,7 +78,7 @@
        (d/pull conn
                selector
                eid)
-       (catch js/Error e
+       (catch js/Error _e
          nil)))))
 
 (defn pull-many

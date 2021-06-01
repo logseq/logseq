@@ -65,33 +65,27 @@
 (defn create!
   ([title]
    (create! title {}))
-  ([title {:keys [redirect?]
+  ([title {:keys [redirect? page-map]
            :or {redirect? true}}]
    (let [title (string/trim title)
          page (string/lower-case title)
          format (state/get-preferred-format)
-         tx (-> (block/page-name->map title true)
-                (assoc :block/format format))
-         page-entity [:block/uuid (:block/uuid tx)]
+         tx (if page-map
+              page-map
+              (-> (block/page-name->map title true)
+                  (assoc :block/format format)))
+         page-entity (if (:block/uuid tx)
+                       [:block/uuid (:block/uuid tx)]
+                       (:db/id tx))
          create-title-property? (util/create-title-property? title)
          default-properties (default-properties-block title format page-entity)
-         empty-block {:block/uuid (db/new-block-id)
-                      :block/left [:block/uuid (:block/uuid default-properties)]
-                      :block/format format
-                      :block/content ""
-                      :block/parent page-entity
-                      :block/unordered true
-                      :block/page page-entity}
          txs (if create-title-property?
-               [tx default-properties empty-block]
+               [tx default-properties]
                [tx])]
      (db/transact! txs)
      (when redirect?
       (route-handler/redirect! {:to :page
-                                :path-params {:name page}})
-      (when create-title-property?
-        (js/setTimeout (fn []
-                        (editor-handler/edit-block! empty-block 0 format (:block/uuid empty-block))) 50))))))
+                                :path-params {:name page}})))))
 
 (defn page-add-property!
   [page-name key value]
@@ -390,7 +384,8 @@
 (defn get-pages-with-modified-at
   [repo]
   (->> (db/get-modified-pages repo)
-       (remove util/file-page?)))
+       (remove util/file-page?)
+       (remove util/uuid-string?)))
 
 (defn get-filters
   [page-name]

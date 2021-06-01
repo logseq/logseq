@@ -28,39 +28,6 @@
            block)]
     @ids))
 
-;; TODO: should we remove this dummy block and use the page's root block instead?
-(defn with-dummy-block
-  ([blocks format]
-   (with-dummy-block blocks format {} {}))
-  ([blocks format default-option {:keys [journal? page-name]
-                                  :or {journal? false}}]
-   (let [format (or format (state/get-preferred-format) :markdown)
-         blocks (vec blocks)]
-     (if (seq blocks)
-       blocks
-       (let [page-block (when page-name (db/pull [:block/name (string/lower-case page-name)]))
-             create-title-property? (util/create-title-property? page-name)
-             content (if create-title-property?
-                       (let [title (or (:block/original-name page-block)
-                                       (:block/name page-block))
-                             properties (common-handler/get-page-default-properties title)]
-                         (property/build-properties-str format properties))
-                       "")
-             page-id {:db/id (:db/id page-block)}
-             dummy (merge {:block/uuid (db/new-block-id)
-                           :block/left page-id
-                           :block/parent page-id
-                           :block/page page-id
-                           :block/title ""
-                           :block/content content
-                           :block/format format
-                           :block/dummy? true}
-                          default-option)
-             dummy (if (:db/id (:block/file dummy))
-                     dummy
-                     (dissoc dummy :block/file))]
-         [dummy])))))
-
 (defn filter-blocks
   [repo ref-blocks filters group-by-page?]
   (let [ref-pages (->> (if group-by-page?
