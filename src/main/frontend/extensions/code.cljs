@@ -174,7 +174,6 @@
    :did-update (fn [state]
                  (when-let [editor @(:editor-atom state)]
                    (.setOption editor "theme" (str "solarized " (nth (state :rum/args) 4))))
-                 (load-and-render! state)
                  state)}
   [state config id attr code theme options]
   [:div.extensions__code
