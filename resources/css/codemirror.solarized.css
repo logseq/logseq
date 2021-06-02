@@ -104,14 +104,6 @@ http://ethanschoonover.com/solarized/img/solarized-palette.png
 /* Editor styling */
 
 
-
-/* Little shadow on the view-port of the buffer view */
-.cm-s-solarized.CodeMirror {
-  -moz-box-shadow: inset 7px 0 12px -6px #000;
-  -webkit-box-shadow: inset 7px 0 12px -6px #000;
-  box-shadow: inset 7px 0 12px -6px #000;
-}
-
 /* Remove gutter border */
 .cm-s-solarized .CodeMirror-gutters {
   border-right: 0;

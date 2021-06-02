@@ -33,3 +33,4 @@ resources/electron.js
 .lsp/
 /libs/dist/
 charlie/
+.vscode

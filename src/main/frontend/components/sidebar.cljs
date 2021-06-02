@@ -308,7 +308,9 @@
         :db-restoring? db-restoring?
         :sidebar-open? sidebar-open?
         :system-theme? system-theme?
-        :on-click      editor-handler/unhighlight-blocks!}
+        :on-click      #(do
+                          (editor-handler/unhighlight-blocks!)
+                          (util/fix-open-external-with-shift! %))}
 
        [:div.theme-inner
         (sidebar-mobile-sidebar
