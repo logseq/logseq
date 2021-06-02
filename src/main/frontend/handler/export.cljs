@@ -1,21 +1,22 @@
 (ns frontend.handler.export
-  (:require [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.format.protocol :as fp]
-            [frontend.format :as f]
-            [frontend.config :as config]
-            [datascript.core :as d]
-            [frontend.util :as util]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
+            [cljs.pprint :as pprint]
             [clojure.string :as string]
-            [goog.dom :as gdom]
-            [frontend.publishing.html :as html]
-            [frontend.text :as text]
-            [frontend.handler.common :as common-handler]
+            [clojure.walk :as walk]
+            [datascript.core :as d]
+            [frontend.config :as config]
+            [frontend.db :as db]
             [frontend.extensions.zip :as zip]
-            [frontend.modules.file.core :as outliner-file]
+            [frontend.format :as f]
+            [frontend.format.protocol :as fp]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.publishing.html :as html]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [goog.dom :as gdom]
             [promesa.core :as p]))
 
 
@@ -514,3 +515,82 @@
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
             (.setAttribute anchor "download" (.-name zipfile))
             (.click anchor)))))))
+
+(defn- nested-select-keys
+  [keyseq vec-tree]
+  (walk/postwalk
+   (fn [x]
+     (cond
+       (and (map? x) (contains? x :block/uuid))
+       (select-keys x keyseq)
+
+       (and (map? x) (contains? x :id))
+       (dissoc x :id)
+
+       :else
+       x))
+   vec-tree))
+
+(defn- blocks [conn]
+  {:version 1
+   :blocks
+   (->> (d/q '[:find (pull ?b [*])
+               :in $
+               :where
+               [?b :block/file]
+               [?b :block/original-name]
+               [?b :block/name]] conn)
+
+        (map (fn [[{:block/keys [name] :as page}]]
+               (assoc page
+                      :block/children
+                      (outliner-tree/blocks->vec-tree
+                       (db/get-page-blocks-no-cache
+                        (state/get-current-repo)
+                        name
+                        {:transform? false}) name))))
+
+        (nested-select-keys
+         [:block/uuid
+          :block/original-name
+          :block/properties
+          :block/format
+          :block/children
+          :block/title
+          :block/body
+          :block/content]))})
+
+(defn export-repo-as-edn-v2!
+  [repo]
+  (when-let [conn (db/get-conn repo)]
+    (let [edn-str (with-out-str
+                    (pprint/pprint
+                     (blocks conn)))
+          data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent edn-str))]
+      (when-let [anchor (gdom/getElement "download-as-edn-v2")]
+        (.setAttribute anchor "href" data-str)
+        (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".edn"))
+        (.click anchor)))))
+
+(defn- nested-update-uuid
+  [vec-tree]
+  (walk/postwalk
+   (fn [x]
+     (if (and (map? x) (contains? x :block/uuid))
+       (update x :block/uuid str)
+       x))
+   vec-tree))
+
+(defn export-repo-as-json-v2!
+  [repo]
+  (when-let [conn (db/get-conn repo)]
+    (let [json-str
+          (-> (blocks conn)
+              nested-update-uuid
+              clj->js
+              js/JSON.stringify)
+          data-str (str "data:text/json;charset=utf-8," (js/encodeURIComponent json-str))]
+      (when-let [anchor (gdom/getElement "download-as-json-v2")]
+        (.setAttribute anchor "href" data-str)
+        (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".json"))
+        (.click anchor)))))
