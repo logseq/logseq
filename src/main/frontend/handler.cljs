@@ -26,17 +26,19 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [frontend.error :as error]))
 
 (defn set-global-error-notification!
   []
   (set! js/window.onerror
         (fn [message, source, lineno, colno, error]
-          (notification/show!
-           (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
-           :error
-           ;; Don't auto-hide
-           false))))
+          (when-not (error/ignored? message)
+            (notification/show!
+             (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
+             :error
+             ;; Don't auto-hide
+             false)))))
 
 (defn- watch-for-date!
   []
