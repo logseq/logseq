@@ -1255,6 +1255,7 @@
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
+        block-ref? (:block-ref? config)
         html-export? (:html-export? config)
         checkbox (when (and (not pre-block?)
                             (not html-export?))
@@ -1276,7 +1277,8 @@
                                ;; FIXME: construct the proper level later
                                2))
         elem (if heading-level
-               (keyword (str "h" heading-level))
+               (keyword (str "h" heading-level
+                             (when block-ref? ".inline")))
                :span.inline)]
     (->elem
      elem
