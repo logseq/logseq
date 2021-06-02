@@ -146,7 +146,7 @@
         (when editor
           (let [element (.getWrapperElement editor)]
             (.on editor "blur" (fn [_cm e]
-                                 (util/stop e)
+                                 (when e (util/stop e))
                                  (state/set-block-component-editing-mode! false)
                                  (when-not @esc-pressed?
                                    (save-file-or-block-when-blur-or-esc! editor textarea config state))))
