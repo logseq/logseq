@@ -146,7 +146,9 @@ interface IEditorProxy {
   insertBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<void>
-  getBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity>
+  getBlock: (srcBlock: BlockIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity | null>
+  getPreviousSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
+  getNextSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
   moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts?: Partial<{ before: boolean, children: boolean }>) => Promise<void>
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
 
