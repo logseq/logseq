@@ -34,6 +34,8 @@ Our top sponsors are shown below! [[Become a sponsor](https://opencollective.com
 
 <a href="https://www.deta.sh/" target="_blank"><img width=200 height=100 src="https://uploads-ssl.webflow.com/5eb96efa78dc680fc15be3be/5ebd24f6cbf6e9ebd674656e_Logo.svg" /></a>
 
+<a href="https://www.producthunt.com/posts/logseq?utm_source=badge-review&utm_medium=badge&utm_souce=badge-logseq#discussion-body" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/review.svg?post_id=298158&theme=light" alt="Logseq - Your joyful, private digital garden | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+
 
 ## Feature requests
 
