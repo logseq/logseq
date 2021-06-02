@@ -35,13 +35,22 @@
 
 (defn- get-file-content
   [file-path]
-  (let [page-name
-        (ffirst (d/q '[:find ?pn
-                       :where
-                       [?e :file/path file-path]
-                       [?p :block/file ?e]
-                       [?p :block/name ?pn]] (db/get-conn)))]
-    (get-page-content page-name)))
+  (if-let [page-name
+           (ffirst (d/q '[:find ?pn
+                          :in $ ?path
+                          :where
+                          [?p :block/file ?f]
+                          [?p :block/name ?pn]
+                          [?f :file/path ?path]]
+                        (db/get-conn) file-path))]
+    (get-page-content page-name)
+    (ffirst
+     (d/q '[:find ?content
+            :in $ ?path
+            :where
+            [?f :file/path ?path]
+            [?f :file/content ?content]]
+          (db/get-conn) file-path))))
 
 (defn- get-blocks-contents
   [repo root-block-uuid]
