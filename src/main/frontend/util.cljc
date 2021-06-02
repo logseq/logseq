@@ -907,6 +907,13 @@
   []
   #?(:cljs (tc/to-long (cljs-time.core/now))))
 
+;; Returns the milliseconds representation of the provided time, in the local timezone.
+;; For example, if you run this function at 10pm EDT in the EDT timezone on May 31st,
+;; it will return 1622433600000, which is equivalent to Mon May 31 2021 00 :00:00.
+#?(:cljs
+   (defn today-at-local-ms [hours mins secs millisecs]
+     (.setHours (js/Date. (.now js/Date)) hours mins secs millisecs)))
+
 (defn d
   [k f]
   (let [result (atom nil)]
@@ -1373,6 +1380,14 @@
                         (apply min))
                    (count val))]
        (.setRangeText input "" current (inc idx)))))
+
+#?(:cljs
+   (defn fix-open-external-with-shift!
+     [^js/MouseEvent e]
+     (when (and (.-shiftKey e) win32? (electron?)
+                (= (string/lower-case (.. e -target -nodeName)) "a")
+                (string/starts-with? (.. e -target -href) "file:"))
+       (.preventDefault e))))
 
 (defn classnames
   "Like react classnames utility:

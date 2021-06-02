@@ -113,10 +113,11 @@
       (let [editor @editor-atom
             doc (.getDoc editor)
             code (nth (:rum/args state) 3)]
-        (.setValue doc code))
-      (let [[config id attr code] (:rum/args state)
+        (.setValue doc code)
+        @editor-atom)
+      (let [[config id attr code theme] (:rum/args state)
             original-mode (get attr :data-lang)
-            mode (or original-mode "javascript")
+            mode original-mode
             clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
             mode (if clojure? "clojure" (text->cm-mode mode))
             lisp? (or clojure?
@@ -127,7 +128,7 @@
                     (when textarea
                       (from-textarea textarea
                                      #js {:mode mode
-                                          :theme (if dark? "solarized dark" "solarized")
+                                          :theme (str "solarized " theme)
                                           :matchBrackets lisp?
                                           :autoCloseBrackets true
                                           :lineNumbers true
@@ -171,14 +172,16 @@
                 (load-and-render! state)
                 state)
    :did-update (fn [state]
-                 (load-and-render! state)
+                 (when-let [editor @(:editor-atom state)]
+                   (.setOption editor "theme" (str "solarized " (nth (state :rum/args) 4))))
                  state)}
-  [state config id attr code options]
+  [state config id attr code theme options]
   [:div.extensions__code
-   [:div.extensions__code-lang
-    (let [mode (string/lower-case (get attr :data-lang "javascript"))]
-      (if (= mode "text/x-clojure")
-        "clojure"
-        mode))]
+   (when-let [mode (:data-lang attr)]
+     [:div.extensions__code-lang
+      (let [mode (string/lower-case mode)]
+        (if (= mode "text/x-clojure")
+          "clojure"
+          mode))])
    [:textarea (merge {:id id
                       :default-value code} attr)]])

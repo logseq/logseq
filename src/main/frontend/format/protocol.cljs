@@ -5,4 +5,5 @@
   (toHtml [this content config])
   (loaded? [this])
   (lazyLoad [this ok-handler])
-  (exportMarkdown [this content config references]))
+  (exportMarkdown [this content config references])
+  (exportOPML [this content config title]))

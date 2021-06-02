@@ -388,7 +388,7 @@
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config page-name href redirect-page-name page-entity contents-page? children html-export? label)]
-      (if-not preview?
+      (if (and (not (util/mobile?)) (not preview?))
         (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
                                  {:style {:width          735
                                           :text-align     "left"
@@ -552,7 +552,7 @@
                          :span.block-ref
                          (map-inline config label))
                        title)]
-           (if-not (:preview? config)
+           (if (and (not (util/mobile?)) (not (:preview? config)))
              (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
                                       {:style {:width      735
                                                :text-align "left"
@@ -2008,7 +2008,7 @@
        [:div.custom-query.mt-2 (get config :attr {})
         (when-not (and built-in? (empty? result))
           (ui/foldable
-           [:div.opacity-70
+           [:div.opacity-70.custom-query-title
             title]
            (cond
              (and (seq result) view-f)

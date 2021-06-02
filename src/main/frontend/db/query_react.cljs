@@ -3,7 +3,9 @@
   (:require [datascript.core :as d]
             [frontend.db.utils :as db-utils :refer [date->int]]
             [frontend.db.model :as model]
+            [frontend.debug :as debug]
             [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
             [frontend.state :as state]
             [clojure.string :as string]
             [cljs.reader :as reader]
@@ -17,6 +19,10 @@
 (defn- resolve-input
   [input]
   (cond
+    (= :right-now-ms input) (util/time-ms)
+    (= :start-of-today-ms input) (util/today-at-local-ms 0 0 0 0)
+    (= :end-of-today-ms input) (util/today-at-local-ms 24 0 0 0)
+
     (= :today input)
     (date->int (t/today))
     (= :yesterday input)
@@ -103,12 +109,17 @@
 
 (defn react-query
   [repo {:keys [query inputs] :as query'} query-opts]
+  (debug/pprint "================")
+  (debug/pprint "Use the following to debug your datalog queries:")
+  (debug/pprint query')
   (try
     (let [query (resolve-query query)
           inputs (map resolve-input inputs)
           repo (or repo (state/get-current-repo))
           k [:custom query']]
+      (debug/pprint "inputs (post-resolution):" inputs)
+      (debug/pprint "query-opts:" query-opts)
       (apply react/q repo k query-opts query inputs))
     (catch js/Error e
-      (println "Custom query failed: " {:query query'})
+      (debug/pprint "Custom query failed: " {:query query'})
       (js/console.dir e))))
