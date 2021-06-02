@@ -108,6 +108,7 @@ type SlashCommandActionCmd =
   | 'editor/restore-saved-cursor'
 type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
 type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
+type BlockCursorPosition = { left: number, top: number, height: number, pos: number, react: DOMRect }
 
 interface IAppProxy {
   getUserInfo: () => Promise<any>
@@ -135,6 +136,7 @@ interface IEditorProxy {
   // block related APIs
   checkEditing: () => Promise<BlockUUID | boolean>
   insertAtEditingCursor: (content: string) => Promise<void>
+  getEditingCursorPosition: () => Promise<BlockCursorPosition | null>
   getCurrentPage: () => Promise<Partial<BlockEntity> | null>
   getCurrentBlock: () => Promise<BlockEntity | null>
   getCurrentBlockContent: () => Promise<string>

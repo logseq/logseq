@@ -9,6 +9,7 @@
             [frontend.util :as util]
             [electron.ipc :as ipc]
             [promesa.core :as p]
+            [goog.dom :as gdom]
             [sci.core :as sci]
             [lambdaisland.glogi :as log]
             [camel-snake-kebab.core :as csk]
@@ -161,6 +162,11 @@
   (fn [content]
     (when-let [input-id (state/get-edit-input-id)]
       (commands/simple-insert! input-id content {}))))
+
+(def ^:export get_editing_cursor_position
+  (fn []
+    (when-let [input-id (state/get-edit-input-id)]
+      (bean/->js (normalize-keyword-for-json (util/get-caret-pos (gdom/getElement input-id)))))))
 
 (def ^:export get_current_block
   (fn []
