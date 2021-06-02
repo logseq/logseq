@@ -25,12 +25,16 @@
          [:a.font-medium {:on-click #(export/export-repo-as-markdown! current-repo)}
           (t :export-markdown)]]
         [:li.mb-4
+         [:a.font-medium {:on-click #(export/export-repo-as-opml! current-repo)}
+          (t :export-opml)]]
+        [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-edn! current-repo)}
           (t :export-edn)]]]
        [:a#download-as-edn.hidden]
        [:a#download-as-html.hidden]
        [:a#download-as-zip.hidden]
        [:a#export-as-markdown.hidden]
+       [:a#export-as-opml.hidden]
        [:a#convert-markdown-to-unordered-list-or-heading.hidden]])))
 
 

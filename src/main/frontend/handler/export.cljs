@@ -176,8 +176,7 @@
   (let [conn (db/get-conn repo)]
     (filter (fn [[path _]]
               (let [path (string/lower-case path)]
-                (or (string/ends-with? path ".md")
-                    (string/ends-with? path ".markdown"))))
+                (re-find #"\.(?:md|markdown)$" path)))
             (get-file-contents repo {:init-level 1
                                      :heading-to-list? true}))))
 
@@ -429,9 +428,12 @@
   (->> files
        (mapv (fn [{:keys [path content names format]}]
                (when (first names)
-                 [path (fp/exportOPML f/mldoc-record content
-                                      (f/get-default-config format)
-                                      (first names))])))
+                 (let [path
+                       (string/replace
+                        (string/lower-case path) #"(.+)\.(md|markdown|org)" "$1.opml")]
+                   [path (fp/exportOPML f/mldoc-record content
+                                        (f/get-default-config format)
+                                        (first names))]))))
        (remove nil?)))
 
 (defn- convert-md-files-unordered-list-or-heading
@@ -492,6 +494,18 @@
                   (.setAttribute anchor "download" path)
                   (.click anchor))))))))))
 
+(defn export-repo-as-opml!
+  [repo]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [files (get-file-contents-with-suffix repo)]
+      (let [files (export-files-as-opml repo files)
+            zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+          (when-let [anchor (gdom/getElement "export-as-opml")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))
+
 (defn export-page-as-opml!
   [page-name]
   (when-let [repo (state/get-current-repo)]
@@ -506,7 +520,7 @@
                                    (clj->js {:type "text/plain;charset=utf-8,"}))]
                 (let [anchor (gdom/getElement "export-page-as-opml")
                       url (js/window.URL.createObjectURL data)
-                      opml-path (string/replace path #"(.+)\.(md|org)$" "$1.opml")]
+                      opml-path (string/replace (string/lower-case path) #"(.+)\.(md|org|markdown)$" "$1.opml")]
                   (.setAttribute anchor "href" url)
                   (.setAttribute anchor "download" opml-path)
                   (.click anchor))))))))))
