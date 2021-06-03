@@ -115,6 +115,10 @@ interface IAppProxy {
   getUserInfo: () => Promise<any>
   getUserConfigs: () => Promise<AppUserConfigs>
 
+  // native
+  relaunch: () => Promise<void>
+  quit: () => Promise<void>
+
   // router
   pushState: (k: string, params?: {}) => void
   replaceState: (k: string, params?: {}) => void
@@ -138,6 +142,7 @@ interface IEditorProxy {
   checkEditing: () => Promise<BlockUUID | boolean>
   insertAtEditingCursor: (content: string) => Promise<void>
   restoreEditingCursor: () => Promise<void>
+  exitEditingMode: (selectBlock?: boolean) => Promise<void>
   getEditingCursorPosition: () => Promise<BlockCursorPosition | null>
   getCurrentPage: () => Promise<Partial<BlockEntity> | null>
   getCurrentBlock: () => Promise<BlockEntity | null>

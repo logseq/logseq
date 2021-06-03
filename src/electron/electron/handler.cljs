@@ -161,6 +161,13 @@
 (defmethod handle :getUserDefaultPlugins []
   (get-ls-default-plugins))
 
+(defmethod handle :relaunchApp []
+  (.relaunch app) (.quit app))
+
+(defmethod handle :quitApp []
+  (.quit app))
+
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 

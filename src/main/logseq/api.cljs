@@ -53,13 +53,13 @@
   (fn []
     (bean/->js
      (normalize-keyword-for-json
-      {:preferred-language (:preferred-language @state/state)
+      {:preferred-language   (:preferred-language @state/state)
        :preferred-theme-mode (:ui/theme @state/state)
-       :preferred-format   (state/get-preferred-format)
-       :preferred-workflow (state/get-preferred-workflow)
-       :preferred-todo     (state/get-preferred-todo)
-       :current-graph (state/get-current-repo)
-       :me (state/get-me)}))))
+       :preferred-format     (state/get-preferred-format)
+       :preferred-workflow   (state/get-preferred-workflow)
+       :preferred-todo       (state/get-preferred-todo)
+       :current-graph        (state/get-current-repo)
+       :me                   (state/get-me)}))))
 
 (def ^:export show_themes
   (fn []
@@ -144,6 +144,14 @@
        pid cmd (assoc action 0 (keyword (first action)))))))
 
 ;; app
+(def ^:export relaunch
+  (fn []
+    (ipc/ipc "relaunchApp")))
+
+(def ^:export quit
+  (fn []
+    (ipc/ipc "quitApp")))
+
 (def ^:export push_state
   (fn [^js k ^js params]
     (rfe/push-state
@@ -159,6 +167,14 @@
   (fn []
     (if (state/get-edit-input-id)
       (str (:block/uuid (state/get-edit-block))) false)))
+
+(def ^:export exit_editing_mode
+  (fn [select?]
+    (when-let [block (state/get-edit-block)]
+      (if select?
+        (editor-handler/select-block! (:block/uuid block))
+        (state/clear-edit!)))
+    nil))
 
 (def ^:export insert_at_editing_cursor
   (fn [content]
