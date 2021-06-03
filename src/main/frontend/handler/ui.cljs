@@ -126,8 +126,11 @@
       :else nil)
     (when-let [element (gdom/getElement (str "ac-" @current-idx))]
       (let [ac-inner (gdom/getElement "ui__ac-inner")
-            element-top (gobj/get element "offsetTop")
-            scroll-top (- (gobj/get element "offsetTop") 360)]
+            height  (or
+                     (gobj/get (gdom/getElementByClass "absolute-modal") "offsetHeight")
+                     (gobj/get ac-inner "offsetHeight")
+                     400)
+            scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
         (set! (.-scrollTop ac-inner) scroll-top)))))
 
 (defn auto-complete-next
@@ -141,7 +144,11 @@
         (swap! current-idx inc)))
     (when-let [element (gdom/getElement (str "ac-" @current-idx))]
       (let [ac-inner (gdom/getElement "ui__ac-inner")
-            scroll-top (- (gobj/get element "offsetTop") 360)]
+            height (or
+                    (gobj/get (gdom/getElementByClass "absolute-modal") "offsetHeight")
+                    (gobj/get ac-inner "offsetHeight")
+                    400)
+            scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
         (set! (.-scrollTop ac-inner) scroll-top)))))
 
 (defn auto-complete-complete
