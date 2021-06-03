@@ -1,6 +1,5 @@
 #ui__ac {
   &-inner {
-    max-height: 400px;
     overflow-x: hidden;
     overflow-y: auto;
     position: relative;
