@@ -530,7 +530,7 @@
     (let [block (and (util/uuid-string? id)
                      (db/pull-block (uuid id)))]
       (if block
-        [:span.block-ref-wrap
+        [:div.block-ref-wrap.inline
          {:on-mouse-down
           (fn [e]
             (util/stop e)
@@ -1472,24 +1472,30 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title body meta content marker page format repo children pre-block? properties idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
   (let [collapsed? (get properties :collapsed)
-        block-ref-with-title? (and (:block-ref? config) (seq title))
+        block-ref? (:block-ref? config)
+        block-ref-with-title? (and block-ref? (seq title))
         dragging? (rum/react *dragging?)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
                          )
-        attrs {:blockid       (str uuid)
-               mouse-down-key (fn [e]
-                                (block-content-on-mouse-down e block block-id properties content format edit-input-id))
-               :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
-               :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
-               :on-drop       (fn [event] (block-content-on-drop event block uuid))
-               :style {:width "100%"}}]
+        attrs (cond->
+                {:blockid       (str uuid)
+                 :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
+                 :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
+                 :on-drop       (fn [event] (block-content-on-drop event block uuid))
+                 :style {:width "100%"}}
+                (not block-ref?)
+                (assoc mouse-down-key (fn [e]
+                                        (block-content-on-mouse-down e block block-id properties content format edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)}
        (not slide?)
-       (merge attrs))
+       (merge attrs)
+
+       block-ref?
+       (assoc :class "cursor-pointer"))
 
      [:span
      ;; .flex.relative {:style {:width "100%"}}
