@@ -1394,11 +1394,17 @@
 ;; assets/journals_2021_02_03_1612350230540_0.png
 (defn resolve-relative-path
   [file-path]
-  (if-let [current-file (some-> (state/get-edit-block)
-                                :block/file
-                                :db/id
-                                (db/entity)
-                                :file/path)]
+  (if-let [current-file (or (some-> (state/get-edit-block)
+                                    :block/file
+                                    :db/id
+                                    (db/entity)
+                                    :file/path)
+
+                            ;; fix dummy file path of page
+                            (and (util/electron?)
+                                 (util/node-path.join
+                                  (config/get-repo-dir (state/get-current-repo))
+                                  (config/get-pages-directory) "_.md")))]
     (util/get-relative-path current-file file-path)
     file-path))
 
