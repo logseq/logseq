@@ -5,6 +5,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.dnd :as editor-dnd-handler]
+            [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.util :as util]
             [electron.ipc :as ipc]
@@ -244,6 +245,19 @@
         (let [{:keys [includeChildren]} (bean/->clj opts)
               block (if (not includeChildren) block (first (outliner-tree/blocks->vec-tree [block] uuid)))]
           (bean/->js (normalize-keyword-for-json block)))))))
+
+(def ^:export get_previous_sibling_block
+  (fn [uuid]
+    (when-let [block (db-model/query-block-by-uuid uuid)]
+      (let [{:block/keys [parent left]} block
+            block (if-not (= parent left) (db-utils/pull (:db/id left)))]
+        (and block (bean/->js (normalize-keyword-for-json block)))))))
+
+(def ^:export get_next_sibling_block
+  (fn [uuid]
+    (when-let [block (db-model/query-block-by-uuid uuid)]
+      (when-let [right-siblings (outliner/get-right-siblings (outliner/->Block block))]
+        (bean/->js (normalize-keyword-for-json (:data (first right-siblings))))))))
 
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
