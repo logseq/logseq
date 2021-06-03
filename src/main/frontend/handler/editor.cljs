@@ -1980,7 +1980,9 @@
                                                  exclude-properties))
                      :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
                      :block/content new-content
-                     :block/title new-title})]
+                     :block/title new-title
+                     :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
+                                           (remove nil?))})]
        (if file
          (assoc m :block/file (select-keys file [:db/id]))
          m)))))

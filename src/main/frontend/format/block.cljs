@@ -609,7 +609,7 @@
                             (map :db/id))
            {:block/keys [refs]} new-block
            ref-pages (filter :block/name refs)
-           path-ref-pages (concat ref-pages parent-refs)
+           path-ref-pages (concat ref-pages parent-refs [(:db/id page)])
            block (merge
                   block
                   new-block
