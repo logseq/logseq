@@ -168,13 +168,19 @@ function initUserSettingsHandlers (pluginLocal: PluginLocal) {
 function initMainUIHandlers (pluginLocal: PluginLocal) {
   const _ = (label: string): any => `main-ui:${label}`
 
-  pluginLocal.on(_('visible'), ({ visible, toggle }) => {
+  pluginLocal.on(_('visible'), ({ visible, toggle, cursor }) => {
     const el = pluginLocal.getMainUI()
     el?.classList[toggle ? 'toggle' : (visible ? 'add' : 'remove')]('visible')
     // pluginLocal.caller!.callUserModel(LSPMSG, { type: _('visible'), payload: visible })
     // auto focus frame
-    if (!pluginLocal.shadow && el) {
-      (el as HTMLIFrameElement).contentWindow?.focus()
+    if (visible) {
+      if (!pluginLocal.shadow && el) {
+        (el as HTMLIFrameElement).contentWindow?.focus()
+      }
+    }
+
+    if (cursor) {
+      invokeHostExportedApi('restore_editing_cursor')
     }
   })
 

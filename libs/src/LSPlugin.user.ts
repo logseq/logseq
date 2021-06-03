@@ -234,8 +234,8 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     this.caller.call('main-ui:style', style)
   }
 
-  hideMainUI (): void {
-    const payload = { key: KEY_MAIN_UI, visible: false }
+  hideMainUI (opts?: { restoreEditingCursor: boolean }): void {
+    const payload = { key: KEY_MAIN_UI, visible: false, cursor: opts?.restoreEditingCursor }
     this.caller.call('main-ui:visible', payload)
     this.emit('ui:visible:changed', payload)
     this._ui.set(payload.key, payload)

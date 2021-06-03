@@ -53,6 +53,7 @@
     (bean/->js
      (normalize-keyword-for-json
       {:preferred-language (:preferred-language @state/state)
+       :preferred-theme-mode (:ui/theme @state/state)
        :preferred-format   (state/get-preferred-format)
        :preferred-workflow (state/get-preferred-workflow)
        :preferred-todo     (state/get-preferred-todo)
@@ -161,7 +162,13 @@
 (def ^:export insert_at_editing_cursor
   (fn [content]
     (when-let [input-id (state/get-edit-input-id)]
-      (commands/simple-insert! input-id content {}))))
+      (commands/simple-insert! input-id content {})
+      (.focus (gdom/getElement input-id)))))
+
+(def ^:export restore_editing_cursor
+  (fn []
+    (when-let [input-id (state/get-edit-input-id)]
+      (.focus (gdom/getElement input-id)))))
 
 (def ^:export get_editing_cursor_position
   (fn []

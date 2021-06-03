@@ -71,6 +71,7 @@ type BlockUUIDTuple = ['uuid', BlockUUID]
 type IEntityID = { id: BlockID }
 
 interface AppUserConfigs {
+  preferredThemeMode: 'dark' | 'light'
   preferredFormat: 'markdown' | 'org'
   preferredLanguage: string
   preferredWorkflow: string
@@ -108,7 +109,7 @@ type SlashCommandActionCmd =
   | 'editor/restore-saved-cursor'
 type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
 type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
-type BlockCursorPosition = { left: number, top: number, height: number, pos: number, react: DOMRect }
+type BlockCursorPosition = { left: number, top: number, height: number, pos: number, rect: DOMRect }
 
 interface IAppProxy {
   getUserInfo: () => Promise<any>
@@ -136,6 +137,7 @@ interface IEditorProxy {
   // block related APIs
   checkEditing: () => Promise<BlockUUID | boolean>
   insertAtEditingCursor: (content: string) => Promise<void>
+  restoreEditingCursor: () => Promise<void>
   getEditingCursorPosition: () => Promise<BlockCursorPosition | null>
   getCurrentPage: () => Promise<Partial<BlockEntity> | null>
   getCurrentBlock: () => Promise<BlockEntity | null>
@@ -244,7 +246,7 @@ interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   showMainUI (): void
 
-  hideMainUI (): void
+  hideMainUI (opts?: { restoreEditingCursor: boolean }): void
 
   toggleMainUI (): void
 
