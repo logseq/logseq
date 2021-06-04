@@ -613,6 +613,12 @@
           :block/body
           :block/content]))})
 
+(defn- file-name [repo extension]
+  (-> (string/replace repo config/local-db-prefix "")
+      (string/replace #"^/+" "")
+      (str "_" (quot (util/time-ms) 1000))
+      (str "." (string/lower-case (name extension)))))
+
 (defn export-repo-as-edn-v2!
   [repo]
   (when-let [conn (db/get-conn repo)]
@@ -622,7 +628,7 @@
           data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent edn-str))]
       (when-let [anchor (gdom/getElement "download-as-edn-v2")]
         (.setAttribute anchor "href" data-str)
-        (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".edn"))
+        (.setAttribute anchor "download" (file-name repo :edn))
         (.click anchor)))))
 
 (defn- nested-update-uuid
@@ -642,8 +648,9 @@
               nested-update-uuid
               clj->js
               js/JSON.stringify)
-          data-str (str "data:text/json;charset=utf-8," (js/encodeURIComponent json-str))]
+          data-str (str "data:text/json;charset=utf-8,"
+                        (js/encodeURIComponent json-str))]
       (when-let [anchor (gdom/getElement "download-as-json-v2")]
         (.setAttribute anchor "href" data-str)
-        (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".json"))
+        (.setAttribute anchor "download" (file-name repo :json))
         (.click anchor)))))
