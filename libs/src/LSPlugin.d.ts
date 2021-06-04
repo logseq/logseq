@@ -111,6 +111,7 @@ interface PageEntity extends IEntityID {
 
 type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
 type BlockPageName = string
+type PageIdentity = BlockPageName | BlockIdentity
 type SlashCommandActionCmd =
   'editor/input'
   | 'editor/hook'
@@ -153,23 +154,18 @@ interface IEditorProxy {
   restoreEditingCursor: () => Promise<void>
   exitEditingMode: (selectBlock?: boolean) => Promise<void>
   getEditingCursorPosition: () => Promise<BlockCursorPosition | null>
-  getCurrentPage: () => Promise<Partial<BlockEntity> | null>
+  getCurrentPage: () => Promise<PageEntity | null>
   getCurrentBlock: () => Promise<BlockEntity | null>
   getCurrentBlockContent: () => Promise<string>
   getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
-  getPageBlocksTree: (pageName: BlockPageName) => Promise<Array<BlockEntity>>
+  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
 
   insertBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<void>
-  getBlock<IS_PAGE extends boolean | undefined>(
-    srcBlock: BlockIdentity | BlockID,
-    opts?: Partial<{ includeChildren: boolean }>
-  ): IS_PAGE extends undefined
-    ? Promise<BlockEntity | PageEntity | null>
-    : IS_PAGE extends false
-    ? Promise<BlockEntity | null>
-    : Promise<PageEntity | null>
+  getBlock: (srcBlock: BlockIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity | null>
+  getPage: (srcPage: PageIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<PageEntity | null>
+
   getPreviousSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
   getNextSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
   moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts?: Partial<{ before: boolean, children: boolean }>) => Promise<void>
