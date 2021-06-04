@@ -218,6 +218,7 @@
                                                     (editor-handler/delete-asset-of-block!
                                                      {:block-id    block-id
                                                       :local?      local?
+                                                      :delete-local? (first sub-selected)
                                                       :repo        (state/get-current-repo)
                                                       :href        src
                                                       :title       title
@@ -1273,9 +1274,7 @@
                                heading-level)
                           (and (get properties :heading)
                                (<= level 6)
-                               level
-                               ;; FIXME: construct the proper level later
-                               2))
+                               level))
         elem (if heading-level
                (keyword (str "h" heading-level
                              (when block-ref? ".inline")))
@@ -1791,6 +1790,9 @@
        :blockid (str uuid)
        :repo repo
        :haschild (str has-child?)}
+
+       level
+       (assoc :level level)
 
        (not slide?)
        (merge attrs)

@@ -29,8 +29,17 @@
           (t :export-opml)]]
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-edn! current-repo)}
-          (t :export-edn)]]]
+          (t :export-datascript-edn)]]
+        [:li.mb-4
+         [:a.font-medium {:on-click #(export/export-repo-as-edn-v2! current-repo)}
+          (t :export-edn)]]
+        [:li.mb-4
+         [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
+          (t :export-json)]]
+        ]
        [:a#download-as-edn.hidden]
+       [:a#download-as-edn-v2.hidden]
+       [:a#download-as-json-v2.hidden]
        [:a#download-as-html.hidden]
        [:a#download-as-zip.hidden]
        [:a#export-as-markdown.hidden]

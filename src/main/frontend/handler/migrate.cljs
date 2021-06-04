@@ -20,10 +20,9 @@
                      (file/alter-file repo path content {:add-history? false
                                                          :reset? false})))
             (p/then (fn []
-                      (config-handler/set-config! :markdown/version 2)
-
-                      (p/let [_ (repo/push repo {:commit-message "Converted to new Markdown syntax!"})]
-                        (repo/re-index! nfs-handler/rebuild-index!)
+                      (p/let [_ (repo/push repo {:commit-message "Converted to new Markdown syntax!"})
+                              _ (repo/re-index! nfs-handler/rebuild-index!)]
+                        (js/setTimeout #(config-handler/set-config! :markdown/version 2) 2000)
 
                         (notification/show!
                          [:div

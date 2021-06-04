@@ -38,13 +38,16 @@
   (assoc block :block/children children))
 
 (defn- blocks->vec-tree-aux
-  [blocks root]
-  (let [root {:db/id (:db/id root)}]
-    (some->>
-     (get-children blocks root)
-     (map (fn [block]
-            (let [children (blocks->vec-tree-aux blocks block)]
-              (with-children block children)))))))
+  ([blocks root]
+   (blocks->vec-tree-aux blocks root 1))
+  ([blocks root level]
+   (let [root {:db/id (:db/id root)}]
+     (some->>
+      (get-children blocks root)
+      (map (fn [block]
+             (let [block (assoc block :block/level level)
+                   children (blocks->vec-tree-aux blocks block (inc level))]
+               (with-children block children))))))))
 
 (defn- get-root-and-page
   [root-id]
