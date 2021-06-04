@@ -2366,6 +2366,7 @@
         (when (and (not (state/get-editor-show-input))
                    (not (state/get-editor-show-date-picker?))
                    (not (state/get-editor-show-template-search?)))
+          (util/stop e)
           (indent-outdent (not (= :left direction)))
           (and input pos
                (when-let [input (state/get-input)]
