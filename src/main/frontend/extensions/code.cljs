@@ -117,7 +117,7 @@
         @editor-atom)
       (let [[config id attr code theme] (:rum/args state)
             original-mode (get attr :data-lang)
-            mode (or original-mode "javascript")
+            mode original-mode
             clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
             mode (if clojure? "clojure" (text->cm-mode mode))
             lisp? (or clojure?
@@ -146,7 +146,7 @@
         (when editor
           (let [element (.getWrapperElement editor)]
             (.on editor "blur" (fn [_cm e]
-                                 (util/stop e)
+                                 (when e (util/stop e))
                                  (state/set-block-component-editing-mode! false)
                                  (when-not @esc-pressed?
                                    (save-file-or-block-when-blur-or-esc! editor textarea config state))))
@@ -177,10 +177,11 @@
                  state)}
   [state config id attr code theme options]
   [:div.extensions__code
-   [:div.extensions__code-lang
-    (let [mode (string/lower-case (get attr :data-lang "javascript"))]
-      (if (= mode "text/x-clojure")
-        "clojure"
-        mode))]
+   (when-let [mode (:data-lang attr)]
+     [:div.extensions__code-lang
+      (let [mode (string/lower-case mode)]
+        (if (= mode "text/x-clojure")
+          "clojure"
+          mode))])
    [:textarea (merge {:id id
                       :default-value code} attr)]])

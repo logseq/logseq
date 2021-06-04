@@ -159,7 +159,9 @@
        {:style (merge
                 {:top 48
                  :left 32
-                 :width 700})
+                 :height 400
+                 :width 700
+                 :overflow "hidden"})
         :class (if all? "search-all" "absolute")}
        (ui/auto-complete
         result

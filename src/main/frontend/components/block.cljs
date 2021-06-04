@@ -218,6 +218,7 @@
                                                     (editor-handler/delete-asset-of-block!
                                                      {:block-id    block-id
                                                       :local?      local?
+                                                      :delete-local? (first sub-selected)
                                                       :repo        (state/get-current-repo)
                                                       :href        src
                                                       :title       title
@@ -388,7 +389,7 @@
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config page-name href redirect-page-name page-entity contents-page? children html-export? label)]
-      (if-not preview?
+      (if (and (not (util/mobile?)) (not preview?))
         (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
                                  {:style {:width          735
                                           :text-align     "left"
@@ -530,7 +531,7 @@
     (let [block (and (util/uuid-string? id)
                      (db/pull-block (uuid id)))]
       (if block
-        [:span.block-ref-wrap
+        [:div.block-ref-wrap.inline
          {:on-mouse-down
           (fn [e]
             (util/stop e)
@@ -552,7 +553,7 @@
                          :span.block-ref
                          (map-inline config label))
                        title)]
-           (if-not (:preview? config)
+           (if (and (not (util/mobile?)) (not (:preview? config)))
              (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
                                       {:style {:width      735
                                                :text-align "left"
@@ -1255,6 +1256,7 @@
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
+        block-ref? (:block-ref? config)
         html-export? (:html-export? config)
         checkbox (when (and (not pre-block?)
                             (not html-export?))
@@ -1276,7 +1278,8 @@
                                ;; FIXME: construct the proper level later
                                2))
         elem (if heading-level
-               (keyword (str "h" heading-level))
+               (keyword (str "h" heading-level
+                             (when block-ref? ".inline")))
                :span.inline)]
     (->elem
      elem
@@ -1470,24 +1473,30 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title body meta content marker page format repo children pre-block? properties idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
   (let [collapsed? (get properties :collapsed)
-        block-ref-with-title? (and (:block-ref? config) (seq title))
+        block-ref? (:block-ref? config)
+        block-ref-with-title? (and block-ref? (seq title))
         dragging? (rum/react *dragging?)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
                          )
-        attrs {:blockid       (str uuid)
-               mouse-down-key (fn [e]
-                                (block-content-on-mouse-down e block block-id properties content format edit-input-id))
-               :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
-               :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
-               :on-drop       (fn [event] (block-content-on-drop event block uuid))
-               :style {:width "100%"}}]
+        attrs (cond->
+                {:blockid       (str uuid)
+                 :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
+                 :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
+                 :on-drop       (fn [event] (block-content-on-drop event block uuid))
+                 :style {:width "100%"}}
+                (not block-ref?)
+                (assoc mouse-down-key (fn [e]
+                                        (block-content-on-mouse-down e block block-id properties content format edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)}
        (not slide?)
-       (merge attrs))
+       (merge attrs)
+
+       block-ref?
+       (assoc :class "cursor-pointer"))
 
      [:span
      ;; .flex.relative {:style {:width "100%"}}

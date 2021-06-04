@@ -270,7 +270,7 @@
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left rect]}]
-  (let [max-height 500
+  (let [max-height 300
         max-width 300
         offset-top 24
         vw-height js/window.innerHeight

@@ -125,10 +125,10 @@
       (reset! current-idx (dec (count matched)))
       :else nil)
     (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-      (let [ac-inner (gdom/getElement "ui__ac-inner")
-            element-top (gobj/get element "offsetTop")
-            scroll-top (- (gobj/get element "offsetTop") 360)]
-        (set! (.-scrollTop ac-inner) scroll-top)))))
+      (let [modal (gobj/get (gdom/getElement "ui__ac") "parentElement")
+            height (or (gobj/get modal "offsetHeight") 300)
+            scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
+        (set! (.-scrollTop modal) scroll-top)))))
 
 (defn auto-complete-next
   [state e]
@@ -140,9 +140,10 @@
         (reset! current-idx 0)
         (swap! current-idx inc)))
     (when-let [element (gdom/getElement (str "ac-" @current-idx))]
-      (let [ac-inner (gdom/getElement "ui__ac-inner")
-            scroll-top (- (gobj/get element "offsetTop") 360)]
-        (set! (.-scrollTop ac-inner) scroll-top)))))
+      (let [modal (gobj/get (gdom/getElement "ui__ac") "parentElement")
+            height (or (gobj/get modal "offsetHeight") 300)
+            scroll-top (- (gobj/get element "offsetTop") (/ height 2))]
+        (set! (.-scrollTop modal) scroll-top)))))
 
 (defn auto-complete-complete
   [state e]

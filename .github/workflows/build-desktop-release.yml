@@ -51,7 +51,7 @@ jobs:
           sudo ./linux-install-1.10.1.763.sh
 
       - name: Compile CLJS
-        run: yarn install --frozen-lockfile && gulp build  && yarn cljs:release
+        run: yarn install  && gulp build  && yarn cljs:release
 
       - name: Update APP Version
         run: |
@@ -107,7 +107,7 @@ jobs:
           key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
-        run: yarn install --frozen-lockfile && yarn electron:make
+        run: yarn install  && yarn electron:make
         working-directory: ./static
 
       - name: Change Artifact Name For ZIP File
@@ -154,7 +154,7 @@ jobs:
           key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron app
-        run: yarn install --frozen-lockfile && yarn electron:make
+        run: yarn install  && yarn electron:make
         working-directory: ./static
 
       - name: Change Artifact Name
@@ -206,7 +206,7 @@ jobs:
           key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
-        run: yarn install --frozen-lockfile && yarn electron:make
+        run: yarn install  && yarn electron:make
         working-directory: ./static
 
       - name: Change DMG Name
@@ -275,7 +275,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.event.inputs.tag-version }}
-          release_name: Desktop APP ${{ github.event.inputs.tag-version }} (Alpha Testing)
+          release_name: Desktop APP ${{ github.event.inputs.tag-version }} (Beta Testing)
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}
 
