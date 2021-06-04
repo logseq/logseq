@@ -100,6 +100,15 @@ interface BlockEntity {
   [key: string]: any
 }
 
+interface PageEntity extends IEntityID {
+  file: IEntityID
+  name: string
+  originalName: string
+  uuid: string
+  journal?: boolean
+  journalDay?: string
+}
+
 type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
 type BlockPageName = string
 type SlashCommandActionCmd =
@@ -153,7 +162,14 @@ interface IEditorProxy {
   insertBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<void>
-  getBlock: (srcBlock: BlockIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity | null>
+  getBlock<IS_PAGE extends boolean | undefined>(
+    srcBlock: BlockIdentity | BlockID,
+    opts?: Partial<{ includeChildren: boolean }>
+  ): IS_PAGE extends undefined
+    ? Promise<BlockEntity | PageEntity | null>
+    : IS_PAGE extends false
+    ? Promise<BlockEntity | null>
+    : Promise<PageEntity | null>
   getPreviousSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
   getNextSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
   moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts?: Partial<{ before: boolean, children: boolean }>) => Promise<void>
