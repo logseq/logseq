@@ -30,14 +30,12 @@
 
 (defn get-block-refs-with-children
   [block]
-  (let [refs (atom [])]
-    (walk/postwalk
-     (fn [f]
-       (when (and (map? f) (:block/refs f))
-         (swap! refs concat (:block/refs f)))
-       f)
-     block)
-    (distinct @refs)))
+  (->>
+   (tree-seq :block/refs
+             :block/children
+             block)
+   (mapcat :block/refs)
+   (distinct)))
 
 (defn filter-blocks
   [repo ref-blocks filters group-by-page?]
