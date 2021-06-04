@@ -82,20 +82,20 @@ interface AppUserConfigs {
 interface BlockEntity {
   id: number // db id
   uuid: string
-  anchor: string
-  body: any
-  children: Array<BlockEntity | BlockUUIDTuple>
-  container: string
-  content: string
-  format: 'markdown' | 'org'
-  file: IEntityID
   left: IEntityID
-  level: number
-  meta: { timestamps: any, properties: any, startPos: number, endPos: number }
-  page: IEntityID
+  format: 'markdown' | 'org'
   parent: IEntityID
-  title: Array<any>
   unordered: boolean
+  page: IEntityID
+  anchor?: string
+  body?: any
+  children?: Array<BlockEntity | BlockUUIDTuple>
+  container?: string
+  content?: string
+  file?: IEntityID
+  level?: number
+  meta?: { timestamps: any, properties: any, startPos: number, endPos: number }
+  title?: Array<any>
 
   [key: string]: any
 }
