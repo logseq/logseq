@@ -1,6 +1,7 @@
 (ns frontend.handler.export
   (:require [cljs-bean.core :as bean]
             [cljs.pprint :as pprint]
+            [clojure.set :as s]
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
@@ -569,16 +570,24 @@
             (.setAttribute anchor "download" (.-name zipfile))
             (.click anchor)))))))
 
+(defn- dissoc-properties [m ks]
+  (if (:block/properties m)
+    (update m :block/properties
+            (fn [v]
+              (apply dissoc v ks)))
+    m))
+
 (defn- nested-select-keys
   [keyseq vec-tree]
   (walk/postwalk
    (fn [x]
      (cond
        (and (map? x) (contains? x :block/uuid))
-       (select-keys x keyseq)
-
-       (and (map? x) (contains? x :id))
-       (dissoc x :id)
+       (-> x
+           (s/rename-keys {:block/uuid :block/id
+                           :block/original-name :block/page-name})
+           (dissoc-properties [:id])
+           (select-keys keyseq))
 
        :else
        x))
@@ -604,8 +613,8 @@
                         {:transform? false}) name))))
 
         (nested-select-keys
-         [:block/uuid
-          :block/original-name
+         [:block/id
+          :block/page-name
           :block/properties
           :block/format
           :block/children
