@@ -335,7 +335,7 @@
   [repo-url path]
   (if (and (util/electron?) (local-db? repo-url))
     path
-    (str (get-repo-dir repo-url) "/" path)))
+    (util/node-path.join (get-repo-dir repo-url) path)))
 
 (defn get-file-path
   [repo-url relative-path]
