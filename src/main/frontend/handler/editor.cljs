@@ -1377,19 +1377,20 @@
                 url))))))))
 
 (defn delete-asset-of-block!
-  [{:keys [repo href title full-text block-id local?] :as opts}]
+  [{:keys [repo href title full-text block-id local? delete-local?] :as opts}]
   (let [block (db-model/query-block-by-uuid block-id)
         _ (or block (throw (str block-id " not exists")))
         format (:block/format block)
         text (:block/content block)
         content (string/replace text full-text "")]
     (save-block! repo block content)
-    (when local?
+    (when (and local? delete-local?)
       ;; FIXME: should be relative to current block page path
-      (fs/unlink! (config/get-repo-path
-                   repo (-> href
-                            (string/replace #"^../" "/")
-                            (string/replace #"^assets://" ""))) nil))))
+      (when-let [href (if (util/electron?) href (second (re-find #"\((.+)\)$" full-text)))]
+        (fs/unlink! (config/get-repo-path
+                      repo (-> href
+                               (string/replace #"^../" "/")
+                               (string/replace #"^assets://" ""))) nil)))))
 
 ;; assets/journals_2021_02_03_1612350230540_0.png
 (defn resolve-relative-path
