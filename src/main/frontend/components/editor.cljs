@@ -174,10 +174,10 @@
   [parent-state parent-id]
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
    [:button.bottom-action
-    {:on-click #(editor-handler/indent-outdent parent-state true)}
+    {:on-click #(editor-handler/indent-outdent true)}
     svg/indent-block]
    [:button.bottom-action
-    {:on-click #(editor-handler/indent-outdent parent-state false)}
+    {:on-click #(editor-handler/indent-outdent false)}
     svg/outdent-block]
    [:button.bottom-action
     {:on-click (editor-handler/move-up-down true)}
