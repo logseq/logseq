@@ -2796,15 +2796,6 @@
     (util/forward-kill-word input)
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
 
-(defn tree-seq-with-level
-  [branch? children root]
-  (let [walk (fn walk [level node]
-               (lazy-seq
-                (cons (assoc node :block/level level)
-                      (when (branch? node)
-                        (mapcat (partial walk (inc level)) (children node))))))]
-    (walk 1 root)))
-
 (defn all-blocks-with-level
   "Return all blocks associated with correct level
    if :collapse? true, return without any collapsed children
@@ -2821,22 +2812,19 @@
      {:block e :level 2}]"
   [{:keys [collapse?] :or {collapse? false}}]
   (let [page (state/get-current-page)]
-    (cond->>
+    (->>
      (-> page
          (db/get-page-blocks-no-cache)
          (tree/blocks->vec-tree page))
 
-     collapse?
-     (w/postwalk
-      (fn [x]
-        (if (and (map? x) (-> x :block/properties :collapsed))
-          (assoc x :block/children [])
-          x)))
+     (#(if collapse?
+         (w/postwalk
+          (fn [x]
+            (if (and (map? x) (-> x :block/properties :collapsed))
+              (assoc x :block/children []) x)) %) %))
 
-     :default
-     (mapcat (fn [x] (tree-seq-with-level map? :block/children x)))
+     (mapcat (fn [x] (tree-seq map? :block/children x)))
 
-     :default
      (map (fn [x] (dissoc x :block/children))))))
 
 (defn collapse-block! [block-id]
