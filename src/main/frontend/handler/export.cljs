@@ -640,12 +640,12 @@
         (.setAttribute anchor "download" (file-name repo :edn))
         (.click anchor)))))
 
-(defn- nested-update-uuid
+(defn- nested-update-id
   [vec-tree]
   (walk/postwalk
    (fn [x]
-     (if (and (map? x) (contains? x :block/uuid))
-       (update x :block/uuid str)
+     (if (and (map? x) (contains? x :block/id))
+       (update x :block/id str)
        x))
    vec-tree))
 
@@ -654,7 +654,7 @@
   (when-let [conn (db/get-conn repo)]
     (let [json-str
           (-> (blocks conn)
-              nested-update-uuid
+              nested-update-id
               clj->js
               js/JSON.stringify)
           data-str (str "data:text/json;charset=utf-8,"
