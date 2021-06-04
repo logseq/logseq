@@ -28,12 +28,23 @@
            block)]
     @ids))
 
+(defn get-block-refs-with-children
+  [block]
+  (let [refs (atom [])]
+    (walk/postwalk
+     (fn [f]
+       (when (and (map? f) (:block/refs f))
+         (swap! refs concat (:block/refs f)))
+       f)
+     block)
+    (distinct @refs)))
+
 (defn filter-blocks
   [repo ref-blocks filters group-by-page?]
   (let [ref-pages (->> (if group-by-page?
                          (mapcat last ref-blocks)
                          ref-blocks)
-                       (mapcat (fn [b] (concat (:block/refs b) (:block/children-refs b))))
+                       (mapcat (fn [b] (get-block-refs-with-children b)))
                        (concat (when group-by-page? (map first ref-blocks)))
                        (distinct)
                        (map :db/id)
@@ -51,16 +62,14 @@
                        (cond->> ref-blocks
                          (seq exclude-ids)
                          (remove (fn [block]
-                                   (let [ids (set (concat (map :db/id (:block/refs block))
-                                                          (map :db/id (:block/children-refs block))
+                                   (let [ids (set (concat (map :db/id (get-block-refs-with-children block))
                                                           [(:db/id (:block/page block))]))]
                                      (seq (set/intersection exclude-ids ids)))))
 
                          (seq include-ids)
                          (remove (fn [block]
                                    (let [page-block-id (:db/id (:block/page block))
-                                         ids (set (concat (map :db/id (:block/refs block))
-                                                          (map :db/id (:block/children-refs block))))]
+                                         ids (set (map :db/id (get-block-refs-with-children block)))]
                                      (if (and (contains? include-ids page-block-id)
                                               (= 1 (count include-ids)))
                                        (not= page-block-id (first include-ids))
