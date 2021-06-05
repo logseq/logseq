@@ -210,8 +210,10 @@
         (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
 
 (def ^:export get_page
-  (fn [page-name]
-    (when-let [page (db-model/get-page page-name)]
+  (fn [id-or-page-name]
+    (when-let [page (cond
+                      (number? id-or-page-name) (db-utils/pull id-or-page-name)
+                      (string? id-or-page-name) (db-model/get-page id-or-page-name))]
       (if-not (contains? page :block/left)
         (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
 

@@ -170,7 +170,7 @@ interface IEditorProxy extends Record<string, any> {
   updateBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<void>
   getBlock: (srcBlock: BlockIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity | null>
-  getPage: (srcPage: PageIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<PageEntity | null>
+  getPage: (srcPage: PageIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<PageEntity | null>
 
   getPreviousSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
   getNextSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
