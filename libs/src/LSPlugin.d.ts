@@ -82,26 +82,36 @@ interface AppUserConfigs {
 interface BlockEntity {
   id: number // db id
   uuid: string
-  anchor: string
-  body: any
-  children: Array<BlockEntity | BlockUUIDTuple>
-  container: string
-  content: string
-  format: 'markdown' | 'org'
-  file: IEntityID
   left: IEntityID
-  level: number
-  meta: { timestamps: any, properties: any, startPos: number, endPos: number }
-  page: IEntityID
+  format: 'markdown' | 'org'
   parent: IEntityID
-  title: Array<any>
   unordered: boolean
+  page: IEntityID
+  anchor?: string
+  body?: any
+  children?: Array<BlockEntity | BlockUUIDTuple>
+  container?: string
+  content?: string
+  file?: IEntityID
+  level?: number
+  meta?: { timestamps: any, properties: any, startPos: number, endPos: number }
+  title?: Array<any>
 
   [key: string]: any
 }
 
+interface PageEntity extends IEntityID {
+  file: IEntityID
+  name: string
+  originalName: string
+  uuid: string
+  journal?: boolean
+  journalDay?: string
+}
+
 type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
 type BlockPageName = string
+type PageIdentity = BlockPageName | BlockIdentity
 type SlashCommandActionCmd =
   'editor/input'
   | 'editor/hook'
@@ -144,16 +154,18 @@ interface IEditorProxy {
   restoreEditingCursor: () => Promise<void>
   exitEditingMode: (selectBlock?: boolean) => Promise<void>
   getEditingCursorPosition: () => Promise<BlockCursorPosition | null>
-  getCurrentPage: () => Promise<Partial<BlockEntity> | null>
+  getCurrentPage: () => Promise<PageEntity | null>
   getCurrentBlock: () => Promise<BlockEntity | null>
   getCurrentBlockContent: () => Promise<string>
   getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
-  getPageBlocksTree: (pageName: BlockPageName) => Promise<Array<BlockEntity>>
+  getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
 
   insertBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<void>
   getBlock: (srcBlock: BlockIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity | null>
+  getPage: (srcPage: PageIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<PageEntity | null>
+
   getPreviousSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
   getNextSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
   moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts?: Partial<{ before: boolean, children: boolean }>) => Promise<void>
