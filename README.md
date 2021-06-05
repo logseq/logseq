@@ -13,6 +13,11 @@ A local-first, non-linear, outliner notebook for organizing and sharing your per
 
 Use it to organize your todo list, to write your journals, or to record your unique life.
 
+<a href="https://www.producthunt.com/posts/logseq?utm_source=badge-review&utm_medium=badge&utm_souce=badge-logseq#discussion-body" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/review.svg?post_id=298158&theme=light" alt="Logseq - Your joyful, private digital garden | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+
+## [Download our free Desktop app](https://github.com/logseq/logseq/releases)
+[Sponsor our contributors on Open Collective](https://opencollective.com/logseq), Logseq will move to Stripe later!
+
 ## Why Logseq?
 
 [Logseq](https://logseq.com) is a platform for knowledge management and collaboration. It focuses on privacy, longevity, and [user control](https://www.gnu.org/philosophy/free-sw.en.html).

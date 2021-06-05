@@ -1,5 +1,6 @@
 (ns frontend.handler.editor
   (:require [frontend.state :as state]
+            [clojure.walk :as w]
             [lambdaisland.glogi :as log]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
@@ -950,7 +951,8 @@
                     [(conj r [id (assoc block :level (inc parent-level))])
                      (assoc-in state [(:db/id block) :level] (inc parent-level))]
                     [(conj r [id block])
-                     state])) [{} level-blocks-map] level-blocks-map)]
+                     state]))
+                [{} level-blocks-map] level-blocks-map)]
     level-blocks-map))
 
 (defn- blocks-vec->tree
@@ -1377,28 +1379,35 @@
                 url))))))))
 
 (defn delete-asset-of-block!
-  [{:keys [repo href title full-text block-id local?] :as opts}]
+  [{:keys [repo href title full-text block-id local? delete-local?] :as opts}]
   (let [block (db-model/query-block-by-uuid block-id)
         _ (or block (throw (str block-id " not exists")))
         format (:block/format block)
         text (:block/content block)
         content (string/replace text full-text "")]
     (save-block! repo block content)
-    (when local?
+    (when (and local? delete-local?)
       ;; FIXME: should be relative to current block page path
-      (fs/unlink! (config/get-repo-path
-                   repo (-> href
-                            (string/replace #"^../" "/")
-                            (string/replace #"^assets://" ""))) nil))))
+      (when-let [href (if (util/electron?) href (second (re-find #"\((.+)\)$" full-text)))]
+        (fs/unlink! (config/get-repo-path
+                      repo (-> href
+                               (string/replace #"^../" "/")
+                               (string/replace #"^assets://" ""))) nil)))))
 
 ;; assets/journals_2021_02_03_1612350230540_0.png
 (defn resolve-relative-path
   [file-path]
-  (if-let [current-file (some-> (state/get-edit-block)
-                                :block/file
-                                :db/id
-                                (db/entity)
-                                :file/path)]
+  (if-let [current-file (or (some-> (state/get-edit-block)
+                                    :block/file
+                                    :db/id
+                                    (db/entity)
+                                    :file/path)
+
+                            ;; fix dummy file path of page
+                            (and (util/electron?)
+                                 (util/node-path.join
+                                  (config/get-repo-dir (state/get-current-repo))
+                                  (config/get-pages-directory) "_.md")))]
     (util/get-relative-path current-file file-path)
     file-path))
 
@@ -1666,61 +1675,39 @@
                       :data [block]}]
             (db/refresh! repo opts)))))))
 
-(defn expand!
-  []
-  (when-let [current-block (state/get-edit-block)]
-    (remove-block-property! (:block/uuid current-block) :collapsed)))
-
-(defn collapse!
-  []
-  (when-let [current-block (state/get-edit-block)]
-    (set-block-property! (:block/uuid current-block) :collapsed true)))
-
-;; TODO:
-(defn cycle-collapse!
-  [e]
-  )
-
 ;; selections
 (defn on-tab
   "direction = :left|:right, only indent or outdent when blocks are siblings"
   [direction]
-  (fn [e]
-    (when-let [repo (state/get-current-repo)]
-      (let [blocks-dom-nodes (state/get-selection-blocks)
-            blocks (seq blocks-dom-nodes)]
-        (cond
-          (seq blocks)
-          (do
-            (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                                     [:block/uuid (medley/uuid id)])) blocks)
-                                   (remove nil?))
-                  blocks (db/pull-many repo '[*] lookup-refs)
-                  blocks (reorder-blocks blocks)
-                  end-node (get-top-level-end-node blocks)
-                  end-node-parent (tree/-get-parent end-node)
-                  top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
-                                                   (get-in % [:block/parent :db/id])) blocks)
-                                       (map outliner-core/block))]
-              (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
-              (let [opts {:key :block/change
-                          :data blocks}]
-                (db/refresh! repo opts)
-                (let [blocks (doall
-                              (map
-                               (fn [block]
-                                 (when-let [id (gobj/get block "id")]
-                                   (when-let [block (gdom/getElement id)]
-                                     (dom/add-class! block "selected noselect")
-                                     block)))
-                               blocks-dom-nodes))]
-                  (state/set-selection-blocks! blocks)))))
-
-          (gdom/getElement "date-time-picker")
-          nil
-
-          :else
-          (cycle-collapse! e))))))
+  (when-let [repo (state/get-current-repo)]
+    (let [blocks-dom-nodes (state/get-selection-blocks)
+          blocks (seq blocks-dom-nodes)]
+      (cond
+        (seq blocks)
+        (do
+          (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
+                                                    [:block/uuid (medley/uuid id)])) blocks)
+                                 (remove nil?))
+                blocks (db/pull-many repo '[*] lookup-refs)
+                blocks (reorder-blocks blocks)
+                end-node (get-top-level-end-node blocks)
+                end-node-parent (tree/-get-parent end-node)
+                top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
+                                                 (get-in % [:block/parent :db/id])) blocks)
+                                     (map outliner-core/block))]
+            (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+            (let [opts {:key :block/change
+                        :data blocks}]
+              (db/refresh! repo opts)
+              (let [blocks (doall
+                            (map
+                             (fn [block]
+                               (when-let [id (gobj/get block "id")]
+                                 (when-let [block (gdom/getElement id)]
+                                   (dom/add-class! block "selected noselect")
+                                   block)))
+                             blocks-dom-nodes))]
+                (state/set-selection-blocks! blocks)))))))))
 
 (defn- get-link
   [format link label]
@@ -1980,7 +1967,9 @@
                                                  exclude-properties))
                      :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
                      :block/content new-content
-                     :block/title new-title})]
+                     :block/title new-title
+                     :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
+                                           (remove nil?))})]
        (if file
          (assoc m :block/file (select-keys file [:db/id]))
          m)))))
@@ -2356,9 +2345,9 @@
         (delete-and-update input (dec current-pos) current-pos)))))
 
 (defn indent-outdent
-  [state indent?]
+  [indent?]
   (state/set-editor-op! :indent-outdent)
-  (let [{:keys [block block-parent-id value config]} (get-state)]
+  (let [{:keys [block]} (get-state)]
     (when block
       (let [current-node (outliner-core/block block)]
         (outliner-core/indent-outdent-nodes [current-node] indent?)
@@ -2369,16 +2358,26 @@
 
 (defn keydown-tab-handler
   [direction]
-  (fn [state e]
-    (let [input (state/get-input)
-          pos (:pos (util/get-caret-pos input))]
-      (when (and (not (state/get-editor-show-input))
-                 (not (state/get-editor-show-date-picker?))
-                 (not (state/get-editor-show-template-search?)))
-        (indent-outdent state (not (= :left direction)))
-        (and input pos
-             (when-let [input (state/get-input)]
-               (util/move-cursor-to input pos)))))))
+  (fn [e]
+    (cond
+      (state/editing?)
+      (let [input (state/get-input)
+            pos (:pos (util/get-caret-pos input))]
+        (when (and (not (state/get-editor-show-input))
+                   (not (state/get-editor-show-date-picker?))
+                   (not (state/get-editor-show-template-search?)))
+          (util/stop e)
+          (indent-outdent (not (= :left direction)))
+          (and input pos
+               (when-let [input (state/get-input)]
+                 (util/move-cursor-to input pos)))))
+
+      (state/selection?)
+      (do
+        (util/stop e)
+        (on-tab direction))
+
+      :else nil)))
 
 (defn keydown-not-matched-handler
   [format]
@@ -2796,3 +2795,111 @@
     (save-current-block! {:force? true})
     (util/forward-kill-word input)
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
+
+(defn all-blocks-with-level
+  "Return all blocks associated with correct level
+   if :collapse? true, return without any collapsed children
+   for example:
+   - a
+    - b (collapsed)
+     - c
+     - d
+    - e
+   return:
+    blocks
+    [{:block a :level 1}
+     {:block b :level 2}
+     {:block e :level 2}]"
+  [{:keys [collapse?] :or {collapse? false}}]
+  (let [page (state/get-current-page)]
+    (->>
+     (-> page
+         (db/get-page-blocks-no-cache)
+         (tree/blocks->vec-tree page))
+
+     (#(if collapse?
+         (w/postwalk
+          (fn [x]
+            (if (and (map? x) (-> x :block/properties :collapsed))
+              (assoc x :block/children []) x)) %) %))
+
+     (mapcat (fn [x] (tree-seq map? :block/children x)))
+
+     (map (fn [x] (dissoc x :block/children))))))
+
+(defn collapse-block! [block-id]
+  (when (db-model/has-children? block-id)
+    (set-block-property! block-id :collapsed true)))
+
+(defn expand-block! [block-id]
+  (remove-block-property! block-id :collapsed))
+
+(defn expand!
+  []
+  (cond
+    (state/editing?)
+    (when-let [block-id (:block/uuid (state/get-edit-block))]
+      (expand-block! block-id))
+
+    (state/selection?)
+    (do
+      (->> (get-selected-blocks-with-children)
+           (map (fn [dom]
+                  (-> (dom/attr dom "blockid")
+                      medley/uuid
+                      expand-block!)))
+           doall)
+      (clear-selection! nil))
+
+    :else
+    ;; expand one level
+    (let [blocks-with-level (all-blocks-with-level {})
+          max-level (apply max (map :block/level blocks-with-level))]
+      (loop [level 1]
+        (if (> level max-level)
+          nil
+          (let [blocks-to-expand (->> blocks-with-level
+                                 (filter (fn [b] (= (:block/level b) level)))
+                                 (filter (fn [{:block/keys [properties]}]
+                                           (contains? properties :collapsed))))]
+            (if (empty? blocks-to-expand)
+              (recur (inc level))
+              (doseq [{:block/keys [uuid]} blocks-to-expand]
+                (expand-block! uuid)))))))))
+
+
+(defn collapse!
+  []
+  (cond
+    (state/editing?)
+    (when-let [block-id (:block/uuid (state/get-edit-block))]
+      (collapse-block! block-id))
+
+    (state/selection?)
+    (do
+      (->> (get-selected-blocks-with-children)
+           (map (fn [dom]
+                  (-> (dom/attr dom "blockid")
+                      medley/uuid
+                      collapse-block!)))
+           doall)
+      (clear-selection! nil))
+
+    :else
+    ;; collapse by one level from outside
+    (let [blocks-with-level
+          (all-blocks-with-level {:collapse? true})
+          max-level (apply max (map :block/level blocks-with-level))]
+      (loop [level (dec max-level)]
+        (if (zero? level)
+          nil
+          (let [blocks-to-collapse
+                (->> blocks-with-level
+                     (filter (fn [b] (= (:block/level b) level)))
+                     (remove (fn [b]
+                               (or (not (db-model/has-children? (:block/uuid b)))
+                                   (-> b :block/properties :collapsed)))))]
+            (if (empty? blocks-to-collapse)
+              (recur (dec level))
+              (doseq [{:block/keys [uuid]} blocks-to-collapse]
+                (collapse-block! uuid)))))))))

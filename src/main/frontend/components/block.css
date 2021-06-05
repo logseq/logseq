@@ -108,6 +108,21 @@
 
 .block-body ul, .block-body ol, .block-body dl {
     margin-bottom: 2em;
+
+    > li {
+      margin: 0;
+    }
+}
+
+.block-body ol {
+  list-style-position: inside;
+  margin-left: 0;
+
+  > li {
+    &::marker, > p {
+      display: inline-block;
+    }
+  }
 }
 
 .block-children {

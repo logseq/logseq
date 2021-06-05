@@ -582,5 +582,6 @@
   (Tippy (merge {:arrow true
                  :sticky true
                  :theme (:ui/theme @state/state)
-                 :disabled (not (state/enable-tooltip?))} opts)
+                 :disabled (not (state/enable-tooltip?))
+                 :unmountHTMLWhenHide true} opts)
          child))

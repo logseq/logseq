@@ -207,6 +207,21 @@
              (conn/get-conn repo-url) pred)
         db-utils/seq-flatten)))
 
+(defn get-files-non-page-blocks
+  [repo-url paths]
+  (let [paths (set paths)
+        pred (fn [_db e]
+               (contains? paths e))]
+    (-> (d/q '[:find ?block
+               :in $ ?pred
+               :where
+               [?file :file/path ?path]
+               [(?pred $ ?path)]
+               [?block :block/file ?file]
+               [(missing? $ ?block :block/name)]]
+          (conn/get-conn repo-url) pred)
+        db-utils/seq-flatten)))
+
 (defn get-file-blocks
   [repo-url path]
   (-> (d/q '[:find ?block
@@ -822,12 +837,14 @@
       blocks)))
 
 (defn has-children?
-  [repo block-id]
-  (let [db (conn/get-conn repo)]
-    (when-let [block (db-utils/entity [:block/uuid block-id])]
-      ;; perf: early stop
-      (let [result (d/datoms db :avet :block/parent (:db/id block))]
-        (boolean (seq result))))))
+  ([block-id]
+   (has-children? (state/get-current-repo) block-id))
+  ([repo block-id]
+   (let [db (conn/get-conn repo)]
+     (when-let [block (db-utils/entity [:block/uuid block-id])]
+       ;; perf: early stop
+       (let [result (d/datoms db :avet :block/parent (:db/id block))]
+         (boolean (seq result)))))))
 
 ;; TODO: improve perf
 (defn with-children-refs
@@ -1136,9 +1153,10 @@
         [@(d/conn-from-datoms datoms db-schema/schema) assets]))))
 
 (defn delete-blocks
-  [repo-url files]
+  [repo-url files delete-page?]
   (when (seq files)
-    (let [blocks (get-files-blocks repo-url files)]
+    (let [f (if delete-page? get-files-blocks get-files-non-page-blocks)
+          blocks (f repo-url files)]
       (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks))))
 
 (defn delete-files

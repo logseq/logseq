@@ -357,7 +357,7 @@
 
 #?(:cljs
    (defn stop [e]
-     (doto e (.preventDefault) (.stopPropagation))))
+     (when e (doto e (.preventDefault) (.stopPropagation)))))
 
 #?(:cljs
    (defn get-fragment

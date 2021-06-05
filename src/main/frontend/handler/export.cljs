@@ -1,21 +1,23 @@
 (ns frontend.handler.export
-  (:require [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.format.protocol :as fp]
-            [frontend.format :as f]
-            [frontend.config :as config]
-            [datascript.core :as d]
-            [frontend.util :as util]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
+            [cljs.pprint :as pprint]
+            [clojure.set :as s]
             [clojure.string :as string]
-            [goog.dom :as gdom]
-            [frontend.publishing.html :as html]
-            [frontend.text :as text]
-            [frontend.handler.common :as common-handler]
+            [clojure.walk :as walk]
+            [datascript.core :as d]
+            [frontend.config :as config]
+            [frontend.db :as db]
             [frontend.extensions.zip :as zip]
-            [frontend.modules.file.core :as outliner-file]
+            [frontend.format :as f]
+            [frontend.format.protocol :as fp]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.publishing.html :as html]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [goog.dom :as gdom]
             [promesa.core :as p]))
 
 
@@ -34,13 +36,22 @@
 
 (defn- get-file-content
   [file-path]
-  (let [page-name
-        (ffirst (d/q '[:find ?pn
-                       :where
-                       [?e :file/path file-path]
-                       [?p :block/file ?e]
-                       [?p :block/name ?pn]] (db/get-conn)))]
-    (get-page-content page-name)))
+  (if-let [page-name
+           (ffirst (d/q '[:find ?pn
+                          :in $ ?path
+                          :where
+                          [?p :block/file ?f]
+                          [?p :block/name ?pn]
+                          [?f :file/path ?path]]
+                        (db/get-conn) file-path))]
+    (get-page-content page-name)
+    (ffirst
+     (d/q '[:find ?content
+            :in $ ?path
+            :where
+            [?f :file/path ?path]
+            [?f :file/content ?content]]
+          (db/get-conn) file-path))))
 
 (defn- get-blocks-contents
   [repo root-block-uuid]
@@ -176,8 +187,7 @@
   (let [conn (db/get-conn repo)]
     (filter (fn [[path _]]
               (let [path (string/lower-case path)]
-                (or (string/ends-with? path ".md")
-                    (string/ends-with? path ".markdown"))))
+                (re-find #"\.(?:md|markdown)$" path)))
             (get-file-contents repo {:init-level 1
                                      :heading-to-list? true}))))
 
@@ -424,6 +434,19 @@
                                              (clj->js (f (first names)))))])))
          (remove nil?))))
 
+(defn- export-files-as-opml
+  [repo files]
+  (->> files
+       (mapv (fn [{:keys [path content names format]}]
+               (when (first names)
+                 (let [path
+                       (string/replace
+                        (string/lower-case path) #"(.+)\.(md|markdown|org)" "$1.opml")]
+                   [path (fp/exportOPML f/mldoc-record content
+                                        (f/get-default-config format)
+                                        (first names))]))))
+       (remove nil?)))
+
 (defn- convert-md-files-unordered-list-or-heading
   [repo files heading-to-list?]
   (->> files
@@ -482,6 +505,38 @@
                   (.setAttribute anchor "download" path)
                   (.click anchor))))))))))
 
+(defn export-repo-as-opml!
+  [repo]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [files (get-file-contents-with-suffix repo)]
+      (let [files (export-files-as-opml repo files)
+            zip-file-name (str repo "_opml_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+          (when-let [anchor (gdom/getElement "export-as-opml")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))
+
+(defn export-page-as-opml!
+  [page-name]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [file (db/get-page-file page-name)]
+      (when-let [path (:file/path file)]
+        (when-let [content (get-page-content page-name)]
+          (let [names [page-name]
+                format (f/get-format path)
+                files [{:path path :content content :names names :format format}]]
+            (let [files (export-files-as-opml repo files)]
+              (let [data (js/Blob. [(second (first files))]
+                                   (clj->js {:type "text/plain;charset=utf-8,"}))]
+                (let [anchor (gdom/getElement "export-page-as-opml")
+                      url (js/window.URL.createObjectURL data)
+                      opml-path (string/replace (string/lower-case path) #"(.+)\.(md|org|markdown)$" "$1.opml")]
+                  (.setAttribute anchor "href" url)
+                  (.setAttribute anchor "download" opml-path)
+                  (.click anchor))))))))))
+
+
 (defn convert-page-markdown-unordered-list-or-heading!
   [page-name]
   (when-let [repo (state/get-current-repo)]
@@ -514,3 +569,97 @@
             (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
             (.setAttribute anchor "download" (.-name zipfile))
             (.click anchor)))))))
+
+(defn- dissoc-properties [m ks]
+  (if (:block/properties m)
+    (update m :block/properties
+            (fn [v]
+              (apply dissoc v ks)))
+    m))
+
+(defn- nested-select-keys
+  [keyseq vec-tree]
+  (walk/postwalk
+   (fn [x]
+     (cond
+       (and (map? x) (contains? x :block/uuid))
+       (-> x
+           (s/rename-keys {:block/uuid :block/id
+                           :block/original-name :block/page-name})
+           (dissoc-properties [:id])
+           (select-keys keyseq))
+
+       :else
+       x))
+   vec-tree))
+
+(defn- blocks [conn]
+  {:version 1
+   :blocks
+   (->> (d/q '[:find (pull ?b [*])
+               :in $
+               :where
+               [?b :block/file]
+               [?b :block/original-name]
+               [?b :block/name]] conn)
+
+        (map (fn [[{:block/keys [name] :as page}]]
+               (assoc page
+                      :block/children
+                      (outliner-tree/blocks->vec-tree
+                       (db/get-page-blocks-no-cache
+                        (state/get-current-repo)
+                        name
+                        {:transform? false}) name))))
+
+        (nested-select-keys
+         [:block/id
+          :block/page-name
+          :block/properties
+          :block/format
+          :block/children
+          :block/title
+          :block/body
+          :block/content]))})
+
+(defn- file-name [repo extension]
+  (-> (string/replace repo config/local-db-prefix "")
+      (string/replace #"^/+" "")
+      (str "_" (quot (util/time-ms) 1000))
+      (str "." (string/lower-case (name extension)))))
+
+(defn export-repo-as-edn-v2!
+  [repo]
+  (when-let [conn (db/get-conn repo)]
+    (let [edn-str (with-out-str
+                    (pprint/pprint
+                     (blocks conn)))
+          data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent edn-str))]
+      (when-let [anchor (gdom/getElement "download-as-edn-v2")]
+        (.setAttribute anchor "href" data-str)
+        (.setAttribute anchor "download" (file-name repo :edn))
+        (.click anchor)))))
+
+(defn- nested-update-id
+  [vec-tree]
+  (walk/postwalk
+   (fn [x]
+     (if (and (map? x) (contains? x :block/id))
+       (update x :block/id str)
+       x))
+   vec-tree))
+
+(defn export-repo-as-json-v2!
+  [repo]
+  (when-let [conn (db/get-conn repo)]
+    (let [json-str
+          (-> (blocks conn)
+              nested-update-id
+              clj->js
+              js/JSON.stringify)
+          data-str (str "data:text/json;charset=utf-8,"
+                        (js/encodeURIComponent json-str))]
+      (when-let [anchor (gdom/getElement "download-as-json-v2")]
+        (.setAttribute anchor "href" data-str)
+        (.setAttribute anchor "download" (file-name repo :json))
+        (.click anchor)))))

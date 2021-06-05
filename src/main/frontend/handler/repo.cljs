@@ -275,7 +275,12 @@
               add-files (filter-diffs "add")
               delete-files (if (seq remove-files)
                              (db/delete-files remove-files))
-              delete-blocks (db/delete-blocks repo-url (concat remove-files modify-files))
+              delete-blocks (db/delete-blocks repo-url remove-files true)
+              delete-blocks (->>
+                             (concat
+                              delete-blocks
+                              (db/delete-blocks repo-url modify-files false))
+                             (remove nil?))
               delete-pages (if (seq remove-files)
                              (db/delete-pages-by-files remove-files)
                              [])
