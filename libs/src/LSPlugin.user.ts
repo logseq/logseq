@@ -301,12 +301,14 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
             const hookMatcher = propKey.toString().match(/^(once|off|on)/i)
 
             if (hookMatcher != null) {
-              const f = hookMatcher[0]
+              const f = hookMatcher[0].toLowerCase()
               const s = hookMatcher.input!
               const e = s.slice(f.length)
 
-              caller[f.toLowerCase()](`hook:${tag}:${snakeCase(e)}`, args[0])
-              return
+              const type = `hook:${tag}:${snakeCase(e)}`
+              const handler = args[0]
+              caller[f](type, handler)
+              return f !== 'off' ? () => (caller.off(type, handler)) : void 0
             }
           }
 

@@ -61,7 +61,8 @@ type IHookEvent = {
   [key: string]: any
 }
 
-type IUserHook<E = any> = (callback: (e: IHookEvent & E) => void) => void
+type IUserOffHook = () => void
+type IUserHook<E = any, R = IUserOffHook> = (callback: (e: IHookEvent & E) => void) => IUserOffHook
 type IUserSlotHook<E = any> = (callback: (e: IHookEvent & UISlotIdentity & E) => void) => void
 
 type BlockID = number
@@ -80,18 +81,20 @@ interface AppUserConfigs {
 }
 
 interface BlockEntity {
-  id: number // db id
-  uuid: string
+  id: BlockID // db id
+  uuid: BlockUUID
   left: IEntityID
   format: 'markdown' | 'org'
   parent: IEntityID
   unordered: boolean
+  content: string
   page: IEntityID
+
+  // optional fields in dummy page
   anchor?: string
   body?: any
   children?: Array<BlockEntity | BlockUUIDTuple>
   container?: string
-  content?: string
   file?: IEntityID
   level?: number
   meta?: { timestamps: any, properties: any, startPos: number, endPos: number }
@@ -100,13 +103,16 @@ interface BlockEntity {
   [key: string]: any
 }
 
-interface PageEntity extends IEntityID {
-  file: IEntityID
+interface PageEntity {
+  id: BlockID
+  uuid: BlockUUID
   name: string
   originalName: string
-  uuid: string
-  journal?: boolean
-  journalDay?: string
+  'journal?': boolean
+
+  file?: IEntityID
+  format?: 'markdown' | 'org'
+  journalDay?: number
 }
 
 type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
@@ -144,7 +150,7 @@ interface IAppProxy {
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 }
 
-interface IEditorProxy {
+interface IEditorProxy extends Record<string, any> {
   registerSlashCommand: (tag: string, action: BlockCommandCallback | Array<SlashCommandAction>) => boolean
   registerBlockContextMenu: (tag: string, action: BlockCommandCallback) => boolean
 
@@ -154,7 +160,7 @@ interface IEditorProxy {
   restoreEditingCursor: () => Promise<void>
   exitEditingMode: (selectBlock?: boolean) => Promise<void>
   getEditingCursorPosition: () => Promise<BlockCursorPosition | null>
-  getCurrentPage: () => Promise<PageEntity | null>
+  getCurrentPage: () => Promise<PageEntity | BlockEntity | null>
   getCurrentBlock: () => Promise<BlockEntity | null>
   getCurrentBlockContent: () => Promise<string>
   getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
@@ -269,7 +275,7 @@ interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   isMainUIVisible: boolean
 
-  App: IAppProxy
-  Editor: IEditorProxy
+  App: IAppProxy & Record<string, any>
+  Editor: IEditorProxy & Record<string, any>
   DB: IDBProxy
 }

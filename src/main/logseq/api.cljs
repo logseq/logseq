@@ -34,11 +34,11 @@
   [input]
   (when input
     (walk/postwalk
-     (fn [a]
-       (cond
-         (keyword? a) (csk/->camelCase (name a))
-         (uuid? a) (str a)
-         :else a)) input)))
+      (fn [a]
+        (cond
+          (keyword? a) (csk/->camelCase (name a))
+          (uuid? a) (str a)
+          :else a)) input)))
 
 (defn- parse-hiccup-ui
   [input]
@@ -52,14 +52,14 @@
 (def ^:export get_user_configs
   (fn []
     (bean/->js
-     (normalize-keyword-for-json
-      {:preferred-language   (:preferred-language @state/state)
-       :preferred-theme-mode (:ui/theme @state/state)
-       :preferred-format     (state/get-preferred-format)
-       :preferred-workflow   (state/get-preferred-workflow)
-       :preferred-todo       (state/get-preferred-todo)
-       :current-graph        (state/get-current-repo)
-       :me                   (state/get-me)}))))
+      (normalize-keyword-for-json
+        {:preferred-language   (:preferred-language @state/state)
+         :preferred-theme-mode (:ui/theme @state/state)
+         :preferred-format     (state/get-preferred-format)
+         :preferred-workflow   (state/get-preferred-workflow)
+         :preferred-todo       (state/get-preferred-todo)
+         :current-graph        (state/get-current-repo)
+         :me                   (state/get-me)}))))
 
 (def ^:export show_themes
   (fn []
@@ -134,14 +134,14 @@
   (fn [pid ^js cmd-actions]
     (when-let [[cmd actions] (bean/->clj cmd-actions)]
       (plugin-handler/register-plugin-slash-command
-       pid [cmd (mapv #(into [(keyword (first %))]
-                             (rest %)) actions)]))))
+        pid [cmd (mapv #(into [(keyword (first %))]
+                              (rest %)) actions)]))))
 
 (def ^:export register_plugin_simple_command
   (fn [pid ^js cmd-action]
     (when-let [[cmd action] (bean/->clj cmd-action)]
       (plugin-handler/register-plugin-simple-command
-       pid cmd (assoc action 0 (keyword (first action)))))))
+        pid cmd (assoc action 0 (keyword (first action)))))))
 
 ;; app
 (def ^:export relaunch
@@ -155,12 +155,12 @@
 (def ^:export push_state
   (fn [^js k ^js params]
     (rfe/push-state
-     (keyword k) (bean/->clj params))))
+      (keyword k) (bean/->clj params))))
 
 (def ^:export replace_state
   (fn [^js k ^js params]
     (rfe/replace-state
-     (keyword k) (bean/->clj params))))
+      (keyword k) (bean/->clj params))))
 
 ;; editor
 (def ^:export check_editing
@@ -209,6 +209,12 @@
       (when-let [page (db-model/get-page page)]
         (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
 
+(def ^:export get_page
+  (fn [page-name]
+    (when-let [page (db-model/get-page page-name)]
+      (if-not (contains? page :block/left)
+        (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
+
 (def ^:export edit_block
   (fn [block-uuid {:keys [pos] :or {pos :max} :as opts}]
     (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
@@ -221,7 +227,7 @@
           page-name (and isPageBlock block-uuid-or-page-name)
           block-uuid (if isPageBlock nil (medley/uuid block-uuid-or-page-name))
           new-block (editor-handler/api-insert-new-block!
-                     content {:block-uuid block-uuid :sibling? sibling :page page-name})]
+                      content {:block-uuid block-uuid :sibling? sibling :page page-name})]
 
       (bean/->js (normalize-keyword-for-json new-block)))))
 
@@ -230,7 +236,7 @@
     (let [{:keys [includeChildren]} (bean/->clj opts)
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-       {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
+        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]
@@ -257,10 +263,11 @@
     (when-let [block (cond
                        (number? id-or-uuid) (db-utils/pull id-or-uuid)
                        (string? id-or-uuid) (db-model/query-block-by-uuid id-or-uuid))]
-      (when-let [uuid (:block/uuid block)]
-        (let [{:keys [includeChildren]} (bean/->clj opts)
-              block (if (not includeChildren) block (first (outliner-tree/blocks->vec-tree [block] uuid)))]
-          (bean/->js (normalize-keyword-for-json block)))))))
+      (if-not (contains? block :block/name)
+        (when-let [uuid (:block/uuid block)]
+          (let [{:keys [includeChildren]} (bean/->clj opts)
+                block (if (not includeChildren) block (first (outliner-tree/blocks->vec-tree [block] uuid)))]
+            (bean/->js (normalize-keyword-for-json block))))))))
 
 (def ^:export get_previous_sibling_block
   (fn [uuid]

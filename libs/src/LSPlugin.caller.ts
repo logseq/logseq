@@ -69,7 +69,7 @@ class LSPluginCaller extends EventEmitter {
     let syncGCTimer: any = 0
     let syncTag = 0
     const syncActors = new Map<number, DeferredActor>()
-    const readyDeferred = deferred()
+    const readyDeferred = deferred(1000 * 5)
 
     const model: any = this._extendUserModel({
       [LSPMSG_READY]: async () => {
@@ -168,7 +168,6 @@ class LSPluginCaller extends EventEmitter {
       this._status = undefined
     })
 
-    // TODO: timeout
     await readyDeferred.promise
 
     return model.baseInfo
