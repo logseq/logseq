@@ -30,33 +30,27 @@
              (when p
                (let [p (str p)
                      current-page? (= p current-page)
-                     block? (and p (util/uuid-string? p))
-                     color (if block?
-                             "#1a6376"
-                             (case [dark? current-page?] ; FIXME: Put it into CSS
-                              [false false] "#222222"
-                              [false true]  "#045591"
-                              [true false]  "#8abbbb"
-                              [true true]   "#ffffff"))
-                     color (if (contains? tags (string/lower-case (str p)))
-                             (if dark? "orange" "green")
-                             color)]
-                 {:id p
-                  :name p
-                  :val (get-connections p edges)
-                  :autoColorBy "group"
-                  :group (js/Math.ceil (* (js/Math.random) 12))
-                  :color color})))
+                     parent (when (string/includes? p "/")
+                              (first (util/split-last "/" p)))]
+                 (cond->
+                   {:id p
+                    :label p
+                    :weight (get-connections p edges)}
+                   parent
+                   (assoc :parent parent)))))
            pages)
      (remove nil?))))
 
 (defn- uuid-or-asset?
   [id]
-  (let [id (str id)]
+  (let [id (string/lower-case (str id))]
     (or (util/uuid-string? id)
        (string/starts-with? id "../assets/")
        (= id "..")
-       (string/starts-with? id "assets/"))))
+       (string/starts-with? id "assets/")
+       (string/ends-with? id ".gif")
+       (string/ends-with? id ".jpg")
+       (string/ends-with? id ".png"))))
 
 (defn- remove-uuids-and-files!
   [nodes]
@@ -78,13 +72,22 @@
         names (zipmap (map (fn [x] (get x :block/name)) names)
                       (map (fn [x]
                              (get x :block/original-name (:block/name x))) names))
-        nodes (mapv (fn [node] (assoc node :id (get names (:id node) (:id node)))) nodes)
+        nodes (mapv (fn [node]
+                      (let [id (get names (:id node) (:id node))]
+                        (assoc node :id id)))
+                    nodes)
+        nodes-map (zipmap (map :id nodes) nodes)
         links (->>
                (mapv (fn [{:keys [source target]}]
                        (when (and (not (uuid-or-asset? source))
                                   (not (uuid-or-asset? target)))
-                         {:source (get names source)
-                          :target (get names target)}))
+                         (let [source (get names source)
+                               target (get names target)]
+                           {:source source
+                            :target target
+                            :weight (+ (:weight source) (:weight target))
+                            ;; :label "TBD"
+                           })))
                      links)
                (remove nil?))
         nodes (remove-uuids-and-files! nodes)]

@@ -19,6 +19,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.export :as export]
             [frontend.extensions.graph-2d :as graph-2d]
+            [frontend.extensions.graph.cytoscape :as cytoscape]
             [frontend.ui :as ui]
             [frontend.components.content :as content]
             [frontend.config :as config]
@@ -427,20 +428,13 @@
         sidebar-open? (state/sub :ui/sidebar-open?)
         [width height] (rum/react layout)
         dark? (= theme "dark")
-        graph (graph-handler/build-global-graph theme (rum/react show-journal?))]
+        graph (profile "build global graph" (graph-handler/build-global-graph theme (rum/react show-journal?)))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.relative#global-graph
        (if (seq (:nodes graph))
-         (graph-2d/graph
-          (graph/build-graph-opts
-           graph
-           dark?
-           {:width (if (and (> width 1280) sidebar-open?)
-                     (- width 24 600)
-                     (- width 24))
-            :height height
-            :ref (fn [v] (reset! graph-ref v))
-            :ref-atom graph-ref}))
+         (cytoscape/graph graph {:dark? dark?
+                                 :width width
+                                 :height height})
          [:div.ls-center.mt-20
           [:p.opacity-70.font-medium "Empty"]])
        [:div.absolute.top-10.left-5

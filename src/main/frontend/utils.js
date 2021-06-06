@@ -217,3 +217,11 @@ export const ios = function () {
   // iPad on iOS 13 detection
     || (navigator.userAgent.includes("Mac") && "ontouchend" in document)
 }
+
+// adapted from https://stackoverflow.com/a/52758068
+export const cyHighlight = function(cy, evt) {
+  const target = evt.target;
+  cy.elements().difference(target.outgoers().union(target.incomers())).not(target).addClass('semitransp');
+  target.addClass('highlight').outgoers().addClass('highlight');
+  target.incomers().addClass('highlight');
+}

@@ -318,7 +318,7 @@
           :route-match route-match})
         [:div.#app-container.h-screen.flex
          [:div.flex-1.h-full.flex.flex-col.overflow-y-auto#left-container.relative
-          [:div.scrollbar-spacing#main-container
+          [:div#main-container {:class (if global-graph-pages? "overflow-hidden" "scrollbar-spacing")}
            (header/header {:open-fn        open-fn
                            :white?         white?
                            :current-repo   current-repo

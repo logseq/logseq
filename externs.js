@@ -65,6 +65,7 @@ dummy.transaction = function() {};
 dummy.getPath = function() {};
 dummy.getDoc = function() {};
 dummy.setValue = function() {};
+dummy.use = function() {};
 
 
 /**
