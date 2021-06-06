@@ -54,7 +54,7 @@
     (bean/->js
       (normalize-keyword-for-json
         {:preferred-language   (:preferred-language @state/state)
-         :preferred-theme-mode (:ui/theme @state/state)
+         :preferred-theme-mode (if (= (:ui/theme @state/state) "light") "white" "dark")
          :preferred-format     (state/get-preferred-format)
          :preferred-workflow   (state/get-preferred-workflow)
          :preferred-todo       (state/get-preferred-todo)
