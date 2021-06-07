@@ -187,11 +187,12 @@
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
 
-(defn init-commands!
-  [get-page-ref-text]
-  (let [commands (commands-map get-page-ref-text)]
-    (reset! *initial-commands commands)
-    (reset! *matched-commands commands)))
+(defonce *first-command-group
+  {"Page Reference" "BASIC"
+   "Tomorrow" "TIME & DATE"
+   "LATER" "TASK"
+   "Query" "ADVANCED"
+   "Quote" "ORG-MODE"})
 
 (defn ->block
   ([type]
@@ -259,6 +260,95 @@
     (state/get-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
+
+(defn commands-map
+  [get-page-ref-text]
+  (->>
+   (concat
+    ;; basic
+    [["Page Reference" [[:editor/input "[[]]" {:backward-pos 2}]
+                        [:editor/search-page]] "Create a backlink to a page"]
+     ["Page Embed" (embed-page) "Embed a page here"]
+     ["Block Reference" [[:editor/input "(())" {:backward-pos 2}]
+                         [:editor/search-block :reference]] "Create a backlink to a blcok"]
+     ["Block Embed" (embed-block) "Embed a block here" "Embed a block here"]
+     ["Link" link-steps "Create a HTTP link"]
+     ["Image Link" link-steps "Create a HTTP link to a image"]
+     (when (state/markdown?)
+       ["Underline" [[:editor/input "<ins></ins>"
+                      {:last-pattern slash
+                       :backward-pos 6}]] "Create a underline text decoration"])
+     ["Template" [[:editor/input "/" nil]
+                  [:editor/search-template]] "Insert a created template here"]
+     (cond
+       (and (util/electron?) (config/local-db? (state/get-current-repo)))
+
+       ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"]
+
+       (state/logged?)
+       ["Upload an image" [[:editor/click-hidden-file-input :id]]])]
+
+    (markdown-headings)
+
+    ;; time & date
+
+    [["Tomorrow" #(get-page-ref-text (date/tomorrow)) "Insert the date of tomorrow"]
+     ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
+     ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
+     ["Current Time" #(date/get-current-time) "Insert current time"]
+     ["Date Picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
+
+    ;; task management
+    (get-preferred-workflow)
+
+    [["Priority A" (->priority "A")]
+     ["Priority B" (->priority "B")]
+     ["Priority C" (->priority "C")]
+     ["DONE" (->marker "DONE")]
+     ["WAITING" (->marker "WAITING")]
+     ["CANCELED" (->marker "CANCELED")]
+     ["Deadline" [[:editor/clear-current-slash]
+                  [:editor/show-date-picker :deadline]]]
+     ["Scheduled" [[:editor/clear-current-slash]
+                   [:editor/show-date-picker :scheduled]]]]
+
+    ;; advanced
+
+    [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] "Create a DataScript query"]
+     ["Draw" (fn []
+               (let [file (draw/file-name)
+                     path (str config/default-draw-directory "/" file)
+                     text (util/format "[[%s]]" path)]
+                 (p/let [_ (draw/create-draw-with-default-content path)]
+                   (println "draw file created, " path))
+                 text)) "Draw a graph with Excalidraw"]
+
+
+
+
+
+
+     (when (util/zh-CN-supported?)
+       ["Embed Bilibili Video" [[:editor/input "{{bilibili }}" {:last-pattern slash
+                                                                :backward-pos 2}]]])
+     ["Embed HTML " (->inline "html")]
+
+     ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
+                                                            :backward-pos 2}]]]
+
+     ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
+                                                        :backward-pos 2}]]]]
+
+    ;; Allow user to modify or extend, should specify how to extend.
+    (state/get-commands))
+   (remove nil?)
+   (util/distinct-by-last-wins first)))
+
+(defn init-commands!
+  [get-page-ref-text]
+  (let [commands (commands-map get-page-ref-text)]
+    (reset! *initial-commands commands)
+    (reset! *matched-commands commands)))
 
 (defonce *matched-block-commands (atom (block-commands-map)))
 
