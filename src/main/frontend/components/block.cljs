@@ -1385,7 +1385,8 @@
            (str (:block/uuid block) "-" k)))]
 
       (and pre-block? properties)
-      [:span.opacity-50 "Properties"]
+      (ui/tippy {:title "Click to edit page properties"}
+                [:span "🍵"])
 
       :else
       nil)))

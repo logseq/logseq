@@ -93,16 +93,6 @@
         (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".json"))
         (.click anchor)))))
 
-(defn export-repo-as-edn!
-  [repo]
-  (when-let [db (db/get-conn repo)]
-    (let [db-edn (db/db->edn-str db)
-          data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent db-edn))]
-      (when-let [anchor (gdom/getElement "download-as-edn")]
-        (.setAttribute anchor "href" data-str)
-        (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".edn"))
-        (.click anchor)))))
-
 (defn download-file!
   [file-path]
   (when-let [content (get-file-content file-path)]
