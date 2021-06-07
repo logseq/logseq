@@ -1005,10 +1005,8 @@
 
 (defn tag-valid?
   [tag-name]
-  (when tag-name
-    (and
-     (not (safe-re-find #"#" tag-name))
-     (safe-re-find regex/valid-tag-pattern tag-name))))
+  (when (string? tag-name)
+    (not (safe-re-find #"[# \t\r\n]+" tag-name))))
 
 (defn encode-str
   [s]

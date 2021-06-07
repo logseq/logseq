@@ -113,8 +113,8 @@
           (if (seq coll')
             (rest coll')
             (reduced false))))
-      (seq match)
-      (seq q)))))
+      (seq (string/lower-case match))
+      (seq (string/lower-case q))))))
 
 (defn page-search
   ([q]
