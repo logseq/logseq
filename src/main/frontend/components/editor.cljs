@@ -42,7 +42,7 @@
           (fn [item]
             (let [command-name (first item)
                   command-doc (get item 2)]
-              [:div {:title command-doc} command-name]))
+              [:div {:title (when (state/show-command-doc?) command-doc)} command-name]))
 
           :on-chosen
           (fn [chosen-item]
