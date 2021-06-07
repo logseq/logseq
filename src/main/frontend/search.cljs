@@ -103,6 +103,19 @@
   (when-let [engine (get-engine repo)]
     (protocol/transact-blocks! engine data)))
 
+(defn exact-matched?
+  [q match]
+  (when (and (string? q) (string? match))
+    (boolean
+     (reduce
+      (fn [coll char]
+        (let [coll' (drop-while #(not= char %) coll)]
+          (if (seq coll')
+            (rest coll')
+            (reduced false))))
+      (seq match)
+      (seq q)))))
+
 (defn page-search
   ([q]
    (page-search q 3))
@@ -121,7 +134,9 @@
                     (:name item))
                  result)
                 (remove nil?)
-                (distinct))))))))
+                (distinct)
+                (filter (fn [name]
+                          (exact-matched? q name))))))))))
 
 (defn file-search
   ([q]
