@@ -76,6 +76,7 @@
         [:b (config/get-local-dir repo)]]
        (ui/button
         "Grant"
+        :class "ui__modal-enter"
         :on-click (fn []
                     (nfs/check-directory-permission! repo)
                     (close-fn)))])))
