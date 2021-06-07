@@ -403,7 +403,7 @@
                                                            redirect-page-name])]
                                  (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
                                    (when-let [f (state/get-page-blocks-cp)]
-                                     (f (state/get-current-repo) redirect-page-name {:sidebar? sidebar? :preview? true})))]
+                                     (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]
                    :interactive true
                    :delay       [1000, 100]}
                   inner)
