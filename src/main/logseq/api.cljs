@@ -192,17 +192,16 @@
     (when-let [input-id (state/get-edit-input-id)]
       (bean/->js (normalize-keyword-for-json (util/get-caret-pos (gdom/getElement input-id)))))))
 
+(def ^:export get_editing_block_content
+  (fn []
+    (state/get-edit-content)))
+
 (def ^:export get_current_block
   (fn []
     (let [block (state/get-edit-block)
           block (or block (state/get-last-edit-block))
           block (and block (db-utils/pull (:db/id block)))]
       (bean/->js (normalize-keyword-for-json block)))))
-
-(def ^:export get_current_block_content
-  (fn []
-    (when-let [block (state/get-edit-block)]
-      (bean/->js [(state/get-edit-content) (str (:block/uuid block))]))))
 
 (def ^:export get_current_page
   (fn []

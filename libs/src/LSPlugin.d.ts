@@ -160,9 +160,9 @@ interface IEditorProxy extends Record<string, any> {
   restoreEditingCursor: () => Promise<void>
   exitEditingMode: (selectBlock?: boolean) => Promise<void>
   getEditingCursorPosition: () => Promise<BlockCursorPosition | null>
+  getEditingBlockContent: () => Promise<string>
   getCurrentPage: () => Promise<PageEntity | BlockEntity | null>
   getCurrentBlock: () => Promise<BlockEntity | null>
-  getCurrentBlockContent: () => Promise<[string, BlockUUID] | null>
   getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
   getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
 
