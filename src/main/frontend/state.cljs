@@ -429,7 +429,7 @@
      ;;                        (remove #(= leader-parent %)))]
      ;;     (prn "followers: " (count followers))
      ;;     ))
-)))
+     )))
 
 (defn get-edit-input-id
   []
@@ -1058,6 +1058,12 @@
   []
   (get (get (sub-config) (get-current-repo))
        :ui/enable-tooltip?
+       true))
+
+(defn show-command-doc?
+  []
+  (get (get (sub-config) (get-current-repo))
+       :ui/show-command-doc?
        true))
 
 (defn set-config!
