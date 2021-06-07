@@ -62,8 +62,11 @@
                           (or references default-references)))
 
 (defn parse-export-opml
-  [content config title]
-  (parseAndExportOPML content config title))
+  [content config title references]
+  (parseAndExportOPML content
+                      config
+                      title
+                      (or references default-references)))
 
 (defn ast-export-markdown
   [ast config references]
@@ -244,8 +247,8 @@
     true)
   (exportMarkdown [this content config references]
     (parse-export-markdown content config references))
-  (exportOPML [this content config title]
-    (parse-export-opml content config title)))
+  (exportOPML [this content config title references]
+    (parse-export-opml content config title references)))
 
 (defn plain->text
   [plains]

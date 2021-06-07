@@ -410,7 +410,7 @@
 
 (defn- remove-indentations
   [format level element]
-  (if (or (= level 1) (= format :org))
+  (if (= format :org)
     element
     (case (first element)
       "Paragraph"
@@ -418,7 +418,7 @@
        (let [level (if (= (ffirst (second element)) "Plain")
                      (count (re-find #"^[\s\t]+" (second (first (second element)))))
                      level)]
-         (->> (partition-by #(= ["Break_Line"] %) (second element))
+         (->> (partition-by #(contains? #{["Break_Line"] ["Hard_Break_Line"]} %) (second element))
              (map (fn [c]
                     (if (and (= (ffirst c) "Plain")
                              (>= (count (re-find #"^[\s\t]+" (second (first c)))) level))

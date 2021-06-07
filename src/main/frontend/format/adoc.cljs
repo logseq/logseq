@@ -29,5 +29,5 @@
      ok-handler))
   (exportMarkdown [this content config references]
     (throw "not support"))
-  (exportOPML [this content config title]
+  (exportOPML [this content config title references]
     (throw "not support")))

@@ -50,7 +50,7 @@
   get-page-referenced-blocks get-page-referenced-pages get-page-unlinked-references get-page-referenced-blocks-no-cache
   get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
-  set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages page-empty? get-alias-source-page
+  set-file-last-modified-at! transact-files-db! with-block-refs-count get-modified-pages page-empty? page-empty-or-dummy? get-alias-source-page
   set-file-content! has-children?]
 
  [frontend.db.react

@@ -118,13 +118,13 @@
        (merge
         {:type  "button"
          :class (str (util/hiccup->class klass) " " class)}
-        (dissoc option :background))
+        (dissoc option :background :class))
        text]
       [:button.ui__button
        (merge
         {:type  "button"
          :class (str (util/hiccup->class klass) " " class)}
-        (dissoc option :background))
+        (dissoc option :background :class))
        text])))
 
 (rum/defc notification-content
@@ -413,9 +413,17 @@
      (mixins/hide-when-esc-or-outside
       state
       :on-hide (fn []
-                 (-> (.querySelector (rum/dom-node state) "button.ui__modal-close")
-                     (.click)))
-      :outside? false)))
+                 (some->
+                  (.querySelector (rum/dom-node state) "button.ui__modal-close")
+                  (.click)))
+      :outside? false)
+     (mixins/on-key-down
+      state
+      {;; enter
+       13 (fn [state e]
+            (some->
+             (.querySelector (rum/dom-node state) "button.ui__modal-enter")
+             (.click)))})))
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
