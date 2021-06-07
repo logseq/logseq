@@ -1026,6 +1026,10 @@
   (set-state! :ui/developer-mode? value)
   (storage/set "developer-mode" (str value)))
 
+(defn developer-mode?
+  []
+  (:ui/developer-mode? @state))
+
 (defn get-notification-contents
   []
   (get @state :notification/contents))
