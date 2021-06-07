@@ -201,7 +201,8 @@
 
 (def ^:export get_current_block_content
   (fn []
-    (state/get-edit-content)))
+    (when-let [block (state/get-edit-block)]
+      (bean/->js [(state/get-edit-content) (str (:block/uuid block))]))))
 
 (def ^:export get_current_page
   (fn []
@@ -248,7 +249,8 @@
 
       (if editing?
         (state/set-edit-content! (state/get-edit-input-id) content)
-        (editor-handler/save-block! repo (medley/uuid block-uuid) content)))))
+        (editor-handler/save-block! repo (medley/uuid block-uuid) content))
+      nil)))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]

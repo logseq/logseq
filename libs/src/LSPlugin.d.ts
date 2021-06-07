@@ -162,7 +162,7 @@ interface IEditorProxy extends Record<string, any> {
   getEditingCursorPosition: () => Promise<BlockCursorPosition | null>
   getCurrentPage: () => Promise<PageEntity | BlockEntity | null>
   getCurrentBlock: () => Promise<BlockEntity | null>
-  getCurrentBlockContent: () => Promise<string>
+  getCurrentBlockContent: () => Promise<[string, BlockUUID] | null>
   getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
   getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
 
