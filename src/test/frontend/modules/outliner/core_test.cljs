@@ -270,12 +270,11 @@
   (let [start-node (build-block 6 2 3)
         end-node (build-block 11 9 10)
         block-ids [7 8 9 10]]
-    ;; FIXME: not sibling, nothing happens
     (outliner-core/delete-nodes start-node end-node block-ids)
     (let [children-of-2 (->> (build-block 2)
                           (tree/-get-children)
                           (mapv #(-> % :data :block/uuid)))]
-      (is (= [3 6 9] children-of-2)))))
+      (is (= [3] children-of-2)))))
 
 (comment
   (run-test test-delete-nodes))
