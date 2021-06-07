@@ -1443,7 +1443,11 @@
         (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
               f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
                        content (property/remove-built-in-properties (:block/format block)
-                                                                 content)]
+                                                                    content)]
+                   ;; save current editing block
+                   (let [{:keys [value] :as state} (editor-handler/get-state)]
+                     (editor-handler/save-block! state value))
+
                    (state/set-editing!
                     edit-input-id
                     content
