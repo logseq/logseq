@@ -423,19 +423,8 @@
            result)
          result)))))
 
-(defn- get-node-parents
-  [node limit]
-  (loop [node node
-         limit limit
-         result []]
-    (if (zero? limit)
-      result
-      (if-let [parent (tree/-get-parent node)]
-        (recur parent (dec limit) (conj result (tree/-get-id parent)))
-        result))))
-
 (defn delete-nodes
-  "Delete nodes from the tree, start-node and end-node must be siblings.
+  "Delete nodes from the tree.
   Args:
     start-node: the node at the top of the outliner document.
     end-node: the node at the bottom of the outliner document
@@ -445,27 +434,27 @@
   [start-node end-node block-ids]
   {:pre [(tree/satisfied-inode? start-node)
          (tree/satisfied-inode? end-node)]}
-  (let [sibling? (= (tree/-get-parent-id start-node)
-                    (tree/-get-parent-id end-node))]
-    (when sibling?
-      (ds/auto-transact!
-        [txs-state (ds/new-outliner-txs-state)]
-        {:outliner-op :delete-nodes}
-        (if (= start-node end-node)
-          (delete-node start-node true)
-          (let [right-node (tree/-get-right end-node)
-                end-node-left-nodes (get-left-nodes end-node (count block-ids))
-                start-node-parents-with-self (conj (get-node-parents start-node 1000) (tree/-get-id start-node))]
-            (when (tree/satisfied-inode? right-node)
-              (let [cross-node-id (first (set/intersection (set end-node-left-nodes) (set start-node-parents-with-self)))
-                    cross-node (get-block-by-id cross-node-id)
-                    new-left-id (if (= cross-node start-node)
-                                  (tree/-get-left-id cross-node)
-                                  cross-node-id)
-                    new-right-node (tree/-set-left-id right-node new-left-id)]
-                (tree/-save new-right-node txs-state)))
-            (let [txs (db-outliner/del-blocks block-ids)]
-              (ds/add-txs txs-state txs))))))))
+  (ds/auto-transact!
+   [txs-state (ds/new-outliner-txs-state)]
+   {:outliner-op :delete-nodes}
+   (if (= start-node end-node)
+     (delete-node start-node true)
+     (let [sibling? (= (tree/-get-parent-id start-node)
+                       (tree/-get-parent-id end-node))
+           right-node (tree/-get-right end-node)]
+       (when (tree/satisfied-inode? right-node)
+         (let [left-node-id (if sibling?
+                              (tree/-get-id (tree/-get-left start-node))
+                              (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
+                                    parents (db/get-block-parents
+                                             (state/get-current-repo)
+                                             (tree/-get-id start-node)
+                                             1000)]
+                                (first (set/intersection (set end-node-left-nodes) parents))))
+               new-right-node (tree/-set-left-id right-node left-node-id)]
+           (tree/-save new-right-node txs-state)))
+       (let [txs (db-outliner/del-blocks block-ids)]
+         (ds/add-txs txs-state txs))))))
 
 (defn first-child?
   [node]

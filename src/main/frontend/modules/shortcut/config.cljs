@@ -59,14 +59,6 @@
     {:desc    "Delete / Delete forwards"
      :binding "delete"
      :fn      editor-handler/editor-delete}
-    :editor/indent
-    {:desc    "Indent block"
-     :binding "tab"
-     :fn      (editor-handler/keydown-tab-handler :right)}
-    :editor/outdent
-    {:desc    "Outdent block"
-     :binding "shift+tab"
-     :fn      (editor-handler/keydown-tab-handler :left)}
     :editor/new-block
     {:desc    "Create new block"
      :binding "enter"
@@ -79,14 +71,6 @@
     {:desc    "Rotate the TODO state of the current item"
      :binding "mod+enter"
      :fn      editor-handler/cycle-todo!}
-    :editor/expand-block-children
-    {:desc    "Expand"
-     :binding "mod+down"
-     :fn      editor-handler/expand!}
-    :editor/collapse-block-children
-    {:desc    "Collapse"
-     :binding "mod+up"
-     :fn      editor-handler/collapse!}
     :editor/follow-link
     {:desc    "Follow link under cursor"
      :binding "mod+o"
@@ -199,6 +183,22 @@
     {:desc    "Delete selected blocks"
      :binding ["backspace" "delete"]
      :fn      editor-handler/delete-selection}
+    :editor/expand-block-children
+    {:desc    "Expand"
+     :binding "mod+down"
+     :fn      editor-handler/expand!}
+    :editor/collapse-block-children
+    {:desc    "Collapse"
+     :binding "mod+up"
+     :fn      editor-handler/collapse!}
+    :editor/indent
+    {:desc    "Indent block"
+     :binding "tab"
+     :fn      (editor-handler/keydown-tab-handler :right)}
+    :editor/outdent
+    {:desc    "Outdent block"
+     :binding "shift+tab"
+     :fn      (editor-handler/keydown-tab-handler :left)}
     :editor/copy
     {:desc    "Copy"
      :binding "mod+c"
@@ -297,14 +297,6 @@
      :binding "t w"
      :fn      ui-handler/toggle-wide-mode!}
     ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
-    :ui/fold
-    {:desc    "Fold blocks (when not in edit mode)"
-     :binding "tab"
-     :fn      (editor-handler/on-tab :right)}
-    :ui/un-fold
-    {:desc    "Unfold blocks (when not in edit mode)"
-     :binding "shift+tab"
-     :fn      (editor-handler/on-tab :left)}
     :git/commit
     {:desc    "Git commit message"
      :binding "g c"
@@ -319,8 +311,8 @@
     :editor/new-line
     :editor/indent
     :editor/outdent
-    :ui/fold
-    :ui/un-fold
+    :editor/collapse-block-children
+    :editor/expand-block-children
     :go/search
     :go/search-in-page
     :editor/undo
