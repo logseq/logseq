@@ -1291,3 +1291,12 @@
 (defn get-editor-cp
   []
   (get-in @state [:view/components :editor]))
+
+(defn exit-editing-and-set-selected-blocks!
+  ([blocks]
+   (exit-editing-and-set-selected-blocks! blocks :down))
+  ([blocks direction]
+   (util/clear-selection!)
+   (clear-edit!)
+   (set-selection-blocks! blocks direction)
+   (util/select-highlight! blocks)))
