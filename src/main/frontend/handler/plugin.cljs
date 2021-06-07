@@ -3,6 +3,7 @@
             [rum.core :as rum]
             [frontend.util :as util]
             [frontend.fs :as fs]
+            [frontend.format.mldoc :refer [->MldocMode] :as mldoc]
             [frontend.handler.notification :as notifications]
             [frontend.storage :as storage]
             [camel-snake-kebab.core :as csk]
@@ -10,7 +11,9 @@
             [medley.core :as md]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [lambdaisland.glogi :as log]
+            [frontend.format :as format]))
 
 (defonce lsp-enabled?
   (and (util/electron?)
@@ -64,11 +67,29 @@
   [id settings]
   (swap! state/state update-in [:plugin/installed-plugins id] assoc :settings settings))
 
+(defn parse-user-md-content
+  [content {:keys [url]}]
+  (try
+    (if-not (string/blank? content)
+      (let [content (if-not (string/blank? url)
+                      (string/replace
+                       content #"!\[[^\]]*\]\((.*?)\s*(\"(?:.*[^\"])\")?\s*\)"
+                       (fn [[matched link]]
+                         (if (and link (not (string/starts-with? link "http")))
+                           (string/replace matched link (util/node-path.join url link))
+                           matched)))
+                      content)]
+        (format/to-html content :markdown (mldoc/default-config :markdown false))))
+    (catch js/Error e
+      (log/error :parse-user-md-exception e)
+      content)))
+
 (defn open-readme!
-  [url display]
+  [url item display]
   (when url
-    (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)]
-          (state/set-state! :plugin/active-readme content)
+    (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)
+                content (parse-user-md-content content item)]
+          (state/set-state! :plugin/active-readme [content item])
           (state/set-modal! display))
         (p/catch #(notifications/show! "No README file." :warn)))))
 

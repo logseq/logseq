@@ -8,7 +8,8 @@
             [promesa.core :as p]
             [frontend.components.svg :as svg]
             [frontend.handler.notification :as notification]
-            [frontend.handler.plugin :as plugin-handler]))
+            [frontend.handler.plugin :as plugin-handler]
+            [clojure.string :as string]))
 
 (rum/defc installed-themes
   < rum/reactive
@@ -62,23 +63,34 @@
 (rum/defc simple-markdown-display
   < rum/reactive
   []
-  (let [content (state/sub :plugin/active-readme)]
-    [:textarea.p-1.bg-transparent.border-none
-     {:style {:width "700px" :min-height "60vw"}}
-     content]))
+  (let [[content item] (state/sub :plugin/active-readme)]
+    [:div.cp__plugins-details
+     {:on-click (fn [^js/MouseEvent e]
+                  (when-let [target (.-target e)]
+                    (when (and (= (string/lower-case (.-nodeName target)) "a")
+                               (not (string/blank? (. target getAttribute "href"))))
+                      (js/apis.openExternal (. target getAttribute "href"))
+                      (.preventDefault e))))}
+     (when-let [repo (:repository item)]
+       (when-let [repo (if (string? repo) repo (:url repo))]
+         [:div.p-4.rounded-md.bg-base-3
+          [:strong [:a.flex.items-center {:target "_blank" :href repo} [:span.mr-1 (svg/github {:width 25 :height 25})] repo]]]))
+     [:div.p-1.bg-transparent.border-none.ls-block
+      {:style                   {:min-height "60vw"}
+       :dangerouslySetInnerHTML {:__html content}}]]))
 
 (rum/defc plugin-item-card
   [{:keys [id name settings version url description author icon usf] :as item}]
   (let [disabled (:disabled settings)]
     [:div.cp__plugins-item-card
      [:div.l.link-block
-      {:on-click #(plugin-handler/open-readme! url simple-markdown-display)}
+      {:on-click #(plugin-handler/open-readme! url item simple-markdown-display)}
       (if icon
         [:img.icon {:src icon}]
         svg/folder)]
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
-       {:on-click #(plugin-handler/open-readme! url simple-markdown-display)}
+       {:on-click #(plugin-handler/open-readme! url item simple-markdown-display)}
        [:span name]
        [:sup.inline-block.px-1.text-xs.opacity-30 version]]
       [:div.desc.text-xs.opacity-60
