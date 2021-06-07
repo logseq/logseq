@@ -1361,7 +1361,16 @@
         properties (apply dissoc properties property/built-in-properties)
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
-                     (dissoc properties :title :filters)
+                     (let [repo (state/get-current-repo)
+                           properties (dissoc properties :title :filters)
+                           aliases (db/get-page-alias-names repo
+                                                            (:block/name (db/pull (:db/id (:block/page block)))))]
+                       (if (seq aliases)
+                         (if (:alias properties)
+                           (update properties :alias (fn [c]
+                                                       (distinct (concat c aliases))))
+                           (assoc properties :alias aliases))
+                         properties))
                      properties)
         properties (sort properties)]
     (cond

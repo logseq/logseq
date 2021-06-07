@@ -357,6 +357,9 @@
              [?e2 :block/alias ?e1]]
             [(alias ?e2 ?e1)
              [?e1 :block/alias ?e2]]
+            [(alias ?e1 ?e3)
+             [?e1 :block/alias ?e2]
+             [?e2 :block/alias ?e3]]
             [(alias ?e3 ?e1)
              [?e1 :block/alias ?e2]
              [?e2 :block/alias ?e3]]])
@@ -386,9 +389,14 @@
   [repo page-name]
   (let [alias-ids (page-alias-set repo page-name)]
     (when (seq alias-ids)
-      (->> (get-page-names-by-ids repo alias-ids)
-           distinct
-           (remove #(= (string/lower-case %) (string/lower-case page-name)))))))
+      (let [names (->> (get-page-names-by-ids repo alias-ids)
+                       distinct
+                       (remove #(= (string/lower-case %) (string/lower-case page-name))))
+            lookup-refs (map (fn [name]
+                               [:block/name (string/lower-case name)]) names)]
+        (->> (db-utils/pull-many repo '[:block/name :block/original-name] lookup-refs)
+             (map (fn [m]
+                    (or (:block/original-name m) (:block/name m)))))))))
 
 (defn with-block-refs-count
   [repo blocks]
