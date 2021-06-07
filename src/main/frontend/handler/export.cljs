@@ -93,16 +93,6 @@
         (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".json"))
         (.click anchor)))))
 
-(defn export-repo-as-edn!
-  [repo]
-  (when-let [db (db/get-conn repo)]
-    (let [db-edn (db/db->edn-str db)
-          data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent db-edn))]
-      (when-let [anchor (gdom/getElement "download-as-edn")]
-        (.setAttribute anchor "href" data-str)
-        (.setAttribute anchor "download" (str (last (string/split repo #"/")) ".edn"))
-        (.click anchor)))))
-
 (defn download-file!
   [file-path]
   (when-let [content (get-file-content file-path)]
@@ -436,16 +426,23 @@
 
 (defn- export-files-as-opml
   [repo files]
-  (->> files
-       (mapv (fn [{:keys [path content names format]}]
-               (when (first names)
-                 (let [path
-                       (string/replace
-                        (string/lower-case path) #"(.+)\.(md|markdown|org)" "$1.opml")]
-                   [path (fp/exportOPML f/mldoc-record content
-                                        (f/get-default-config format)
-                                        (first names))]))))
-       (remove nil?)))
+  (let [get-page&block-refs-by-query-aux (get-embed-and-refs-blocks-pages-aux)
+        f (if (< (count files) 30)      ;query db for per page if (< (count files) 30), or pre-compute whole graph's page&block-refs
+            #(get-page&block-refs-by-query repo % get-page&block-refs-by-query-aux)
+            (let [page&block-refs (page&block-refs repo)]
+              #(get-page&block-refs repo % page&block-refs)))]
+    (->> files
+         (mapv (fn [{:keys [path content names format]}]
+                 (when (first names)
+                   (let [path
+                         (string/replace
+                          (string/lower-case path) #"(.+)\.(md|markdown|org)" "$1.opml")]
+                     [path (fp/exportOPML f/mldoc-record content
+                                          (f/get-default-config format)
+                                          (first names)
+                                          (js/JSON.stringify
+                                           (clj->js (f (first names)))))]))))
+         (remove nil?))))
 
 (defn- convert-md-files-unordered-list-or-heading
   [repo files heading-to-list?]

@@ -1026,6 +1026,10 @@
   (set-state! :ui/developer-mode? value)
   (storage/set "developer-mode" (str value)))
 
+(defn developer-mode?
+  []
+  (:ui/developer-mode? @state))
+
 (defn get-notification-contents
   []
   (get @state :notification/contents))
@@ -1291,3 +1295,12 @@
 (defn get-editor-cp
   []
   (get-in @state [:view/components :editor]))
+
+(defn exit-editing-and-set-selected-blocks!
+  ([blocks]
+   (exit-editing-and-set-selected-blocks! blocks :down))
+  ([blocks direction]
+   (util/clear-selection!)
+   (clear-edit!)
+   (set-selection-blocks! blocks direction)
+   (util/select-highlight! blocks)))

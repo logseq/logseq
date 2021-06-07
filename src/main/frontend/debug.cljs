@@ -1,7 +1,9 @@
 (ns frontend.debug
-  (:require [cljs.pprint :as pprint]))
+  (:require [cljs.pprint :as pprint]
+            [frontend.state :as state]))
 
 (defn pprint
   [& xs]
-  (doseq [x xs]
-    (pprint/pprint x)))
+  (when (state/developer-mode?)
+    (doseq [x xs]
+      (pprint/pprint x))))

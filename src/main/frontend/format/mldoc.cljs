@@ -13,7 +13,7 @@
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
-(defonce parseHtml (gobj/get Mldoc "parseHtml"))
+(defonce exportToHtml (gobj/get Mldoc "exportToHtml"))
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
 (defonce parseAndExportOPML (gobj/get Mldoc "parseAndExportOPML"))
@@ -62,8 +62,11 @@
                           (or references default-references)))
 
 (defn parse-export-opml
-  [content config title]
-  (parseAndExportOPML content config title))
+  [content config title references]
+  (parseAndExportOPML content
+                      config
+                      title
+                      (or references default-references)))
 
 (defn ast-export-markdown
   [ast config references]
@@ -237,15 +240,15 @@
   (toEdn [this content config]
     (->edn content config))
   (toHtml [this content config]
-    (parseHtml content config))
+    (exportToHtml content config))
   (loaded? [this]
     true)
   (lazyLoad [this ok-handler]
     true)
   (exportMarkdown [this content config references]
     (parse-export-markdown content config references))
-  (exportOPML [this content config title]
-    (parse-export-opml content config title)))
+  (exportOPML [this content config title references]
+    (parse-export-opml content config title references)))
 
 (defn plain->text
   [plains]

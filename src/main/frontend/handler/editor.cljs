@@ -651,7 +651,7 @@
       (when content
         (str (string/trimr content)
              "\n"
-             (util/format (str (if (= format :org) "-" "*") " %s -> DONE [%s]")
+             (util/format (str "*" " %s -> DONE [%s]")
                           marker
                           (date/get-local-date-time-string)))))
     content))
@@ -909,21 +909,12 @@
        (set-block-property! block-id "id" (str block-id))))
    (util/copy-to-clipboard! (tap-clipboard block-id))))
 
-(defn exit-editing-and-set-selected-blocks!
-  ([blocks]
-   (exit-editing-and-set-selected-blocks! blocks :down))
-  ([blocks direction]
-   (util/clear-selection!)
-   (state/clear-edit!)
-   (state/set-selection-blocks! blocks direction)
-   (util/select-highlight! blocks)))
-
 (defn select-block!
   [block-uuid]
   (when-let [block (-> (str block-uuid)
                        (js/document.getElementsByClassName)
                        first)]
-    (exit-editing-and-set-selected-blocks! [block])))
+    (state/exit-editing-and-set-selected-blocks! [block])))
 
 (defn select-all-blocks!
   []
@@ -931,7 +922,7 @@
     (let [input (gdom/getElement current-input-id)
           blocks-container (util/rec-get-blocks-container input)
           blocks (dom/by-class blocks-container "ls-block")]
-      (exit-editing-and-set-selected-blocks! blocks))))
+      (state/exit-editing-and-set-selected-blocks! blocks))))
 
 (defn- get-selected-blocks-with-children
   []
@@ -1183,7 +1174,7 @@
           blocks (if (= :up direction)
                    (reverse blocks)
                    blocks)]
-      (exit-editing-and-set-selected-blocks! blocks direction))))
+      (state/exit-editing-and-set-selected-blocks! blocks direction))))
 
 (defn on-select-block
   [direction]
@@ -1191,7 +1182,7 @@
     (cond
       ;; when editing, quit editing and select current block
       (state/editing?)
-      (exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
+      (state/exit-editing-and-set-selected-blocks! [(gdom/getElement (state/get-editing-block-dom-id))])
 
       ;; when selection and one block selected, select next block
       (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
@@ -2109,7 +2100,7 @@
                    (f))]
     (when block
       (.scrollIntoView block #js {:behavior "smooth" :block "center"})
-      (exit-editing-and-set-selected-blocks! [block]))))
+      (state/exit-editing-and-set-selected-blocks! [block]))))
 
 (defn- select-up-down [direction]
   (let [selected (first (state/get-selection-blocks))
@@ -2120,7 +2111,7 @@
     (when (and sibling-block (dom/attr sibling-block "blockid"))
       (clear-selection! nil)
       (.scrollIntoView sibling-block #js {:behavior "smooth" :block "center"})
-      (exit-editing-and-set-selected-blocks! [sibling-block]))))
+      (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
 (defn- move-cross-boundrary-up-down
   [direction]
@@ -2466,6 +2457,22 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
+        (when (and (= k "【")
+                   (> current-pos 0)
+                   (= "【" (util/nth-safe value (dec (dec current-pos)))))
+          (commands/handle-step [:editor/input "[[]]" {:last-pattern "【【"
+                                                       :backward-pos 2}])
+          (commands/handle-step [:editor/search-page])
+          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
+        (when (and (= k "（")
+                   (> current-pos 0)
+                   (= "（" (util/nth-safe value (dec (dec current-pos)))))
+          (commands/handle-step [:editor/input "(())" {:last-pattern "（（"
+                                                       :backward-pos 2}])
+          (commands/handle-step [:editor/search-block :reference])
+          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+
         (when (= c " ")
           (when (or (= (util/nth-safe value (dec (dec current-pos))) "#")
                     (not (state/get-editor-show-page-search?)))

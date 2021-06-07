@@ -377,7 +377,7 @@
                                (:block/alias? config)
                                page
 
-                               (db/page-empty? (state/get-current-repo) (:db/id page-entity))
+                               (db/page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
                                (let [source-page (model/get-alias-source-page (state/get-current-repo)
                                                                               (string/lower-case page-name))]
                                  (or (when source-page (:block/name source-page))
@@ -396,10 +396,14 @@
                                           :font-weight    500
                                           :max-height     600
                                           :padding-bottom 64}}
-                                 [:h2.font-bold.text-lg page-name]
-                                 (let [page (db/entity [:block/name (string/lower-case page-name)])]
+                                 [:h2.font-bold.text-lg (if (= page redirect-page-name)
+                                                          page
+                                                          [:span
+                                                           [:span.text-sm.mr-2 "Alias:" ]
+                                                           redirect-page-name])]
+                                 (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
                                    (when-let [f (state/get-page-blocks-cp)]
-                                     (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]
+                                     (f (state/get-current-repo) redirect-page-name {:sidebar? sidebar? :preview? true})))]
                    :interactive true
                    :delay       1000}
                   inner)
@@ -1357,7 +1361,16 @@
         properties (apply dissoc properties property/built-in-properties)
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
-                     (dissoc properties :title :filters)
+                     (let [repo (state/get-current-repo)
+                           properties (dissoc properties :title :filters)
+                           aliases (db/get-page-alias-names repo
+                                                            (:block/name (db/pull (:db/id (:block/page block)))))]
+                       (if (seq aliases)
+                         (if (:alias properties)
+                           (update properties :alias (fn [c]
+                                                       (distinct (concat c aliases))))
+                           (assoc properties :alias aliases))
+                         properties))
                      properties)
         properties (sort properties)]
     (cond
@@ -1372,7 +1385,8 @@
            (str (:block/uuid block) "-" k)))]
 
       (and pre-block? properties)
-      [:span.opacity-50 "Properties"]
+      (ui/tippy {:title "Click to edit page properties"}
+                [:span "🍵"])
 
       :else
       nil)))
@@ -1430,7 +1444,11 @@
         (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
               f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
                        content (property/remove-built-in-properties (:block/format block)
-                                                                 content)]
+                                                                    content)]
+                   ;; save current editing block
+                   (let [{:keys [value] :as state} (editor-handler/get-state)]
+                     (editor-handler/save-block! state value))
+
                    (state/set-editing!
                     edit-input-id
                     content

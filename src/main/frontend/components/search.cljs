@@ -161,7 +161,7 @@
                  :left 32
                  :height 400
                  :width 700
-                 :overflow "hidden"})
+                 :overflow "auto"})
         :class (if all? "search-all" "absolute")}
        (ui/auto-complete
         result
