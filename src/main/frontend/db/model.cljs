@@ -471,6 +471,15 @@
   [repo page-id]
   (zero? (get-page-blocks-count repo page-id)))
 
+(defn page-empty-or-dummy?
+  [repo page-id]
+  (or
+   (page-empty? repo page-id)
+   (when-let [db (conn/get-conn repo)]
+     (let [datoms (d/datoms db :avet :block/page page-id)]
+       (and (= (count datoms) 1)
+            (= "" (:block/content (db-utils/pull (:e (first datoms))))))))))
+
 (defn get-block-parent
   ([block-id]
    (get-block-parent (state/get-current-repo) block-id))

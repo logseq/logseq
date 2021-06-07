@@ -377,7 +377,7 @@
                                (:block/alias? config)
                                page
 
-                               (db/page-empty? (state/get-current-repo) (:db/id page-entity))
+                               (db/page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
                                (let [source-page (model/get-alias-source-page (state/get-current-repo)
                                                                               (string/lower-case page-name))]
                                  (or (when source-page (:block/name source-page))
@@ -396,10 +396,14 @@
                                           :font-weight    500
                                           :max-height     600
                                           :padding-bottom 64}}
-                                 [:h2.font-bold.text-lg page-name]
-                                 (let [page (db/entity [:block/name (string/lower-case page-name)])]
+                                 [:h2.font-bold.text-lg (if (= page redirect-page-name)
+                                                          page
+                                                          [:span
+                                                           [:span.text-sm.mr-2 "Alias:" ]
+                                                           redirect-page-name])]
+                                 (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
                                    (when-let [f (state/get-page-blocks-cp)]
-                                     (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]
+                                     (f (state/get-current-repo) redirect-page-name {:sidebar? sidebar? :preview? true})))]
                    :interactive true
                    :delay       1000}
                   inner)
