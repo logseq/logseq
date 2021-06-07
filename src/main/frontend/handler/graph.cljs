@@ -56,7 +56,10 @@
     (or (util/uuid-string? id)
        (string/starts-with? id "../assets/")
        (= id "..")
-       (string/starts-with? id "assets/"))))
+       (string/starts-with? id "assets/")
+       (string/ends-with? id ".gif")
+       (string/ends-with? id ".jpg")
+       (string/ends-with? id ".png"))))
 
 (defn- remove-uuids-and-files!
   [nodes]
@@ -80,14 +83,19 @@
                              (get x :block/original-name (:block/name x))) names))
         nodes (mapv (fn [node] (assoc node :id (get names (:id node) (:id node)))) nodes)
         links (->>
+               links
+               (remove (fn [{:keys [source target]}]
+                         (or (nil? source) (nil? target))))
                (mapv (fn [{:keys [source target]}]
                        (when (and (not (uuid-or-asset? source))
                                   (not (uuid-or-asset? target)))
-                         {:source (get names source)
-                          :target (get names target)}))
-                     links)
-               (remove nil?))
-        nodes (remove-uuids-and-files! nodes)]
+                         {:source (get names (string/lower-case source))
+                          :target (get names (string/lower-case target))})))
+               (remove nil?)
+               (remove (fn [{:keys [source target]}]
+                         (or (nil? source) (nil? target)))))
+        nodes (->> (remove-uuids-and-files! nodes)
+                   (util/distinct-by #(string/lower-case (:id %))))]
     {:nodes nodes
      :links links}))
 
