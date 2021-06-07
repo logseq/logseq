@@ -359,21 +359,6 @@
    (defn stop [e]
      (when e (doto e (.preventDefault) (.stopPropagation)))))
 
-#?(:cljs
-   (defn get-fragment
-     []
-     (when-let [hash js/window.location.hash]
-       (when (> (count hash) 2)
-         (-> (subs hash 1)
-             (string/split #"\?")
-             (first))))))
-
-#?(:cljs
-   (defn fragment-with-anchor
-     [anchor]
-     (let [fragment (get-fragment)]
-       (str "#" fragment "?anchor=" anchor))))
-
 (def speed 500)
 (def moving-frequency 15)
 

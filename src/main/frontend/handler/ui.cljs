@@ -78,21 +78,12 @@
       (let [elements (array-seq (js/document.getElementsByClassName id))]
         (when (first elements)
           (util/scroll-to-element (gobj/get (first elements) "id")))
-        (doseq [element elements]
-          (dom/add-class! element "block-highlight")
-          (js/setTimeout #(dom/remove-class! element "block-highlight")
-                         4000)))
+        (state/exit-editing-and-set-selected-blocks! elements))
       (when-let [element (gdom/getElement fragment)]
         (util/scroll-to-element fragment)
         (dom/add-class! element "block-highlight")
         (js/setTimeout #(dom/remove-class! element "block-highlight")
                        4000)))))
-
-(defn scroll-and-highlight!
-  [state]
-  (if-let [fragment (util/get-fragment)]
-    (highlight-element! fragment))
-  state)
 
 (defn add-style-if-exists!
   []
