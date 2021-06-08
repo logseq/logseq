@@ -23,6 +23,7 @@
             [clojure.set :as set]
             [clojure.zip :as zip]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.util.cursor :as cursor]
             [frontend.config :as config]
             [dommy.core :as dom]
             [frontend.utf8 :as utf8]
@@ -2265,8 +2266,8 @@
 
       :else
       (if up?
-        (util/move-cursor-up input)
-        (util/move-cursor-down input)))))
+        (cursor/move-cursor-up input)
+        (cursor/move-cursor-down input)))))
 
 (defn- move-to-block-when-cross-boundrary
   [direction]
