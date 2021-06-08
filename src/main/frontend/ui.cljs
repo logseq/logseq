@@ -585,11 +585,22 @@
                 (assoc :selected selected))
       label])])
 
-(rum/defc tippy
-  [opts child]
-  (Tippy (merge {:arrow true
-                 :sticky true
-                 :theme (:ui/theme @state/state)
-                 :disabled (not (state/enable-tooltip?))
-                 :unmountHTMLWhenHide true} opts)
-         child))
+(rum/defcs tippy < rum/static
+  (rum/local false ::mounted?)
+  [state opts child]
+  (let [*mounted? (::mounted? state)
+        mounted? @*mounted?]
+    (Tippy (->
+           (merge {:arrow true
+                   :sticky true
+                   :theme (:ui/theme @state/state)
+                   :disabled (not (state/enable-tooltip?))
+                   :unmountHTMLWhenHide true
+                   :open @*mounted?
+                   :onShow #(reset! *mounted? true)
+                   :onHide #(reset! *mounted? false)}
+                  opts)
+           (assoc :html (if mounted?
+                          (:html opts)
+                          [:div ""])))
+          child)))
