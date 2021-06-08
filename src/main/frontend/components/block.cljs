@@ -403,9 +403,9 @@
                                                            redirect-page-name])]
                                  (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
                                    (when-let [f (state/get-page-blocks-cp)]
-                                     (f (state/get-current-repo) redirect-page-name {:sidebar? sidebar? :preview? true})))]
+                                     (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]
                    :interactive true
-                   :delay       1000}
+                   :delay       [1000, 100]}
                   inner)
         inner))))
 
@@ -564,7 +564,7 @@
                                                :max-height 600}}
                                       (blocks-container [block] (assoc config :preview? true))]
                         :interactive true
-                        :delay       1000} inner)
+                        :delay       [1000, 100]} inner)
              inner))]
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
@@ -1385,8 +1385,7 @@
            (str (:block/uuid block) "-" k)))]
 
       (and pre-block? properties)
-      (ui/tippy {:title "Click to edit page properties"}
-                [:span "🍵"])
+      [:span.opacity-50 "Properties"]
 
       :else
       nil)))

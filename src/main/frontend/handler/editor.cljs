@@ -2821,7 +2821,8 @@
      {:block b :level 2}
      {:block e :level 2}]"
   [{:keys [collapse?] :or {collapse? false}}]
-  (let [page (state/get-current-page)]
+  (when-let [page (or (state/get-current-page)
+                      (date/today))]
     (->>
      (-> page
          (db/get-page-blocks-no-cache)
