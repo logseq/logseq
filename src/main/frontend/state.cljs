@@ -141,8 +141,7 @@
 
 (defn get-current-page
   []
-  (and
-   (= :page (get-current-route))
+  (when (= :page (get-current-route))
    (get-in (get-route-match)
            [:path-params :name])))
 
