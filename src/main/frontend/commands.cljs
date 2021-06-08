@@ -1,5 +1,6 @@
 (ns frontend.commands
   (:require [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [frontend.util.marker :as marker]
             [frontend.util.priority :as priority]
             [frontend.date :as date]
@@ -302,7 +303,7 @@
                         (or forward-pos 0))
                      (or backward-pos 0))]
       (state/set-block-content-and-last-pos! id new-value new-pos)
-      (util/move-cursor-to input
+      (cursor/move-cursor-to input
                            (if (or backward-pos forward-pos)
                              new-pos
                              (+ new-pos 1))))))
@@ -323,7 +324,7 @@
                       (or forward-pos 0))
                    (or backward-pos 0))]
     (state/set-block-content-and-last-pos! id new-value new-pos)
-    (util/move-cursor-to input new-pos)
+    (cursor/move-cursor-to input new-pos)
     (when check-fn
       (check-fn new-value (dec (count prefix)) new-pos))))
 
@@ -343,7 +344,7 @@
                       (or forward-pos 0))
                    (or backward-pos 0))]
     (state/set-block-content-and-last-pos! id new-value new-pos)
-    (util/move-cursor-to input new-pos)
+    (cursor/move-cursor-to input new-pos)
     (when check-fn
       (check-fn new-value (dec (count suffix)) new-pos))))
 
@@ -367,7 +368,7 @@
                       (or forward-pos 0))
                    (or backward-pos 0))]
     (state/set-block-content-and-last-pos! id new-value new-pos)
-    (util/move-cursor-to input new-pos)
+    (cursor/move-cursor-to input new-pos)
     (when selected?
       (.setSelectionRange input new-pos (+ new-pos (count selected))))
     (when check-fn
@@ -383,7 +384,7 @@
                        (subs edit-content (inc current-pos)))
         new-pos (count prefix)]
     (state/set-block-content-and-last-pos! id new-value new-pos)
-    (util/move-cursor-to input new-pos)))
+    (cursor/move-cursor-to input new-pos)))
 
 (defn get-matched-commands
   ([text]
@@ -410,17 +411,17 @@
 (defmethod handle-step :editor/cursor-back [[_ n]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (util/cursor-move-back current-input n))))
+      (cursor/move-cursor-backward current-input n))))
 
 (defmethod handle-step :editor/cursor-forward [[_ n]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (util/cursor-move-forward current-input n))))
+      (cursor/move-cursor-forward current-input n))))
 
 (defmethod handle-step :editor/move-cursor-to-end [[_]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
-      (util/move-cursor-to-end current-input))))
+      (cursor/move-cursor-to-end current-input))))
 
 (defmethod handle-step :editor/clear-current-slash [[_]]
   (when-let [input-id (state/get-edit-input-id)]

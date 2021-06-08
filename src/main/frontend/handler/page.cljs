@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.state :as state]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.util.cursor :as cursor]
             [frontend.config :as config]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
@@ -420,8 +421,8 @@
                        (- (count page-ref-text)
                           (count old-page-ref))
                        2)]
-        (util/move-cursor-to input new-pos)))
-    (util/cursor-move-forward input 2)))
+        (cursor/move-cursor-to input new-pos)))
+    (cursor/move-cursor-forward input 2)))
 
 (defn on-chosen-handler
   [input id q pos format]

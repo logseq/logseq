@@ -91,9 +91,9 @@
           new-value (str prefix wrapped-value postfix)]
       (state/set-edit-content! edit-id new-value)
       (if empty-selection?
-        (util/cursor-move-back input (count pattern))
+        (cursor/move-cursor-backward input (count pattern))
         (let [new-pos (count (str prefix wrapped-value))]
-          (util/move-cursor-to input new-pos))))))
+          (cursor/move-cursor-to input new-pos))))))
 
 (defn bold-format! []
   (format-text! config/get-bold))
@@ -127,7 +127,7 @@
                      (subs value selection-end))
           cur-pos (or selection-start cur-pos)]
       (state/set-edit-content! edit-id new-value)
-      (util/move-cursor-to input (+ cur-pos forward-pos)))))
+      (cursor/move-cursor-to input (+ cur-pos forward-pos)))))
 
 (defn open-block-in-sidebar!
   [block-id]
@@ -1729,7 +1729,7 @@
   (when-let [saved-cursor (get @state/state :editor/last-saved-cursor)]
     (when-let [input (gdom/getElement id)]
       (.focus input)
-      (util/move-cursor-to input saved-cursor))))
+      (cursor/move-cursor-to input saved-cursor))))
 
 (defn open-block!
   [first?]
@@ -1873,7 +1873,7 @@
   [input]
   (fn []
     (state/set-editor-show-block-search! false)
-    (util/cursor-move-forward input 2)))
+    (cursor/move-cursor-forward input 2)))
 
 (defn- get-block-tree-insert-pos-at-point
   "return [target-block sibling? delete-editing-block? editing-block]"
@@ -2077,7 +2077,7 @@
           s2 (subs value selected-end)]
       (state/set-edit-content! (state/get-edit-input-id)
                                (str s1 "\n" s2))
-      (util/move-cursor-to input (inc selected-start)))))
+      (cursor/move-cursor-to input (inc selected-start)))))
 
 (defn keydown-new-block-handler [state e]
   (if (state/get-new-block-toggle?)
@@ -2201,8 +2201,8 @@
 
         :else
         (if left?
-          (util/cursor-move-back input 1)
-          (util/cursor-move-forward input 1))))))
+          (cursor/move-cursor-backward input)
+          (cursor/move-cursor-forward input))))))
 
 (defn- delete-and-update [^js input start end]
   (.setRangeText input "" start end)
@@ -2232,7 +2232,7 @@
       (do
         (delete-block-aux! next-block false)
         (state/set-edit-content! input-id (str value "" (:block/content next-block)))
-        (util/move-cursor-to input current-pos)))))
+        (cursor/move-cursor-to input current-pos)))))
 
 (defn keydown-delete-handler
   [e]
@@ -2362,7 +2362,7 @@
           (indent-outdent (not (= :left direction)))
           (and input pos
                (when-let [input (state/get-input)]
-                 (util/move-cursor-to input pos)))))
+                 (cursor/move-cursor-to input pos)))))
 
       (state/selection?)
       (do
@@ -2398,7 +2398,7 @@
          (= (get-current-input-char input) key))
         (do
           (util/stop e)
-          (util/cursor-move-forward input 1))
+          (cursor/move-cursor-forward input))
 
         (contains? (set (keys autopair-map)) key)
         (do
@@ -2781,16 +2781,16 @@
   (util/kill-line-after! (state/get-input)))
 
 (defn beginning-of-block []
-  (util/move-cursor-to (state/get-input) 0))
+  (cursor/move-cursor-to (state/get-input) 0))
 
 (defn end-of-block []
-  (util/move-cursor-to-end (state/get-input)))
+  (cursor/move-cursor-to-end (state/get-input)))
 
 (defn cursor-forward-word []
-  (util/move-cursor-forward-by-word (state/get-input)))
+  (cursor/move-cursor-forward-by-word (state/get-input)))
 
 (defn cursor-backward-word []
-  (util/move-cursor-backward-by-word (state/get-input)))
+  (cursor/move-cursor-backward-by-word (state/get-input)))
 
 (defn backward-kill-word []
   (let [input (state/get-input)]

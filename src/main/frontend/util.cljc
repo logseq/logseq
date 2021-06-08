@@ -622,29 +622,6 @@
            res)))))
 
 #?(:cljs
-   (defn cursor-move-back [input n]
-     (let [{:keys [pos]} (get-caret-pos input)
-           pos (- pos n)]
-       (.setSelectionRange input pos pos))))
-
-#?(:cljs
-   (defn cursor-move-forward [input n]
-     (when input
-       (let [{:keys [pos]} (get-caret-pos input)
-             pos (+ pos n)]
-         (.setSelectionRange input pos pos)))))
-
-#?(:cljs
-   (defn move-cursor-to [input n]
-     (.setSelectionRange input n n)))
-
-#?(:cljs
-   (defn move-cursor-to-end
-     [input]
-     (let [pos (count (gobj/get input "value"))]
-       (move-cursor-to input pos))))
-
-#?(:cljs
    (defn kill-line-before!
      [input]
      (let [val (.-value input)
@@ -1258,43 +1235,6 @@
    coll))
 
 (def pprint clojure.pprint/pprint)
-
-#?(:cljs
-   (defn move-cursor-forward-by-word
-     [input]
-     (let [val   (.-value input)
-           current (.-selectionStart input)
-           current (loop [idx current]
-                     (if (#{\space \newline} (nth-safe val idx))
-                       (recur (inc idx))
-                       idx))
-           idx (or (->> [(string/index-of val \space current)
-                         (string/index-of val \newline current)]
-                        (remove nil?)
-                        (apply min))
-                   (count val))]
-       (move-cursor-to input idx))))
-
-#?(:cljs
-   (defn move-cursor-backward-by-word
-     [input]
-     (let [val     (.-value input)
-           current (.-selectionStart input)
-           prev    (or
-                    (->> [(string/last-index-of val \space (dec current))
-                          (string/last-index-of val \newline (dec current))]
-                         (remove nil?)
-                         (apply max))
-                    0)
-           idx     (if (zero? prev)
-                     0
-                     (->
-                      (loop [idx prev]
-                        (if (#{\space \newline} (nth-safe val idx))
-                          (recur (dec idx))
-                          idx))
-                      inc))]
-       (move-cursor-to input idx))))
 
 #?(:cljs
    (defn backward-kill-word

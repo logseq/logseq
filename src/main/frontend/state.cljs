@@ -2,6 +2,7 @@
   (:require [frontend.storage :as storage]
             [rum.core :as rum]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.util.cursor :as cursor]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [medley.core :as medley]
@@ -740,7 +741,7 @@
              ;; it seems to me textarea autoresize is completely broken
              #_(set! (.-value input) (string/trim content)))
            (when move-cursor?
-             (util/move-cursor-to input pos))))))))
+             (cursor/move-cursor-to input pos))))))))
 
 (defn clear-edit!
   []
