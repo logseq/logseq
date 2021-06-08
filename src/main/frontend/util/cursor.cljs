@@ -22,7 +22,7 @@
              second
              int)})
 
-(defn get-caret-pos
+(defn- get-caret-pos
   [input]
   (when input
     (try
@@ -34,21 +34,83 @@
 (defn move-cursor-to [input n]
   (.setSelectionRange input n n))
 
-(defn move-cursor-up [input]
+(defn move-cursor-forward
+  ([input]
+   (move-cursor-forward input 1))
+  ([input n]
+   (when input
+     (let [{:keys [pos]} (get-caret-pos input)
+           pos (+ pos n)]
+       (move-cursor-to input pos)))))
+
+(defn move-cursor-backward
+  ([input]
+   (move-cursor-backward input 1))
+  ([input n]
+   (when input
+     (let [{:keys [pos]} (get-caret-pos input)
+           pos (- pos n)]
+       (move-cursor-to input pos)))))
+
+(defn move-cursor-to-end
+  [input]
+  (let [pos (count (gobj/get input "value"))]
+    (move-cursor-to input pos)))
+
+(defn move-cursor-forward-by-word
+  [input]
+  (let [val   (.-value input)
+        current (.-selectionStart input)
+        current (loop [idx current]
+                  (if (#{\space \newline} (util/nth-safe val idx))
+                    (recur (inc idx))
+                    idx))
+        idx (or (->> [(string/index-of val \space current)
+                      (string/index-of val \newline current)]
+                     (remove nil?)
+                     (apply min))
+                (count val))]
+    (move-cursor-to input idx)))
+
+(defn move-cursor-backward-by-word
+  [input]
+  (let [val     (.-value input)
+        current (.-selectionStart input)
+        prev    (or
+                 (->> [(string/last-index-of val \space (dec current))
+                       (string/last-index-of val \newline (dec current))]
+                      (remove nil?)
+                      (apply max))
+                 0)
+        idx     (if (zero? prev)
+                  0
+                  (->
+                   (loop [idx prev]
+                     (if (#{\space \newline} (util/nth-safe val idx))
+                       (recur (dec idx))
+                       idx))
+                   inc))]
+    (move-cursor-to input idx)))
+
+(defn- move-cursor-up-down
+  [input direction]
   (let [elms  (-> (gdom/getElement "mock-text")
                   gdom/getChildren
                   array-seq)
         cusor (-> input
-                  (util/get-caret-pos)
+                  (get-caret-pos)
                   (select-keys [:left :top :pos]))
         chars (->> elms
                    (map mock-char-pos)
                    (group-by :top))
         tops  (sort (keys chars))
         tops-p (partition-by #(== (:top cusor) %) tops)
-        prev-t (-> tops-p first last)
+        line-next
+        (if (= :up direction)
+          (-> tops-p first last)
+          (-> tops-p last first))
         lefts
-        (->> (get chars prev-t)
+        (->> (get chars line-next)
              (partition-by (fn [char-pos]
                              (<= (:left char-pos) (:left cusor)))))
         left-a (-> lefts first last)
@@ -59,30 +121,11 @@
           (closer left-a cusor left-c))]
     (move-cursor-to input (:pos closer))))
 
+(defn move-cursor-up [input]
+  (move-cursor-up-down input :up))
+
 (defn move-cursor-down [input]
-  (let [elms  (-> (gdom/getElement "mock-text")
-                  gdom/getChildren
-                  array-seq)
-        cusor (-> input
-                  (util/get-caret-pos)
-                  (select-keys [:left :top :pos]))
-        chars (->> elms
-                   (map mock-char-pos)
-                   (group-by :top))
-        tops  (sort (keys chars))
-        tops-p (partition-by #(== (:top cusor) %) tops)
-        next-t (-> tops-p last first)
-        lefts
-        (->> (get chars next-t)
-             (partition-by (fn [char-pos]
-                             (<= (:left char-pos) (:left cusor)))))
-        left-a (-> lefts first last)
-        left-c (-> lefts last first)
-        closer
-        (if (< (count lefts) 2)
-          left-a
-          (closer left-a cusor left-c))]
-    (move-cursor-to input (:pos closer))))
+  (move-cursor-up-down input :down))
 
 (comment
   ;; previous implementation of up/down
