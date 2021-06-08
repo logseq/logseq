@@ -89,4 +89,20 @@
    {:before-load frontend.core/stop
     ;; after live-reloading finishes call this function
     :after-load frontend.core/start
-    :preloads     [devtools.preload]}}}}
+    :preloads     [devtools.preload]}}
+
+  :cards {:target     nubank.workspaces.shadow-cljs.target
+          :ns-regexp  "(test|cards)$"
+          :output-dir "./static/js/workspaces"
+          :asset-path "/static/js/workspaces"
+          :preloads   [] ; optional, list namespaces to be pre loaded
+          :devtools
+          {
+           :after-load   nubank.workspaces.core/after-load
+           :loader-mode  :eval
+           :http-root    "public/workspaces"
+           :http-port    9670
+           :watch-path   "static"
+           :preloads     [devtools.preload
+                          shadow.remote.runtime.cljs.browser]}
+          :modules {:main {:entries [workspaces.main]}}}}}
