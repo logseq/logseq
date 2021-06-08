@@ -1,6 +1,7 @@
 (ns frontend.components.editor
   (:require [rum.core :as rum]
             [frontend.components.svg :as svg]
+            [cljs-bean.core :as bean]
             [frontend.config :as config]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.lifecycle :as lifecycle]
@@ -375,6 +376,25 @@
     6 {:font-size "0.75em" :font-weight "bold" :margin "1.67em 0"}
     nil))
 
+
+(rum/defc mock-textarea
+  [content]
+  [:div#mock-text
+   {:style {:width "100%"
+            :height "100%"
+            :position "absolute"
+            :visibility "hidden"
+            :top 0
+            :left 0}}
+   (map-indexed (fn [idx c]
+                  (if (= c "\n")
+                    [:span {:id (str "mock-text_" idx)
+                          :key idx} "0" [:br]]
+                    [:span {:id (str "mock-text_" idx)
+                            :key idx} c]))
+                (string/split (str content "0") ""))])
+
+
 (rum/defcs box < rum/reactive
   {:init (fn [state]
            (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
@@ -405,6 +425,8 @@
        :on-paste          (editor-handler/editor-on-paste! id)
        :auto-focus        false
        :style             (get-editor-style heading-level)})
+
+     (mock-textarea content)
 
      ;; TODO: how to render the transitions asynchronously?
      (transition-cp
