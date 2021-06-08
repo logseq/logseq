@@ -72,6 +72,7 @@
         "fs-extra": "^9.1.0",
         "fuse.js": "^6.4.6",
         "gulp-cached": "^1.1.1",
+        "highlight.js": "^9.12.0",
         "ignore": "^5.1.8",
         "is-svg": "4.2.2",
         "jszip": "^3.5.0",
@@ -80,10 +81,13 @@
         "posthog-js": "^1.10.2",
         "react": "^17.0.2",
         "react-dom": "^17.0.2",
+        "react-grid-layout": "^0.16.6",
+        "react-icons": "^2.2.7",
         "react-resize-context": "^3.0.0",
         "react-textarea-autosize": "^8.0.1",
         "react-tippy": "^1.4.0",
         "react-transition-group": "^4.3.0",
+        "reakit": "^0.11.1",
         "url": "^0.11.0",
         "yargs-parser": "^20.2.4"
     }

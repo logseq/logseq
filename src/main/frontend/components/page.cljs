@@ -98,28 +98,23 @@
           journal? (db/journal-page? page-name)
           block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
-          raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
           page-e (if (and page-e (:db/id page-e))
                    {:db/id (:db/id page-e)}
                    page-e)
-          page-blocks (cond
-                        (seq raw-page-blocks)
-                        raw-page-blocks
 
-                        page-e
-                        (let [empty-block {:block/uuid (db/new-block-id)
-                                           :block/left page-e
-                                           :block/format format
-                                           :block/content ""
-                                           :block/parent page-e
-                                           :block/unordered true
-                                           :block/page page-e}]
-                          (when (db/page-empty? repo (:db/id page-e))
-                            (db/transact! [empty-block]))
-                          [empty-block])
-
-                        :else
-                        nil)
+          ;; create an empty block if not exists
+          _ (when (and (not block?) (db/page-empty? repo (:db/id page-e)))
+              (let [empty-block {:block/uuid (db/new-block-id)
+                                 :block/left page-e
+                                 :block/format format
+                                 :block/content ""
+                                 :block/parent page-e
+                                 :block/unordered true
+                                 :block/page page-e}]
+                (when (db/page-empty? repo (:db/id page-e))
+                  (db/transact! [empty-block]))))
+          raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
+          page-blocks raw-page-blocks
           document-mode? (state/sub :document/mode?)
           hiccup-config (merge
                          {:id (if block? (str block-id) page-name)
