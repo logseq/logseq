@@ -107,7 +107,7 @@
 (defn html-link-format! []
   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format value block edit-id input]} m
-          cur-pos (:pos (util/get-caret-pos input))
+          cur-pos (cursor/pos input)
           empty-selection? (= selection-start selection-end)
           selection (subs value selection-start selection-end)
           selection-link? (and selection (or (util/starts-with? selection "http://")
@@ -1765,7 +1765,7 @@
   []
   (when-let [id (state/get-edit-input-id)]
     (when-let [input (gdom/getElement id)]
-      (let [current-pos (:pos (util/get-caret-pos input))
+      (let [current-pos (cursor/pos input)
             pos (:editor/last-saved-cursor @state/state)
             edit-content (or (state/sub [:editor/content id]) "")]
         (or
@@ -1781,7 +1781,7 @@
     (when-let [q (get-search-q)]
       (let [value (gobj/get input "value")
             pos (:editor/last-saved-cursor @state/state)
-            current-pos (:pos (util/get-caret-pos input))]
+            current-pos (cursor/pos input)]
         (when (or (< current-pos pos)
                   (string/includes? q "]")
                   (string/includes? q ")"))
@@ -2257,7 +2257,7 @@
   [cut? e]
   (let [^js input (state/get-input)
         id (state/get-edit-input-id)
-        current-pos (:pos (util/get-caret-pos input))
+        current-pos (cursor/pos input)
         value (gobj/get input "value")
         deleted (and (> current-pos 0)
                      (util/nth-safe value (dec current-pos)))
@@ -2353,7 +2353,7 @@
     (cond
       (state/editing?)
       (let [input (state/get-input)
-            pos (:pos (util/get-caret-pos input))]
+            pos (cursor/pos input)]
         (when (and (not (state/get-editor-show-input))
                    (not (state/get-editor-show-date-picker?))
                    (not (state/get-editor-show-template-search?)))
@@ -2421,7 +2421,7 @@
          (= key "#"))
         (do
           (commands/handle-step [:editor/search-page-hashtag])
-          (state/set-last-pos! (:pos (util/get-caret-pos input)))
+          (state/set-last-pos! (cursor/pos input))
           (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
         (let [sym "$"]
