@@ -506,40 +506,6 @@
   [repo-url]
   (take-last 2 (string/split repo-url #"/")))
 
-#?(:cljs
-   (defn get-textarea-height
-     [input]
-     (some-> input
-             (d/style)
-             (gobj/get "height")
-             (string/split #"\.")
-             first
-             (parse-int))))
-
-#?(:cljs
-   (defn get-textarea-line-height
-     [input]
-     (try
-       (some-> input
-               (d/style)
-               (gobj/get "lineHeight")
-                ;; TODO: is this cross-platform?
-               (string/replace "px" "")
-               (parse-int))
-       (catch js/Error _e
-         24))))
-
-#?(:cljs
-   (defn textarea-cursor-first-row?
-     [input line-height]
-     (<= (:top (get-caret-pos input)) line-height)))
-
-#?(:cljs
-   (defn textarea-cursor-end-row?
-     [input line-height]
-     (>= (+ (:top (get-caret-pos input)) line-height)
-         (get-textarea-height input))))
-
 (defn safe-split-first [pattern s]
   (if-let [first-index (string/index-of s pattern)]
     [(subs s 0 first-index)
