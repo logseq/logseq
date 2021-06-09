@@ -2117,7 +2117,7 @@
           result-blocks (if template-including-parent? sorted-blocks (drop 1 sorted-blocks))
           tree (blocks-vec->tree result-blocks)]
       (insert-command! id "" format {})
-      (let [last-block (paste-block-tree-at-point tree [:template :template-including-parent]
+      (let [last-block (paste-block-vec-tree-at-target tree [:template :template-including-parent]
                                                   (fn [content]
                                                     (->> content
                                                          (property/remove-property format "template")
