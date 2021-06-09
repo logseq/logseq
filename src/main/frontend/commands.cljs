@@ -469,7 +469,7 @@
         (let [new-pos (compute-pos-delta-when-change-marker
                        current-input edit-content new-value marker (dec slash-pos))]
           ;; TODO: any performance issue?
-          (js/setTimeout #(util/set-caret-pos! current-input new-pos) 10))))))
+          (js/setTimeout #(cursor/move-cursor-to current-input new-pos) 10))))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] format]
   (when-let [input-id (state/get-edit-input-id)]

@@ -326,11 +326,6 @@
                  (gobj/get pre-caret-text-range "text")))))))))
 
 #?(:cljs
-   (defn set-caret-pos!
-     [input pos]
-     (.setSelectionRange input pos pos)))
-
-#?(:cljs
    (defn get-caret-pos
      [input]
      (when input

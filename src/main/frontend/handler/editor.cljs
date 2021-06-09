@@ -150,7 +150,7 @@
     (when-let [cursor-range (state/get-cursor-range)]
       (when-let [range cursor-range]
         (let [pos (diff/find-position markup range)]
-          (util/set-caret-pos! node pos))))))
+          (cursor/move-cursor-to node pos))))))
 
 (defn highlight-block!
   [block-uuid]
@@ -747,7 +747,7 @@
       (let [new-pos (commands/compute-pos-delta-when-change-marker
                      current-input content new-content marker (util/get-input-pos current-input))]
         (state/set-edit-content! edit-input-id new-content)
-        (util/set-caret-pos! current-input new-pos)))))
+        (cursor/move-cursor-to current-input new-pos)))))
 
 (defn set-marker
   [{:block/keys [uuid marker content format properties] :as block} new-marker]
@@ -2256,8 +2256,8 @@
     (cond
       (not= selected-start selected-end)
       (if up?
-        (util/set-caret-pos! input selected-start)
-        (util/set-caret-pos! input selected-end))
+        (cursor/move-cursor-to input selected-start)
+        (cursor/move-cursor-to input selected-end))
 
       (or (and up? (cursor/textarea-cursor-first-row? input))
           (and down? (cursor/textarea-cursor-last-row? input)))
@@ -2299,8 +2299,8 @@
       (cond
         (not= selected-start selected-end)
         (if left?
-          (util/set-caret-pos! input selected-start)
-          (util/set-caret-pos! input selected-end))
+          (cursor/move-cursor-to input selected-start)
+          (cursor/move-cursor-to input selected-end))
 
         (or (and left? (util/input-start? input))
             (and right? (util/input-end? input)))
