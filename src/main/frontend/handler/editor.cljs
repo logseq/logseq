@@ -2088,11 +2088,18 @@
 (defn paste-block-tree-after-target
   [target-block-id sibling? tree format]
   (let [vec-tree (tree->vec-tree tree)
-        block-tree (vec-tree->vec-block-tree vec-tree format)]
+        block-tree (vec-tree->vec-block-tree vec-tree format)
+        target-block (db/pull target-block-id)
+        page-block (if (:block/name target-block) target-block
+                       (db/entity (:db/id (:block/page (db/pull target-block-id)))))
+        ;; sibling? = false, when target-block is a page-block
+        sibling? (if (=  target-block-id (:db/id page-block))
+                   false
+                   sibling?)]
     (paste-block-vec-tree-at-target
      block-tree [] nil
      #(get-block-tree-insert-pos-after-target target-block-id sibling?)
-     (db/entity (:db/id (:block/page (db/pull target-block-id)))))))
+     page-block)))
 
 (defn template-on-chosen-handler
   [_input id _q format _edit-block _edit-content]
