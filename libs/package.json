@@ -10,7 +10,7 @@
     "dev:user": "npm run build:user -- --mode development --watch",
     "build:core": "webpack --config webpack.config.core.js --mode production",
     "dev:core": "npm run build:core -- --mode development --watch",
-    "build": "tsc && rm dist/*.js && cp src/*.d.ts dist/ && npm run build:user"
+    "build": "tsc && rm dist/*.js && npm run build:user"
   },
   "dependencies": {
     "csstype": "^3.0.8",

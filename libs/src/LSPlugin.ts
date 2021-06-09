@@ -1,11 +1,10 @@
 import EventEmitter from 'eventemitter3'
 import * as CSS from 'csstype'
 import { LSPluginCaller } from './LSPlugin.caller'
-import { LSPluginUser } from './LSPlugin.user'
 
-type PluginLocalIdentity = string
+export type PluginLocalIdentity = string
 
-type ThemeOptions = {
+export type ThemeOptions = {
   name: string
   url: string
   description?: string
@@ -14,38 +13,38 @@ type ThemeOptions = {
   [key: string]: any
 }
 
-type StyleString = string;
-type StyleOptions = {
+export type StyleString = string;
+export type StyleOptions = {
   key?: string
   style: StyleString
 }
 
-type UIBaseOptions = {
+export type UIBaseOptions = {
   key?: string
   replace?: boolean
   template: string
 }
 
-type UIPathIdentity = {
+export type UIPathIdentity = {
   path: string // dom selector
 }
 
-type UISlotIdentity = {
+export type UISlotIdentity = {
   slot: string // slot key
 }
 
-type UISlotOptions = UIBaseOptions & UISlotIdentity
-type UIPathOptions = UIBaseOptions & UIPathIdentity
-type UIOptions = UIPathOptions | UISlotOptions
+export type UISlotOptions = UIBaseOptions & UISlotIdentity
+export type UIPathOptions = UIBaseOptions & UIPathIdentity
+export type UIOptions = UIPathOptions | UISlotOptions
 
-interface LSPluginPkgConfig {
+export interface LSPluginPkgConfig {
   id: PluginLocalIdentity
   mode: 'shadow' | 'iframe'
   themes: Array<ThemeOptions>
   icon: string
 }
 
-interface LSPluginBaseInfo {
+export interface LSPluginBaseInfo {
   id: string // should be unique
   mode: 'shadow' | 'iframe'
 
@@ -57,21 +56,22 @@ interface LSPluginBaseInfo {
   [key: string]: any
 }
 
-type IHookEvent = {
+export type IHookEvent = {
   [key: string]: any
 }
 
-type IUserOffHook = () => void
-type IUserHook<E = any, R = IUserOffHook> = (callback: (e: IHookEvent & E) => void) => IUserOffHook
-type IUserSlotHook<E = any> = (callback: (e: IHookEvent & UISlotIdentity & E) => void) => void
+export type IUserOffHook = () => void
+export type IUserHook<E = any, R = IUserOffHook> = (callback: (e: IHookEvent & E) => void) => IUserOffHook
+export type IUserSlotHook<E = any> = (callback: (e: IHookEvent & UISlotIdentity & E) => void) => void
 
-type BlockID = number
-type BlockUUID = string
-type BlockUUIDTuple = ['uuid', BlockUUID]
+export type BlockID = number
+export type BlockUUID = string
+export type BlockUUIDTuple = ['uuid', BlockUUID]
 
-type IEntityID = { id: BlockID }
+export type IBatchBlock = { content: string, props?: Record<string, any>, children?: Array<IBatchBlock> }
+export type IEntityID = { id: BlockID }
 
-interface AppUserConfigs {
+export interface AppUserConfigs {
   preferredThemeMode: 'dark' | 'light'
   preferredFormat: 'markdown' | 'org'
   preferredLanguage: string
@@ -80,7 +80,7 @@ interface AppUserConfigs {
   [key: string]: any
 }
 
-interface BlockEntity {
+export interface BlockEntity {
   id: BlockID // db id
   uuid: BlockUUID
   left: IEntityID
@@ -103,7 +103,7 @@ interface BlockEntity {
   [key: string]: any
 }
 
-interface PageEntity {
+export interface PageEntity {
   id: BlockID
   uuid: BlockUUID
   name: string
@@ -115,19 +115,19 @@ interface PageEntity {
   journalDay?: number
 }
 
-type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
-type BlockPageName = string
-type PageIdentity = BlockPageName | BlockIdentity
-type SlashCommandActionCmd =
+export type BlockIdentity = BlockUUID | Pick<BlockEntity, 'uuid'>
+export type BlockPageName = string
+export type PageIdentity = BlockPageName | BlockIdentity
+export type SlashCommandActionCmd =
   'editor/input'
   | 'editor/hook'
   | 'editor/clear-current-slash'
   | 'editor/restore-saved-cursor'
-type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
-type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
-type BlockCursorPosition = { left: number, top: number, height: number, pos: number, rect: DOMRect }
+export type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
+export type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
+export type BlockCursorPosition = { left: number, top: number, height: number, pos: number, rect: DOMRect }
 
-interface IAppProxy {
+export interface IAppProxy {
   getUserInfo: () => Promise<any>
   getUserConfigs: () => Promise<AppUserConfigs>
 
@@ -150,8 +150,18 @@ interface IAppProxy {
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 }
 
-interface IEditorProxy extends Record<string, any> {
+export interface IEditorProxy extends Record<string, any> {
+  /**
+   * Register logseq `slash` command when editing mode
+   * @param tag command name
+   * @param action command callback
+   */
   registerSlashCommand: (tag: string, action: BlockCommandCallback | Array<SlashCommandAction>) => boolean
+
+  /**
+   * @param tag
+   * @param action
+   */
   registerBlockContextMenu: (tag: string, action: BlockCommandCallback) => boolean
 
   // block related APIs
@@ -167,6 +177,7 @@ interface IEditorProxy extends Record<string, any> {
   getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
 
   insertBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
+  insertBatchBlock: (srcBlock: BlockIdentity, batch: IBatchBlock | Array<IBatchBlock>, opts?: Partial<{ before: boolean, sibling: boolean }>) => Promise<null>
   updateBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ props: {} }>) => Promise<void>
   removeBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<void>
   getBlock: (srcBlock: BlockIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity | null>
@@ -183,11 +194,11 @@ interface IEditorProxy extends Record<string, any> {
   getBlockProperties: (block: BlockIdentity) => Promise<any>
 }
 
-interface IDBProxy {
+export interface IDBProxy {
   datascriptQuery: <T = any>(query: string) => Promise<T>
 }
 
-interface ILSPluginThemeManager extends EventEmitter {
+export interface ILSPluginThemeManager extends EventEmitter {
   themes: Map<PluginLocalIdentity, Array<ThemeOptions>>
 
   registerTheme (id: PluginLocalIdentity, opt: ThemeOptions): Promise<void>
@@ -197,9 +208,9 @@ interface ILSPluginThemeManager extends EventEmitter {
   selectTheme (opt?: ThemeOptions): Promise<void>
 }
 
-type LSPluginUserEvents = 'ui:visible:changed' | 'settings:changed'
+export type LSPluginUserEvents = 'ui:visible:changed' | 'settings:changed'
 
-interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
+export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   /**
    * Indicate connected with host
    */

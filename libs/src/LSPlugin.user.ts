@@ -20,7 +20,6 @@ import EventEmitter from 'eventemitter3'
 declare global {
   interface Window {
     __LSP__HOST__: boolean
-    logseq: ILSPluginUser
   }
 }
 
@@ -117,6 +116,7 @@ const KEY_MAIN_UI = 0
 
 /**
  * User plugin instance
+ * @public
  */
 export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements ILSPluginUser {
   /**
@@ -279,6 +279,9 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     return this._caller
   }
 
+  /**
+   * @internal
+   */
   _makeUserProxy (
     target: any,
     tag?: 'app' | 'editor' | 'db'
@@ -322,11 +325,14 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     })
   }
 
+  /**
+   * The interface methods of {@link IAppProxy}
+   */
   get App (): IAppProxy {
     return this._makeUserProxy(app, 'app')
   }
 
-  get Editor () {
+  get Editor (): IEditorProxy {
     return this._makeUserProxy(editor, 'editor')
   }
 
@@ -335,6 +341,11 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   }
 }
 
+export * from './LSPlugin'
+
+/**
+ * @internal
+ */
 export function setupPluginUserInstance (
   pluginBaseInfo: LSPluginBaseInfo,
   pluginCaller: LSPluginCaller
@@ -344,5 +355,6 @@ export function setupPluginUserInstance (
 
 if (window.__LSP__HOST__ == null) { // Entry of iframe mode
   const caller = new LSPluginCaller(null)
+  // @ts-ignore
   window.logseq = setupPluginUserInstance({} as any, caller)
 }
