@@ -204,9 +204,9 @@
   (true? (:feature/enable-grammarly?
           (get (sub-config) (get-current-repo)))))
 
-(defn store-all-ids-in-text?
-  []
-  (true? (:text/store-all-ids (get-config))))
+;; (defn store-block-id-in-file?
+;;   []
+;;   (true? (:block/store-id-in-file? (get-config))))
 
 (defn scheduled-deadlines-disabled?
   []
