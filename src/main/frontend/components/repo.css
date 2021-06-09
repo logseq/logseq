@@ -8,3 +8,8 @@
     }
   }
 }
+
+.repo-plus svg {
+    display: inline;
+    transform: scale(0.7);
+}

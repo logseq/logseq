@@ -844,12 +844,12 @@
         (let [format (:block/format block)
               content (:block/content block)
               properties (:block/properties block)
-              properties (if value        ; add
-                           (assoc properties key value)
-                           (dissoc properties key))
-              content (if value
-                        (property/insert-property format content key value)
-                        (property/remove-property format key content))
+              properties (if (nil? value)
+                           (dissoc properties key)
+                           (assoc properties key value))
+              content (if (nil? value)
+                        (property/remove-property format key content)
+                        (property/insert-property format content key value))
               block (outliner-core/block {:block/uuid block-id
                                           :block/properties properties
                                           :block/content content})]
@@ -1998,7 +1998,8 @@
                  (when-let [id (:db/id (outliner-core/get-data editing-block))]
                    (outliner-core/delete-node (outliner-core/block (db/pull id)) true)))
              new-blocks (db/pull-many repo '[*] (map (fn [id] [:block/uuid id]) @new-block-uuids))]
-         (db/refresh! repo {:key :block/insert :data new-blocks}))))))
+         (db/refresh! repo {:key :block/insert :data new-blocks})
+         (last metadata-replaced-blocks))))))
 
 (defn template-on-chosen-handler
   [_input id _q format _edit-block _edit-content]
@@ -2006,24 +2007,29 @@
     (let [repo (state/get-current-repo)
           block (db/entity db-id)
           block-uuid (:block/uuid block)
-          including-parent? (not (false? (:including-parent (:block/properties block))))
-          blocks (if including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
+          template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
+          blocks (if template-including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
           level-blocks (vals (blocks-with-level blocks))
           grouped-blocks (group-by #(= db-id (:db/id %)) level-blocks)
           root-block (or (first (get grouped-blocks true)) (assoc (db/pull db-id) :level 1))
           blocks-exclude-root (get grouped-blocks false)
           sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
-          result-blocks (if including-parent? sorted-blocks (drop 1 sorted-blocks))
+          result-blocks (if template-including-parent? sorted-blocks (drop 1 sorted-blocks))
           tree (blocks-vec->tree result-blocks)]
       (insert-command! id "" format {})
-      (paste-block-tree-at-point tree [:template :including-parent]
-                                 (fn [content]
-                                   (->> content
-                                        (property/remove-property format "template")
-                                        (property/remove-property format "including-parent")
-                                        template/resolve-dynamic-template!)))
-      (clear-when-saved!)
-      (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]}))
+      (let [last-block (paste-block-tree-at-point tree [:template :template-including-parent]
+                                                  (fn [content]
+                                                    (->> content
+                                                         (property/remove-property format "template")
+                                                         (property/remove-property format "template-including-parent")
+                                                         template/resolve-dynamic-template!)))]
+        (clear-when-saved!)
+        (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]})
+        ;; FIXME:
+        ;; (js/setTimeout
+        ;;  #(edit-block! {:block/uuid (:block/uuid last-block)} :max nil (:block/uuid last-block))
+        ;;  100)
+        ))
     (when-let [input (gdom/getElement id)]
       (.focus input))))
 
@@ -2458,7 +2464,7 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (and (= k "【")
+        (when (and (or (= k "[") (= k "【"))
                    (> current-pos 0)
                    (= "【" (util/nth-safe value (dec (dec current-pos)))))
           (commands/handle-step [:editor/input "[[]]" {:last-pattern "【【"
@@ -2466,7 +2472,7 @@
           (commands/handle-step [:editor/search-page])
           (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
-        (when (and (= k "（")
+        (when (and (or (= k "(") (= k "（"))
                    (> current-pos 0)
                    (= "（" (util/nth-safe value (dec (dec current-pos)))))
           (commands/handle-step [:editor/input "(())" {:last-pattern "（（"
