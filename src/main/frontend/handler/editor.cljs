@@ -2463,7 +2463,7 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (and (= k "【")
+        (when (and (or (= k "[") (= k "【"))
                    (> current-pos 0)
                    (= "【" (util/nth-safe value (dec (dec current-pos)))))
           (commands/handle-step [:editor/input "[[]]" {:last-pattern "【【"
@@ -2471,7 +2471,7 @@
           (commands/handle-step [:editor/search-page])
           (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
 
-        (when (and (= k "（")
+        (when (and (or (= k "(") (= k "（"))
                    (> current-pos 0)
                    (= "（" (util/nth-safe value (dec (dec current-pos)))))
           (commands/handle-step [:editor/input "(())" {:last-pattern "（（"
