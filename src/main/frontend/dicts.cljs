@@ -240,6 +240,7 @@
         :page-search "Search in the current page"
         :new-page "New page"
         :new-file "New file"
+        :new-graph "Add new graph"
         :graph "Graph"
         :graph-view "View Graph"
         :publishing "Publishing"

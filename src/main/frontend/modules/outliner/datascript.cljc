@@ -43,9 +43,9 @@
                 (not (:skip-transact? opts)))
        (try
          (let [conn (conn/get-conn false)
-              editor-cursor (state/get-last-edit-block)
-              meta (merge opts {:editor-cursor editor-cursor})
-              rs (d/transact! conn txs meta)]
+               editor-cursor (state/get-current-edit-block-and-position)
+               meta (merge opts {:editor-cursor editor-cursor})
+               rs (d/transact! conn txs meta)]
           (when-not config/test?
             (after-transact-pipelines rs))
           rs)
