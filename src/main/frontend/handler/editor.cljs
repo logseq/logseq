@@ -1501,12 +1501,12 @@
           "[["
           (do
             (commands/handle-step [:editor/search-page])
-            (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+            (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
           "(("
           (do
             (commands/handle-step [:editor/search-block :reference])
-            (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+            (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
           nil)))))
 
@@ -1817,7 +1817,6 @@
 (defn edit-box-on-change!
   [e block id]
   (let [value (util/evalue e)
-        current-pos (util/get-input-pos (gdom/getElement id))
         repo (or (:block/repo block)
                  (state/get-current-repo))]
     (state/set-edit-content! id value false)
@@ -1831,22 +1830,24 @@
                  (state/set-editor-op! :auto-save)
                  (save-current-block! {})
                  (state/set-editor-op! nil)))
-             500))
-    (let [input (gdom/getElement id)
-          native-e (gobj/get e "nativeEvent")
-          last-input-char (util/nth-safe value (dec current-pos))]
-      (case last-input-char
-        "/"
-        ;; TODO: is it cross-browser compatible?
-        (when (not= (gobj/get native-e "inputType") "insertFromPaste")
-          (when-let [matched-commands (seq (get-matched-commands input))]
-            (reset! commands/*slash-caret-pos (util/get-caret-pos input))
-            (reset! commands/*show-commands true)))
-        "<"
-        (when-let [matched-commands (seq (get-matched-block-commands input))]
-          (reset! commands/*angle-bracket-caret-pos (util/get-caret-pos input))
-          (reset! commands/*show-block-commands true))
-        nil))))
+             500))))
+
+(defn handle-last-input []
+  (let [input           (state/get-input)
+        pos             (cursor/pos input)
+        last-input-char (util/nth-safe (.-value input) (dec pos))]
+    (case last-input-char
+      "/"
+      ;; TODO: is it cross-browser compatible?
+      ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
+      (when (seq (get-matched-commands input))
+        (reset! commands/*slash-caret-pos (cursor/get-caret-pos input))
+        (reset! commands/*show-commands true))
+      "<"
+      (when (seq (get-matched-block-commands input))
+        (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
+        (reset! commands/*show-block-commands true))
+      nil)))
 
 (defn block-on-chosen-handler
   [input id q format]
@@ -2407,11 +2408,11 @@
             (surround-by? input "[[" "]]")
             (do
               (commands/handle-step [:editor/search-page])
-              (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+              (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
             (surround-by? input "((" "))")
             (do
               (commands/handle-step [:editor/search-block :reference])
-              (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+              (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
             :else
             nil))
 
@@ -2422,7 +2423,7 @@
         (do
           (commands/handle-step [:editor/search-page-hashtag])
           (state/set-last-pos! (cursor/pos input))
-          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+          (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
         (let [sym "$"]
           (and (= key sym)
@@ -2463,7 +2464,7 @@
           (commands/handle-step [:editor/input "[[]]" {:last-pattern "【【"
                                                        :backward-pos 2}])
           (commands/handle-step [:editor/search-page])
-          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+          (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
         (when (and (= k "（")
                    (> current-pos 0)
@@ -2471,7 +2472,7 @@
           (commands/handle-step [:editor/input "(())" {:last-pattern "（（"
                                                        :backward-pos 2}])
           (commands/handle-step [:editor/search-block :reference])
-          (reset! commands/*slash-caret-pos (util/get-caret-pos input)))
+          (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
         (when (= c " ")
           (when (or (= (util/nth-safe value (dec (dec current-pos))) "#")

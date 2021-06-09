@@ -5,7 +5,6 @@
    #?(:cljs [cljs-time.coerce :as tc])
    #?(:cljs [cljs-time.core :as t])
    #?(:cljs [dommy.core :as d])
-   #?(:cljs ["/frontend/caret_pos" :as caret-pos])
    #?(:cljs ["/frontend/selection" :as selection])
    #?(:cljs ["/frontend/utils" :as utils])
    #?(:cljs ["path" :as nodePath])
@@ -324,17 +323,6 @@
                  (.moveToElementText pre-caret-text-range node)
                  (.setEndPoint pre-caret-text-range "EndToEnd" text-range)
                  (gobj/get pre-caret-text-range "text")))))))))
-
-#?(:cljs
-   (defn get-caret-pos
-     [input]
-     (when input
-       (try
-         (let [pos ((gobj/get caret-pos "position") input)]
-           (set! pos -rect (.. input (getBoundingClientRect) (toJSON)))
-           (bean/->clj pos))
-         (catch js/Error e
-           (js/console.error e))))))
 
 (defn get-first-or-last-line-pos
   [input]
