@@ -88,8 +88,11 @@
 (extend-type Block
   tree/INode
   (-get-id [this]
-    (when-let [block-id (get-in this [:data :block/uuid])]
-      block-id))
+    (or
+     (when-let [block-id (get-in this [:data :block/uuid])]
+       block-id)
+     (when-let [db-id (get-in this [:data :db/id])]
+       (:block/uuid (db/pull db-id)))))
 
   (-get-parent-id [this]
     (-> (get-in this [:data :block/parent])

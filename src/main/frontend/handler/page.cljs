@@ -83,6 +83,7 @@
                [tx default-properties]
                [tx])]
      (db/transact! txs)
+     (editor-handler/insert-first-page-block-if-not-exists! page)
      (when redirect?
       (route-handler/redirect! {:to :page
                                 :path-params {:name page}})))))
@@ -312,8 +313,7 @@
   (let [content (str "[[" page-name "]]")]
     (editor-handler/api-insert-new-block!
      content
-     {:page "Contents"
-      :sibling? true})
+     {:page "Contents"})
     (notification/show! "Added to contents!" :success)
     (editor-handler/clear-when-saved!)))
 
