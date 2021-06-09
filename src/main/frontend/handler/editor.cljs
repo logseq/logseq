@@ -282,8 +282,8 @@
 (defn- remove-non-existed-refs!
   [refs]
   (remove (fn [x] (and (vector? x)
-                      (= :block/uuid (first x))
-                      (nil? (db/entity x)))) refs))
+                       (= :block/uuid (first x))
+                       (nil? (db/entity x)))) refs))
 
 (defn- wrap-parse-block
   [{:block/keys [content format parent left page uuid pre-block?] :as block}]
@@ -581,7 +581,6 @@
                value)]
     [properties value]))
 
-
 (defn insert-new-block!
   ([state]
    (insert-new-block! state nil))
@@ -725,8 +724,8 @@
           format (or (db/get-page-format (state/get-current-page))
                      (state/get-preferred-format))
           cond-fn (fn [marker] (or (and (= :markdown format)
-                                       (util/safe-re-find (re-pattern (str "#*\\s*" marker)) content))
-                                  (util/starts-with? content "TODO")))
+                                        (util/safe-re-find (re-pattern (str "#*\\s*" marker)) content))
+                                   (util/starts-with? content "TODO")))
           [new-content marker] (cond
                                  (cond-fn "TODO")
                                  [(string/replace-first content "TODO" "DOING") "DOING"]
@@ -748,7 +747,6 @@
                      current-input content new-content marker (util/get-input-pos current-input))]
         (state/set-edit-content! edit-input-id new-content)
         (util/set-caret-pos! current-input new-pos)))))
-
 
 (defn set-marker
   [{:block/keys [uuid marker content format properties] :as block} new-marker]
@@ -1164,9 +1162,8 @@
               (edit-block! {:block/uuid block-id} :max nil block-id))
             (let [page-id (some-> (db/entity [:block/uuid block-id])
                                   :block/page
-                                  :db/id
+                                  :db/id)]
 
-                                  )]
               (when-let [page-name (:block/name (db/entity page-id))]
                 (route-handler/redirect! {:to :page
                                           :path-params {:name page-name}})
@@ -1908,6 +1905,14 @@
     (state/set-editor-show-block-search! false)
     (util/cursor-move-forward input 2)))
 
+(defn- get-block-tree-insert-pos-after-target
+  "return [target-block sibling? delete-editing-block? editing-block]"
+  ([target-block-id sibling?]
+   (get-block-tree-insert-pos-after-target target-block-id sibling? nil))
+  ([target-block-id sibling? editing-block]
+   (when-let [target-block (db/pull target-block-id)]
+     [target-block sibling? false (or editing-block target-block)])))
+
 (defn- get-block-tree-insert-pos-at-point
   "return [target-block sibling? delete-editing-block? editing-block]"
   []
@@ -1988,8 +1993,8 @@
                      :block/page (select-keys page [:db/id])
                      :block/format format
                      :block/properties (apply dissoc (:block/properties block)
-                                         (concat [:id :custom_id :custom-id]
-                                                 exclude-properties))
+                                              (concat [:id :custom_id :custom-id]
+                                                      exclude-properties))
                      :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
                      :block/content new-content
                      :block/title new-title
@@ -1999,14 +2004,17 @@
          (assoc m :block/file (select-keys file [:db/id]))
          m)))))
 
-(defn- paste-block-tree-at-point
-  ([tree exclude-properties] (paste-block-tree-at-point tree exclude-properties nil))
+(defn- paste-block-vec-tree-at-target
+  ([tree exclude-properties]
+   (paste-block-vec-tree-at-target tree exclude-properties nil nil))
   ([tree exclude-properties content-update-fn]
+   (paste-block-vec-tree-at-target tree exclude-properties content-update-fn nil))
+  ([tree exclude-properties content-update-fn get-pos-fn]
    (let [repo (state/get-current-repo)
          page (:block/page (db/entity (:db/id (state/get-edit-block))))
          file (:block/file page)]
      (when-let [[target-block sibling? delete-editing-block? editing-block]
-                (get-block-tree-insert-pos-at-point)]
+                ((or get-pos-fn get-block-tree-insert-pos-at-point))]
        (let [target-block (outliner-core/block target-block)
              editing-block (outliner-core/block editing-block)
              format (or (:block/format target-block) (state/get-preferred-format))
@@ -2032,6 +2040,57 @@
              new-blocks (db/pull-many repo '[*] (map (fn [id] [:block/uuid id]) @new-block-uuids))]
          (db/refresh! repo {:key :block/insert :data new-blocks})
          (last metadata-replaced-blocks))))))
+
+(defn- tree->vec-tree
+  "tree:
+  [
+  {
+    :content 'this is a block',
+    :props {\"key\" \"value\" \"key2\" \"value2\"},
+    :children [
+      { :content 'this is child block' }
+    ]
+  },
+  {
+    :content 'this is sibling block'
+  }
+  ]"
+  [tree]
+  (into []
+        (mapcat
+         (fn [e]
+           (let [e* (select-keys e [:content :props])]
+             (if-let [children (:children e)]
+               [e* (tree->vec-tree (:children e))]
+               [e*])))
+         tree)))
+
+(defn- vec-tree->vec-block-tree
+  [tree format]
+  (let [loc (zip/vector-zip tree)]
+    (loop [loc loc]
+      (if (zip/end? loc)
+        (zip/root loc)
+        (let [node (zip/node loc)]
+          (if (vector? node)
+            (recur (zip/next loc))
+            (let [content (:content node)
+                  props (into [] (:props node))
+                  content* (str "- "
+                                (property/insert-properties format content props))
+                  ast (mldoc/->edn content* (mldoc/default-config format))
+                  blocks (block/extract-blocks ast content* true format)
+                  fst-block (first blocks)]
+              (assert fst-block "fst-block shouldn't be nil")
+              (recur (zip/next (zip/replace loc fst-block))))))))))
+
+(defn paste-block-tree-after-target
+  [target-block-id sibling? tree format]
+  (let [vec-tree (tree->vec-tree tree)
+        block-tree (vec-tree->vec-block-tree vec-tree format)]
+    (paste-block-vec-tree-at-target
+     block-tree [] nil
+     #(get-block-tree-insert-pos-after-target target-block-id sibling?))))
 
 (defn template-on-chosen-handler
   [_input id _q format _edit-block _edit-content]
@@ -2145,8 +2204,8 @@
 (defn- select-up-down [direction]
   (let [selected (first (state/get-selection-blocks))
         f (case direction
-                :up get-prev-block-non-collapsed
-                :down get-next-block-non-collapsed)
+            :up get-prev-block-non-collapsed
+            :down get-next-block-non-collapsed)
         sibling-block (f selected)]
     (when (and sibling-block (dom/attr sibling-block "blockid"))
       (clear-selection! nil)
@@ -2159,8 +2218,8 @@
         line-pos (util/get-first-or-last-line-pos input)
         repo (state/get-current-repo)
         f (case direction
-                :up get-prev-block-non-collapsed
-                :down get-next-block-non-collapsed)
+            :up get-prev-block-non-collapsed
+            :down get-next-block-non-collapsed)
         sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
         {:block/keys [uuid content format]} (state/get-edit-block)]
     (when sibling-block
@@ -2385,7 +2444,7 @@
         (let [repo (state/get-current-repo)]
           (db/refresh! repo
                        {:key :block/change :data [(:data current-node)]}))))
-  (state/set-editor-op! :nil)))
+    (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
   [direction]
@@ -2563,7 +2622,6 @@
                  timeout)))
       (edit-box-on-change! e block id))))
 
-
 (defn- get-current-page-format
   []
   (when-let [page (state/get-current-page)]
@@ -2579,7 +2637,7 @@
         tree* (->> tree
                    (mapv #(assoc % :level (- (:block/level %) prefix-level)))
                    (blocks-vec->tree))]
-    (paste-block-tree-at-point tree* [])))
+    (paste-block-vec-tree-at-target tree* [])))
 
 (defn- paste-segmented-text
   [format text]
@@ -2589,8 +2647,8 @@
                      (mapv (fn [p] (->> (string/trim p)
                                         ((fn [p]
                                            (if (util/safe-re-find (if (= format :org)
-                                                          #"\s*\*+\s+"
-                                                          #"\s*-\s+") p)
+                                                                    #"\s*\*+\s+"
+                                                                    #"\s*-\s+") p)
                                              p
                                              (str (if (= format :org) "* " "- ") p))))))
                            paragraphs))]
@@ -2610,7 +2668,7 @@
          (= (string/trim text) (string/trim (:copy/content copied-blocks))))
       (do
         ;; copy from logseq internally
-        (paste-block-tree-at-point copied-block-tree [])
+        (paste-block-vec-tree-at-target copied-block-tree [])
         (util/stop e))
 
       (do
@@ -2649,35 +2707,35 @@
   [id]
   (fn [e]
     (if-let [handled
-               (let [pick-one-allowed-item
-                     (fn [items]
-                       (if (util/electron?)
-                         (let [existed-file-path (js/window.apis.getFilePathFromClipboard)
-                               existed-file-path (if (and
-                                                      (string? existed-file-path)
-                                                      (not util/mac?)
-                                                      (not util/win32?)) ; FIXME: linux
-                                                   (when (util/safe-re-find #"^(/[^/ ]*)+/?$" existed-file-path)
-                                                     existed-file-path)
+             (let [pick-one-allowed-item
+                   (fn [items]
+                     (if (util/electron?)
+                       (let [existed-file-path (js/window.apis.getFilePathFromClipboard)
+                             existed-file-path (if (and
+                                                    (string? existed-file-path)
+                                                    (not util/mac?)
+                                                    (not util/win32?)) ; FIXME: linux
+                                                 (when (util/safe-re-find #"^(/[^/ ]*)+/?$" existed-file-path)
                                                    existed-file-path)
-                               has-file-path? (not (string/blank? existed-file-path))
-                               has-image? (js/window.apis.isClipboardHasImage)]
-                           (if (or has-image? has-file-path?)
-                             [:asset (js/File. #js[] (if has-file-path? existed-file-path "image.png"))]))
+                                                 existed-file-path)
+                             has-file-path? (not (string/blank? existed-file-path))
+                             has-image? (js/window.apis.isClipboardHasImage)]
+                         (if (or has-image? has-file-path?)
+                           [:asset (js/File. #js[] (if has-file-path? existed-file-path "image.png"))]))
 
-                         (when (and items (.-length items))
-                           (let [files (. (js/Array.from items) (filter #(= (.-kind %) "file")))
-                                 it (gobj/get files 0) ;;; TODO: support multiple files
-                                 mime (and it (.-type it))]
-                             (cond
-                               (contains? #{"image/jpeg" "image/png" "image/jpg" "image/gif"} mime) [:asset (. it getAsFile)])))))
-                     clipboard-data (gobj/get e "clipboardData")
-                     items (or (.-items clipboard-data)
-                               (.-files clipboard-data))
-                     picked (pick-one-allowed-item items)]
-                 (if (get picked 1)
-                   (match picked
-                     [:asset file] (set-asset-pending-file file))))]
+                       (when (and items (.-length items))
+                         (let [files (. (js/Array.from items) (filter #(= (.-kind %) "file")))
+                               it (gobj/get files 0) ;;; TODO: support multiple files
+                               mime (and it (.-type it))]
+                           (cond
+                             (contains? #{"image/jpeg" "image/png" "image/jpg" "image/gif"} mime) [:asset (. it getAsFile)])))))
+                   clipboard-data (gobj/get e "clipboardData")
+                   items (or (.-items clipboard-data)
+                             (.-files clipboard-data))
+                   picked (pick-one-allowed-item items)]
+               (if (get picked 1)
+                 (match picked
+                   [:asset file] (set-asset-pending-file file))))]
       (util/stop e)
       (paste-text (.getData (gobj/get e "clipboardData") "text") e))))
 
@@ -2735,7 +2793,6 @@
 
       :else
       (js/document.execCommand "copy"))))
-
 
 (defn shortcut-cut
   "shortcut cut action:
@@ -2907,14 +2964,13 @@
         (if (> level max-level)
           nil
           (let [blocks-to-expand (->> blocks-with-level
-                                 (filter (fn [b] (= (:block/level b) level)))
-                                 (filter (fn [{:block/keys [properties]}]
-                                           (contains? properties :collapsed))))]
+                                      (filter (fn [b] (= (:block/level b) level)))
+                                      (filter (fn [{:block/keys [properties]}]
+                                                (contains? properties :collapsed))))]
             (if (empty? blocks-to-expand)
               (recur (inc level))
               (doseq [{:block/keys [uuid]} blocks-to-expand]
                 (expand-block! uuid)))))))))
-
 
 (defn collapse!
   []
