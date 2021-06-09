@@ -379,7 +379,7 @@
    {:style {:width "100%"
             :height "100%"
             :position "absolute"
-            ;; :visibility "hidden"
+            :visibility "hidden"
             :top 0
             :left 0}}
    (for [[idx c] (map-indexed
