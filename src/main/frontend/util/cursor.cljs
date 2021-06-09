@@ -1,7 +1,5 @@
 (ns frontend.util.cursor
-  (:require ["/frontend/caret_pos" :as caret-pos]
-            [cljs-bean.core :as bean]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]))
@@ -24,12 +22,17 @@
 
 (defn- get-caret-pos
   [input]
-  (when input
+  (let [pos (.-selectionStart input)]
     (try
-      (let [pos ((gobj/get caret-pos "position") input)]
-        (bean/->clj pos))
-      (catch js/Error e
-        (js/console.error e)))))
+      (-> (gdom/getElement "mock-text")
+          gdom/getChildren
+          array-seq
+          (nth pos)
+          mock-char-pos)
+      (catch js/Error _e
+        {:pos pos
+         :left js/Number.MAX_SAFE_INTEGER
+         :top js/Number.MAX_SAFE_INTEGER}))))
 
 (defn move-cursor-to [input n]
   (.setSelectionRange input n n))
@@ -92,14 +95,37 @@
                    inc))]
     (move-cursor-to input idx)))
 
+(defn textarea-cursor-first-row? [input]
+  (let [elms   (-> (gdom/getElement "mock-text")
+                   gdom/getChildren
+                   array-seq)
+        cursor (-> input
+                   (get-caret-pos))
+        tops   (->> elms
+                    (map mock-char-pos)
+                    (map :top)
+                    (distinct))]
+    (= (first tops) (:top cursor))))
+
+(defn textarea-cursor-last-row? [input]
+  (let [elms   (-> (gdom/getElement "mock-text")
+                   gdom/getChildren
+                   array-seq)
+        cursor (-> input
+                   (get-caret-pos))
+        tops   (->> elms
+                    (map mock-char-pos)
+                    (map :top)
+                    (distinct))]
+    (= (last tops) (:top cursor))))
+
 (defn- move-cursor-up-down
   [input direction]
   (let [elms  (-> (gdom/getElement "mock-text")
                   gdom/getChildren
                   array-seq)
         cusor (-> input
-                  (get-caret-pos)
-                  (select-keys [:left :top :pos]))
+                  (get-caret-pos))
         chars (->> elms
                    (map mock-char-pos)
                    (group-by :top))

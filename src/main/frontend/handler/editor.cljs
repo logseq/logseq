@@ -2249,7 +2249,6 @@
 (defn keydown-up-down-handler
   [direction]
   (let [input (state/get-input)
-        line-height (util/get-textarea-line-height input)
         selected-start (.-selectionStart input)
         selected-end (.-selectionEnd input)
         up? (= direction :up)
@@ -2260,8 +2259,8 @@
         (util/set-caret-pos! input selected-start)
         (util/set-caret-pos! input selected-end))
 
-      (or (and up? (util/textarea-cursor-first-row? input line-height))
-          (and down? (util/textarea-cursor-end-row? input line-height)))
+      (or (and up? (cursor/textarea-cursor-first-row? input))
+          (and down? (cursor/textarea-cursor-last-row? input)))
       (move-cross-boundrary-up-down direction)
 
       :else
