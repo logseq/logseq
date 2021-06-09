@@ -50,13 +50,13 @@
            (when (nfs-handler/supported?)
              [:div.mr-8
               (ui/button
-               (t :open-a-directory)
-               :on-click page-handler/ls-dir-files!)])
+                (t :open-a-directory)
+                :on-click page-handler/ls-dir-files!)])
            (when (and (state/logged?) (not (util/electron?)))
              (ui/button
-              "Add another git repo"
-              :href (rfe/href :repo-add nil {:graph-types "github"})
-              :intent "logseq"))]
+               "Add another git repo"
+               :href (rfe/href :repo-add nil {:graph-types "github"})
+               :intent "logseq"))]
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-1 {:key id}
@@ -94,7 +94,7 @@
       (when-not (= repo config/local-repo)
         (if (and nfs-repo? (nfs-handler/supported?))
           (let [syncing? (state/sub :graph/syncing?)]
-            [:div.ml-2.mr-2.opacity-30.refresh.hover:opacity-100 {:class (if syncing? "loader" "initial")}
+            [:div.ml-3.mr-1.mt-1.opacity-30.refresh.hover:opacity-100 {:class (if syncing? "loader" "initial")}
              [:a
               {:on-click #(nfs-handler/refresh! repo
                                                 repo-handler/create-today-journal!)
@@ -161,10 +161,10 @@
                               [:span (t :download)]]]])]]
                        :else
                        [:p (t :git/local-changes-synced)])]
-                   ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
+                    ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
                     [:div.flex.flex-row.justify-between.align-items.mt-2
                      (ui/button (t :git/push)
-                                :on-click (fn [] (state/set-modal! commit/add-commit-message)))
+                       :on-click (fn [] (state/set-modal! commit/add-commit-message)))
                      (if pushing? svg/loading)]]
                    [:hr]
                    [:div
@@ -173,7 +173,7 @@
                        (str ": " last-pulled-at)])
                     [:div.flex.flex-row.justify-between.align-items
                      (ui/button (t :git/pull)
-                                :on-click (fn [] (repo-handler/pull-current-repo)))
+                       :on-click (fn [] (repo-handler/pull-current-repo)))
                      (if pulling? svg/loading)]
                     [:a.mt-5.text-sm.opacity-50.block
                      {:on-click (fn []
@@ -185,29 +185,34 @@
 (rum/defc repos-dropdown < rum/reactive
   [on-click]
   (when-let [current-repo (state/sub :git/current-repo)]
-    (let [logged? (state/logged?)
-          local-repo? (= current-repo config/local-repo)
-          get-repo-name (fn [repo]
-                          (if (config/local-db? repo)
-                            (config/get-local-dir repo)
-                            (db/get-repo-path repo)))]
-      (let [repos (->> (state/sub [:me :repos])
-                       (remove (fn [r] (= config/local-repo (:url r)))))]
-        (cond
-          (> (count repos) 1)
+    (rum/with-context [[t] i18n/*tongue-context*]
+      (let [get-repo-name (fn [repo]
+                            (if (config/local-db? repo)
+                              (config/get-local-dir repo)
+                              (db/get-repo-path repo)))
+            repos (state/sub [:me :repos])
+            repos (remove (fn [r] (= config/local-repo (:url r))) repos)
+            switch-repos (remove (fn [repo]
+                                   (= current-repo (:url repo)))
+                                 repos)]
+        (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
              [:a#repo-switch.fade-link {:on-click toggle-fn}
-              (let [repo-name (get-repo-name current-repo)
-                    repo-name (if (util/electron?)
-                                (last (string/split repo-name #"/"))
-                                repo-name)]
-                [:span#repo-name repo-name])
-              [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]])
+
+              [:span
+               [:span.repo-plus svg/plus]
+               (let [repo-name (get-repo-name current-repo)
+                     repo-name (if (util/electron?)
+                                 (last (string/split repo-name #"/"))
+                                 repo-name)]
+                 [:span#repo-name repo-name])
+               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]]])
            (mapv
             (fn [{:keys [id url]}]
               {:title (get-repo-name url)
-               :options {:on-click (fn []
+               :options {:class "ml-1"
+                         :on-click (fn []
                                      (repo-handler/push-if-auto-enabled! (state/get-current-repo))
                                      (state/set-current-repo! url)
                                      ;; load config
@@ -216,23 +221,18 @@
                                        (route-handler/redirect-to-home!))
                                      (when on-click
                                        (on-click url)))}})
-            (remove (fn [repo]
-                      (= current-repo (:url repo)))
-                    repos))
-           {:modal-class (util/hiccup->class
-                          "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg ")})
-
-          (and current-repo (not local-repo?))
-          (let [repo-name (get-repo-name current-repo)]
-            (if (config/local-db? current-repo)
-              [:span.fade-link#repo-name
-               (if (util/electron?)
-                 (last (string/split repo-name #"/"))
-                 repo-name)]
-              [:a.fade-link#repo-name
-               {:href current-repo
-                :target "_blank"}
-               repo-name]))
-
-          :else
-          nil)))))
+            switch-repos)
+           (cond->
+             {:modal-class (util/hiccup->class
+                            "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg")
+              :links-footer [:div
+                             (when (seq switch-repos) [:hr.my-4])
+                             [:a {:class "block px-4 py-2 text-sm text-gray-700 transition ease-in-out duration-150 cursor menu-link"
+                                  :href (rfe/href :repo-add)}
+                              (t :new-graph)]
+                             [:a {:class "block px-4 py-2 text-sm text-gray-700 transition ease-in-out duration-150 cursor menu-link"
+                                  :href (rfe/href :repos)}
+                              (t :all-graphs)]]}
+             (seq switch-repos)
+             (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.py-2
+                                   "Switch to:"]))))))))
