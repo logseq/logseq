@@ -426,7 +426,7 @@
 
 (defn on-chosen-handler
   [input id q pos format]
-  (let [current-pos (:pos (util/get-caret-pos input))
+  (let [current-pos (cursor/pos input)
         edit-content (state/sub [:editor/content id])
         edit-block (state/sub :editor/block)
         q (or

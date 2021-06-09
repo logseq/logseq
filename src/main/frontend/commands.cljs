@@ -277,7 +277,7 @@
     :as option}]
   (when-let [input (gdom/getElement id)]
     (let [edit-content (gobj/get input "value")
-          current-pos (:pos (util/get-caret-pos input))
+          current-pos (cursor/pos input)
           prefix (subs edit-content 0 current-pos)
           space? (when (and last-pattern prefix)
                    (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
@@ -314,7 +314,7 @@
     :as option}]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
-        current-pos (:pos (util/get-caret-pos input))
+        current-pos (cursor/pos input)
         prefix (subs edit-content 0 current-pos)
         new-value (str prefix
                        value
@@ -334,7 +334,7 @@
     :as option}]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
-        current-pos (:pos (util/get-caret-pos input))
+        current-pos (cursor/pos input)
         suffix (subs edit-content 0 current-pos)
         new-value (str value
                        suffix
@@ -355,7 +355,7 @@
   (let [selected? (not (string/blank? selected))
         input (gdom/getElement id)
         edit-content (gobj/get input "value")
-        current-pos (:pos (util/get-caret-pos input))
+        current-pos (cursor/pos input)
         prefix (subs edit-content 0 current-pos)
         postfix (if selected?
                   (string/replace-first (subs edit-content current-pos)
@@ -378,7 +378,7 @@
   [id]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
-        current-pos (:pos (util/get-caret-pos input))
+        current-pos (cursor/pos input)
         prefix (subs edit-content 0 (dec current-pos))
         new-value (str prefix
                        (subs edit-content (inc current-pos)))
@@ -427,7 +427,7 @@
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (gobj/get current-input "value")
-            current-pos (:pos (util/get-caret-pos current-input))
+            current-pos (cursor/pos current-input)
             prefix (subs edit-content 0 current-pos)
             prefix (util/replace-last slash prefix "")
             new-value (str prefix

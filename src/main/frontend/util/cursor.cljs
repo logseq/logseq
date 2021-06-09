@@ -34,6 +34,10 @@
          :left js/Number.MAX_SAFE_INTEGER
          :top js/Number.MAX_SAFE_INTEGER}))))
 
+(defn pos [input]
+  (when input
+    (.-selectionStart input)))
+
 (defn move-cursor-to [input n]
   (.setSelectionRange input n n))
 
