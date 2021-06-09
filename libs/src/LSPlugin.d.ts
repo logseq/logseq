@@ -27,15 +27,23 @@ type UIBaseOptions = {
 }
 
 type UIPathIdentity = {
-  path: string // dom selector
+  /**
+   * DOM selector
+   */
+  path: string
 }
 
 type UISlotIdentity = {
-  slot: string // slot key
+  /**
+   * Slot key
+   */
+  slot: string
 }
 
 type UISlotOptions = UIBaseOptions & UISlotIdentity
+
 type UIPathOptions = UIBaseOptions & UIPathIdentity
+
 type UIOptions = UIPathOptions | UISlotOptions
 
 interface LSPluginPkgConfig {
@@ -71,6 +79,9 @@ type BlockUUIDTuple = ['uuid', BlockUUID]
 
 type IEntityID = { id: BlockID }
 
+/**
+ * User's app configurations
+ */
 interface AppUserConfigs {
   preferredThemeMode: 'dark' | 'light'
   preferredFormat: 'markdown' | 'org'
@@ -80,6 +91,9 @@ interface AppUserConfigs {
   [key: string]: any
 }
 
+/**
+ * Block - Logseq's fundamental data structure.
+ */
 interface BlockEntity {
   id: BlockID // db id
   uuid: BlockUUID
@@ -103,6 +117,9 @@ interface BlockEntity {
   [key: string]: any
 }
 
+/**
+ * Page is just a block with some specific properties.
+ */
 interface PageEntity {
   id: BlockID
   uuid: BlockUUID
@@ -127,8 +144,12 @@ type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
 type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
 type BlockCursorPosition = { left: number, top: number, height: number, pos: number, rect: DOMRect }
 
+/**
+ * App level APIs
+ */
 interface IAppProxy {
   getUserInfo: () => Promise<any>
+
   getUserConfigs: () => Promise<AppUserConfigs>
 
   // native
@@ -150,40 +171,145 @@ interface IAppProxy {
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 }
 
+/**
+ * Editor related APIs
+ */
 interface IEditorProxy extends Record<string, any> {
-  registerSlashCommand: (tag: string, action: BlockCommandCallback | Array<SlashCommandAction>) => boolean
-  registerBlockContextMenu: (tag: string, action: BlockCommandCallback) => boolean
+  /**
+   * reigster a custom command which will be added to the Logseq slash command list
+   *
+   * @param tag - displayed name of command
+   * @param action - can be a single callback function to run when the command is called, or an array of fixed commands with arguments
+   * 
+   * @example
+   * ```ts
+   * logseq.Editor.registerSlashCommand("Say Hi", () => {
+   *   console.log('Hi!')
+   * })
+   * ```
+   *
+   * @example
+   * ```ts
+   * logseq.Editor.registerSlashCommand("💥 Big Bang", [
+   *   ["editor/hook", "customCallback"],
+   *   ["editor/clear-current-slash"],
+   * ]);
+   * ```
+   */
+  registerSlashCommand: (
+    tag: string,
+    action: BlockCommandCallback | Array<SlashCommandAction>
+  ) => boolean
+
+  /**
+   * register a custom command in the block context menu (triggered by right clicking the block dot)
+   * @param tag - displayed name of command
+   * @param action - can be a single callback function to run when the command is called
+   */
+  registerBlockContextMenu: (
+    tag: string,
+    action: BlockCommandCallback
+  ) => boolean
 
   // block related APIs
+
   checkEditing: () => Promise<BlockUUID | boolean>
+
+  /**
+   * insert a string at the current cursor
+   */
   insertAtEditingCursor: (content: string) => Promise<void>
+
   restoreEditingCursor: () => Promise<void>
+
   exitEditingMode: (selectBlock?: boolean) => Promise<void>
+
   getEditingCursorPosition: () => Promise<BlockCursorPosition | null>
+
   getEditingBlockContent: () => Promise<string>
+
   getCurrentPage: () => Promise<PageEntity | BlockEntity | null>
+
   getCurrentBlock: () => Promise<BlockEntity | null>
+
+  /**
+   * get all blocks of the current page as a tree structure
+   * 
+   * @example
+   * ```ts
+   * const blocks = await logseq.Editor.getCurrentPageBlocksTree()
+   * initMindMap(blocks)
+   * ```
+   */
   getCurrentPageBlocksTree: () => Promise<Array<BlockEntity>>
+
+  /**
+   * get all blocks for the specified page
+   * 
+   * @param srcPage - the page name or uuid
+   */
   getPageBlocksTree: (srcPage: PageIdentity) => Promise<Array<BlockEntity>>
 
-  insertBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ before: boolean, sibling: boolean, props: {} }>) => Promise<BlockEntity | null>
-  updateBlock: (srcBlock: BlockIdentity, content: string, opts?: Partial<{ props: {} }>) => Promise<void>
-  removeBlock: (srcBlock: BlockIdentity, opts?: Partial<{ includeChildren: boolean }>) => Promise<void>
-  getBlock: (srcBlock: BlockIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<BlockEntity | null>
-  getPage: (srcPage: PageIdentity | BlockID, opts?: Partial<{ includeChildren: boolean }>) => Promise<PageEntity | null>
+  insertBlock: (
+    srcBlock: BlockIdentity,
+    content: string,
+    opts?: Partial<{ before: boolean; sibling: boolean; props: {} }>
+  ) => Promise<BlockEntity | null>
 
-  getPreviousSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
+  updateBlock: (
+    srcBlock: BlockIdentity,
+    content: string,
+    opts?: Partial<{ props: {} }>
+  ) => Promise<void>
+
+  removeBlock: (
+    srcBlock: BlockIdentity,
+    opts?: Partial<{ includeChildren: boolean }>
+  ) => Promise<void>
+
+  getBlock: (
+    srcBlock: BlockIdentity | BlockID,
+    opts?: Partial<{ includeChildren: boolean }>
+  ) => Promise<BlockEntity | null>
+
+  getPage: (
+    srcPage: PageIdentity | BlockID,
+    opts?: Partial<{ includeChildren: boolean }>
+  ) => Promise<PageEntity | null>
+
+  getPreviousSiblingBlock: (
+    srcBlock: BlockIdentity
+  ) => Promise<BlockEntity | null>
+
   getNextSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
-  moveBlock: (srcBlock: BlockIdentity, targetBlock: BlockIdentity, opts?: Partial<{ before: boolean, children: boolean }>) => Promise<void>
+
+  moveBlock: (
+    srcBlock: BlockIdentity,
+    targetBlock: BlockIdentity,
+    opts?: Partial<{ before: boolean; children: boolean }>
+  ) => Promise<void>
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
 
-  upsertBlockProperty: (block: BlockIdentity, key: string, value: any) => Promise<void>
+  upsertBlockProperty: (
+    block: BlockIdentity,
+    key: string,
+    value: any
+  ) => Promise<void>
+
   removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
+
   getBlockProperty: (block: BlockIdentity, key: string) => Promise<any>
+
   getBlockProperties: (block: BlockIdentity) => Promise<any>
 }
 
+/**
+ * Datascript related APIs
+ */
 interface IDBProxy {
+  /**
+   * Run a datascript query
+   */
   datascriptQuery: <T = any>(query: string) => Promise<T>
 }
 
@@ -201,7 +327,7 @@ type LSPluginUserEvents = 'ui:visible:changed' | 'settings:changed'
 
 interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   /**
-   * Indicate connected with host
+   * Connection status with the main app
    */
   connected: boolean
 
@@ -211,67 +337,66 @@ interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   caller: LSPluginCaller
 
   /**
-   * Most from packages
+   * The plugin configurations from package.json
    */
   baseInfo: LSPluginBaseInfo
 
   /**
-   * Plugin user settings
+   * The plugin user settings
    */
   settings?: LSPluginBaseInfo['settings']
 
   /**
-   * Ready for host connected
+   * The main app is ready to run the plugin
    */
-  ready (model?: Record<string, any>): Promise<any>
+  ready(model?: Record<string, any>): Promise<any>
 
-  ready (callback?: (e: any) => void | {}): Promise<any>
+  ready(callback?: (e: any) => void | {}): Promise<any>
 
-  ready (model?: Record<string, any>, callback?: (e: any) => void | {}): Promise<any>
+  ready(
+    model?: Record<string, any>,
+    callback?: (e: any) => void | {}
+  ): Promise<any>
 
-  /**
-   * @param callback
-   */
   beforeunload: (callback: () => Promise<void>) => void
 
-  /**
-   * @param model
-   */
-  provideModel (model: Record<string, any>): this
+  provideModel(model: Record<string, any>): this
+
+  provideTheme(theme: ThemeOptions): this
 
   /**
-   * @param theme options
+   * Inject custom css for the plugin
    */
-  provideTheme (theme: ThemeOptions): this
+  provideStyle(style: StyleString | StyleOptions): this
 
   /**
-   * @param style
+   * Inject custom UI at specific DOM node
+   * @example
+   * ```ts
+   * logseq.provideUI({
+   * key: 'open-calendar',
+   * path: '#search',
+   * template: `
+   *  <a data-on-click="openCalendar" onclick="alert('abc')" style="opacity: .6; display: inline-flex; padding-left: 3px;">
+   *    <i class="iconfont icon-Calendaralt2"></i>
+   *  </a>
+   * `
+   * })
+   * ```
    */
-  provideStyle (style: StyleString | StyleOptions): this
+  provideUI(ui: UIOptions): this
 
-  /**
-   * @param ui options
-   */
-  provideUI (ui: UIOptions): this
+  updateSettings(attrs: Record<string, any>): void
 
-  /**
-   * @param attrs
-   */
-  updateSettings (attrs: Record<string, any>): void
+  setMainUIAttrs(attrs: Record<string, any>): void
 
-  /**
-   * MainUI for index.html
-   * @param attrs
-   */
-  setMainUIAttrs (attrs: Record<string, any>): void
+  setMainUIInlineStyle(style: CSS.Properties): void
 
-  setMainUIInlineStyle (style: CSS.Properties): void
+  showMainUI(): void
 
-  showMainUI (): void
+  hideMainUI(opts?: { restoreEditingCursor: boolean }): void
 
-  hideMainUI (opts?: { restoreEditingCursor: boolean }): void
-
-  toggleMainUI (): void
+  toggleMainUI(): void
 
   isMainUIVisible: boolean
 
