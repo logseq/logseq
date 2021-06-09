@@ -1309,3 +1309,7 @@
    (clear-edit!)
    (set-selection-blocks! blocks direction)
    (util/select-highlight! blocks)))
+
+(defn get-favorites-name
+  []
+  (:name/favorites (get-config)))

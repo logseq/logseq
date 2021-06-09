@@ -310,7 +310,7 @@
                  (let [contents? (= (string/lower-case (str page-name)) "contents")
                        links (fn [] (->>
                                     [(when-not contents?
-                                       {:title   (t :page/add-to-contents)
+                                       {:title   (t :page/add-to-favorites)
                                         :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
 
                                      {:title "Go to presentation mode"
