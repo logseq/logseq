@@ -1,5 +1,6 @@
 (ns frontend.util.cursor
-  (:require [clojure.string :as string]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]))
@@ -20,19 +21,24 @@
              second
              int)})
 
-(defn- get-caret-pos
+(defn get-caret-pos
   [input]
-  (let [pos (.-selectionStart input)]
+  (let [pos (.-selectionStart input)
+        rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))]
     (try
       (-> (gdom/getElement "mock-text")
           gdom/getChildren
           array-seq
           (nth pos)
-          mock-char-pos)
-      (catch js/Error _e
+          mock-char-pos
+          (assoc :rect rect))
+      (catch :default _e
+        (js/console.log "index error" _e)
         {:pos pos
+         :rect rect
          :left js/Number.MAX_SAFE_INTEGER
          :top js/Number.MAX_SAFE_INTEGER}))))
+
 
 (defn pos [input]
   (when input

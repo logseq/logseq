@@ -308,7 +308,7 @@
                    (let [[id format] (:rum/args state)]
                      (add-watch editor-handler/*asset-pending-file ::pending-asset
                                 (fn [_ _ _ f]
-                                  (reset! *slash-caret-pos (util/get-caret-pos (gdom/getElement id)))
+                                  (reset! *slash-caret-pos (cursor/get-caret-pos (gdom/getElement id)))
                                   (editor-handler/upload-asset id #js[f] format editor-handler/*asset-uploading? true))))
                    state)
    :will-unmount (fn [state]
@@ -369,21 +369,27 @@
 
 
 (rum/defc mock-textarea
-  [content]
+  < rum/reactive
+  {:did-update
+   (fn [state]
+     (editor-handler/handle-last-input)
+     state)}
+  []
   [:div#mock-text
    {:style {:width "100%"
             :height "100%"
             :position "absolute"
-            :visibility "hidden"
+            ;; :visibility "hidden"
             :top 0
             :left 0}}
-   (map-indexed (fn [idx c]
-                  (if (= c "\n")
-                    [:span {:id (str "mock-text_" idx)
-                          :key idx} "0" [:br]]
-                    [:span {:id (str "mock-text_" idx)
-                            :key idx} c]))
-                (string/split (str content "0") ""))])
+   (for [[idx c] (map-indexed
+                  vector
+                  (string/split (str (state/sub [:editor/content (state/get-edit-input-id)]) "0") ""))]
+     (if (= c "\n")
+       [:span {:id (str "mock-text_" idx)
+               :key idx} "0" [:br]]
+       [:span {:id (str "mock-text_" idx)
+               :key idx} c]))])
 
 
 (rum/defcs box < rum/reactive
@@ -417,7 +423,7 @@
        :auto-focus        false
        :style             (get-editor-style heading-level)})
 
-     (mock-textarea content)
+     (mock-textarea)
 
      ;; TODO: how to render the transitions asynchronously?
      (transition-cp
