@@ -2006,12 +2006,13 @@
 
 (defn- paste-block-vec-tree-at-target
   ([tree exclude-properties]
-   (paste-block-vec-tree-at-target tree exclude-properties nil nil))
+   (paste-block-vec-tree-at-target tree exclude-properties nil nil nil))
   ([tree exclude-properties content-update-fn]
-   (paste-block-vec-tree-at-target tree exclude-properties content-update-fn nil))
-  ([tree exclude-properties content-update-fn get-pos-fn]
+   (paste-block-vec-tree-at-target tree exclude-properties content-update-fn nil nil))
+  ([tree exclude-properties content-update-fn get-pos-fn page-block]
    (let [repo (state/get-current-repo)
-         page (:block/page (db/entity (:db/id (state/get-edit-block))))
+         page (or page-block
+                  (:block/page (db/entity (:db/id (state/get-edit-block)))))
          file (:block/file page)]
      (when-let [[target-block sibling? delete-editing-block? editing-block]
                 ((or get-pos-fn get-block-tree-insert-pos-at-point))]
@@ -2090,7 +2091,8 @@
         block-tree (vec-tree->vec-block-tree vec-tree format)]
     (paste-block-vec-tree-at-target
      block-tree [] nil
-     #(get-block-tree-insert-pos-after-target target-block-id sibling?))))
+     #(get-block-tree-insert-pos-after-target target-block-id sibling?)
+     (db/entity (:db/id (:block/page (db/pull target-block-id)))))))
 
 (defn template-on-chosen-handler
   [_input id _q format _edit-block _edit-content]
