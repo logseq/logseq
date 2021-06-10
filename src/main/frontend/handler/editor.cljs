@@ -2588,7 +2588,9 @@
 
         (when (= c " ")
           (when (or (= (util/nth-safe value (dec (dec current-pos))) "#")
-                    (not (state/get-editor-show-page-search?)))
+                    (not (state/get-editor-show-page-search?))
+                    (and (state/get-editor-show-page-search?)
+                         (not= (util/nth-safe value current-pos) "]")))
             (state/set-editor-show-page-search-hashtag! false)))
 
         (when (and @*show-commands (not= key-code 191)) ; not /
