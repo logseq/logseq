@@ -245,70 +245,76 @@
       (when (and old-name new-name)
         (let [name-changed? (not= (string/lower-case (string/trim old-name))
                                   (string/lower-case (string/trim new-name)))]
-          (when-let [repo (state/get-current-repo)]
-            (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
-              (let [old-original-name (:block/original-name page)
-                    file (:block/file page)
-                    journal? (:block/journal? page)
-                    properties-block (:data (outliner-tree/-get-down (outliner-core/block page)))
-                    properties-block-tx (when (and properties-block
-                                                   (string/includes? (string/lower-case (:block/content properties-block))
-                                                                     (string/lower-case old-name)))
-                                          {:db/id (:db/id properties-block)
-                                           :block/content (property/insert-property (:block/format properties-block)
-                                                                                 (:block/content properties-block)
-                                                                                 :title
-                                                                                 new-name)})
-                    page-txs [{:db/id (:db/id page)
-                               :block/uuid (:block/uuid page)
-                               :block/name (string/lower-case new-name)
-                               :block/original-name new-name}]
-                    page-txs (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
+          (when name-changed?
+            (if (db/pull [:block/name (string/lower-case new-name)])
+              (notification/show! "Page already exists!" :error)
+              (when-let [repo (state/get-current-repo)]
+                (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
+                  (let [old-original-name (:block/original-name page)
+                        file (:block/file page)
+                        journal? (:block/journal? page)
+                        properties-block (:data (outliner-tree/-get-down (outliner-core/block page)))
+                        properties-block-tx (when (and properties-block
+                                                       (string/includes? (string/lower-case (:block/content properties-block))
+                                                                         (string/lower-case old-name)))
+                                              (let [front-matter? (and (property/front-matter? (:block/content properties-block))
+                                                                       (= :markdown (:block/format properties-block)))]
+                                                {:db/id (:db/id properties-block)
+                                                 :block/content (property/insert-property (:block/format properties-block)
+                                                                                          (:block/content properties-block)
+                                                                                          :title
+                                                                                          new-name
+                                                                                          front-matter?)}))
+                        page-txs [{:db/id (:db/id page)
+                                   :block/uuid (:block/uuid page)
+                                   :block/name (string/lower-case new-name)
+                                   :block/original-name new-name}]
+                        page-txs (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
 
-                (d/transact! (db/get-conn repo false) page-txs)
+                    (d/transact! (db/get-conn repo false) page-txs)
 
-                (when (and file (not journal?) name-changed?)
-                  (rename-file! file new-name (fn [] nil)))
+                    (when (and file (not journal?) name-changed?)
+                      (rename-file! file new-name (fn [] nil)))
 
-                ;; update all files which have references to this page
-                (let [blocks (db/get-page-referenced-blocks-no-cache (:db/id page))
-                      page-ids (->> (map :block/page blocks)
-                                    (remove nil?)
-                                    (set))
-                      tx (->> (map (fn [{:block/keys [uuid title content properties] :as block}]
-                                     (let [title (let [title' (walk-replace-old-page! title old-original-name new-name)]
-                                                   (when-not (= title' title)
-                                                     title'))
-                                           content (let [content' (replace-old-page! content old-original-name new-name)]
-                                                     (when-not (= content' content)
-                                                       content'))
-                                           properties (let [properties' (walk-replace-old-page! properties old-original-name new-name)]
-                                                        (when-not (= properties' properties)
-                                                          properties'))]
-                                       (when (or title content properties)
-                                         (util/remove-nils-non-nested
-                                          {:block/uuid uuid
-                                           :block/title title
-                                           :block/content content
-                                           :block/properties properties})))) blocks)
-                              (remove nil?))]
-                  (db/transact! repo tx)
-                  (doseq [page-id page-ids]
-                    (outliner-file/sync-to-file page-id)))
+                    ;; update all files which have references to this page
+                    (let [blocks (db/get-page-referenced-blocks-no-cache (:db/id page))
+                          page-ids (->> (map :block/page blocks)
+                                        (remove nil?)
+                                        (set))
+                          tx (->> (map (fn [{:block/keys [uuid title content properties] :as block}]
+                                         (let [title (let [title' (walk-replace-old-page! title old-original-name new-name)]
+                                                       (when-not (= title' title)
+                                                         title'))
+                                               content (let [content' (replace-old-page! content old-original-name new-name)]
+                                                         (when-not (= content' content)
+                                                           content'))
+                                               properties (let [properties' (walk-replace-old-page! properties old-original-name new-name)]
+                                                            (when-not (= properties' properties)
+                                                              properties'))]
+                                           (when (or title content properties)
+                                             (util/remove-nils-non-nested
+                                              {:block/uuid uuid
+                                               :block/title title
+                                               :block/content content
+                                               :block/properties properties})))) blocks)
+                                  (remove nil?))]
+                      (db/transact! repo tx)
+                      (doseq [page-id page-ids]
+                        (outliner-file/sync-to-file page-id)))
 
-                (outliner-file/sync-to-file page))
+                    (outliner-file/sync-to-file page))
 
-              ;; TODO: update browser history, remove the current one
+                  ;; TODO: update browser history, remove the current one
 
-              ;; Redirect to the new page
-              (route-handler/redirect! {:to :page
-                                        :path-params {:name (string/lower-case new-name)}})
+                  ;; Redirect to the new page
+                  (route-handler/redirect! {:to :page
+                                            :path-params {:name (string/lower-case new-name)}})
 
-              (notification/show! "Page renamed successfully!" :success)
+                  (notification/show! "Page renamed successfully!" :success)
 
-              (repo-handler/push-if-auto-enabled! repo)
+                  (repo-handler/push-if-auto-enabled! repo)
 
-              (ui-handler/re-render-root!))))))))
+                  (ui-handler/re-render-root!))))))))))
 
 (defn handle-add-page-to-contents!
   [page-name]
