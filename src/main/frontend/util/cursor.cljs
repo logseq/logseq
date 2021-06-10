@@ -22,6 +22,12 @@
              int)})
 
 (defn get-caret-pos
+  "Get caret offset position as well as input element rect.
+
+  This function is only used by autocomplete command or up/down command
+  where offset position is needed.
+
+  If you only need character position, use `pos` instead. Do NOT call this."
   [input]
   (let [pos (.-selectionStart input)
         rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))]
@@ -43,6 +49,14 @@
 (defn pos [input]
   (when input
     (.-selectionStart input)))
+
+(defn start? [input]
+  (and input (zero? (.-selectionStart input))))
+
+(defn end? [input]
+  (and input
+       (= (count (.-value input))
+          (.-selectionStart input))))
 
 (defn move-cursor-to [input n]
   (.setSelectionRange input n n))

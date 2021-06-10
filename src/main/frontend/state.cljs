@@ -712,7 +712,7 @@
     (when container
       {:last-edit-block edit-block
        :container (gobj/get container "id")
-       :pos (util/get-input-pos (gdom/getElement edit-input-id))})))
+       :pos (cursor/pos (gdom/getElement edit-input-id))})))
 
 (defn set-editing!
   ([edit-input-id content block cursor-range]
