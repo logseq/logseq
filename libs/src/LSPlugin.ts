@@ -77,7 +77,7 @@ export type BlockUUID = string
 export type BlockUUIDTuple = ['uuid', BlockUUID]
 
 export type IEntityID = { id: BlockID }
-export type IBatchBlock = { content: string, props?: Record<string, any>, children?: Array<IBatchBlock> }
+export type IBatchBlock = { content: string, properties?: Record<string, any>, children?: Array<IBatchBlock> }
 
 /**
  * User's app configurations

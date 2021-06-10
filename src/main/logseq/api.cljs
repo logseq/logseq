@@ -8,6 +8,7 @@
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [goog.dom :as gdom]
@@ -34,11 +35,11 @@
   [input]
   (when input
     (walk/postwalk
-      (fn [a]
-        (cond
-          (keyword? a) (csk/->camelCase (name a))
-          (uuid? a) (str a)
-          :else a)) input)))
+     (fn [a]
+       (cond
+         (keyword? a) (csk/->camelCase (name a))
+         (uuid? a) (str a)
+         :else a)) input)))
 
 (defn- parse-hiccup-ui
   [input]
@@ -52,14 +53,14 @@
 (def ^:export get_user_configs
   (fn []
     (bean/->js
-      (normalize-keyword-for-json
-        {:preferred-language   (:preferred-language @state/state)
-         :preferred-theme-mode (if (= (:ui/theme @state/state) "light") "white" "dark")
-         :preferred-format     (state/get-preferred-format)
-         :preferred-workflow   (state/get-preferred-workflow)
-         :preferred-todo       (state/get-preferred-todo)
-         :current-graph        (state/get-current-repo)
-         :me                   (state/get-me)}))))
+     (normalize-keyword-for-json
+      {:preferred-language   (:preferred-language @state/state)
+       :preferred-theme-mode (if (= (:ui/theme @state/state) "light") "white" "dark")
+       :preferred-format     (state/get-preferred-format)
+       :preferred-workflow   (state/get-preferred-workflow)
+       :preferred-todo       (state/get-preferred-todo)
+       :current-graph        (state/get-current-repo)
+       :me                   (state/get-me)}))))
 
 (def ^:export show_themes
   (fn []
@@ -134,14 +135,14 @@
   (fn [pid ^js cmd-actions]
     (when-let [[cmd actions] (bean/->clj cmd-actions)]
       (plugin-handler/register-plugin-slash-command
-        pid [cmd (mapv #(into [(keyword (first %))]
-                              (rest %)) actions)]))))
+       pid [cmd (mapv #(into [(keyword (first %))]
+                             (rest %)) actions)]))))
 
 (def ^:export register_plugin_simple_command
   (fn [pid ^js cmd-action]
     (when-let [[cmd action] (bean/->clj cmd-action)]
       (plugin-handler/register-plugin-simple-command
-        pid cmd (assoc action 0 (keyword (first action)))))))
+       pid cmd (assoc action 0 (keyword (first action)))))))
 
 ;; app
 (def ^:export relaunch
@@ -155,12 +156,12 @@
 (def ^:export push_state
   (fn [^js k ^js params]
     (rfe/push-state
-      (keyword k) (bean/->clj params))))
+     (keyword k) (bean/->clj params))))
 
 (def ^:export replace_state
   (fn [^js k ^js params]
     (rfe/replace-state
-      (keyword k) (bean/->clj params))))
+     (keyword k) (bean/->clj params))))
 
 ;; editor
 (def ^:export check_editing
@@ -190,7 +191,7 @@
 (def ^:export get_editing_cursor_position
   (fn []
     (when-let [input-id (state/get-edit-input-id)]
-      (bean/->js (normalize-keyword-for-json (util/get-caret-pos (gdom/getElement input-id)))))))
+      (bean/->js (normalize-keyword-for-json (cursor/get-caret-pos (gdom/getElement input-id)))))))
 
 (def ^:export get_editing_block_content
   (fn []
@@ -229,16 +230,26 @@
           page-name (and isPageBlock block-uuid-or-page-name)
           block-uuid (if isPageBlock nil (medley/uuid block-uuid-or-page-name))
           new-block (editor-handler/api-insert-new-block!
-                      content {:block-uuid block-uuid :sibling? sibling :page page-name})]
+                     content {:block-uuid block-uuid :sibling? sibling :page page-name})]
 
       (bean/->js (normalize-keyword-for-json new-block)))))
+
+(def ^:export insert_batch_block
+  (fn [block-uuid ^js batch-blocks ^js opts]
+    (when-let [block (db-model/query-block-by-uuid block-uuid)]
+      (when-let [bb (bean/->clj batch-blocks)]
+        (let [bb (if-not (vector? bb) (vector bb) bb)
+              {:keys [sibling]} (bean/->clj opts)
+              _ (editor-handler/paste-block-tree-after-target
+                 (:db/id block) sibling bb (:block/format block))]
+          nil)))))
 
 (def ^:export remove_block
   (fn [block-uuid ^js opts]
     (let [{:keys [includeChildren]} (bean/->clj opts)
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
+       {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]
