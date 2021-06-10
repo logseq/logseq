@@ -84,6 +84,10 @@
                                    (ui-handler/add-style-if-exists!))))
                          (p/then
                           (fn []
+
+                            ;; install after config is restored
+                            (shortcut/refresh!)
+
                             (cond
                               (and (not logged?)
                                    (not (seq (db/get-files config/local-repo)))
@@ -190,7 +194,6 @@
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
-    (shortcut/install-shortcuts!)
     (when (util/electron?)
       (el/listen!))))
 

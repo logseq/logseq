@@ -35,11 +35,11 @@
     (.setAlwaysPreventDefault handler prevent-default?)
 
     ;; register shortcuts
-    ;; TODO add try catch for register conflicts
     (doseq [[id _] shortcut-map]
       ;; (log/info :shortcut/install-shortcut {:id id :shortcut (dh/shortcut-binding id)})
       (doseq [k (dh/shortcut-binding id)]
         (try
+          (log/debug :shortcut/register-shortcut {:id id :binding k})
           (.registerShortcut handler (util/keyname id) k)
           (catch js/Object e
             (log/error :shortcut/register-shortcut {:id id
@@ -64,19 +64,19 @@
 
       install-id)))
 
-(defn install-shortcuts!
+(defn- install-shortcuts!
   []
-  (install-shortcut! :shortcut.handler/misc {:skip-installed? true})
-  (->> [:shortcut.handler/editor-global
+  (->> [:shortcut.handler/misc
+        :shortcut.handler/editor-global
         :shortcut.handler/global-non-editing-only
         :shortcut.handler/global-prevent-default]
        (map #(install-shortcut! % {}))
        doall))
 
-(defn uninstall-shortcut! [install-id]
-  (let [handler
-        (-> (get @*installed install-id)
-            :handler)]
+(defn- uninstall-shortcut! [install-id]
+  (when-let
+      [handler (-> (get @*installed install-id)
+                   :handler)]
     (.dispose ^js handler)
     (swap! *installed dissoc install-id)))
 
@@ -109,11 +109,13 @@
      (dissoc state :shortcut-key))})
 
 (defn unlisten-all []
-  (doseq [{:keys [handler]} (vals @*installed)]
+  (doseq [{:keys [handler group]} (vals @*installed)
+          :when (not= group :shortcut.handler/misc)]
     (.removeAllListeners handler)))
 
 (defn listen-all []
-  (doseq [{:keys [handler dispatch-fn]} (vals @*installed)]
+  (doseq [{:keys [handler group dispatch-fn]} (vals @*installed)
+          :when (not= group :shortcut.handler/misc)]
     (events/listen handler EventType/SHORTCUT_TRIGGERED dispatch-fn)))
 
 (defn disable-all-shortcuts []
@@ -126,3 +128,11 @@
    (fn [state]
      (listen-all)
      state)})
+
+(defn refresh!
+  "Always use this function to refresh shortcuts"
+  []
+  (log/info :shortcut/refresh @*installed)
+  (doseq [id (keys @*installed)]
+    (uninstall-shortcut! id))
+  (install-shortcuts!))
