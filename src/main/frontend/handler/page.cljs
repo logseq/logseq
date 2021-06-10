@@ -13,6 +13,7 @@
             [frontend.handler.web.nfs :as web-nfs]
             [frontend.handler.notification :as notification]
             [frontend.handler.config :as config-handler]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.core :as outliner-core]
@@ -379,7 +380,8 @@
   []
   (web-nfs/ls-dir-files-with-handler!
    (fn []
-     (init-commands!))))
+     (init-commands!)
+     (shortcut/refresh!))))
 
 ;; TODO: add use :file/last-modified-at
 (defn get-pages-with-modified-at

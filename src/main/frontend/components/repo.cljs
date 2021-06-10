@@ -11,6 +11,7 @@
             [frontend.handler.export :as export-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.util :as util]
             [frontend.config :as config]
             [reitit.frontend.easy :as rfe]
@@ -84,6 +85,10 @@
                  "Unlink"]]]))]]
         (widgets/add-graph)))))
 
+(defn refresh-cb []
+  (repo-handler/create-today-journal!)
+  (shortcut/refresh!))
+
 (rum/defc sync-status < rum/reactive
   {:did-mount (fn [state]
                 (js/setTimeout common-handler/check-changed-files-status 1000)
@@ -96,8 +101,7 @@
           (let [syncing? (state/sub :graph/syncing?)]
             [:div.ml-3.mr-1.mt-1.opacity-30.refresh.hover:opacity-100 {:class (if syncing? "loader" "initial")}
              [:a
-              {:on-click #(nfs-handler/refresh! repo
-                                                repo-handler/create-today-journal!)
+              {:on-click #(nfs-handler/refresh! repo refresh-cb)
                :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "
                            version/version)}
               svg/refresh]])
@@ -217,6 +221,7 @@
                                      (state/set-current-repo! url)
                                      ;; load config
                                      (common-handler/reset-config! url nil)
+                                     (shortcut/refresh!)
                                      (when-not (= :draw (state/get-current-route))
                                        (route-handler/redirect-to-home!))
                                      (when on-click
