@@ -733,15 +733,15 @@
                                    (util/starts-with? content "TODO")))
           [new-content marker] (cond
                                  (cond-fn "TODO")
-                                 [(string/replace-first content "TODO" "DOING") "DOING"]
+                                 [(string/replace-first content #"^TODO" "DOING") "DOING"]
                                  (cond-fn "DOING")
-                                 [(string/replace-first content "DOING" "DONE") "DONE"]
+                                 [(string/replace-first content #"^DOING" "DONE") "DONE"]
                                  (cond-fn "LATER")
-                                 [(string/replace-first content "LATER" "NOW") "NOW"]
+                                 [(string/replace-first content #"^LATER" "NOW") "NOW"]
                                  (cond-fn "NOW")
-                                 [(string/replace-first content "NOW" "DONE") "DONE"]
+                                 [(string/replace-first content #"^NOW" "DONE") "DONE"]
                                  (cond-fn "DONE")
-                                 [(string/replace-first content "DONE" "") nil]
+                                 [(string/replace-first content #"^DONE" "") nil]
                                  :else
                                  (let [marker (if (= :now (state/get-preferred-workflow))
                                                 "LATER"
@@ -755,7 +755,7 @@
 
 (defn set-marker
   [{:block/keys [uuid marker content format properties] :as block} new-marker]
-  (let [new-content (-> (string/replace-first content marker new-marker)
+  (let [new-content (-> (string/replace-first content (re-pattern (str "^" marker)) new-marker)
                         (with-marker-time format new-marker))]
     (save-block-if-changed! block new-content)))
 
