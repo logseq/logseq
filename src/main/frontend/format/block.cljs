@@ -372,19 +372,6 @@
                               [:block/name (string/lower-case tag)]) tags))
     block))
 
-(defn- remove-indentation-spaces
-  [s level]
-  (let [level (inc level)
-        lines (string/split-lines s)
-        [f & r] lines
-        body (map (fn [line]
-                    (if (string/blank? (util/safe-subs line 0 level))
-                      (util/safe-subs line level)
-                      line))
-                  r)
-        content (cons f body)]
-    (string/join "\n" content)))
-
 (defn src-block?
   [block]
   (some (fn [x] (and (vector? x) (= "Src" (first x)))) (:body block)))
@@ -404,7 +391,7 @@
                       (if (or (:pre-block? block)
                               (= (:format block) :org))
                         content
-                        (remove-indentation-spaces content (:level block)))))]
+                        (text/remove-indentation-spaces content (inc (:level block)) false))))]
       (if (= format :org)
         content
         (property/->new-properties content)))))

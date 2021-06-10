@@ -173,3 +173,15 @@
       (string/replace "- DOING -> DONE [" "* DOING -> DONE [")
       (string/replace "- LATER -> DONE [" "* LATER -> DONE [")
       (string/replace "- NOW -> DONE [" "* NOW -> DONE [")))
+
+(defn remove-indentation-spaces
+  [s level remove-first-line?]
+  (let [lines (string/split-lines s)
+        [f & r] lines
+        body (map (fn [line]
+                    (if (string/blank? (util/safe-subs line 0 level))
+                      (util/safe-subs line level)
+                      line))
+               (if remove-first-line? lines r))
+        content (if remove-first-line? body (cons f body))]
+    (string/join "\n" content)))

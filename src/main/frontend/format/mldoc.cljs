@@ -2,6 +2,7 @@
   (:require [frontend.format.protocol :as protocol]
             [frontend.util :as util]
             [frontend.utf8 :as utf8]
+            [frontend.text :as text]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer-macros [match]]
@@ -198,9 +199,11 @@
           (if (and (vector? block)
                    (= "Src" (first block)))
             (let [{:keys [start_pos end_pos]} pos-meta
-                  block ["Src" (assoc (second block)
-                                      :full_content
-                                      (utf8/substring content start_pos end_pos))]]
+                  content (utf8/substring content start_pos end_pos)
+                  spaces (re-find #"^[\t ]+" (first (string/split-lines content)))
+                  content (if spaces (text/remove-indentation-spaces content (count spaces) true)
+                              content)
+                  block ["Src" (assoc (second block) :full_content content)]]
               [block pos-meta])
             [block pos-meta])) ast)))
 
