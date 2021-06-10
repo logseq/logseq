@@ -33,4 +33,4 @@
     (is (= "Export JSON" (:title md)))
     (is (:created-at md))
     (is (:last-modified-at md))
-    (is (= "---\ntitle: Export JSON\n---\n\n## Hello, world!\n" (:text md)))))
+    (is (= "---\ntitle: Export JSON\n---\n\n- Hello, world!\n" (:text md)))))
