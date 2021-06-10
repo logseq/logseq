@@ -104,6 +104,9 @@
 (defn highlight-format! []
   (format-text! config/get-highlight))
 
+(defn strike-through-format! []
+  (format-text! config/get-strike-through))
+
 (defn html-link-format! []
   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format value block edit-id input]} m

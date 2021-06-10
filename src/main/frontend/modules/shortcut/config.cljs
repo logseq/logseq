@@ -91,6 +91,10 @@
     {:desc    "Highlight"
      :binding "mod+shift+h"
      :fn      editor-handler/highlight-format!}
+    :editor/strike-through
+    {:desc    "Strikethrough"
+     :binding "mod+shift+s"
+     :fn      editor-handler/strike-through-format!}
     :editor/insert-link
     {:desc    "Html Link"
      :binding "mod+k"
