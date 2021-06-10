@@ -32,7 +32,7 @@
 
  ;; Specify a custom CSS import
  ;; This option take precedence over your local `logseq/custom.css` file
- ;; You may find a list of awesome logseq thems here:
+ ;; You may find a list of awesome logseq themes here:
  ;; https://github.com/logseq/awesome-logseq#css-themes
  ;; Example:
  ;; :custom-css-url "@import url('https://cdn.jsdelivr.net/gh/dracula/logseq@master/custom.css');"
