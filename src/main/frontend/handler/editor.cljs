@@ -2047,7 +2047,7 @@
   [
   {
     :content 'this is a block',
-    :props {\"key\" \"value\" \"key2\" \"value2\"},
+    :properties {\"key\" \"value\" \"key2\" \"value2\"},
     :children [
       { :content 'this is child block' }
     ]
@@ -2060,7 +2060,7 @@
   (into []
         (mapcat
          (fn [e]
-           (let [e* (select-keys e [:content :props])]
+           (let [e* (select-keys e [:content :properties])]
              (if-let [children (:children e)]
                [e* (tree->vec-tree (:children e))]
                [e*])))
@@ -2076,7 +2076,7 @@
           (if (vector? node)
             (recur (zip/next loc))
             (let [content (:content node)
-                  props (into [] (:props node))
+                  props (into [] (:properties node))
                   content* (str "- "
                                 (property/insert-properties format content props))
                   ast (mldoc/->edn content* (mldoc/default-config format))
