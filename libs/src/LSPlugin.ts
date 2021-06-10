@@ -79,6 +79,10 @@ export type BlockUUIDTuple = ['uuid', BlockUUID]
 export type IEntityID = { id: BlockID }
 export type IBatchBlock = { content: string, properties?: Record<string, any>, children?: Array<IBatchBlock> }
 
+export interface AppUserInfo {
+  [key: string]: any
+}
+
 /**
  * User's app configurations
  */
@@ -87,6 +91,14 @@ export interface AppUserConfigs {
   preferredFormat: 'markdown' | 'org'
   preferredLanguage: string
   preferredWorkflow: string
+
+  [key: string]: any
+}
+
+export interface AppGraphInfo {
+  name: string
+  url: string
+  path: string
 
   [key: string]: any
 }
@@ -148,13 +160,16 @@ export type BlockCursorPosition = { left: number, top: number, height: number, p
  * App level APIs
  */
 export interface IAppProxy {
-  getUserInfo: () => Promise<any>
+  getUserInfo: () => Promise<AppUserInfo | null>
 
   getUserConfigs: () => Promise<AppUserConfigs>
 
   // native
   relaunch: () => Promise<void>
   quit: () => Promise<void>
+
+  // graph
+  getCurrentGraph: () => Promise<AppGraphInfo | null>
 
   // router
   pushState: (k: string, params?: {}) => void
@@ -165,6 +180,7 @@ export interface IAppProxy {
   setZoomFactor: (factor: number) => void
 
   // events
+  onCurrentGraphChanged: IUserHook
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onBlockRendererMounted: IUserSlotHook<{ uuid: BlockUUID }>
   onRouteChanged: IUserHook<{ path: string, template: string }>

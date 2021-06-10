@@ -8,6 +8,7 @@
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.util :as util]
+            [frontend.config :as config]
             [frontend.util.cursor :as cursor]
             [electron.ipc :as ipc]
             [promesa.core :as p]
@@ -61,6 +62,14 @@
        :preferred-todo       (state/get-preferred-todo)
        :current-graph        (state/get-current-repo)
        :me                   (state/get-me)}))))
+
+(def ^:export get_current_graph
+  (fn []
+    (when-let [repo (state/get-current-repo)]
+      (when-not (= config/local-repo repo)
+        (bean/->js {:url repo
+                    :name (util/node-path.basename repo)
+                    :path (config/get-repo-dir repo)})))))
 
 (def ^:export show_themes
   (fn []

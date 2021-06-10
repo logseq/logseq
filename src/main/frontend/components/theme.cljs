@@ -7,7 +7,7 @@
             [frontend.components.svg :as svg]))
 
 (rum/defc container
-  [{:keys [route theme on-click nfs-granted? db-restoring? sidebar-open? system-theme?] :as props} child]
+  [{:keys [route theme on-click current-repo nfs-granted? db-restoring? sidebar-open? system-theme?] :as props} child]
   (rum/use-effect!
    #(let [doc js/document.documentElement
           cls (.-classList doc)]
@@ -21,6 +21,10 @@
   (rum/use-effect!
    #(plugin-handler/hook-plugin-app :sidebar-visible-changed {:visible sidebar-open?})
    [sidebar-open?])
+
+  (rum/use-effect!
+    #(plugin-handler/hook-plugin-app :current-graph-changed {})
+    [current-repo])
 
   (rum/use-effect!
    #(let [db-restored? (false? db-restoring?)]

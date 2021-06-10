@@ -304,6 +304,7 @@
       (theme/container
        {:theme         theme
         :route         route-match
+        :current-repo  current-repo
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
         :sidebar-open? sidebar-open?

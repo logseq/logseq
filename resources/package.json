@@ -10,7 +10,7 @@
     "electron:debug": "electron-forge start --inspect-electron",
     "electron:make": "electron-forge make",
     "electron:publish:github": "electron-forge publish",
-    "rebuild:better-sqlite3": "electron-rebuild -v 12 -f -w better-sqlite3",
+    "rebuild:better-sqlite3": "electron-rebuild -v 13 -f -w better-sqlite3",
     "postinstall": "install-app-deps"
   },
   "config": {
