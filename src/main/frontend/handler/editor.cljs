@@ -509,6 +509,8 @@
         current-block (assoc block :block/content fst-block-text)
         current-block (apply dissoc current-block db-schema/retract-attributes)
         current-block (wrap-parse-block current-block)
+        zooming? (when-let [id (:id config)]
+                   (and (string? id) (util/uuid-string? id)))
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
@@ -523,7 +525,9 @@
                                  :data [current-block next-block]}]
                        (db/refresh! repo opts)))]
     (do
-      (if (or (:ref? config) (not sibling?))
+      (if (or (:ref? config)
+              (not sibling?)
+              zooming?)
         (refresh-fn)
         (do
           (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
