@@ -68,10 +68,10 @@
      :shortcut.editor/kill-line-after         "删除光标左侧行"
      :shortcut.editor/beginning-of-block      "移动光标到块开始位置"
      :shortcut.editor/end-of-block            "移动光标到块末尾"
-     :shortcut.editor/forward-word            "光标像后移动一个单词"
+     :shortcut.editor/forward-word            "光标向后移动一个单词"
      :shortcut.editor/backward-word           "光标向前移动一个单词"
-     :shortcut.editor/forward-kill-word       "像后删除一个单词"
-     :shortcut.editor/backward-kill-word      "像前删除一个单词"
+     :shortcut.editor/forward-kill-word       "向后删除一个单词"
+     :shortcut.editor/backward-kill-word      "向前删除一个单词"
      :shortcut.editor/open-edit               "编辑选中块"
      :shortcut.editor/delete-selection        "删除选中块"}
     :zh-Hant

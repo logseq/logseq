@@ -144,16 +144,17 @@
   ([text format]
    (remove-level-spaces text format false))
   ([text format space?]
-   (cond
-     (string/blank? text)
-     ""
+   (when format
+     (cond
+       (string/blank? text)
+       ""
 
-     (and (= "markdown" (name format))
-          (string/starts-with? text "---"))
-     text
+       (and (= "markdown" (name format))
+            (string/starts-with? text "---"))
+       text
 
-     :else
-     (remove-level-space-aux! text (config/get-block-pattern format) space?))))
+       :else
+       (remove-level-space-aux! text (config/get-block-pattern format) space?)))))
 
 (defn build-data-value
   [col]

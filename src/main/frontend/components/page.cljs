@@ -88,6 +88,17 @@
                page-name)]
     (db/get-page-format page)))
 
+(rum/defc dummy-block
+  [page-name]
+  [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
+   [:div.flex.flex-row
+    [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
+     [:span.bullet-container.cursor
+      [:span.bullet]]]
+    [:div.flex.flex-1 {:on-click #(editor-handler/insert-first-page-block-if-not-exists! page-name)}
+     [:span.opacity-50
+      "Click here to edit..."]]]])
+
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
   [repo page-e {:keys [sidebar? preview?] :as config}]
@@ -99,34 +110,24 @@
           journal? (db/journal-page? page-name)
           block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
+          page-empty? (and (not block?) (db/page-empty? repo (:db/id page-e)))
           page-e (if (and page-e (:db/id page-e))
                    {:db/id (:db/id page-e)}
                    page-e)
-
-          ;; create an empty block if not exists
-          _ (when (and (not block?) (db/page-empty? repo (:db/id page-e)))
-              (let [empty-block {:block/uuid (db/new-block-id)
-                                 :block/left page-e
-                                 :block/format format
-                                 :block/content ""
-                                 :block/parent page-e
-                                 :block/unordered true
-                                 :block/page page-e}]
-                (when (db/page-empty? repo (:db/id page-e))
-                  (db/transact! [empty-block]))))
-          raw-page-blocks (get-blocks repo page-name page-original-name block? block-id)
-          page-blocks raw-page-blocks
-          document-mode? (state/sub :document/mode?)
-          hiccup-config (merge
-                         {:id (if block? (str block-id) page-name)
-                          :block? block?
-                          :editor-box editor/box
-                          :page page
-                          :document/mode? document-mode?}
-                         config)
-          hiccup-config (common-handler/config-with-document-mode hiccup-config)
-          hiccup (block/->hiccup page-blocks hiccup-config {})]
-      (page-blocks-inner page-name page-blocks hiccup sidebar?))))
+          page-blocks (get-blocks repo page-name page-original-name block? block-id)]
+      (if (empty? page-blocks)
+        (dummy-block page-name)
+        (let [document-mode? (state/sub :document/mode?)
+              hiccup-config (merge
+                             {:id (if block? (str block-id) page-name)
+                              :block? block?
+                              :editor-box editor/box
+                              :page page
+                              :document/mode? document-mode?}
+                             config)
+              hiccup-config (common-handler/config-with-document-mode hiccup-config)
+              hiccup (block/->hiccup page-blocks hiccup-config {})]
+          (page-blocks-inner page-name page-blocks hiccup sidebar?))))))
 
 (defn contents-page
   [page]
@@ -311,7 +312,7 @@
                  (let [contents? (= (string/lower-case (str page-name)) "contents")
                        links (fn [] (->>
                                     [(when-not contents?
-                                       {:title   (t :page/add-to-contents)
+                                       {:title   (t :page/add-to-favorites)
                                         :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
 
                                      {:title "Go to presentation mode"

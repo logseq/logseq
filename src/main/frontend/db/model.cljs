@@ -477,7 +477,7 @@
 
 (defn page-empty?
   [repo page-id]
-  (zero? (get-page-blocks-count repo page-id)))
+  (empty? (:block/_parent (db-utils/entity repo page-id))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
@@ -559,12 +559,12 @@
 
 ;; FIXME: alert
 (defn- keep-only-one-file
-  [blocks parent]
+  [blocks]
   (filter (fn [b] (= (:block/file b) (:block/file (first blocks)))) blocks))
 
 (defn sort-by-left
   [blocks parent]
-  (let [blocks (keep-only-one-file blocks parent)]
+  (let [blocks (keep-only-one-file blocks)]
     (when (not= (count blocks) (count (set (map :block/left blocks))))
       (let [duplicates (->> (map (comp :db/id :block/left) blocks)
                             frequencies

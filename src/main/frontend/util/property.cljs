@@ -224,6 +224,10 @@
          :else
          content)))))
 
+(defn insert-properties
+  [format content kvs]
+  (reduce (fn [content [k v]] (insert-property format content k v)) content kvs))
+
 (defn remove-property
   ([format key content]
    (remove-property format key content true))

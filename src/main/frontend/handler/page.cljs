@@ -4,6 +4,7 @@
             [datascript.core :as d]
             [frontend.state :as state]
             [frontend.util :as util :refer-macros [profile]]
+            [frontend.util.cursor :as cursor]
             [frontend.config :as config]
             [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
@@ -83,6 +84,7 @@
                [tx default-properties]
                [tx])]
      (db/transact! txs)
+     (editor-handler/insert-first-page-block-if-not-exists! page)
      (when redirect?
       (route-handler/redirect! {:to :page
                                 :path-params {:name page}})))))
@@ -312,8 +314,7 @@
   (let [content (str "[[" page-name "]]")]
     (editor-handler/api-insert-new-block!
      content
-     {:page "Contents"
-      :sibling? true})
+     {:page "Contents"})
     (notification/show! "Added to contents!" :success)
     (editor-handler/clear-when-saved!)))
 
@@ -420,12 +421,12 @@
                        (- (count page-ref-text)
                           (count old-page-ref))
                        2)]
-        (util/move-cursor-to input new-pos)))
-    (util/cursor-move-forward input 2)))
+        (cursor/move-cursor-to input new-pos)))
+    (cursor/move-cursor-forward input 2)))
 
 (defn on-chosen-handler
   [input id q pos format]
-  (let [current-pos (:pos (util/get-caret-pos input))
+  (let [current-pos (cursor/pos input)
         edit-content (state/sub [:editor/content id])
         edit-block (state/sub :editor/block)
         q (or

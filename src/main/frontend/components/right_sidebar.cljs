@@ -95,7 +95,8 @@
   [repo idx db-id block-type block-data t]
   (case block-type
     :contents
-    [(t :right-side-bar/contents)
+    [(or (state/get-favorites-name)
+         (t :right-side-bar/favorites))
      (contents)]
 
     :recent
@@ -267,7 +268,8 @@
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
                                                              (state/sidebar-add-block! repo "contents" :contents nil))}
-              (t :right-side-bar/contents)]]
+              (or (state/get-favorites-name)
+                  (t :right-side-bar/favorites))]]
 
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]

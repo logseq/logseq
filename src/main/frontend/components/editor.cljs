@@ -1,33 +1,25 @@
 (ns frontend.components.editor
-  (:require [rum.core :as rum]
+  (:require [clojure.string :as string]
+            [dommy.core :as d]
+            [frontend.commands :as commands
+             :refer [*angle-bracket-caret-pos *matched-block-commands *matched-commands *show-block-commands *show-commands *slash-caret-pos]]
+            [frontend.components.datetime :as datetime-comp]
+            [frontend.components.search :as search]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
+            [frontend.db :as db]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.lifecycle :as lifecycle]
-            [frontend.util :as util :refer-macros [profile]]
-            [frontend.handler.block :as block-handler]
-            [frontend.components.block :as block]
-            [frontend.components.search :as search]
             [frontend.handler.page :as page-handler]
-            [frontend.components.datetime :as datetime-comp]
-            [frontend.state :as state]
             [frontend.mixins :as mixins]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.db :as db]
-            [dommy.core :as d]
-            [goog.object :as gobj]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [clojure.string :as string]
             [promesa.core :as p]
-            [frontend.commands :as commands
-             :refer [*show-commands
-                     *matched-commands
-                     *slash-caret-pos
-                     *angle-bracket-caret-pos
-                     *matched-block-commands
-                     *show-block-commands]]
-            ["/frontend/utils" :as utils]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [rum.core :as rum]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -76,7 +68,7 @@
     (let [pos (:editor/last-saved-cursor @state/state)
           input (gdom/getElement id)]
       (when input
-        (let [current-pos (:pos (util/get-caret-pos input))
+        (let [current-pos (cursor/pos input)
               edit-content (or (state/sub [:editor/content id]) "")
               edit-block (state/sub :editor/block)
               q (or
@@ -134,7 +126,7 @@
     (let [pos (:editor/last-saved-cursor @state/state)
           input (gdom/getElement id)
           [id format] (:rum/args state)
-          current-pos (:pos (util/get-caret-pos input))
+          current-pos (cursor/pos input)
           edit-content (state/sub [:editor/content id])
           edit-block (state/get-edit-block)
           q (or
@@ -151,7 +143,7 @@
     (let [pos (:editor/last-saved-cursor @state/state)
           input (gdom/getElement id)]
       (when input
-        (let [current-pos (:pos (util/get-caret-pos input))
+        (let [current-pos (cursor/pos input)
               edit-content (state/sub [:editor/content id])
               edit-block (state/sub :editor/block)
               q (or
@@ -316,7 +308,7 @@
                    (let [[id format] (:rum/args state)]
                      (add-watch editor-handler/*asset-pending-file ::pending-asset
                                 (fn [_ _ _ f]
-                                  (reset! *slash-caret-pos (util/get-caret-pos (gdom/getElement id)))
+                                  (reset! *slash-caret-pos (cursor/get-caret-pos (gdom/getElement id)))
                                   (editor-handler/upload-asset id #js[f] format editor-handler/*asset-uploading? true))))
                    state)
    :will-unmount (fn [state]
@@ -375,6 +367,31 @@
     6 {:font-size "0.75em" :font-weight "bold" :margin "1.67em 0"}
     nil))
 
+
+(rum/defc mock-textarea
+  < rum/reactive
+  {:did-update
+   (fn [state]
+     (editor-handler/handle-last-input)
+     state)}
+  []
+  [:div#mock-text
+   {:style {:width "100%"
+            :height "100%"
+            :position "absolute"
+            :visibility "hidden"
+            :top 0
+            :left 0}}
+   (for [[idx c] (map-indexed
+                  vector
+                  (string/split (str (state/sub [:editor/content (state/get-edit-input-id)]) "0") ""))]
+     (if (= c "\n")
+       [:span {:id (str "mock-text_" idx)
+               :key idx} "0" [:br]]
+       [:span {:id (str "mock-text_" idx)
+               :key idx} c]))])
+
+
 (rum/defcs box < rum/reactive
   {:init (fn [state]
            (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
@@ -405,6 +422,8 @@
        :on-paste          (editor-handler/editor-on-paste! id)
        :auto-focus        false
        :style             (get-editor-style heading-level)})
+
+     (mock-textarea)
 
      ;; TODO: how to render the transitions asynchronously?
      (transition-cp

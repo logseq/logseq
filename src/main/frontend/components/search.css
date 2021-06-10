@@ -4,6 +4,10 @@
   }
 }
 
+.search-ac {
+    background-color: var(--ls-primary-background-color);
+}
+
 #search-wrapper svg {
     color: var(--ls-search-icon-color, #9fa6b2);
     opacity: 0.3;

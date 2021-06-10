@@ -72,7 +72,7 @@
         "fs-extra": "^9.1.0",
         "fuse.js": "^6.4.6",
         "gulp-cached": "^1.1.1",
-        "highlight.js": "^9.12.0",
+        "highlight.js": "^10.4.1",
         "ignore": "^5.1.8",
         "is-svg": "4.2.2",
         "jszip": "^3.5.0",

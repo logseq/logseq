@@ -155,7 +155,7 @@
           result (if config/publishing?
                    (concat pages files blocks)
                    (concat new-page pages files blocks))]
-      [:div.rounded-md.shadow-lg
+      [:div.rounded-md.shadow-lg.search-ac
        {:style (merge
                 {:top 48
                  :left 32

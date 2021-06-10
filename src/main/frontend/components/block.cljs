@@ -342,6 +342,7 @@
     :href href
     :on-click (fn [e]
                 (util/stop e)
+                (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                 (if (gobj/get e "shiftKey")
                   (when-let [page-entity (db/entity [:block/name redirect-page-name])]
                     (state/sidebar-add-block!
@@ -402,6 +403,7 @@
                                                            [:span.text-sm.mr-2 "Alias:" ]
                                                            redirect-page-name])]
                                  (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
+                                   (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                                    (when-let [f (state/get-page-blocks-cp)]
                                      (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]
                    :interactive true

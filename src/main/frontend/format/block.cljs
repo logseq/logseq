@@ -359,6 +359,7 @@
                                          {:block/name (string/lower-case ref)}
                                          ref)))
                                 (remove vector?)
+                                (remove nil?)
                                 (distinct))]
         (recur (rest blocks)
                (conj acc (assoc block :block/path-refs path-ref-pages))
@@ -630,7 +631,8 @@
                             (map :db/id))
            {:block/keys [refs]} new-block
            ref-pages (filter :block/name refs)
-           path-ref-pages (concat ref-pages parent-refs [(:db/id page)])
+           path-ref-pages (->> (concat ref-pages parent-refs [(:db/id page)])
+                               (remove nil?))
            block (merge
                   block
                   new-block

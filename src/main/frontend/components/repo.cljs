@@ -232,7 +232,11 @@
                               (t :new-graph)]
                              [:a {:class "block px-4 py-2 text-sm text-gray-700 transition ease-in-out duration-150 cursor menu-link"
                                   :href (rfe/href :repos)}
-                              (t :all-graphs)]]}
+                              (t :all-graphs)]
+                             [:a {:class "block px-4 py-2 text-sm text-gray-700 transition ease-in-out duration-150 cursor menu-link"
+                                  :on-click (fn []
+                                              (repo-handler/re-index! nfs-handler/rebuild-index!))}
+                              (t :re-index)]]}
              (seq switch-repos)
              (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.py-2
                                    "Switch to:"]))))))))

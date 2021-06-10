@@ -64,7 +64,8 @@
           blocks (map (fn [block]
                         (let [block-ref-pages (seq (:block/refs block))
                               page-lookup-ref [:block/name (string/lower-case page)]
-                              block-path-ref-pages (cons page-lookup-ref (seq (:block/path-refs block)))]
+                              block-path-ref-pages (->> (cons page-lookup-ref (seq (:block/path-refs block)))
+                                                        (remove nil?))]
                           (when block-ref-pages
                             (swap! ref-pages set/union (set block-ref-pages)))
                           (-> block
