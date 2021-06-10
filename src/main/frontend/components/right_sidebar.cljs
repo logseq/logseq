@@ -131,7 +131,8 @@
           (block-cp repo idx block-data)]]))
 
     :page
-    (let [page-name (:block/name block-data)]
+    (let [page-name (or (:block/name block-data)
+                        db-id)]
       [[:a {:href     (rfe/href :page {:name page-name})
             :on-click (fn [e]
                         (when (gobj/get e "shiftKey")
@@ -170,9 +171,11 @@
 
 (rum/defc sidebar-item < rum/reactive
   [repo idx db-id block-type block-data t]
+
   (let [item
         (if (= :page block-type)
-          (let [page (db/query-entity-in-component db-id)]
+          (let [lookup-ref (if (number? db-id) db-id [:block/name (string/lower-case db-id)])
+                page (db/query-entity-in-component lookup-ref)]
             (when (seq page)
               (build-sidebar-item repo idx db-id block-type page t)))
           (build-sidebar-item repo idx db-id block-type block-data t))]
