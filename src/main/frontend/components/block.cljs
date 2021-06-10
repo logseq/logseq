@@ -1370,7 +1370,7 @@
                        (if (seq aliases)
                          (if (:alias properties)
                            (update properties :alias (fn [c]
-                                                       (distinct (concat c aliases))))
+                                                       (util/distinct-by string/lower-case (concat c aliases))))
                            (assoc properties :alias aliases))
                          properties))
                      properties)
