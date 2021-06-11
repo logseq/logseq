@@ -8,7 +8,8 @@
             [frontend.util :as util :refer-macros [profile]]
             [frontend.handler.notification :as notification]
             [goog.object :as gobj]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [clojure.string :as string]))
 
 (def write-chan (async/chan))
 
@@ -19,9 +20,11 @@
   [page-db-id]
   (let [page-block (db/pull page-db-id)
         page-db-id (:db/id page-block)
-        blocks (model/get-blocks-by-page page-db-id)
-        tree (tree/blocks->vec-tree blocks (:block/name page-block))]
-    (file/save-tree page-block tree)))
+        blocks (model/get-blocks-by-page page-db-id)]
+    (when-not (and (= 1 (count blocks))
+                   (string/blank? (:block/content (first blocks))))
+      (let [tree (tree/blocks->vec-tree blocks (:block/name page-block))]
+        (file/save-tree page-block tree)))))
 
 (defn write-files!
   [page-db-ids]
