@@ -64,11 +64,6 @@ jobs:
           sed -i 's/appleIdPassword: "my-fake-apple-id-password"/appleIdPassword: "${{ secrets.APPLE_ID_PASSWORD }}"/' ./forge.config.js
         working-directory: ./static
 
-      - name: Debug forge.cofnig.js
-        run: |
-          cat ./forge.config.js
-        working-directory: ./static
-
       - name: Display Package.json
         run: cat ./package.json
         working-directory: ./static
