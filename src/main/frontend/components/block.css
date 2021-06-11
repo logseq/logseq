@@ -190,13 +190,15 @@
     background-color: var(--ls-page-properties-background-color);
 }
 
-.marker-switch {
+.block-marker {
   padding: 2px 4px;
   opacity: 0.5;
   font-size: 85%;
   margin: 0 2px 0 0px;
   font-weight: 600;
+}
 
+.marker-switch {
   &:hover {
     color: var(--ls-link-text-hover-color);
     opacity: 1;
