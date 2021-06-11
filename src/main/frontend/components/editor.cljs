@@ -357,15 +357,17 @@
     (set-up-key-up! state input input-id search-timeout)))
 
 (defn- get-editor-style
-  [heading-level]
-  (case heading-level
-    1 {:font-size "2em" :font-weight "bold" :margin "0.67em 0"}
-    2 {:font-size "1.5em" :font-weight "bold" :margin "0.75em 0"}
-    3 {:font-size "1.17em" :font-weight "bold" :margin "0.83em 0"}
-    4 {:font-weight "bold" :margin "1.12em 0"}
-    5 {:font-size "0.83em" :font-weight "bold" :margin "1.5em 0"}
-    6 {:font-size "0.75em" :font-weight "bold" :margin "1.67em 0"}
-    nil))
+  [content heading-level]
+  (if (string/includes? content "\n")
+    nil
+    (case heading-level
+      1 {:font-size "2em" :font-weight "bold" :margin "0.67em 0"}
+      2 {:font-size "1.5em" :font-weight "bold" :margin "0.75em 0"}
+      3 {:font-size "1.17em" :font-weight "bold" :margin "0.83em 0"}
+      4 {:font-weight "bold" :margin "1.12em 0"}
+      5 {:font-size "0.83em" :font-weight "bold" :margin "1.5em 0"}
+      6 {:font-size "0.75em" :font-weight "bold" :margin "1.67em 0"}
+      nil)))
 
 
 (rum/defc mock-textarea
@@ -421,7 +423,7 @@
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
        :auto-focus        false
-       :style             (get-editor-style heading-level)})
+       :style             (get-editor-style content heading-level)})
 
      (mock-textarea)
 
