@@ -182,7 +182,8 @@ export interface IAppProxy {
   // events
   onCurrentGraphChanged: IUserHook
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
-  onBlockRendererMounted: IUserSlotHook<{ uuid: BlockUUID }>
+  onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
+  onPageHeadActionsSlotted: IUserSlotHook
   onRouteChanged: IUserHook<{ path: string, template: string }>
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>
 }

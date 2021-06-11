@@ -365,6 +365,7 @@
                                     (flatten)
                                     (remove nil?)))]
                    [:div.flex.flex-row
+                    (plugins/hook-ui-slot :page-head-actions-slotted nil)
                     [:a.opacity-30.hover:opacity-100.page-op.mr-1
                      {:title "Search in current page"
                       :on-click #(route-handler/go-to-search! :page)}

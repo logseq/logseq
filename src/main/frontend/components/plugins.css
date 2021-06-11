@@ -183,7 +183,7 @@
 body {
   &[data-page=page] {
     .lsp-hook-ui-slot {
-      @apply flex items-center px-1 opacity-70;
+      @apply flex px-1 opacity-30 hover:opacity-50;
     }
   }
 }
