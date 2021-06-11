@@ -729,7 +729,7 @@
           format (or (db/get-page-format (state/get-current-page))
                      (state/get-preferred-format))
           markdown? (= :markdown format)
-          cond-fn (fn [marker] (or (and markdown? (util/safe-re-find (re-pattern (str "#*\\s*" marker)) content))
+          cond-fn (fn [marker] (or (and markdown? (util/safe-re-find (re-pattern (str "^" "[# ]*" marker)) content))
                                   (util/starts-with? content "TODO")))
           marker-pattern (fn [marker] (re-pattern (str "^" (if markdown? "[# ]*") marker)))
           replace-marker (fn [old-marker new-marker]
