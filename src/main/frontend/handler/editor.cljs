@@ -728,20 +728,25 @@
           content (state/get-edit-content)
           format (or (db/get-page-format (state/get-current-page))
                      (state/get-preferred-format))
-          cond-fn (fn [marker] (or (and (= :markdown format)
-                                        (util/safe-re-find (re-pattern (str "#*\\s*" marker)) content))
-                                   (util/starts-with? content "TODO")))
+          markdown? (= :markdown format)
+          cond-fn (fn [marker] (or (and markdown? (util/safe-re-find (re-pattern (str "#*\\s*" marker)) content))
+                                  (util/starts-with? content "TODO")))
+          marker-pattern (fn [marker] (re-pattern (str "^" (if markdown? "[# ]*") marker)))
+          replace-marker (fn [old-marker new-marker]
+                           (string/replace-first content (marker-pattern old-marker)
+                                                 (fn [match]
+                                                   (string/replace match old-marker new-marker))))
           [new-content marker] (cond
                                  (cond-fn "TODO")
-                                 [(string/replace-first content #"^TODO" "DOING") "DOING"]
+                                 [(replace-marker "TODO" "DOING") "DOING"]
                                  (cond-fn "DOING")
-                                 [(string/replace-first content #"^DOING" "DONE") "DONE"]
+                                 [(replace-marker "DOING" "DONE") "DONE"]
                                  (cond-fn "LATER")
-                                 [(string/replace-first content #"^LATER" "NOW") "NOW"]
+                                 [(replace-marker "LATER" "NOW") "NOW"]
                                  (cond-fn "NOW")
-                                 [(string/replace-first content #"^NOW" "DONE") "DONE"]
+                                 [(replace-marker "NOW" "DONE") "DONE"]
                                  (cond-fn "DONE")
-                                 [(string/replace-first content #"^DONE" "") nil]
+                                 [(replace-marker "DONE" "") nil]
                                  :else
                                  (let [marker (if (= :now (state/get-preferred-workflow))
                                                 "LATER"
