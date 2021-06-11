@@ -1184,23 +1184,23 @@
                             (editor-handler/set-marker block marker)))]
       (case marker
         "NOW"
-        [:a.marker-switch
+        [:a.marker-switch.block-marker
          {:title "Change from NOW to LATER"
           :on-click (set-marker-fn "LATER")}
          "NOW"]
         "LATER"
-        [:a.marker-switch
+        [:a.marker-switch.block-marker
          {:title "Change from LATER to NOW"
           :on-click (set-marker-fn "NOW")}
          "LATER"]
 
         "TODO"
-        [:a.marker-switch
+        [:a.marker-switch.block-marker
          {:title "Change from TODO to DOING"
           :on-click (set-marker-fn "DOING")}
          "TODO"]
         "DOING"
-        [:a.marker-switch
+        [:a.marker-switch.block-marker
          {:title "Change from DOING to TODO"
           :on-click (set-marker-fn "TODO")}
          "DOING"]
@@ -1210,7 +1210,7 @@
   [{:block/keys [pre-block? marker] :as block}]
   (when-not pre-block?
     (if (contains? #{"IN-PROGRESS" "WAIT" "WAITING"} marker)
-      [:span {:class (str "task-status " (string/lower-case marker))
+      [:span {:class (str "task-status block-marker " (string/lower-case marker))
               :style {:margin-right 3.5}}
        (string/upper-case marker)])))
 
