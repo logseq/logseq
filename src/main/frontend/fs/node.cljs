@@ -24,32 +24,42 @@
            (str "/" (string/replace path #"^/" ""))))))
 
 (defn- write-file-impl!
-  [this repo dir path content {:keys [ok-handler error-handler] :as opts} stat]
-  (p/let [disk-mtime (when stat (gobj/get stat "mtime"))
-          db-mtime (db/get-file-last-modified-at repo path)
-          old-content nil
-          old-content (-> (protocol/read-file this dir path nil)
-                          (p/catch (fn [error]
-                                     "")))
-          ext (string/lower-case (util/get-file-ext path))]
-    (if (and
-         (and (not= disk-mtime db-mtime)
-              (not= (string/trim old-content) (string/trim content)))
-         ;; FIXME:
-         (not (contains? #{"excalidraw" "edn"} ext)))
-      (js/alert (str "The file has been modified on your local disk! File path: " path
-                     ", please save your changes and click the refresh button to reload it."))
-      (->
-       (p/let [result (ipc/ipc "writeFile" path content)
-               mtime (gobj/get result "mtime")]
-         (db/set-file-last-modified-at! repo path mtime)
-         (when ok-handler
-           (ok-handler repo path result))
-         result)
-       (p/catch (fn [error]
-                  (if error-handler
-                    (error-handler error)
-                    (log/error :write-file-failed error))))))))
+  [this repo dir path content {:keys [ok-handler error-handler skip-mtime?] :as opts} stat]
+  (if skip-mtime?
+    (p/catch
+     (p/let [result (ipc/ipc "writeFile" path content)]
+       (when ok-handler
+         (ok-handler repo path result)))
+     (fn [error]
+       (if error-handler
+         (error-handler error)
+         (log/error :write-file-failed error))))
+
+    (p/let [disk-mtime (when stat (gobj/get stat "mtime"))
+            db-mtime (db/get-file-last-modified-at repo path)
+            old-content nil
+            old-content (-> (protocol/read-file this dir path nil)
+                            (p/catch (fn [error]
+                                       "")))
+            ext (string/lower-case (util/get-file-ext path))]
+      (if (and
+           (and (not= disk-mtime db-mtime)
+                (not= (string/trim old-content) (string/trim content)))
+            ;; FIXME:
+           (not (contains? #{"excalidraw" "edn"} ext)))
+        (js/alert (str "The file has been modified on your local disk! File path: " path
+                       ", please save your changes and click the refresh button to reload it."))
+        (->
+         (p/let [result (ipc/ipc "writeFile" path content)
+                 mtime (gobj/get result "mtime")]
+           (db/set-file-last-modified-at! repo path mtime)
+           (when ok-handler
+             (ok-handler repo path result))
+           result)
+         (p/catch (fn [error]
+                    (if error-handler
+                      (error-handler error)
+                      (log/error :write-file-failed error)))))))))
 
 (defrecord Node []
   protocol/Fs

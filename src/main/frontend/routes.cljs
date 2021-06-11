@@ -4,6 +4,7 @@
             [frontend.components.file :as file]
             [frontend.components.page :as page]
             [frontend.components.diff :as diff]
+            [frontend.components.plugins :as plugins]
             [frontend.components.journal :as journal]
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
@@ -63,6 +64,10 @@
    ["/all-journals"
     {:name :all-journals
      :view journal/all-journals}]
+
+   ["/plugins"
+    {:name :plugins
+     :view plugins/installed-page}]
 
    ["/helper/shortcut"
     {:name :shortcut

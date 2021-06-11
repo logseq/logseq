@@ -875,9 +875,11 @@
                                           :block/properties properties
                                           :block/content content})]
           (outliner-core/save-node block)
-          (let [opts {:key :block/change
-                      :data [block]}]
-            (db/refresh! repo opts)))))))
+
+          ;; update editing input content
+          (when-let [editing-block (state/get-edit-block)]
+            (and (= (:block/uuid editing-block) block-id)
+                 (state/set-edit-content! (state/get-edit-input-id) content))))))))
 
 (defn remove-block-property!
   [block-id key]

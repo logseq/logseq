@@ -13,6 +13,7 @@
             [goog.object :as gobj]
             [frontend.format :as format]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
             [promesa.core :as p]))
@@ -175,10 +176,11 @@
 
      ;; TODO:
      ;; ["Upload a file" nil]
-     ]
+]
     (markdown-headings)
     ;; Allow user to modify or extend, should specify how to extend.
-    (state/get-commands))
+    (state/get-commands)
+    (state/get-plugins-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
 
@@ -404,6 +406,9 @@
 
 (defmulti handle-step first)
 
+(defmethod handle-step :editor/hook [[_ event {:keys [pid] :as payload}] format]
+  (plugin-handler/hook-plugin-editor event (merge payload {:format format :uuid (:block/uuid (state/get-edit-block))}) pid))
+
 (defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]
     (insert! input-id value option)))
@@ -423,13 +428,18 @@
     (when-let [current-input (gdom/getElement input-id)]
       (cursor/move-cursor-to-end current-input))))
 
-(defmethod handle-step :editor/clear-current-slash [[_]]
+(defmethod handle-step :editor/restore-saved-cursor [[_]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (cursor/move-cursor-to current-input (:editor/last-saved-cursor @state/state)))))
+
+(defmethod handle-step :editor/clear-current-slash [[_ space?]]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (gobj/get current-input "value")
             current-pos (cursor/pos current-input)
             prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last slash prefix "")
+            prefix (util/replace-last slash prefix "" (boolean space?))
             new-value (str prefix
                            (subs edit-content current-pos))]
         (state/set-block-content-and-last-pos! input-id

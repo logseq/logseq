@@ -1,0 +1,189 @@
+.cp__plugins {
+  &-page-installed {
+    min-height: 60vh;
+    padding-top: 20px;
+
+    > h1 {
+      padding: 20px 0;
+      font-size: 38px;
+    }
+  }
+
+  &-item-lists {
+    @apply w-full grid grid-flow-row gap-3 pt-1;
+  }
+
+  &-item-card {
+    @apply flex py-3 px-1 rounded-md;
+
+    background-color: var(--ls-secondary-background-color);
+    height: 180px;
+
+    svg, .icon {
+      width: 70px;
+      height: 70px;
+      opacity: .8;
+
+      &:hover {
+        opacity: 1;
+      }
+    }
+
+    .head {
+      max-height: 60px;
+      overflow: hidden;
+
+      cursor: pointer;
+
+      &:active {
+        opacity: .8;
+      }
+    }
+
+    .desc {
+      height: 60px;
+      overflow: hidden;
+    }
+
+    .flag {
+      position: absolute;
+      bottom: 20px;
+      left: 0;
+      width: 100%;
+    }
+
+    > .l {
+      padding: 8px;
+    }
+
+    > .r {
+      flex: 1;
+      position: relative;
+
+      p {
+        @apply py-1 m-0;
+      }
+
+      .ctl {
+        @apply flex pl-2 items-center justify-between absolute w-full;
+
+        bottom: -8px;
+        right: 8px;
+
+        .de {
+          font-size: 10px;
+          padding: 5px 0;
+          padding-right: 10px;
+          border-radius: 2px;
+          user-select: none;
+          transition: none;
+          opacity: .2;
+          position: relative;
+          z-index: var(--ls-z-index-level-1);
+
+          .menu-list {
+            @apply shadow-md rounded-sm absolute hidden list-none overflow-hidden m-0 p-0;
+
+            background-color: var(--ls-primary-background-color);
+            top: 20px;
+            left: 0;
+            min-width: 120px;
+
+            > li {
+              margin: 0;
+              padding: 5px;
+              transition: background-color .2s;
+              user-select: none;
+              font-weight: bold;
+              opacity: .9;
+
+              &:hover {
+                background-color: var(--ls-quaternary-background-color);
+
+                &:active {
+                  opacity: 1;
+                }
+              }
+            }
+          }
+
+          &.err {
+            @apply text-red-500 opacity-100;
+          }
+
+          &.log {
+            padding: 5px;
+          }
+
+          svg {
+            width: 13px;
+            height: 13px;
+          }
+        }
+
+        > .l {
+          @apply flex items-center;
+
+          margin-left: -80px;
+
+          .de {
+            &:hover {
+              opacity: .9;
+
+              .menu-list {
+                display: block;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  &-details {}
+}
+
+.cp__themes {
+  &-installed {
+    min-width: 480px;
+
+    > .it {
+      user-select: none;
+      cursor: pointer;
+      background-color: var(--ls-secondary-background-color);
+      border: 1px solid transparent;
+      transition: background-color .3s;
+
+      &:hover, &.is-selected {
+        background-color: var(--ls-quaternary-background-color);
+      }
+    }
+  }
+}
+
+.lsp-iframe-sandbox, .lsp-shadow-sandbox {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  visibility: hidden;
+  height: 0;
+  width: 0;
+  padding: 0;
+  margin: 0;
+
+  &.visible {
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    visibility: visible;
+  }
+}
+
+body {
+  &[data-page=page] {
+    .lsp-hook-ui-slot {
+      @apply flex px-1 opacity-30 hover:opacity-50;
+    }
+  }
+}
