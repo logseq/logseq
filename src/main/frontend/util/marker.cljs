@@ -33,3 +33,33 @@
                                    marker-pattern
                                    (str marker " ")))]
     new-content))
+
+(defn header-marker-pattern
+  [markdown? marker]
+  (re-pattern (str "^" (if markdown? "#*\\s*") marker)))
+
+(defn replace-marker
+  [content markdown? old-marker new-marker]
+  (string/replace-first content (header-marker-pattern markdown? old-marker)
+                        (fn [match]
+                          (string/replace match old-marker new-marker))))
+
+(defn cycle-marker
+  [content format preferred-workflow]
+  (let [markdown? (= :markdown format)
+        match-fn (fn [marker] (util/safe-re-find (header-marker-pattern markdown? marker)
+                                                content))]
+    (cond
+     (match-fn "TODO")
+     [(replace-marker content markdown? "TODO" "DOING") "DOING"]
+     (match-fn "DOING")
+     [(replace-marker content markdown? "DOING" "DONE") "DONE"]
+     (match-fn "LATER")
+     [(replace-marker content markdown? "LATER" "NOW") "NOW"]
+     (match-fn "NOW")
+     [(replace-marker content markdown? "NOW" "DONE") "DONE"]
+     (match-fn "DONE")
+     [(replace-marker content markdown? "DONE" "") nil]
+     :else
+     (let [marker (if (= :now preferred-workflow) "LATER" "TODO")]
+       [(add-or-update-marker (string/triml content) format marker) marker]))))

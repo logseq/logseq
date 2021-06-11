@@ -728,30 +728,7 @@
           content (state/get-edit-content)
           format (or (db/get-page-format (state/get-current-page))
                      (state/get-preferred-format))
-          markdown? (= :markdown format)
-          cond-fn (fn [marker] (or (and markdown? (util/safe-re-find (re-pattern (str "^" "[# ]*" marker)) content))
-                                  (util/starts-with? content "TODO")))
-          marker-pattern (fn [marker] (re-pattern (str "^" (if markdown? "[# ]*") marker)))
-          replace-marker (fn [old-marker new-marker]
-                           (string/replace-first content (marker-pattern old-marker)
-                                                 (fn [match]
-                                                   (string/replace match old-marker new-marker))))
-          [new-content marker] (cond
-                                 (cond-fn "TODO")
-                                 [(replace-marker "TODO" "DOING") "DOING"]
-                                 (cond-fn "DOING")
-                                 [(replace-marker "DOING" "DONE") "DONE"]
-                                 (cond-fn "LATER")
-                                 [(replace-marker "LATER" "NOW") "NOW"]
-                                 (cond-fn "NOW")
-                                 [(replace-marker "NOW" "DONE") "DONE"]
-                                 (cond-fn "DONE")
-                                 [(replace-marker "DONE" "") nil]
-                                 :else
-                                 (let [marker (if (= :now (state/get-preferred-workflow))
-                                                "LATER"
-                                                "TODO")]
-                                   [(marker/add-or-update-marker (string/triml content) format marker)  marker]))
+          [new-content marker] (marker/cycle-marker content format (state/get-preferred-workflow))
           new-content (string/triml new-content)]
       (let [new-pos (commands/compute-pos-delta-when-change-marker
                      current-input content new-content marker (cursor/pos current-input))]
