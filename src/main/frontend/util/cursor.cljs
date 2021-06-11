@@ -58,6 +58,9 @@
        (= (count (.-value input))
           (.-selectionStart input))))
 
+(defn set-selection-to [input n m]
+  (.setSelectionRange input n m))
+
 (defn move-cursor-to [input n]
   (.setSelectionRange input n n))
 

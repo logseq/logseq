@@ -83,17 +83,23 @@
           empty-selection? (= selection-start selection-end)
           pattern (pattern-fn format)
           pattern-count (count pattern)
-          prefix (subs value 0 selection-start)
-          wrapped-value (str pattern
-                             (subs value selection-start selection-end)
-                             pattern)
-          postfix (subs value selection-end)
-          new-value (str prefix wrapped-value postfix)]
+          pattern-prefix (subs value (max 0 (- selection-start pattern-count)) selection-start)
+          pattern-suffix (subs value selection-end (min (count value) (+ selection-end pattern-count)))
+          already-wrapped? (= pattern pattern-prefix pattern-suffix)
+          prefix (if already-wrapped?
+                   (subs value 0 (- selection-start pattern-count))
+                   (subs value 0 selection-start))
+          postfix (if already-wrapped?
+                    (subs value (+ selection-end pattern-count))
+                    (subs value selection-end))
+          inner-value (cond-> (subs value selection-start selection-end)
+                        (not already-wrapped?) (#(str pattern % pattern)))
+          new-value (str prefix inner-value postfix)]
       (state/set-edit-content! edit-id new-value)
-      (if empty-selection?
-        (cursor/move-cursor-backward input (count pattern))
-        (let [new-pos (count (str prefix wrapped-value))]
-          (cursor/move-cursor-to input new-pos))))))
+      (cond
+        already-wrapped? (cursor/set-selection-to input (- selection-start pattern-count) (- selection-end pattern-count))
+        empty-selection? (cursor/move-cursor-to input (+ selection-end pattern-count))
+        :else (cursor/set-selection-to input (+ selection-start pattern-count) (+ selection-end pattern-count))))))
 
 (defn bold-format! []
   (format-text! config/get-bold))
