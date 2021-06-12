@@ -4,6 +4,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.db :as db]
+            [frontend.extensions.calc :as calc]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
@@ -136,6 +137,10 @@
                                                                (js/setTimeout #(reset! esc-pressed? false) 10))}}))]
       (when editor
         (let [element (.getWrapperElement editor)]
+          (when (= mode "calc")
+            (.on editor "change" (fn [_cm e]
+                                   (let [new-code (.getValue editor)]
+                                     (reset! (:calc-atom state) (calc/eval-lines new-code))))))
           (.on editor "blur" (fn [_cm e]
                                (when e (util/stop e))
                                (state/set-block-component-editing-mode! false)
@@ -158,7 +163,8 @@
 
 (rum/defcs editor < rum/reactive
   {:init (fn [state]
-           (assoc state :editor-atom (atom nil)))
+           (let [[_ _ _ code _] (:rum/args state)]
+             (assoc state :editor-atom (atom nil) :calc-atom (atom (calc/eval-lines code)))))
    :did-mount (fn [state]
                 (load-and-render! state)
                 state)
@@ -171,10 +177,13 @@
   [state config id attr code theme options]
   [:div.extensions__code
    (when-let [mode (:data-lang attr)]
-     [:div.extensions__code-lang
-      (let [mode (string/lower-case mode)]
-        (if (= mode "text/x-clojure")
-          "clojure"
-          mode))])
+     (when-not (= mode "calc")
+       [:div.extensions__code-lang
+        (let [mode (string/lower-case mode)]
+          (if (= mode "text/x-clojure")
+            "clojure"
+            mode))]))
    [:textarea (merge {:id id
-                      :default-value code} attr)]])
+                      :default-value code} attr)]
+   (when (= (:data-lang attr) "calc")
+     (calc/results (:calc-atom state)))])
