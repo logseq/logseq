@@ -80,12 +80,8 @@
     (are [final-env expr] (let [env (calc/new-env)]
                             (calc/eval env (calc/parse expr))
                             (= final-env @env))
-      {"a_a" 1}           "a_a = 1"
-      {"a_a_" 1}          "a_a_ = 1"
-      {"_" 1}             "_ = 1"
-      {"__" 1}            "__ = 1"
-      {"foo_bar_baz" 1}   "foo_bar_baz = 1 + 0 * 2"
-      {"foo___bar_baz" 1} "foo___bar_baz = 1 + 0 * 2"))
+      {"a_a" 1}          "a_a = 1"
+      {"foo_bar_baz" 1}  "foo_bar_baz = 1 + 0 * 2"))
   (testing "variables can be reused"
     (are [final-env exprs] (let [env (calc/new-env)]
                              (doseq [expr exprs]
