@@ -18,11 +18,18 @@
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))
 
+;; {encoding: 'utf8', withFileTypes: true}
 (defn- readdir
   [dir]
   (->> (tree-seq
-        (fn [f] (.isDirectory (fs/statSync f) ()))
-        (fn [d] (map #(.join path d %) (fs/readdirSync d)))
+        (fn [^js f]
+          (.isDirectory (fs/statSync f) ()))
+        (fn [d]
+          (let [files (fs/readdirSync d (clj->js {:withFileTypes true}))]
+            (->> files
+                 (remove #(.isSymbolicLink ^js %))
+                 (remove #(string/starts-with? (.-name ^js %) "."))
+                 (map #(.join path d (.-name %))))))
         dir)
        (doall)
        (vec)))
