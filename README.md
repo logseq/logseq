@@ -92,6 +92,7 @@ We also have [a dedicated page](https://github.com/logseq/logseq/blob/master/COD
 
 ```bash
 git clone https://github.com/logseq/logseq
+cd logseq
 yarn
 yarn watch
 ```
