@@ -104,7 +104,7 @@
                             [:a {:href "https://web.dev/file-system-access/"
                                  :target "_blank"}
                              "new native filesystem API"]
-                            [:span ", please use any chromium 86+ browser like Chrome, Vivaldi, Edge, Brave, etc."]]))]]])]))
+                            [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc."]]))]]])]))
 
 (rum/defcs add-graph <
   [state & {:keys [graph-types]
