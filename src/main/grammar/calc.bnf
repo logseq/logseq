@@ -20,6 +20,6 @@ asin = <#'\s*'> <'asin('> expr <')'> <#'\s*'>
 <term> = scientific | number | variable | <#'\s*'> <'('> expr <')'> <#'\s*'>
 scientific = #'\s*[0-9]+\.?[0-9]*(e|E)-?[0-9]+()\s*'
 number = #'\s*[0-9]+\.?[0-9]*()\s*'
-variable = #'\s*[[a-zA-Z]+\_*[a-zA-Z]*]*\s*'
-toassign = #'\s*[[a-zA-Z]+\_*[a-zA-Z]*]*\s*'
+variable = #'\s*[[a-zA-Z]+[\_*[a-zA-Z]*]*]*\s*'
+toassign = #'\s*[[a-zA-Z]+[\_*[a-zA-Z]*]*]*\s*'
 assignment = toassign <#'\s*'> <'='> <#'\s*'> expr
