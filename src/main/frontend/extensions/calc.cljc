@@ -2,12 +2,16 @@
   (:refer-clojure :exclude [eval])
   (:require #?(:clj [clojure.java.io :as io])
             #?(:cljs [shadow.resource :as rc])
+            #?(:cljs [rum.core :as rum])
             [clojure.string :as str]
             [clojure.edn :as edn]
             [clojure.test :as test :refer [deftest testing is are]]
             [frontend.util :as util]
             #?(:clj [instaparse.core :as insta]
                :cljs [instaparse.core :as insta :refer-macros [defparser]])))
+
+;; ======================================================================
+;; Interpreter
 
 #?(:clj (def parse (insta/parser (io/resource "grammar/calc.bnf")))
    :cljs (defparser parse (rc/inline "grammar/calc.bnf")))
@@ -53,3 +57,31 @@
                           (throw (ex-info (util/format "Can't find variable %s" var)
                                           {:var var})))))}
      ast))))
+
+#?(:cljs
+   (defn eval-lines [s]
+     {:pre [(string? s)]}
+     (let [env (new-env)]
+       (->> (str/split-lines s)
+            (mapv (fn [line]
+                    (try
+                      (first (eval env (parse line)))
+                      (catch js/Error e
+                        nil))))))))
+
+;; ======================================================================
+;; UI
+
+#?(:cljs
+   (rum/defc results < rum/reactive
+     [calc-atom]
+     (when-let [output-lines (rum/react calc-atom)]
+       ;; the editor's parent will go into edit mode if any elements are clicked
+       ;; if we stop click propagation on this element, we allow the user to
+       ;; copy and paste the calc results
+       [:div.extensions__code-calc {:on-mouse-down (fn [e]
+                                                     (.stopPropagation e))}
+        ;; TODO: add react keys
+        (for [[i line] (map-indexed vector output-lines)]
+          [:div.extensions__code-calc-output-line {:key i}
+           [:span (or line "?")]])])))

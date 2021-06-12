@@ -9,6 +9,27 @@
     background: var(--ls-secondary-background-color);
   }
 
+  &-calc {
+    @apply absolute right-0 text-sm;
+    padding: 0 0.25em;
+    top: 3px;
+    z-index: 1;
+    background: transparent;
+    width: max-content;
+    text-align: right;
+
+    &-output-line {
+      height: 23px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+
+      > span {
+          font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+      }
+    }
+  }
+
   > .CodeMirror {
     z-index: 0;
     height: auto;
