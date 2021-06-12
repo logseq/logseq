@@ -95,6 +95,9 @@ export interface AppUserConfigs {
   [key: string]: any
 }
 
+/**
+ * In Logseq, a graph represents a repository of connected pages and blocks
+ */
 export interface AppGraphInfo {
   name: string
   url: string
@@ -311,6 +314,7 @@ export interface IEditorProxy extends Record<string, any> {
     targetBlock: BlockIdentity,
     opts?: Partial<{ before: boolean; children: boolean }>
   ) => Promise<void>
+
   editBlock: (srcBlock: BlockIdentity, opts?: { pos: number }) => Promise<void>
 
   upsertBlockProperty: (
@@ -370,30 +374,64 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   settings?: LSPluginBaseInfo['settings']
 
   /**
-   * The main app is ready to run the plugin
+   * The main Logseq app is ready to run the plugin
+   * 
+   * @param model - same as the model in `provideModel`
    */
-  ready (model?: Record<string, any>): Promise<any>
+  ready(model?: Record<string, any>): Promise<any>
 
-  ready (callback?: (e: any) => void | {}): Promise<any>
+  /**
+   * @param callback - a function to run when the main Logseq app is ready
+   */
+  ready(callback?: (e: any) => void | {}): Promise<any>
 
-  ready (
+  ready(
     model?: Record<string, any>,
     callback?: (e: any) => void | {}
   ): Promise<any>
 
   beforeunload: (callback: () => Promise<void>) => void
 
-  provideModel (model: Record<string, any>): this
-
-  provideTheme (theme: ThemeOptions): this
-
   /**
-   * Inject custom css for the plugin
+   * Create a object to hold the methods referenced in `provideUI`
+   *
+   * @example
+   * ```ts
+   * logseq.provideModel({
+   *  openCalendar () {
+   *    console.log('Open the calendar!')
+   *  }
+   * })
+   * ```
    */
-  provideStyle (style: StyleString | StyleOptions): this
+  provideModel(model: Record<string, any>): this
 
   /**
-   * Inject custom UI at specific DOM node
+   * Set the theme for the main Logseq app
+   */
+  provideTheme(theme: ThemeOptions): this
+
+  /**
+   * Inject custom css for the main Logseq app
+   *
+   * @example
+   * ```ts
+   *   logseq.provideStyle(`
+   *    @import url("https://at.alicdn.com/t/font_2409735_r7em724douf.css");
+   *  )
+   * ```
+   *
+   * @example
+   * ```ts
+   *
+   * ```
+   */
+  provideStyle(style: StyleString | StyleOptions): this
+
+  /**
+   * Inject custom UI at specific DOM node.
+   * Event handlers can not be passed by string, so you need to create them in `provideModel`
+   *
    * @example
    * ```ts
    * logseq.provideUI({
@@ -407,19 +445,39 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  provideUI (ui: UIOptions): this
+  provideUI(ui: UIOptions): this
 
-  updateSettings (attrs: Record<string, any>): void
+  updateSettings(attrs: Record<string, any>): void
 
-  setMainUIAttrs (attrs: Record<string, any>): void
+  setMainUIAttrs(attrs: Record<string, any>): void
 
-  setMainUIInlineStyle (style: CSS.Properties): void
+  /**
+   * Set the style for the plugin's UI
+   * 
+   * @example
+   * ```ts
+   * logseq.setMainUIInlineStyle({
+   *  position: 'fixed',
+   *  zIndex: 11,
+   * })
+   * ```
+   */
+  setMainUIInlineStyle(style: CSS.Properties): void
 
-  showMainUI (): void
+  /**
+   * show the plugin's UI
+   */
+  showMainUI(): void
 
-  hideMainUI (opts?: { restoreEditingCursor: boolean }): void
+  /**
+   * hide the plugin's UI
+   */
+  hideMainUI(opts?: { restoreEditingCursor: boolean }): void
 
-  toggleMainUI (): void
+  /**
+   * toggle the plugin's UI
+   */
+  toggleMainUI(): void
 
   isMainUIVisible: boolean
 
