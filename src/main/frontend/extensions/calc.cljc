@@ -20,6 +20,7 @@
    (doall
     (insta/transform
      {:number     edn/read-string
+      :scientific edn/read-string
       :expr       identity
       :add        +
       :sub        -
