@@ -362,7 +362,7 @@
          (last child)
          (let [{:keys [content children]} (last child)
                page-name (subs content 2 (- (count content) 2))]
-           (page-reference html-export? page-name (assoc config :children children) nil))))
+           (rum/with-key (page-reference html-export? page-name (assoc config :children children) nil) page-name))))
      (if (and label
               (string? label)
               (not (string/blank? label))) ; alias
