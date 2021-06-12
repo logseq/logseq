@@ -541,7 +541,7 @@
                     blocks)]
        (with-path-refs blocks)))
     (catch js/Error e
-      (log/error :extract-blocks-failed)
+      (js/console.error "extract-blocks-failed")
       (log/error :exception e))))
 
 (defn with-parent-and-left
