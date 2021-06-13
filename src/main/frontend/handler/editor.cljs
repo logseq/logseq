@@ -1693,7 +1693,9 @@
         (when-let [repo (state/get-current-repo)]
           (let [opts {:key :block/change
                       :data [block]}]
-            (db/refresh! repo opts)))))))
+            (db/refresh! repo opts)))
+        (when-let [block-node (util/get-first-block-by-id block-id)]
+          (.scrollIntoView block-node #js {:behavior "smooth" :block "center"}))))))
 
 ;; selections
 (defn on-tab
