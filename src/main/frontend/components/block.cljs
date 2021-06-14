@@ -1572,7 +1572,7 @@
                    edit-input-id
                    config)]
       [:div.flex.flex-row.block-content-wrapper
-       [:div.flex-1 {:style {:display (if (:slide? config) "block" "flex")}}
+       [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (block-content config block edit-input-id block-id slide?)]
        [:div.flex.flex-row
         (when (and (:embed? config)

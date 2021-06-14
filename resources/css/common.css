@@ -703,6 +703,7 @@ hr {
 .resize {
   resize: both;
   overflow: hidden;
+  max-width: -webkit-fill-available;
 }
 
 /* ideas from https://github.com/PiotrSss/logseq-bujo-theme/blob/main/main.css */
