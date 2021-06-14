@@ -319,7 +319,7 @@
           :close-fn    close-fn
           :route-match route-match})
         [:div.#app-container.h-screen.flex
-         [:div.flex-1.h-full.flex.flex-col#left-container.relative
+         [:div.flex-1.h-full.w-full.flex.flex-col#left-container.relative
           [:div.scrollbar-spacing#main-container
            (header/header {:open-fn        open-fn
                            :white?         white?
