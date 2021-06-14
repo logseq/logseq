@@ -67,6 +67,7 @@
 }
 
 .cp__sidebar-main-content {
+  width: 100%;
   max-width: var(--ls-main-content-max-width);
   flex: 1;
 
