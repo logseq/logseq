@@ -551,11 +551,18 @@
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (let [blocks (util/sort-by-height blocks)]
-       (swap! state assoc
-             :selection/mode true
-             :selection/blocks blocks
-             :selection/direction direction)))))
+     (swap! state assoc
+            :selection/mode true
+            :selection/blocks blocks
+            :selection/direction direction))))
+
+(defn sort-selection-blocks!
+  []
+  (when (:selection/mode @state)
+    (swap! state update :selection/blocks
+           (fn [blocks]
+             (when (seq blocks)
+               (util/sort-by-height blocks))))))
 
 (defn into-selection-mode!
   []
