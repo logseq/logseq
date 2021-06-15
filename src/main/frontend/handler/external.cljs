@@ -7,7 +7,11 @@
             [frontend.date :as date]
             [frontend.config :as config]
             [clojure.string :as string]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.format.mldoc :as mldoc]
+            [frontend.format.block :as block]
+            [frontend.handler.page :as page]
+            [frontend.handler.editor :as editor]))
 
 (defonce debug-files (atom nil))
 (defn index-files!
@@ -58,3 +62,31 @@
                     (fn []
                       (common-handler/check-changed-files-status)
                       (finished-ok-handler))))))
+
+
+;;; import OPML files
+(defn import-from-opml!
+  [data finished-ok-handler]
+  (when-let [repo (state/get-current-repo)]
+    (let [[headers parsed-blocks] (mldoc/opml->edn data)
+          parsed-blocks (block/extract-blocks parsed-blocks "" true :markdown) ; TODO: only support md in opml's text attr yet
+          page-name (:title headers)]
+      (when (not (page/page-exists? page-name))
+        (page/create! page-name {:redirect? false}))
+      (let [page-block (db/entity [:block/name (string/lower-case page-name)])
+            children (:block/_parent page-block)
+            blocks (db/sort-by-left children page-block)
+            last-block (last blocks)
+            snd-last-block (last (butlast blocks))
+            [target-block sibling?] (if (and last-block (seq (:block/content last-block)))
+                                      [last-block true]
+                                      (if snd-last-block
+                                        [snd-last-block true]
+                                        [page-block false]))
+            tree (editor/blocks->tree-by-level parsed-blocks)]
+        (editor/paste-block-vec-tree-at-target
+         tree [] nil
+         #(editor/get-block-tree-insert-pos-after-target
+           (:db/id target-block) sibling?)
+         page-block)
+        (finished-ok-handler [page-name])))))
