@@ -2560,21 +2560,27 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (and (or (= k "[") (= k "【"))
-                   (> current-pos 0)
-                   (= "【" (util/nth-safe value (dec (dec current-pos)))))
+        (when (and (= "【" c (util/nth-safe value (dec (dec current-pos))))
+                   (> current-pos 0))
           (commands/handle-step [:editor/input "[[]]" {:last-pattern "【【"
                                                        :backward-pos 2}])
           (commands/handle-step [:editor/search-page])
           (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
-        (when (and (or (= k "(") (= k "（"))
-                   (> current-pos 0)
-                   (= "（" (util/nth-safe value (dec (dec current-pos)))))
+        (when (and (= "（" c (util/nth-safe value (dec (dec current-pos))))
+                   (> current-pos 0))
           (commands/handle-step [:editor/input "(())" {:last-pattern "（（"
                                                        :backward-pos 2}])
           (commands/handle-step [:editor/search-block :reference])
           (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+
+        (when (and (= "〈" c)
+                   (= "《" (util/nth-safe value (dec (dec current-pos))))
+                   (> current-pos 0))
+          (commands/handle-step [:editor/input "<" {:last-pattern "《〈"
+                                                    :backward-pos 0}])
+          (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
+          (reset! commands/*show-block-commands true))
 
         (when (= c " ")
           (when (or (= (util/nth-safe value (dec (dec current-pos))) "#")
