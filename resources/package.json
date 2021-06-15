@@ -17,7 +17,7 @@
     "forge": "./forge.config.js"
   },
   "dependencies": {
-    "better-sqlite3": "^7.4.1",
+    "better-sqlite3": "7.4.1",
     "chokidar": "^3.5.1",
     "electron-log": "^4.3.1",
     "electron-squirrel-startup": "^1.0.0",

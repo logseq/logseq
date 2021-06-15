@@ -86,6 +86,11 @@ exports.electronMaker = async () => {
     })
   }
 
+  cp.execSync('yarn rebuild:better-sqlite3', {
+    cwd: outputPath,
+    stdio: 'inherit'
+  })
+
   cp.execSync('yarn electron:make', {
     cwd: outputPath,
     stdio: 'inherit'
