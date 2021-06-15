@@ -261,7 +261,7 @@
         :settings "Settings"
         :plugins "Plugins"
         :themes "Themes"
-        :developer-mode-alert "You need to restart the app to enable the plugin system. Do it right now?"
+        :developer-mode-alert "You need to restart the app to enable the plugin system. Do you want to restart it now?"
         :import "Import"
         :join-community "Join the community"
         :sponsor-us "Sponsor Us"
