@@ -650,6 +650,14 @@ span.warning {
   color: #fff;
 }
 
+a.error,
+span.error {
+    background: red;
+    padding: 0.1em 0.4em;
+    border-radius: var(--ls-border-radius-low);
+    color: #fff;
+}
+
 img.small {
   display: inline;
   width: 20px;

@@ -22,6 +22,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.config :as config]
             [dommy.core :as d]
             [clojure.string :as string]
@@ -105,35 +107,46 @@
 
 (rum/defc main
   [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    [:div#main-content.cp__sidebar-main-layout.flex-1.flex
-     [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
-      {:style {:flex (if (state/get-left-sidebar-open?)
-                       "0 1 20%"
-                       "0 0 0px")
-               :border-right (str "1px solid "
-                                  (if white? "#f0f8ff" "#073642"))}}
-      (when (state/sub :ui/left-sidebar-open?)
-        (sidebar-nav route-match nil))]
-     [:div#main-content-container.w-full.flex.justify-center
-      {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
-      [:div.cp__sidebar-main-content
-       {:data-is-global-graph-pages global-graph-pages?
-        :data-is-full-width (or global-graph-pages?
-                                (contains? #{:all-files :all-pages :my-publishing} route-name))}
-       (cond
-         (not indexeddb-support?)
-         nil
+  (ui/catch-error
+   [:div#main-content-container.w-full.flex.justify-center
+    [:div.mt-8
+     [:span.error "⚠️ Oops, Something Went Wrong, please back up your data first!"]
+     [:div.my-2 "Usually, a re-index could fix it. If it doesn't, you can join our "
+      [:a.inline {:href "https://discord.gg/KpN4eHY"
+                  :target "_blank"}
+       "discord group"]
+      " to ask for help."]
+     (ui/button "Re-index current graph"
+       :on-click #(repo-handler/re-index! nfs-handler/rebuild-index!))]]
+   (rum/with-context [[t] i18n/*tongue-context*]
+     [:div#main-content.cp__sidebar-main-layout.flex-1.flex
+      [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
+       {:style {:flex (if (state/get-left-sidebar-open?)
+                        "0 1 20%"
+                        "0 0 0px")
+                :border-right (str "1px solid "
+                                   (if white? "#f0f8ff" "#073642"))}}
+       (when (state/sub :ui/left-sidebar-open?)
+         (sidebar-nav route-match nil))]
+      [:div#main-content-container.w-full.flex.justify-center
+       {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
+       [:div.cp__sidebar-main-content
+        {:data-is-global-graph-pages global-graph-pages?
+         :data-is-full-width (or global-graph-pages?
+                                 (contains? #{:all-files :all-pages :my-publishing} route-name))}
+        (cond
+          (not indexeddb-support?)
+          nil
 
-         db-restoring?
-         [:div.mt-20
-          [:div.ls-center
-           (ui/loading (t :loading))]]
+          db-restoring?
+          [:div.mt-20
+           [:div.ls-center
+            (ui/loading (t :loading))]]
 
-         :else
-         [:div.pb-24 {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
-                      :style {:margin-bottom (if global-graph-pages? 0 120)}}
-          main-content])]]]))
+          :else
+          [:div.pb-24 {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
+                       :style {:margin-bottom (if global-graph-pages? 0 120)}}
+           main-content])]]])))
 
 (rum/defc footer
   []

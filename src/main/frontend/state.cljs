@@ -551,10 +551,12 @@
    (set-selection-blocks! blocks :down))
   ([blocks direction]
    (when (seq blocks)
-     (swap! state assoc
-            :selection/mode true
-            :selection/blocks blocks
-            :selection/direction direction))))
+     (let [blocks (util/sort-by-height blocks)]
+       (swap! state assoc
+             :selection/mode true
+             :selection/blocks blocks
+             :selection/direction direction)))))
+
 (defn into-selection-mode!
   []
   (swap! state assoc :selection/mode true))
@@ -588,7 +590,8 @@
   (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
-         :selection/blocks (conj (:selection/blocks @state) block)
+         :selection/blocks (-> (conj (:selection/blocks @state) block)
+                               util/sort-by-height)
          :selection/direction direction))
 
 (defn drop-last-selection-block!

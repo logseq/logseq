@@ -17,7 +17,8 @@
             [medley.core :as medley]
             [frontend.ui.date-picker]
             [frontend.context.i18n :as i18n]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [frontend.modules.shortcut.core :as shortcut]
+            [lambdaisland.glogi :as log]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -566,6 +567,9 @@
        (js/console.dir error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
+  (when error
+    (js/console.error error)
+    (log/error :ui/catch-error error))
   (if (some? error)
     error-view
     view))

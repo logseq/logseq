@@ -851,16 +851,16 @@
   (when (seq block-uuids)
     (let [lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
           blocks (db/pull-many repo '[*] lookup-refs)
-          blocks (reorder-blocks blocks)]
-      (let [start-node (outliner-core/block (first blocks))
-            end-node (get-top-level-end-node blocks)]
-        (if (= start-node end-node)
-          (delete-block-aux! (first blocks) true)
-          (when (outliner-core/delete-nodes start-node end-node lookup-refs)
-            (let [opts {:key :block/change
-                        :data blocks}]
-              (db/refresh! repo opts)
-              (ui-handler/re-render-root!))))))))
+          blocks (reorder-blocks blocks)
+          start-node (outliner-core/block (first blocks))
+          end-node (get-top-level-end-node blocks)]
+      (if (= start-node end-node)
+        (delete-block-aux! (first blocks) true)
+        (when (outliner-core/delete-nodes start-node end-node lookup-refs)
+          (let [opts {:key :block/change
+                      :data blocks}]
+            (db/refresh! repo opts)
+            (ui-handler/re-render-root!)))))))
 
 (defn- block-property-aux!
   [block-id key value]
@@ -956,11 +956,12 @@
 
 (defn- get-selected-blocks-with-children
   []
-  (when-let [blocks (seq (get @state/state :selection/blocks))]
-    (mapcat (fn [block]
-              (cons block
-                    (array-seq (dom/by-class block "ls-block"))))
-            blocks)))
+  (when-let [blocks (seq (state/get-selection-blocks))]
+    (->> (mapcat (fn [block]
+                   (cons block
+                         (array-seq (dom/by-class block "ls-block"))))
+                 blocks)
+         distinct)))
 
 (defn- blocks-with-level
   [blocks]
@@ -1048,9 +1049,6 @@
           ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))
-          ids (if (= :up (state/get-selection-direction))
-                (reverse ids)
-                ids)
           [content tree] (compose-copied-blocks-contents-&-block-tree repo ids)
           block (db/pull [:block/uuid (first ids)])]
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
@@ -1065,10 +1063,7 @@
     (let [blocks (remove (fn [block] (= "true" (dom/attr block "data-transclude"))) blocks)]
       (when (seq blocks)
         (let [repo (dom/attr (first blocks) "repo")
-              ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))
-              ids (if (= :up (state/get-selection-direction))
-                    (reverse ids)
-                    ids)]
+              ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
           (delete-blocks! repo ids))))))
 
 (defn- get-nearest-page

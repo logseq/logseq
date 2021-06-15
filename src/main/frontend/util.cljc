@@ -1235,3 +1235,15 @@
                    (when v (name k)))
                  (name %))
               args)))
+
+#?(:cljs
+   (defn- get-dom-top
+     [node]
+     (gobj/get (.getBoundingClientRect node) "top")))
+
+#?(:cljs
+   (defn sort-by-height
+     [elements]
+     (sort (fn [x y]
+             (< (get-dom-top x) (get-dom-top y)))
+           elements)))
