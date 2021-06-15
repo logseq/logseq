@@ -419,7 +419,9 @@
                       (fn []
                         (let [mode (not developer-mode?)]
                           (state/set-developer-mode! mode)
-                          (and mode (js/alert (t :developer-mode-alert)))))
+                          (and mode (util/electron?)
+                               (if (js/confirm (t :developer-mode-alert))
+                                 (js/logseq.api.relaunch)))))
                       true)]]]
         [:div.text-sm.opacity-50
          (t :settings-page/developer-mode-desc)]
