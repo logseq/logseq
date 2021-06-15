@@ -1901,7 +1901,7 @@
     (state/set-editor-show-block-search! false)
     (cursor/move-cursor-forward input 2)))
 
-(defn- get-block-tree-insert-pos-after-target
+(defn get-block-tree-insert-pos-after-target
   "return [target-block sibling? delete-editing-block? editing-block]"
   ([target-block-id sibling?]
    (get-block-tree-insert-pos-after-target target-block-id sibling? nil))
@@ -2000,7 +2000,7 @@
          (assoc m :block/file (select-keys file [:db/id]))
          m)))))
 
-(defn- paste-block-vec-tree-at-target
+(defn paste-block-vec-tree-at-target
   ([tree exclude-properties]
    (paste-block-vec-tree-at-target tree exclude-properties nil nil nil))
   ([tree exclude-properties content-update-fn]
@@ -2632,6 +2632,14 @@
   []
   (when-let [page (state/get-current-page)]
     (db/get-page-format page)))
+
+(defn blocks->tree-by-level
+  [blocks]
+  (let [min-level (apply min (mapv :block/level blocks))
+        prefix-level (if (> min-level 1) (- min-level 1) 0)]
+    (->> blocks
+                   (mapv #(assoc % :level (- (:block/level %) prefix-level)))
+                   (blocks-vec->tree))))
 
 (defn- paste-text-parseable
   [format text]
