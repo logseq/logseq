@@ -421,6 +421,7 @@
      (case (util/get-file-ext full-path)
        "pdf"
        [:iframe {:src full-path
+                 :class "pdf-preview"
                  :fullscreen true
                  :height 800}]
        ;; https://en.wikipedia.org/wiki/HTML5_video
