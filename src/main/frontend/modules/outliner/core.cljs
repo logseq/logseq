@@ -164,18 +164,19 @@
                        (conj children-ids block-id))
                      [block-id]))
           txs (map (fn [id] [:db.fn/retractEntity [:block/uuid id]]) ids)
-          txs (or (let [immediate-children (db/get-block-immediate-children (state/get-current-repo) block-id)]
-                    (when (seq immediate-children)
-                      (let [left-id (tree/-get-id (tree/-get-left this))]
-                        (concat txs
-                                (map-indexed (fn [idx child]
-                                               (let [parent [:block/uuid left-id]]
-                                                 (cond->
-                                                  {:db/id (:db/id child)
-                                                   :block/parent parent}
-                                                  (zero? idx)
-                                                   (assoc :block/left parent))))
-                                             immediate-children)))))
+          txs (if-not children?
+                (let [immediate-children (db/get-block-immediate-children (state/get-current-repo) block-id)]
+                  (when (seq immediate-children)
+                    (let [left-id (tree/-get-id (tree/-get-left this))]
+                      (concat txs
+                              (map-indexed (fn [idx child]
+                                             (let [parent [:block/uuid left-id]]
+                                               (cond->
+                                                 {:db/id (:db/id child)
+                                                  :block/parent parent}
+                                                 (zero? idx)
+                                                 (assoc :block/left parent))))
+                                           immediate-children)))))
                   txs)]
       (swap! txs-state concat txs)
       block-id))
