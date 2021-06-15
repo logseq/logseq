@@ -289,8 +289,7 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<void>
 
   removeBlock: (
-    srcBlock: BlockIdentity,
-    opts?: Partial<{ includeChildren: boolean }>
+    srcBlock: BlockIdentity
   ) => Promise<void>
 
   getBlock: (
@@ -375,17 +374,17 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   /**
    * The main Logseq app is ready to run the plugin
-   * 
+   *
    * @param model - same as the model in `provideModel`
    */
-  ready(model?: Record<string, any>): Promise<any>
+  ready (model?: Record<string, any>): Promise<any>
 
   /**
    * @param callback - a function to run when the main Logseq app is ready
    */
-  ready(callback?: (e: any) => void | {}): Promise<any>
+  ready (callback?: (e: any) => void | {}): Promise<any>
 
-  ready(
+  ready (
     model?: Record<string, any>,
     callback?: (e: any) => void | {}
   ): Promise<any>
@@ -404,12 +403,12 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  provideModel(model: Record<string, any>): this
+  provideModel (model: Record<string, any>): this
 
   /**
    * Set the theme for the main Logseq app
    */
-  provideTheme(theme: ThemeOptions): this
+  provideTheme (theme: ThemeOptions): this
 
   /**
    * Inject custom css for the main Logseq app
@@ -426,7 +425,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    *
    * ```
    */
-  provideStyle(style: StyleString | StyleOptions): this
+  provideStyle (style: StyleString | StyleOptions): this
 
   /**
    * Inject custom UI at specific DOM node.
@@ -445,15 +444,15 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  provideUI(ui: UIOptions): this
+  provideUI (ui: UIOptions): this
 
-  updateSettings(attrs: Record<string, any>): void
+  updateSettings (attrs: Record<string, any>): void
 
-  setMainUIAttrs(attrs: Record<string, any>): void
+  setMainUIAttrs (attrs: Record<string, any>): void
 
   /**
    * Set the style for the plugin's UI
-   * 
+   *
    * @example
    * ```ts
    * logseq.setMainUIInlineStyle({
@@ -462,22 +461,22 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * })
    * ```
    */
-  setMainUIInlineStyle(style: CSS.Properties): void
+  setMainUIInlineStyle (style: CSS.Properties): void
 
   /**
    * show the plugin's UI
    */
-  showMainUI(): void
+  showMainUI (): void
 
   /**
    * hide the plugin's UI
    */
-  hideMainUI(opts?: { restoreEditingCursor: boolean }): void
+  hideMainUI (opts?: { restoreEditingCursor: boolean }): void
 
   /**
    * toggle the plugin's UI
    */
-  toggleMainUI(): void
+  toggleMainUI (): void
 
   isMainUIVisible: boolean
 

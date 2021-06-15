@@ -255,7 +255,7 @@
 
 (def ^:export remove_block
   (fn [block-uuid ^js opts]
-    (let [{:keys [includeChildren]} (bean/->clj opts)
+    (let [includeChildren true
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
