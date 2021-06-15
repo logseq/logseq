@@ -449,13 +449,17 @@
          (let [left-node-id (if sibling?
                               (tree/-get-id (tree/-get-left start-node))
                               (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
-                                    parents (db/get-block-parents
-                                             (state/get-current-repo)
-                                             (tree/-get-id start-node)
-                                             1000)]
-                                (first (set/intersection (set end-node-left-nodes) parents))))
-               new-right-node (tree/-set-left-id right-node left-node-id)]
-           (tree/-save new-right-node txs-state)))
+                                    parents (->>
+                                             (db/get-block-parents
+                                              (state/get-current-repo)
+                                              (tree/-get-id start-node)
+                                              1000)
+                                             (map :block/uuid)
+                                             (set))]
+                                (first (set/intersection (set end-node-left-nodes) parents))))]
+           (assert left-node-id "Can't find the left-node-id")
+           (let [new-right-node (tree/-set-left-id right-node left-node-id)]
+             (tree/-save new-right-node txs-state))))
        (let [txs (db-outliner/del-blocks block-ids)]
          (ds/add-txs txs-state txs))))))
 
