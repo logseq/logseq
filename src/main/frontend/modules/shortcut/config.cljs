@@ -195,6 +195,10 @@
     {:desc    "Collapse"
      :binding "mod+up"
      :fn      editor-handler/collapse!}
+    :editor/collapse-top-blocks
+    {:desc    "Collapse all blocks"
+     :binding "mod+shift+l"
+     :fn      editor-handler/collapse-all!}
     :editor/indent
     {:desc    "Indent block"
      :binding "tab"
@@ -315,6 +319,7 @@
     :editor/new-line
     :editor/indent
     :editor/outdent
+    :editor/collapse-top-blocks
     :editor/collapse-block-children
     :editor/expand-block-children
     :go/search

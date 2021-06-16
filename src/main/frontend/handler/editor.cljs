@@ -3027,3 +3027,18 @@
               (recur (dec level))
               (doseq [{:block/keys [uuid]} blocks-to-collapse]
                 (collapse-block! uuid)))))))))
+
+(defn collapse-all!
+  []
+  (let [blocks-with-level
+        (all-blocks-with-level {:collapse? true})
+        level 1]
+    (let [blocks-to-collapse
+          (->> blocks-with-level
+               (filter (fn [b] (= (:block/level b) level)))
+               (remove (fn [b]
+                         (or (not (db-model/has-children? (:block/uuid b)))
+                             (-> b :block/properties :collapsed)))))]
+      (when (seq blocks-to-collapse)
+        (doseq [{:block/keys [uuid]} blocks-to-collapse]
+          (collapse-block! uuid))))))
