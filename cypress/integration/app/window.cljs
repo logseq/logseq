@@ -26,6 +26,19 @@
   []
   (.. cy (realPress #js ["Shift" "Tab"])))
 
+(defn backspace
+  []
+  (edit-block "{backspace}"))
+
+(defn delete
+  []
+  (.. cy (realPress "Delete")))
+
+(defn match-content
+  [value]
+  (.. cy (get "textarea") (first)
+      (should "have.value" value)))
+
 (describe "Window"
   (beforeEach []
               (.clearIndexedDB cy))
@@ -61,4 +74,27 @@
     (tab)
     (edit-block ", continue editing")
     (shift+tab)
-    (edit-block ", continue {enter}")))
+    (edit-block ", continue {enter}")
+
+    ;; Backspace to delete a block
+    (edit-block "test")
+
+    ;; delete the previous block
+    (dorun (repeatedly 5 backspace))
+
+    (.. cy (get ".ls-block")
+        (should (fn [result]
+                  (expect result :to.have.length 3))))
+
+    (edit-block "{enter}")
+
+    ;; Del
+    (edit-block "test")
+    (edit-block "{leftarrow}{leftarrow}")
+    (delete)
+    (delete)
+
+    ;; FIXME: not working
+    ;; (match-content "te")
+
+    (edit-block "{enter}")))
