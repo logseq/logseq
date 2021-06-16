@@ -99,13 +99,6 @@
     {:desc    "Html Link"
      :binding "mod+k"
      :fn      editor-handler/html-link-format!}
-    ;; FIXME
-    ;; select-all-blocks only works in block editing mode
-    ;; maybe we can improve this
-    :editor/select-all-blocks
-    {:desc    "Select all blocks"
-     :binding "mod+shift+a"
-     :fn      editor-handler/select-all-blocks!}
     :editor/move-block-up
     {:desc    "Move block up"
      :binding (if mac? "mod+shift+up"  "alt+shift+up")
@@ -227,7 +220,11 @@
 
    :shortcut.handler/global-prevent-default
    ^{:before m/prevent-default-behavior}
-   {:editor/zoom-in
+   {:editor/select-all-blocks
+    {:desc    "Select all blocks"
+     :binding "mod+shift+a"
+     :fn      editor-handler/select-all-blocks!}
+    :editor/zoom-in
     {:desc    "Zoom in / Forward"
      :binding (if mac? "mod+." "alt+right")
      :fn      editor-handler/zoom-in!}
@@ -321,6 +318,7 @@
     :editor/outdent
     :editor/collapse-block-children
     :editor/expand-block-children
+    :editor/select-all-blocks
     :go/search
     :go/search-in-page
     :editor/undo
@@ -359,7 +357,6 @@
     :editor/cycle-todo
     :editor/follow-link
     :editor/open-link-in-sidebar
-    :editor/select-all-blocks
     :editor/move-block-up
     :editor/move-block-down]
 
@@ -379,6 +376,7 @@
    :shortcut.category/block-selection
    ^{:doc "Block selection (press Esc to quit selection)"}
    [:editor/open-edit
+    :editor/select-all-blocks
     :editor/select-block-up
     :editor/select-block-down
     :editor/delete-selection]
