@@ -1247,3 +1247,17 @@
      (sort (fn [x y]
              (< (get-dom-top x) (get-dom-top y)))
            elements)))
+
+
+(def regex-char-esc-smap
+  (let [esc-chars "{}[]()&^%$#!?*.+|\\"]
+    (zipmap esc-chars
+            (map #(str "\\" %) esc-chars))))
+
+(defn regex-escape
+  "Escape all regex meta chars in text."
+  [text]
+  (string/join (replace regex-char-esc-smap text)))
+
+(comment
+  (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
