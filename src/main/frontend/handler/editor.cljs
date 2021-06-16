@@ -1210,7 +1210,8 @@
       ;; if same direction, keep conj on same direction
       (and (state/selection?) (= direction (state/get-selection-direction)))
       (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
-            element (f (last (state/get-selection-blocks)))]
+            first-last (if (= :up direction) first last)
+            element (f (first-last (state/get-selection-blocks)))]
         (when element
           (state/conj-selection-block! element direction)))
 
