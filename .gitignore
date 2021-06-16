@@ -34,3 +34,4 @@ resources/electron.js
 /libs/dist/
 charlie/
 .vscode
+/.preprocessor-cljs
