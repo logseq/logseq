@@ -1743,9 +1743,7 @@
    :on-mouse-over (fn [e]
                     (block-mouse-over e has-child? *control-show? block-id doc-mode?))
    :on-mouse-leave (fn [e]
-                     (block-mouse-leave e has-child? *control-show? block-id doc-mode?))
-   :on-mouse-up (fn [e]
-                  (state/sort-selection-blocks!))})
+                     (block-mouse-leave e has-child? *control-show? block-id doc-mode?))})
 
 (defn- build-refs-data-value
   [block refs]

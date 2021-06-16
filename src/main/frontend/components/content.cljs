@@ -331,10 +331,8 @@
                     on-click
                     on-hide]
              :as option}]
-  (let [in-selection-mode? (state/sub :selection/mode)
-        selected-blocks (state/sub :selection/blocks)]
-    (if hiccup
-      [:div
-       (hiccup-content id option)]
-      (let [format (format/normalize format)]
-        (non-hiccup-content id content on-click on-hide config format)))))
+  (if hiccup
+    [:div
+     (hiccup-content id option)]
+    (let [format (format/normalize format)]
+      (non-hiccup-content id content on-click on-hide config format))))

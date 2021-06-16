@@ -556,14 +556,6 @@
             :selection/blocks blocks
             :selection/direction direction))))
 
-(defn sort-selection-blocks!
-  []
-  (when (:selection/mode @state)
-    (swap! state update :selection/blocks
-           (fn [blocks]
-             (when (seq blocks)
-               (util/sort-by-height blocks))))))
-
 (defn into-selection-mode!
   []
   (swap! state assoc :selection/mode true))
@@ -581,7 +573,7 @@
 
 (defn get-selection-blocks
   []
-  (:selection/blocks @state))
+  (util/sort-by-height (:selection/blocks @state)))
 
 (defn in-selection-mode?
   []
@@ -597,8 +589,7 @@
   (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
-         :selection/blocks (-> (conj (:selection/blocks @state) block)
-                               util/sort-by-height)
+         :selection/blocks (conj (:selection/blocks @state) block)
          :selection/direction direction))
 
 (defn drop-last-selection-block!
