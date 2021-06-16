@@ -264,10 +264,11 @@
   (fn [block-uuid content ^js opts]
     (let [opts (and opts (bean/->clj opts))
           repo (state/get-current-repo)
-          editing? (string/ends-with? (state/get-edit-input-id) block-uuid)]
+          edit-input (state/get-edit-input-id)
+          editing? (and edit-input (string/ends-with? edit-input block-uuid))]
 
       (if editing?
-        (state/set-edit-content! (state/get-edit-input-id) content)
+        (state/set-edit-content! edit-input content)
         (editor-handler/save-block! repo (medley/uuid block-uuid) content))
       nil)))
 
