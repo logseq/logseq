@@ -68,6 +68,7 @@
         "chrono-node": "^2.2.4",
         "codemirror": "^5.58.1",
         "cypress-clojurescript-preprocessor": "^0.1.4",
+        "cypress-real-events": "^1.5.0",
         "diff": "5.0.0",
         "diff-match-patch": "^1.0.5",
         "electron": "^13.0.0",
