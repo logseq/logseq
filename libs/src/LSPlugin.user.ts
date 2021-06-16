@@ -155,14 +155,13 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     _caller.on('beforeunload', async (payload) => {
       const { actor, ...rest } = payload
       const cb = this._beforeunloadCallback
-      if (!cb || !actor) return
 
       try {
         cb && await cb(rest)
-        actor.resolve(null)
+        actor?.resolve(null)
       } catch (e) {
         console.debug(`${_caller.debugTag} [beforeunload] `, e)
-        actor.reject(e)
+        actor?.reject(e)
       }
     })
   }
