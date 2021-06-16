@@ -946,14 +946,6 @@
                        first)]
     (state/exit-editing-and-set-selected-blocks! [block])))
 
-(defn select-all-blocks!
-  []
-  (when-let [current-input-id (state/get-edit-input-id)]
-    (let [input (gdom/getElement current-input-id)
-          blocks-container (util/rec-get-blocks-container input)
-          blocks (dom/by-class blocks-container "ls-block")]
-      (state/exit-editing-and-set-selected-blocks! blocks))))
-
 (defn- get-selected-blocks-with-children
   []
   (when-let [blocks (seq (state/get-selection-blocks))]
@@ -3056,3 +3048,14 @@
     (if all-collapsed?
       (expand-all!)
       (collapse-all!))))
+
+(defn select-all-blocks!
+  []
+  (if-let [current-input-id (state/get-edit-input-id)]
+    (let [input (gdom/getElement current-input-id)
+          blocks-container (util/rec-get-blocks-container input)
+          blocks (dom/by-class blocks-container "ls-block")]
+      (state/exit-editing-and-set-selected-blocks! blocks))
+    (-> (gdom/getElementsByClass "ls-block")
+        array-seq
+        state/exit-editing-and-set-selected-blocks!)))
