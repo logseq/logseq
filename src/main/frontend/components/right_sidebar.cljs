@@ -265,7 +265,7 @@
          [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
           (sidebar-resizer)
-          [:div.cp__right-sidebar-scollable
+          [:div.cp__right-sidebar-scrollable
            [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-4.h-12
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm

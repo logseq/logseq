@@ -680,7 +680,7 @@
                                         ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
-    (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scollable")]
+    (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
       (util/scroll-to elem 0))))
 
 (defn sidebar-remove-block!
