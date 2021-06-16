@@ -28,7 +28,7 @@
 (rum/defc toggle
   []
   (when-not (util/mobile?)
-    [:a.opacity-50.hover:opacity-100.ml-4 {:on-click state/toggle-sidebar-open?!}
+    [:a.opacity-60.hover:opacity-100.ml-4 {:on-click state/toggle-sidebar-open?!}
     (svg/menu)]))
 
 (rum/defc block-cp < rum/reactive

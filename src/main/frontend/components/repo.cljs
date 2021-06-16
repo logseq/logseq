@@ -99,7 +99,7 @@
       (when-not (= repo config/local-repo)
         (if (and nfs-repo? (nfs-handler/supported?))
           (let [syncing? (state/sub :graph/syncing?)]
-            [:div.ml-3.mr-1.mt-1.opacity-30.refresh.hover:opacity-100 {:class (if syncing? "loader" "initial")}
+            [:div.ml-3.mr-1.mt-1.opacity-60.refresh.hover:opacity-100 {:class (if syncing? "loader" "initial")}
              [:a
               {:on-click #(nfs-handler/refresh! repo refresh-cb)
                :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "

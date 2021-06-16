@@ -29,16 +29,16 @@
   }
 }
 
-.cp__vertial-menu-button {
-    opacity: 0.3;
+.cp__vertical-menu-button {
+    opacity: 60%;
     display: block;
 }
 
-.cp__vertial-menu-button:hover {
+.cp__vertical-menu-button:hover {
     opacity: 1;
 }
 
-.cp__vertial-menu-button svg {
+.cp__vertical-menu-button svg {
     width: 20px;
     height: 20px;
 }

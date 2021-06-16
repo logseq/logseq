@@ -126,7 +126,7 @@ html[data-theme='light'] {
   --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
   --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
   --ls-head-text-color: var(--ls-link-text-color);
-  --ls-icon-color: #c1bdb7;
+  --ls-icon-color: #908e8b;
   --ls-search-icon-color: var(--ls-icon-color);
   --ls-a-chosen-bg: #f4f5f7;
   --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
@@ -722,7 +722,7 @@ hr {
 
 .cp__header-logo,
 .fade-link {
-  opacity: 0.3;
+  opacity: 0.6;
   transition: 0.3s;
 }
 
