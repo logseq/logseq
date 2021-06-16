@@ -795,22 +795,6 @@
      (set! (.-title js/document) title)))
 
 #?(:cljs
-   (defn get-prev-block
-     [block]
-     (when-let [blocks (d/by-class "ls-block")]
-       (when-let [index (.indexOf blocks block)]
-         (when (> index 0)
-           (nth blocks (dec index)))))))
-
-#?(:cljs
-   (defn get-next-block
-     [block]
-     (when-let [blocks (d/by-class "ls-block")]
-       (when-let [index (.indexOf blocks block)]
-         (when (> (count blocks) (inc index))
-           (nth blocks (inc index)))))))
-
-#?(:cljs
    (defn get-prev-block-with-same-level
      [block]
      (let [id (gobj/get block "id")
@@ -857,6 +841,38 @@
   (if (or (< i 0) (>= i (count c)))
     nil
     (nth c i)))
+
+#?(:cljs
+   (defn get-prev-block-non-collapsed
+     [block]
+     (when-let [blocks (get-blocks-noncollapse)]
+       (when-let [index (.indexOf blocks block)]
+         (let [idx (dec index)]
+           (when (>= idx 0)
+             (nth blocks idx)))))))
+
+#?(:cljs
+   (defn get-next-block-non-collapsed
+     [block]
+     (when-let [blocks (get-blocks-noncollapse)]
+       (when-let [index (.indexOf blocks block)]
+         (let [idx (inc index)]
+           (when (>= (count blocks) idx)
+             (nth-safe blocks idx)))))))
+
+#?(:cljs
+   (defn get-next-block-non-collapsed-skip
+     [block]
+     (when-let [blocks (get-blocks-noncollapse)]
+       (when-let [index (.indexOf blocks block)]
+         (loop [idx (inc index)]
+           (when (>= (count blocks) idx)
+             (let [block (nth-safe blocks idx)
+                   nested? (->> (array-seq (gdom/getElementsByClass "selected"))
+                                (some (fn [dom] (.contains dom block))))]
+               (if nested?
+                 (recur (inc idx))
+                 block))))))))
 
 (defn sort-by-value
   [order m]
