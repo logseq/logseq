@@ -195,10 +195,6 @@
     {:desc    "Collapse"
      :binding "mod+up"
      :fn      editor-handler/collapse!}
-    :editor/collapse-top-blocks
-    {:desc    "Collapse all blocks"
-     :binding "mod+shift+l"
-     :fn      editor-handler/collapse-all!}
     :editor/indent
     {:desc    "Indent block"
      :binding "tab"
@@ -304,6 +300,10 @@
     {:desc    "Toggle wide mode"
      :binding "t w"
      :fn      ui-handler/toggle-wide-mode!}
+    :editor/toggle-open-blocks
+    {:desc    "Toggle open blocks, either collapse or expand all blocks"
+     :binding "t o"
+     :fn      editor-handler/toggle-open!}
     ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
     :git/commit
     {:desc    "Git commit message"
@@ -319,7 +319,6 @@
     :editor/new-line
     :editor/indent
     :editor/outdent
-    :editor/collapse-top-blocks
     :editor/collapse-block-children
     :editor/expand-block-children
     :go/search
@@ -330,6 +329,7 @@
     :editor/zoom-out
     :editor/copy
     :editor/cut
+    :editor/toggle-open-blocks
     :ui/toggle-wide-mode]
 
    :shortcut.category/formatting
@@ -387,6 +387,7 @@
    ^{:doc "Toggle"}
    [:ui/toggle-help
     :ui/toggle-new-block
+    :editor/toggle-open-blocks
     :ui/toggle-wide-mode
     :ui/toggle-document-mode
     :ui/toggle-brackets

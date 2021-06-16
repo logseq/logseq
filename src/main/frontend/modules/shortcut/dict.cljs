@@ -44,8 +44,6 @@
      :shortcut.category/others                "其他"
      :shortcut.ui/toggle-wide-mode            "切换宽屏模式"
      :shortcut.ui/toggle-brackets             "切换是否显示括号"
-     :shortcut.ui/fold                        "折叠块（非编辑状态）"
-     :shortcut.ui/un-fold                     "展开块（非编辑状态）"
      :shortcut.search/re-index                "重新建立搜索索引"
      :shortcut.graph/re-index                 "重新建立图库索引"
      :shortcut.editor/bold                    "粗体"
@@ -73,7 +71,8 @@
      :shortcut.editor/forward-kill-word       "向后删除一个单词"
      :shortcut.editor/backward-kill-word      "向前删除一个单词"
      :shortcut.editor/open-edit               "编辑选中块"
-     :shortcut.editor/delete-selection        "删除选中块"}
+     :shortcut.editor/delete-selection        "删除选中块"
+     :shortcut.editor/toggle-open-blocks      "切换折叠/展开所有块（非编辑g状态"}
     :zh-Hant
     {:shortcut.editor/indent                  "縮進塊標簽"
      :shortcut.editor/outdent                 "取消縮進塊"
