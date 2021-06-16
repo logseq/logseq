@@ -18,6 +18,13 @@
       (click)
       (type content)))
 
+(defn tab
+  []
+  (.. cy (realPress "Tab")))
+
+(defn shift+tab
+  []
+  (.. cy (realPress #js ["Shift" "Tab"])))
 
 (describe "Window"
   (beforeEach []
@@ -49,4 +56,9 @@
 
     ;; edit bullet
     (edit-block "this is my first bullet {enter}")
-    (edit-block "this is my second bullet {enter}")))
+    (edit-block "this is my second bullet {enter}")
+    (edit-block "this is my third bullet")
+    (tab)
+    (edit-block ", continue editing")
+    (shift+tab)
+    (edit-block ", continue {enter}")))

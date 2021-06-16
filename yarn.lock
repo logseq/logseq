@@ -2907,6 +2907,11 @@ cypress-clojurescript-preprocessor@^0.1.4:
     chokidar "3.4.0"
     shadow-cljs "2.10.18"
 
+cypress-real-events@^1.5.0:
+  version "1.5.0"
+  resolved "https://registry.yarnpkg.com/cypress-real-events/-/cypress-real-events-1.5.0.tgz#115945872f3e39b90f6896a5a226ff4effa1b8f5"
+  integrity sha512-5virdYmZmtnpVqX4U0Ht66985b5MpCHE6icDXReQGognja5d2FuRD+Hh2MqzJqOTmai74z50u5+nmTZ/Dn/VcQ==
+
 cypress@^7.5.0:
   version "7.5.0"
   resolved "https://registry.yarnpkg.com/cypress/-/cypress-7.5.0.tgz#72dd342e3b45f54b63cd46819f38d126feff5954"
