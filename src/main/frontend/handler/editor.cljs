@@ -3056,6 +3056,6 @@
           blocks-container (util/rec-get-blocks-container input)
           blocks (dom/by-class blocks-container "ls-block")]
       (state/exit-editing-and-set-selected-blocks! blocks))
-    (-> (gdom/getElementsByClass "ls-block")
-        array-seq
-        state/exit-editing-and-set-selected-blocks!)))
+    (->> (all-blocks-with-level {:collapse? true})
+         (map (comp gdom/getElementByClass str :block/uuid))
+         state/exit-editing-and-set-selected-blocks!)))
