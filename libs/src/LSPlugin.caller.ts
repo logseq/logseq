@@ -77,6 +77,7 @@ class LSPluginCaller extends EventEmitter {
       },
 
       [LSPMSG_BEFORE_UNLOAD]: async (e) => {
+        debugger
         const actor = deferred(10 * 1000)
         caller.emit('beforeunload', Object.assign({ actor }, e))
         await actor.promise
@@ -225,7 +226,7 @@ class LSPluginCaller extends EventEmitter {
 
         this._callUserModel = async (type, payload: any) => {
           if (type.startsWith(FLAG_AWAIT)) {
-            // TODO: attach payload
+            // TODO: attach payload with method call
             return await refChild.get(type.replace(FLAG_AWAIT, ''))
           } else {
             refChild.call(type, payload)
