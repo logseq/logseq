@@ -65,4 +65,7 @@
     ;; FIXME: not working
     ;; (match-content "te")
 
-    (util/edit-block "{enter}")))
+    (util/edit-block "{enter}")
+
+    ;; Selection
+    (dorun (repeatedly 3 util/shift+up))))

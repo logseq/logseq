@@ -24,6 +24,14 @@
   []
   (.. cy (realPress #js ["Shift" "Tab"])))
 
+(defn shift+up
+  []
+  (.. cy (realPress #js ["Shift" "ArrowUp"])))
+
+(defn shift+down
+  []
+  (.. cy (realPress #js ["Shift" "ArrowDown"])))
+
 (defn backspace
   []
   (edit-block "{backspace}"))
