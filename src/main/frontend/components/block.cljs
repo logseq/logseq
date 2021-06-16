@@ -1828,7 +1828,7 @@
 
      (dnd-separator-wrapper block slide? top?)
 
-     [:div.flex.flex-row {:class (if heading? "items-center" "")}
+     [:div.flex.flex-row.pr-2 {:class (if heading? "items-center" "")}
       (when (not slide?)
         (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show?))
 
