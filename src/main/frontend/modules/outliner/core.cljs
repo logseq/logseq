@@ -346,16 +346,8 @@
          (let [topmost-last-node (zip/node topmost-last-loc)
                updated-node (tree/-set-left-id down-node (tree/-get-id topmost-last-node))]
            (tree/-save updated-node txs-state))
-         (and sibling? (some? down-node) topmost-last-loc) ;; down-node.parent=N, down-node.left=N
-         (let [topmost-last-node-id (tree/-get-id (zip/node topmost-last-loc))
-               updated-node (tree/-set-parent-id (tree/-set-left-id down-node topmost-last-node-id) topmost-last-node-id)]
-           (tree/-save updated-node txs-state))
-         (and sibling? (some? down-node) sub-topmost-last-loc) ;; down-node.left=N, down-node.parent=N.parent
-         (let [sub-topmost-last-node (zip/node sub-topmost-last-loc)
-               updated-node (tree/-set-parent-id
-                             (tree/-set-left-id down-node (tree/-get-id sub-topmost-last-node))
-                             (tree/-get-parent-id sub-topmost-last-node))]
-           (tree/-save updated-node txs-state)))))))
+         (and sibling? (some? down-node)) ;; unchanged
+         nil)))))
 
 (defn move-node
   [node up?]
