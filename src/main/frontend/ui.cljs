@@ -373,15 +373,19 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
+(defn apply-close-fn [close-fn]
+  (fn [] (apply (or (gobj/get close-fn "user-close") close-fn) [])))
+
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
-  [state]
+  [state close-fn]
   [:div.ui__modal-overlay
    {:class (case state
              "entering" "ease-out duration-300 opacity-0"
              "entered" "ease-out duration-300 opacity-100"
              "exiting" "ease-in duration-200 opacity-100"
-             "exited" "ease-in duration-200 opacity-0")}
+             "exited" "ease-in duration-200 opacity-0")
+    :on-click (apply-close-fn close-fn)}
    [:div.absolute.inset-0.opacity-75]])
 
 (rum/defc modal-panel
@@ -396,7 +400,7 @@
     [:button.ui__modal-close
      {:aria-label "Close"
       :type       "button"
-      :on-click   (fn [] (apply (or (gobj/get close-fn "user-close") close-fn) []))}
+      :on-click   close-fn}
      [:svg.h-6.w-6
       {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
       [:path
@@ -436,7 +440,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-overlay state)))
+        (modal-overlay state close-fn)))
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
