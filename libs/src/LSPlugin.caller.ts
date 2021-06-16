@@ -77,7 +77,6 @@ class LSPluginCaller extends EventEmitter {
       },
 
       [LSPMSG_BEFORE_UNLOAD]: async (e) => {
-        debugger
         const actor = deferred(10 * 1000)
         caller.emit('beforeunload', Object.assign({ actor }, e))
         await actor.promise
