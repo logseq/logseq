@@ -976,7 +976,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (conn/get-conn repo)]
       (let [page-id (:db/id (db-utils/entity [:block/name page]))
-            pattern (re-pattern (str "(?i)(?<!#)(?<!\\[\\[)" page "(?!\\]\\])"))]
+            pattern (re-pattern (str "(?i)(?<!#)(?<!\\[\\[)" (util/regex-escape page) "(?!\\]\\])"))]
         (->> (react/q repo [:block/unlinked-refs page-id]
                {:query-fn (fn [db]
                             (let [ids (->> (d/datoms db :aevt :block/content)
