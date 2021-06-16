@@ -118,6 +118,12 @@ Run ClojureScript tests
 yarn test
 ```
 
+Run Cypress tests
+
+``` bash
+yarn e2e-test
+```
+
 Run Clojure tests. (Note: `.cljc` files may be tested both by ClojureScript, and Clojure.)
 
 ```bash
