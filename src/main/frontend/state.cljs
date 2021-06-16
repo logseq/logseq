@@ -1319,7 +1319,6 @@
   ([blocks]
    (exit-editing-and-set-selected-blocks! blocks :down))
   ([blocks direction]
-   (util/clear-selection!)
    (util/select-unhighlight! (dom/by-class "selected"))
    (clear-selection!)
    (clear-edit!)
