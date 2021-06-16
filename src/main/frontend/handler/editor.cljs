@@ -191,9 +191,7 @@
 
 (defn clear-selection!
   [_e]
-  (doseq [block (dom/by-class "selected")]
-    (dom/remove-class! block "selected")
-    (dom/remove-class! block "noselect"))
+  (util/select-unhighlight! (dom/by-class "selected"))
   (state/clear-selection!))
 
 (defn- text-range-by-lst-fst-line [content [direction pos]]
@@ -1149,8 +1147,7 @@
 (defn clear-last-selected-block!
   []
   (let [block (state/drop-last-selection-block!)]
-    (dom/remove-class! block "selected")
-    (dom/remove-class! block "noselect")))
+    (util/select-unhighlight! [block])))
 
 (defn input-start-or-end?
   ([input]
@@ -1167,7 +1164,6 @@
 (defn highlight-selection-area!
   [end-block]
   (when-let [start-block (state/get-selection-start-block)]
-    (clear-selection! nil)
     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
 
@@ -2154,7 +2150,6 @@
             :down util/get-next-block-non-collapsed)
         sibling-block (f selected)]
     (when (and sibling-block (dom/attr sibling-block "blockid"))
-      (clear-selection! nil)
       (.scrollIntoView sibling-block #js {:behavior "smooth" :block "center"})
       (state/exit-editing-and-set-selected-blocks! [sibling-block]))))
 
