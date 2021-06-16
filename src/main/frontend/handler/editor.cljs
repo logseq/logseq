@@ -757,22 +757,6 @@
                                           (util/format "[#%s]" new-priority))]
     (save-block-if-changed! block new-content)))
 
-(defn- get-prev-block-non-collapsed
-  [block]
-  (when-let [blocks (util/get-blocks-noncollapse)]
-    (when-let [index (.indexOf blocks block)]
-      (let [idx (dec index)]
-        (when (>= idx 0)
-          (nth blocks idx))))))
-
-(defn- get-next-block-non-collapsed
-  [block]
-  (when-let [blocks (util/get-blocks-noncollapse)]
-    (when-let [index (.indexOf blocks block)]
-      (let [idx (inc index)]
-        (when (>= (count blocks) idx)
-          (util/nth-safe blocks idx))))))
-
 (defn delete-block-aux!
   [{:block/keys [uuid content repo refs] :as block} children?]
   (let [repo (or repo (state/get-current-repo))
@@ -803,7 +787,7 @@
                                              (seq (:block/_parent block)))))]
              (when-not (and has-children? left-has-children?)
                (let [block-parent (gdom/getElement block-parent-id)
-                     sibling-block (get-prev-block-non-collapsed block-parent)]
+                     sibling-block (util/get-prev-block-non-collapsed block-parent)]
                  (delete-block-aux! block delete-children?)
                  (when (and repo sibling-block)
                    (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
@@ -1202,14 +1186,14 @@
 
       ;; when selection and one block selected, select next block
       (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
-      (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
+      (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
             element (f (first (state/get-selection-blocks)))]
         (when element
           (state/conj-selection-block! element direction)))
 
       ;; if same direction, keep conj on same direction
       (and (state/selection?) (= direction (state/get-selection-direction)))
-      (let [f (if (= :up direction) util/get-prev-block util/get-next-block)
+      (let [f (if (= :up direction) util/get-prev-block-non-collapsed util/get-next-block-non-collapsed-skip)
             first-last (if (= :up direction) first last)
             element (f (first-last (state/get-selection-blocks)))]
         (when element
@@ -1651,12 +1635,6 @@
       (when (and (>= (count value) (inc pos))
                  (>= pos 1))
         (util/nth-safe value pos)))))
-
-(defn- get-previous-block-level
-  [current-id]
-  (when-let [input (gdom/getElement current-id)]
-    (when-let [prev-block (util/get-prev-block input)]
-      (util/parse-int (dom/attr prev-block "level")))))
 
 (defn append-paste-doc!
   [format event]
@@ -2202,8 +2180,8 @@
 (defn- select-up-down [direction]
   (let [selected (first (state/get-selection-blocks))
         f (case direction
-            :up get-prev-block-non-collapsed
-            :down get-next-block-non-collapsed)
+            :up util/get-prev-block-non-collapsed
+            :down util/get-next-block-non-collapsed)
         sibling-block (f selected)]
     (when (and sibling-block (dom/attr sibling-block "blockid"))
       (clear-selection! nil)
@@ -2216,8 +2194,8 @@
         line-pos (util/get-first-or-last-line-pos input)
         repo (state/get-current-repo)
         f (case direction
-            :up get-prev-block-non-collapsed
-            :down get-next-block-non-collapsed)
+            :up util/get-prev-block-non-collapsed
+            :down util/get-next-block-non-collapsed)
         sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
         {:block/keys [uuid content format]} (state/get-edit-block)]
     (when sibling-block
@@ -2263,7 +2241,7 @@
         {:block/keys [format uuid] :as block} (state/get-edit-block)
         id (state/get-edit-input-id)
         repo (state/get-current-repo)]
-    (let [f (if up? get-prev-block-non-collapsed get-next-block-non-collapsed)
+    (let [f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
           sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))]
       (when sibling-block
         (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
