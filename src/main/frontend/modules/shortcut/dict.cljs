@@ -72,7 +72,7 @@
      :shortcut.editor/backward-kill-word      "向前删除一个单词"
      :shortcut.editor/open-edit               "编辑选中块"
      :shortcut.editor/delete-selection        "删除选中块"
-     :shortcut.editor/toggle-open-blocks      "切换折叠/展开所有块（非编辑g状态"}
+     :shortcut.editor/toggle-open-blocks      "切换折叠/展开所有块（非编辑状态）"}
     :zh-Hant
     {:shortcut.editor/indent                  "縮進塊標簽"
      :shortcut.editor/outdent                 "取消縮進塊"
