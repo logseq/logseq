@@ -438,8 +438,7 @@
            (if (seq blocks)
              (let [[block {:keys [start_pos end_pos] :as block-content}] (first blocks)
                    block-content (when (string? block-content) block-content)
-                   unordered? (:unordered (second block))
-                   markdown-heading? (and (false? unordered?) (= :markdown format))]
+                   markdown-heading? (and (:size (second block)) (= :markdown format))]
                (cond
                  (paragraph-timestamp-block? block)
                  (let [timestamps (extract-timestamps block)
@@ -466,8 +465,8 @@
                        block (if markdown-heading?
                                (assoc block
                                       :type :heading
-                                      :level 1
-                                      :heading-level (:level block))
+                                      :level (:level block)
+                                      :heading-level (or (:size block) 6))
                                block)
                        level (:level block)
                        [children current-block-children]
