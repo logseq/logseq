@@ -280,7 +280,7 @@ export interface IEditorProxy extends Record<string, any> {
     srcBlock: BlockIdentity,
     batch: IBatchBlock | Array<IBatchBlock>,
     opts?: Partial<{ before: boolean, sibling: boolean }>
-  ) => Promise<null>
+  ) => Promise<Array<BlockEntity> | null>
 
   updateBlock: (
     srcBlock: BlockIdentity,
