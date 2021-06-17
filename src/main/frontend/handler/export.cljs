@@ -14,6 +14,7 @@
             [frontend.handler.file :as file-handler]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.external.roam-export :as roam-export]
             [frontend.publishing.html :as html]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -659,4 +660,47 @@
       (when-let [anchor (gdom/getElement "download-as-json-v2")]
         (.setAttribute anchor "href" data-str)
         (.setAttribute anchor "download" (file-name repo :json))
+        (.click anchor)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Export to roam json ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; https://roamresearch.com/#/app/help/page/Nxz8u0vXU
+;; export to roam json according to above spec
+(defn- roam-json [conn]
+  (->> (d/q '[:find (pull ?b [*])
+              :in $
+              :where
+              [?b :block/file]
+              [?b :block/original-name]
+              [?b :block/name]] conn)
+
+       (map (fn [[{:block/keys [name] :as page}]]
+              (assoc page
+                     :block/children
+                     (outliner-tree/blocks->vec-tree
+                      (db/get-page-blocks-no-cache
+                       (state/get-current-repo)
+                       name
+                       {:transform? false}) name))))
+
+       (roam-export/traverse
+        [:page/title
+         :block/string
+         :block/uid
+         :block/children])))
+
+(defn export-repo-as-roam-json!
+  [repo]
+  (when-let [conn (db/get-conn repo)]
+    (let [json-str
+          (-> (roam-json conn)
+              clj->js
+              js/JSON.stringify)
+          data-str (str "data:text/json;charset=utf-8,"
+                        (js/encodeURIComponent json-str))]
+      (when-let [anchor (gdom/getElement "download-as-roam-json")]
+        (.setAttribute anchor "href" data-str)
+        (.setAttribute anchor "download" (file-name (str repo "_roam") :json))
         (.click anchor)))))

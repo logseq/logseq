@@ -33,10 +33,14 @@
         [:li.mb-4
          [:a.font-medium {:on-click #(export/export-repo-as-json-v2! current-repo)}
           (t :export-json)]]
+        [:li.mb-4
+         [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
+          (t :export-roam-json)]]
         ]
        [:a#download-as-edn.hidden]
        [:a#download-as-edn-v2.hidden]
        [:a#download-as-json-v2.hidden]
+       [:a#download-as-roam-json.hidden]
        [:a#download-as-html.hidden]
        [:a#download-as-zip.hidden]
        [:a#export-as-markdown.hidden]
