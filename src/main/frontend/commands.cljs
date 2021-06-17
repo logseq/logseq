@@ -494,16 +494,12 @@
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [edit-content (gobj/get current-input "value")
-            slash-pos (:pos @*slash-caret-pos)
-            heading-pattern  #"^#\+"
-            prefix (subs edit-content 0 (dec slash-pos))
-            pos (count (util/safe-re-find heading-pattern prefix))
+            heading-pattern #"^#+\s+"
             new-value (cond
-                        (util/safe-re-find heading-pattern prefix)
-                        (str (subs edit-content 0 pos)
-                             (string/replace-first (subs edit-content pos)
-                                                   heading-pattern
-                                                   heading))
+                        (util/safe-re-find heading-pattern edit-content)
+                        (string/replace-first edit-content
+                                              heading-pattern
+                                              (str heading " "))
                         :else
                         (str heading " " (string/triml edit-content)))]
         (state/set-edit-content! input-id new-value)))))
