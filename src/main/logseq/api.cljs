@@ -180,10 +180,7 @@
 
 (def ^:export exit_editing_mode
   (fn [select?]
-    (when-let [block (state/get-edit-block)]
-      (if select?
-        (editor-handler/select-block! (:block/uuid block))
-        (state/clear-edit!)))
+    (editor-handler/escape-editing select?)
     nil))
 
 (def ^:export insert_at_editing_cursor

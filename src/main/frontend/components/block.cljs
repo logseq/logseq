@@ -1569,7 +1569,7 @@
                     :heading-level heading-level
                     :on-hide (fn [value event]
                                (when (= event :esc)
-                                 (editor-handler/select-block! uuid)))}
+                                 (editor-handler/escape-editing)))}
                    edit-input-id
                    config)]
       [:div.flex.flex-row.block-content-wrapper
