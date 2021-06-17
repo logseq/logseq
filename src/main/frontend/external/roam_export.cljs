@@ -1,11 +1,10 @@
 (ns frontend.external.roam-export
-  (:require [clojure.string :as str]
-            [clojure.set :as s]
+  (:require [clojure.set :as s]
+            [clojure.string :as str]
+            [clojure.walk :as walk]
             [datascript.core :as d]
-            [frontend.state :as state]
-
             [frontend.db :as db]
-            [clojure.walk :as walk]))
+            [frontend.state :as state]))
 
 (def todo-marker-regex
   #"^(NOW|LATER|TODO|DOING|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)")
