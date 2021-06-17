@@ -59,7 +59,7 @@
                   (str/replace todo-marker-regex "{{[[TODO]]}}")
                   (str/replace done-marker-regex "{{[[DONE]]}}")
                   (str/replace "{{embed " "{{embed: ")
-                  (trim))))
+                  (str/trim))))
     block))
 
 (defn traverse
