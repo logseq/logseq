@@ -121,8 +121,9 @@
 (defn- string-of-url
   [url]
   (match url
-    (:or ["File" s] ["Search" s])
-    s
+    ["File" s]
+    (string/replace s "file:" "")
+
     ["Complex" m]
     (let [{:keys [link protocol]} m]
       (if (= protocol "file")
