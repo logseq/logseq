@@ -139,7 +139,7 @@
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [this {:data (update-block-unordered (:data this))}
+    (let [this (block (update-block-unordered (:data this)))
           m (-> (:data this)
                 (dissoc :block/children :block/meta)
                 (util/remove-nils))
