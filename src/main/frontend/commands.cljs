@@ -116,6 +116,7 @@
   {"Page Reference" "BASIC"
    "Tomorrow" "TIME & DATE"
    "LATER" "TASK"
+   "A" "PRIORITY"
    "Query" "ADVANCED"
    "Quote" "ORG-MODE"})
 
@@ -226,16 +227,18 @@
     ;; task management
     (get-preferred-workflow)
 
-    [["Priority A" (->priority "A")]
-     ["Priority B" (->priority "B")]
-     ["Priority C" (->priority "C")]
-     ["DONE" (->marker "DONE")]
+    [["DONE" (->marker "DONE")]
      ["WAITING" (->marker "WAITING")]
      ["CANCELED" (->marker "CANCELED")]
      ["Deadline" [[:editor/clear-current-slash]
                   [:editor/show-date-picker :deadline]]]
      ["Scheduled" [[:editor/clear-current-slash]
                    [:editor/show-date-picker :scheduled]]]]
+
+    ;; priority
+    [["A" (->priority "A")]
+     ["B" (->priority "B")]
+     ["C" (->priority "C")]]
 
     ;; advanced
 
@@ -247,11 +250,6 @@
                  (p/let [_ (draw/create-draw-with-default-content path)]
                    (println "draw file created, " path))
                  text)) "Draw a graph with Excalidraw"]
-
-
-
-
-
 
      (when (util/zh-CN-supported?)
        ["Embed Bilibili Video" [[:editor/input "{{bilibili }}" {:last-pattern slash
