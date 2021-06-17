@@ -21,11 +21,12 @@
     (string/join (str "\n" spaces-tabs) lines)))
 
 (defn transform-content
-  [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline]} level {:keys [heading-to-list?]}]
+  [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline parent]} level {:keys [heading-to-list?]}]
   (let [content (or content "")
         heading-with-title? (seq title)
         first-block? (= left page)
         pre-block? (and first-block? pre-block?)
+        markdown? (= format :markdown)
         content (cond
                   (and first-block? pre-block?)
                   (let [content (-> (string/trim content)
@@ -34,12 +35,16 @@
                     (str content "\n"))
 
                   :else
-                  (let [[prefix spaces-tabs]
+                  (let [markdown-top-heading? (and markdown? (= parent page))
+                        [prefix spaces-tabs]
                         (cond
                           (= format :org)
                           [(->>
                             (repeat level "*")
                             (apply str)) ""]
+
+                          markdown-top-heading?
+                          ["" ""]
 
                           :else
                           (let [level (if (and heading-to-list? heading-level)
@@ -57,6 +62,9 @@
                                   content)
                         new-content (indented-block-content (string/trim content) spaces-tabs)
                         sep (cond
+                              markdown-top-heading?
+                              ""
+
                               heading-with-title?
                               " "
 
