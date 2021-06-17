@@ -151,7 +151,11 @@
 
      [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
       (for [[_ item] installed-plugins]
-        (rum/with-key (plugin-item-card item) (:id item)))]]))
+        (rum/with-key (plugin-item-card item) (:id item)))]
+
+     (ui/admonition
+      :warning
+      [:div "Plugins can access your graph and your local files, issue network requests. They can also cause data corruption or loss. We're working on proper access rules for your graphs. Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and understand the source code."])]))
 
 (defn open-select-theme!
   []
