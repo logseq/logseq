@@ -191,7 +191,11 @@
                             (apply concat clauses)
 
                             :else
-                            (->> (map #(cons 'and (seq %)) clauses)
+                            (->> (map (fn [result]
+                                        (let [result (if (vector? (ffirst result))
+                                                       (apply concat result)
+                                                       result)]
+                                          (cons 'and (seq result)))) clauses)
                                  (apply list fe)))
 
                           :else
