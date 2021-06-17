@@ -4024,10 +4024,10 @@ mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@0.7.6:
-  version "0.7.6"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.7.6.tgz#73a785605b735bf31ff36cfa89201080ed265da9"
-  integrity sha512-/lo6IP8qurROeys+SpPKGjzZx8IYrU4rbaQJRSIYxUkHNFc87MrSZWdVQgiHSoBpisOG5LvaEhtJTFkU3lgksQ==
+mldoc@0.7.7:
+  version "0.7.7"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.7.7.tgz#0aa011adf09969daf7ec80cc3dc6303b3c07d1bb"
+  integrity sha512-v/TIRo5hUSbJHqcD5IBLTlkljK30RqgtVQzdsrmRXARgcMXp0vPff2B/prWLcVbCjNRO1FntRVn2r+kNF+WfQQ==
   dependencies:
     yargs "^12.0.2"
 
