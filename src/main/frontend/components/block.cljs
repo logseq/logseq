@@ -389,6 +389,7 @@
 
                                :else
                                page)
+          page-original-name (model/get-page-original-name redirect-page-name)
           href (if html-export?
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))
@@ -402,10 +403,10 @@
                                             :max-height     600
                                             :padding-bottom 64}}
                                    [:h2.font-bold.text-lg (if (= page redirect-page-name)
-                                                            page
+                                                            page-original-name
                                                             [:span
-                                                             [:span.text-sm.mr-2 "Alias:" ]
-                                                             redirect-page-name])]
+                                                             [:span.text-sm.mr-2 "Alias:"]
+                                                             page-original-name])]
                                    (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
                                      (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                                      (when-let [f (state/get-page-blocks-cp)]
