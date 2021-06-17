@@ -304,10 +304,12 @@
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
+        first-elem-meta (second (ffirst ast))
         properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
         top-level? (= parent page)
         markdown-heading? (and (= format :markdown)
-                               (= "Heading" first-elem-type))
+                               (= "Heading" first-elem-type)
+                               (nil? (:size first-elem-meta)))
         block-with-title? (mldoc/block-with-title? first-elem-type)
         content (string/triml content)
         content (string/replace content (util/format "((%s))" (str uuid)) "")
@@ -315,12 +317,8 @@
                              (and first-block? properties?)
                              [content content]
 
-                             (and markdown-heading? top-level?)
-                             [content content]
-
                              markdown-heading?
-                             (let [content (string/replace content #"^#+\s+" "")]
-                               [content (str (config/get-block-pattern format) " " content)])
+                             [content content]
 
                              :else
                              (let [content' (str (config/get-block-pattern format) (if block-with-title? " " "\n") content)]

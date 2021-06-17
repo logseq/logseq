@@ -216,7 +216,8 @@
   [type]
   (contains? #{"Paragraph"
                "Raw_Html"
-               "Hiccup"} type))
+               "Hiccup"
+               "Heading"} type))
 
 (defn ->edn
   [content config]

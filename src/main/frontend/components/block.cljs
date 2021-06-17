@@ -1275,8 +1275,7 @@
         priority (priority-cp t)
         tags (block-tags-cp t)
         bg-color (:background-color properties)
-        heading-level (or (and (false? unordered)
-                               heading-level
+        heading-level (or (and heading-level
                                (<= heading-level 6)
                                heading-level)
                           (and (get properties :heading)
