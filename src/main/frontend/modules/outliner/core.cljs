@@ -82,6 +82,15 @@
                                           :created-at (get page-properties :created-at updated-at))}]
     [m page-tx]))
 
+(defn- update-block-unordered
+  [block]
+  (let [parent (:block/parent block)
+        page (:block/page block)
+        type (:block/type block)]
+    (if (and parent page type (= parent page) (= type :heading))
+      (assoc block :block/unordered false)
+      (assoc block :block/unordered true))))
+
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
 
@@ -130,7 +139,8 @@
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [m (-> (:data this)
+    (let [this {:data (update-block-unordered (:data this))}
+          m (-> (:data this)
                 (dissoc :block/children :block/meta)
                 (util/remove-nils))
           other-tx (:db/other-tx m)]
