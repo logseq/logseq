@@ -621,6 +621,9 @@
                    :onHide #(reset! *mounted? false)}
                   opts)
            (assoc :html (if mounted?
-                          (:html opts)
+                          (when-let [html (:html opts)]
+                            (if (fn? html)
+                              (html)
+                              html))
                           [:div ""])))
           child)))

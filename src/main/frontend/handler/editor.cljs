@@ -689,7 +689,7 @@
   (when (string? page-name)
     (when-let [page (db/entity [:block/name (string/lower-case page-name)])]
       (when (db/page-empty? (state/get-current-repo) (:db/id page))
-          (api-insert-new-block! "" {:page page-name})))))
+        (api-insert-new-block! "" {:page page-name})))))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker format] :as block} content]

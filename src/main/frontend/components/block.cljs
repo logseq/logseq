@@ -342,16 +342,19 @@
     :href href
     :on-click (fn [e]
                 (util/stop e)
-                (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                 (if (gobj/get e "shiftKey")
-                  (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-                    (state/sidebar-add-block!
-                     (state/get-current-repo)
-                     (:db/id page-entity)
-                     :page
-                     {:page page-entity}))
-                  (route-handler/redirect! {:to :page
-                                            :path-params {:name redirect-page-name}}))
+                  (do
+                    (js/setTimeout #(editor-handler/insert-first-page-block-if-not-exists! redirect-page-name) 310)
+                    (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+                     (state/sidebar-add-block!
+                      (state/get-current-repo)
+                      (:db/id page-entity)
+                      :page
+                      {:page page-entity})))
+                  (do
+                    (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
+                    (route-handler/redirect! {:to :page
+                                             :path-params {:name redirect-page-name}})))
                 (when (and contents-page?
                            (state/get-left-sidebar-open?))
                   (ui-handler/close-left-sidebar!)))}
@@ -391,21 +394,22 @@
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config page-name href redirect-page-name page-entity contents-page? children html-export? label)]
       (if (and (not (util/mobile?)) (not preview?))
-        (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
-                                 {:style {:width          735
-                                          :text-align     "left"
-                                          :font-weight    500
-                                          :max-height     600
-                                          :padding-bottom 64}}
-                                 [:h2.font-bold.text-lg (if (= page redirect-page-name)
-                                                          page
-                                                          [:span
-                                                           [:span.text-sm.mr-2 "Alias:" ]
-                                                           redirect-page-name])]
-                                 (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
-                                   (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
-                                   (when-let [f (state/get-page-blocks-cp)]
-                                     (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]
+        (ui/tippy {:html        (fn []
+                                  [:div.tippy-wrapper.overflow-y-auto.p-4
+                                   {:style {:width          735
+                                            :text-align     "left"
+                                            :font-weight    500
+                                            :max-height     600
+                                            :padding-bottom 64}}
+                                   [:h2.font-bold.text-lg (if (= page redirect-page-name)
+                                                            page
+                                                            [:span
+                                                             [:span.text-sm.mr-2 "Alias:" ]
+                                                             redirect-page-name])]
+                                   (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
+                                     (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
+                                     (when-let [f (state/get-page-blocks-cp)]
+                                       (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])
                    :interactive true
                    :delay       [1000, 100]}
                   inner)

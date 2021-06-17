@@ -272,7 +272,8 @@
                        (db/pull [:block/name page-name])))
               _ (when (and (not block?) (db/page-empty? (state/get-current-repo) (:db/id page)))
                   (page-handler/create! page-name {:page-map page
-                                                   :redirect? false}))
+                                                   :redirect? false
+                                                   :create-first-block? false}))
               {:keys [title] :as properties} (:block/properties page)
               page-name (:block/name page)
               page-original-name (:block/original-name page)
