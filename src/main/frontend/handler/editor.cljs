@@ -683,7 +683,8 @@
                                      nil)]
             (when block-m
               (outliner-insert-block! {:skip-save-current-block? true} block-m new-block sibling?)
-              (ui-handler/re-render-root!))))))))
+              (ui-handler/re-render-root!)
+              new-block)))))))
 
 (defn insert-first-page-block-if-not-exists!
   [page-name]

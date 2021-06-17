@@ -241,8 +241,9 @@
           new-block (editor-handler/api-insert-new-block!
                      content
                      {:block-uuid block-uuid
-                      :sibling? sibling
-                      :page page-name
+                      :sibling?   sibling
+                      :before?    before
+                      :page       page-name
                       :properties properties})]
       (bean/->js (normalize-keyword-for-json new-block)))))
 
