@@ -37,15 +37,16 @@
     ;; register shortcuts
     (doseq [[id _] shortcut-map]
       ;; (log/info :shortcut/install-shortcut {:id id :shortcut (dh/shortcut-binding id)})
-      (doseq [k (dh/shortcut-binding id)]
-        (try
-          (log/debug :shortcut/register-shortcut {:id id :binding k})
-          (.registerShortcut handler (util/keyname id) k)
-          (catch js/Object e
-            (log/error :shortcut/register-shortcut {:id id
-                                                    :binding k
-                                                    :error e})
-            (notification/show! (str/join " " [id k (.-message e)]) :error false)))))
+      (when-not (false? (dh/shortcut-binding id))
+        (doseq [k (dh/shortcut-binding id)]
+          (try
+            (log/debug :shortcut/register-shortcut {:id id :binding k})
+            (.registerShortcut handler (util/keyname id) k)
+            (catch js/Object e
+              (log/error :shortcut/register-shortcut {:id id
+                                                      :binding k
+                                                      :error e})
+              (notification/show! (str/join " " [id k (.-message e)]) :error false))))))
 
     (let [f (fn [e]
               (let [dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
