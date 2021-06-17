@@ -259,7 +259,7 @@
         theme (state/sub :ui/theme)
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#right-sidebar.cp__right-sidebar.h-screen
+      [:div#right-sidebar.cp__right-sidebar.h-screen.scrollbar-spacing
        {:class (if sidebar-open? "open" "closed")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
