@@ -36,7 +36,12 @@
                  (or
                   (and
                    (= typ "Search")
-                   ;; FIXME: alert error
+                   (string? (second (:url (second block))))
+                   (text/page-ref? (second (:url (second block))))
+                   (text/page-ref-un-brackets! (second (:url (second block)))))
+
+                  (and
+                   (= typ "Search")
                    (not (contains? #{\# \* \/ \[} (first (second (:url (second block))))))
                    (let [page (second (:url (second block)))
                          ext (some-> (util/get-file-ext page) keyword)]
