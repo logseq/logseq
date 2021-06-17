@@ -35,7 +35,10 @@
                     (str content "\n"))
 
                   :else
-                  (let [markdown-top-heading? (and markdown? (= parent page))
+                  (let [markdown-top-heading? (and markdown?
+                                                   (= parent page)
+                                                   (not unordered)
+                                                   heading-level)
                         [prefix spaces-tabs]
                         (cond
                           (= format :org)

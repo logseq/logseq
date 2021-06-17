@@ -131,10 +131,21 @@
     (swap! counter inc)
     result))
 
+(defn- collect-vars
+  [l]
+  (let [vars (atom #{})]
+    (walk/postwalk
+     (fn [f]
+       (when (and (symbol? f) (= \? (first (name f))))
+         (swap! vars conj f))
+       f)
+     l)
+    @vars))
+
 (defn build-query
   ([repo e env]
-   (build-query repo e env 0))
-  ([repo e {:keys [sort-by blocks? counter current-filter] :as env} level]
+   (build-query repo e (assoc env :vars (atom {})) 0))
+  ([repo e {:keys [sort-by blocks? counter current-filter vars] :as env} level]
    ;; TODO: replace with multi-methods for extensibility.
    (let [fe (first e)
          page-ref? (text/page-ref? e)]
@@ -171,15 +182,29 @@
                             (cons fe (seq clauses)))
 
                           (coll? (first clauses))
-                          (if (= current-filter 'not)
+                          (cond
+                            (= current-filter 'not)
                             (->> (apply concat clauses)
                                  (apply list fe))
+
+                            (= current-filter 'or)
+                            (apply concat clauses)
+
+                            :else
                             (->> (map #(cons 'and (seq %)) clauses)
                                  (apply list fe)))
 
                           :else
-                          (apply list fe clauses))]
+                          (apply list fe clauses))
+                 vars' (set/union (set @vars) (collect-vars result))]
+             (reset! vars vars')
              (cond
+               ;; TODO: more thoughts
+               (and (= current-filter 'and)
+                    (= 'or fe)
+                    (= #{'?b} vars'))
+               [(concat result [['?b]])]
+
                (and (zero? level) (= 'and fe))
                (distinct (apply concat clauses))
 

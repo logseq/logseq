@@ -355,7 +355,8 @@ last-modified-at:: 1609084800002"}]]
       {:query '([?b :block/marker ?marker]
                 [(contains? #{"NOW" "LATER"} ?marker)]
                 (or (and [?b :block/path-refs [:block/name "page 1"]])
-                    (and [?b :block/path-refs [:block/name "page 2"]])))
+                    (and [?b :block/path-refs [:block/name "page 2"]])
+                    [?b]))
        :count 3})
 
     (are [x y] (= (q-count x) y)
@@ -366,7 +367,8 @@ last-modified-at:: 1609084800002"}]]
                  [(contains? #{"NOW" "LATER"} ?marker)]
                  (or
                   (and [?b :block/path-refs [:block/name "page 1"]])
-                  (and [?b :block/path-refs [:block/name "page 2"]]))))
+                  (and [?b :block/path-refs [:block/name "page 2"]])
+                  [?b])))
        :count 34})
 
     ;; FIXME: not working
@@ -388,7 +390,8 @@ last-modified-at:: 1609084800002"}]]
                 [(contains? #{"NOW" "LATER" "DONE"} ?marker)]
                 (or
                  (and [?b :block/path-refs [:block/name "page 1"]])
-                 (and (not [?b :block/path-refs [:block/name "page 1"]]))))
+                 (and (not [?b :block/path-refs [:block/name "page 1"]]))
+                 [?b]))
        :count 5}))
 
   ;; (testing "sort-by (created-at defaults to desc)"
