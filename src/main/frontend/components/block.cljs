@@ -565,11 +565,12 @@
                          (map-inline config label))
                        title)]
            (if (and (not (util/mobile?)) (not (:preview? config)))
-             (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
-                                      {:style {:width      735
-                                               :text-align "left"
-                                               :max-height 600}}
-                                      (blocks-container [block] (assoc config :preview? true))]
+             (ui/tippy {:html        (fn []
+                                       [:div.tippy-wrapper.overflow-y-auto.p-4
+                                        {:style {:width      735
+                                                 :text-align "left"
+                                                 :max-height 600}}
+                                        (blocks-container [block] (assoc config :preview? true))])
                         :interactive true
                         :delay       [1000, 100]} inner)
              inner))]
