@@ -628,9 +628,12 @@
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? attributes]}]
+  [content {:keys [page block-uuid sibling? before? properties]
+            :or {sibling? false
+                 before? false}}]
   (when (or page block-uuid)
-    (let [sibling? (if page false sibling?)
+    (let [before? (if page false before?)
+          sibling? (if before? true (if page false sibling?))
           block (if page
                   (db/entity [:block/name (string/lower-case page)])
                   (db/entity [:block/uuid block-uuid]))]
@@ -641,7 +644,7 @@
                                  blocks (db/sort-by-left children block)
                                  last-block-id (:db/id (last blocks))]
                              (when last-block-id
-                                 (db/pull last-block-id))))
+                               (db/pull last-block-id))))
               new-block (-> (select-keys block [:block/page :block/file :block/journal?
                                                 :block/journal-day])
                             (assoc :block/content content
@@ -652,27 +655,35 @@
                             (wrap-parse-block)
                             (assoc :block/uuid (db/new-block-id)))
               new-block (if (:block/page new-block)
-                          new-block
+                          (assoc new-block :block/page (:db/id (:block/page new-block)))
                           (assoc new-block :block/page (:db/id block)))
               new-block (if-let [db-id (:db/id (:block/file block))]
                           (assoc new-block :block/file db-id)
+                          new-block)
+              new-block (if (and (map? properties) (seq properties))
+                          (update new-block :block/properties (fn [m] (merge m properties)))
                           new-block)]
           (let [[block-m sibling?] (cond
+                                     before?
+                                     (let [block (db/pull (:db/id (:block/left block)))
+                                           sibling? (if (:block/name block) false sibling?)]
+                                       [block sibling?])
+
                                      sibling?
                                      [(db/pull (:db/id block)) sibling?]
 
                                      last-block
                                      [last-block true]
 
-                                     page
-                                     [(db/pull (:db/id block)) false]
+                                     block
+                                     [(db/pull (:db/id block)) sibling?]
 
                                      ;; FIXME: assert
                                      :else
                                      nil)]
-            (outliner-insert-block! {:skip-save-current-block? true} block-m new-block sibling?)
-            (db/refresh! repo {:key :block/insert
-                               :data [(assoc block-m :block/page block)]})))))))
+            (when block-m
+              (outliner-insert-block! {:skip-save-current-block? true} block-m new-block sibling?)
+              (ui-handler/re-render-root!))))))))
 
 (defn insert-first-page-block-if-not-exists!
   [page-name]

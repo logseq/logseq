@@ -235,12 +235,15 @@
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
-    (let [{:keys [before sibling isPageBlock props]} (bean/->clj opts)
+    (let [{:keys [before sibling isPageBlock properties]} (bean/->clj opts)
           page-name (and isPageBlock block-uuid-or-page-name)
           block-uuid (if isPageBlock nil (medley/uuid block-uuid-or-page-name))
           new-block (editor-handler/api-insert-new-block!
-                     content {:block-uuid block-uuid :sibling? sibling :page page-name})]
-
+                     content
+                     {:block-uuid block-uuid
+                      :sibling? sibling
+                      :page page-name
+                      :properties properties})]
       (bean/->js (normalize-keyword-for-json new-block)))))
 
 (def ^:export insert_batch_block
@@ -266,7 +269,6 @@
           repo (state/get-current-repo)
           edit-input (state/get-edit-input-id)
           editing? (and edit-input (string/ends-with? edit-input block-uuid))]
-
       (if editing?
         (state/set-edit-content! edit-input content)
         (editor-handler/save-block! repo (medley/uuid block-uuid) content))

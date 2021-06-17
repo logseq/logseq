@@ -1327,4 +1327,4 @@
 
 (defn get-favorites-name
   []
-  (:name/favorites (get-config)))
+  (or (:name/favorites (get-config)) "Favorites"))

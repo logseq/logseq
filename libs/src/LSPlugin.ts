@@ -273,7 +273,7 @@ export interface IEditorProxy extends Record<string, any> {
   insertBlock: (
     srcBlock: BlockIdentity,
     content: string,
-    opts?: Partial<{ before: boolean; sibling: boolean; props: {} }>
+    opts?: Partial<{ before: boolean; sibling: boolean; properties: {} }>
   ) => Promise<BlockEntity | null>
 
   insertBatchBlock: (
@@ -285,7 +285,7 @@ export interface IEditorProxy extends Record<string, any> {
   updateBlock: (
     srcBlock: BlockIdentity,
     content: string,
-    opts?: Partial<{ props: {} }>
+    opts?: Partial<{ properties: {} }>
   ) => Promise<void>
 
   removeBlock: (

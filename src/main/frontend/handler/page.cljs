@@ -322,7 +322,7 @@
     (editor-handler/api-insert-new-block!
      content
      {:page "Contents"})
-    (notification/show! "Added to contents!" :success)
+    (notification/show! (util/format "Added to %s!" (state/get-favorites-name)) :success)
     (editor-handler/clear-when-saved!)))
 
 (defn has-more-journals?
