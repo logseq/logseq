@@ -24,7 +24,9 @@
       (log/error :shortcut/binding-not-found {:id id})
 
       (false? shortcut)
-      (log/debug :shortcut/disabled {:id id})
+      (do
+        (log/debug :shortcut/disabled {:id id})
+        false)
 
       :else
       (->>

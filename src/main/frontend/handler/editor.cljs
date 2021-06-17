@@ -3003,3 +3003,13 @@
     (->> (all-blocks-with-level {:collapse? true})
          (map (comp gdom/getElementByClass str :block/uuid))
          state/exit-editing-and-set-selected-blocks!)))
+
+(defn escape-editing
+  ([]
+   (escape-editing true))
+  ([select?]
+   (when (state/editing?)
+     (if select?
+       (->> (:block/uuid (state/get-edit-block))
+            select-block!)
+       (state/clear-edit!)))))

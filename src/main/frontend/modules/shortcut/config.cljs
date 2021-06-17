@@ -51,7 +51,11 @@
 
    :shortcut.handler/block-editing-only
    ^{:before m/enable-when-editing-mode!}
-   {:editor/backspace
+   {:editor/escape-editing
+    {:desc    "Escape editing (remap to ctrl+open-square-bracket for example)"
+     :binding false
+     :fn      (fn [_ _] (editor-handler/escape-editing))}
+    :editor/backspace
     {:desc    "Backspace / Delete backwards"
      :binding "backspace"
      :fn      editor-handler/editor-backspace}
@@ -358,7 +362,8 @@
     :editor/follow-link
     :editor/open-link-in-sidebar
     :editor/move-block-up
-    :editor/move-block-down]
+    :editor/move-block-down
+    :editor/escape-editing]
 
    :shortcut.category/block-command-editing
    ^{:doc "Block command editing"}
