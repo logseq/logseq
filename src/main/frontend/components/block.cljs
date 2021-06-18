@@ -571,7 +571,9 @@
                                         {:style {:width      735
                                                  :text-align "left"
                                                  :max-height 600}}
-                                        (blocks-container [block] (assoc config :preview? true))])
+                                        (blocks-container
+                                         (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
+                                         (assoc config :id (str id) :preview? true))])
                         :interactive true
                         :delay       [1000, 100]} inner)
              inner))]
