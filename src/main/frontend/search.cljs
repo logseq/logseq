@@ -3,7 +3,7 @@
             [frontend.search.db :as search-db :refer [indices]]
             [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [clojure.set :as set]

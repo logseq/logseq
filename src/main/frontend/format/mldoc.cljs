@@ -1,16 +1,15 @@
 (ns frontend.format.mldoc
-  (:require [frontend.format.protocol :as protocol]
-            [frontend.util :as util]
-            [frontend.utf8 :as utf8]
-            [frontend.text :as text]
+  (:require [cljs-bean.core :as bean]
+            [cljs.core.match :refer [match]]
             [clojure.string :as string]
-            [cljs-bean.core :as bean]
-            [cljs.core.match :refer-macros [match]]
-            [lambdaisland.glogi :as log]
-            [goog.object :as gobj]
+            [frontend.format.protocol :as protocol]
             [frontend.text :as text]
-            ["mldoc" :as mldoc :refer [Mldoc]]
-            [medley.core :as medley]))
+            [frontend.utf8 :as utf8]
+            [frontend.util :as util]
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
+            [medley.core :as medley]
+            ["mldoc" :as mldoc :refer [Mldoc]]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))

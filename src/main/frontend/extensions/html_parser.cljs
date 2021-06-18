@@ -1,11 +1,10 @@
 (ns frontend.extensions.html-parser
-  (:require [goog.object :as gobj]
-            [hickory.core :as hickory]
-            [cljs.core.match :refer-macros [match]]
+  (:require [cljs.core.match :refer [match]]
+            [clojure.string :as string]
+            [clojure.walk :as walk]
             [frontend.config :as config]
             [frontend.util :as util]
-            [clojure.string :as string]
-            [clojure.walk :as walk]))
+            [hickory.core :as hickory]))
 
 (defonce *inside-pre? (atom false))
 (defn- hiccup-without-style

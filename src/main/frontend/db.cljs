@@ -1,20 +1,19 @@
 (ns frontend.db
-  (:require [frontend.namespaces :refer-macros [import-vars]]
+  (:require [clojure.core.async :as async]
+            [datascript.core :as d]
+            [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
-            [frontend.db.utils :as db-utils]
+            [frontend.db.default :as default-db]
+            [frontend.db.migrate :as migrate]
             [frontend.db.model]
-            [frontend.db.react]
             [frontend.db.query-custom]
             [frontend.db.query-react]
-            [frontend.db.migrate :as migrate]
-            [frontend.util :as util]
-            [datascript.core :as d]
+            [frontend.db.react]
+            [frontend.idb :as idb]
+            [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
-            [promesa.core :as p]
-            [frontend.db-schema :as db-schema]
-            [frontend.db.default :as default-db]
-            [clojure.core.async :as async]
-            [frontend.idb :as idb]))
+            [frontend.util :as util]
+            [promesa.core :as p]))
 
 (import-vars
  [frontend.db.conn

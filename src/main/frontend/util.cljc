@@ -1,26 +1,25 @@
 (ns frontend.util
   #?(:clj (:refer-clojure :exclude [format]))
+  #?(:cljs (:require-macros [frontend.util]))
+  #?(:cljs (:require
+            ["/frontend/selection" :as selection]
+            ["/frontend/utils" :as utils]
+            [cljs-bean.core :as bean]
+            [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [dommy.core :as d]
+            [frontend.react-impls :as react-impls]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]
+            [goog.string :as gstring]
+            [goog.userAgent]
+            ["path" :as nodePath]
+            [promesa.core :as p]))
   (:require
-   #?(:cljs [cljs-bean.core :as bean])
-   #?(:cljs [cljs-time.coerce :as tc])
-   #?(:cljs [cljs-time.core :as t])
-   #?(:cljs [dommy.core :as d])
-   #?(:cljs ["/frontend/selection" :as selection])
-   #?(:cljs ["/frontend/utils" :as utils])
-   #?(:cljs ["path" :as nodePath])
-   #?(:cljs [goog.dom :as gdom])
-   #?(:cljs [goog.object :as gobj])
-   #?(:cljs [goog.string :as gstring])
-   #?(:cljs [goog.string.format])
-   #?(:cljs [goog.userAgent])
-   #?(:cljs [rum.core])
-   #?(:cljs [frontend.react-impls :as react-impls])
-   [clojure.string :as string]
    [clojure.core.async :as async]
    [clojure.pprint]
-   [clojure.walk :as walk]
-   [frontend.regex :as regex]
-   [promesa.core :as p]))
+   [clojure.string :as string]
+   [clojure.walk :as walk]))
 
 #?(:cljs (goog-define NODETEST false)
    :clj (def NODETEST false))

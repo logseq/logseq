@@ -1,24 +1,19 @@
 (ns frontend.db.model
   "Core db functions."
-  (:require [frontend.db.conn :as conn]
-            [frontend.db.utils :as db-utils]
-            [frontend.db.react :as react]
+  (:require [clojure.set :as set]
+            [clojure.string :as string]
+            [clojure.walk :as walk]
             [datascript.core :as d]
+            [frontend.config :as config]
             [frontend.date :as date]
-            [medley.core :as medley]
+            [frontend.db-schema :as db-schema]
+            [frontend.db.conn :as conn]
+            [frontend.db.react :as react]
+            [frontend.db.utils :as db-utils]
             [frontend.format :as format]
             [frontend.state :as state]
-            [clojure.string :as string]
-            [clojure.set :as set]
-            [frontend.utf8 :as utf8]
-            [frontend.config :as config]
-            [cljs.reader :as reader]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
-            [frontend.util :as util :refer [react] :refer-macros [profile]]
-            [frontend.db-schema :as db-schema]
-            [clojure.walk :as walk]
-            [clojure.string :as string]))
+            [frontend.util :as util :refer [react]]
+            [medley.core :as medley]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; correponding handlers.

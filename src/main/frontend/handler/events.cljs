@@ -4,7 +4,7 @@
             [clojure.core.async :as async]
             [frontend.spec :as spec]
             [frontend.ui :as ui]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.components.encryption :as encryption]

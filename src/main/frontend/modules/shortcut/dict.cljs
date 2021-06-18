@@ -1,6 +1,6 @@
 (ns frontend.modules.shortcut.dict
-  (:require [frontend.modules.shortcut.data-helper :as dh])
-  (:require-macros [frontend.modules.shortcut.macro :refer [shortcut-dict]]))
+  (:require [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.modules.shortcut.macro :refer [shortcut-dict]]))
 
 (def dict
   (shortcut-dict

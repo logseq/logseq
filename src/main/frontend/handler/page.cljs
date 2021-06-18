@@ -3,7 +3,7 @@
             [frontend.db :as db]
             [datascript.core :as d]
             [frontend.state :as state]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.util.cursor :as cursor]
             [frontend.config :as config]
             [frontend.handler.common :as common-handler]

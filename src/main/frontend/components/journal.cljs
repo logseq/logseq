@@ -1,7 +1,7 @@
 (ns frontend.components.journal
   (:require [rum.core :as rum]
             [reitit.frontend.easy :as rfe]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db-mixins :as db-mixins]

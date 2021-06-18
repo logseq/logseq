@@ -1,7 +1,7 @@
 (ns frontend.state
   (:require [frontend.storage :as storage]
             [rum.core :as rum]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.util.cursor :as cursor]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
