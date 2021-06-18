@@ -1,5 +1,5 @@
 (ns frontend.template
-  (:require [frontend.util :as util :refer-macros [profile]]
+  (:require [frontend.util :as util :refer [profile]]
             [frontend.date :as date]
             [clojure.string :as string]
             [cljs-time.coerce :as tc]

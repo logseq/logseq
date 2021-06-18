@@ -1,19 +1,17 @@
 (ns frontend.format.block
-  (:require [frontend.util :as util :refer-macros [profile]]
+  (:require [clojure.string :as string]
             [clojure.walk :as walk]
-            [clojure.string :as string]
-            [frontend.format :as format]
-            [frontend.utf8 :as utf8]
-            [medley.core :as medley]
             [frontend.config :as config]
-            [datascript.core :as d]
             [frontend.date :as date]
-            [frontend.text :as text]
-            [frontend.util.property :as property]
-            [medley.core :as medley]
-            [frontend.state :as state]
             [frontend.db :as db]
-            [lambdaisland.glogi :as log]))
+            [frontend.format :as format]
+            [frontend.state :as state]
+            [frontend.text :as text]
+            [frontend.utf8 :as utf8]
+            [frontend.util :as util]
+            [frontend.util.property :as property]
+            [lambdaisland.glogi :as log]
+            [medley.core :as medley]))
 
 (defn heading-block?
   [block]

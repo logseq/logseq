@@ -1,4 +1,5 @@
-(ns frontend.namespaces)
+(ns frontend.namespaces
+  #?(:cljs (:require-macros [frontend.namespaces])))
 
 ;; copy from https://github.com/clj-commons/potemkin/issues/31#issuecomment-110689951
 (defmacro import-def

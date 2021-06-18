@@ -1,7 +1,7 @@
 (ns frontend.mixins
   (:require [rum.core :as rum]
             [goog.dom :as dom]
-            [frontend.util :refer-macros [profile]])
+            [frontend.util :refer [profile]])
   (:import [goog.events EventHandler]))
 
 (defn detach

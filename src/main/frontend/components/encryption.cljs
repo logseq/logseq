@@ -2,7 +2,7 @@
   (:require [rum.core :as rum]
             [promesa.core :as p]
             [frontend.encrypt :as e]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.context.i18n :as i18n]
             [frontend.db.utils :as db-utils]
             [clojure.string :as string]

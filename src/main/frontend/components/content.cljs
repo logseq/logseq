@@ -6,7 +6,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.image :as image-handler]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
             [frontend.ui :as ui]

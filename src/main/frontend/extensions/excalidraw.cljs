@@ -2,7 +2,7 @@
   (:require [rum.core :as rum]
             [goog.object :as gobj]
             [frontend.rum :as r]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.mixins :as mixins]
             [frontend.storage :as storage]
             [frontend.components.svg :as svg]

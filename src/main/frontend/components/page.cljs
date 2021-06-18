@@ -1,6 +1,6 @@
 (ns frontend.components.page
   (:require [rum.core :as rum]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.util.marker :as marker]
             [frontend.tools.html-export :as html-export]
             [frontend.handler.file :as file]

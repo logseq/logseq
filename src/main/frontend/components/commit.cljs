@@ -1,6 +1,6 @@
 (ns frontend.components.commit
   (:require [rum.core :as rum]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.util.cursor :as cursor]
             [clojure.string :as string]
             [frontend.handler.repo :as repo-handler]

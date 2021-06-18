@@ -1,4 +1,5 @@
-(ns frontend.modules.shortcut.macro)
+(ns frontend.modules.shortcut.macro
+  #?(:cljs (:require-macros [frontend.modules.shortcut.macro])))
 
 (defmacro shortcut-dict
   "All docs for EN are generated from :desc field of shortcut default-config map.

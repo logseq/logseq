@@ -1,6 +1,6 @@
 (ns frontend.components.datetime
   (:require [rum.core :as rum]
-            [frontend.util :as util :refer-macros [profile]]
+            [frontend.util :as util :refer [profile]]
             [frontend.components.svg :as svg]
             [frontend.date :as date]
             [frontend.state :as state]
