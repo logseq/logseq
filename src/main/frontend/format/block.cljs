@@ -654,7 +654,12 @@
 (defn break-line-paragraph?
   [[typ break-lines]]
   (and (= typ "Paragraph")
-       (every? #(= % ["Break_Line"]) break-lines)))
+       (every?
+        (fn
+          [line]
+          (let [type (first line)]
+            (or (= type "Break_Line") (= type "Timestamp"))))
+        break-lines)))
 
 (defn trim-break-lines!
   [ast]
