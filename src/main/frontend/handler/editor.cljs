@@ -1005,7 +1005,7 @@
         (mapv (fn [block]
                 (let [header
                       (if (= format :markdown)
-                        (str (string/join (repeat (- (:level block) 1) "  ")) "-")
+                        (str (string/join (repeat (- (:level block) 1) "\t")) "-")
                         (string/join (repeat (:level block) "*")))]
                   (str header " " (:block/content block) "\n")))
               level-blocks)
