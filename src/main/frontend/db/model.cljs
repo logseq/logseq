@@ -971,19 +971,29 @@
                (sort-by-left-recursive)
                db-utils/group-by-page))))))
 
+(defn- pattern [name]
+  (re-pattern (str "(?i)(?<!#)(?<!\\[\\[)"
+                   (util/regex-escape name)
+                   "(?!\\]\\])")))
+
 (defn get-page-unlinked-references
   [page]
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (conn/get-conn repo)]
-      (let [page-id (:db/id (db-utils/entity [:block/name page]))
-            pattern (re-pattern (str "(?i)(?<!#)(?<!\\[\\[)" (util/regex-escape page) "(?!\\]\\])"))]
+      (let [page-id     (:db/id (db-utils/entity [:block/name page]))
+            alias-names (get-page-alias-names repo page)
+            patterns    (->> (conj alias-names page)
+                             (map pattern))
+            filter-fn   (fn [datom]
+                          (some (fn [p] (re-find p (:v datom))) patterns))]
         (->> (react/q repo [:block/unlinked-refs page-id]
-               {:query-fn (fn [db]
-                            (let [ids (->> (d/datoms db :aevt :block/content)
-                                           (filter #(re-find pattern (:v %)))
-                                           (map :e))
-                                  result (d/pull-many db block-attrs ids)]
-                              (remove (fn [block] (= page-id (:db/id (:block/page block)))) result)))}
+                      {:query-fn (fn [db]
+                                   (let [ids
+                                         (->> (d/datoms db :aevt :block/content)
+                                              (filter filter-fn)
+                                              (map :e))
+                                         result (d/pull-many db block-attrs ids)]
+                                     (remove (fn [block] (= page-id (:db/id (:block/page block)))) result)))}
                nil)
              react
              (sort-by-left-recursive)
