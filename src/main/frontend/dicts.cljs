@@ -1444,7 +1444,6 @@
         :help/privacy "Privacy policy"
         :help/terms "Terms"
         :help/community "Discord community"
-        :help/awesome-logseq "Awesome Logseq"
         :help/shortcuts "Keyboard Shortcuts"
         :help/shortcuts-triggers "Triggers"
         :help/shortcut "Shortcut"
