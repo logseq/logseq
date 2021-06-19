@@ -1004,11 +1004,9 @@
         contents
         (mapv (fn [block]
                 (let [header
-                      (if (and unordered? (= format :markdown))
-                        (str (string/join (repeat (- (:level block) 1) "  ")) "-")
-                        (let [header-char (if (= format :markdown) "#" "*")
-                              init-char (if (= format :markdown) "##" "*")]
-                          (str (string/join (repeat (:level block) header-char)) init-char)))]
+                      (if (= format :markdown)
+                        (str (string/join (repeat (- (:level block) 1) "\t")) "-")
+                        (string/join (repeat (:level block) "*")))]
                   (str header " " (:block/content block) "\n")))
               level-blocks)
         content-without-properties
