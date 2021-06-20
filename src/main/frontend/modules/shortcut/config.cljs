@@ -146,7 +146,11 @@
     :editor/backward-kill-word
     {:desc    "Kill a word backwards"
      :binding (if mac? false "alt+w")
-     :fn      editor-handler/backward-kill-word}}
+     :fn      editor-handler/backward-kill-word}
+    :editor/replace-block-reference-at-point
+    {:desc "Replace block reference with its content at point"
+     :binding "ctrl+c ctrl+c"
+     :fn editor-handler/replace-block-reference-with-content-at-point}}
 
    :shortcut.handler/editor-global
    ^{:before m/enable-when-not-component-editing!}
@@ -376,7 +380,8 @@
     :editor/forward-word
     :editor/backward-word
     :editor/forward-kill-word
-    :editor/backward-kill-word]
+    :editor/backward-kill-word
+    :editor/replace-block-reference-at-point]
 
    :shortcut.category/block-selection
    ^{:doc "Block selection (press Esc to quit selection)"}
