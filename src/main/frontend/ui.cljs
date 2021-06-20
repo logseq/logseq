@@ -613,7 +613,7 @@
     (Tippy (->
            (merge {:arrow true
                    :sticky true
-                   :theme (:ui/theme @state/state)
+                   :theme "customized"
                    :disabled (not (state/enable-tooltip?))
                    :unmountHTMLWhenHide true
                    :open @*mounted?
