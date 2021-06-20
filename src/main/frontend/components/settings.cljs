@@ -301,7 +301,6 @@
         (toggle "preferred_outdenting"
                 (ui/tippy {:html (outdenting-hint)
                            :interactive true
-                           :theme "customized"
                            :disabled false}
                           (t :settings-page/preferred-outdenting))
                 logical-outdenting?
