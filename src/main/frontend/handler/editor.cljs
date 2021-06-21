@@ -38,6 +38,7 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.marker :as marker]
             [frontend.util.property :as property]
+            [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
