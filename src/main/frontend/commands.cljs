@@ -7,6 +7,7 @@
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.config :as config]
+            [frontend.db.utils :as db-util]
             [frontend.db :as db]
             [clojure.string :as string]
             [goog.dom :as gdom]
@@ -556,3 +557,9 @@
   [vector format]
   (doseq [step vector]
     (handle-step step format)))
+
+(defn exec-plugin-simple-command!
+  [pid {:keys [key label block-id] :as cmd} action]
+  (let [format (and block-id (:block/format (db-util/pull [:block/uuid block-id])))
+        inputs (vector (conj action (assoc cmd :pid pid)))]
+    (handle-steps inputs format)))
