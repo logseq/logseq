@@ -6,6 +6,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.image :as image-handler]
+            [frontend.commands :as commands]
             [frontend.util :as util :refer [profile]]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -194,6 +195,15 @@
             :on-click (fn [_e]
                         (editor-handler/cut-block! block-id))}
            "Cut")
+
+          (when (state/sub [:plugin/simple-commands])
+            (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu)]
+              (for [[_ {:keys [key label] :as cmd} action pid] cmds]
+                (ui/menu-link
+                  {:key      key
+                   :on-click #(commands/exec-plugin-simple-command!
+                                pid (assoc cmd :block-id block-id) action)}
+                  label))))
 
           (when (state/sub [:ui/developer-mode?])
             (ui/menu-link
