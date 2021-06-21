@@ -263,7 +263,8 @@
                                                         :backward-pos 2}]]]]
 
     ;; Allow user to modify or extend, should specify how to extend.
-    (state/get-commands))
+    (state/get-commands)
+    (state/get-plugins-commands))
    (remove nil?)
    (util/distinct-by-last-wins first)))
 
