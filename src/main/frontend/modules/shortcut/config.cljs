@@ -252,6 +252,13 @@
     {:desc    "Jump to journals"
      :binding (if mac? "mod+j" "alt+j")
      :fn      route-handler/go-to-journals!}
+    :go/forward
+    {:desc    "Go back"
+     :binding ["mod+[" "mod+left"]
+     :fn      js/window.history.back}
+    {:desc    "Go forward"
+     :binding ["mod+]" "mod+right"]
+     :fn      js/window.history.forward}
     :search/re-index
     {:desc    "Rebuild search index"
      :binding "mod+c mod+s"
@@ -346,7 +353,9 @@
    [:editor/up
     :editor/down
     :editor/left
-    :editor/right]
+    :editor/right
+    :go/back
+    :go/forward]
 
    :shortcut.category/block-editing
    ^{:doc "Block editing general"}
