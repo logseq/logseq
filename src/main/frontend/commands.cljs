@@ -243,6 +243,8 @@
     ;; advanced
 
     [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] "Create a DataScript query"]
+     ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
+                    [:codemirror/focus]] "Insert a calculator"]
      ["Draw" (fn []
                (let [file (draw/file-name)
                      path (str config/default-draw-directory "/" file)

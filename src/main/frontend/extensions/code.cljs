@@ -5,10 +5,12 @@
             [goog.object :as gobj]
             [frontend.db :as db]
             [frontend.extensions.calc :as calc]
+            [frontend.commands :as commands]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [clojure.string :as string]
+            [dommy.core :as dom]
             [frontend.utf8 :as utf8]
             ["codemirror" :as cm]
             ["codemirror/addon/edit/matchbrackets"]
@@ -47,6 +49,9 @@
 ;; codemirror
 
 (def from-textarea (gobj/get cm "fromTextArea"))
+
+(def textarea-ref-name "textarea")
+(def codemirror-ref-name "codemirror-instance")
 
 (defn- save-file-or-block-when-blur-or-esc!
   [editor textarea config state]
@@ -136,6 +141,8 @@
                                                                (reset! esc-pressed? true)
                                                                (js/setTimeout #(reset! esc-pressed? false) 10))}}))]
       (when editor
+        (let [textarea-ref (rum/ref-node state textarea-ref-name)]
+          (gobj/set textarea-ref codemirror-ref-name editor))
         (let [element (.getWrapperElement editor)]
           (when (= mode "calc")
             (.on editor "change" (fn [_cm e]
@@ -184,6 +191,30 @@
             "clojure"
             mode))]))
    [:textarea (merge {:id id
+                      ;; Expose the textarea associated with the CodeMirror instance via
+                      ;; ref so that we can autofocus into the CodeMirror instance later.
+                      :ref textarea-ref-name
                       :default-value code} attr)]
    (when (= (:data-lang attr) "calc")
      (calc/results (:calc-atom state)))])
+
+;; Focus into the CodeMirror editor rather than the normal "raw" editor
+(defmethod commands/handle-step :codemirror/focus [[_]]
+  ;; This requestAnimationFrame is necessary because, for some reason, when you
+  ;; type /calculate and then click the "Calculate" command in the dropdown
+  ;; *with your mouse* (but not when you do so via your keyboard with the
+  ;; arrow + enter keys!), React doesn't re-render before the :codemirror/focus
+  ;; command kicks off. As a result, you get an error saying that the node
+  ;; you're trying to focus doesn't yet exist. Adding the requestAnimationFrame
+  ;; ensures that the React component re-renders before the :codemirror/focus
+  ;; command is run. It's not elegant... open to suggestions for how to fix it!
+  (js/window.requestAnimationFrame
+   (fn []
+     (let [block (state/get-edit-block)
+           block-uuid (:block/uuid block)
+           block-node (util/get-first-block-by-id block-uuid)]
+       (editor-handler/select-block! (:block/uuid block))
+       (let [textarea-ref (.querySelector block-node "textarea")]
+         (.focus (gobj/get textarea-ref codemirror-ref-name)))
+       (util/select-unhighlight! (dom/by-class "selected"))
+       (state/clear-selection!)))))
