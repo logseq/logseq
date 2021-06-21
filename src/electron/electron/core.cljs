@@ -94,7 +94,7 @@
                               (. fs copy (path/join app-path part) (path/join static-dir part)))
                             ["css" "fonts" "icons" "img" "js"])))
                 custom-css (. fs readFile custom-css-path)
-                _ (. fs appendFile (path/join static-dir "css" "style.css") custom-css)
+                _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js"]
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" file)))
