@@ -203,6 +203,7 @@
 
        [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
         {:auto-focus true
+         :default-value title
          :on-change (fn [e]
                       (reset! input (util/evalue e)))}]
 
