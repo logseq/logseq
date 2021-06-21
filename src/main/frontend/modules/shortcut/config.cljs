@@ -149,7 +149,7 @@
      :fn      editor-handler/backward-kill-word}
     :editor/replace-block-reference-at-point
     {:desc "Replace block reference with its content at point"
-     :binding "ctrl+c ctrl+c"
+     :binding "mod+shift+r"
      :fn editor-handler/replace-block-reference-with-content-at-point}}
 
    :shortcut.handler/editor-global
