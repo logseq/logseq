@@ -75,7 +75,7 @@
    :block/pre-block? {}
 
    ;; heading's level (the block must be a heading)
-   :block/heading-level
+   :block/heading-level {}
 
    ;; scheduled day
    :block/scheduled {}
