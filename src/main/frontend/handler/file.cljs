@@ -61,19 +61,6 @@
   [files]
   (keep-formats files (config/img-formats)))
 
-(defn- hidden?
-  [path patterns]
-  (let [path (if (and (string? path)
-                      (= \/ (first path)))
-               (subs path 1)
-               path)]
-    (some (fn [pattern]
-            (let [pattern (if (and (string? pattern)
-                                   (not= \/ (first pattern)))
-                            (str "/" pattern)
-                            pattern)]
-              (string/starts-with? (str "/" path) pattern))) patterns)))
-
 (defn restore-config!
   ([repo-url project-changed-check?]
    (restore-config! repo-url nil project-changed-check?))
@@ -93,9 +80,7 @@
                                     (config/get-config-path repo-url))
           files (if config-content
                   (let [config (restore-config! repo-url config-content true)]
-                    (if-let [patterns (seq (:hidden config))]
-                      (remove (fn [path] (hidden? path patterns)) files)
-                      files))
+                    (common-handler/remove-hidden-files files config identity))
                   files)]
     (only-supported-formats files)))
 

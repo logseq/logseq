@@ -16,7 +16,8 @@
             [frontend.config :as config]
             ["ignore" :as Ignore]
             ["/frontend/utils" :as utils]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [clojure.string :as string]))
 
 (defn get-ref
   [repo-url]
@@ -71,6 +72,27 @@
       (.filter (bean/->js paths))
       (bean/->clj)))
 
+(defn- hidden?
+  [path patterns]
+  (let [path (if (and (string? path)
+                      (= \/ (first path)))
+               (subs path 1)
+               path)]
+    (some (fn [pattern]
+            (let [pattern (if (and (string? pattern)
+                                   (not= \/ (first pattern)))
+                            (str "/" pattern)
+                            pattern)]
+              (string/starts-with? (str "/" path) pattern))) patterns)))
+
+(defn remove-hidden-files
+  [files config get-path-fn]
+  (if-let [patterns (seq (:hidden config))]
+    (remove (fn [file]
+              (let [path (get-path-fn file)]
+                (hidden? path patterns))) files)
+    files))
+
 (comment
   (let [repo (state/get-current-repo)]
     (p/let [remote-oid (get-remote-ref repo)
@@ -84,15 +106,19 @@
   [repo-url]
   (db/get-file repo-url (config/get-config-path)))
 
+(defn safe-read-string
+  [content error-message]
+  (try
+    (reader/read-string content)
+    (catch js/Error e
+      (println error-message)
+      (js/console.dir e)
+      {})))
+
 (defn reset-config!
   [repo-url content]
   (when-let [content (or content (get-config repo-url))]
-    (let [config (try
-                   (reader/read-string content)
-                   (catch js/Error e
-                     (println "Parsing config file failed: ")
-                     (js/console.dir e)
-                     {}))]
+    (let [config (safe-read-string content "Parsing config file failed: ")]
       (state/set-config! repo-url config)
       config)))
 

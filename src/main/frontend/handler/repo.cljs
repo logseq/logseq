@@ -245,7 +245,16 @@
   [repo-url {:keys [first-clone? diffs nfs-files]
              :as opts}]
   (spec/validate :repos/url repo-url)
-  (let [load-contents (fn [files option]
+  (let [config (or (state/get-config repo-url)
+                   (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
+                           :file/content
+                           (common-handler/safe-read-string "Parsing config file failed: ")))
+        relate-path-fn (fn [m k]
+                         (some-> (get m k)
+                                 (string/replace (str (config/get-local-dir repo-url) "/") "")))
+        nfs-files (common-handler/remove-hidden-files nfs-files config #(relate-path-fn % :file/path))
+        diffs (common-handler/remove-hidden-files diffs config #(relate-path-fn % :path))
+        load-contents (fn [files option]
                         (file-handler/load-files-contents!
                          repo-url
                          files
