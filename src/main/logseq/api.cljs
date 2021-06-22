@@ -67,7 +67,7 @@
   (fn []
     (when-let [repo (state/get-current-repo)]
       (when-not (= config/local-repo repo)
-        (bean/->js {:url repo
+        (bean/->js {:url  repo
                     :name (util/node-path.basename repo)
                     :path (config/get-repo-dir repo)})))))
 
@@ -161,6 +161,11 @@
 (def ^:export quit
   (fn []
     (ipc/ipc "quitApp")))
+
+(def ^:export open_external_link
+  (fn [url]
+    (when (re-find #"https?://" url)
+      (js/apis.openExternal url))))
 
 (def ^:export push_state
   (fn [^js k ^js params]
