@@ -5734,10 +5734,10 @@ mkdirp@^0.5.0, mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@0.7.7:
-  version "0.7.7"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.7.7.tgz#0aa011adf09969daf7ec80cc3dc6303b3c07d1bb"
-  integrity sha512-v/TIRo5hUSbJHqcD5IBLTlkljK30RqgtVQzdsrmRXARgcMXp0vPff2B/prWLcVbCjNRO1FntRVn2r+kNF+WfQQ==
+mldoc@0.7.8:
+  version "0.7.8"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.7.8.tgz#0ae440dafeee567a2df287291bc24114b4cbf836"
+  integrity sha512-tv43WtN0EmzNodBtDWHM1RIrGmw8HIG4eO2YgBkz7C9bNf7vRRUhKDc8zX3xM/2LXodxKFhCNLH/MH2oirtuQA==
   dependencies:
     yargs "^12.0.2"
 
