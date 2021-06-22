@@ -325,13 +325,12 @@
         new-properties (merge
                         (select-keys properties property/built-in-properties)
                         (:block/properties block))]
-    (merge
-     (-> block
-         (dissoc :block/top?
-                 :block/block-refs-count)
-         (assoc :block/content content
-                :block/properties new-properties)
-         (merge (if level {:block/level level} {}))))))
+    (-> block
+        (dissoc :block/top?
+                :block/block-refs-count)
+        (assoc :block/content content
+               :block/properties new-properties)
+        (merge (if level {:block/level level} {})))))
 
 (defn- save-block-inner!
   [repo block value {:keys [refresh?]
