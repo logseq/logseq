@@ -157,6 +157,7 @@
 (defn- keyname [e]
   (let [name (get key-names (str (.-keyCode e)))]
     (case name
+      nil nil
       ("ctrl" "shift" "alt" "esc") nil
       (str " " (name-with-meta e)))))
 
