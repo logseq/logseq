@@ -285,8 +285,8 @@
                        (= :block/uuid (first x))
                        (nil? (db/entity x)))) refs))
 
-(defn- wrap-parse-block
-  [{:block/keys [content format parent left page uuid pre-block?] :as block}]
+(defn wrap-parse-block
+  [{:block/keys [content format parent left page uuid pre-block? level] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         properties (:block/properties block)
         real-content (:block/content block)
@@ -298,7 +298,6 @@
         first-elem-type (first (ffirst ast))
         first-elem-meta (second (ffirst ast))
         properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
-        top-level? (= parent page)
         markdown-heading? (and (= format :markdown)
                                (= "Heading" first-elem-type)
                                (nil? (:size first-elem-meta)))
@@ -326,11 +325,13 @@
         new-properties (merge
                         (select-keys properties property/built-in-properties)
                         (:block/properties block))]
-    (-> block
-        (dissoc :block/top?
-                :block/block-refs-count)
-        (assoc :block/content content
-               :block/properties new-properties))))
+    (merge
+     (-> block
+         (dissoc :block/top?
+                 :block/block-refs-count)
+         (assoc :block/content content
+                :block/properties new-properties)
+         (merge (if level {:block/level level} {}))))))
 
 (defn- save-block-inner!
   [repo block value {:keys [refresh?]
