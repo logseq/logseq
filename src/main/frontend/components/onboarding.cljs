@@ -228,7 +228,7 @@
        (t :help/shortcuts)
        [:br]
        (ui/button
-        "Full-list && Customize"
+        "Full-list & Customize"
         :class "text-sm p-1"
         :on-click
         (fn []
