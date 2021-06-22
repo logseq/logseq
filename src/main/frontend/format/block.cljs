@@ -615,7 +615,7 @@
                 [blocks parents' (last parents') result]))]
         (recur blocks parents sibling result)))))
 
-(defn parse-block
+(defn- parse-block
   ([block]
    (parse-block block nil))
   ([{:block/keys [uuid content meta file page parent left format] :as block} {:keys [with-id?]

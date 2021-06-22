@@ -69,7 +69,9 @@
   [data finished-ok-handler]
   (when-let [repo (state/get-current-repo)]
     (let [[headers parsed-blocks] (mldoc/opml->edn data)
-          parsed-blocks (block/extract-blocks parsed-blocks "" true :markdown) ; TODO: only support md in opml's text attr yet
+          parsed-blocks (->>
+                          (block/extract-blocks parsed-blocks "" true :markdown)
+                          (mapv editor/wrap-parse-block))
           page-name (:title headers)]
       (when (not (page/page-exists? page-name))
         (page/create! page-name {:redirect? false}))
