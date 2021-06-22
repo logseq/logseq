@@ -1,9 +1,14 @@
 (ns frontend.modules.shortcut.data-helper
-  (:require [clojure.string :as str]
+  (:require [borkdude.rewrite-edn :as rewrite]
+            [clojure.string :as str]
+            [frontend.config :as cfg]
+            [frontend.db :as db]
+            [frontend.handler.file :as file]
             [frontend.modules.shortcut.config :as config]
             [frontend.state :as state]
             [frontend.util :as util]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log])
+  (:import [goog.ui KeyboardShortcutHandler]))
 (defonce default-binding
   (->> (vals config/default-config)
        (into {})
@@ -110,3 +115,51 @@
     (->> binding
          (map decorate-binding)
          (str/join " | "))))
+
+
+(defn remove-shortcut [k]
+  (let [repo (state/get-current-repo)
+        path (cfg/get-config-path)]
+    (when-let [content (db/get-file-no-sub path)]
+      (let [result (try
+                     (rewrite/parse-string content)
+                     (catch js/Error e
+                       (println "Parsing config file failed: ")
+                       (js/console.dir e)
+                       {}))
+            new-result (rewrite/update
+                        result
+                        :shortcuts
+                        #(dissoc (rewrite/sexpr %) k))]
+        (state/set-config! repo new-result)
+        (let [new-content (str new-result)]
+          (file/set-file-content! repo path new-content))))))
+
+(defn get-group
+  "Given shortcut key, return handler group
+  eg: :editor/new-line -> :shortcut.handler/block-editing-only"
+  [k]
+  (->> config/default-config
+       (filter (fn [[_ v]] (contains? v k)))
+       (map key)
+       (first)))
+
+(defn potential-confilct? [k]
+  (if-not (shortcut-binding k)
+    false
+    (let [handler-id    (get-group k)
+          shortcut-m    (shortcut-map handler-id)
+          bindings      (->> (shortcut-binding k)
+                            (map mod-key)
+                            (map KeyboardShortcutHandler/parseStringShortcut)
+                            (map js->clj))
+          rest-bindings (->> (map key shortcut-m)
+                             (remove #{k})
+                             (map shortcut-binding)
+                             (filter vector?)
+                             (mapcat identity)
+                             (map mod-key)
+                             (map KeyboardShortcutHandler/parseStringShortcut)
+                             (map js->clj))]
+
+      (some? (some (fn [b] (some #{b} rest-bindings)) bindings)))))

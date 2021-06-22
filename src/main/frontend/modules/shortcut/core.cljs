@@ -1,5 +1,6 @@
 (ns frontend.modules.shortcut.core
   (:require [clojure.string :as str]
+            [frontend.handler.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.util :as util]
@@ -7,7 +8,7 @@
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
             [lambdaisland.glogi :as log]
             [medley.core :as medley])
-  (:import [goog.events KeyCodes]
+  (:import [goog.events KeyCodes KeyHandler KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
 (def *installed (atom {}))
@@ -17,6 +18,8 @@
    KeyCodes/ENTER
    KeyCodes/BACKSPACE KeyCodes/DELETE
    KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
+
+(def key-names (js->clj KeyNames))
 
 (defn install-shortcut!
   [handler-id {:keys [set-global-keys?
@@ -43,6 +46,7 @@
             (log/debug :shortcut/register-shortcut {:id id :binding k})
             (.registerShortcut handler (util/keyname id) k)
             (catch js/Object e
+              (def e e)
               (log/error :shortcut/register-shortcut {:id id
                                                       :binding k
                                                       :error e})
@@ -137,3 +141,51 @@
   (doseq [id (keys @*installed)]
     (uninstall-shortcut! id))
   (install-shortcuts!))
+
+(defn- name-with-meta [e]
+  (let [ctrl    (.-ctrlKey e)
+        alt     (.-altKey e)
+        meta    (.-metaKey e)
+        shift   (.-shiftKey e)
+        keyname (get key-names (str (.-keyCode e)))]
+    (cond->> keyname
+      ctrl  (str "ctrl+")
+      alt   (str "alt+")
+      meta  (str "meta+")
+      shift (str "shift+"))))
+
+(defn- keyname [e]
+  (let [name (get key-names (str (.-keyCode e)))]
+    (case name
+      ("ctrl" "shift" "alt" "esc") nil
+      (str " " (name-with-meta e)))))
+
+(defn record! []
+  {:did-mount
+   (fn [state]
+     (let [handler (KeyHandler. js/document)
+           keystroke (:rum/local state)]
+
+       (doseq [id (keys @*installed)]
+         (uninstall-shortcut! id))
+
+       (events/listen handler "key"
+                      (fn [e]
+                        (.preventDefault e)
+                        (swap! keystroke #(str % (keyname e)))))
+
+       (assoc state ::key-record-handler handler)))
+
+   :will-unmount
+   (fn [{:rum/keys [args local] :as state}]
+     (let [k (first args)
+           keystroke (str/trim @local)]
+       (when-not (empty? keystroke)
+         (config/set-config! [:shortcuts k] keystroke)))
+
+     (when-let [^js handler (::key-record-handler state)]
+       (.dispose handler))
+
+     (js/setTimeout #(refresh!) 500)
+
+     (dissoc state ::key-record-handler))})
