@@ -224,7 +224,8 @@
        (t :help/shortcuts)
        [:br]
        (ui/button
-        "Learn more"
+        "Full-list && Customize"
+        :class "text-sm p-1"
         :on-click
         (fn []
           (route-handler/redirect! {:to :shortcut})))
