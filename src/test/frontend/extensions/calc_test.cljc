@@ -4,7 +4,7 @@
 
 (defn run [expr]
   {:pre [(string? expr)]}
-  (first (calc/eval (calc/parse expr))))
+  (calc/eval (calc/parse expr)))
 
 (deftest basic-arithmetic
   (testing "numbers are parsed as expected"
@@ -100,3 +100,16 @@
       {"a" 2}              ["a = 1" "a = 2"]
       {"a" 2 "b" 2}        ["a = 1" "b = a + 1" "a = b"]
       {"variable" 1 "x" 0} ["variable = 1 + 0 * 2" "x = log(variable)" "x = variable - 1"])))
+
+(deftest failure
+  (testing "expressions that don't match the spec fail"
+    (are [expr] (calc/failure? (calc/eval (calc/new-env) (calc/parse expr)))
+      "foo_ ="
+      "foo__ ="
+      "oo___ ="
+      "                        "
+      "bar_2  = 2 + 4"
+      "bar_2a = 3 + 4"
+      "foo_ = "
+      "foo__  ="
+      "foo_3  = a")))

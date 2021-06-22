@@ -16,59 +16,70 @@
 #?(:clj (def parse (insta/parser (io/resource "grammar/calc.bnf")))
    :cljs (defparser parse (rc/inline "grammar/calc.bnf")))
 
+(defn exception? [e]
+  #?(:clj (instance? Exception e)
+     :cljs (instance? js/Error e)))
+
+(defn failure? [v]
+  (or (insta/failure? v) (exception? v)))
+
 (defn new-env [] (atom {}))
+
+(defn eval* [env ast]
+  (insta/transform
+   {:number     edn/read-string
+    :scientific edn/read-string
+    :expr       identity
+    :add        +
+    :sub        -
+    :mul        *
+    :div        /
+    :pow        (fn [a b]
+                  #?(:clj (java.lang.Math/pow a b) :cljs (js/Math.pow a b)))
+    :log        (fn [a]
+                  #?(:clj (java.lang.Math/log10 a) :cljs (js/Math.log10 a)))
+    :ln         (fn [a]
+                  #?(:clj (java.lang.Math/log a) :cljs (js/Math.log a)))
+    :sin        (fn [a]
+                  #?(:clj (java.lang.Math/sin a) :cljs (js/Math.sin a)))
+    :cos        (fn [a]
+                  #?(:clj (java.lang.Math/cos a) :cljs (js/Math.cos a)))
+    :tan        (fn [a]
+                  #?(:clj (java.lang.Math/tan a) :cljs (js/Math.tan a)))
+    :atan       (fn [a]
+                  #?(:clj (java.lang.Math/atan a) :cljs (js/Math.atan a)))
+    :asin       (fn [a]
+                  #?(:clj (java.lang.Math/asin a) :cljs (js/Math.asin a)))
+    :acos       (fn [a]
+                  #?(:clj (java.lang.Math/acos a) :cljs (js/Math.acos a)))
+    :assignment (fn [var val]
+                  (swap! env assoc var val)
+                  val)
+    :toassign   str/trim
+    :variable   (fn [var]
+                  (let [var (str/trim var)]
+                    (or (get @env var)
+                        (throw
+                         (ex-info (util/format "Can't find variable %s" var)
+                                  {:var var})))))}
+   ast))
 
 (defn eval
   ([ast] (eval (new-env) ast))
   ([env ast]
-   (doall
-    (insta/transform
-     {:number     edn/read-string
-      :scientific edn/read-string
-      :expr       identity
-      :add        +
-      :sub        -
-      :mul        *
-      :div        /
-      :pow        (fn [a b]
-                    #?(:clj (java.lang.Math/pow a b) :cljs (js/Math.pow a b)))
-      :log        (fn [a]
-                    #?(:clj (java.lang.Math/log10 a) :cljs (js/Math.log10 a)))
-      :ln         (fn [a]
-                    #?(:clj (java.lang.Math/log a) :cljs (js/Math.log a)))
-      :sin        (fn [a]
-                    #?(:clj (java.lang.Math/sin a) :cljs (js/Math.sin a)))
-      :cos        (fn [a]
-                    #?(:clj (java.lang.Math/cos a) :cljs (js/Math.cos a)))
-      :tan        (fn [a]
-                    #?(:clj (java.lang.Math/tan a) :cljs (js/Math.tan a)))
-      :atan       (fn [a]
-                    #?(:clj (java.lang.Math/atan a) :cljs (js/Math.atan a)))
-      :asin       (fn [a]
-                    #?(:clj (java.lang.Math/asin a) :cljs (js/Math.asin a)))
-      :acos       (fn [a]
-                    #?(:clj (java.lang.Math/acos a) :cljs (js/Math.acos a)))
-      :assignment (fn [var val]
-                    (swap! env assoc var val)
-                    val)
-      :toassign   str/trim
-      :variable   (fn [var]
-                    (let [var (str/trim var)]
-                      (or (get @env var)
-                          (throw (ex-info (util/format "Can't find variable %s" var)
-                                          {:var var})))))}
-     ast))))
+   (try
+     (if (failure? ast)
+       ast
+       (first (eval* env ast)))
+     (catch #?(:clj Exception :cljs js/Error) e
+       e))))
 
-#?(:cljs
-   (defn eval-lines [s]
-     {:pre [(string? s)]}
-     (let [env (new-env)]
-       (->> (str/split-lines s)
-            (mapv (fn [line]
-                    (try
-                      (first (eval env (parse line)))
-                      (catch js/Error e
-                        nil))))))))
+(defn eval-lines [s]
+  {:pre [(string? s)]}
+  (let [env (new-env)]
+    (mapv (fn [line]
+            (eval env (parse line)))
+          (str/split-lines s))))
 
 ;; ======================================================================
 ;; UI
@@ -85,4 +96,6 @@
         ;; TODO: add react keys
         (for [[i line] (map-indexed vector output-lines)]
           [:div.extensions__code-calc-output-line {:key i}
-           [:span (or line "?")]])])))
+           [:span (if (or (nil? line) (failure? line))
+                    "?"
+                    line)]])])))
