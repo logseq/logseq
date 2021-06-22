@@ -98,7 +98,6 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div
      [:h1.title (t :help/shortcut-page-title)]
-     (trigger-table)
      (shortcut-table :shortcut.category/basics true)
      (shortcut-table :shortcut.category/navigating true)
      (shortcut-table :shortcut.category/block-editing true)

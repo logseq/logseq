@@ -229,11 +229,11 @@
      :binding "mod+shift+a"
      :fn      editor-handler/select-all-blocks!}
     :editor/zoom-in
-    {:desc    "Zoom in / Forward"
+    {:desc    "Zoom in when editing / Forward"
      :binding (if mac? "mod+." "alt+right")
      :fn      editor-handler/zoom-in!}
     :editor/zoom-out
-    {:desc    "Zoom out / Back"
+    {:desc    "Zoom out when editing / Back"
      :binding (if mac? "mod+," "alt+left")
      :fn      editor-handler/zoom-out!}
     :ui/toggle-brackets
@@ -320,19 +320,13 @@
     :editor/new-line
     :editor/indent
     :editor/outdent
-    :editor/collapse-block-children
-    :editor/expand-block-children
     :editor/select-all-blocks
     :go/search
     :go/search-in-page
     :editor/undo
     :editor/redo
-    :editor/zoom-in
-    :editor/zoom-out
     :editor/copy
-    :editor/cut
-    :editor/toggle-open-blocks
-    :ui/toggle-wide-mode]
+    :editor/cut]
 
    :shortcut.category/formatting
    ^{:doc "Formatting"}
@@ -346,7 +340,12 @@
    [:editor/up
     :editor/down
     :editor/left
-    :editor/right]
+    :editor/right
+    :editor/zoom-in
+    :editor/zoom-out
+    :editor/collapse-block-children
+    :editor/expand-block-children
+    :editor/toggle-open-blocks]
 
    :shortcut.category/block-editing
    ^{:doc "Block editing general"}
