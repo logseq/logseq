@@ -170,6 +170,7 @@ export interface IAppProxy {
   // native
   relaunch: () => Promise<void>
   quit: () => Promise<void>
+  openExternalLink: (url: string) => Promise<void>
 
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>
