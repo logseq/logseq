@@ -447,8 +447,12 @@
                  (paragraph-timestamp-block? block)
                  (let [timestamps (extract-timestamps block)
                        timestamps' (merge timestamps timestamps)
-                       other-body (->> (second block)
-                                       (drop-while #(= ["Break_Line"] %)))]
+                       [timestamps others] (split-with #(= "Timestamp" (first %)) (second block))
+                       other-body (->>
+                                   (concat
+                                    timestamps
+                                    (drop-while #(contains? #{"Hard_Break_Line" "Break_Line"} (first %)) others))
+                                   (remove nil?))]
                    (recur headings (conj block-body ["Paragraph" other-body]) (rest blocks) timestamps' properties last-pos last-level children (conj block-all-content block-content)))
 
                  (property/properties-ast? block)
