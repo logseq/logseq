@@ -74,6 +74,9 @@
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
 
+   ;; heading's level (the block must be a heading)
+   :block/heading-level
+
    ;; scheduled day
    :block/scheduled {}
 
