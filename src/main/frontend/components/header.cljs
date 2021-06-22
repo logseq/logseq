@@ -106,7 +106,7 @@
           :icon svg/calendar-sm})
 
        {:title (t :settings)
-        :options {:on-click #(ui-handler/toggle-settings-modal!)}
+        :options {:on-click state/open-settings!}
         :icon svg/settings-sm}
 
        (when developer-mode?

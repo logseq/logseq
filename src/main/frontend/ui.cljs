@@ -385,9 +385,6 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
-(defn apply-close-fn [close-fn]
-  (fn [] (apply (or (gobj/get close-fn "user-close") close-fn) [])))
-
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
   [state close-fn]
@@ -397,7 +394,7 @@
              "entered" "ease-out duration-300 opacity-100"
              "exiting" "ease-in duration-200 opacity-100"
              "exited" "ease-in duration-200 opacity-0")
-    :on-click (apply-close-fn close-fn)}
+    :on-click close-fn}
    [:div.absolute.inset-0.opacity-75]])
 
 (rum/defc modal-panel
@@ -445,7 +442,9 @@
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
         show? (boolean modal-panel-content)
-        close-fn #(state/close-modal!)
+        close-fn (fn []
+                   (state/close-modal!)
+                   (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
      {:style {:z-index (if show? 10 -1)}}

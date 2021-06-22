@@ -1235,6 +1235,14 @@
   []
   (toggle! :ui/settings-open?))
 
+(defn close-settings!
+  []
+  (set-state! :ui/settings-open? false))
+
+(defn open-settings!
+  []
+  (set-state! :ui/settings-open? true))
+
 ;; TODO: Move those to the uni `state`
 
 (defonce editor-op (atom nil))

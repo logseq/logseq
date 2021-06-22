@@ -267,20 +267,16 @@
                     (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
        "?"])))
 
-(rum/defc settings-modal
-  [settings-open?]
-  (rum/use-effect!
-   (fn []
-     (if settings-open?
-       (state/set-modal!
-        (fn [close-fn]
-          (gobj/set close-fn "user-close" #(ui-handler/toggle-settings-modal!))
-          [:div.settings-modal (settings/settings)]))
-       (state/set-modal! nil))
-
-     (util/lock-global-scroll settings-open?)
-     #())
-   [settings-open?]) nil)
+(rum/defc settings-modal < rum/reactive
+  []
+  (let [settings-open? (state/sub :ui/settings-open?)]
+    (if settings-open?
+      (do
+        (state/set-modal!
+         (fn [] [:div.settings-modal (settings/settings)]))
+        (util/lock-global-scroll settings-open?))
+      (state/set-modal! nil))
+    nil))
 
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
@@ -303,7 +299,6 @@
         theme (state/sub :ui/theme)
         system-theme? (state/sub :ui/system-theme?)
         white? (= "white" (state/sub :ui/theme))
-        settings-open? (state/sub :ui/settings-open?)
         sidebar-open?  (state/sub :ui/sidebar-open?)
         route-name (get-in route-match [:data :name])
         global-graph-pages? (= :graph route-name)
@@ -359,7 +354,7 @@
 
         (ui/notification)
         (ui/modal)
-        (settings-modal settings-open?)
+        (settings-modal)
         (custom-context-menu)
         [:a#download.hidden]
         (when
