@@ -532,11 +532,15 @@
 
 (declare block-content)
 (declare block-container)
+(declare block-parents)
 (rum/defc block-reference < rum/reactive
   [config id label]
-  (when-not (string/blank? id)
-    (let [block (and (util/uuid-string? id)
-                     (db/pull-block (uuid id)))]
+  (when (and
+         (not (string/blank? id))
+         (util/uuid-string? id))
+    (let [block-id (uuid id)
+          block (db/pull-block block-id)
+          repo (state/get-current-repo)]
       (if block
         [:div.block-ref-wrap.inline
          {:on-mouse-down
@@ -566,9 +570,10 @@
                                         {:style {:width      735
                                                  :text-align "left"
                                                  :max-height 600}}
-                                        (blocks-container
-                                         (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
-                                         (assoc config :id (str id) :preview? true))])
+                                         [(block-parents config repo block-id (:block/format config))
+                                          (blocks-container
+                                           (db/get-block-and-children repo block-id)
+                                           (assoc config :id (str id) :preview? true))]])
                         :interactive true
                         :delay       [1000, 100]} inner)
              inner))]
