@@ -501,11 +501,7 @@ li p:last-child,
 }
 
 .dnd-separator {
-  border-bottom: 3px solid transparent;
-}
-
-.dnd-separator-cur {
-  border-bottom: 3px solid #999;
+  border-bottom: 3px solid #ccc;
 }
 
 .aspect-ratio-square {

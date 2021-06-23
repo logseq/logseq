@@ -64,15 +64,13 @@
           s])))))
 
 ;; local state
-(defonce *block-children
-  (atom {}))
-
 (defonce *dragging?
   (atom false))
 (defonce *dragging-block
   (atom nil))
-(defonce *move-to-top?
-  (atom false))
+(defonce *drag-to-block
+  (atom nil))
+(def *move-to (atom nil))
 
 ;; TODO: Improve blocks grouped by pages
 (defonce max-blocks-per-page 500)
@@ -1125,11 +1123,13 @@
         :else
         [:span ""])]
      [:a {:href (rfe/href :page {:name uuid})
-          :on-click (fn [e] (bullet-on-click e block config uuid))}
+          :on-click (fn [e]
+                      (bullet-on-click e block config uuid))}
       [:span.bullet-container.cursor
        {:id (str "dot-" uuid)
         :draggable true
-        :on-drag-start (fn [event] (bullet-drag-start event block uuid block-id))
+        :on-drag-start (fn [event]
+                         (bullet-drag-start event block uuid block-id))
         :blockid (str uuid)
         :class (str (when collapsed? "bullet-closed")
                     " "
@@ -1139,24 +1139,15 @@
        [:span.bullet {:blockid (str uuid)}]]]]))
 
 (rum/defc dnd-separator
-  [block top? nested?]
-  (let [id (str (:block/uuid block)
-                (cond nested?
-                      "-nested"
-                      top?
-                      "-top"
-                      :else
-                      nil))]
-    [:div.dnd-separator
-     {:id id
-      :style (merge
-              {:position "absolute"
-               :left (if nested? 40 20)
-               :width "100%"
-               :z-index 3}
-              (if top?
-                {:top 0}
-                {:bottom 0}))}]))
+  [block move-to block-content?]
+  [:div.relative
+   [:div.dnd-separator.absolute
+    {:style {:left (cond-> (if (= move-to :nested) 40 20)
+                     block-content?
+                     (- 34))
+             :top 0
+             :width "100%"
+             :z-index 3}}]])
 
 (defn block-checkbox
   [block class]
@@ -1318,20 +1309,6 @@
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
 
-(defn show-dnd-separator
-  [element-id]
-  (when-let [element (gdom/getElement element-id)]
-    (when (d/has-class? element "dnd-separator")
-      (d/remove-class! element "dnd-separator")
-      (d/add-class! element "dnd-separator-cur"))))
-
-(defn hide-dnd-separator
-  [element-id]
-  (when-let [element (gdom/getElement element-id)]
-    (when (d/has-class? element "dnd-separator-cur")
-      (d/remove-class! element "dnd-separator-cur")
-      (d/add-class! element "dnd-separator"))))
-
 (rum/defc span-comma
   []
   [:span ", "])
@@ -1471,29 +1448,24 @@
 
         (when block-id (state/set-selection-start-block! block-id))))))
 
-(defn- block-content-on-drag-over
-  [event uuid]
-  (util/stop event)
-  (when-not (dnd-same-block? uuid)
-    (show-dnd-separator (str uuid "-nested"))))
-
-(defn- block-content-on-drag-leave
-  [uuid]
-  (hide-dnd-separator (str uuid))
-  (hide-dnd-separator (str uuid "-nested"))
-  (hide-dnd-separator (str uuid "-top")))
-
-(defn- block-content-on-drop
-  [event block uuid]
-  (util/stop event)
-  (when (not (dnd-same-block? uuid))
-    (dnd/move-block @*dragging-block
-                    block
-                    false
-                    true))
-  (reset! *dragging? false)
-  (reset! *dragging-block nil)
-  (editor-handler/unhighlight-blocks!))
+(rum/defc dnd-separator-wrapper < rum/reactive
+  [block block-id slide? top? block-content?]
+  (let [dragging? (rum/react *dragging?)
+        drag-to-block (rum/react *drag-to-block)]
+    (when (and
+           (= block-id drag-to-block)
+           dragging?
+           (not slide?)
+           (not (:block/pre-block? block)))
+      (let [move-to (rum/react *move-to)]
+        (when-not
+            (or (and top? (not= move-to :top))
+                (and (not top?) (= move-to :top))
+                (and block-content? (not= move-to :nested))
+                (and (not block-content?)
+                     (seq (:block/children block))
+                     (= move-to :nested)))
+          (dnd-separator block move-to block-content?))))))
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title body meta content marker page format repo children pre-block? properties idx container block-refs-count scheduled deadline repeated?] :as block} edit-input-id block-id slide?]
@@ -1508,9 +1480,6 @@
                          )
         attrs (cond->
                 {:blockid       (str uuid)
-                 :on-drag-over  (fn [event] (block-content-on-drag-over event uuid))
-                 :on-drag-leave (fn [_event] (block-content-on-drag-leave uuid))
-                 :on-drop       (fn [event] (block-content-on-drop event block uuid))
                  :style {:width "100%"}}
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
@@ -1535,8 +1504,8 @@
         :else
         nil)
 
-      (when (and dragging? (not slide?))
-        (dnd-separator block false true))
+      (when (seq children)
+        (dnd-separator-wrapper block block-id slide? false true))
 
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
@@ -1621,14 +1590,6 @@
                           {:block block}))}
             block-refs-count]])]])))
 
-(rum/defc dnd-separator-wrapper < rum/reactive
-  [block slide? top?]
-  (let [dragging? (rum/react *dragging?)]
-    (when (and dragging?
-               (not slide?)
-               (not (:block/pre-block? block)))
-      (dnd-separator block top? false))))
-
 (defn non-dragging?
   [e]
   (and (= (gobj/get e "buttons") 1)
@@ -1675,40 +1636,41 @@
            component))))))
 
 (defn- block-drag-over
-  [event uuid top? block-id *move-to-top?]
+  [event uuid top? block-id *move-to]
   (util/stop event)
   (when-not (dnd-same-block? uuid)
-    (if top?
-      (let [element-top (gobj/get (utils/getOffsetRect (gdom/getElement block-id)) "top")
-            cursor-top (gobj/get event "clientY")]
-        (if (<= (js/Math.abs (- cursor-top element-top)) 16)
-          ;; top
-          (do
-            (hide-dnd-separator (str uuid))
-            (show-dnd-separator (str uuid "-top"))
-            (reset! *move-to-top? true))
-          (do
-            (hide-dnd-separator (str uuid "-top"))
-            (show-dnd-separator (str uuid)))))
-      (show-dnd-separator (str uuid)))))
+    (let [over-block (gdom/getElement block-id)
+          rect (utils/getOffsetRect over-block)
+          element-top (gobj/get rect "top")
+          element-left (gobj/get rect "left")
+          x-offset (- (.. event -pageX) element-left)
+          cursor-top (gobj/get event "clientY")
+          move-to-value (cond
+                          (and top? (<= (js/Math.abs (- cursor-top element-top)) 16))
+                          :top
+
+                          (> x-offset 50)
+                          :nested
+
+                          :else
+                          :sibling)]
+      (reset! *drag-to-block block-id)
+      (reset! *move-to move-to-value))))
 
 (defn- block-drag-leave
-  [event uuid *move-to-top?]
-  (hide-dnd-separator (str uuid))
-  (hide-dnd-separator (str uuid "-nested"))
-  (hide-dnd-separator (str uuid "-top"))
-  (reset! *move-to-top? false))
+  [_event _uuid *move-to]
+  (reset! *move-to nil))
 
 (defn- block-drop
-  [event uuid block *move-to-top?]
+  [event uuid block *move-to]
   (when-not (dnd-same-block? uuid)
-    (let [from-dom-id (get-data-transfer-attr event "block-dom-id")]
-      (dnd/move-block @*dragging-block
-                      block
-                      @*move-to-top?
-                      false)))
+    (dnd/move-block event @*dragging-block
+                    block
+                    @*move-to))
   (reset! *dragging? false)
   (reset! *dragging-block nil)
+  (reset! *drag-to-block nil)
+  (reset! *move-to nil)
   (editor-handler/unhighlight-blocks!))
 
 (defn- block-mouse-over
@@ -1740,13 +1702,13 @@
     (state/into-selection-mode!)))
 
 (defn- on-drag-and-mouse-attrs
-  [block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?]
+  [block uuid top? block-id *move-to has-child? *control-show? doc-mode?]
   {:on-drag-over (fn [event]
-                   (block-drag-over event uuid top? block-id *move-to-top?))
+                   (block-drag-over event uuid top? block-id *move-to))
    :on-drag-leave (fn [event]
-                    (block-drag-leave event uuid *move-to-top?))
+                    (block-drag-leave event uuid *move-to))
    :on-drop (fn [event]
-              (block-drop event uuid block *move-to-top?))
+              (block-drop event uuid block *move-to))
    :on-mouse-over (fn [e]
                     (block-mouse-over e has-child? *control-show? block-id doc-mode?))
    :on-mouse-leave (fn [e]
@@ -1804,7 +1766,7 @@
                      (not pre-block?)
                      (or (and (coll? children) (seq children))
                          (seq body))))
-        attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to-top? has-child? *control-show? doc-mode?)
+        attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to has-child? *control-show? doc-mode?)
         data-refs (build-refs-data-value block (remove (set refs) path-refs))
         data-refs-self (build-refs-data-value block refs)]
     [:div.ls-block.flex.flex-col.rounded-sm
@@ -1833,7 +1795,9 @@
        (when-let [comp (block-parents config repo uuid format false)]
          [:div.my-2.opacity-50.ml-4 comp]))
 
-     (dnd-separator-wrapper block slide? top?)
+     ;; only render this for the first block in each container
+     (when top?
+       (dnd-separator-wrapper block block-id slide? true false))
 
      [:div.flex.flex-row.pr-2 {:class (if heading? "items-center" "")}
       (when (not slide?)
@@ -1844,7 +1808,7 @@
 
      (block-children config children collapsed? *ref-collapsed?)
 
-     (dnd-separator-wrapper block slide? false)]))
+     (dnd-separator-wrapper block block-id slide? false false)]))
 
 (defn divide-lists
   [[f & l]]

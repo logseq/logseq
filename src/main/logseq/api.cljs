@@ -279,13 +279,19 @@
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]
-
     (let [{:keys [before children]} (bean/->clj opts)
-          top? (boolean before)
-          nested? (boolean children)
+          move-to (cond
+                    (boolean before)
+                    :top
+
+                    (boolean children)
+                    :nested
+
+                    :else
+                    nil)
           src-block-uuid (db-model/query-block-by-uuid (medley/uuid src-block-uuid))
           target-block-uuid (db-model/query-block-by-uuid (medley/uuid target-block-uuid))]
-      (editor-dnd-handler/move-block src-block-uuid target-block-uuid top? nested?))))
+      (editor-dnd-handler/move-block nil src-block-uuid target-block-uuid move-to))))
 
 (def ^:export get_block
   (fn [id-or-uuid ^js opts]

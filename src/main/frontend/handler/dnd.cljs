@@ -32,25 +32,29 @@
      we don't handle this now. TODO: transform between different formats in mldoc.
   2. Sometimes we might need to move a parent block to it's own child.
   "
-  [current-block target-block top? nested?]
-  (when (and (every? map? [current-block target-block])
-             (moveable? current-block target-block))
-    (let [[current-node target-node]
-          (mapv outliner-core/block [current-block target-block])]
-      (cond
-        top?
-        (let [first-child?
-              (= (tree/-get-parent-id target-node)
-                (tree/-get-left-id target-node))]
-          (if first-child?
-            (let [parent (tree/-get-parent target-node)]
-              (outliner-core/move-subtree current-node parent false))
-            (outliner-core/move-subtree current-node target-node true)))
-        nested?
-        (outliner-core/move-subtree current-node target-node false)
+  [event current-block target-block move-to]
+  (let [top? (= move-to :top)
+        nested? (= move-to :nested)
+        native-event ^js (.-nativeEvent event)
+        key-code (and native-event (.-keycode native-event))]
+    (when (and (every? map? [current-block target-block])
+               (moveable? current-block target-block))
+      (let [[current-node target-node]
+            (mapv outliner-core/block [current-block target-block])]
+        (cond
+          top?
+          (let [first-child?
+                (= (tree/-get-parent-id target-node)
+                   (tree/-get-left-id target-node))]
+            (if first-child?
+              (let [parent (tree/-get-parent target-node)]
+                (outliner-core/move-subtree current-node parent false))
+              (outliner-core/move-subtree current-node target-node true)))
+          nested?
+          (outliner-core/move-subtree current-node target-node false)
 
-        :else
-        (outliner-core/move-subtree current-node target-node true))
-      (let [repo (state/get-current-repo)]
-        (db/refresh! repo {:key :block/change
-                           :data [(:data current-node) (:data target-node)]})))))
+          :else
+          (outliner-core/move-subtree current-node target-node true))
+        (let [repo (state/get-current-repo)]
+          (db/refresh! repo {:key :block/change
+                             :data [(:data current-node) (:data target-node)]}))))))
