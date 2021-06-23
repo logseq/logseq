@@ -50,6 +50,24 @@
   (fn [close-fn]
     (filter-dialog-inner filters-atom close-fn references page-name)))
 
+(defn- block-with-ref-level
+  [block level]
+  (if (:block/children block)
+    (-> (update block :block/children
+             (fn [blocks]
+               (map (fn [block]
+                      (let [level (inc level)
+                            block (assoc block :ref/level level)]
+                        (block-with-ref-level block level))) blocks)))
+        (assoc :ref/level level))
+    (assoc block :ref/level level)))
+
+(defn- blocks-with-ref-level
+  [page-blocks]
+  (map (fn [[page blocks]]
+         [page (map #(block-with-ref-level % 1) blocks)])
+    page-blocks))
+
 (rum/defcs references < rum/reactive
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
@@ -83,7 +101,8 @@
           filters (when (seq filter-state)
                     (->> (group-by second filter-state)
                          (medley/map-vals #(map first %))))
-          filtered-ref-blocks (block-handler/filter-blocks repo ref-blocks filters true)
+          filtered-ref-blocks (->> (block-handler/filter-blocks repo ref-blocks filters true)
+                                   blocks-with-ref-level)
           n-ref (apply +
                  (for [[_ rfs] filtered-ref-blocks]
                    (count rfs)))]

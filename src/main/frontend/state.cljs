@@ -1261,6 +1261,14 @@
    (get-in @state [:me :settings :start-of-week])
    6))
 
+(defn get-ref-open-blocks-level
+  []
+  (or
+   (when-let [value (:ref/default-open-blocks-level (get-config))]
+     (when (integer? value)
+       value))
+   2))
+
 (defn get-events-chan
   []
   (:system/events @state))

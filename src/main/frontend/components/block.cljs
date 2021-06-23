@@ -1776,7 +1776,9 @@
            (let [[config block] (:rum/args state)
                  ref-collpased? (boolean
                                  (and (:ref? config)
-                                      (seq (:block/children block))))]
+                                      (seq (:block/children block))
+                                      (>= (:ref/level block)
+                                          (state/get-ref-open-blocks-level))))]
              (assoc state
                     ::control-show? (atom false)
                     ::ref-collapsed? (atom ref-collpased?))))
