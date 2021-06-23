@@ -61,6 +61,13 @@
    (outliner-tree/blocks->vec-tree (str root-block-uuid))
    (outliner-file/tree->file-content {:init-level 1})))
 
+(defn- get-block-content
+  [repo block]
+  (->
+   [block]
+   (outliner-tree/blocks->vec-tree (str (:block/uuid block)))
+   (outliner-file/tree->file-content {:init-level 1})))
+
 (defn copy-block!
   [block-id]
   (when-let [block (db/pull [:block/uuid block-id])]
@@ -258,7 +265,7 @@
         embed-blocks
         (mapv (fn [b] [(str (:block/uuid b))
                        [(get-blocks-contents repo (:block/uuid b))
-                        (:block/content b)]])
+                        (get-block-content repo b)]])
               blocks)]
     {:embed_blocks embed-blocks
      :embed_pages pages-name-and-content}))
@@ -405,7 +412,7 @@
      (mapv (fn [[_title content uuid id]]
              [(str uuid)
               [(get-blocks-contents repo uuid)
-               content]])
+               (get-block-content repo (db/pull id))]])
            block-refs)
      :embed_pages (vec page-refs)}))
 
