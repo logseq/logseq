@@ -1114,7 +1114,9 @@
                    (when-not (and (not collapsed?) (not has-child?))
                      (if ref?
                        (swap! *ref-collapsed? not)
-                       (editor-handler/set-block-property! uuid :collapsed (not collapsed?)))))}
+                       (if collapsed?
+                         (editor-handler/expand-block! uuid)
+                         (editor-handler/collapse-block! uuid)))))}
       (cond
         (and control-show? collapsed?)
         (svg/caret-right)
