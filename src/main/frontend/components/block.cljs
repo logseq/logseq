@@ -716,10 +716,6 @@
           (let [page (text/page-ref-un-brackets! s)]
             (page-reference (:html-export? config) page config label))
 
-          ;; image
-          (text/image-link? img-formats s)
-          (image-link config url s label metadata full_text)
-
           (= \# (first s))
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
@@ -734,8 +730,14 @@
                       :target "_blank"}
                   (map-inline config label))
 
-          (and (util/electron?) (config/local-asset? s))
+          (and (util/electron?)
+               (config/local-asset? s)
+               (string/starts-with? (string/triml full_text) "!"))
           (asset-reference (second (first label)) s)
+
+          ;; image
+          (string/starts-with? (string/triml full_text) "!")
+          (image-link config url s label metadata full_text)
 
           :else
           (page-reference (:html-export? config) s config label))
@@ -785,7 +787,7 @@
                    (map-inline config label)))))
 
             ;; image
-            (text/image-link? img-formats href)
+            (string/starts-with? (string/triml full_text) "!")
             (image-link config url href label metadata full_text)
 
             :else
