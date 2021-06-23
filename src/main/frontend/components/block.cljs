@@ -359,10 +359,16 @@
          (let [{:keys [content children]} (last child)
                page-name (subs content 2 (- (count content) 2))]
            (rum/with-key (page-reference html-export? page-name (assoc config :children children) nil) page-name))))
-     (if (and label
-              (string? label)
-              (not (string/blank? label))) ; alias
+     (cond
+       (and label
+            (string? label)
+            (not (string/blank? label))) ; alias
        label
+
+       (coll? label)
+       (->elem :span (map-inline config label))
+
+       :else
        (get page-entity :block/original-name page-name)))])
 
 (rum/defc page-cp
@@ -732,7 +738,7 @@
           (asset-reference (second (first label)) s)
 
           :else
-          (page-reference html-export? s config label))
+          (page-reference (:html-export? config) s config label))
 
         :else
         (let [href (string-of-url url)
@@ -746,7 +752,12 @@
                  (= protocol "id")
                  (string? (:link (second url)))
                  (util/uuid-string? (:link (second url)))) ; org mode id
-            (block-reference config (:link (second url)) nil)
+            (let [id (uuid (:link (second url)))
+                  block (db/entity [:block/uuid id])]
+              (if (:block/pre-block? block)
+                (let [page (:block/page block)]
+                  (page-reference html-export? (:block/name page) config label))
+                (block-reference config (:link (second url)) nil)))
 
             (= protocol "file")
             (if (text/image-link? img-formats href)
