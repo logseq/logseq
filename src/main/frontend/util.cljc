@@ -570,6 +570,14 @@
            res)))))
 
 #?(:cljs
+   (defn re-group [re s]
+     (let [re (js/RegExp. (.-source re) "g")]
+       (loop [res []]
+         (if-let [m (.exec re s)]
+           (recur (conj res [(.-index m) (array-seq m)]))
+           res)))))
+
+#?(:cljs
    (defn kill-line-before!
      [input]
      (let [val (.-value input)

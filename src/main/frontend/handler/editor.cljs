@@ -1042,34 +1042,36 @@
 
 (defn- get-nearest-page
   []
-  (when-let [block (state/get-edit-block)]
-    (when-let [id (:block/uuid block)]
-      (when-let [edit-id (state/get-edit-input-id)]
-        (when-let [input (gdom/getElement edit-id)]
-          (when-let [pos (cursor/pos input)]
-            (let [value (gobj/get input "value")
-                  page-pattern #"\[\[([^\]]+)]]"
-                  block-pattern #"\(\(([^\)]+)\)\)"
-                  page-matches (util/re-pos page-pattern value)
-                  block-matches (util/re-pos block-pattern value)
-                  matches (->> (concat page-matches block-matches)
-                               (remove nil?))
-                  [_ page] (first (sort-by
-                                   (fn [[start-pos content]]
-                                     (let [end-pos (+ start-pos (count content))]
-                                       (cond
-                                         (< pos start-pos)
-                                         (- pos start-pos)
+  (when-let [input (state/get-input)]
+    (let [value (.-value input)
+          pos (cursor/pos input)
 
-                                         (> pos end-pos)
-                                         (- end-pos pos)
+          page-pattern #"\[\[([^\]]+)\]\]"
+          block-pattern #"\(\(([^\)]+)\)\)"
+          tag-pattern #"#([^\[\ \n]+)"
 
-                                         :else
-                                         0)))
-                                   >
-                                   matches))]
-              (when page
-                (subs page 2 (- (count page) 2))))))))))
+          page-matches (util/re-group page-pattern value)
+          block-matches (util/re-group block-pattern value)
+          tag-matches (util/re-group tag-pattern value)
+          matches (->> (concat page-matches block-matches tag-matches)
+                       (remove nil?))
+
+          [_ [_ page]] (first (sort-by
+                           (fn [[start-pos [content _]]]
+                             (let [end-pos (+ start-pos (count content))]
+                               (cond
+                                 (< pos start-pos)
+                                 (- pos start-pos)
+
+                                 (> pos end-pos)
+                                 (- end-pos pos)
+
+                                 :else
+                                 0)))
+                           >
+                           matches))]
+      (when page page))))
+
 
 (defn follow-link-under-cursor!
   []
