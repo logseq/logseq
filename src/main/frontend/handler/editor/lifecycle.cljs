@@ -50,8 +50,11 @@
       ;; (.removeEventListener input "paste" (fn [event]
       ;;                                       (append-paste-doc! format event)))
       (let [s (str "cljs-drag-n-drop." :upload-images)
-            element (gdom/getElement "main-content")]
-        (dnd/unsubscribe! element :upload-files)))
+            element (gdom/getElement "main-content")
+            a (gobj/get element s)
+            timer (:timer a)]
+        (when (and element timer)
+          (dnd/unsubscribe! element :upload-files))))
     (editor-handler/clear-when-saved!)
     ;; TODO: ugly
     (when-not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op))

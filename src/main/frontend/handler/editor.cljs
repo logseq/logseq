@@ -1295,12 +1295,13 @@
 
 (defn- get-asset-file-link
   [format url file-name image?]
-  (case (keyword format)
-    :markdown (util/format (str (when image? "!") "[%s](%s)") file-name url)
-    :org (if image?
-           (util/format "[[%s]]" url)
-           (util/format "[[%s][%s]]" url file-name))
-    nil))
+  (let [pdf? (and url (string/ends-with? url ".pdf"))]
+    (case (keyword format)
+      :markdown (util/format (str (when (or image? pdf?) "!") "[%s](%s)") file-name url)
+      :org (if image?
+             (util/format "[[%s]]" url)
+             (util/format "[[%s][%s]]" url file-name))
+      nil)))
 
 (defn- get-asset-link
   [url]
