@@ -368,6 +368,20 @@
                   (let [value (not enable-encryption?)]
                     (config-handler/set-config! :feature/enable-encryption? value))))
 
+        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+         [:label.block.text-sm.font-medium.leading-5.opacity-70
+          {:for "customize_shortcuts"}
+          (t :settings-page/customize-shortcuts)]
+         [:div.mt-1.sm:mt-0.sm:col-span-2
+          [:div.max-w-lg.rounded-md
+           (ui/button
+            (t :settings-page/shortcut-settings)
+            :class "text-sm p-0.5"
+            :on-click
+            (fn []
+              (state/close-settings!)
+              (route-handler/redirect! {:to :shortcut})))]]]
+
         (when (string/starts-with? current-repo "https://")
           (toggle "enable_git_auto_push"
                   "Enable Git auto push"
