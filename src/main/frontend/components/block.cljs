@@ -396,16 +396,24 @@
       (if (and (not (util/mobile?)) (not preview?))
         (ui/tippy {:html        (fn []
                                   [:div.tippy-wrapper.overflow-y-auto.p-4
-                                   {:style {:width          735
+                                   {:style {:width          600
                                             :text-align     "left"
                                             :font-weight    500
                                             :max-height     600
                                             :padding-bottom 64}}
-                                   [:h2.font-bold.text-lg (if (= page redirect-page-name)
-                                                            page-original-name
-                                                            [:span
-                                                             [:span.text-sm.mr-2 "Alias:"]
-                                                             page-original-name])]
+                                   (if (string/includes? page-original-name "/")
+                                     [:div.my-2
+                                      (->>
+                                       (for [page (string/split page-original-name #"/")]
+                                         (when (and (string? page) page)
+                                           (page-reference false page {} nil)))
+                                       (interpose [:span.mx-2.opacity-30 "/"]))]
+                                     [:h2.font-bold.text-lg (if (= page redirect-page-name)
+                                                              page-original-name
+                                                              [:span
+                                                               [:span.text-sm.mr-2 "Alias:"]
+                                                               page-original-name])])
+
                                    (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
                                      (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                                      (when-let [f (state/get-page-blocks-cp)]
