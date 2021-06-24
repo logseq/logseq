@@ -640,7 +640,9 @@
       (or
        (and
         (nil? metadata-show)
-        (text/image-link? img-formats s))
+        (or
+         (config/local-asset? s)
+         (text/image-link? img-formats s)))
        (true? (boolean metadata-show)))))))
 
 (defn inline
@@ -743,7 +745,6 @@
                   (map-inline config label))
 
           (and (util/electron?)
-               (config/local-asset? s)
                (show-link? config metadata s full_text))
           (asset-reference (second (first label)) s)
 
