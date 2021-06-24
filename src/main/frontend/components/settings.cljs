@@ -148,7 +148,7 @@
 (rum/defcs settings < rum/reactive
   []
   (let [preferred-format (state/get-preferred-format)
-        custom-date-format (state/get-date-formatter)
+        preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
         preferred-language (state/sub [:preferred-language])
         enable-timetracking? (state/enable-timetracking?)
@@ -211,18 +211,15 @@
          [:div.mt-1.sm:mt-0.sm:col-span-2
           [:div.max-w-lg.rounded-md
            [:select.form-select.is-small
-            {:on-change (fn [e]
-                          (let [lang (util/evalue e)
-                                lang-val (filter (fn [el] (if (= (:label el) lang) true nil)) dicts/languages)
-                                lang-val (name (:value (first lang-val)))]
-                            (state/set-preferred-language! lang-val)
+            {:value preferred-language
+             :on-change (fn [e]
+                          (let [lang-code (util/evalue e)                                ]
+                            (state/set-preferred-language! lang-code)
                             (ui-handler/re-render-root!)))}
             (for [language dicts/languages]
-              [:option (cond->
-                        {:key (:value language)}
-                         (= (name (:value language)) preferred-language)
-                         (assoc :selected "selected"))
-               (:label language)])]]]]
+              (let [lang-code (name (:value language))
+                    lang-label (:label language)]
+                [:option {:key lang-code :value lang-code} lang-label]))]]]]
 
                         ;; config.edn
         (when current-repo
@@ -241,17 +238,14 @@
          [:div.mt-1.sm:mt-0.sm:col-span-2
           [:div.max-w-lg.rounded-md
            [:select.form-select.is-small
-            {:on-change (fn [e]
+            {:value (name preferred-format)
+             :on-change (fn [e]
                           (let [format (-> (util/evalue e)
                                            (string/lower-case)
                                            keyword)]
                             (user-handler/set-preferred-format! format)))}
-            (for [format [:org :markdown]]
-              [:option (cond->
-                        {:key (name format)}
-                         (= format preferred-format)
-                         (assoc :selected "selected"))
-               (string/capitalize (name format))])]]]]
+            (for [format (map name [:org :markdown])]
+              [:option {:key format :value format} (string/capitalize format)])]]]]
 
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -260,7 +254,8 @@
          [:div.mt-1.sm:mt-0.sm:col-span-2
           [:div.max-w-lg.rounded-md
            [:select.form-select.is-small
-            {:on-change (fn [e]
+            {:value preferred-date-format
+             :on-change (fn [e]
                           (let [format (util/evalue e)]
                             (when-not (string/blank? format)
                               (config-handler/set-config! :date-formatter format)
@@ -270,11 +265,7 @@
                               (state/close-modal!)
                               (route-handler/redirect! {:to :repos}))))}
             (for [format (sort (date/journal-title-formatters))]
-              [:option (cond->
-                        {:key format}
-                         (= format custom-date-format)
-                         (assoc :selected "selected"))
-               format])]]]]
+              [:option {:key format} format])]]]]
 
         [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
          [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -283,21 +274,16 @@
          [:div.mt-1.sm:mt-0.sm:col-span-2
           [:div.max-w-lg.rounded-md
            [:select.form-select.is-small
-            {:on-change (fn [e]
+            {:value (name preferred-workflow)
+             :on-change (fn [e]
                           (-> (util/evalue e)
                               string/lower-case
                               keyword
-                              (#(if (= % :now/later) :now :todo))
+                              (#(if (= % :now) :now :todo))
                               user-handler/set-preferred-workflow!))}
             (for [workflow [:now :todo]]
-              [:option (cond->
-                        {:key (name workflow)}
-                         (= workflow preferred-workflow)
-                         (assoc :selected "selected"))
-               (if (= workflow :now)
-                 "NOW/LATER"
-                 "TODO/DOING")])]]]]
-
+              [:option {:key (name workflow) :value (name workflow)}
+               (if (= workflow :now) "NOW/LATER" "TODO/DOING")])]]]]
         (toggle "preferred_outdenting"
                 (ui/tippy {:html (outdenting-hint)
                            :interactive true
