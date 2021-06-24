@@ -203,6 +203,16 @@
         parts (concat (butlast result) [new-file])]
     (string/join "/" parts)))
 
+(defn- rename-file-aux!
+  [repo old-path new-path]
+  (fs/rename! repo
+              (if (util/electron?)
+                old-path
+                (str (config/get-repo-dir repo) "/" old-path))
+              (if (util/electron?)
+                new-path
+                (str (config/get-repo-dir repo) "/" new-path))))
+
 (defn rename-file!
   [file new-name ok-handler]
   (let [repo (state/get-current-repo)
@@ -213,13 +223,7 @@
     (db/transact! repo [{:db/id (:db/id file)
                          :file/path new-path}])
     (->
-     (p/let [_ (fs/rename! repo
-                           (if (util/electron?)
-                             old-path
-                             (str (config/get-repo-dir repo) "/" old-path))
-                           (if (util/electron?)
-                             new-path
-                             (str (config/get-repo-dir repo) "/" new-path)))
+     (p/let [_ (rename-file-aux! repo old-path new-path)
              _ (when-not (config/local-db? repo)
                  (git/rename repo old-path new-path))]
        (common-handler/check-changed-files-status)
@@ -257,6 +261,44 @@
                      :else
                      f))
                  form))
+
+(defn- build-new-namespace-page-title
+  [old-page-title old-name new-name]
+  (let [old-parts (when old-page-title
+                    (string/split old-page-title #"/"))
+        new-parts (map (fn [part] (if (= part old-name) new-name part)) old-parts)]
+    (string/join "/" new-parts)))
+
+;; FIXME: get namespace pages instead of files for compatibility with the
+;; database-only version.
+(defn- rename-namespace-pages!
+  [repo old-name new-name]
+  (doseq [datom (db/get-namespace-files repo old-name)]
+    (let [old-path (:v datom)
+          [search replace] (cond
+                             (string/includes? old-path (str "." old-name "."))
+                             [(str "." old-name ".") (str "." new-name ".")]
+
+                             (string/includes? old-path (str "/" old-name "."))
+                             [(str "/" old-name ".") (str "/" new-name ".")]
+
+                             :else
+                             [(str old-name ".") (str new-name ".")])
+          new-path (string/replace-first old-path search replace)
+          tx {:db/id (:e datom)
+              :file/path new-path}
+          page (db/entity (db/get-file-page-id old-path))
+          page-tx (when page
+                    (let [old-page-title (or (:block/original-name page)
+                                             (:block/name page))
+                          new-page-title (build-new-namespace-page-title old-page-title old-name new-name)]
+                      {:db/id (:db/id page)
+                       :block/original-name new-page-title
+                       :block/name (string/lower-case new-page-title)}))
+          txs (->> [tx page-tx] (remove nil?))]
+      (db/transact! repo txs)
+      (p/let [_ (rename-file-aux! repo old-path new-path)]
+        (println "Renamed " old-path " to " new-path ".")))))
 
 (defn rename!
   [old-name new-name]
@@ -323,6 +365,8 @@
                         (outliner-file/sync-to-file page-id)))
 
                     (outliner-file/sync-to-file page))
+
+                  (rename-namespace-pages! repo old-name new-name)
 
                   ;; TODO: update browser history, remove the current one
 

@@ -401,7 +401,7 @@
                                             :font-weight    500
                                             :max-height     600
                                             :padding-bottom 64}}
-                                   (if (string/includes? page-original-name "/")
+                                   (if (and (string? page-original-name) (string/includes? page-original-name "/"))
                                      [:div.my-2
                                       (->>
                                        (for [page (string/split page-original-name #"/")]

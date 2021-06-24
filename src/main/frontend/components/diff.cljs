@@ -6,7 +6,6 @@
             [frontend.handler.file :as file]
             [frontend.handler.notification :as notification]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.file :as file-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.db :as db]
@@ -54,7 +53,7 @@
   {:will-mount (fn [state]
                  (let [*local-content (atom "")
                        [repo _ path & _others] (:rum/args state)]
-                   (p/let [content (file-handler/load-file repo path )]
+                   (p/let [content (file/load-file repo path )]
                      (reset! *local-content content))
                    (assoc state ::local-content *local-content)))}
   [state repo type path contents remote-oid]
