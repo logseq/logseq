@@ -20,6 +20,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.export :as export]
             [frontend.extensions.graph-2d :as graph-2d]
+            [frontend.components.hierarchy :as hierarchy]
             [frontend.ui :as ui]
             [frontend.components.content :as content]
             [frontend.config :as config]
@@ -403,6 +404,8 @@
             (rum/with-key
               (reference/references route-page-name false)
               (str route-page-name "-refs"))]
+
+           (hierarchy/structures route-page-name)
 
            ;; TODO: or we can lazy load them
            (when-not sidebar?
