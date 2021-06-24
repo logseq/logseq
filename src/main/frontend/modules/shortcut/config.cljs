@@ -150,7 +150,11 @@
     :editor/replace-block-reference-at-point
     {:desc "Replace block reference with its content at point"
      :binding "mod+shift+r"
-     :fn editor-handler/replace-block-reference-with-content-at-point}}
+     :fn editor-handler/replace-block-reference-with-content-at-point}
+    :editor-handler/paste-text-in-one-block-at-point
+    {:desc "Paste text into one block at point"
+     :binding "mod+shift+v"
+     :fn editor-handler/paste-text-in-one-block-at-point}}
 
    :shortcut.handler/editor-global
    ^{:before m/enable-when-not-component-editing!}

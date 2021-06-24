@@ -3028,3 +3028,12 @@
                                         block-content-without-prop
                                         (subs current-block-content end))]
                 (state/set-block-content-and-last-pos! input block-content* 1)))))))))
+
+
+(defn paste-text-in-one-block-at-point
+  []
+  (.then
+   (js/navigator.clipboard.readText)
+   (fn [clipboard-data]
+     (when-let [_ (state/get-input)]
+       (state/append-current-edit-content! clipboard-data)))))
