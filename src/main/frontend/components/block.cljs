@@ -630,6 +630,25 @@
 
 (declare custom-query)
 
+(defn- show-link?
+  [config metadata s full-text]
+  (let [img-formats (set (map name (config/img-formats)))
+        metadata-show (:show (safe-read-string metadata))]
+    (or
+     ;; markdown
+     (and
+      (= :markdown (get-in config [:block :block/format]))
+      (string/starts-with? (string/triml full-text) "!"))
+
+     ;; org
+     (and
+      (= :org (get-in config [:block :block/format]))
+      (or
+       (and
+        (nil? metadata-show)
+        (text/image-link? img-formats s))
+       (true? (boolean metadata-show)))))))
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -700,8 +719,7 @@
     (nested-link config html-export? link)
 
     ["Link" link]
-    (let [{:keys [url label title metadata full_text]} link
-          img-formats (set (map name (config/img-formats)))]
+    (let [{:keys [url label title metadata full_text]} link]
       (match url
         ["Search" s]
         (cond
@@ -732,11 +750,11 @@
 
           (and (util/electron?)
                (config/local-asset? s)
-               (string/starts-with? (string/triml full_text) "!"))
+               (show-link? config metadata s full_text))
           (asset-reference (second (first label)) s)
 
           ;; image
-          (string/starts-with? (string/triml full_text) "!")
+          (show-link? config metadata s full_text)
           (image-link config url s label metadata full_text)
 
           :else
@@ -762,7 +780,7 @@
                 (block-reference config (:link (second url)) nil)))
 
             (= protocol "file")
-            (if (text/image-link? img-formats href)
+            (if (show-link? config metadata href full_text)
               (image-link config url href label metadata full_text)
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
@@ -787,7 +805,7 @@
                    (map-inline config label)))))
 
             ;; image
-            (string/starts-with? (string/triml full_text) "!")
+            (show-link? config metadata href full_text)
             (image-link config url href label metadata full_text)
 
             :else
