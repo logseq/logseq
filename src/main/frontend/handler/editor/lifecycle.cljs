@@ -25,7 +25,7 @@
     (when (and input element)
       (dnd/subscribe!
        element
-       :upload-images
+       :upload-files
        {:drop (fn [e files]
                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))}))
 
@@ -50,13 +50,8 @@
       ;; (.removeEventListener input "paste" (fn [event]
       ;;                                       (append-paste-doc! format event)))
       (let [s (str "cljs-drag-n-drop." :upload-images)
-            a (gobj/get input s)
-            timer (:timer a)]
-
-        (and timer
-             (dnd/unsubscribe!
-              input
-              :upload-images))))
+            element (gdom/getElement "main-content")]
+        (dnd/unsubscribe! element :upload-files)))
     (editor-handler/clear-when-saved!)
     ;; TODO: ugly
     (when-not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op))
