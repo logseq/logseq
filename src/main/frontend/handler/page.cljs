@@ -67,30 +67,32 @@
 (defn create!
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? page-map create-first-block?]
+  ([title {:keys [redirect? create-first-block?]
            :or {redirect? true
                 create-first-block? true}}]
    (let [title (string/trim title)
+         pages (string/split title #"/")
          page (string/lower-case title)
          format (state/get-preferred-format)
-         tx (if page-map
-              page-map
-              (-> (block/page-name->map title true)
-                  (assoc :block/format format)))
-         page-entity (if (:block/uuid tx)
-                       [:block/uuid (:block/uuid tx)]
-                       (:db/id tx))
-         create-title-property? (util/create-title-property? title)
-         default-properties (default-properties-block title format page-entity)
-         txs (if create-title-property?
-               [tx default-properties]
-               [tx])]
+         pages (map (fn [page]
+                      (-> (block/page-name->map page true)
+                          (assoc :block/format format)))
+                 pages)
+         txs (mapcat
+              (fn [page]
+                (let [page-entity [:block/uuid (:block/uuid page)]
+                      create-title-property? (util/create-title-property? (:block/name page))]
+                  (if create-title-property?
+                    (let [default-properties (default-properties-block (:block/original-name page) format page-entity)]
+                      [page default-properties])
+                    [page])))
+              pages)]
      (db/transact! txs)
      (when create-first-block?
        (editor-handler/insert-first-page-block-if-not-exists! page))
      (when redirect?
-      (route-handler/redirect! {:to :page
-                                :path-params {:name page}})))))
+       (route-handler/redirect! {:to :page
+                                 :path-params {:name page}})))))
 
 (defn page-add-property!
   [page-name key value]
@@ -235,9 +237,9 @@
 (defn- walk-replace-old-page!
   [form old-name new-name]
   (walk/postwalk (fn [f] (if (string? f)
-                          (if (= f old-name)
-                            new-name
-                            (replace-old-page! f old-name new-name))
+                           (if (= f old-name)
+                             new-name
+                             (replace-old-page! f old-name new-name))
                            f)) form))
 
 (defn rename!
