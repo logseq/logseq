@@ -1046,7 +1046,7 @@
     (let [value (.-value input)
           pos (cursor/pos input)
 
-          page-pattern #"(?<=\[\[)(.+)(?=\]\])"
+          page-pattern #"\[\[([^\]]+)\]\]"
           block-pattern #"\(\(([^\)]+)\)\)"
           tag-pattern #"#([^\[\ \n]+)"
 
