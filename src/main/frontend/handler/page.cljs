@@ -228,19 +228,35 @@
                 (println "file rename failed: " error))))))
 
 ;; FIXME: not safe
+;; 1. normal pages [[foo]]
+;; 2. namespace pages [[foo/bar]]
 (defn- replace-old-page!
   [s old-name new-name]
-  (-> s
-      (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
-      (string/replace (str "#" old-name) (str "#" new-name))))
+  (let [pattern "[[%s/"]
+    (-> s
+        (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
+        (string/replace (util/format pattern old-name) (util/format pattern new-name))
+        (string/replace (str "#" old-name) (str "#" new-name)))))
 
 (defn- walk-replace-old-page!
   [form old-name new-name]
-  (walk/postwalk (fn [f] (if (string? f)
-                           (if (= f old-name)
-                             new-name
-                             (replace-old-page! f old-name new-name))
-                           f)) form))
+  (walk/postwalk (fn [f]
+                   (cond
+                     (and (vector? f)
+                          (contains? #{"Search" "Label"} (first f))
+                          (string/starts-with? (second f) (str old-name "/")))
+                     [(first f) (string/replace-first (second f)
+                                                      (str old-name "/")
+                                                      (str new-name "/"))]
+
+                     (string? f)
+                     (if (= f old-name)
+                       new-name
+                       (replace-old-page! f old-name new-name))
+
+                     :else
+                     f))
+                 form))
 
 (defn rename!
   [old-name new-name]
