@@ -16,14 +16,15 @@
   [state]
   (let [[{:keys [format block-parent-id]} id] (:rum/args state)
         content (get-in @state/state [:editor/content id])
-        input (gdom/getElement id)]
+        input (gdom/getElement id)
+        element (gdom/getElement "main-content")]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
     (editor-handler/restore-cursor-pos! id content)
 
-    (when input
+    (when (and input element)
       (dnd/subscribe!
-       input
+       element
        :upload-images
        {:drop (fn [e files]
                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))}))
