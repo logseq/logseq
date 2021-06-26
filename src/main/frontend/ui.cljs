@@ -385,11 +385,14 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
+;; `sequence` can be a list of symbols or strings
 (defn keyboard-shortcut [sequence]
   [:div.keyboard-shortcut
-   (map (fn [key]
-          [:code
-           (if (= :meta key)
+   (map-indexed (fn [i key]
+          [:code {:key i}
+           ;; Display "cmd" rather than "meta" to the user to describe the Mac
+           ;; mod key, because that's what the Mac keyboards actually say.
+           (if (or (= :meta key) (= "meta" key))
              (util/meta-key-name)
              (name key))])
         sequence)]
