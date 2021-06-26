@@ -97,16 +97,11 @@
   (let [tmp (cond
               (false? binding)
               (cond
-                (and util/mac? (= k :editor/kill-line-after))
-                "disabled (system default: ctrl+k)"
-                (and util/mac? (= k :editor/beginning-of-block))
-                "disabled (system default: ctrl+a)"
-                (and util/mac? (= k :editor/end-of-block))
-                "disabled (system default: ctrl+e)"
-                (and util/mac? (= k :editor/backward-kill-word))
-                "disabled (system default: opt+delete)"
-                :else
-                "disabled")
+                (and util/mac? (= k :editor/kill-line-after))    "disabled (system default: ctrl+k)"
+                (and util/mac? (= k :editor/beginning-of-block)) "disabled (system default: ctrl+a)"
+                (and util/mac? (= k :editor/end-of-block))       "disabled (system default: ctrl+e)"
+                (and util/mac? (= k :editor/backward-kill-word)) "disabled (system default: opt+delete)"
+                :else "disabled")
 
               (string? binding)
               (decorate-binding binding)
@@ -115,6 +110,9 @@
               (->> binding
                    (map decorate-binding)
                    (str/join " | ")))]
+
+    ;; Display "cmd" rather than "meta" to the user to describe the Mac
+    ;; mod key, because that's what the Mac keyboards actually say.
     (clojure.string/replace tmp "meta" "cmd")))
 
 
