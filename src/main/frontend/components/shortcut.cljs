@@ -20,17 +20,7 @@
       [:p.mb-4.mt-4
        (ui/keyboard-shortcut (-> keyboard-shortcut
                                  (clojure.string/trim)
-                                 (clojure.string/split  #" |\+")))
-       #_(map-indexed (fn [i key]
-                        [:span.keyboard-shortcut {:key i}
-                         [:code {:style {:font-size "1.5em" :margin-right "8px"}}
-                        ;; When displaying to the user, use "cmd" rather than
-                        ;; "meta" to describe the Mac mod key, because that's 
-                        ;; what the Mac keyboards actually say.
-                          (clojure.string/replace key "meta" "cmd")]])
-                      (-> keyboard-shortcut
-                          (clojure.string/trim)
-                          (clojure.string/split  #" |\+")))]]
+                                 (clojure.string/split  #" |\+")))]]
      [:div.cancel-save-buttons.text-right.mt-4
       (ui/button "Save" :on-click state/close-modal!)
       [:a.ml-4
