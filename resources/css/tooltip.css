@@ -658,3 +658,7 @@
 .tippy-wrapper {
   background-color: var(--ls-tertiary-background-color);
 }
+
+.tippy-hover {
+  cursor: pointer;
+}

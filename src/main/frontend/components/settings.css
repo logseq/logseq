@@ -1,8 +1,8 @@
 .cp__settings {
+  > h1.title {
+    margin-bottom: 0;
+  }
   &-main {
-    > h1.title {
-      margin-bottom: 2rem;
-    }
 
     hr {
       margin: 1rem 0;
@@ -14,7 +14,7 @@
 
       > .it {
         margin-bottom: 0;
-        padding-bottom: 20px;
+        padding-bottom: 12px;
         align-items: center;
 
         label {
@@ -49,6 +49,10 @@
 
         .form-select, .form-input {
           width: 68%;
+        }
+
+        &:first-of-type {
+          padding-top: 14px;
         }
       }
     }
@@ -115,10 +119,6 @@
     margin-bottom: -5px;
 
     button.check-update {
-      position: absolute;
-      right: 0;
-      top: -42px;
-
       &:disabled {
         cursor: progress;
       }
@@ -145,7 +145,7 @@
           margin-right: 2px;
         }
 
-        &:hover {
+        &:hover { 
           text-decoration: underline;
         }
       }

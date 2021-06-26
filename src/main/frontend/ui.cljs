@@ -385,6 +385,16 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
+(defn keyboard-shortcut [sequence]
+  [:div.keyboard-shortcut
+   (map (fn [key]
+          [:code
+           (if (= :meta key)
+             (util/meta-key-name)
+             (name key))])
+        sequence)]
+  )
+
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
   [state close-fn]
@@ -624,5 +634,5 @@
                             (if (fn? html)
                               (html)
                               html))
-                          [:div ""])))
+                          [:div {:key "tippy"} ""])))
           child)))

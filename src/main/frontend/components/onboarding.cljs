@@ -226,10 +226,9 @@
          svg/discord]]]
       [:li
        (t :help/shortcuts)
-       [:br]
        (ui/button
-        "Full-list & Customize"
-        :class "text-sm p-1"
+        "Customize"
+        :class "text-sm p-1 ml-3"
         :on-click
         (fn []
           (route-handler/redirect! {:to :shortcut})))
