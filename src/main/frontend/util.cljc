@@ -85,6 +85,10 @@
      (gobj/getValueByKeys event "target" "value")))
 
 #?(:cljs
+   (defn ekey [event]
+     (gobj/getValueByKeys event "key")))
+
+#?(:cljs
    (defn set-change-value
      "compatible change event for React"
      [node value]
@@ -1282,3 +1286,8 @@
 
 (comment
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
+
+#?(:cljs
+   (defn meta-key-name []
+     (let [user-agent (.. js/navigator -userAgent)]
+       (if mac? "Cmd" "Ctrl"))))

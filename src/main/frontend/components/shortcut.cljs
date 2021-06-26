@@ -2,6 +2,7 @@
   (:require [frontend.context.i18n :as i18n]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.components.svg :as svg]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [rum.core :as rum]))
@@ -10,42 +11,49 @@
 (rum/defcs customize-shortcut-dialog-inner <
   (rum/local "")
   (shortcut/record!)
-  [state _]
-  (let [keypress (:rum/local state)]
+  [state _ action-name current-binding]
+  (let [keypress (:rum/local state)
+        keyboard-shortcut (if (= "" @keypress) current-binding @keypress)]
     [:div.w-full.sm:max-w-lg.sm:w-96
-     [:div.sm:flex.sm:items-start
-      [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.text-lg.leading-6.font-medium
-        "Press any key and Esc to finish"]
-       [:h4.text-lg.leading-6.font-medium
-        @keypress]]]]))
+     [:div
+      [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
+      [:p.mb-4.mt-4
+       (map-indexed (fn [i key]
+                      [:span.keyboard-shortcut {:key i}
+                       [:code {:style {:font-size "1.5em" :margin-right "8px"}}
+                        (clojure.string/replace key "meta" "cmd")]])
+                    (-> keyboard-shortcut
+                        (clojure.string/trim)
+                        (clojure.string/split  #" |\+")))]]
+     [:div.cancel-save-buttons.text-right.mt-4
+      (ui/button "Save" :on-click state/close-modal!)
+      [:a.ml-4
+       {:on-click (fn []
+                    (reset! keypress current-binding)
+                    (state/close-modal!))} "Cancel"]]]))
 
-(defn customize-shortcut-dialog [k]
+(defn customize-shortcut-dialog [k action-name displayed-binding]
   (fn [_]
-    (customize-shortcut-dialog-inner k)))
+    (customize-shortcut-dialog-inner k action-name displayed-binding)))
 
-(rum/defc shortcut-col [k binding configurable?]
+(rum/defc shortcut-col [k binding configurable? action-name]
   (let [conflict?         (dh/potential-confilct? k)
         displayed-binding (dh/binding-for-display k binding)]
-    (if configurable?
+    (if (not configurable?)
+      [:td.text-right displayed-binding]
       [:td.text-right
        (ui/button
         displayed-binding
+        :class "text-sm p-1"
         :title (if conflict?
                  "Shortcut conflict!"
                  "Click to modify")
         :background (when conflict? "pink")
-        :on-click
-        #(state/set-modal! (customize-shortcut-dialog k)))
-       (ui/button "❌"
-                  :title "Reset to default"
-                  :class "transform motion-safe:hover:scale-125"
-                  :background "none"
-                  :on-click
-                  (fn [_]
-                    (dh/remove-shortcut k)
-                    (shortcut/refresh!)))]
-      [:td.text-right displayed-binding])))
+        :on-click #(state/set-modal! (customize-shortcut-dialog k action-name displayed-binding)))
+       [:a.text-sm
+        {:style {:margin-left "12px"}
+         :on-click (fn [] (dh/remove-shortcut k) (shortcut/refresh!))}
+        "Reset"]])))
 
 (rum/defc shortcut-table < rum/reactive
   ([name]
@@ -58,12 +66,12 @@
          [:thead
           [:tr
            [:th.text-left [:b (t name)]]
-           [:th.text-right [:b (t :help/shortcut)]]]]
+           [:th.text-right]]]
          [:tbody
           (map (fn [[k {:keys [binding]}]]
                  [:tr {:key k}
                   [:td.text-left (t (dh/decorate-namespace k))]
-                  (shortcut-col k binding configurable?)])
+                  (shortcut-col k binding configurable? (t (dh/decorate-namespace k)))])
                (dh/binding-by-category name))]]]))))
 
 (rum/defc trigger-table []

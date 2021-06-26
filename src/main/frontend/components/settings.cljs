@@ -70,27 +70,29 @@
       [:span.pl-1.opacity-70 "Git commit requires the cors address."]]]))
 
 (defn toggle
-  [label-for name state on-toggle]
+  [label-for name state on-toggle & [detail-text]]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for label-for}
     name]
    [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.rounded-md.sm:max-w-xs
-     (ui/toggle state on-toggle true)]]])
+    [:div.rounded-md
+     {:style {:display "flex" :gap "1rem" :align-items "center"}}
+     (ui/toggle state on-toggle true)
+     detail-text]]])
 
 (rum/defcs app-updater < rum/reactive
   [state]
   (let [update-pending? (state/sub :electron/updater-pending?)
         {:keys [type payload]} (state/sub :electron/updater)]
-    [:div.cp__settings-app-updater
+    [:span.cp__settings-app-updater
+
      (ui/button
       (if update-pending? "Checking ..." "Check for updates")
-
-      :intent "logseq"
-      :class "check-update"
+      :class "text-sm p-1 mr-3"
       :disabled update-pending?
       :on-click #(js/window.apis.checkForUpdates false))
+
      (when-not (or update-pending?
                    (string/blank? type))
        [:div.update-state
@@ -138,12 +140,272 @@
 
 (rum/defc outdenting-hint
   []
-  [:div
-   [:p "See more details at " [:a {:target "_blank" :href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"} "here"] "."]
-   [:p "default(left) vs logical(right)"]
-   [:img {:src "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"
-          :width 500
-          :height 500}]])
+  [:div.ui__modal-panel
+   {:style {:box-shadow "0 4px 20px 4px rgba(0, 20, 60, .1), 0 4px 80px -8px rgba(0, 20, 60, .2)"}}
+   [:div {:style {:margin "12px" :max-width "500px"}}
+    [:p.text-sm
+     "The left side shows outdenting with the default setting, and the right shows outdenting with logical outdenting enabled. "
+     [:a.text-sm
+      {:target "_blank" :href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"}
+      "→ Learn more"]]
+    [:img {:src "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"
+           :width 500
+           :height 500}]]])
+
+(defn edit-config-edn []
+  (rum/with-context [[t] i18n/*tongue-context*]
+    [:div.text-sm
+     [:a {:href     (rfe/href :file {:path (config/get-config-path)})
+          :on-click #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))}
+      (t :settings-page/edit-config-edn)]]))
+
+(defn show-brackets-row [t show-brackets?]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "show_brackets"}
+    (t :settings-page/show-brackets)]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/toggle show-brackets?
+                config-handler/toggle-ui-show-brackets!
+                true)]]
+   [:div {:style {:text-align "right"}}
+    ;; TODO: Fetch this shortcut from config.cljs so there's one source of truth
+    (ui/keyboard-shortcut [:meta :c :meta :b])]])
+
+(defn language-row [t preferred-language]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "preferred_language"}
+    (t :language)]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md
+     [:select.form-select.is-small
+      {:value preferred-language
+       :on-change (fn [e]
+                    (let [lang-code (util/evalue e)]
+                      (state/set-preferred-language! lang-code)
+                      (ui-handler/re-render-root!)))}
+      (for [language dicts/languages]
+        (let [lang-code (name (:value language))
+              lang-label (:label language)]
+          [:option {:key lang-code :value lang-code} lang-label]))]]]])
+
+(defn theme-modes-row [t switch-theme system-theme? dark?]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "toggle_theme"}
+    (t :right-side-bar/switch-theme (string/capitalize switch-theme))]
+   [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-1
+    [:div.rounded-md.sm:max-w-xs
+
+     [:ul.theme-modes-options
+      [:li {:on-click (partial state/use-theme-mode! "light")
+            :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
+      [:li {:on-click (partial state/use-theme-mode! "dark")
+            :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
+      [:li {:on-click (partial state/use-theme-mode! "system")
+            :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]]
+
+   [:div {:style {:text-align "right"}}
+    (ui/keyboard-shortcut [:t :t])]])
+
+(defn file-format-row [t preferred-format]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "preferred_format"}
+    (t :settings-page/preferred-file-format)]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md
+     [:select.form-select.is-small
+      {:value (name preferred-format)
+       :on-change (fn [e]
+                    (let [format (-> (util/evalue e)
+                                     (string/lower-case)
+                                     keyword)]
+                      (user-handler/set-preferred-format! format)))}
+      (for [format (map name [:org :markdown])]
+        [:option {:key format :value format} (string/capitalize format)])]]]])
+
+(defn date-format-row [t preferred-date-format]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "custom_date_format"}
+    (t :settings-page/custom-date-format)]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md
+     [:select.form-select.is-small
+      {:value preferred-date-format
+       :on-change (fn [e]
+                    (let [format (util/evalue e)]
+                      (when-not (string/blank? format)
+                        (config-handler/set-config! :date-formatter format)
+                        (notification/show!
+                         [:div "You need to re-index your graph to make the change works"]
+                         :success)
+                        (state/close-modal!)
+                        (route-handler/redirect! {:to :repos}))))}
+      (for [format (sort (date/journal-title-formatters))]
+        [:option {:key format} format])]]]])
+
+(defn workflow-row [t preferred-workflow]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "preferred_workflow"}
+    (t :settings-page/preferred-workflow)]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md
+     [:select.form-select.is-small
+      {:value (name preferred-workflow)
+       :on-change (fn [e]
+                    (-> (util/evalue e)
+                        string/lower-case
+                        keyword
+                        (#(if (= % :now) :now :todo))
+                        user-handler/set-preferred-workflow!))}
+      (for [workflow [:now :todo]]
+        [:option {:key (name workflow) :value (name workflow)}
+         (if (= workflow :now) "NOW/LATER" "TODO/DOING")])]]]])
+
+(defn outdenting-row [t logical-outdenting?]
+  (toggle "preferred_outdenting"
+          [(t :settings-page/preferred-outdenting)
+           (ui/tippy {:html (outdenting-hint)
+                      :class "tippy-hover ml-2"
+                      :interactive true
+                      :disabled false}
+                     (svg/info))]
+          logical-outdenting?
+          config-handler/toggle-logical-outdenting!))
+
+(defn tooltip-row [t enable-tooltip?]
+  (toggle "enable_tooltip"
+          (t :settings-page/enable-tooltip)
+          enable-tooltip?
+          (fn []
+            (config-handler/toggle-ui-enable-tooltip!))))
+
+(defn timetracking-row [t enable-timetracking?]
+  (toggle "enable_timetracking"
+          (t :settings-page/enable-timetracking)
+          enable-timetracking?
+          (fn []
+            (let [value (not enable-timetracking?)]
+              (config-handler/set-config! :feature/enable-timetracking? value)))))
+
+(defn update-home-page
+  [event]
+  (let [value (util/evalue event)]
+    (cond
+      (string/blank? value)
+      (let [home (get (state/get-config) :default-home {})
+            new-home (dissoc home :page)]
+        (config-handler/set-config! :default-home new-home)
+        (notification/show! "Home default page updated successfully!" :success))
+
+      (page-handler/page-exists? (string/lower-case value))
+      (let [home (get (state/get-config) :default-home {})
+            new-home (assoc home :page value)]
+        (config-handler/set-config! :default-home new-home)
+        (notification/show! "Home default page updated successfully!" :success))
+
+      :else
+      (notification/show! (str "The page \"" value "\" doesn't exist yet. Please create that page first, and then try again.") :warning))))
+
+(defn journal-row [t enable-journals?]
+  [(toggle "enable_journals"
+           (t :settings-page/enable-journals)
+           enable-journals?
+           (fn []
+             (let [value (not enable-journals?)]
+               (config-handler/set-config! :feature/enable-journals? value))))
+
+   (when (not enable-journals?)
+     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+      [:label.block.text-sm.font-medium.leading-5.opacity-70
+       {:for "default page"}
+       (t :settings-page/home-default-page)]
+      [:div.mt-1.sm:mt-0.sm:col-span-2
+       [:div.max-w-lg.rounded-md.sm:max-w-xs
+        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
+         {:default-value (state/sub-default-home-page)
+          :on-blur update-home-page
+          :on-key-press (fn [e]
+                          (when (= "Enter" (util/ekey e))
+                            (update-home-page e)))}]]]])])
+
+(defn encryption-row [t enable-encryption?]
+  (toggle "enable_encryption"
+          (t :settings-page/enable-encryption)
+          enable-encryption?
+          (fn []
+            (let [value (not enable-encryption?)]
+              (config-handler/set-config! :feature/enable-encryption? value)))))
+
+(defn keyboard-shortcuts-row [t]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "customize_shortcuts"}
+    (t :settings-page/customize-shortcuts)]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div
+     (ui/button
+      (t :settings-page/shortcut-settings)
+      :class "text-sm p-1"
+      :style {:margin-top "0px"}
+      :on-click
+      (fn []
+        (state/close-settings!)
+        (route-handler/redirect! {:to :shortcut})))]]])
+
+(defn auto-push-row [t current-repo enable-git-auto-push?]
+  (when (string/starts-with? current-repo "https://")
+    (toggle "enable_git_auto_push"
+            "Enable Git auto push"
+            enable-git-auto-push?
+            (fn []
+              (let [value (not enable-git-auto-push?)]
+                (config-handler/set-config! :git-auto-push value))))))
+
+(defn usage-diagnostics-row [t instrument-disabled?]
+  (toggle "usage-diagnostics"
+          (t :settings-page/disable-sentry)
+          (not instrument-disabled?)
+          (fn [] (instrument/disable-instrument
+                  (not instrument-disabled?)))
+          [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
+
+(defn clear-cache-row [t]
+  [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "clear_cache"}
+    (t :settings-page/clear-cache)]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md.sm:max-w-xs
+     (ui/button
+      (t :settings-page/clear)
+      :class "text-sm p-1"
+      :on-click handler/clear-cache!)]]])
+
+(defn version-row [t version]
+  [:div.it.app-updater.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    (t :settings-page/current-version)]
+   [:div.wrap.sm:mt-0.sm:col-span-2
+    (when (util/electron?) (app-updater))
+    [:span.ver version]]])
+
+(defn developer-mode-row [t developer-mode?]
+  (toggle "developer_mode"
+          (t :settings-page/developer-mode)
+          developer-mode?
+          (fn []
+            (let [mode (not developer-mode?)]
+              (state/set-developer-mode! mode)
+              (and mode (util/electron?)
+                   (if (js/confirm (t :developer-mode-alert))
+                     (js/logseq.api.relaunch)))))
+          [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
 
 (rum/defcs settings < rum/reactive
   []
@@ -171,259 +433,37 @@
         switch-theme (if dark? "white" "dark")]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#settings.cp__settings-main
-       [:h1.title (t :settings)]
-
        [:div.panel-wrap
+        [:h1.title (t :settings)]]
 
-        ;;; theme modes
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          {:for "toggle_theme"}
-          (t :right-side-bar/switch-theme (string/capitalize switch-theme))]
-         [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-1
-          [:div.rounded-md.sm:max-w-xs
-
-           [:ul.theme-modes-options
-            [:li {:on-click (partial state/use-theme-mode! "light")
-                  :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
-            [:li {:on-click (partial state/use-theme-mode! "dark")
-                  :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
-            [:li {:on-click (partial state/use-theme-mode! "system")
-                  :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]]
-
-         [:span.ml-4.opacity-50.text-sm.px-5 "t t"]]
-
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          {:for "show_brackets"}
-          (t :settings-page/show-brackets)]
-         [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-2
-          [:div.rounded-md.sm:max-w-xs
-           (ui/toggle show-brackets?
-                      config-handler/toggle-ui-show-brackets!
-                      true)]
-          [:span.ml-4.opacity-50.text-sm "Ctrl-c Ctrl-b"]]]
-
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          {:for "preferred_language"}
-          (t :language)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md
-           [:select.form-select.is-small
-            {:value preferred-language
-             :on-change (fn [e]
-                          (let [lang-code (util/evalue e)                                ]
-                            (state/set-preferred-language! lang-code)
-                            (ui-handler/re-render-root!)))}
-            (for [language dicts/languages]
-              (let [lang-code (name (:value language))
-                    lang-label (:label language)]
-                [:option {:key lang-code :value lang-code} lang-label]))]]]]
-
-                        ;; config.edn
-        (when current-repo
-          [:div.mt-5.text-sm
-           [:a {:href     (rfe/href :file {:path (config/get-config-path)})
-                :on-click #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))}
-            (t :settings-page/edit-config-edn)]])]
+       (when current-repo
+         [[:div.panel-wrap
+           (edit-config-edn)]])
 
        [:hr]
 
        [:div.panel-wrap
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          {:for "preferred_format"}
-          (t :settings-page/preferred-file-format)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md
-           [:select.form-select.is-small
-            {:value (name preferred-format)
-             :on-change (fn [e]
-                          (let [format (-> (util/evalue e)
-                                           (string/lower-case)
-                                           keyword)]
-                            (user-handler/set-preferred-format! format)))}
-            (for [format (map name [:org :markdown])]
-              [:option {:key format :value format} (string/capitalize format)])]]]]
+        (theme-modes-row t switch-theme system-theme? dark?)
+        (language-row t preferred-language)
+        (file-format-row t preferred-format)
+        (date-format-row t preferred-date-format)
+        (workflow-row t preferred-workflow)
+        (show-brackets-row t show-brackets?)
+        (outdenting-row t logical-outdenting?)
+        (tooltip-row t enable-tooltip?)
+        (timetracking-row t enable-timetracking?)
+        (journal-row t enable-journals?)
+        (encryption-row t enable-encryption?)
+        (keyboard-shortcuts-row t)
+        (auto-push-row t current-repo enable-git-auto-push?)]
 
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          {:for "custom_date_format"}
-          (t :settings-page/custom-date-format)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md
-           [:select.form-select.is-small
-            {:value preferred-date-format
-             :on-change (fn [e]
-                          (let [format (util/evalue e)]
-                            (when-not (string/blank? format)
-                              (config-handler/set-config! :date-formatter format)
-                              (notification/show!
-                               [:div "You need to re-index your graph to make the change works"]
-                               :success)
-                              (state/close-modal!)
-                              (route-handler/redirect! {:to :repos}))))}
-            (for [format (sort (date/journal-title-formatters))]
-              [:option {:key format} format])]]]]
-
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          {:for "preferred_workflow"}
-          (t :settings-page/preferred-workflow)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md
-           [:select.form-select.is-small
-            {:value (name preferred-workflow)
-             :on-change (fn [e]
-                          (-> (util/evalue e)
-                              string/lower-case
-                              keyword
-                              (#(if (= % :now) :now :todo))
-                              user-handler/set-preferred-workflow!))}
-            (for [workflow [:now :todo]]
-              [:option {:key (name workflow) :value (name workflow)}
-               (if (= workflow :now) "NOW/LATER" "TODO/DOING")])]]]]
-        (toggle "preferred_outdenting"
-                (ui/tippy {:html (outdenting-hint)
-                           :interactive true
-                           :disabled false}
-                          (t :settings-page/preferred-outdenting))
-                logical-outdenting?
-                (fn []
-                  (config-handler/toggle-logical-outdenting!)))
-
-        (toggle "enable_tooltip"
-                (t :settings-page/enable-tooltip)
-                enable-tooltip?
-                (fn []
-                  (config-handler/toggle-ui-enable-tooltip!)))
-
-        (toggle "enable_timetracking"
-                (t :settings-page/enable-timetracking)
-                enable-timetracking?
-                (fn []
-                  (let [value (not enable-timetracking?)]
-                    (config-handler/set-config! :feature/enable-timetracking? value))))
-
-                        ;; (toggle "enable_block_time"
-                        ;;         (t :settings-page/enable-block-time)
-                        ;;         enable-block-time?
-                        ;;         (fn []
-                        ;;           (let [value (not enable-block-time?)]
-                        ;;             (config-handler/set-config! :feature/enable-block-time? value))))
-
-        (toggle "enable_journals"
-                (t :settings-page/enable-journals)
-                enable-journals?
-                (fn []
-                  (let [value (not enable-journals?)]
-                    (config-handler/set-config! :feature/enable-journals? value))))
-
-        (when (not enable-journals?)
-          [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-           [:label.block.text-sm.font-medium.leading-5.opacity-70
-            {:for "default page"}
-            (t :settings-page/home-default-page)]
-           [:div.mt-1.sm:mt-0.sm:col-span-2
-            [:div.max-w-lg.rounded-md.sm:max-w-xs
-             [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
-              {:default-value (state/sub-default-home-page)
-               :on-blur       (fn [event]
-                                (let [value (util/evalue event)]
-                                  (cond
-                                    (string/blank? value)
-                                    (let [home (get (state/get-config) :default-home {})
-                                          new-home (dissoc home :page)]
-                                      (config-handler/set-config! :default-home new-home)
-                                      (notification/show! "Home default page updated successfully!" :success))
-
-                                    (page-handler/page-exists? (string/lower-case value))
-                                    (let [home (get (state/get-config) :default-home {})
-                                          new-home (assoc home :page value)]
-                                      (config-handler/set-config! :default-home new-home)
-                                      (notification/show! "Home default page updated successfully!" :success))
-
-                                    :else
-                                    (notification/show! "Please make sure the page exists!" :warning))))}]]]])
-
-        (toggle "enable_encryption"
-                (t :settings-page/enable-encryption)
-                enable-encryption?
-                (fn []
-                  (let [value (not enable-encryption?)]
-                    (config-handler/set-config! :feature/enable-encryption? value))))
-
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          {:for "customize_shortcuts"}
-          (t :settings-page/customize-shortcuts)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md
-           (ui/button
-            (t :settings-page/shortcut-settings)
-            :class "text-sm p-0.5"
-            :on-click
-            (fn []
-              (state/close-settings!)
-              (route-handler/redirect! {:to :shortcut})))]]]
-
-        (when (string/starts-with? current-repo "https://")
-          (toggle "enable_git_auto_push"
-                  "Enable Git auto push"
-                  enable-git-auto-push?
-                  (fn []
-                    (let [value (not enable-git-auto-push?)]
-                      (config-handler/set-config! :git-auto-push value)))))]
-
-       [:hr]
+       [:hr] ;; Outside of panel wrap so that it is wider
 
        [:div.panel-wrap
-        [:p "Logseq will never collect your local graph database or sell your data."]
-        (toggle "usage-diagnostics"
-                (t :settings-page/disable-sentry)
-                (not instrument-disabled?)
-                (fn [] (instrument/disable-instrument
-                        (not instrument-disabled?))))]
-
-       [:hr]
-
-       [:div.panel-wrap
-
-        [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          {:for "clear_cache"}
-          (t :settings-page/clear-cache)]
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.max-w-lg.rounded-md.sm:max-w-xs
-           (ui/button (t :settings-page/clear)
-             :on-click handler/clear-cache!)]]]]
-
-       [:div.panel-wrap
-        [:div.it.app-updater.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          (t :settings-page/current-version)]
-         [:div.wrap.sm:mt-0.sm:col-span-2
-          [:div.ver version]
-          (if (util/electron?) (app-updater))]]
-
-        [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-         [:label.block.text-sm.font-medium.leading-5.opacity-70
-          {:for "developer_mode"}
-          (t :settings-page/developer-mode)]
-
-         [:div.mt-1.sm:mt-0.sm:col-span-2
-          [:div.rounded-md.sm:max-w-xs
-           (ui/toggle developer-mode?
-                      (fn []
-                        (let [mode (not developer-mode?)]
-                          (state/set-developer-mode! mode)
-                          (and mode (util/electron?)
-                               (if (js/confirm (t :developer-mode-alert))
-                                 (js/logseq.api.relaunch)))))
-                      true)]]]
-        [:div.text-sm.opacity-50
-         (t :settings-page/developer-mode-desc)]
+        (clear-cache-row t)
+        (version-row t version)
+        (usage-diagnostics-row t instrument-disabled?)
+        (developer-mode-row t developer-mode?)
 
         (when logged?
           [:div

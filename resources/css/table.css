@@ -9,10 +9,6 @@ table {
     margin: 1rem 0;
 }
 
-tr {
-    border-bottom: 1px solid var(--ls-border-color);
-}
-
 th {
     font-size: 14px;
     font-weight: 400;
@@ -22,7 +18,6 @@ th {
 }
 
 td {
-    border-bottom: 1px solid var(--ls-border-color);
     padding: 6px 8px;
     text-align: left;
 }

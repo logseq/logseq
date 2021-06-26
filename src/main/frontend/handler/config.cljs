@@ -1,8 +1,7 @@
 (ns frontend.handler.config
   (:require [frontend.state :as state]
             [frontend.handler.file :as file-handler]
-            [frontend.config :as config]
-            [clojure.string :as string]))
+            [frontend.config :as config]))
 
 (defn set-config!
   [k v]
@@ -14,6 +13,7 @@
     (set-config! :ui/show-brackets? (not show-brackets?))))
 
 (defn toggle-logical-outdenting! []
+  (js/alert "toggle-logical-outdenting!")
   (let [logical-outdenting? (state/logical-outdenting?)]
     (set-config! :editor/logical-outdenting? (not logical-outdenting?))))
 

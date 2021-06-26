@@ -17,4 +17,7 @@ svg.add-button {
   }
 }
 
-
+svg.info {
+  fill: var(--ls-primary-text-color);
+  transition: fill 200ms ease-in;
+}

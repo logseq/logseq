@@ -203,19 +203,19 @@
         :content/open-in-sidebar "Open in sidebar"
         :content/copy-as-json "Copy as JSON"
         :content/click-to-edit "Click to edit"
-        :settings-page/edit-config-edn "Edit config.edn (for current repo)"
+        :settings-page/edit-config-edn "Edit config.edn for current repo"
         :settings-page/show-brackets "Show brackets"
         :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
         :settings-page/preferred-outdenting "Enable logical outdenting"
-        :settings-page/custom-date-format "Preferred journal format"
+        :settings-page/custom-date-format "Preferred date format"
         :settings-page/preferred-file-format "Preferred file format"
         :settings-page/preferred-workflow "Preferred workflow"
         :settings-page/enable-timetracking "Enable timetracking"
-        :settings-page/enable-tooltip "Enable tooltip"
+        :settings-page/enable-tooltip "Enable tooltips"
         :settings-page/enable-journals "Enable journals"
         :settings-page/enable-encryption "Enable encryption feature"
-        :settings-page/customize-shortcuts "Customize shortcuts"
-        :settings-page/shortcut-settings "Shortcut Settings"
+        :settings-page/customize-shortcuts "Keyboard shortcuts"
+        :settings-page/shortcut-settings "Customize shortcuts"
         :settings-page/home-default-page "Set the default home page"
         :settings-page/enable-block-time "Enable block timestamps"
         :settings-page/dont-use-other-peoples-proxy-servers "Don't use other people's proxy servers. It's very dangerous, which could make your token and notes stolen. Logseq will not be responsible for this loss if you use other people's proxy servers. You can deploy it yourself, check "
@@ -293,7 +293,7 @@
         :user/delete-your-account "Delete your account"
         :user/delete-account-notice "All your published pages on logseq.com will be deleted."
 
-        :help/shortcut-page-title "Learn & Customize Shortcuts"}
+        :help/shortcut-page-title "Keyboard shortcuts"}
 
    :de {:help/about "Über Logseq"
         :help/bug "Fehlerbericht"
