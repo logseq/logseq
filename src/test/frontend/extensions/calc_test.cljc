@@ -89,6 +89,7 @@
                                (calc/eval env (calc/parse expr)))
                              (= final-env @env))
       {"a" 1 "b" 2}          ["a = 1" "b = a + 1"]
+      {"a" 1 "b" 3}          ["a = 1" "b=a*2+1"]
       {"a_a" 1 "b_b" 2}      ["a_a = 1" "b_b = a_a + 1"]
       {"variable" 1 "x" 0.0} ["variable = 1 + 0 * 2" "x = log(variable)"]
       {"x" 1 "u" 23 "v" 24}  ["x= 2 * 1 - 1 " "23 + 54" "u= 23" "v = x + u"]))
