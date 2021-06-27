@@ -71,7 +71,7 @@
            :or {redirect? true
                 create-first-block? true}}]
    (let [title (string/trim title)
-         pages (string/split title #"/")
+         pages (util/split-namespace-pages title)
          page (string/lower-case title)
          format (state/get-preferred-format)
          pages (map (fn [page]
