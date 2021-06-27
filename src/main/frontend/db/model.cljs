@@ -1255,7 +1255,8 @@
 (defn get-namespace-files
   [repo namespace]
   (assert (string? namespace))
-  (let [db (conn/get-conn repo)]
+  (let [db (conn/get-conn repo)
+        namespace (string/replace namespace "/" ".")]
     (when-not (string/blank? namespace)
      (let [namespace (string/trim namespace)
            pattern-1 (re-pattern (util/format "[\\.|/]%s\\." namespace))

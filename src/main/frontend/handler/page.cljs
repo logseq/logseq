@@ -264,10 +264,7 @@
 
 (defn- build-new-namespace-page-title
   [old-page-title old-name new-name]
-  (let [old-parts (when old-page-title
-                    (string/split old-page-title #"/"))
-        new-parts (map (fn [part] (if (= part old-name) new-name part)) old-parts)]
-    (string/join "/" new-parts)))
+  (string/replace-first old-page-title old-name new-name))
 
 ;; FIXME: get namespace pages instead of files for compatibility with the
 ;; database-only version.
@@ -275,15 +272,17 @@
   [repo old-name new-name]
   (doseq [datom (db/get-namespace-files repo old-name)]
     (let [old-path (:v datom)
+          path-old-name (string/replace old-name "/" ".")
+          path-new-name (string/replace new-name "/" ".")
           [search replace] (cond
-                             (string/includes? old-path (str "." old-name "."))
-                             [(str "." old-name ".") (str "." new-name ".")]
+                             (string/includes? old-path (str "." path-old-name "."))
+                             [(str "." path-old-name ".") (str "." path-new-name ".")]
 
-                             (string/includes? old-path (str "/" old-name "."))
-                             [(str "/" old-name ".") (str "/" new-name ".")]
+                             (string/includes? old-path (str "/" path-old-name "."))
+                             [(str "/" path-old-name ".") (str "/" path-new-name ".")]
 
                              :else
-                             [(str old-name ".") (str new-name ".")])
+                             [(str path-old-name ".") (str path-new-name ".")])
           new-path (string/replace-first old-path search replace)
           tx {:db/id (:e datom)
               :file/path new-path}
