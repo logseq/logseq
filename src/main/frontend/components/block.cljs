@@ -1157,15 +1157,10 @@
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
                          (editor-handler/collapse-block! uuid)))))}
-      (cond
-        (and control-show? collapsed?)
-        (svg/caret-right)
-
-        (and control-show? has-child?)
-        (svg/caret-down)
-
-        :else
-        [:span ""])]
+      [:span {:class (if control-show? "control-show" "control-hide")}
+         (cond
+           collapsed? (svg/caret-right)
+           has-child? (svg/caret-down))]]
      [:a {:on-click (fn [e]
                       (bullet-on-click e block config uuid))}
       [:span.bullet-container.cursor
@@ -2387,8 +2382,7 @@
   [blocks config option]
   [:div.content
    (cond-> option
-     (:document/mode? config)
-     (assoc :class "doc-mode"))
+     (:document/mode? config) (assoc :class "doc-mode"))
    (if (and (:group-by-page? config)
             (vector? (first blocks)))
      [:div.flex.flex-col
