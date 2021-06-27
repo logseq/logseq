@@ -3,7 +3,8 @@
             [clojure.string :as string]
             [frontend.components.block :as block]
             [rum.core :as rum]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [medley.core :as medley]))
 
 (defn get-relation
   ([page]
@@ -29,8 +30,13 @@
          (for [namespace namespaces]
            [:li.my-2
             (->>
-             (for [page namespace]
+             (for [[idx page] (medley/indexed namespace)]
                (when (and (string? page) page)
-                 (block/page-reference false page {} nil)))
+                 (let [full-page (->> (take (inc idx) namespace)
+                                      (string/join "/"))]
+                   (block/page-reference false
+                                         full-page
+                                         {}
+                                         page))))
              (interpose [:span.mx-2.opacity-30 "/"]))])]
         true)])))

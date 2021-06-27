@@ -392,7 +392,9 @@
           href (if html-export?
                  (util/encode-str page)
                  (rfe/href :page {:name redirect-page-name}))
-          inner (page-inner config page-name href redirect-page-name page-entity contents-page? children html-export? label)]
+          inner (page-inner config
+                            page-name
+                            href redirect-page-name page-entity contents-page? children html-export? label)]
       (if (and (not (util/mobile?)) (not preview?))
         (ui/tippy {:html        (fn []
                                   [:div.tippy-wrapper.overflow-y-auto.p-4
@@ -474,7 +476,8 @@
        (let [s (string/trim s)]
          (page-cp (assoc config
                          :label (mldoc/plain->text label)
-                         :contents-page? contents-page?) {:block/name s}))
+                         :contents-page? contents-page?)
+                  {:block/name s}))
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
