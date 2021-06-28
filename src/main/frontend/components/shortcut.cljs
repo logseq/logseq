@@ -1,12 +1,11 @@
 (ns frontend.components.shortcut
-  (:require [frontend.context.i18n :as i18n]
+  (:require [clojure.string :as str]
+            [frontend.context.i18n :as i18n]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.modules.shortcut.data-helper :as dh]
-            [frontend.components.svg :as svg]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [rum.core :as rum]))
-(def *shortcut-config (rum/cursor-in state/state [:config (state/get-current-repo) :shortcuts]))
 
 (rum/defcs customize-shortcut-dialog-inner <
   (rum/local "")
@@ -19,8 +18,8 @@
       [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
       [:p.mb-4.mt-4
        (ui/keyboard-shortcut (-> keyboard-shortcut
-                                 (clojure.string/trim)
-                                 (clojure.string/split  #" |\+")))]]
+                                 (str/trim)
+                                 (str/split  #" |\+")))]]
      [:div.cancel-save-buttons.text-right.mt-4
       (ui/button "Save" :on-click state/close-modal!)
       [:a.ml-4
@@ -55,7 +54,10 @@
   ([name]
    (shortcut-table name false))
   ([name configurable?]
-   (let [_ (rum/react *shortcut-config)]
+   (let [shortcut-config (rum/cursor-in
+                          state/state
+                          [:config (state/get-current-repo) :shortcuts])
+         _ (rum/react shortcut-config)]
      (rum/with-context [[t] i18n/*tongue-context*]
        [:div
         [:table
