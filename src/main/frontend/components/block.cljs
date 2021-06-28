@@ -1661,12 +1661,13 @@
                                              [:a {:on-mouse-down (fn [e]
                                                                    (util/stop e)
                                                                    (route-handler/redirect! {:to :page
-                                                                                             :path-params {:name uuid}}))}
+                                                                                             :path-params {:name uuid}}))
+                                                  :key uuid}
                                               (map-inline config title)])))
                                 parents (remove nil? parents)]
                             (reset! parents-atom parents)
                             (when (seq parents)
-                              (interpose [:span.mx-2.opacity-50 "➤"]
+                              (interpose [:span.mx-2.opacity-50 {:key "separator"} "➤"]
                                          parents))))]
              component (filterv identity component)]
          (when (or (seq @parents-atom) show-page?)
