@@ -152,6 +152,8 @@
            first-block (ffirst ast)
            properties (let [properties (and (property/properties-ast? first-block)
                                             (->> (last first-block)
+                                                 (map (fn [[x y]]
+                                                        [x (property/parse-property x y)]))
                                                  (into {})
                                                  (walk/keywordize-keys)))]
                         (when (and properties (seq properties))

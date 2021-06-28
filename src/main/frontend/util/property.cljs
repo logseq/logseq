@@ -336,6 +336,9 @@
         v (if (or (symbol? v) (keyword? v)) (name v) (str v))
         v (string/trim v)]
     (cond
+      (= k "filters")
+      v
+
       (= v "true")
       true
       (= v "false")
