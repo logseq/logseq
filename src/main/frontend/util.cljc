@@ -1284,6 +1284,17 @@
   [text]
   (string/join (replace regex-char-esc-smap text)))
 
+(defn split-namespace-pages
+  [title]
+  (let [parts (string/split title "/")]
+    (loop [others (rest parts)
+           result [(first parts)]]
+      (if (seq others)
+        (let [prev (last result)]
+          (recur (rest others)
+                 (conj result (str prev "/" (first others)))))
+        result))))
+
 (comment
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
 

@@ -1251,3 +1251,17 @@
            (conn/get-conn repo)
            page-id)
       ffirst))
+
+(defn get-namespace-files
+  [repo namespace]
+  (assert (string? namespace))
+  (let [db (conn/get-conn repo)
+        namespace (string/replace namespace "/" ".")]
+    (when-not (string/blank? namespace)
+     (let [namespace (string/trim namespace)
+           pattern-1 (re-pattern (util/format "[\\.|/]%s\\." namespace))
+           pattern-2 (re-pattern (util/format "^%s\\." namespace))]
+       (->> (d/datoms db :aevt :file/path)
+            (filter (fn [datom]
+                      (or (re-find pattern-1 (:v datom))
+                          (re-find pattern-2 (:v datom))))))))))
