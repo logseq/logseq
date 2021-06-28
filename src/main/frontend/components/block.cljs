@@ -1634,6 +1634,12 @@
        (not (d/has-class? (gobj/get e "target") "bullet"))
        (not @*dragging?)))
 
+(rum/defc breadcrumb-fragment
+  [href label]
+  [:a {:href href} (apply str label)])
+
+(rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
+
 (defn block-parents
   ([config repo block-id format]
    (block-parents config repo block-id format true))
@@ -1641,37 +1647,23 @@
    (let [parents (db/get-block-parents repo block-id 3)
          page (db/get-block-page repo block-id)
          page-name (:block/name page)
-         page-original-name (:block/original-name page)]
-     (when (or (seq parents)
-               show-page?
-               page-name)
-       (let [parents-atom (atom parents)
-             component [:div.block-parents.flex-row.flex-1
-                        (when show-page?
-                          [:a {:href (rfe/href :page {:name page-name})}
-                           (or page-original-name page-name)])
-
-                        (when (and show-page? (seq parents) (> (count parents) 1))
-                          [:span.mx-2.opacity-50 "➤"])
-
-                        (when (seq parents)
-                          (let [parents (doall
-                                         (for [{:block/keys [uuid title name]} parents]
-                                           (when-not name ; not page
-                                             [:a {:on-mouse-down (fn [e]
-                                                                   (util/stop e)
-                                                                   (route-handler/redirect! {:to :page
-                                                                                             :path-params {:name uuid}}))
-                                                  :key uuid}
-                                              (map-inline config title)])))
-                                parents (remove nil? parents)]
-                            (reset! parents-atom parents)
-                            (when (seq parents)
-                              (interpose [:span.mx-2.opacity-50 {:key "separator"} "➤"]
-                                         parents))))]
-             component (filterv identity component)]
-         (when (or (seq @parents-atom) show-page?)
-           component))))))
+         page-original-name (:block/original-name page)
+         show? (or (seq parents) show-page? page-name)]
+     (when show?
+       (let [page-name-props (when show-page?
+                                  [(rfe/href :page {:name page-name})
+                                   (or page-original-name page-name)])
+             parents-props (doall
+                                (for [{:block/keys [uuid title name]} parents]
+                                  (when-not name ; not page
+                                    [(rfe/href :page {:name uuid})
+                                     (map-inline config title)])))
+             breadcrumb (->> (into [] parents-props)
+                             (concat [page-name-props])
+                             (filterv identity)
+                             (map (fn [[href label]] (breadcrumb-fragment href label)))
+                             (interpose (breadcrumb-separator)))]
+         [:div.block-parents.flex-row.flex-1 breadcrumb])))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
