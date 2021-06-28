@@ -29,9 +29,9 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 16
 
       - name: Setup Java JDK
         uses: actions/setup-java@v1.4.3
@@ -95,9 +95,9 @@ jobs:
         run: unzip static.zip
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 16
 
       - name: Cache Node Modules
         uses: actions/cache@v2
@@ -142,9 +142,9 @@ jobs:
         run: unzip static.zip
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 16
 
       - name: Cache Node Modules
         uses: actions/cache@v2
@@ -188,9 +188,9 @@ jobs:
         run: ls -al ./static
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 16
 
       - name: Signing By Apple Developer ID
         uses: apple-actions/import-codesign-certs@v1
