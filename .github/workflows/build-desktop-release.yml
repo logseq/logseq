@@ -91,6 +91,11 @@ jobs:
         shell: "/usr/bin/arch -arch arm64 /bin/bash {0}"
     
     steps:
+      - name: Clean runner workspace path
+        run: |
+          echo "Cleaning up previous run"
+          rm -rf "${{ github.workspace }}"
+          
       - name: Download The Static Asset
         uses: actions/download-artifact@v1
         with:
@@ -104,8 +109,9 @@ jobs:
         run: ls -al ./static
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
+          architecture: 'arm64'
           node-version: 14
 
       - name: Cache Node Modules
