@@ -41,7 +41,18 @@
         :keep_line_break true
         :format format
         :heading_to_list export-heading-to-list?
-        :exporting_keep_properties exporting-keep-properties?})))))
+        :exporting_keep_properties exporting-keep-properties?}))))
+  ([format export-heading-to-list? exporting-keep-properties? inline_type_with_pos?]
+   (let [format (string/capitalize (name (or format :markdown)))]
+     (js/JSON.stringify
+      (bean/->js
+       {:toc false
+        :heading_number false
+        :keep_line_break true
+        :format format
+        :heading_to_list export-heading-to-list?
+        :exporting_keep_properties exporting-keep-properties?
+        :inline_type_with_pos inline_type_with_pos?})))))
 
 (def default-references
   (js/JSON.stringify
