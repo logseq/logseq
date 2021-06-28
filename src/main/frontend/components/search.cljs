@@ -74,8 +74,8 @@
   [repo uuid format content q search-mode]
   [:div [
          (when (not= search-mode :page)
-           [:div {:class "mb-1"} (block/block-parents {:id "block-search-block-parent" :block? true} repo (clojure.core/uuid uuid) format)])
-         [:div {:class "font-medium"} (highlight-exact-query content q)]]])
+           [:div {:class "mb-1" :key "parents"} (block/block-parents {:id "block-search-block-parent" :block? true} repo (clojure.core/uuid uuid) format)])
+         [:div {:class "font-medium" :key "content"} (highlight-exact-query content q)]]])
 
 (rum/defc highlight-fuzzy
   [content indexes]
