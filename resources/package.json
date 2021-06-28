@@ -9,6 +9,7 @@
     "electron:dev": "electron-forge start",
     "electron:debug": "electron-forge start --inspect-electron",
     "electron:make": "electron-forge make",
+    "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
     "rebuild:better-sqlite3": "electron-rebuild -v 13 -f -w better-sqlite3",
     "postinstall": "install-app-deps"

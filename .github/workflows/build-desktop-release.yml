@@ -85,17 +85,17 @@ jobs:
 
   build-macos-arm64:
     needs: [ compile-cljs ]
-    runs-on: [self-hosted, macOS, ARM64]
+    runs-on: macos-latest
     defaults:
       run:
         shell: "/usr/bin/arch -arch arm64 /bin/bash {0}"
-    
+
     steps:
       - name: Clean runner workspace path
         run: |
           echo "Cleaning up previous run"
           rm -rf "${{ github.workspace }}"
-          
+
       - name: Download The Static Asset
         uses: actions/download-artifact@v1
         with:
@@ -113,7 +113,7 @@ jobs:
         with:
           architecture: 'arm64'
           node-version: 16
-      
+
       - run: node -p process.arch
 
       - name: Cache Node Modules
@@ -124,7 +124,7 @@ jobs:
           key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
-        run: yarn install  && yarn electron:make
+        run: yarn install && yarn electron:make-macos-arm64
         working-directory: ./static
 
       - name: Change DMG Name
@@ -201,5 +201,3 @@ jobs:
           asset_path: ./logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
           asset_name: logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
           asset_content_type: application/x-apple-diskimage
-
-  
