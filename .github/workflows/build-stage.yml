@@ -23,9 +23,9 @@ jobs:
           java-version: 1.8
 
       - name: Set up Node
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-            node-version: '12'
+            node-version: 16
 
       - name: Install clojure
         run: |
@@ -50,4 +50,3 @@ jobs:
           AWS_REGION: 'us-west-1'   # optional: defaults to us-east-1
           SOURCE_DIR: 'static'      # optional: defaults to entire repository
           DEST_DIR: ${GITHUB_REF##*/}/static
-

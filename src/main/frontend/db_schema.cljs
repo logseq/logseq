@@ -97,6 +97,8 @@
    ;; whether page's is a journal
    :block/journal? {}
    :block/journal-day {}
+   ;; page's namespace
+   :block/namespace {:db/valueType :db.type/ref}
 
    ;; block's file
    :block/file {:db/valueType :db.type/ref}

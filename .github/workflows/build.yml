@@ -43,9 +43,9 @@ jobs:
           java-version: 1.8
 
       - name: Set up Node
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-          node-version: '12'
+          node-version: 16
 
       - name: Check Dockerfile consistency
         run: |

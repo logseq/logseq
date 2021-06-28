@@ -3,7 +3,6 @@
             [frontend.util :as util :refer [profile]]
             [frontend.util.marker :as marker]
             [frontend.tools.html-export :as html-export]
-            [frontend.handler.file :as file]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common :as common-handler]

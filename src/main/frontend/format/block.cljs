@@ -278,7 +278,7 @@
                                                    (not (string/starts-with? p "../"))
                                                    (not (string/starts-with? p "./"))
                                                    (not (string/starts-with? p "http")))
-                                          (string/split p #"/")))
+                                          (util/split-namespace-pages p)))
                                       refs)
                               (remove string/blank?))
           refs (->> (distinct (concat refs children-pages))

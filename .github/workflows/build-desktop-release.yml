@@ -29,9 +29,9 @@ jobs:
         uses: actions/checkout@v1
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 16
 
       - name: Setup Java JDK
         uses: actions/setup-java@v1.4.3
@@ -95,9 +95,9 @@ jobs:
         run: unzip static.zip
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 16
 
       - name: Cache Node Modules
         uses: actions/cache@v2
@@ -142,9 +142,9 @@ jobs:
         run: unzip static.zip
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 16
 
       - name: Cache Node Modules
         uses: actions/cache@v2
@@ -188,9 +188,9 @@ jobs:
         run: ls -al ./static
 
       - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 16
 
       - name: Signing By Apple Developer ID
         uses: apple-actions/import-codesign-certs@v1
@@ -230,8 +230,81 @@ jobs:
           name: Logseq-x64.zip
           path: static/out/make/zip/darwin/x64/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
 
+  build-macos-arm64:
+    needs: [ compile-cljs ]
+    runs-on: macos-latest
+
+    steps:
+      # this is only needed temporarily
+      # wait until macos-11 GA https://github.com/actions/virtual-environments/issues/2486
+      # or m1 hardware https://github.com/actions/virtual-environments/issues/2187
+      - name: hack osx sdk
+        run: |
+          if [ "$(sw_vers -productVersion | cut -d'.' -f1)" = 10 ]; then
+            pushd /Library/Developer/CommandLineTools/SDKs
+            sudo rm MacOSX.sdk
+            sudo ln -s MacOSX11.1.sdk MacOSX.sdk
+            sudo rm -rf MacOSX10.15.sdk
+            ls -l
+            popd
+          fi
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v1
+        with:
+          name: static.zip
+          path: ./
+
+      - name: Uncompress Static Files
+        run: unzip ./static.zip
+
+      - name: List Static Files
+        run: ls -al ./static
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v2
+        with:
+          node-version: 16
+
+      - name: Signing By Apple Developer ID
+        uses: apple-actions/import-codesign-certs@v1
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+
+      - name: Cache Node Modules
+        uses: actions/cache@v2
+        with:
+          path: |
+            **/node_modules
+          key: ${{ runner.os }}-node-modules
+
+      - name: Build/Release Electron App
+        run: yarn install && yarn electron:make-macos-arm64
+        working-directory: ./static
+
+      - name: Change DMG Name
+        run: mv static/out/make/*.dmg static/out/make/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
+
+      - name: Cache Artifact DMG
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-arm64.dmg
+          path: static/out/make/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
+
+      - name: ls files
+        run: du -a static/out/
+
+      - name: Change zip Name
+        run: mv static/out/make/zip/darwin/arm64/*.zip static/out/make/zip/darwin/arm64/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+
+      - name: Cache Artifact ZIP
+        uses: actions/upload-artifact@v1
+        with:
+          name: Logseq-arm64.zip
+          path: static/out/make/zip/darwin/arm64/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+
   release:
-    needs: [ build-macos, build-linux, build-windows ]
+    needs: [ build-macos, build-linux, build-windows, build-macos-arm64 ]
     runs-on: ubuntu-18.04
 
     steps:
@@ -245,6 +318,18 @@ jobs:
         uses: actions/download-artifact@v1
         with:
           name: Logseq-x64.zip
+          path: ./
+
+      - name: Download The MacOS ARM64 DMG Artifact
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-arm64.dmg
+          path: ./
+
+      - name: Download The MacOS ARM64 ZIP Artifact
+        uses: actions/download-artifact@v1
+        with:
+          name: Logseq-arm64.zip
           path: ./
 
       - name: Download The Linux Artifact In Zip format
@@ -299,6 +384,28 @@ jobs:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
           asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+          asset_content_type: application/x-apple-diskimage
+
+      - name: Upload MacOS ARM64 ZIP Artifact
+        id: upload-macos-arm64-zip-artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+          asset_name: logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+          asset_content_type: application/zip
+
+      - name: Upload MacOS ARM64 DMG Artifact
+        id: upload-macos-arm64-dmg-artifact
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
+          asset_name: logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
           asset_content_type: application/x-apple-diskimage
 
       - name: Upload Linux Artifact With Zip format
