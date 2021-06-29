@@ -28,7 +28,7 @@
         win-opts (cond->
                   {:width         (.-width win-state)
                    :height        (.-height win-state)
-                   :frame         true
+                   :frame         false
                    :autoHideMenuBar (not mac?)
                    :webPreferences
                    {:plugins                 true ; pdf
