@@ -751,6 +751,11 @@
   [s]
   (safe-re-find (re-pattern uuid-pattern) s))
 
+(defn extract-page-name
+  "[[page-name]] -> page-name"
+  [s]
+  (second (safe-re-find #"\[\[(.+)\]\]" s)))
+
 (defn drop-nth [n coll]
   (keep-indexed #(if (not= %1 n) %2) coll))
 
