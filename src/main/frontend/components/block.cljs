@@ -1156,10 +1156,9 @@
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
                          (editor-handler/collapse-block! uuid)))))}
-      [:span {:class (if control-show? "control-show" "control-hide")}
-         (cond
-           collapsed? (svg/caret-right)
-           has-child? (svg/caret-down))]]
+      (when
+       control-show?
+        (ui/rotating-arrow collapsed?))]
      [:a {:on-click (fn [e]
                       (bullet-on-click e block config uuid))}
       [:span.bullet-container.cursor
