@@ -2889,8 +2889,16 @@
 
      (map (fn [x] (dissoc x :block/children))))))
 
+(defn collapsable? [block-id]
+  (if-let [block (db-model/get-block-by-uuid block-id)]
+    (and
+     (nil? (-> block :block/properties :collapsed))
+     (or (not-empty (:block/body block))
+         (db-model/has-children? block-id)))
+    false))
+
 (defn collapse-block! [block-id]
-  (when (db-model/has-children? block-id)
+  (when (collapsable? block-id)
     (set-block-property! block-id :collapsed true)))
 
 (defn expand-block! [block-id]
@@ -2951,15 +2959,13 @@
     (let [blocks-with-level
           (all-blocks-with-level {:collapse? true})
           max-level (apply max (map :block/level blocks-with-level))]
-      (loop [level (dec max-level)]
+      (loop [level max-level]
         (if (zero? level)
           nil
           (let [blocks-to-collapse
                 (->> blocks-with-level
                      (filter (fn [b] (= (:block/level b) level)))
-                     (remove (fn [b]
-                               (or (not (db-model/has-children? (:block/uuid b)))
-                                   (-> b :block/properties :collapsed)))))]
+                     (filter (fn [b] (collapsable? (:block/uuid b)))))]
             (if (empty? blocks-to-collapse)
               (recur (dec level))
               (doseq [{:block/keys [uuid]} blocks-to-collapse]
@@ -2969,8 +2975,7 @@
   []
   (let [blocks-to-collapse
         (->> (all-blocks-with-level {:collapse? true})
-             (filter (fn [b] (= (:block/level b) 1)))
-             (remove (fn [b] (-> b :block/properties :collapsed))))]
+             (filter (fn [b] (collapsable? (:block/uuid b)))))]
     (when (seq blocks-to-collapse)
       (doseq [{:block/keys [uuid]} blocks-to-collapse]
         (collapse-block! uuid)))))
@@ -2985,11 +2990,8 @@
 (defn toggle-open! []
   (let [all-collapsed?
         (->> (all-blocks-with-level {:collapse? true})
-             (filter (fn [b] (= (:block/level b) 1)))
-             (every? (fn [{:block/keys [uuid properties]}]
-                       (or
-                        (not (db-model/has-children? uuid))
-                        (some? (-> properties :collapsed))))))]
+             (filter (fn [b] (collapsable? (:block/uuid b))))
+             (empty?))]
     (if all-collapsed?
       (expand-all!)
       (collapse-all!))))
