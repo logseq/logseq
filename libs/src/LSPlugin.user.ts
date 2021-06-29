@@ -27,7 +27,7 @@ const debug = Debug('LSPlugin:user')
 
 const app: Partial<IAppProxy> = {
   registerUIItem (
-    type: 'toolbar' | 'page',
+    type: 'toolbar' | 'pagebar',
     opts: { key: string, template: string }
   ) {
     const pid = this.baseInfo.id

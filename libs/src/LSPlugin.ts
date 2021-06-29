@@ -184,7 +184,7 @@ export interface IAppProxy {
   setZoomFactor: (factor: number) => void
 
   registerUIItem: (
-    type: 'toolbar' | 'page',
+    type: 'toolbar' | 'pagebar',
     opts: { key: string, template: string }
   ) => boolean
 
