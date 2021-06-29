@@ -147,6 +147,10 @@
   min-width: 10px;
   color: initial;
   user-select: none;
+
+  .control-hide {
+    display: none;
+  }
 }
 
 .block-ref {

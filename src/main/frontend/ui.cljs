@@ -547,29 +547,16 @@
           :on-click (fn [e]
                       (util/stop e)
                       (swap! collapsed? not))}
-         (cond
-           @collapsed?
-           (svg/caret-right)
-
-           @control?
-           (svg/caret-down)
-
-           :else
-           [:span ""])]
+         [:span {:class (if @control? "control-show" "control-hide")}
+          (if @collapsed?
+            (svg/caret-right)
+            (svg/caret-down))]]
         (if (fn? header)
           (header @collapsed?)
           header)]]]
-     [:div {:class (if @collapsed?
-                     "hidden"
-                     "initial")}
-      (cond
-        (and (fn? content) (not @collapsed?))
-        (content)
-
-        (fn? content)
-        nil
-
-        :else
+     [:div {:class (if @collapsed? "hidden" "initial")}
+      (if (fn? content)
+        (if (not @collapsed?) (content) nil)
         content)]]))
 
 (defn admonition
