@@ -27,7 +27,7 @@
 
 (defn eval* [env ast]
   (insta/transform
-   {:number     edn/read-string
+   {:number     (comp edn/read-string #(str/replace % "," ""))
     :scientific edn/read-string
     :expr       identity
     :add        +
