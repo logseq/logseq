@@ -644,23 +644,21 @@
 (defn- show-link?
   [config metadata s full-text]
   (let [img-formats (set (map name (config/img-formats)))
-        metadata-show (:show (safe-read-string metadata))]
+        metadata-show (:show (safe-read-string metadata))
+        format (get-in config [:block :block/format])]
     (or
-     ;; markdown
      (and
-      (= :markdown (get-in config [:block :block/format]))
-      (string/starts-with? (string/triml full-text) "!"))
-
-     ;; org
-     (and
-      (= :org (get-in config [:block :block/format]))
+      (= :org format)
       (or
        (and
         (nil? metadata-show)
         (or
          (config/local-asset? s)
          (text/image-link? img-formats s)))
-       (true? (boolean metadata-show)))))))
+       (true? (boolean metadata-show))))
+
+     ;; markdown
+     (string/starts-with? (string/triml full-text) "!"))))
 
 (defn inline
   [{:keys [html-export?] :as config} item]
@@ -1788,6 +1786,7 @@
                           (:block/content (second (:rum/args new-state)))))}
   [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
+        config (update config :block merge block)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
         *ref-collapsed? (get state ::ref-collapsed?)
