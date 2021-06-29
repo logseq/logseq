@@ -234,13 +234,19 @@
 ;; FIXME: not safe
 ;; 1. normal pages [[foo]]
 ;; 2. namespace pages [[foo/bar]]
+;; 3. what if there's a tag `#foobar` and we want to replace `#foo` with `#something`?
 (defn- replace-old-page!
   [s old-name new-name]
-  (let [pattern "[[%s/"]
-    (-> s
-        (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
-        (string/replace (util/format pattern old-name) (util/format pattern new-name))
-        (string/replace (str "#" old-name) (str "#" new-name)))))
+  (let [get-tag-pattern (fn [s] (if (string/includes? s " ")
+                                 (str "#[[" s "]]")
+                                 (str "#" s)))
+        old-tag-pattern (get-tag-pattern old-name)
+        new-tag-pattern (get-tag-pattern new-name)]
+    (let [pattern "[[%s/"]
+     (-> s
+         (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
+         (string/replace (util/format pattern old-name) (util/format pattern new-name))
+         (string/replace old-tag-pattern new-tag-pattern)))))
 
 (defn- walk-replace-old-page!
   [form old-name new-name]
