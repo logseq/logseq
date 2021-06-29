@@ -4,20 +4,20 @@
             [frontend.components.block :as block]
             [rum.core :as rum]
             [frontend.ui :as ui]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.db :as db]
+            [frontend.state :as state]
+            [frontend.text :as text]))
 
 (defn get-relation
-  ([page]
-   (get-relation page 100))
-  ([page limit]
-   (->> (search/page-search page limit)
-        (filter #(or
-                  (= page %)
-                  (string/starts-with? % (str page "/"))
-                  (string/includes? % (str "/" page "/"))
-                  (string/ends-with? % (str "/" page))))
-        (map #(string/split % #"/"))
-        (remove #(= % [page])))))
+  [page]
+  (when (text/namespace-page? page)
+    (->> (db/get-namespace-pages (state/get-current-repo) page)
+         (map (fn [page]
+                (or (:block/original-name page) (:block/name page))))
+         (map #(string/split % #"/"))
+         (remove #(= % [page]))
+         (sort))))
 
 (rum/defc structures
   [page]

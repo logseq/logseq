@@ -188,8 +188,7 @@
 
 (defn namespace-page?
   [p]
-  (and (string/includes? p "/")
-       (not (string/starts-with? p "../"))
+  (and (not (string/starts-with? p "../"))
        (not (string/starts-with? p "./"))
        (not (string/starts-with? p "http"))
        (not
