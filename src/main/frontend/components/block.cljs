@@ -761,13 +761,13 @@
                       :target "_blank"}
                   (map-inline config label))
 
-          (and (util/electron?)
-               (show-link? config metadata s full_text))
-          (asset-reference (second (first label)) s)
-
           ;; image
           (show-link? config metadata s full_text)
           (image-link config url s label metadata full_text)
+
+          (and (util/electron?)
+               (show-link? config metadata s full_text))
+          (asset-reference (second (first label)) s)
 
           :else
           (page-reference (:html-export? config) s config label))
