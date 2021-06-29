@@ -26,9 +26,9 @@
   []
   (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
         win-opts (cond->
-                  {:width         (.-width win-state)
-                   :height        (.-height win-state)
-                   :frame         false
+                  {:width           (.-width win-state)
+                   :height          (.-height win-state)
+                   :frame           (not mac?)
                    :autoHideMenuBar (not mac?)
                    :webPreferences
                    {:plugins                 true ; pdf
