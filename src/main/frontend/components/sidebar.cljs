@@ -31,7 +31,8 @@
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [goog.dom :as gdom]
-            [frontend.handler.web.nfs :as nfs-handler]))
+            [frontend.handler.web.nfs :as nfs-handler]
+            [cljs-drag-n-drop.core :as dnd]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -105,7 +106,17 @@
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 
-(rum/defc main
+(rum/defc main <
+  {:did-mount (fn [state]
+                (when-let [element (gdom/getElement "main-content")]
+                  (dnd/subscribe!
+                   element
+                   :upload-files
+                   {:drop (fn [e files]
+                            (when-let [id (state/get-edit-input-id)]
+                              (let [format (:block/format (state/get-edit-block))]
+                                (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
+                state)}
   [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
   (ui/catch-error
    [:div#main-content-container.w-full.flex.justify-center

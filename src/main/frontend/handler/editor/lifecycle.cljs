@@ -3,7 +3,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [cljs-drag-n-drop.core :as dnd]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
@@ -15,19 +14,10 @@
 (defn did-mount!
   [state]
   (let [[{:keys [format block-parent-id]} id] (:rum/args state)
-        content (get-in @state/state [:editor/content id])
-        input (gdom/getElement id)
-        element (gdom/getElement "main-content")]
+        content (get-in @state/state [:editor/content id])]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
     (editor-handler/restore-cursor-pos! id content)
-
-    (when (and input element)
-      (dnd/subscribe!
-       element
-       :upload-files
-       {:drop (fn [e files]
-                (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))}))
 
     ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
     ;; which will hide the editor so no way for editing.
@@ -46,15 +36,6 @@
   [state]
   (let [{:keys [id value format block repo config]} (get-state)
         file? (:file? config)]
-    (when-let [input (gdom/getElement id)]
-      ;; (.removeEventListener input "paste" (fn [event]
-      ;;                                       (append-paste-doc! format event)))
-      (let [s (str "cljs-drag-n-drop." :upload-images)
-            element (gdom/getElement "main-content")
-            a (gobj/get element s)
-            timer (:timer a)]
-        (when (and element timer)
-          (dnd/unsubscribe! element :upload-files))))
     (editor-handler/clear-when-saved!)
     ;; TODO: ugly
     (when-not (contains? #{:insert :indent-outdent :auto-save :undo :redo :delete} (state/get-editor-op))
