@@ -762,7 +762,8 @@
                   (map-inline config label))
 
           ;; image
-          (show-link? config metadata s full_text)
+          (and (show-link? config metadata s full_text)
+               (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext s))))
           (image-link config url s label metadata full_text)
 
           (and (util/electron?)
