@@ -1636,7 +1636,7 @@
 
 (rum/defc breadcrumb-fragment
   [href label]
-  [:a {:href href} (apply str label)])
+  [:a {:href href} label])
 
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
@@ -1657,7 +1657,7 @@
                                 (for [{:block/keys [uuid title name]} parents]
                                   (when-not name ; not page
                                     [(rfe/href :page {:name uuid})
-                                     (map-inline config title)])))
+                                     (->elem :span (map-inline config title))])))
              breadcrumb (->> (into [] parents-props)
                              (concat [page-name-props])
                              (filterv identity)
