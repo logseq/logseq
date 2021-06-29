@@ -11,6 +11,7 @@
             [frontend.context.i18n :as i18n]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.components.svg :as svg]
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
@@ -185,6 +186,9 @@
 
        (when-not (util/electron?)
          (login logged?))
+
+       (when plugin-handler/lsp-enabled?
+         (plugins/hook-ui-items :toolbar))
 
        (repo/sync-status current-repo)
 

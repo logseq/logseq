@@ -183,6 +183,11 @@ export interface IAppProxy {
   showMsg: (content: string, status?: 'success' | 'warning' | string) => void
   setZoomFactor: (factor: number) => void
 
+  registerUIItem: (
+    type: 'toolbar' | 'page',
+    opts: { key: string, template: string }
+  ) => boolean
+
   // events
   onCurrentGraphChanged: IUserHook
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>

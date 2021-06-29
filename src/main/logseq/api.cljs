@@ -153,6 +153,12 @@
       (plugin-handler/register-plugin-simple-command
        pid cmd (assoc action 0 (keyword (first action)))))))
 
+(def ^:export register_plugin_ui_item
+  (fn [pid type ^js opts]
+    (when-let [opts (bean/->clj opts)]
+      (plugin-handler/register-plugin-ui-item
+       pid (assoc opts :type type)))))
+
 ;; app
 (def ^:export relaunch
   (fn []

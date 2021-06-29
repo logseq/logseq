@@ -25,7 +25,22 @@ declare global {
 
 const debug = Debug('LSPlugin:user')
 
-const app: Partial<IAppProxy> = {}
+const app: Partial<IAppProxy> = {
+  registerUIItem (
+    type: 'toolbar' | 'page',
+    opts: { key: string, template: string }
+  ) {
+    const pid = this.baseInfo.id
+    // opts.key = `${pid}_${opts.key}`
+
+    this.caller?.call(`api:call`, {
+      method: 'register-plugin-ui-item',
+      args: [pid, type, opts]
+    })
+
+    return false
+  }
+}
 
 let registeredCmdUid = 0
 
@@ -101,7 +116,7 @@ const editor: Partial<IEditorProxy> = {
       args: [this.baseInfo.id, [{ key, label, type }, ['editor/hook', eventKey]]]
     })
 
-    return false
+    return true
   }
 }
 
