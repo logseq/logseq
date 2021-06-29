@@ -185,3 +185,14 @@
                (if remove-first-line? lines r))
         content (if remove-first-line? body (cons f body))]
     (string/join "\n" content)))
+
+(defn namespace-page?
+  [p]
+  (and (string/includes? p "/")
+       (not (string/starts-with? p "../"))
+       (not (string/starts-with? p "./"))
+       (not (string/starts-with? p "http"))
+       (not
+        (when-let [last-part (last (string/split p #"/"))]
+          ;; a file
+          (string/includes? last-part ".")))))
