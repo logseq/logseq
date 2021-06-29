@@ -139,6 +139,16 @@
   }
 }
 
+.block-control {
+  .not-collapsed svg {
+    transform: rotate(90deg);
+  }
+
+  .arrow svg {
+    transition: all 100ms ease-in 0ms;
+  }
+}
+
 .block-control,
 .block-control:hover {
   text-decoration: none;
