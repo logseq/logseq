@@ -1040,36 +1040,44 @@
               ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
           (delete-blocks! repo ids))))))
 
+(defn parse-inline-with-pos [format content]
+  (mldoc/->edn content (mldoc/default-config format false false true)))
+
+#_
 (defn- get-nearest-page
   []
-  (when-let [block (state/get-edit-block)]
-    (when-let [id (:block/uuid block)]
-      (when-let [edit-id (state/get-edit-input-id)]
-        (when-let [input (gdom/getElement edit-id)]
-          (when-let [pos (cursor/pos input)]
-            (let [value (gobj/get input "value")
-                  page-pattern #"\[\[([^\]]+)]]"
-                  block-pattern #"\(\(([^\)]+)\)\)"
-                  page-matches (util/re-pos page-pattern value)
-                  block-matches (util/re-pos block-pattern value)
-                  matches (->> (concat page-matches block-matches)
-                               (remove nil?))
-                  [_ page] (first (sort-by
-                                   (fn [[start-pos content]]
-                                     (let [end-pos (+ start-pos (count content))]
-                                       (cond
-                                         (< pos start-pos)
-                                         (- pos start-pos)
+  (when-let [content (gobj/get (state/get-input) "value")]
+    (let [format (:block/format (state/get-edit-block))
+          ast    (parse-inline-with-pos format content)
+          result (atom [])]
+      (w/postwalk
+       (fn [form]
+         (match form
+                ["Nested_link" [{:content c} pos]]
+                (swap! result #(conj % [c pos]))
 
-                                         (> pos end-pos)
-                                         (- end-pos pos)
+                [["Tag" c] pos]
+                (swap! result #(conj % [c pos]))
 
-                                         :else
-                                         0)))
-                                   >
-                                   matches))]
-              (when page
-                (subs page 2 (- (count page) 2))))))))))
+                [["Link" {:url ["Search" s]}] pos]
+                (cond
+                  ;; TODO
+                  nil
+                  )
+                (swap! result #(conj % [c pos]))
+
+                [["Block_reference" c] pos]
+                (swap! result #(conj % [c pos]))
+
+                [["Macro" {:name "embed" :arguments [arg]}] pos]
+                (when-let [uuid (util/extract-uuid arg)]
+                  (swap! result #(conj % [uuid pos])))
+
+                :else nil)
+         form)
+       ast)
+
+      @result)))
 
 (defn follow-link-under-cursor!
   []
