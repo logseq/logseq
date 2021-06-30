@@ -264,14 +264,15 @@
 
 (rum/defc new-block-mode < rum/reactive
   []
-  (when (state/sub [:editor/new-block-toggle?])
-    (ui/tippy {:html [:ul
-                      [:li "Shift + Enter to create new block"]
-                      [:li "Click to switch back to the default behaviour"]
-                      [:li "Type `t d` to toggle document mode"]]}
+  (when (state/sub [:document/mode?])
+    (ui/tippy {:html [:div.p-2
+                      [:p.mb-2 [:b "Document mode"]]
+                      [:ul
+                       [:li "Shift + Enter to create new block"]
+                       [:li "Click `D` or type `t d` to toggle document mode"]]]}
      [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
-      {:on-click state/toggle-new-block-shortcut!}
-      "A"])))
+      {:on-click state/toggle-document-mode!}
+      "D"])))
 
 (rum/defc help-button < rum/reactive
   []
