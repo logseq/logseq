@@ -1,6 +1,7 @@
 (ns frontend.format.block
   (:require [clojure.string :as string]
             [clojure.walk :as walk]
+            [cljs.core.match :refer [match]]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -21,9 +22,24 @@
 
 (defn get-tag
   [block]
-  (and (vector? block)
-       (= "Tag" (first block))
-       (second block)))
+  (when-let [tag-value (and (vector? block)
+                            (= "Tag" (first block))
+                            (second block))]
+    (->
+     (mapv (fn [e]
+             (match e
+                    ["Plain" s]
+                    s
+                    ["Link" t]
+                    (let [{full_text :full_text} t]
+                      full_text)
+                    ["Nested_link" t]
+                    (let [ {content :content} t]
+                      content)
+                    :else
+                    ""
+                    )) tag-value)
+     (string/join))))
 
 (defn get-page-reference
   [block]
@@ -32,6 +48,11 @@
                (let [typ (first (:url (second block)))]
                  ;; {:url ["File" "file:../pages/hello_world.org"], :label [["Plain" "hello world"]], :title nil}
                  (or
+                  (and
+                   (= typ "Page_ref")
+                   (string? (second (:url (second block))))
+                   (second (:url (second block))))
+
                   (and
                    (= typ "Search")
                    (string? (second (:url (second block))))
@@ -102,6 +123,12 @@
                         (and (vector? block)
                              (= "Block_reference" (first block)))
                         (last block)
+
+                        (and (vector? block)
+                             (= "Link" (first block))
+                             (map? (second block))
+                             (= "Block_ref" (first (:url (second block)))))
+                        (second (:url (second block)))
 
                         (and (vector? block)
                              (= "Macro" (first block)))
