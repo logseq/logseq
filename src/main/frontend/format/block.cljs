@@ -106,6 +106,7 @@
     (cond
       (and
        (string? page)
+       (not (string/blank? page))
        (text/block-ref? page))
       (text/block-ref-un-brackets! page)
 

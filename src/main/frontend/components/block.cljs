@@ -738,7 +738,9 @@
 
         ["Page_ref" page]
         (let [label* (if (seq (mldoc/plain->text label)) label nil)]
-          (page-reference (:html-export? config) page config label*))
+          (if (and (string? page) (string/blank? page))
+            [:span (util/format "[[%s]]" page)]
+            (page-reference (:html-export? config) page config label*)))
 
         ["Search" s]
         (cond
