@@ -167,9 +167,11 @@
 (defn get-default-home-if-valid
   []
   (when-let [default-home (state/get-default-home)]
-    (when-let [page (:page default-home)]
-      (when (db/entity [:block/name (string/lower-case page)])
-        default-home))))
+    (let [page (:page default-home)
+          page (when page (db/entity [:block/name (string/lower-case page)]))]
+      (if page
+        default-home
+        (dissoc default-home :page)))))
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
@@ -209,7 +211,8 @@
        (cond
          (and default-home
               (= :home (state/get-current-route))
-              (not (state/route-has-p?)))
+              (not (state/route-has-p?))
+              (:page default-home))
          (route-handler/redirect! {:to :page
                                    :path-params {:name (:page default-home)}})
 
