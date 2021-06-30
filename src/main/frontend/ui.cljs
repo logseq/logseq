@@ -553,7 +553,7 @@
           :on-click (fn [e]
                       (util/stop e)
                       (swap! collapsed? not))}
-         (when @control? (rotating-arrow @collapsed?))]
+         [:span {:class (if @control? "control-show" "control-hide")} (rotating-arrow @collapsed?)]]
         (if (fn? header)
           (header @collapsed?)
           header)]]]
