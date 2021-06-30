@@ -232,13 +232,13 @@
                             "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg")
               :links-footer [:div
                              (when (seq switch-repos) [:hr.my-4])
-                             [:a {:class "block px-4 py-2 text-sm text-gray-700 transition ease-in-out duration-150 cursor menu-link"
+                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                   :href (rfe/href :repo-add)}
                               (t :new-graph)]
-                             [:a {:class "block px-4 py-2 text-sm text-gray-700 transition ease-in-out duration-150 cursor menu-link"
+                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                   :href (rfe/href :repos)}
                               (t :all-graphs)]
-                             [:a {:class "block px-4 py-2 text-sm text-gray-700 transition ease-in-out duration-150 cursor menu-link"
+                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                   :on-click (fn []
                                               (repo-handler/re-index! nfs-handler/rebuild-index!))}
                               (t :re-index)]]}
