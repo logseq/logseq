@@ -10,7 +10,7 @@ import {
   BlockCommandCallback,
   StyleString,
   ThemeOptions,
-  UIOptions
+  UIOptions, IHookEvent
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -25,6 +25,35 @@ declare global {
 
 const debug = Debug('LSPlugin:user')
 
+/**
+ * @param type
+ * @param opts
+ * @param action
+ */
+function registerSimpleCommand (
+  this: LSPluginUser,
+  type: string,
+  opts: {
+    key: string,
+    label: string
+  },
+  action: BlockCommandCallback
+) {
+  if (typeof action !== 'function') {
+    return false
+  }
+
+  const { key, label } = opts
+  const eventKey = `SimpleCommandHook${key}${++registeredCmdUid}`
+
+  this.Editor['on' + eventKey](action)
+
+  this.caller?.call(`api:call`, {
+    method: 'register-plugin-simple-command',
+    args: [this.baseInfo.id, [{ key, label, type }, ['editor/hook', eventKey]]]
+  })
+}
+
 const app: Partial<IAppProxy> = {
   registerUIItem (
     type: 'toolbar' | 'pagebar',
@@ -37,6 +66,27 @@ const app: Partial<IAppProxy> = {
       method: 'register-plugin-ui-item',
       args: [pid, type, opts]
     })
+
+    return false
+  },
+
+  registerPagebarMenuItem (
+    this: LSPluginUser,
+    tag: string,
+    action: (e: IHookEvent & { page: string }) => void
+  ): unknown {
+    if (typeof action !== 'function') {
+      return false
+    }
+
+    const key = tag + '_' + this.baseInfo.id
+    const label = tag
+    const type = 'pagebar-menu-item'
+
+    registerSimpleCommand.call(this,
+      type, {
+        key, label
+      }, action)
 
     return false
   }
@@ -95,28 +145,25 @@ const editor: Partial<IEditorProxy> = {
     return false
   },
 
-  registerBlockContextMenu (
+  registerBlockContextMenuItem (
     this: LSPluginUser,
     tag: string,
     action: BlockCommandCallback
-  ): boolean {
+  ): unknown {
     if (typeof action !== 'function') {
       return false
     }
 
-    const key = tag
+    const key = + '_' + this.baseInfo.id
     const label = tag
-    const type = 'block-context-menu'
-    const eventKey = `SimpleCommandHook${tag}${++registeredCmdUid}`
+    const type = 'block-context-menu-item'
 
-    this.Editor['on' + eventKey](action)
+    registerSimpleCommand.call(this,
+      type, {
+        key, label
+      }, action)
 
-    this.caller?.call(`api:call`, {
-      method: 'register-plugin-simple-command',
-      args: [this.baseInfo.id, [{ key, label, type }, ['editor/hook', eventKey]]]
-    })
-
-    return true
+    return false
   }
 }
 

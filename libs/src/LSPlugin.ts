@@ -188,6 +188,11 @@ export interface IAppProxy {
     opts: { key: string, template: string }
   ) => boolean
 
+  registerPagebarMenuItem: (
+    tag: string,
+    action: (e: IHookEvent & { page: string }) => void
+  ) => unknown
+
   // events
   onCurrentGraphChanged: IUserHook
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
@@ -232,10 +237,10 @@ export interface IEditorProxy extends Record<string, any> {
    * @param tag - displayed name of command
    * @param action - can be a single callback function to run when the command is called
    */
-  registerBlockContextMenu: (
+  registerBlockContextMenuItem: (
     tag: string,
     action: BlockCommandCallback
-  ) => boolean
+  ) => unknown
 
   // block related APIs
 

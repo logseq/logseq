@@ -6,6 +6,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common :as common-handler]
+            [frontend.commands :as commands]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.graph :as graph-handler]
@@ -350,6 +351,12 @@
                                                      (if public? false true))
                                                     (state/close-modal!))}})
 
+                                     (when plugin-handler/lsp-enabled?
+                                       (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :pagebar-menu-item)]
+                                         {:title label
+                                          :options {:on-click #(commands/exec-plugin-simple-command!
+                                                                 pid (assoc cmd :page (state/get-current-page)) action)}}))
+
                                      (when developer-mode?
                                        {:title   "(Dev) Show page data"
                                         :options {:on-click (fn []
@@ -367,15 +374,15 @@
                                     (remove nil?)))]
                    [:div.flex.flex-row
 
-                    (plugins/hook-ui-slot :page-head-actions-slotted nil)
-
                     (when plugin-handler/lsp-enabled?
+                      (plugins/hook-ui-slot :page-head-actions-slotted nil)
                       (plugins/hook-ui-items :pagebar))
 
                     [:a.opacity-60.hover:opacity-100.page-op.mr-1
                      {:title "Search in current page"
                       :on-click #(route-handler/go-to-search! :page)}
                      svg/search]
+
                     (ui/dropdown-with-links
                      (fn [{:keys [toggle-fn]}]
                        [:a.cp__vertical-menu-button
