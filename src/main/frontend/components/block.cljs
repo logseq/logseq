@@ -672,7 +672,7 @@
     ["Subscript" l]
     (->elem :sub (map-inline config l))
     ["Tag" s]
-    (when s
+    (when-let [s (block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
         [:a.tag {:data-ref s
                  :href (rfe/href :page {:name s})
@@ -722,9 +722,9 @@
       [:a {:href (str "mainto:" address)}
        address])
 
-    ["Block_reference" id]
-    ;; FIXME: alert when self block reference
-    (block-reference (assoc config :reference? true) id nil)
+    ;; ["Block_reference" id]
+    ;; ;; FIXME: alert when self block reference
+    ;; (block-reference (assoc config :reference? true) id nil)
 
     ["Nested_link" link]
     (nested-link config html-export? link)
@@ -732,18 +732,18 @@
     ["Link" link]
     (let [{:keys [url label title metadata full_text]} link]
       (match url
+        ["Block_ref" id]
+        (let [label* (if (seq (mldoc/plain->text label)) label nil)]
+          (block-reference (assoc config :reference? true) id label*))
+
+        ["Page_ref" page]
+        (let [label* (if (seq (mldoc/plain->text label)) label nil)]
+          (page-reference (:html-export? config) page config label*))
+
         ["Search" s]
         (cond
           (string/blank? s)
           [:span.warning {:title "Invalid link"} full_text]
-
-          (text/block-ref? s)
-          (let [block-id (text/block-ref-un-brackets! s)]
-            (block-reference config block-id label))
-
-          (text/page-ref? s)
-          (let [page (text/page-ref-un-brackets! s)]
-            (page-reference (:html-export? config) page config label))
 
           (= \# (first s))
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
