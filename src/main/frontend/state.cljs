@@ -52,6 +52,7 @@
       :modal/show? false
 
       ;; right sidebar
+      :ui/fullscreen? false
       :ui/settings-open? false
       :ui/sidebar-open? false
       :ui/left-sidebar-open? false

@@ -20,6 +20,7 @@
             [frontend.components.right-sidebar :as sidebar]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
+            [frontend.mixins :as mixins]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.handler.migrate :as migrate]))
@@ -149,12 +150,12 @@
      ;;                  [:div.px-2.py-2 (login logged?)])}
      )))
 
-(rum/defc header
-  < rum/reactive
+(rum/defc header < rum/reactive
   [{:keys [open-fn current-repo white? logged? page? route-match me default-home new-block-mode]}]
   (let [local-repo? (= current-repo config/local-repo)
         repos (->> (state/sub [:me :repos])
-                   (remove #(= (:url %) config/local-repo)))]
+                   (remove #(= (:url %) config/local-repo)))
+        electron-mac? (and util/mac? (util/electron?))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
        {:on-double-click (fn [^js e]
@@ -169,14 +170,13 @@
        (logo {:white? white?})
 
        (when (util/electron?)
-         [:a.mr-1.opacity-60.hover:opacity-100.it.navigation
-          {:style {:margin-left -10}
-           :title "Go Back" :on-click #(js/window.history.back)} (svg/arrow-left)])
+         [:a.opacity-60.hover:opacity-100.mr-1.it.navigation.nav-left
+          {:title "Go Back" :on-click #(js/window.history.back)} svg/arrow-narrow-left])
 
        (when (util/electron?)
-         [:a.opacity-60.hover:opacity-100.it.navigation
-          {:style {:margin-right 15}
-           :title "Go Forward" :on-click #(js/window.history.forward)} (svg/arrow-right)])
+         [:a.opacity-60.hover:opacity-100.it.navigation.nav-right
+          {:style {:margin-right 5}
+           :title "Go Forward" :on-click #(js/window.history.forward)} svg/arrow-narrow-right])
 
        (if current-repo
          (search/search)

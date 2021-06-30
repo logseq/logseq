@@ -71,6 +71,12 @@
      :stroke "currentColor"
      :d "M10 19L3 12M3 12L10 5M3 12L21 12"}]])
 
+(def arrow-narrow-left
+  [:svg.h-6.w-6 {:xmlns "http://www.w3.org/2000/svg" :fill "none" :viewbox "0 0 24 24" :stroke "currentColor"} [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M7 16l-4-4m0 0l4-4m-4 4h18"}]])
+
+(def arrow-narrow-right
+  [:svg.h-6.w-6 {:xmlns "http://www.w3.org/2000/svg" :fill "none" :viewbox "0 0 24 24" :stroke "currentColor"} [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M17 8l4 4m0 0l-4 4m4-4H3"}]])
+
 (defonce arrow-right-v2
   [:svg.h-3.w-3
    {:version "1.1"
