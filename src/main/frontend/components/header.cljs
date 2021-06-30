@@ -158,7 +158,8 @@
         electron-mac? (and util/mac? (util/electron?))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
-       {:on-double-click (fn [^js e]
+       {:class (when electron-mac? "electron-mac")
+        :on-double-click (fn [^js e]
                            (when-let [target (.-target e)]
                              (when (and (util/electron?)
                                         (or (.. target -classList (contains "cp__header"))))
@@ -197,13 +198,13 @@
 
        (when (and (nfs/supported?) (empty? repos)
                   (not config/publishing?))
-         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
+         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block.open-button
           {:on-click (fn []
                        (page-handler/ls-dir-files!))}
-          [:div.flex.flex-row.text-center
-           [:span.inline-block svg/folder-add]
+          [:div.flex.flex-row.text-center.open-button__inner
+           [:span.inline-block.open-button__icon-wrapper svg/folder-add]
            (when-not config/mobile?
-             [:span.ml-1 {:style {:margin-top 2}}
+             [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
               (t :open)])]])
 
        (if config/publishing?

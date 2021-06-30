@@ -26,6 +26,37 @@
       min-width: 14rem;
     }
   }
+
+  &.electron-mac {
+    height: auto;
+    border-bottom: 1px solid var(--ls-secondary-border-color);
+
+    .open-button__icon-wrapper {
+      margin-right: 7px;
+    }
+
+    svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .navigation svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .open-button {
+      &__inner {
+        @apply items-center;
+
+        svg {
+          width: 18px;
+          height: 18px;
+        }
+      }
+    }
+
+  }
 }
 
 .is-electron.is-mac .cp__header {
