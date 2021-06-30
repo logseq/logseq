@@ -2348,10 +2348,12 @@
         blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree % (:id config)))
         blocks' (blocks->vec-tree blocks)
         blocks (if (seq blocks') blocks' blocks)
-        config (assoc config :blocks-container-id blocks-container-id)]
+        config (assoc config :blocks-container-id blocks-container-id)
+        doc-mode? (:document/mode? config)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
-       {:style {:margin-left (cond
+       {:class (when doc-mode? "document-mode")
+        :style {:margin-left (cond
                                sidebar?
                                0
                                :else

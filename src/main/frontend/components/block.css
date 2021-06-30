@@ -266,6 +266,29 @@
     margin: 0.4em 0 0;
 }
 
+.document-mode .ls-block h1, .document-mode .editor-inner .h1 {
+    margin: 0.67em 0;
+}
+.document-mode .ls-block h2, .document-mode .editor-inner .h2 {
+    margin: 0.75em 0;
+}
+.document-mode .ls-block h3, .document-mode .editor-inner .h3 {
+    margin: 0.83em 0;
+}
+.document-mode .ls-block h4, .document-mode .editor-inner .h4 {
+    margin: 1.12em 0;
+}
+.document-mode .ls-block h5, .document-mode .editor-inner .h5 {
+    margin: 1.5em 0;
+}
+.document-mode .ls-block h6, .document-mode .editor-inner .h6 {
+    margin: 1.67em 0;
+}
+
+.document-mode .ls-block {
+    margin-bottom: 2rem;
+}
+
 .color-level {
   background-color: var(--color-level-1);
 }
