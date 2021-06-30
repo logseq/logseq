@@ -95,7 +95,7 @@
 
                (and (vector? block)
                     (= "Tag" (first block)))
-               (let [text (second block)]
+               (let [text (get-tag block)]
                  (when (and
                         (string? text)
                         (text/page-ref? text))
