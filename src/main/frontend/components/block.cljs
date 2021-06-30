@@ -1522,10 +1522,7 @@
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)}
        (not slide?)
-       (merge attrs)
-
-       block-ref?
-       (assoc :class "cursor-pointer"))
+       (merge attrs))
 
      [:span
       ;; .flex.relative {:style {:width "100%"}}
