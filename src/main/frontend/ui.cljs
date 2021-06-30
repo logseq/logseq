@@ -79,7 +79,7 @@
 
 (rum/defc menu-link
   [options child]
-  [:span.block.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+  [:a.block.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
    options
    child])
 
