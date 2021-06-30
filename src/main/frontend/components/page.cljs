@@ -6,6 +6,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -365,7 +366,12 @@
                                     (flatten)
                                     (remove nil?)))]
                    [:div.flex.flex-row
+
                     (plugins/hook-ui-slot :page-head-actions-slotted nil)
+
+                    (when plugin-handler/lsp-enabled?
+                      (plugins/hook-ui-items :pagebar))
+
                     [:a.opacity-60.hover:opacity-100.page-op.mr-1
                      {:title "Search in current page"
                       :on-click #(route-handler/go-to-search! :page)}

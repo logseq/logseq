@@ -196,7 +196,7 @@
 (rum/defcs hook-ui-items < rum/reactive
   "type
       - :toolbar
-      - :page
+      - :pagebar
    "
   [state type]
   (when (state/sub [:plugin/installed-ui-items])
