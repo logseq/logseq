@@ -19,6 +19,7 @@
             [cljs.pprint :as pprint]
             [frontend.handler.notification :as notification]
             [frontend.components.editor :as editor]
+            [frontend.components.export :as export]
             [frontend.context.i18n :as i18n]
             [frontend.text :as text]
             [frontend.handler.page :as page-handler]))
@@ -172,17 +173,11 @@
 
           (block-template block-id)
 
-          ;; (ui/menu-link
-          ;;  {:key "Make template"
-          ;;   :on-click (fn [_e]
-          ;;               (editor-handler/copy-block-ref! block-id))}
-          ;;  "Make template")
-
           (ui/menu-link
-           {:key "Copy as text"
-            :on-click (fn [_e]
-                        (export-handler/copy-block! block-id))}
-           "Copy as TEXT")
+           {:key "Export"
+            :on-click (fn [_]
+                        (state/set-modal! #(export/export-blocks block-id)))}
+           "Export")
 
           (ui/menu-link
            {:key "Copy as JSON"

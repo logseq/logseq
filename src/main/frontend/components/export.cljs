@@ -65,3 +65,46 @@
          [:a#export-page-as-markdown.hidden]
          [:a#export-page-as-opml.hidden]
          [:a#convert-markdown-to-unordered-list-or-heading.hidden]]))))
+
+(def *export-block-type (atom :text))
+
+(def text-indent-style-options [{:label "dash"
+                                 :selected false}
+                                {:label "space"
+                                 :selected false}
+                                {:label "no-indent"
+                                 :selected false}])
+
+(def *export-block-text-indent-style (atom "dash"))
+
+(rum/defcs export-blocks
+  < rum/reactive
+  (rum/local false ::copied?)
+  [state root-block-id]
+  (let [current-repo (state/get-current-repo)
+        type (rum/react *export-block-type)
+        text-indent-style (rum/react *export-block-text-indent-style)
+        copied? (::copied? state)
+        content
+        (case type
+          :text (export/export-blocks-as-markdown current-repo root-block-id text-indent-style)
+          :opml (export/export-blocks-as-opml current-repo root-block-id)
+          (export/export-blocks-as-markdown current-repo root-block-id text-indent-style))]
+    [:div.export.w-96.resize
+     (ui/button "Text"
+                :on-click #(reset! *export-block-type :text))
+     (ui/button "OPML"
+                :on-click #(reset! *export-block-type :opml))
+     [:textarea.overflow-y-auto.h-96 {:value content}]
+     (when (and (:not-impl-yet 0)
+                (= :text type))
+       (let [options (->> text-indent-style-options
+                          (mapv (fn [opt]
+                                  (if (= text-indent-style (:label opt))
+                                    (assoc opt :selected true)
+                                    opt))))]
+         (ui/select options #(reset! *export-block-text-indent-style %))))
+     (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")
+                :on-click (fn []
+                            (util/copy-to-clipboard! content)
+                            (reset! copied? true)))]))
