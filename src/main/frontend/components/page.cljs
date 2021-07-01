@@ -417,7 +417,8 @@
               (reference/references route-page-name false)
               (str route-page-name "-refs"))]
 
-           (hierarchy/structures route-page-name)
+           (when (text/namespace-page? route-page-name)
+             (hierarchy/structures route-page-name))
 
            ;; TODO: or we can lazy load them
            (when-not sidebar?

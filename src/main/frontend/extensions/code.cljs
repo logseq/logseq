@@ -155,11 +155,11 @@
                                  (save-file-or-block-when-blur-or-esc! editor textarea config state))))
           (.addEventListener element "mousedown"
                              (fn [e]
-                               (let [block (into {} (db/get-block-by-uuid (:block/uuid config)))]
-                                 (state/clear-selection!)
-                                 (state/set-editing! id (.getValue editor) block nil false)
-                                 (util/stop e)
-                                 (state/set-block-component-editing-mode! true))))
+                               (state/clear-selection!)
+                               (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
+                                 (state/set-editing! id (.getValue editor) block nil false))
+                               (util/stop e)
+                               (state/set-block-component-editing-mode! true)))
           (.save editor)
           (.refresh editor)))
       editor)))

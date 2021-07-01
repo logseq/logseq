@@ -234,13 +234,19 @@
 ;; FIXME: not safe
 ;; 1. normal pages [[foo]]
 ;; 2. namespace pages [[foo/bar]]
+;; 3. what if there's a tag `#foobar` and we want to replace `#foo` with `#something`?
 (defn- replace-old-page!
   [s old-name new-name]
-  (let [pattern "[[%s/"]
-    (-> s
-        (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
-        (string/replace (util/format pattern old-name) (util/format pattern new-name))
-        (string/replace (str "#" old-name) (str "#" new-name)))))
+  (let [get-tag-pattern (fn [s] (if (string/includes? s " ")
+                                 (str "#[[" s "]]")
+                                 (str "#" s)))
+        old-tag-pattern (get-tag-pattern old-name)
+        new-tag-pattern (get-tag-pattern new-name)]
+    (let [pattern "[[%s/"]
+     (-> s
+         (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
+         (string/replace (util/format pattern old-name) (util/format pattern new-name))
+         (string/replace old-tag-pattern new-tag-pattern)))))
 
 (defn- walk-replace-old-page!
   [form old-name new-name]
@@ -266,38 +272,40 @@
   [old-page-title old-name new-name]
   (string/replace-first old-page-title old-name new-name))
 
-;; FIXME: get namespace pages instead of files for compatibility with the
-;; database-only version.
+(defn- get-new-file-path
+  [old-path old-name new-name]
+  (let [path-old-name (string/replace old-name "/" ".")
+        path-new-name (string/replace new-name "/" ".")
+        [search replace] (cond
+                           (string/includes? old-path (str "." path-old-name "."))
+                           [(str "." path-old-name ".") (str "." path-new-name ".")]
+
+                           (string/includes? old-path (str "/" path-old-name "."))
+                           [(str "/" path-old-name ".") (str "/" path-new-name ".")]
+
+                           :else
+                           [(str path-old-name ".") (str path-new-name ".")])]
+    (string/replace-first old-path search replace)))
+
 (defn- rename-namespace-pages!
   [repo old-name new-name]
-  (doseq [datom (db/get-namespace-files repo old-name)]
-    (let [old-path (:v datom)
-          path-old-name (string/replace old-name "/" ".")
-          path-new-name (string/replace new-name "/" ".")
-          [search replace] (cond
-                             (string/includes? old-path (str "." path-old-name "."))
-                             [(str "." path-old-name ".") (str "." path-new-name ".")]
-
-                             (string/includes? old-path (str "/" path-old-name "."))
-                             [(str "/" path-old-name ".") (str "/" path-new-name ".")]
-
-                             :else
-                             [(str path-old-name ".") (str path-new-name ".")])
-          new-path (string/replace-first old-path search replace)
-          tx {:db/id (:e datom)
-              :file/path new-path}
-          page (db/entity (db/get-file-page-id old-path))
-          page-tx (when page
-                    (let [old-page-title (or (:block/original-name page)
-                                             (:block/name page))
-                          new-page-title (build-new-namespace-page-title old-page-title old-name new-name)]
-                      {:db/id (:db/id page)
-                       :block/original-name new-page-title
-                       :block/name (string/lower-case new-page-title)}))
-          txs (->> [tx page-tx] (remove nil?))]
-      (db/transact! repo txs)
-      (p/let [_ (rename-file-aux! repo old-path new-path)]
-        (println "Renamed " old-path " to " new-path ".")))))
+  (let [pages (db/get-namespace-pages repo old-name)]
+    (doseq [{:block/keys [name original-name file] :as page} pages]
+      (let [old-page-title (or original-name name)
+            new-page-title (build-new-namespace-page-title old-page-title old-name new-name)
+            page-tx {:db/id (:db/id page)
+                     :block/original-name new-page-title
+                     :block/name (string/lower-case new-page-title)}
+            old-path (:file/path file)
+            new-path (when old-path
+                       (get-new-file-path old-path old-name new-name))
+            file-tx (when file
+                      {:db/id (:db/id file)
+                       :file/path new-path})
+            txs (->> [file-tx page-tx] (remove nil?))]
+        (db/transact! repo txs)
+        (p/let [_ (rename-file-aux! repo old-path new-path)]
+          (println "Renamed " old-path " to " new-path))))))
 
 (defn rename!
   [old-name new-name]

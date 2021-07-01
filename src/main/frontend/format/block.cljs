@@ -274,10 +274,7 @@
      (concat title body))
     (let [refs (remove string/blank? @refs)
           children-pages (->> (mapcat (fn [p]
-                                        (when (and (string/includes? p "/")
-                                                   (not (string/starts-with? p "../"))
-                                                   (not (string/starts-with? p "./"))
-                                                   (not (string/starts-with? p "http")))
+                                        (when (text/namespace-page? p)
                                           (util/split-namespace-pages p)))
                                       refs)
                               (remove string/blank?))

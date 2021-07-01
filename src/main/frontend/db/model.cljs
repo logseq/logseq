@@ -1252,16 +1252,21 @@
            page-id)
       ffirst))
 
-(defn get-namespace-files
+(defn get-namespace-pages
   [repo namespace]
   (assert (string? namespace))
-  (let [db (conn/get-conn repo)
-        namespace (string/replace namespace "/" ".")]
+  (let [db (conn/get-conn repo)]
     (when-not (string/blank? namespace)
-     (let [namespace (string/trim namespace)
-           pattern-1 (re-pattern (util/format "[\\.|/]%s\\." namespace))
-           pattern-2 (re-pattern (util/format "^%s\\." namespace))]
-       (->> (d/datoms db :aevt :file/path)
-            (filter (fn [datom]
-                      (or (re-find pattern-1 (:v datom))
-                          (re-find pattern-2 (:v datom))))))))))
+      (let [namespace (string/lower-case (string/trim namespace))
+            ids (->> (d/datoms db :aevt :block/name)
+                     (filter (fn [datom]
+                               (let [page (:v datom)]
+                                 (or
+                                  (= page namespace)
+                                  (string/starts-with? page (str namespace "/"))))))
+                     (map :e))]
+        (when (seq ids)
+          (db-utils/pull-many repo
+                              '[:db/id :block/name :block/original-name
+                                {:block/file [:db/id :file/path]}]
+                              ids))))))
