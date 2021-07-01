@@ -188,9 +188,7 @@
              [:div.flex.flex-row.justify-center
               [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
                {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
-               (if collapse?
-                 (svg/caret-right)
-                 (svg/caret-down))]
+               (ui/rotating-arrow collapse?)]
               [:div.ml-1.font-medium
                title]]
              (close #(state/sidebar-remove-block! idx))]

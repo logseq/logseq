@@ -167,9 +167,11 @@
 (defn get-default-home-if-valid
   []
   (when-let [default-home (state/get-default-home)]
-    (when-let [page (:page default-home)]
-      (when (db/entity [:block/name (string/lower-case page)])
-        default-home))))
+    (let [page (:page default-home)
+          page (when page (db/entity [:block/name (string/lower-case page)]))]
+      (if page
+        default-home
+        (dissoc default-home :page)))))
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
@@ -209,7 +211,8 @@
        (cond
          (and default-home
               (= :home (state/get-current-route))
-              (not (state/route-has-p?)))
+              (not (state/route-has-p?))
+              (:page default-home))
          (route-handler/redirect! {:to :page
                                    :path-params {:name (:page default-home)}})
 
@@ -261,11 +264,15 @@
 
 (rum/defc new-block-mode < rum/reactive
   []
-  (when (state/sub [:editor/new-block-toggle?])
-    [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
-     {:title "Click to switch to \"Enter\" for creating new block"
-      :on-click state/toggle-new-block-shortcut!}
-     "A"]))
+  (when (state/sub [:document/mode?])
+    (ui/tippy {:html [:div.p-2
+                      [:p.mb-2 [:b "Document mode"]]
+                      [:ul
+                       [:li "Shift + Enter to create new block"]
+                       [:li "Click `D` or type `t d` to toggle document mode"]]]}
+     [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
+      {:on-click state/toggle-document-mode!}
+      "D"])))
 
 (rum/defc help-button < rum/reactive
   []

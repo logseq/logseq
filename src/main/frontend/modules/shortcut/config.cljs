@@ -297,10 +297,6 @@
     {:desc    "Toggle between dark/light theme"
      :binding "t t"
      :fn      state/toggle-theme!}
-    :ui/toggle-new-block
-    {:desc    "Toggle newblock/newline command for inserting newline/newblock"
-     :binding "t e"
-     :fn      state/toggle-new-block-shortcut!}
     :ui/toggle-contents
     {:desc    "Toggle Contents in sidebar"
      :binding "t c"

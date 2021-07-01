@@ -79,7 +79,7 @@
 
 (rum/defc menu-link
   [options child]
-  [:a.block.px-4.py-2.text-sm.text-gray-700.transition.ease-in-out.duration-150.cursor.menu-link
+  [:a.block.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
    options
    child])
 
@@ -524,6 +524,12 @@
    [:span.icon.flex.items-center svg/loading]
    [:span.text.pl-2 content]])
 
+(rum/defc rotating-arrow
+  [collapsed?]
+  [:span
+   {:class (if collapsed? "rotating-arrow collapsed" "rotating-arrow not-collapsed")}
+   (svg/caret-right)])
+
 (rum/defcs foldable <
   (rum/local false ::control?)
   (rum/local false ::collapsed?)
@@ -547,10 +553,7 @@
           :on-click (fn [e]
                       (util/stop e)
                       (swap! collapsed? not))}
-         [:span {:class (if @control? "control-show" "control-hide")}
-          (if @collapsed?
-            (svg/caret-right)
-            (svg/caret-down))]]
+         [:span {:class (if @control? "control-show" "control-hide")} (rotating-arrow @collapsed?)]]
         (if (fn? header)
           (header @collapsed?)
           header)]]]
@@ -610,19 +613,19 @@
   (let [*mounted? (::mounted? state)
         mounted? @*mounted?]
     (Tippy (->
-           (merge {:arrow true
-                   :sticky true
-                   :theme "customized"
-                   :disabled (not (state/enable-tooltip?))
-                   :unmountHTMLWhenHide true
-                   :open @*mounted?
-                   :onShow #(reset! *mounted? true)
-                   :onHide #(reset! *mounted? false)}
-                  opts)
-           (assoc :html (if mounted?
-                          (when-let [html (:html opts)]
-                            (if (fn? html)
-                              (html)
-                              html))
-                          [:div {:key "tippy"} ""])))
-          child)))
+            (merge {:arrow true
+                    :sticky true
+                    :theme "customized"
+                    :disabled (not (state/enable-tooltip?))
+                    :unmountHTMLWhenHide true
+                    :open @*mounted?
+                    :onShow #(reset! *mounted? true)
+                    :onHide #(reset! *mounted? false)}
+                   opts)
+            (assoc :html (if mounted?
+                           (when-let [html (:html opts)]
+                             (if (fn? html)
+                               (html)
+                               html))
+                           [:div {:key "tippy"} ""])))
+           child)))

@@ -187,3 +187,11 @@
     @apply py-1.5 sm:leading-4 sm:text-xs;
   }
 }
+
+.rotating-arrow.not-collapsed svg {
+  transform: rotate(90deg);
+}
+
+.rotating-arrow svg {
+  transition: all 100ms ease-in 0ms;
+}

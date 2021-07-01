@@ -672,7 +672,7 @@
     ["Subscript" l]
     (->elem :sub (map-inline config l))
     ["Tag" s]
-    (when s
+    (when-let [s (block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
         [:a.tag {:data-ref s
                  :href (rfe/href :page {:name s})
@@ -722,9 +722,9 @@
       [:a {:href (str "mainto:" address)}
        address])
 
-    ["Block_reference" id]
-    ;; FIXME: alert when self block reference
-    (block-reference (assoc config :reference? true) id nil)
+    ;; ["Block_reference" id]
+    ;; ;; FIXME: alert when self block reference
+    ;; (block-reference (assoc config :reference? true) id nil)
 
     ["Nested_link" link]
     (nested-link config html-export? link)
@@ -732,18 +732,20 @@
     ["Link" link]
     (let [{:keys [url label title metadata full_text]} link]
       (match url
+        ["Block_ref" id]
+        (let [label* (if (seq (mldoc/plain->text label)) label nil)]
+          (block-reference (assoc config :reference? true) id label*))
+
+        ["Page_ref" page]
+        (let [label* (if (seq (mldoc/plain->text label)) label nil)]
+          (if (and (string? page) (string/blank? page))
+            [:span (util/format "[[%s]]" page)]
+            (page-reference (:html-export? config) page config label*)))
+
         ["Search" s]
         (cond
           (string/blank? s)
           [:span.warning {:title "Invalid link"} full_text]
-
-          (text/block-ref? s)
-          (let [block-id (text/block-ref-un-brackets! s)]
-            (block-reference config block-id label))
-
-          (text/page-ref? s)
-          (let [page (text/page-ref-un-brackets! s)]
-            (page-reference (:html-export? config) page config label))
 
           (= \# (first s))
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
@@ -1157,9 +1159,7 @@
                          (editor-handler/expand-block! uuid)
                          (editor-handler/collapse-block! uuid)))))}
       [:span {:class (if control-show? "control-show" "control-hide")}
-         (cond
-           collapsed? (svg/caret-right)
-           has-child? (svg/caret-down))]]
+       (ui/rotating-arrow collapsed?)]]
      [:a {:on-click (fn [e]
                       (bullet-on-click e block config uuid))}
       [:span.bullet-container.cursor
@@ -1524,10 +1524,7 @@
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)}
        (not slide?)
-       (merge attrs)
-
-       block-ref?
-       (assoc :class "cursor-pointer"))
+       (merge attrs))
 
      [:span
       ;; .flex.relative {:style {:width "100%"}}
@@ -1634,6 +1631,12 @@
        (not (d/has-class? (gobj/get e "target") "bullet"))
        (not @*dragging?)))
 
+(rum/defc breadcrumb-fragment
+  [href label]
+  [:a {:href href} label])
+
+(rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
+
 (defn block-parents
   ([config repo block-id format]
    (block-parents config repo block-id format true))
@@ -1641,36 +1644,23 @@
    (let [parents (db/get-block-parents repo block-id 3)
          page (db/get-block-page repo block-id)
          page-name (:block/name page)
-         page-original-name (:block/original-name page)]
-     (when (or (seq parents)
-               show-page?
-               page-name)
-       (let [parents-atom (atom parents)
-             component [:div.block-parents.flex-row.flex-1
-                        (when show-page?
-                          [:a {:href (rfe/href :page {:name page-name})}
-                           (or page-original-name page-name)])
-
-                        (when (and show-page? (seq parents) (> (count parents) 1))
-                          [:span.mx-2.opacity-50 "➤"])
-
-                        (when (seq parents)
-                          (let [parents (doall
-                                         (for [{:block/keys [uuid title name]} parents]
-                                           (when-not name ; not page
-                                             [:a {:on-mouse-down (fn [e]
-                                                                   (util/stop e)
-                                                                   (route-handler/redirect! {:to :page
-                                                                                             :path-params {:name uuid}}))}
-                                              (map-inline config title)])))
-                                parents (remove nil? parents)]
-                            (reset! parents-atom parents)
-                            (when (seq parents)
-                              (interpose [:span.mx-2.opacity-50 "➤"]
-                                         parents))))]
-             component (filterv identity component)]
-         (when (or (seq @parents-atom) show-page?)
-           component))))))
+         page-original-name (:block/original-name page)
+         show? (or (seq parents) show-page? page-name)]
+     (when show?
+       (let [page-name-props (when show-page?
+                                  [(rfe/href :page {:name page-name})
+                                   (or page-original-name page-name)])
+             parents-props (doall
+                                (for [{:block/keys [uuid title name]} parents]
+                                  (when-not name ; not page
+                                    [(rfe/href :page {:name uuid})
+                                     (->elem :span (map-inline config title))])))
+             breadcrumb (->> (into [] parents-props)
+                             (concat [page-name-props])
+                             (filterv identity)
+                             (map (fn [[href label]] (breadcrumb-fragment href label)))
+                             (interpose (breadcrumb-separator)))]
+         [:div.block-parents.flex-row.flex-1 breadcrumb])))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -2358,10 +2348,12 @@
         blocks->vec-tree #(if (or custom-query? ref?) % (tree/blocks->vec-tree % (:id config)))
         blocks' (blocks->vec-tree blocks)
         blocks (if (seq blocks') blocks' blocks)
-        config (assoc config :blocks-container-id blocks-container-id)]
+        config (assoc config :blocks-container-id blocks-container-id)
+        doc-mode? (:document/mode? config)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
-       {:style {:margin-left (cond
+       {:class (when doc-mode? "document-mode")
+        :style {:margin-left (cond
                                sidebar?
                                0
                                :else
