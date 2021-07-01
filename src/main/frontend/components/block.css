@@ -119,7 +119,7 @@
 
   > li {
     &::marker, > p {
-      display: inline-block;
+      display: initial;
     }
   }
 }
