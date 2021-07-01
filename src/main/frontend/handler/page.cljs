@@ -78,15 +78,18 @@
                       (-> (block/page-name->map page true)
                           (assoc :block/format format)))
                  pages)
-         txs (mapcat
-              (fn [page]
-                (let [page-entity [:block/uuid (:block/uuid page)]
-                      create-title-property? (util/create-title-property? (:block/name page))]
-                  (if create-title-property?
-                    (let [default-properties (default-properties-block (:block/original-name page) format page-entity)]
-                      [page default-properties])
-                    [page])))
-              pages)]
+         txs (->>
+              (mapcat
+               (fn [page]
+                 (when (:block/uuid page)
+                   (let [page-entity [:block/uuid (:block/uuid page)]
+                         create-title-property? (util/create-title-property? (:block/name page))]
+                     (if create-title-property?
+                       (let [default-properties (default-properties-block (:block/original-name page) format page-entity)]
+                         [page default-properties])
+                       [page]))))
+               pages)
+              (remove nil?))]
      (db/transact! txs)
      (when create-first-block?
        (editor-handler/insert-first-page-block-if-not-exists! page))
