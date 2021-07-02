@@ -34,9 +34,12 @@
       margin: 0;
     }
 
-    .open-button__icon-wrapper {
-      margin-right: 7px;
+    #repo-switch {
+      display: flex;
+      align-items: center;
     }
+
+   
 
     svg {
       width: 18px;
