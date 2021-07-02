@@ -28,7 +28,7 @@
   }
 
   &.electron-mac {
-    height: auto;
+    height: 38px;
     border-bottom: 1px solid var(--ls-secondary-border-color);
 
     .open-button__icon-wrapper {
@@ -36,8 +36,8 @@
     }
 
     svg {
-      width: 15px;
-      height: 15px;
+      width: 18px;
+      height: 18px;
     }
 
     .navigation svg {
