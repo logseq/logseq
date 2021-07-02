@@ -14,6 +14,7 @@
   right: 0;
   user-select: none;
   transition: width 0.3s;
+  line-height: 1;
 
   .it svg {
     transform: scale(0.8);
