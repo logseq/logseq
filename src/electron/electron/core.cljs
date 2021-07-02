@@ -29,7 +29,7 @@
                   {:width         (.-width win-state)
                    :height        (.-height win-state)
                    :frame         true
-                   :titleBarStyle "hidden"
+                   :titleBarStyle "hiddenInset"
                    :trafficLightPosition {:x 15 :y 15}
                    :autoHideMenuBar (not mac?)
                    :webPreferences
