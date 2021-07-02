@@ -80,10 +80,11 @@
                                  (assoc me :repos repos)
                                  old-db-schema
                                  (fn [repo]
-                                   (file-handler/restore-config! repo false)
-                                   (ui-handler/add-style-if-exists!))))
+                                   (file-handler/restore-config! repo false))))
                          (p/then
                           (fn []
+                            ;; try to load custom css only for current repo
+                            (ui-handler/add-style-if-exists!)
 
                             ;; install after config is restored
                             (shortcut/refresh!)
