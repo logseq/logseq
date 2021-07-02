@@ -23,8 +23,8 @@
      (for [opt themes]
        (let [current-selected (= selected (:url opt))]
          [:div.it.flex.px-3.py-2.mb-2.rounded-sm.justify-between
-          {:key   (:url opt)
-           :class [(if current-selected "is-selected")]
+          {:key      (:url opt)
+           :class    [(if current-selected "is-selected")]
            :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
                           (state/set-modal! nil))}
           [:section
@@ -173,3 +173,36 @@
       [])
      [:div.lsp-hook-ui-slot
       (merge opts {:id id})])))
+
+(rum/defc ui-item-renderer
+  [pid type {:keys [key template]}]
+  (let [*el (rum/use-ref nil)
+        uni #(str "injected-ui-item-" %)
+        ^js pl (js/LSPluginCore.registeredPlugins.get (name pid))]
+
+    (rum/use-effect!
+     (fn []
+       (when-let [^js el (rum/deref *el)]
+         (js/LSPlugin.pluginHelpers.setupInjectedUI.call
+          pl #js {:slot (.-id el) :key key :template template} #js {})))
+     [])
+
+    (if-not (nil? pl)
+      [:div {:id    (uni (str (name key) "-" (name pid)))
+             :class (uni (name type))
+             :ref   *el}]
+      [:span])))
+
+(rum/defcs hook-ui-items < rum/reactive
+  "type
+      - :toolbar
+      - :pagebar
+   "
+  [state type]
+  (when (state/sub [:plugin/installed-ui-items])
+    (let [items (state/get-plugins-ui-items-with-type type)]
+      (when (seq items)
+        [:div {:class     (str "ui-items-container")
+               :data-type (name type)}
+         (for [[_ {:keys [key template] :as opts} pid] items]
+           (rum/with-key (ui-item-renderer pid type opts) key))]))))

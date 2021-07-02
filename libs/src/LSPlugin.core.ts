@@ -9,6 +9,7 @@ import {
   invokeHostExportedApi,
   isObject, withFileProtocol
 } from './helpers'
+import * as pluginHelpers from './helpers'
 import Debug from 'debug'
 import {
   LSPluginCaller,
@@ -905,7 +906,7 @@ class LSPluginCore
 
     this.emit('beforeenable')
     p.settings?.set('disabled', false)
-    // this.emit('enabled', p)
+    this.emit('enabled', p.id)
   }
 
   async disable (plugin: PluginLocalIdentity) {
@@ -914,7 +915,7 @@ class LSPluginCore
 
     this.emit('beforedisable')
     p.settings?.set('disabled', true)
-    // this.emit('disabled', p)
+    this.emit('disabled', p.id)
   }
 
   async _hook (ns: string, type: string, payload?: any, pid?: string) {
@@ -1019,5 +1020,6 @@ function setupPluginCore (options: any) {
 
 export {
   PluginLocal,
+  pluginHelpers,
   setupPluginCore
 }
