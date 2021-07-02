@@ -29,7 +29,10 @@
 
   &.electron-mac {
     height: 38px;
-    border-bottom: 1px solid var(--ls-secondary-border-color);
+
+    .refresh {
+      margin: 0;
+    }
 
     .open-button__icon-wrapper {
       margin-right: 7px;
