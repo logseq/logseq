@@ -133,13 +133,15 @@
                   format (-> (util/get-file-ext path)
                              (config/get-file-format))
                   pending-writes (state/get-write-chan-length)
-                  draw? (and path (string/ends-with? path ".excalidraw"))]
+                  draw? (and path (string/ends-with? path ".excalidraw"))
+                  config? (and path (string/ends-with? path "/config.edn"))]
             (p/let [_ (verify-permission repo file-handle true)
                     _ (utils/writeFile file-handle content)
                     file (.getFile file-handle)]
               (if (and local-content new?
                        (or
                         draw?
+                        config?
                         ;; Writing not finished
                         (> pending-writes 0)
                         ;; not changed by other editors

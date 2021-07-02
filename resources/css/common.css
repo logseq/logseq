@@ -86,7 +86,7 @@ html[data-theme='dark'] {
 
 .white-theme,
 html[data-theme='light'] {
-  --ls-primary-background-color: white;
+  --ls-primary-background-color: #f6f6f6;
   --ls-secondary-background-color: #f7f6f4;
   --ls-tertiary-background-color: #f1eee8;
   --ls-quaternary-background-color: #e8e5de;
@@ -625,7 +625,7 @@ video {
   background-color: rgba(91, 33, 182);
 }
 
-.bg-purple-900	{
+.bg-purple-900  {
   background-color: rgba(76, 29, 149);
 }
 

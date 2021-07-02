@@ -10,6 +10,7 @@
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.components.block :as block]
@@ -18,7 +19,7 @@
             [frontend.components.reference :as reference]
             [frontend.components.svg :as svg]
             [frontend.components.export :as export]
-            [frontend.extensions.graph-2d :as graph-2d]
+            [frontend.extensions.graph :as graph]
             [frontend.components.hierarchy :as hierarchy]
             [frontend.ui :as ui]
             [frontend.components.content :as content]
@@ -32,7 +33,6 @@
             [goog.object :as gobj]
             [frontend.utf8 :as utf8]
             [frontend.date :as date]
-            [frontend.graph :as graph]
             [frontend.format.mldoc :as mldoc]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
@@ -41,7 +41,8 @@
             [reitit.frontend.easy :as rfe]
             [frontend.text :as text]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.handler.block :as block-handler]))
+            [frontend.handler.block :as block-handler]
+            [cljs-bean.core :as bean]))
 
 (defn- get-page-name
   [state]
@@ -412,45 +413,163 @@
              [:div {:key "page-unlinked-references"}
               (reference/unlinked-references route-page-name)])])))))
 
-(defonce layout (atom [js/window.outerWidth js/window.outerHeight]))
+(defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 
-(defonce graph-ref (atom nil))
 (defonce show-journal? (atom false))
+
+;; scrollHeight
+(rum/defcs graph-filter-section <
+  (rum/local false ::open?)
+  [state title content]
+  (let [open? (get state ::open?)]
+    [:li.relative.border-b.border-gray-200
+     [:div
+      [:button.w-full.px-4.py-2.text-left {:on-click #(swap! open? not)}
+       [:div.flex.items-center.justify-between
+        title
+        (if @open? (svg/caret-down) (svg/caret-right))]]
+      (content open?)]]))
+
+(rum/defc filter-expand-area
+  [open? content]
+  [:div.relative.overflow-hidden.transition-all.max-h-0.duration-700
+   {:style {:max-height (if @open? 400 0)}}
+   content])
+
+(defonce *n-hops (atom nil))
+(defonce *focus-nodes (atom []))
+
+(rum/defc graph-filters < rum/reactive
+  [settings n-hops focus-nodes]
+  (let [{:keys [layout journal? orphan-pages? builtin-pages?]
+         :or {layout "gForce"
+              orphan-pages? true}} settings
+        set-setting! (fn [key value]
+                       (let [new-settings (assoc settings key value)]
+                         (config-handler/set-config! :graph/settings new-settings)))]
+    (rum/with-context [[t] i18n/*tongue-context*]
+     [:div.absolute.top-4.right-4.graph-filters
+      [:div.flex.flex-col
+       [:div.border
+        [:ul.shadow-box
+         (graph-filter-section
+          [:span.font-medium "Nodes"]
+          (fn [open?]
+            (filter-expand-area
+             open?
+             [:div.p-6
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Layout"]
+               (ui/select
+                 (mapv
+                  (fn [item]
+                    (if (= (:label item) layout)
+                      (assoc item :selected "selected")
+                      item))
+                  [{:label "gForce"}
+                   {:label "dagre"}])
+                 (fn [value]
+                   (set-setting! :layout value))
+                 "graph-layout")]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Journals"]
+               (ui/toggle journal?
+                          #(set-setting! :journal? (not journal?))
+                          true)]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Orphan pages"]
+               (ui/toggle orphan-pages?
+                          #(set-setting! :orphan-pages? (not orphan-pages?))
+                          true)]
+              [:div.flex.items-center.justify-between.mb-2
+               [:span "Built-in pages"]
+               (ui/toggle builtin-pages?
+                          #(set-setting! :builtin-pages? (not builtin-pages?))
+                          true)]
+              (when (seq focus-nodes)
+                [:div.flex.flex-col.mb-2
+                 [:p {:title "N hops from selected nodes"}
+                  "N hops from selected nodes"]
+                (ui/tippy {:html [:span n-hops]}
+                          (ui/slider (or n-hops 10)
+                                     {:min 1
+                                      :max 10
+                                      :on-change #(reset! *n-hops (int %))}))])])))
+         (graph-filter-section
+          [:span.font-medium "Search"]
+          (fn [open?]
+            (filter-expand-area
+             open?
+             [:div.p-6])))]]]])))
+
+(rum/defc global-graph-inner < rum/reactive
+  [graph settings theme]
+  (let [sidebar-open? (state/sub :ui/sidebar-open?)
+        [width height] (rum/react layout)
+        dark? (= theme "dark")
+        focus-nodes (rum/react *focus-nodes)
+        n-hops (rum/react *n-hops)
+        graph (if (and (seq focus-nodes)
+                       (integer? n-hops)
+                       (not (:orphan-pages? settings)))
+                (graph-handler/n-hops graph focus-nodes n-hops)
+                graph)]
+    (rum/with-context [[t] i18n/*tongue-context*]
+      [:div.relative#global-graph
+       (if (seq (:nodes graph))
+         (graph/graph-2d {:data graph
+                          :width (if (and (> width 1280) sidebar-open?)
+                                   (- width 24 600)
+                                   (- width 24))
+                          :height height
+                          :layout {
+                                   ;; :type "dagre"
+                                   :type "gForce"
+                                   :gpuEnabled true
+                                   ;; :workerEnabled true
+                                   }
+                          :modes {:default ["drag-canvas"
+                                            "zoom-canvas"
+                                            "drag-node"
+                                            "activate-relations"
+                                            "click-select"
+                                            "create-edge"]} ;; "tooltip"
+                          :damping 0.1
+                          :fitView true
+                          :fitCenter true
+                          :minZoom 0.2
+                          :maxZoom 10
+                          :defaultNode {:labelCfg {:position "bottom"}}
+                          :defaultEdge {:style {:stroke (if dark? "#023643" "#eee")
+                                                :lineWidth 1}}
+                          :nodeStateStyles {:inactive {:opacity 0.2
+                                                       :node-label {:opacity 0.2}}}
+                          :edgeStateStyles {:active {:stroke (if dark? "#08404f" "#ccc")}
+                                            :inactive {:stroke (if dark? "#023643" "#eee")
+                                                       :opacity 0.2}}}
+                         {:focus-nodes *focus-nodes
+                          :on-click-node (fn [node] (swap! *focus-nodes
+                                                          (fn [v]
+                                                            (vec (distinct (conj v node))))))})
+         [:div.ls-center.mt-20
+          [:p.opacity-70.font-medium "Empty"]])
+       (graph-filters settings n-hops focus-nodes)])))
 
 (rum/defcs global-graph < rum/reactive
   (mixins/event-mixin
    (fn [state]
      (mixins/listen state js/window "resize"
                     (fn [e]
-                      (reset! layout [js/window.outerWidth js/window.outerHeight])))))
+                      (reset! layout [js/window.innerWidth js/window.innerHeight])))))
+  {:will-unmount (fn [state]
+                   (reset! *n-hops nil)
+                   (reset! *focus-nodes [])
+                   state)}
   [state]
-  (let [theme (state/sub :ui/theme)
-        sidebar-open? (state/sub :ui/sidebar-open?)
-        [width height] (rum/react layout)
-        dark? (= theme "dark")
-        graph (graph-handler/build-global-graph theme (rum/react show-journal?))]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.relative#global-graph
-       (if (seq (:nodes graph))
-         (graph-2d/graph
-          (graph/build-graph-opts
-           graph
-           dark?
-           {:width (if (and (> width 1280) sidebar-open?)
-                     (- width 24 600)
-                     (- width 24))
-            :height height
-            :ref (fn [v] (reset! graph-ref v))
-            :ref-atom graph-ref}))
-         [:div.ls-center.mt-20
-          [:p.opacity-70.font-medium "Empty"]])
-       [:div.absolute.top-10.left-5
-        [:div.flex.flex-col
-         [:a.text-sm.font-medium
-          {:on-click (fn [_e]
-                       (swap! show-journal? not))}
-          (str (t :page/show-journals)
-               (if @show-journal? " (ON)"))]]]])))
+  (let [settings (state/sub-graph-config)
+        theme (state/sub :ui/theme)
+        graph (graph-handler/build-global-graph theme settings)]
+    (global-graph-inner graph settings theme)))
 
 (rum/defc all-pages < rum/reactive
   ;; {:did-mount (fn [state]

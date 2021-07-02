@@ -45,7 +45,7 @@
         "gulp:build": "cross-env NODE_ENV=production gulp build",
         "css:build": "postcss tailwind.all.css -o static/css/style.css --verbose --env production",
         "css:watch": "postcss tailwind.all.css -o static/css/style.css --verbose --watch",
-        "cljs:watch": "clojure -M:cljs watch app publishing electron",
+        "cljs:watch": "clojure -M:cljs watch app publishing electron cards",
         "cljs:electron-watch": "clojure -M:cljs watch app electron",
         "cljs:release": "clojure -M:cljs release app publishing electron",
         "cljs:electron-release": "clojure -M:cljs release app publishing electron --config-merge '{:asset-path \"./js\"}'",
@@ -60,6 +60,7 @@
         "cljs:build-electron": "clojure -A:cljs compile app electron"
     },
     "dependencies": {
+        "@antv/g6": "^4.3.4",
         "@excalidraw/excalidraw": "^0.4.2",
         "@kanru/rage-wasm": "^0.2.1",
         "@sentry/browser": "^6.4.1",

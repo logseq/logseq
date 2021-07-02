@@ -5,7 +5,9 @@
             [nubank.workspaces.card-types.test :as ct.test]
             [cljs.test :refer [is async]]
             [rum.core :as rum]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [frontend.extensions.graph :as graph]
+            [cljs-bean.core :as bean]))
 
 ;; simple function to create react elemnents
 (defn element [name props & children]
@@ -24,3 +26,16 @@
 (ws/defcard button-card
   (ct.react/react-card
    (ui-button)))
+
+(rum/defc graph
+  []
+  (graph/graph-2d
+   {:data {:nodes [{:id "a" :label "a"} {:id "b" :label "b"}]
+           :edges [{:source "a" :target "b"}]}
+    :width 150
+    :height 150
+    :fitView true}))
+
+(ws/defcard graph-card
+  (ct.react/react-card
+   (graph)))

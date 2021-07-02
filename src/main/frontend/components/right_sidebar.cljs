@@ -4,7 +4,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.page :as page]
             [frontend.components.block :as block]
-            [frontend.extensions.graph-2d :as graph-2d]
+            [frontend.extensions.graph :as graph]
             [frontend.components.onboarding :as onboarding]
             [frontend.handler.route :as route-handler]
             [frontend.handler.page :as page-handler]
@@ -19,7 +19,6 @@
             [frontend.extensions.slide :as slide]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
-            [frontend.graph :as graph]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [frontend.db-mixins :as db-mixins]
@@ -58,11 +57,13 @@
                 (graph-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
       [:div.sidebar-item.flex-col
-       (graph-2d/graph
-        (graph/build-graph-opts
-         graph dark?
-         {:width  600
-          :height 600}))])))
+       (graph/graph-2d
+        {:data graph}
+        ;; (graph/build-graph-opts
+        ;;  graph dark?
+        ;;  {:width  600
+        ;;   :height 600})
+        )])))
 
 (defn recent-pages
   []

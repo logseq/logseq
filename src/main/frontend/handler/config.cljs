@@ -6,7 +6,7 @@
 (defn set-config!
   [k v]
   (let [path (config/get-config-path)]
-    (file-handler/edn-file-set-key-value path k v state/set-config!)))
+    (file-handler/edn-file-set-key-value path k v)))
 
 (defn toggle-ui-show-brackets! []
   (let [show-brackets? (state/show-brackets?)]

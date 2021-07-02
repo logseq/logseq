@@ -301,7 +301,7 @@
         (reset-file! repo-url path default-content)))))
 
 (defn edn-file-set-key-value
-  [path k v ok-handler]
+  [path k v]
   (when-let [repo (state/get-current-repo)]
     (when-let [content (db/get-file-no-sub path)]
       (let [result (try
@@ -312,7 +312,5 @@
                        {}))
             ks (if (vector? k) k [k])
             new-result (rewrite/assoc-in result ks v)]
-        (when ok-handler (ok-handler repo new-result))
-        (state/set-config! repo new-result)
         (let [new-content (str new-result)]
           (set-file-content! repo path new-content))))))

@@ -5,7 +5,8 @@
             [frontend.date :as date]
             [frontend.state :as state]
             [clojure.set :as set]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.db.default :as default-db]))
 
 (defn- build-edges
   [edges]
@@ -34,19 +35,21 @@
                      color (if block?
                              "#1a6376"
                              (case [dark? current-page?] ; FIXME: Put it into CSS
-                              [false false] "#222222"
+                              [false false] "#333"
                               [false true]  "#045591"
                               [true false]  "#8abbbb"
                               [true true]   "#ffffff"))
                      color (if (contains? tags (string/lower-case (str p)))
                              (if dark? "orange" "green")
                              color)]
-                 {:id p
-                  :name p
-                  :val (get-connections p edges)
-                  :autoColorBy "group"
-                  :group (js/Math.ceil (* (js/Math.random) 12))
-                  :color color})))
+                 (let [size-v (js/Math.cbrt (get-connections (string/lower-case p) edges))
+                       size (* (if (zero? size-v) 1 size-v) 8)]
+                   {:id p
+                    :label p
+                    :size size
+                    :style {:fill color
+                            :stroke color}
+                    :labelCfg {:style {:fill color}}}))))
            pages)
      (remove nil?))))
 
@@ -68,11 +71,11 @@
    nodes))
 
 (defn- normalize-page-name
-  [{:keys [nodes links] :as g}]
+  [{:keys [nodes edges] :as g}]
   (let [all-pages (->> (set (apply concat
                                    [(map :id nodes)
-                                    (map :source links)
-                                    (map :target links)]))
+                                    (map :source edges)
+                                    (map :target edges)]))
                        (map string/lower-case))
         names (db/pull-many '[:block/name :block/original-name] (mapv (fn [page]
                                                                         (if (util/uuid-string? page)
@@ -82,8 +85,8 @@
                       (map (fn [x]
                              (get x :block/original-name (:block/name x))) names))
         nodes (mapv (fn [node] (assoc node :id (get names (:id node) (:id node)))) nodes)
-        links (->>
-               links
+        edges (->>
+               edges
                (remove (fn [{:keys [source target]}]
                          (or (nil? source) (nil? target))))
                (mapv (fn [{:keys [source target]}]
@@ -97,44 +100,34 @@
         nodes (->> (remove-uuids-and-files! nodes)
                    (util/distinct-by #(string/lower-case (:id %))))]
     {:nodes nodes
-     :links links}))
+     :edges edges}))
 
 (defn build-global-graph
-  [theme show-journal?]
+  [theme {:keys [journal? orphan-pages? builtin-pages?] :as settings}]
   (let [dark? (= "dark" theme)
         current-page (:block/name (db/get-current-page))]
     (when-let [repo (state/get-current-repo)]
-      (let [relation (db/get-pages-relation repo show-journal?)
+      (let [relation (db/get-pages-relation repo journal?)
             tagged-pages (db/get-all-tagged-pages repo)
             tags (set (map second tagged-pages))
-            linked-pages (-> (concat
-                              relation
-                              tagged-pages)
-                             flatten
-                             set)
             all-pages (db/get-pages repo)
-            other-pages (->> (remove linked-pages all-pages)
-                             (remove nil?))
-            other-pages (if show-journal? other-pages
-                            (remove date/valid-journal-title? other-pages))
-            other-pages (if (seq other-pages)
-                          (map string/lower-case other-pages)
-                          other-pages)
-            nodes (concat (seq relation)
-                          (seq tagged-pages)
-                          (if (seq other-pages)
-                            (map (fn [page]
-                                   [page])
-                                 other-pages)
-                            []))
-            edges (build-edges (remove
-                                (fn [[_ to]]
-                                  (nil? to))
-                                nodes))
+            edges (concat (seq relation)
+                          (seq tagged-pages))
+            linked (set (flatten edges))
+            nodes (cond->> all-pages
+                          (not journal?)
+                          (remove date/valid-journal-title?)
+
+                          (not builtin-pages?)
+                          (remove (fn [p] (default-db/built-in-pages-names (string/upper-case p))))
+
+                          (not orphan-pages?)
+                          (filter #(contains? linked (string/lower-case %))))
+            edges (build-edges (remove (fn [[_ to]] (nil? to)) edges))
             nodes (build-nodes dark? current-page edges tags nodes)]
         (normalize-page-name
          {:nodes nodes
-          :links edges})))))
+          :edges edges})))))
 
 (defn build-page-graph
   [page theme]
@@ -185,7 +178,7 @@
                        (build-nodes dark? page edges (set tags)))]
         (normalize-page-name
          {:nodes nodes
-          :links edges})))))
+          :edges edges})))))
 
 (defn build-block-graph
   "Builds a citation/reference graph for a given block uuid."
@@ -220,4 +213,27 @@
                        (build-nodes dark? block edges #{}))]
         (normalize-page-name
          {:nodes nodes
-          :links edges})))))
+          :edges edges})))))
+
+(defn n-hops
+  "Get all nodes that are n hops from nodes (a collection of node ids)"
+  [{:keys [edges] :as graph} nodes level]
+  (def graph graph)
+  (def nodes nodes)
+  (def level level)
+  (let [edges (group-by :source edges)
+        nodes (loop [nodes nodes
+                     level level]
+                (if (zero? level)
+                  nodes
+                  (recur (distinct (apply concat nodes
+                                     (map
+                                       (fn [id]
+                                         (->> (get edges id) (map :target)))
+                                       nodes)))
+                         (dec level))))
+        nodes (set nodes)]
+    (update graph :nodes
+            (fn [full-nodes]
+              (filter (fn [node] (contains? nodes (:id node)))
+                      full-nodes)))))
