@@ -99,10 +99,12 @@
 
 
 (defmethod handle :after-db-restore [[_ repo]]
+  ;; compare :ast/version
   (let [db (conn/get-conn repo)
         ast-version (:v (first (d/datoms db :aevt :ast/version)))]
-    (when (or (nil? ast-version)
-              (. semver lt ast-version db-schema/ast-version))
+    (when (and (not= config/local-repo repo)
+               (or (nil? ast-version)
+                   (. semver lt ast-version db-schema/ast-version)))
       (notification/show!
        [:p.content
         (util/format "DB-schema updated, Please re-index repo [%s]" repo)]
