@@ -99,9 +99,8 @@
 
 
 (defmethod handle :after-db-restore [[_ repo]]
-  (println ":after-db-restore: " repo)
-  (let [conn* (conn/get-conn repo)
-        ast-version (:v (first (d/datoms conn* :aevt :ast/version)))]
+  (let [db (conn/get-conn repo)
+        ast-version (:v (first (d/datoms db :aevt :ast/version)))]
     (when (or (nil? ast-version)
               (. semver lt ast-version db-schema/ast-version))
       (notification/show!
