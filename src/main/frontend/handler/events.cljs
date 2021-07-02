@@ -9,7 +9,11 @@
             [frontend.handler.notification :as notification]
             [frontend.components.encryption :as encryption]
             [frontend.fs.nfs :as nfs]
-            [frontend.handler.migrate :as migrate]))
+            [frontend.db.conn :as conn]
+            [frontend.handler.migrate :as migrate]
+            [frontend.db-schema :as db-schema]
+            [datascript.core :as d]
+            ["semver" :as semver]))
 
 ;; TODO: should we move all events here?
 
@@ -47,6 +51,14 @@
     close-fn)))
 
 (defmethod handle :graph/added [[_ repo]]
+  ;; add ast/version to db
+  (let [conn (conn/get-conn repo false)
+        ast-version (d/datoms @conn :aevt :ast/version)]
+    (when ast-version
+      (d/transact! conn [(mapv (fn [aevt] [:db.fn/retractEntity (:e aevt)]) ast-version)]))
+    (d/transact! conn [{:ast/version db-schema/ast-version}]))
+
+  ;; markdown convert notification
   (js/setTimeout
    (fn []
      (when (not (:markdown/version (state/get-config)))
@@ -84,6 +96,20 @@
 (defmethod handle :modal/nfs-ask-permission []
   (when-let [repo (get-local-repo)]
     (state/set-modal! (ask-permission repo))))
+
+
+
+(defmethod handle :after-db-restore [[_ repo]]
+  (println ":after-db-restore: " repo)
+  (let [conn* (conn/get-conn repo)
+        ast-version (:v (first (d/datoms conn* :aevt :ast/version)))]
+    (when (or (nil? ast-version)
+              (. semver lt ast-version db-schema/ast-version))
+      (notification/show!
+       [:p.content
+        (util/format "DB-schema updated, Please re-index repo [%s]" repo)]
+       :error
+       false))))
 
 (defn run!
   []
