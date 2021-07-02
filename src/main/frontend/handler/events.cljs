@@ -12,6 +12,7 @@
             [frontend.db.conn :as conn]
             [frontend.handler.migrate :as migrate]
             [frontend.db-schema :as db-schema]
+            [frontend.db :as db]
             [datascript.core :as d]
             ["semver" :as semver]))
 
@@ -54,9 +55,7 @@
   ;; add ast/version to db
   (let [conn (conn/get-conn repo false)
         ast-version (d/datoms @conn :aevt :ast/version)]
-    (when ast-version
-      (d/transact! conn [(mapv (fn [aevt] [:db.fn/retractEntity (:e aevt)]) ast-version)]))
-    (d/transact! conn [{:ast/version db-schema/ast-version}]))
+    (db/set-key-value repo :ast/version db-schema/ast-version))
 
   ;; markdown convert notification
   (js/setTimeout
@@ -108,7 +107,7 @@
       (notification/show!
        [:p.content
         (util/format "DB-schema updated, Please re-index repo [%s]" repo)]
-       :error
+       :warning
        false))))
 
 (defn run!
