@@ -188,7 +188,7 @@ export interface IAppProxy {
     opts: { key: string, template: string }
   ) => boolean
 
-  registerPagebarMenuItem: (
+  registerPageMenuItem: (
     tag: string,
     action: (e: IHookEvent & { page: string }) => void
   ) => unknown

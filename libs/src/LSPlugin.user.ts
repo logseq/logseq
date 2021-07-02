@@ -70,7 +70,7 @@ const app: Partial<IAppProxy> = {
     return false
   },
 
-  registerPagebarMenuItem (
+  registerPageMenuItem (
     this: LSPluginUser,
     tag: string,
     action: (e: IHookEvent & { page: string }) => void
@@ -81,7 +81,7 @@ const app: Partial<IAppProxy> = {
 
     const key = tag + '_' + this.baseInfo.id
     const label = tag
-    const type = 'pagebar-menu-item'
+    const type = 'page-menu-item'
 
     registerSimpleCommand.call(this,
       type, {

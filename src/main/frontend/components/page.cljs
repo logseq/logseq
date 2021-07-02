@@ -352,7 +352,7 @@
                                                     (state/close-modal!))}})
 
                                      (when plugin-handler/lsp-enabled?
-                                       (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :pagebar-menu-item)]
+                                       (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
                                          {:title label
                                           :options {:on-click #(commands/exec-plugin-simple-command!
                                                                  pid (assoc cmd :page (state/get-current-page)) action)}}))
