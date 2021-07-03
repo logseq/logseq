@@ -2058,7 +2058,7 @@
              [:ul#query-pages.mt-1
               (for [{:block/keys [name original-name] :as page-entity} result]
                 [:li.mt-1
-                 [:a {:href (rfe/href :page {:name name})
+                 [:a.page-ref {:href (rfe/href :page {:name name})
                       :on-click (fn [e]
                                   (util/stop e)
                                   (if (gobj/get e "shiftKey")

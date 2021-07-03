@@ -291,7 +291,7 @@
                        (not block?))
               [:div.flex.flex-row.space-between
                [:div.flex-1.flex-row
-                [:a {:on-click (fn [e]
+                [:a.page-title {:on-click (fn [e]
                                  (.preventDefault e)
                                  (when (gobj/get e "shiftKey")
                                    (when-let [page (db/pull repo '[*] [:block/name page-name])]

@@ -17,7 +17,9 @@
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
                    (plugin-handler/host-mounted!)
-                   (let [teardown-fn (comp (ui/setup-patch-ios-fixed-bottom-position!))]
+                   (let [td-fns [(ui/setup-active-keystroke!)
+                                 (ui/setup-active-keystroke!)]
+                         teardown-fn #(mapv (fn [f] (f)) td-fns)]
                      (assoc state ::teardown teardown-fn)))
    :will-unmount (fn [state]
                    (let [teardown (::teardown state)]
@@ -32,7 +34,7 @@
            (view route-match)
            (sidebar/sidebar
             route-match
-            (view route-match)))
+            (view route-match))))))))
 
         ;; FIXME: disable for now
         ;; (let [route-name (get-in route-match [:data :name])
@@ -51,4 +53,4 @@
         ;;           :timeout {:enter 300
         ;;                     :exit 200}}
         ;;          (route-view view route-match)))))))
-         )))))
+
