@@ -211,8 +211,14 @@
                                  :block
                                  block))
 
-                              nil)
-                            (search-handler/clear-search!))
+                              :new-page
+                              (page-handler/create! search-q)
+
+                              :file
+                              (route/redirect! {:to :file
+                                                :path-params {:path data}})
+
+                              nil))
          :item-render (fn [{:keys [type data]}]
                         (let [search-mode (state/get-search-mode)]
                           [:div {:class "py-2"} (case type
