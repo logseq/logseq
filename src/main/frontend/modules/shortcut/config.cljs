@@ -47,7 +47,11 @@
     :auto-complete/complete
     {:desc    "Auto-complete choose selected item"
      :binding "enter"
-     :fn      ui-handler/auto-complete-complete}}
+     :fn      ui-handler/auto-complete-complete}
+    :auto-complete/shift-complete
+    {:desc    "Auto-complete open selected item in sidebar"
+     :binding "shift+enter"
+     :fn      ui-handler/auto-complete-shift-complete}}
 
    :shortcut.handler/block-editing-only
    ^{:before m/enable-when-editing-mode!}
@@ -412,6 +416,7 @@
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete
+    :auto-complete/shift-complete
     :date-picker/prev-day
     :date-picker/next-day
     :date-picker/prev-week
