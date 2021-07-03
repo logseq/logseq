@@ -8,6 +8,7 @@
             [frontend.ui :as ui]
             [frontend.extensions.graph :as graph]
             [frontend.extensions.graph.trellis :as trellis]
+            [frontend.extensions.graph.netv :refer [netv]]
             [cljs-bean.core :as bean]))
 
 ;; simple function to create react elemnents
@@ -42,46 +43,63 @@
    (graph)))
 
 (defn- random-graph
-  [n]
-  (let [nodes (for [i (range 0 n)]
-                {:id (str i) :label (str i) :radius 18})
-        edges (->
-               (for [i (range 0 (/ n 2))]
-                 (let [source i
-                       target (inc i)]
-                   {:id (str source target)
-                    :source (str source)
-                    :target (str target)}))
-               (distinct))]
-    {:nodes nodes
-     :edges edges}))
+  ([n]
+   (random-graph n true))
+  ([n edge?]
+   (let [nodes (for [i (range 0 n)]
+                 {:id (str i)
+                  :label (str i)
+                  :radius 18
+                  })
+         edges (->
+                (for [i (range 0 (/ n 2))]
+                  (let [source i
+                        target (inc i)]
+                    {:id (str source target)
+                     :source (str source)
+                     :target (str target)}))
+                (distinct))]
+     {:nodes nodes
+      (if edge? :edges :links) edges})))
 
 (rum/defc trellis-graph
   []
   (trellis/graph
    (merge
     {:width 1000
-     :height 1000
-     ;; :targetRef (fn [ref] )
-     :style-node (fn [node hover?]
-                   (let [style {:labelSize 10
-                                :labelWordWrap 260}]
-                     )
-                   (js/console.dir node)
-                   node)
-     ;; :styleEdge (fn [edge hover?]
-     ;;              ;; (bean/->js
-     ;;              ;;  )
-     ;;              edge)
+     :styleNode (fn [node hover?]
+                  (let [style {:labelSize 10
+                               :labelWordWrap 260}]
+                    )
+                  node)
+     :styleEdge (fn [edge hover?]
+                  ;; (bean/->js
+                  ;;  )
+                  edge)
      :onNodeClick (fn [target]
                     (prn "clicked")
                     (js/console.dir target))
      :onNodeDoubleDlick (fn [target]
                           (prn "double clicked")
-                          (js/console.dir target))
-     }
-    (random-graph 100))))
+                          (js/console.dir target))}
+    (random-graph 500))))
 
-(ws/defcard trellis-graph-card
+;; (ws/defcard trellis-graph-card
+;;   (ct.react/react-card
+;;    (trellis-graph)))
+
+(rum/defc netv-graph <
+  {:did-mount (fn [state]
+                (let [n 10
+                      g (new netv (bean/->js {:container (js/document.getElementById "netv")}))
+                      _ (prn {:data (random-graph n)})
+                      data (bean/->js (random-graph n))]
+                  (.data g data)
+                  (.draw g))
+                state)}
+  []
+  [:div#netv])
+
+(ws/defcard netv-graph-card
   (ct.react/react-card
-   (trellis-graph)))
+   (netv-graph)))
