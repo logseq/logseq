@@ -171,14 +171,6 @@
   }
 }
 
-/* Change to another cursor style if Shift key is active */
-[data-active-keystroke*="Shift" i]
-:is(.journal-title, .page-title,
-    .block-ref, .page-ref, a.tag, 
-    .bullet-container.cursor) {
-  cursor: context-menu;
-}
-
 .embed-page {
   @apply py-2 my-2 px-2;
 
