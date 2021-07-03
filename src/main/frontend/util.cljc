@@ -730,16 +730,26 @@
 #?(:cljs (def clear-selection! selection/clearSelection))
 
 #?(:cljs
-   (defn copy-to-clipboard! [s]
-     (let [el (js/document.createElement "textarea")]
-       (set! (.-value el) s)
-       (.setAttribute el "readonly" "")
-       (set! (-> el .-style .-position) "absolute")
-       (set! (-> el .-style .-left) "-9999px")
-       (js/document.body.appendChild el)
-       (.select el)
-       (js/document.execCommand "copy")
-       (js/document.body.removeChild el))))
+   (defn copy-to-clipboard!
+     ([s] (copy-to-clipboard! s {}))
+     ([plain-text {:keys [html-text] :as opts}]
+      (let [el (js/document.createElement "textarea")
+            listener (fn [^js/ClibpoardEvent e]
+                       (.setData (.-clipboardData e) "text/plain" plain-text)
+                       (.setData (.-clipboardData e) "text/html" html-text)
+                       (.preventDefault e))]
+        (when html-text
+          (js/document.addEventListener "copy" listener))
+        (set! (.-value el) plain-text)
+        (.setAttribute el "readonly" "")
+        (set! (-> el .-style .-position) "absolute")
+        (set! (-> el .-style .-left) "-9999px")
+        (js/document.body.appendChild el)
+        (.select el)
+        (js/document.execCommand "copy")
+        (js/document.body.removeChild el)
+        (when html-text
+          (js/document.removeEventListener listener))))))
 
 (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
 (defonce exactly-uuid-pattern (re-pattern (str "^" uuid-pattern "$")))
