@@ -52,7 +52,7 @@
                                   [key (daiquiri.interpreter/interpret val)]
                                   [key val]))
           new-options (into {} (map vector->react-elems opts))]
-         ;; (.dir js/console new-children)
+      ;; (.dir js/console new-children)
       (apply js/React.createElement react-class
            ;; sablono html-to-dom-attrs does not work for nested hashmaps
              (clj->js (map-keys->camel-case new-options :html-props true))

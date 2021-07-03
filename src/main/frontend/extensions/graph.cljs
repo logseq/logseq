@@ -9,33 +9,9 @@
             [goog.object :as gobj]
             [frontend.state :as state]
             [frontend.db :as db]
-            [frontend.extensions.graph.g6 :as g6]
             [promesa.core :as p]
             [clojure.set :as set]
             [cljs-bean.core :as bean]))
-
-(def util g6/util)
-(def arrow g6/arrow)
-
-;; (defn- render!
-;;   [state]
-;;   (let [opts (first (:rum/args state))
-;;         data (:data opts)]
-;;     (if-let [graph (:graph state)]
-;;       (let [old-nodes (set (:nodes (:data state)))
-;;             new-nodes (set (:nodes data))
-;;             added (set/difference new-nodes old-nodes)
-;;             removed (set/difference old-nodes new-nodes)]
-;;         (doseq [node removed]
-;;           (when-let [item (.findById graph (:id node))]
-;;             (.removeItem graph item)))
-;;         (doseq [node added]
-;;           (.addItem graph "node" (bean/->js node)))
-;;         (.layout graph)
-;;         (assoc state :graph graph :data data))
-;;       (let [graph (new g6/graph (-> (assoc opts :container "graph-2d") bean/->js))]
-;;         (.render graph)
-;;         (assoc state :graph graph :data data)))))
 
 (defn click-handle [node event focus-nodes]
   (let [page-name (string/lower-case node)
@@ -55,20 +31,21 @@
 
 (defn- render!
   [state]
-  (let [[opts handler] (:rum/args state)
-        data (:data opts)]
-    (when-let [graph (:graph state)]
-      (.destroy graph))
-    (let [graph (new g6/graph (-> (assoc opts :container "graph-2d") bean/->js))]
-      (.render graph)
-      ;; TODO: dblclick
-      (.on graph "node:click"
-           (fn [e]
-             (when-let [id (.get (.-item e) "id")]
-               (when-let [f (:on-click-node handler)]
-                 (click-handle id e @(:focus-nodes handler))
-                 (f id)))))
-      (assoc state :graph graph :data data))))
+  ;; (let [[opts handler] (:rum/args state)
+  ;;       data (:data opts)]
+  ;;   (when-let [graph (:graph state)]
+  ;;     (.destroy graph))
+  ;;   (let [graph (new g6/graph (-> (assoc opts :container "graph-2d") bean/->js))]
+  ;;     (.render graph)
+  ;;     ;; TODO: dblclick
+  ;;     (.on graph "node:click"
+  ;;          (fn [e]
+  ;;            (when-let [id (.get (.-item e) "id")]
+  ;;              (when-let [f (:on-click-node handler)]
+  ;;                (click-handle id e @(:focus-nodes handler))
+  ;;                (f id)))))
+  ;;     (assoc state :graph graph :data data)))
+  )
 
 (rum/defc graph-2d <
   {:did-mount render!

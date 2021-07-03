@@ -20,7 +20,7 @@
         "postcss-import-ext-glob": "^2.0.1",
         "postcss-nested": "5.0.5",
         "purgecss": "4.0.2",
-        "shadow-cljs": "^2.12.5",
+        "shadow-cljs": "2.12.5",
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
         "tailwindcss": "2.0.3"
@@ -51,7 +51,7 @@
         "cljs:electron-release": "clojure -M:cljs release app publishing electron --config-merge '{:asset-path \"./js\"}'",
         "cljs:test": "clojure -M:test compile test",
         "cljs:run-test": "node static/tests.js",
-        "cljs:watch-app": "clojure -M:cljs watch app",
+        "cljs:watch-app": "clojure -M:cljs watch app cards",
         "cljs:release-app": "clojure -M:cljs release app",
         "cljs:release-publishing": "clojure -M:cljs release publishing",
         "cljs:dev-release-app": "clojure -M:cljs release app --config-merge '{:closure-defines {frontend.config/DEV-RELEASE true}}'",
@@ -60,7 +60,6 @@
         "cljs:build-electron": "clojure -A:cljs compile app electron"
     },
     "dependencies": {
-        "@antv/g6": "^4.3.4",
         "@excalidraw/excalidraw": "^0.4.2",
         "@kanru/rage-wasm": "^0.2.1",
         "@sentry/browser": "^6.4.1",
@@ -93,7 +92,10 @@
         "react-tippy": "^1.4.0",
         "react-transition-group": "^4.3.0",
         "reakit": "^0.11.1",
+        "trellis-simple-graph": "../../simple-graph/",
         "url": "^0.11.0",
-        "yargs-parser": "^20.2.4"
+        "yargs-parser": "^20.2.4",
+        "@sayari/trellis": "0.3.0-rc.12",
+        "react-resize-detector": "6.3.1"
     }
 }
