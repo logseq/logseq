@@ -368,16 +368,16 @@
            {:key idx}
            (let [item-cp
                  [:div {:key idx}
-                  (menu-link
-                   {:id       (str "ac-" idx)
-                    :class    (when (= @current-idx idx)
-                                "chosen")
-                    :on-mouse-down (fn [e]
-                                     (util/stop e)
-                                     (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                       (on-shift-chosen item)
-                                       (on-chosen item)))}
-                   (if item-render (item-render item) item))]]
+                  (let [chosen? (= @current-idx idx)]
+                    (menu-link
+                      {:id            (str "ac-" idx)
+                       :class         (when chosen? "chosen")
+                       :on-mouse-down (fn [e]
+                                        (util/stop e)
+                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                          (on-shift-chosen item)
+                                          (on-chosen item)))}
+                      (if item-render (item-render item chosen?) item)))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -628,7 +628,7 @@
 
 (rum/defcs tippy < rum/static
   (rum/local false ::mounted?)
-  [state opts child]
+  [state {:keys [fixed-position?] :as opts} child]
   (let [*mounted? (::mounted? state)
         mounted? @*mounted?]
     (Tippy (->
@@ -638,6 +638,12 @@
                     :disabled (not (state/enable-tooltip?))
                     :unmountHTMLWhenHide true
                     :open @*mounted?
+                    ;; See https://github.com/tvkhoa/react-tippy/issues/13
+                    :popperOptions (if fixed-position?
+                                      {:modifiers {:preventOverflow {:enabled false}
+                                                   :flip {:enabled false}
+                                                   :hide {:enabled false}}}
+                                      {})
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)

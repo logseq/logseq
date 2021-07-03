@@ -63,3 +63,17 @@ pre {
   background: #f6f8fa;
   background: var(--ls-secondary-background-color);
 }
+
+
+.page-search-menu-item-preview {
+  opacity: 0;
+}
+
+.page-search-menu-item:hover {
+  .page-search-menu-item-preview {
+    opacity: 0.5;
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
