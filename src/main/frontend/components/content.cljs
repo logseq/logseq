@@ -185,6 +185,12 @@
            "Copy as TEXT")
 
           (ui/menu-link
+           {:key "Copy as document"
+            :on-click (fn [_e]
+                        (export-handler/copy-block-as-document! block-id))}
+           "Copy as DOCUMENT")
+
+          (ui/menu-link
            {:key "Copy as JSON"
             :on-click (fn [_e]
                         (export-handler/copy-block-as-json! block-id))}
