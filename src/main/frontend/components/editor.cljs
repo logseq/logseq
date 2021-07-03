@@ -6,6 +6,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [frontend.components.block :as block]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
@@ -94,11 +95,19 @@
                               (editor-handler/get-matched-pages q))]
           (ui/auto-complete
            matched-pages
-           {:on-chosen (page-handler/on-chosen-handler input id q pos format)
-            :on-enter #(page-handler/page-not-exists-handler input id q current-pos)
-            :item-render (fn [item] [:div.py-2 (search/highlight-exact-query item q)])
-            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
-            :class     "black"}))))))
+           {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
+            :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
+            :item-render (fn [item chosen?]
+                           [:div.py-2.flex.page-search-menu-item
+                            [[:div (search/highlight-exact-query item q)]
+                             [:div.flex-1]
+                             ;; Ideally, we may want to trigger preview on focused
+                             (block/page-preview-trigger
+                               {:children [:div.page-search-menu-item-preview "Preview"]
+                                :tippy-position "right"}
+                               item)]])
+            :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
+            :class       "black"}))))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]

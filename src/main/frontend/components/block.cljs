@@ -371,58 +371,55 @@
        :else
        (get page-entity :block/original-name page-name)))])
 
+(rum/defc page-preview-trigger
+  [{:keys [children sidebar? tippy-position fixed-position?] :as config} page-name]
+  (let [page-entity (db/entity [:block/name page-name])
+        redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
+        page-original-name (model/get-page-original-name redirect-page-name)]
+    (ui/tippy {:html        (fn []
+                              [:div.tippy-wrapper.overflow-y-auto.p-4
+                               {:style {:width          600
+                                        :text-align     "left"
+                                        :font-weight    500
+                                        :max-height     600
+                                        :padding-bottom 64}}
+                               (if (and (string? page-original-name) (string/includes? page-original-name "/"))
+                                 [:div.my-2
+                                  (->>
+                                    (for [page (string/split page-original-name #"/")]
+                                      (when (and (string? page) page)
+                                        (page-reference false page {} nil)))
+                                    (interpose [:span.mx-2.opacity-30 "/"]))]
+                                 [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
+                                                          page-original-name
+                                                          [:span
+                                                           [:span.text-sm.mr-2 "Alias:"]
+                                                           page-original-name])])
+                               (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
+                                 (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
+                                 (when-let [f (state/get-page-blocks-cp)]
+                                   (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])
+               :interactive true
+               :delay       [1000, 100]
+               :fixed-position? fixed-position?
+               :position    (or tippy-position "top")}
+              children)))
+
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page? sidebar? preview?] :as config} page]
   (when-let [page-name (:block/name page)]
-    (let [page (string/lower-case page-name)
-          page-entity (db/entity [:block/name page])
-          redirect-page-name (cond
-                               (:block/alias? config)
-                               page
-
-                               (db/page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
-                               (let [source-page (model/get-alias-source-page (state/get-current-repo)
-                                                                              (string/lower-case page-name))]
-                                 (or (when source-page (:block/name source-page))
-                                     page))
-
-                               :else
-                               page)
+    (let [page-name (string/lower-case page-name)
+          page-entity (db/entity [:block/name page-name])
+          redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
           page-original-name (model/get-page-original-name redirect-page-name)
           href (if html-export?
-                 (util/encode-str page)
+                 (util/encode-str page-name)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config
                             page-name
                             href redirect-page-name page-entity contents-page? children html-export? label)]
       (if (and (not (util/mobile?)) (not preview?))
-        (ui/tippy {:html        (fn []
-                                  [:div.tippy-wrapper.overflow-y-auto.p-4
-                                   {:style {:width          600
-                                            :text-align     "left"
-                                            :font-weight    500
-                                            :max-height     600
-                                            :padding-bottom 64}}
-                                   (if (and (string? page-original-name) (string/includes? page-original-name "/"))
-                                     [:div.my-2
-                                      (->>
-                                       (for [page (string/split page-original-name #"/")]
-                                         (when (and (string? page) page)
-                                           (page-reference false page {} nil)))
-                                       (interpose [:span.mx-2.opacity-30 "/"]))]
-                                     [:h2.font-bold.text-lg (if (= page redirect-page-name)
-                                                              page-original-name
-                                                              [:span
-                                                               [:span.text-sm.mr-2 "Alias:"]
-                                                               page-original-name])])
-
-                                   (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
-                                     (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
-                                     (when-let [f (state/get-page-blocks-cp)]
-                                       (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])
-                   :interactive true
-                   :delay       [1000, 100]}
-                  inner)
+        (page-preview-trigger (assoc config :children inner) page-name)
         inner))))
 
 (rum/defc asset-reference
