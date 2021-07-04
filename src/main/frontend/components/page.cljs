@@ -62,16 +62,18 @@
 (defn- open-first-block!
   [state]
   (let [blocks (nth (:rum/args state) 1)
-        block (first blocks)]
+        block (first blocks)
+        preview? (nth (:rum/args state) 4)]
     (when (and (= (count blocks) 1)
-               (string/blank? (:block/content block)))
+               (string/blank? (:block/content block))
+               (not preview?))
       (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))
   state)
 
 (rum/defc page-blocks-inner <
   {:did-mount open-first-block!
    :did-update open-first-block!}
-  [page-name page-blocks hiccup sidebar?]
+  [page-name page-blocks hiccup sidebar? preview?]
   [:div.page-blocks-inner
    (rum/with-key
      (content/content page-name
@@ -129,7 +131,7 @@
                              config)
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (block/->hiccup page-blocks hiccup-config {})]
-          (page-blocks-inner page-name page-blocks hiccup sidebar?))))))
+          (page-blocks-inner page-name page-blocks hiccup sidebar? preview?))))))
 
 (defn contents-page
   [page]

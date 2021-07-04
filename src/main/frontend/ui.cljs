@@ -5,6 +5,7 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-resize-context" :as Resize]
             ["react-tippy" :as react-tippy]
+            ["@popperjs/core" :as popperjs]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
@@ -628,26 +629,28 @@
 
 (rum/defcs tippy < rum/static
   (rum/local false ::mounted?)
-  [state {:keys [fixed-position?] :as opts} child]
+  [state {:keys [fixed-position? open?] :as opts} child]
   (let [*mounted? (::mounted? state)
-        mounted? @*mounted?]
+        mounted? @*mounted?
+        manual (not= open? nil)]
     (Tippy (->
             (merge {:arrow true
                     :sticky true
                     :theme "customized"
                     :disabled (not (state/enable-tooltip?))
                     :unmountHTMLWhenHide true
-                    :open @*mounted?
+                    :open (if manual open? @*mounted?)
+                    :trigger (if manual "manual" "mouseenter focus")
                     ;; See https://github.com/tvkhoa/react-tippy/issues/13
                     :popperOptions (if fixed-position?
-                                      {:modifiers {:preventOverflow {:enabled false}
-                                                   :flip {:enabled false}
-                                                   :hide {:enabled false}}}
+                                      {:modifiers {:flip {:enabled false}
+                                                   :hide {:enabled false}
+                                                   :preventOverflow {:enabled false}}}
                                       {})
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)
-            (assoc :html (if mounted?
+            (assoc :html (if (or open? mounted?)
                            (when-let [html (:html opts)]
                              (if (fn? html)
                                (html)
