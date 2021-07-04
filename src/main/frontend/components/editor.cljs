@@ -102,13 +102,14 @@
             {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
              :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
              :item-render (fn [page-name chosen?]
-                            [:div.py-2 (block/page-preview-trigger
-                                         {:children        [:div (search/highlight-exact-query page-name q)]
-                                          :open?           chosen?
-                                          :fixed-position? true
-                                          :tippy-distance  24
-                                          :tippy-position  (if sidebar? "left" "right")}
-                                         page-name)])
+                            [:div.py-2.preview-trigger-wrapper
+                             (block/page-preview-trigger
+                               {:children        [:div (search/highlight-exact-query page-name q)]
+                                :open?           chosen?
+                                :fixed-position? true
+                                :tippy-distance  24
+                                :tippy-position  (if sidebar? "left" "right")}
+                               page-name)])
              :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
              :class       "black"}))))))
 
