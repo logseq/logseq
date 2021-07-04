@@ -32,24 +32,28 @@
                (let [p (str p)
                      current-page? (= p current-page)
                      block? (and p (util/uuid-string? p))
+                     parent (when (string/includes? p "/")
+                              (first (util/split-last "/" p)))
                      color (if block?
                              "#1a6376"
                              (case [dark? current-page?] ; FIXME: Put it into CSS
-                              [false false] "#333"
-                              [false true]  "#045591"
-                              [true false]  "#8abbbb"
-                              [true true]   "#ffffff"))
+                               [false false] "#333"
+                               [false true]  "#045591"
+                               [true false]  "#8abbbb"
+                               [true true]   "#ffffff"))
                      color (if (contains? tags (string/lower-case (str p)))
                              (if dark? "orange" "green")
                              color)]
                  (let [size-v (js/Math.cbrt (get-connections (string/lower-case p) links))
                        size (* (if (zero? size-v) 1 size-v) 8)]
-                   {:id p
-                    :label p
-                    :size size
-                    :style {:fill color
-                            :stroke color}
-                    :labelCfg {:style {:fill color}}}))))
+                   (cond->
+                     {:id p
+                      :label p
+                      :size size
+                      :style {:fill color
+                              :stroke color}}
+                     parent
+                     (assoc :parent parent))))))
            pages)
      (remove nil?))))
 
@@ -111,6 +115,7 @@
             tagged-pages (db/get-all-tagged-pages repo)
             tags (set (map second tagged-pages))
             all-pages (db/get-pages repo)
+            ;; TODO: namespaces
             links (concat (seq relation)
                           (seq tagged-pages))
             linked (set (flatten links))

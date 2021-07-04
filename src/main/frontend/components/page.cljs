@@ -418,10 +418,11 @@
 (defonce show-journal? (atom false))
 
 ;; scrollHeight
-(rum/defcs graph-filter-section <
-  (rum/local false ::open?)
-  [state title content]
+(rum/defcs graph-filter-section < (rum/local false ::open?)
+  [state title content {:keys [search-filters]}]
   (let [open? (get state ::open?)]
+    (when (and (seq search-filters) (not @open?))
+      (reset! open? true))
     [:li.relative.border-b.border-gray-200
      [:div
       [:button.w-full.px-4.py-2.text-left {:on-click #(swap! open? not)}
@@ -446,7 +447,8 @@
               orphan-pages? true}} settings
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
-                         (config-handler/set-config! :graph/settings new-settings)))]
+                         (config-handler/set-config! :graph/settings new-settings)))
+        search-graph-filters (state/sub :search/graph-filters)]
     (rum/with-context [[t] i18n/*tongue-context*]
      [:div.absolute.top-4.right-4.graph-filters
       [:div.flex.flex-col
@@ -458,19 +460,19 @@
             (filter-expand-area
              open?
              [:div.p-6
-              [:div.flex.items-center.justify-between.mb-2
-               [:span "Layout"]
-               (ui/select
-                 (mapv
-                  (fn [item]
-                    (if (= (:label item) layout)
-                      (assoc item :selected "selected")
-                      item))
-                  [{:label "gForce"}
-                   {:label "dagre"}])
-                 (fn [value]
-                   (set-setting! :layout value))
-                 "graph-layout")]
+              ;; [:div.flex.items-center.justify-between.mb-2
+              ;;  [:span "Layout"]
+              ;;  (ui/select
+              ;;    (mapv
+              ;;     (fn [item]
+              ;;       (if (= (:label item) layout)
+              ;;         (assoc item :selected "selected")
+              ;;         item))
+              ;;     [{:label "gForce"}
+              ;;      {:label "dagre"}])
+              ;;    (fn [value]
+              ;;      (set-setting! :layout value))
+              ;;    "graph-layout")]
               [:div.flex.items-center.justify-between.mb-2
                [:span "Journals"]
                (ui/toggle journal?
@@ -500,7 +502,20 @@
           (fn [open?]
             (filter-expand-area
              open?
-             [:div.p-6])))]]]])))
+             [:div.p-6
+              (if (seq search-graph-filters)
+                [:div
+                 (for [q search-graph-filters]
+                   [:div.flex.flex-row.justify-between.items-center.mb-2
+                    [:span.font-medium q]
+                    [:a.search-filter-close.opacity-70.opacity-100 {:on-click #(state/remove-search-filter! q)}
+                     svg/close]])
+
+                 [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
+                  "Clear All"]]
+                [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
+                 "Click to search"])]))
+          {:search-filters search-graph-filters})]]]])))
 
 (rum/defc global-graph-inner < rum/reactive
   [graph settings theme]
@@ -516,27 +531,32 @@
                 graph)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.relative#global-graph
-       (if (seq (:nodes graph))
-         (graph/graph-2d {:nodes (:nodes graph)
-                          :links (:links graph)
-                          :width (- width 24)
-                          :height (- height 48)
-                          ;; :defaultNode {:labelCfg {:position "bottom"}}
-                          ;; :defaultEdge {:style {:stroke (if dark? "#023643" "#eee")
-                          ;;                       :lineWidth 1}}
-                          ;; :nodeStateStyles {:inactive {:opacity 0.2
-                          ;;                              :node-label {:opacity 0.2}}}
-                          ;; :edgeStateStyles {:active {:stroke (if dark? "#08404f" "#ccc")}
-                          ;;                   :inactive {:stroke (if dark? "#023643" "#eee")
-                          ;;                              :opacity 0.2}}
-                          }
-                         {:focus-nodes *focus-nodes
-                          :on-click-node (fn [node] (swap! *focus-nodes
-                                                          (fn [v]
-                                                            (vec (distinct (conj v node))))))})
-         [:div.ls-center.mt-20
-          [:p.opacity-70.font-medium "Empty"]])
+       (graph/graph-2d {:nodes (:nodes graph)
+                        :links (:links graph)
+                        :width (- width 24)
+                        :height (- height 48)
+                        :register-handlers-fn
+                        (fn [graph]
+                          (.on graph "nodeClick"
+                               (fn [event node]
+                                 (graph/on-click-handler graph node event *focus-nodes))))
+                        ;; :defaultNode {:labelCfg {:position "bottom"}}
+                        ;; :defaultEdge {:style {:stroke (if dark? "#023643" "#eee")
+                        ;;                       :lineWidth 1}}
+                        ;; :nodeStateStyles {:inactive {:opacity 0.2
+                        ;;                              :node-label {:opacity 0.2}}}
+                        ;; :edgeStateStyles {:active {:stroke (if dark? "#08404f" "#ccc")}
+                        ;;                   :inactive {:stroke (if dark? "#023643" "#eee")
+                        ;;                              :opacity 0.2}}
+                        })
        (graph-filters settings n-hops focus-nodes)])))
+
+(defn- filter-graph-nodes
+  [nodes filters]
+  (if (seq filters)
+    (let [filter-patterns (map #(re-pattern (util/regex-escape %)) filters)]
+      (filter (fn [node] (some #(re-find % (:id node)) filter-patterns)) nodes))
+    nodes))
 
 (rum/defcs global-graph < rum/reactive
   (mixins/event-mixin
@@ -544,14 +564,20 @@
      (mixins/listen state js/window "resize"
                     (fn [e]
                       (reset! layout [js/window.innerWidth js/window.innerHeight])))))
-  {:will-unmount (fn [state]
+  {:will-mount (fn [state]
+                 (state/set-search-mode! :graph)
+                 state)
+   :will-unmount (fn [state]
                    (reset! *n-hops nil)
                    (reset! *focus-nodes [])
+                   (state/set-search-mode! :global)
                    state)}
   [state]
   (let [settings (state/sub-graph-config)
         theme (state/sub :ui/theme)
-        graph (graph-handler/build-global-graph theme settings)]
+        graph (graph-handler/build-global-graph theme settings)
+        search-graph-filters (state/sub :search/graph-filters)
+        graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
     (global-graph-inner graph settings theme)))
 
 (rum/defc all-pages < rum/reactive

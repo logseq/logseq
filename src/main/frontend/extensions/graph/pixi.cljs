@@ -32,6 +32,7 @@
 
 (def default-style
   {:node {:size 8
+          :border {:width 0}
           :color (fn [node]
                    (if-let [parent (gobj/get node "parent")]
                      (let [v (js/Math.abs (hash parent))]
@@ -47,15 +48,15 @@
           :color "#cccccc"}})
 
 (def default-hover-style
-  {:node {:border {:color "#000000"}
+  {:node {:border {:width 2}
           :label {:backgroundColor "rgba(238, 238, 238, 1)"}}
    :edge {:color "#999999"}})
 
 (defn render!
   [state]
-  (when-let [graph (::graph state)]
+  (when-let [graph (:graph state)]
     (.destroy graph))
-  (let [{:keys [nodes links style hover-style height]
+  (let [{:keys [nodes links style hover-style height register-handlers-fn]
          :or {style default-style
               hover-style default-hover-style}} (first (:rum/args state))
         graph (graph.)
@@ -75,7 +76,7 @@
       (.assign forceAtlas2 graph (bean/->js {:iterations 30
                                              :settings settings})))
 
-    (when-let [container-ref (:ref state)]
+    (if-let [container-ref (:ref state)]
       (let [graph (new (.-PixiGraph Pixi-Graph)
                   (bean/->js
                    {:container @container-ref
@@ -83,4 +84,8 @@
                     :style style
                     :hoverStyle hover-style
                     :height height}))]
-       (assoc state ::graph graph)))))
+        (when register-handlers-fn
+          (register-handlers-fn graph))
+        (def debug-graph graph)
+        (assoc state :graph graph))
+      state)))

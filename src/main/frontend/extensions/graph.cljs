@@ -12,28 +12,47 @@
             [promesa.core :as p]
             [clojure.set :as set]
             [cljs-bean.core :as bean]
-            [frontend.extensions.graph.pixi :as pixi]))
+            [frontend.extensions.graph.pixi :as pixi]
+            [frontend.util :as util]))
 
-(defn click-handle [node event focus-nodes]
-  (let [page-name (string/lower-case node)
-        focus-nodes (map string/lower-case focus-nodes)
-        event (gobj/get event "originalEvent")]
+(defonce clicked-page-timestamps (atom nil))
+
+(defn on-click-handler [graph node event *focus-nodes]
+  (let [page-name (string/lower-case node)]
+    ;; shift+click to select the page
     (if (gobj/get event "shiftKey")
-      (let [repo (state/get-current-repo)
-            page (db/entity repo [:block/name page-name])]
-        (state/sidebar-add-block!
-         repo
-         (:db/id page)
-         :page
-         {:page page}))
-      (when (contains? (set focus-nodes) page-name) ; already selected
-       (route-handler/redirect! {:to :page
-                                 :path-params {:name page-name}})))))
+      (do
+        (swap! *focus-nodes
+              (fn [v]
+                (vec (distinct (conj v node)))))
+
+        ;; highlight current node
+        (let [node-attributes (-> (.getNodeAttributes (.-graph graph) node)
+                                  (bean/->clj))]
+          (.setNodeAttribute (.-graph graph) node "parent" "ls-selected-nodes")))
+
+      ;; double click to go to the page
+      (let [last-time (get @clicked-page-timestamps page-name)
+            new-time (util/time-ms)]
+        (swap! clicked-page-timestamps assoc page-name new-time)
+        (when (and last-time
+                   (< (- new-time last-time) 300))
+          (route-handler/redirect! {:to :page
+                                    :path-params {:name page-name}}))))))
 
 (rum/defcs graph-2d <
   (rum/local nil :ref)
   {:did-mount pixi/render!
-   :did-update pixi/render!}
+   :did-update pixi/render!
+   :should-update (fn [old new]
+                    (not=
+                     (dissoc (first (:rum/args old)) :register-handlers-fn)
+                     (dissoc (first (:rum/args new)) :register-handlers-fn)))
+   :will-unmount (fn [state]
+                   (when-let [graph (:graph state)]
+                     (.destroy graph))
+                   (reset! clicked-page-timestamps nil)
+                   state)}
   [state opts]
   [:div.graph {:style {:height "100vh"}
                :ref (fn [value]

@@ -47,6 +47,7 @@
       :search/q ""
       :search/mode :global
       :search/result nil
+      :search/graph-filters []
 
       ;; modals
       :modal/show? false
@@ -1233,6 +1234,24 @@
 (defn clear-search-result!
   []
   (set-search-result! nil))
+
+(defn add-graph-search-filter!
+  [q]
+  (when-not (string/blank? q)
+    (update-state! :search/graph-filters
+                  (fn [value]
+                    (vec (distinct (conj value q)))))))
+
+(defn remove-search-filter!
+  [q]
+  (when-not (string/blank? q)
+    (update-state! :search/graph-filters
+                   (fn [value]
+                     (remove #{q} value)))))
+
+(defn clear-search-filters!
+  []
+  (set-state! :search/graph-filters []))
 
 (defn get-search-mode
   []

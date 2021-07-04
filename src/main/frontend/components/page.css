@@ -44,7 +44,7 @@
 }
 
 .graph-filters {
-    width: 240px;
+    width: 200px;
     background: var(--ls-secondary-background-color);
 }
 
@@ -59,4 +59,8 @@
 
 .graph-layout {
     background: var(--ls-secondary-background-color);
+}
+
+.search-filter-close svg {
+    transform: scale(0.7);
 }
