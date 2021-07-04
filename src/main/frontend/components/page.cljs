@@ -554,7 +554,7 @@
 (defn- filter-graph-nodes
   [nodes filters]
   (if (seq filters)
-    (let [filter-patterns (map #(re-pattern (util/regex-escape %)) filters)]
+    (let [filter-patterns (map #(re-pattern (str "(?i)" (util/regex-escape %))) filters)]
       (filter (fn [node] (some #(re-find % (:id node)) filter-patterns)) nodes))
     nodes))
 
