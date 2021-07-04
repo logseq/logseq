@@ -371,38 +371,55 @@
        :else
        (get page-entity :block/original-name page-name)))])
 
+(defn- use-delayed-open [open? page-name timeout]
+  "A react hook to debounce open? value.
+  If open? changed from false to open, there will be a `timeout` delay.
+  Otherwise, the value will be changed to false immediately"
+  (let [[deval set-deval!] (rum/use-state false)]
+    (rum/use-effect!
+      (fn []
+        (if open? (let [timer (js/setTimeout #(set-deval! open?) timeout)]
+                    #(js/clearTimeout timer))
+                  (set-deval! open?))) ;; immediately change
+      [open? page-name])
+    deval))
+
 (rum/defc page-preview-trigger
-  [{:keys [children sidebar? tippy-position fixed-position?] :as config} page-name]
+  [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open?] :as config} page-name]
   (let [page-entity (db/entity [:block/name page-name])
         redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
-        page-original-name (model/get-page-original-name redirect-page-name)]
-    (ui/tippy {:html        (fn []
-                              [:div.tippy-wrapper.overflow-y-auto.p-4
-                               {:style {:width          600
-                                        :text-align     "left"
-                                        :font-weight    500
-                                        :max-height     600
-                                        :padding-bottom 64}}
-                               (if (and (string? page-original-name) (string/includes? page-original-name "/"))
-                                 [:div.my-2
-                                  (->>
-                                    (for [page (string/split page-original-name #"/")]
-                                      (when (and (string? page) page)
-                                        (page-reference false page {} nil)))
-                                    (interpose [:span.mx-2.opacity-30 "/"]))]
-                                 [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
-                                                          page-original-name
-                                                          [:span
-                                                           [:span.text-sm.mr-2 "Alias:"]
-                                                           page-original-name])])
-                               (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
-                                 (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
-                                 (when-let [f (state/get-page-blocks-cp)]
-                                   (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])
-               :interactive true
-               :delay       [1000, 100]
+        page-original-name (model/get-page-original-name redirect-page-name)
+        debounced-open? (use-delayed-open open? page-name 1000)
+        html-template (fn []
+                        [:div.tippy-wrapper.overflow-y-auto.p-4
+                         {:style {:width          600
+                                  :text-align     "left"
+                                  :font-weight    500
+                                  :max-height     600
+                                  :padding-bottom 64}}
+                         (if (and (string? page-original-name) (string/includes? page-original-name "/"))
+                           [:div.my-2
+                            (->>
+                              (for [page (string/split page-original-name #"/")]
+                                (when (and (string? page) page)
+                                  (page-reference false page {} nil)))
+                              (interpose [:span.mx-2.opacity-30 "/"]))]
+                           [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
+                                                    page-original-name
+                                                    [:span
+                                                     [:span.text-sm.mr-2 "Alias:"]
+                                                     page-original-name])])
+                         (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
+                           (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
+                           (when-let [f (state/get-page-blocks-cp)]
+                             (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])]
+    (ui/tippy {:html            html-template
+               :interactive     true
+               :open?           debounced-open?
+               :delay           [1000, 100]
                :fixed-position? fixed-position?
-               :position    (or tippy-position "top")}
+               :position        (or tippy-position "top")
+               :distance        (or tippy-distance 10)}
               children)))
 
 (rum/defc page-cp
