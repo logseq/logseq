@@ -11,7 +11,8 @@
             [frontend.db :as db]
             [promesa.core :as p]
             [clojure.set :as set]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.extensions.graph.pixi :as pixi]))
 
 (defn click-handle [node event focus-nodes]
   (let [page-name (string/lower-case node)
@@ -29,52 +30,35 @@
        (route-handler/redirect! {:to :page
                                  :path-params {:name page-name}})))))
 
-(defn- render!
-  [state]
-  ;; (let [[opts handler] (:rum/args state)
-  ;;       data (:data opts)]
-  ;;   (when-let [graph (:graph state)]
-  ;;     (.destroy graph))
-  ;;   (let [graph (new g6/graph (-> (assoc opts :container "graph-2d") bean/->js))]
-  ;;     (.render graph)
-  ;;     ;; TODO: dblclick
-  ;;     (.on graph "node:click"
-  ;;          (fn [e]
-  ;;            (when-let [id (.get (.-item e) "id")]
-  ;;              (when-let [f (:on-click-node handler)]
-  ;;                (click-handle id e @(:focus-nodes handler))
-  ;;                (f id)))))
-  ;;     (assoc state :graph graph :data data)))
-  )
-
-(rum/defc graph-2d <
-  {:did-mount render!
-   :did-update (fn [state]
-                 (render! state))
-   :should-update (fn [old-state new-state]
-                    (not= (first (:rum/args old-state))
-                          (first (:rum/args new-state))))}
-  [opts handler]
-  [:div#graph-2d])
+(rum/defcs graph-2d <
+  (rum/local nil :ref)
+  {:did-mount pixi/render!
+   :did-update pixi/render!}
+  [state opts]
+  [:div.graph {:style {:height "100vh"}
+               :ref (fn [value]
+                      (let [ref (get state :ref)]
+                        (when (and ref value)
+                          (reset! ref value))))}])
 
 (defn build-graph-data
-  [{:keys [edges nodes]}]
+  [{:keys [links nodes]}]
   (let [nodes (mapv
                (fn [node]
-                 (let [edges (filter (fn [{:keys [source target]}]
+                 (let [links (filter (fn [{:keys [source target]}]
                                        (let [node (:id node)]
-                                         (or (= source node) (= target node)))) edges)]
+                                         (or (= source node) (= target node)))) links)]
                    (assoc node
                           :neighbors (vec
                                       (distinct
                                        (->>
                                         (concat
-                                         (mapv :source edges)
-                                         (mapv :target edges))
+                                         (mapv :source links)
+                                         (mapv :target links))
                                         (remove #(= (:id node) %)))))
-                          :edges (vec edges))))
+                          :links (vec links))))
                nodes)]
-    {:edges edges
+    {:links links
      :nodes nodes}))
 
 ;; (defn build-graph-opts

@@ -517,36 +517,19 @@
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.relative#global-graph
        (if (seq (:nodes graph))
-         (graph/graph-2d {:data graph
-                          :width (if (and (> width 1280) sidebar-open?)
-                                   (- width 24 600)
-                                   (- width 24))
-                          :height height
-                          :layout {
-                                   ;; :type "dagre"
-                                   :type "gForce"
-                                   :gpuEnabled true
-                                   ;; :workerEnabled true
-                                   }
-                          :modes {:default ["drag-canvas"
-                                            "zoom-canvas"
-                                            "drag-node"
-                                            "activate-relations"
-                                            "click-select"
-                                            "create-edge"]} ;; "tooltip"
-                          :damping 0.1
-                          :fitView true
-                          :fitCenter true
-                          :minZoom 0.2
-                          :maxZoom 10
-                          :defaultNode {:labelCfg {:position "bottom"}}
-                          :defaultEdge {:style {:stroke (if dark? "#023643" "#eee")
-                                                :lineWidth 1}}
-                          :nodeStateStyles {:inactive {:opacity 0.2
-                                                       :node-label {:opacity 0.2}}}
-                          :edgeStateStyles {:active {:stroke (if dark? "#08404f" "#ccc")}
-                                            :inactive {:stroke (if dark? "#023643" "#eee")
-                                                       :opacity 0.2}}}
+         (graph/graph-2d {:nodes (:nodes graph)
+                          :links (:links graph)
+                          :width (- width 24)
+                          :height (- height 48)
+                          ;; :defaultNode {:labelCfg {:position "bottom"}}
+                          ;; :defaultEdge {:style {:stroke (if dark? "#023643" "#eee")
+                          ;;                       :lineWidth 1}}
+                          ;; :nodeStateStyles {:inactive {:opacity 0.2
+                          ;;                              :node-label {:opacity 0.2}}}
+                          ;; :edgeStateStyles {:active {:stroke (if dark? "#08404f" "#ccc")}
+                          ;;                   :inactive {:stroke (if dark? "#023643" "#eee")
+                          ;;                              :opacity 0.2}}
+                          }
                          {:focus-nodes *focus-nodes
                           :on-click-node (fn [node] (swap! *focus-nodes
                                                           (fn [v]

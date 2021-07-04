@@ -8,22 +8,22 @@
             [medley.core :as medley]
             [frontend.db.default :as default-db]))
 
-(defn- build-edges
-  [edges]
+(defn- build-links
+  [links]
   (map (fn [[from to]]
          {:source from
           :target to})
-       edges))
+       links))
 
 (defn- get-connections
-  [page edges]
+  [page links]
   (count (filter (fn [{:keys [source target]}]
                    (or (= source page)
                        (= target page)))
-                 edges)))
+                 links)))
 
 (defn- build-nodes
-  [dark? current-page edges tags nodes]
+  [dark? current-page links tags nodes]
   (let [pages (->> (set (flatten nodes))
                    (remove nil?))]
     (->>
@@ -42,7 +42,7 @@
                      color (if (contains? tags (string/lower-case (str p)))
                              (if dark? "orange" "green")
                              color)]
-                 (let [size-v (js/Math.cbrt (get-connections (string/lower-case p) edges))
+                 (let [size-v (js/Math.cbrt (get-connections (string/lower-case p) links))
                        size (* (if (zero? size-v) 1 size-v) 8)]
                    {:id p
                     :label p
@@ -71,11 +71,11 @@
    nodes))
 
 (defn- normalize-page-name
-  [{:keys [nodes edges] :as g}]
+  [{:keys [nodes links] :as g}]
   (let [all-pages (->> (set (apply concat
                                    [(map :id nodes)
-                                    (map :source edges)
-                                    (map :target edges)]))
+                                    (map :source links)
+                                    (map :target links)]))
                        (map string/lower-case))
         names (db/pull-many '[:block/name :block/original-name] (mapv (fn [page]
                                                                         (if (util/uuid-string? page)
@@ -85,8 +85,8 @@
                       (map (fn [x]
                              (get x :block/original-name (:block/name x))) names))
         nodes (mapv (fn [node] (assoc node :id (get names (:id node) (:id node)))) nodes)
-        edges (->>
-               edges
+        links (->>
+               links
                (remove (fn [{:keys [source target]}]
                          (or (nil? source) (nil? target))))
                (mapv (fn [{:keys [source target]}]
@@ -100,7 +100,7 @@
         nodes (->> (remove-uuids-and-files! nodes)
                    (util/distinct-by #(string/lower-case (:id %))))]
     {:nodes nodes
-     :edges edges}))
+     :links links}))
 
 (defn build-global-graph
   [theme {:keys [journal? orphan-pages? builtin-pages?] :as settings}]
@@ -111,9 +111,9 @@
             tagged-pages (db/get-all-tagged-pages repo)
             tags (set (map second tagged-pages))
             all-pages (db/get-pages repo)
-            edges (concat (seq relation)
+            links (concat (seq relation)
                           (seq tagged-pages))
-            linked (set (flatten edges))
+            linked (set (flatten links))
             nodes (cond->> all-pages
                           (not journal?)
                           (remove date/valid-journal-title?)
@@ -123,11 +123,11 @@
 
                           (not orphan-pages?)
                           (filter #(contains? linked (string/lower-case %))))
-            edges (build-edges (remove (fn [[_ to]] (nil? to)) edges))
-            nodes (build-nodes dark? current-page edges tags nodes)]
+            links (build-links (remove (fn [[_ to]] (nil? to)) links))
+            nodes (build-nodes dark? current-page links tags nodes)]
         (normalize-page-name
          {:nodes nodes
-          :edges edges})))))
+          :links links})))))
 
 (defn build-page-graph
   [page theme]
@@ -140,7 +140,7 @@
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page)
             mentioned-pages (db/get-pages-that-mentioned-page repo page)
-            edges (concat
+            links (concat
                    (map (fn [[p aliases]]
                           [page p]) ref-pages)
                    (map (fn [[p aliases]]
@@ -152,7 +152,7 @@
                                      (map first mentioned-pages))
                              (remove nil?)
                              (set))
-            other-pages-edges (mapcat
+            other-pages-links (mapcat
                                (fn [page]
                                  (let [ref-pages (-> (map first (db/get-page-referenced-pages repo page))
                                                      (set)
@@ -164,10 +164,10 @@
                                     (map (fn [p] [page p]) ref-pages)
                                     (map (fn [p] [p page]) mentioned-pages))))
                                other-pages)
-            edges (->> (concat edges other-pages-edges)
+            links (->> (concat links other-pages-links)
                        (remove nil?)
                        (distinct)
-                       (build-edges))
+                       (build-links))
             nodes (->> (concat
                         [page]
                         (map first ref-pages)
@@ -175,10 +175,10 @@
                         tags)
                        (remove nil?)
                        (distinct)
-                       (build-nodes dark? page edges (set tags)))]
+                       (build-nodes dark? page links (set tags)))]
         (normalize-page-name
          {:nodes nodes
-          :edges edges})))))
+          :links links})))))
 
 (defn build-block-graph
   "Builds a citation/reference graph for a given block uuid."
@@ -186,13 +186,13 @@
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
       (let [ref-blocks (db/get-block-referenced-blocks block)
-            edges (concat
+            links (concat
                    (map (fn [[p aliases]]
                           [block p]) ref-blocks))
             other-blocks (->> (concat (map first ref-blocks))
                               (remove nil?)
                               (set))
-            other-blocks-edges (mapcat
+            other-blocks-links (mapcat
                                 (fn [block]
                                   (let [ref-blocks (-> (map first (db/get-block-referenced-blocks block))
                                                        (set)
@@ -200,28 +200,25 @@
                                     (concat
                                      (map (fn [p] [block p]) ref-blocks))))
                                 other-blocks)
-            edges (->> (concat edges other-blocks-edges)
+            links (->> (concat links other-blocks-links)
                        (remove nil?)
                        (distinct)
-                       (build-edges))
+                       (build-links))
             nodes (->> (concat
                         [block]
                         (map first ref-blocks))
                        (remove nil?)
                        (distinct)
                        ;; FIXME: get block tags
-                       (build-nodes dark? block edges #{}))]
+                       (build-nodes dark? block links #{}))]
         (normalize-page-name
          {:nodes nodes
-          :edges edges})))))
+          :links links})))))
 
 (defn n-hops
   "Get all nodes that are n hops from nodes (a collection of node ids)"
-  [{:keys [edges] :as graph} nodes level]
-  (def graph graph)
-  (def nodes nodes)
-  (def level level)
-  (let [edges (group-by :source edges)
+  [{:keys [links] :as graph} nodes level]
+  (let [links (group-by :source links)
         nodes (loop [nodes nodes
                      level level]
                 (if (zero? level)
@@ -229,7 +226,7 @@
                   (recur (distinct (apply concat nodes
                                      (map
                                        (fn [id]
-                                         (->> (get edges id) (map :target)))
+                                         (->> (get links id) (map :target)))
                                        nodes)))
                          (dec level))))
         nodes (set nodes)]

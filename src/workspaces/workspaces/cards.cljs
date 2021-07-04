@@ -7,8 +7,7 @@
             [rum.core :as rum]
             [frontend.ui :as ui]
             [frontend.extensions.graph :as graph]
-            [frontend.extensions.graph.trellis :as trellis]
-            [frontend.extensions.graph.netv :refer [netv]]
+            [frontend.extensions.graph.pixi :as pixi]
             [cljs-bean.core :as bean]))
 
 ;; simple function to create react elemnents
@@ -43,63 +42,43 @@
    (graph)))
 
 (defn- random-graph
-  ([n]
-   (random-graph n true))
-  ([n edge?]
-   (let [nodes (for [i (range 0 n)]
-                 {:id (str i)
-                  :label (str i)
-                  :radius 18
-                  })
-         edges (->
-                (for [i (range 0 (/ n 2))]
-                  (let [source i
-                        target (inc i)]
-                    {:id (str source target)
-                     :source (str source)
-                     :target (str target)}))
-                (distinct))]
-     {:nodes nodes
-      (if edge? :edges :links) edges})))
+  [n]
+  (let [nodes (for [i (range 0 n)]
+                {:id (str i)
+                 :label (str i)})
+        edges (->
+               (for [i (range 0 (/ n 2))]
+                 (let [source i
+                       target (inc i)]
+                   {:id (str source target)
+                    :source (str source)
+                    :target (str target)}))
+               (distinct))]
+    {:nodes nodes
+     :links edges}))
 
-(rum/defc trellis-graph
-  []
-  (trellis/graph
-   (merge
-    {:width 1000
-     :styleNode (fn [node hover?]
-                  (let [style {:labelSize 10
-                               :labelWordWrap 260}]
-                    )
-                  node)
-     :styleEdge (fn [edge hover?]
-                  ;; (bean/->js
-                  ;;  )
-                  edge)
-     :onNodeClick (fn [target]
-                    (prn "clicked")
-                    (js/console.dir target))
-     :onNodeDoubleDlick (fn [target]
-                          (prn "double clicked")
-                          (js/console.dir target))}
-    (random-graph 500))))
+;; (rum/defc pixi-graph
+;;   []
+;;   (let [{:keys [nodes links]} (random-graph 4000)]
+;;     (pixi/graph (fn []
+;;                   {:nodes nodes
+;;                   :links links
+;;                   :style {:node {:size 15
+;;                                  :color "#666666"
+;;                                  :border {:width 2
+;;                                           :color "#ffffff"}
+;;                                  :label {:content (fn [node] (.-id node))
+;;                                          :type js/window.PixiGraph.TextType.TEXT
+;;                                          :fontSize 12
+;;                                          :color "#333333"
+;;                                          :backgroundColor "rgba(255, 255, 255, 0.5)"
+;;                                          :padding 4}}
+;;                           :edge {:width 1
+;;                                  :color "#cccccc"}}
+;;                   :hover-style {:node {:border {:color "#000000"}
+;;                                        :label {:backgroundColor "rgba(238, 238, 238, 1)"}}
+;;                                 :edge {:color "#999999"}}}))))
 
-;; (ws/defcard trellis-graph-card
+;; (ws/defcard pixi-graph-card
 ;;   (ct.react/react-card
-;;    (trellis-graph)))
-
-(rum/defc netv-graph <
-  {:did-mount (fn [state]
-                (let [n 10
-                      g (new netv (bean/->js {:container (js/document.getElementById "netv")}))
-                      _ (prn {:data (random-graph n)})
-                      data (bean/->js (random-graph n))]
-                  (.data g data)
-                  (.draw g))
-                state)}
-  []
-  [:div#netv])
-
-(ws/defcard netv-graph-card
-  (ct.react/react-card
-   (netv-graph)))
+;;    (pixi-graph)))
