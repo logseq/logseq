@@ -35,10 +35,8 @@
 (defn get-default-config
   ([format]
    (mldoc/default-config format))
-  ([format heading-to-list?]
-   (mldoc/default-config format heading-to-list?))
-  ([format heading-to-list? exporting-keep-properties?]
-   (mldoc/default-config format heading-to-list? exporting-keep-properties?)))
+  ([format options]
+   (mldoc/default-config format options)))
 
 (defn to-html
   ([content format]
