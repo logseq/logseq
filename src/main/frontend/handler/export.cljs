@@ -423,7 +423,7 @@
          (mapv (fn [{:keys [path content names format]}]
                  (when (first names)
                    [path (fp/exportMarkdown f/mldoc-record content
-                                            (f/get-default-config format heading-to-list?)
+                                            (f/get-default-config format {:export-heading-to-list? heading-to-list?})
                                             (js/JSON.stringify
                                              (clj->js (f (first names)))))])))
          (remove nil?))))
@@ -473,7 +473,7 @@
         format (or (:block/format root-block) (state/get-preferred-format))]
     (def aa refs)
     (fp/exportMarkdown f/mldoc-record content
-                       (f/get-default-config format)
+                       (f/get-default-config format {:export-md-indent-style indent-style})
                        (js/JSON.stringify (clj->js refs)))))
 
 
@@ -484,7 +484,7 @@
        (mapv (fn [{:keys [path content names format]}]
                (when (first names)
                  [path (fp/exportMarkdown f/mldoc-record content
-                                          (f/get-default-config format heading-to-list? true)
+                                          (f/get-default-config format {:export-heading-to-list? heading-to-list? :export-keep-properties? true})
                                           nil)])))
        (remove nil?)))
 

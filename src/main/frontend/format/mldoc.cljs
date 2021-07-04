@@ -22,26 +22,20 @@
 
 (defn default-config
   ([format]
-   (default-config format false))
-  ([format export-heading-to-list?]
+   (default-config format {:export-heading-to-list? false}))
+  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style]}]
    (let [format (string/capitalize (name (or format :markdown)))]
-     (js/JSON.stringify
-      (bean/->js
-       {:toc false
-        :heading_number false
-        :keep_line_break true
-        :format format
-        :heading_to_list export-heading-to-list?}))))
-  ([format export-heading-to-list? exporting-keep-properties?]
-   (let [format (string/capitalize (name (or format :markdown)))]
-     (js/JSON.stringify
-      (bean/->js
-       {:toc false
-        :heading_number false
-        :keep_line_break true
-        :format format
-        :heading_to_list export-heading-to-list?
-        :exporting_keep_properties exporting-keep-properties?})))))
+     (->> {:toc false
+           :heading_number false
+           :keep_line_break true
+           :format format
+           :heading_to_list (or export-heading-to-list? false)
+           :exporting_keep_properties export-keep-properties?
+           :export_md_indent_style export-md-indent-style}
+          (filter #(not(nil? (second %))))
+          (into {})
+          (bean/->js)
+          (js/JSON.stringify)))))
 
 (def default-references
   (js/JSON.stringify

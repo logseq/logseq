@@ -68,14 +68,14 @@
 
 (def *export-block-type (atom :text))
 
-(def text-indent-style-options [{:label "dash"
+(def text-indent-style-options [{:label "dashes"
                                  :selected false}
-                                {:label "space"
+                                {:label "spaces"
                                  :selected false}
                                 {:label "no-indent"
                                  :selected false}])
 
-(def *export-block-text-indent-style (atom "dash"))
+(def *export-block-text-indent-style (atom "dashes"))
 
 (rum/defcs export-blocks
   < rum/reactive
@@ -96,8 +96,7 @@
      (ui/button "OPML"
                 :on-click #(reset! *export-block-type :opml))
      [:textarea.overflow-y-auto.h-96 {:value content}]
-     (when (and (:not-impl-yet 0)
-                (= :text type))
+     (when (= :text type)
        (let [options (->> text-indent-style-options
                           (mapv (fn [opt]
                                   (if (= text-indent-style (:label opt))
