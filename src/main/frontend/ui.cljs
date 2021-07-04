@@ -5,7 +5,6 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-resize-context" :as Resize]
             ["react-tippy" :as react-tippy]
-            ["@popperjs/core" :as popperjs]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
