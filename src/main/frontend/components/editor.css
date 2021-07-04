@@ -63,3 +63,8 @@ pre {
   background: #f6f8fa;
   background: var(--ls-secondary-background-color);
 }
+
+/* Fix autocomplete preview  */
+.preview-trigger-wrapper > [data-tooltipped] {
+  display: block !important;
+}
