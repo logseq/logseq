@@ -14,7 +14,7 @@
             [cljs-bean.core :as bean]
             ["pixi-graph-fork" :as Pixi-Graph]
             ["graphology" :as graphology]
-            ["graphology-layout-forceatlas2" :as forceAtlas2]))
+            ["d3-force" :refer [forceSimulation forceManyBody forceCenter forceLink forceCollide forceRadial forceX forceY SimulationLinkDatum SimulationNodeDatum] :as force]))
 
 (def graph (gobj/get graphology "Graph"))
 
@@ -52,6 +52,36 @@
           :label {:backgroundColor "rgba(238, 238, 238, 1)"}}
    :edge {:color "#999999"}})
 
+;; TODO: animation
+;; (defn ticked [^js link ^js node]
+;;   (-> link
+;;       (.attr "x1" (fn [d] (.. d -source -x)))
+;;       (.attr "y1" (fn [d] (.. d -source -y)))
+;;       (.attr "x2" (fn [d] (.. d -target -x)))
+;;       (.attr "y2" (fn [d] (.. d -target -y))))
+
+;;   (-> node
+;;       (.attr "cx" (fn [d] (.-x d)))
+;;       (.attr "cy" (fn [d] (.-y d)))))
+
+(defn layout!
+  [nodes links]
+  (let [simulation (forceSimulation nodes)]
+    (-> simulation
+     (.force "link" (.id (forceLink links)
+                         (fn [d] (.-id d))))
+     (.force "charge" (-> (forceManyBody)
+                          (.distanceMax 4000)
+                          (.theta 0.5)
+                          (.strength -600)))
+     (.force "collision" (-> (forceCollide)
+                             (.radius (+ 8 18))))
+     (.force "x" (-> (forceX 0) (.strength 0.02)))
+     (.force "y" (-> (forceX 0) (.strength 0.02)))
+     (.force "center" (forceCenter))
+     (.tick 30)
+     (.stop))))
+
 (defn render!
   [state]
   (when-let [graph (:graph state)]
@@ -60,21 +90,16 @@
          :or {style default-style
               hover-style default-hover-style}} (first (:rum/args state))
         graph (graph.)
-        nodes-set (set (map :id nodes))]
-    (doseq [node nodes]
-      (.addNode graph (:id node) (bean/->js node)))
-    (doseq [link links]
-      (when (and (nodes-set (:source link)) (nodes-set (:target link)))
-        (.addEdge graph (:source link) (:target link) (bean/->js link))))
-
-    (.forEachNode graph (fn [node]
-                          (.setNodeAttribute graph node "x" (js/Math.random))
-                          (.setNodeAttribute graph node "y" (js/Math.random))))
-
-    (let [settings (assoc (bean/->clj (.inferSettings forceAtlas2 graph))
-                          :scalingRatio 80)]
-      (.assign forceAtlas2 graph (bean/->js {:iterations 30
-                                             :settings settings})))
+        nodes-set (set (map :id nodes))
+        links (filter (fn [link]
+                        (and (nodes-set (:source link)) (nodes-set (:target link)))) links)
+        nodes-js (bean/->js nodes)
+        links-js (bean/->js links)]
+    (layout! nodes-js links-js)
+    (doseq [node nodes-js]
+      (.addNode graph (.-id node) node))
+    (doseq [link links-js]
+      (.addEdge graph (.-id (.-source link)) (.-id (.-target link)) link))
 
     (if-let [container-ref (:ref state)]
       (let [graph (new (.-PixiGraph Pixi-Graph)
@@ -86,6 +111,5 @@
                     :height height}))]
         (when register-handlers-fn
           (register-handlers-fn graph))
-        (def debug-graph graph)
         (assoc state :graph graph))
       state)))
