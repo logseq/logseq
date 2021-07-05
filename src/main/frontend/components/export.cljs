@@ -91,18 +91,32 @@
           :opml (export/export-blocks-as-opml current-repo root-block-id)
           (export/export-blocks-as-markdown current-repo root-block-id text-indent-style))]
     [:div.export.w-96.resize
-     (ui/button "Text"
-                :on-click #(reset! *export-block-type :text))
-     (ui/button "OPML"
-                :on-click #(reset! *export-block-type :opml))
+     [:div
+      {:class "mb-2"}
+      (ui/button "Text"
+                 :class "mr-2"
+                 :on-click #(reset! *export-block-type :text))
+      (ui/button "OPML"
+                 :on-click #(reset! *export-block-type :opml))]
      [:textarea.overflow-y-auto.h-96 {:value content}]
-     (when (= :text type)
-       (let [options (->> text-indent-style-options
-                          (mapv (fn [opt]
-                                  (if (= text-indent-style (:label opt))
-                                    (assoc opt :selected true)
-                                    opt))))]
-         (ui/select options #(reset! *export-block-text-indent-style %))))
+     (let [options (->> text-indent-style-options
+                        (mapv (fn [opt]
+                                (if (= text-indent-style (:label opt))
+                                  (assoc opt :selected true)
+                                  opt))))]
+       [:select.block.w-full.my-2.text-lg.rounded.border
+        {:style     {:padding "0 0 0 12px"
+                     :visibility (if (= :text type) "visible" "hidden")}
+         :on-change (fn [e]
+                      (let [value (util/evalue e)]
+                        (#(reset! *export-block-text-indent-style %) value)))}
+        (for [{:keys [label value selected]} options]
+          [:option (cond->
+                    {:key   label
+                     :value (or value label)}
+                     selected
+                     (assoc :selected selected))
+           label])])
      (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")
                 :on-click (fn []
                             (util/copy-to-clipboard! content)
