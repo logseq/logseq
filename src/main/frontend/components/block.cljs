@@ -114,7 +114,7 @@
   [url]
   (match url
     ["File" s]
-    (string/replace s "file:" "")
+    (string/replace s "file://" "")
 
     ["Complex" m]
     (let [{:keys [link protocol]} m]
@@ -660,6 +660,14 @@
      ;; markdown
      (string/starts-with? (string/triml full-text) "!"))))
 
+(defn- relative-assets-path->absolute-path
+  [path]
+  (if (util/absolute-path? path)
+    path
+    (.. util/node-path
+        (join (config/get-repo-dir (state/get-current-repo))
+              (config/get-local-asset-absolute-path path)))))
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -770,6 +778,20 @@
                (show-link? config metadata s full_text))
           (asset-reference (second (first label)) s)
 
+          ;; open file externally if s is "../assets/<...>"
+          (and (util/electron?)
+               (config/local-asset? s))
+          (let [path (relative-assets-path->absolute-path s)]
+            (->elem
+             :a
+             (cond->
+                 {:href      (str "file://" path)
+                  :data-href path
+                  :target    "_blank"}
+               title
+               (assoc :title title))
+             (map-inline config label)))
+
           :else
           (page-reference (:html-export? config) s config label))
 
@@ -807,15 +829,19 @@
                    (page-cp config page)
                    [:span.text-gray-500 "]]"]]
 
-                  (->elem
-                   :a
-                   (cond->
-                     {:href      (str "file://" href)
-                      :data-href href
-                      :target    "_blank"}
-                     title
-                     (assoc :title title))
-                   (map-inline config label)))))
+                  (let [href*
+                        (if (util/electron?)
+                          (relative-assets-path->absolute-path href)
+                          href)]
+                    (->elem
+                     :a
+                     (cond->
+                         {:href      (str "file://" href*)
+                          :data-href href*
+                          :target    "_blank"}
+                       title
+                       (assoc :title title))
+                     (map-inline config label))))))
 
             ;; image
             (show-link? config metadata href full_text)
