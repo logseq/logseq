@@ -3,6 +3,6 @@ module.exports = (ctx) => ({
     require('postcss-nested')({}),
     require('postcss-import-ext-glob')({}),
     require('postcss-import')({}),
-    require('@tailwindcss/jit')('tailwind.config.js'),
+    require('tailwindcss')('tailwind.config.js'),
   ],
 })
