@@ -47,8 +47,9 @@
        (fn [{:keys [toggle-fn]}]
          [:a.fade-link {:on-click toggle-fn}
           [:span.ml-1 (t :login)]])
-       (let [list [{:title (t :login-google)
-                    :url (str config/website "/login/google")}
+       (let [list [
+                   ;; {:title (t :login-google)
+                   ;;  :url (str config/website "/login/google")}
                    {:title (t :login-github)
                     :url (str config/website "/login/github")}]]
          (mapv
