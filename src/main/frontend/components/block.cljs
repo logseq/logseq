@@ -903,10 +903,12 @@
 
     ;; String to hiccup
     ["Inline_Hiccup" s]
-    (ui/catch-error
-     [:div.warning {:title "Invalid hiccup"} s]
-     (-> (safe-read-string s)
-         (security/remove-javascript-links-in-href)))
+    (do
+      (js/console.log s)
+      (ui/catch-error
+       [:div.warning {:title "Invalid hiccup"} s]
+       (-> (safe-read-string s)
+           (security/remove-javascript-links-in-href))))
 
     ["Inline_Html" s]
     (when (not html-export?)
@@ -988,6 +990,14 @@
                     :src (str "https://www.youtube.com/embed/" youtube-id)
                     :height height
                     :width width}])))))
+
+        (= name "tutorial-video")
+        (let [youtube-id "Afmqowr0qEQ"]
+          [:div.tutorial-video-container.relative
+           {:style
+            {:height 367 :width 653}}
+           [:img.w-full.h-full.absolute {:src "https://i.ytimg.com/vi/Afmqowr0qEQ/maxresdefault.jpg"}]
+           (svg/play)])
 
         (= name "vimeo")
         (when-let [url (first arguments)]

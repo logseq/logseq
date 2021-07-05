@@ -23,7 +23,7 @@
         "shadow-cljs": "^2.12.5",
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
-        "tailwindcss": "2.0.3"
+        "tailwindcss": "2.2.4"
     },
     "scripts": {
         "watch": "run-p gulp:watch cljs:watch",
