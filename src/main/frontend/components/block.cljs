@@ -494,10 +494,18 @@
 
 (declare blocks-container)
 
+(defn- edit-parent-block [e parent-block]
+  (when-not (state/editing?)
+    (.stopPropagation e)
+    (editor-handler/edit-block! parent-block :max (:block/format parent-block) (:block/uuid parent-block))))
+
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.color-level.embed-block.bg-base-2 {:style {:z-index 2}}
+    [:div.color-level.embed-block.bg-base-2
+     {:style {:z-index 2}
+      :on-double-click #(edit-parent-block % config)
+      :on-mouse-down (fn [e] (.stopPropagation e))}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :id (str id)
@@ -510,7 +518,9 @@
   (let [page-name (string/trim (string/lower-case page-name))
         current-page (state/get-current-page)]
     [:div.color-level.embed.embed-page.bg-base-2
-     {:class (if (:sidebar? config) "in-sidebar")}
+     {:class (if (:sidebar? config) "in-sidebar")
+      :on-double-click #(edit-parent-block % config)
+      :on-mouse-down #(.stopPropagation %)}
      [:section.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
       (page-cp config {:block/name page-name})]
