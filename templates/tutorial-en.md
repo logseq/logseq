@@ -19,7 +19,7 @@ some changes on the right sidebar, those referenced blocks will be changed too!
 - 4. Do you support tasks like todo/doing/done and priorities?
     - Yes, type `/` and pick your favorite todo keyword or priority (A/B/C).
     - NOW [#A] A dummy tutorial on "How to take dummy notes?"
-    - LATER [#A] Check out this awesome video by [:a {:href "https://twitter.com/EdTravelling" :target "_blank"} "@EdTravelling"], which shows how to use logseq to open your local directory.
+    - LATER [#A] Check out this awesome video by [:a {:href "https://twitter.com/TechWithEd" :target "_blank"} "@TechWithEd"], which shows how to use logseq to open your local directory.
 
 [:div.video-wrapper.mb-4
         [:iframe
