@@ -41,7 +41,7 @@
                      (.-color node)))
           :label {:content (fn [node] (.-id node))
                   :type (.-TEXT (.-TextType Pixi-Graph))
-                  :fontSize 24
+                  :fontSize 12
                   :color "#333333"
                   :backgroundColor "rgba(255, 255, 255, 0.5)"
                   :padding 4}}
@@ -49,9 +49,11 @@
           :color "#cccccc"}})
 
 (def default-hover-style
-  {:node {:border {:width 2}
+  {:node {:color "#6366F1"
+          :border {:width 2
+                   :color "#6366F1"}
           :label {:backgroundColor "rgba(238, 238, 238, 1)"}}
-   :edge {:color "#999999"}})
+   :edge {:color "#A5B4FC"}})
 
 ;; TODO: animation
 ;; (defn ticked [^js link ^js node]
@@ -73,17 +75,17 @@
                            (.id (fn [d] (.-id d)))
                            (.distance 180)
                            (.links links)))
-     (.force "charge" (-> (forceManyBody)
-                          (.distanceMax 4000)
-                          (.theta 0.5)
-                          (.strength -600)))
-     (.force "collision" (-> (forceCollide)
-                             (.radius (+ 8 18))))
-     (.force "x" (-> (forceX 0) (.strength 0.02)))
-     (.force "y" (-> (forceX 0) (.strength 0.02)))
-     (.force "center" (forceCenter))
-     (.tick 30)
-     (.stop))))
+        (.force "charge" (-> (forceManyBody)
+                             (.distanceMax 4000)
+                             (.theta 0.5)
+                             (.strength -600)))
+        (.force "collision" (-> (forceCollide)
+                                (.radius (+ 8 18))))
+        (.force "x" (-> (forceX 0) (.strength 0.02)))
+        (.force "y" (-> (forceX 0) (.strength 0.02)))
+        (.force "center" (forceCenter))
+        (.tick 30)
+        (.stop))))
 
 (defn render!
   [state]
@@ -106,12 +108,12 @@
 
     (if-let [container-ref (:ref state)]
       (let [graph (new (.-PixiGraph Pixi-Graph)
-                  (bean/->js
-                   {:container @container-ref
-                    :graph graph
-                    :style style
-                    :hoverStyle hover-style
-                    :height height}))]
+                       (bean/->js
+                        {:container @container-ref
+                         :graph graph
+                         :style style
+                         :hoverStyle hover-style
+                         :height height}))]
         (when register-handlers-fn
           (register-handlers-fn graph))
         (assoc state :graph graph))

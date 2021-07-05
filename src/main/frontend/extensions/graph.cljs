@@ -13,24 +13,52 @@
             [clojure.set :as set]
             [cljs-bean.core :as bean]
             [frontend.extensions.graph.pixi :as pixi]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [cljs-bean.core :as bean]))
 
 (defonce clicked-page-timestamps (atom nil))
 
+(defn- highlight-node!
+  [^js graph node]
+  (.resetNodeStyle graph node
+                   (bean/->js {:color "#6366F1"
+                               :border {:width 2
+                                        :color "#6366F1"}})))
+
+(defn- highlight-neighbours!
+  [^js graph node]
+  (.forEachNeighbor
+   (.-graph graph) node
+   (fn [node attributes]
+     (let [attributes (bean/->clj attributes)
+           attributes (assoc attributes
+                             :color "#6366F1"
+                             :border {:width 2
+                                      :color "#6366F1"})]
+       (.resetNodeStyle graph node (bean/->js attributes))))))
+
+(defn- highlight-edges!
+  [^js graph node]
+  (.forEachEdge
+   (.-graph graph) node
+   (fn [edge attributes]
+     (.resetEdgeStyle graph edge (bean/->js {:width 1
+                                             :color "#A5B4FC"})))))
+
 (defn on-click-handler [graph node event *focus-nodes]
   (let [page-name (string/lower-case node)]
+    (swap! *focus-nodes
+           (fn [v]
+             (vec (distinct (conj v node)))))
+    ;; highlight current node
+    (let [node-attributes (-> (.getNodeAttributes (.-graph graph) node)
+                              (bean/->clj))]
+      (.setNodeAttribute (.-graph graph) node "parent" "ls-selected-nodes"))
+    (highlight-neighbours! graph node)
+    (highlight-edges! graph node)
+
     ;; shift+click to select the page
-    (if (gobj/get event "shiftKey")
-      (do
-        (swap! *focus-nodes
-              (fn [v]
-                (vec (distinct (conj v node)))))
-
-        ;; highlight current node
-        (let [node-attributes (-> (.getNodeAttributes (.-graph graph) node)
-                                  (bean/->clj))]
-          (.setNodeAttribute (.-graph graph) node "parent" "ls-selected-nodes")))
-
+    (when-not (gobj/get event "shiftKey")
       ;; double click to go to the page
       (let [last-time (get @clicked-page-timestamps page-name)
             new-time (util/time-ms)]
@@ -39,6 +67,10 @@
                    (< (- new-time last-time) 300))
           (route-handler/redirect! {:to :page
                                     :path-params {:name page-name}}))))))
+
+(defn reset-graph!
+  [^js graph]
+  (.resetView graph))
 
 (rum/defcs graph-2d <
   (rum/local nil :ref)
@@ -59,80 +91,3 @@
                       (let [ref (get state :ref)]
                         (when (and ref value)
                           (reset! ref value))))}])
-
-(defn build-graph-data
-  [{:keys [links nodes]}]
-  (let [nodes (mapv
-               (fn [node]
-                 (let [links (filter (fn [{:keys [source target]}]
-                                       (let [node (:id node)]
-                                         (or (= source node) (= target node)))) links)]
-                   (assoc node
-                          :neighbors (vec
-                                      (distinct
-                                       (->>
-                                        (concat
-                                         (mapv :source links)
-                                         (mapv :target links))
-                                        (remove #(= (:id node) %)))))
-                          :links (vec links))))
-               nodes)]
-    {:links links
-     :nodes nodes}))
-
-;; (defn build-graph-opts
-;;   [graph dark? option]
-;;   nil)
-
-;; (defn build-graph-opts
-;;   [graph dark? option]
-;;   (let [nodes-count (count (:nodes graph))
-;;         graph-data (build-graph-data graph)]
-;;     (-> (merge
-;;          {:graphData (bean/->js graph-data)
-;;           ;; :nodeRelSize node-r
-;;           :linkWidth (fn [link]
-;;                        (let [link {:source (gobj/get link "source")
-;;                                    :target (gobj/get link "target")}]
-;;                          (if (contains? @highlight-links link) 5 1)))
-;;           :linkDirectionalParticles 2
-;;           :linkDirectionalParticleWidth (fn [link]
-;;                                           (let [link {:source (-> (gobj/get link "source")
-;;                                                                   (gobj/get "id"))
-;;                                                       :target (-> (gobj/get link "target")
-;;                                                                   (gobj/get "id"))}]
-;;                                             (if (contains? @highlight-links link) 2 0)))
-;;           :onNodeHover on-node-hover
-;;           :onLinkHover on-link-hover
-;;           :nodeLabel "id"
-;;           :linkColor (fn [] (if dark? "rgba(255,255,255,0.2)" "rgba(0,0,0,0.1)"))
-;;           :onZoom (fn [z]
-;;                     (let [k (:k (bean/->clj z))]
-;;                       (reset! graph-mode
-;;                               (cond
-;;                                 (< k 0.4)
-;;                                 :dot
-
-;;                                 :else
-;;                                 :dot-text))))
-;;           :onNodeClick (fn [node event]
-;;                          (let [page-name (string/lower-case (gobj/get node "id"))]
-;;                            (if (gobj/get event "shiftKey")
-;;                              (let [repo (state/get-current-repo)
-;;                                    page (db/entity repo [:block/name page-name])]
-;;                                (state/sidebar-add-block!
-;;                                 repo
-;;                                 (:db/id page)
-;;                                 :page
-;;                                 {:page page}))
-;;                              (route-handler/redirect! {:to :page
-;;                                                        :path-params {:name page-name}}))))
-;;           ;; :cooldownTicks 100
-;;           ;; :onEngineStop (fn []
-;;           ;;                 (when-let [ref (:ref-atom option)]
-;;           ;;                   (.zoomToFit @ref 400)))
-;;           :nodeCanvasObject
-;;           (fn [node ^CanvasRenderingContext2D ctx global-scale]
-;;             (dot-text-mode node ctx global-scale dark?))}
-;;          option)
-;;         bean/->js)))

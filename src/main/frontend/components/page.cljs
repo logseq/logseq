@@ -439,6 +439,7 @@
 
 (defonce *n-hops (atom nil))
 (defonce *focus-nodes (atom []))
+(defonce *graph-reset? (atom false))
 
 (rum/defc graph-filters < rum/reactive
   [settings n-hops focus-nodes]
@@ -450,72 +451,78 @@
                          (config-handler/set-config! :graph/settings new-settings)))
         search-graph-filters (state/sub :search/graph-filters)]
     (rum/with-context [[t] i18n/*tongue-context*]
-     [:div.absolute.top-4.right-4.graph-filters
-      [:div.flex.flex-col
-       [:div.border
-        [:ul.shadow-box
-         (graph-filter-section
-          [:span.font-medium "Nodes"]
-          (fn [open?]
-            (filter-expand-area
-             open?
-             [:div.p-6
-              ;; [:div.flex.items-center.justify-between.mb-2
-              ;;  [:span "Layout"]
-              ;;  (ui/select
-              ;;    (mapv
-              ;;     (fn [item]
-              ;;       (if (= (:label item) layout)
-              ;;         (assoc item :selected "selected")
-              ;;         item))
-              ;;     [{:label "gForce"}
-              ;;      {:label "dagre"}])
-              ;;    (fn [value]
-              ;;      (set-setting! :layout value))
-              ;;    "graph-layout")]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span "Journals"]
-               (ui/toggle journal?
-                          #(set-setting! :journal? (not journal?))
-                          true)]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span "Orphan pages"]
-               (ui/toggle orphan-pages?
-                          #(set-setting! :orphan-pages? (not orphan-pages?))
-                          true)]
-              [:div.flex.items-center.justify-between.mb-2
-               [:span "Built-in pages"]
-               (ui/toggle builtin-pages?
-                          #(set-setting! :builtin-pages? (not builtin-pages?))
-                          true)]
-              (when (seq focus-nodes)
-                [:div.flex.flex-col.mb-2
-                 [:p {:title "N hops from selected nodes"}
-                  "N hops from selected nodes"]
-                (ui/tippy {:html [:span n-hops]}
-                          (ui/slider (or n-hops 10)
-                                     {:min 1
-                                      :max 10
-                                      :on-change #(reset! *n-hops (int %))}))])])))
-         (graph-filter-section
-          [:span.font-medium "Search"]
-          (fn [open?]
-            (filter-expand-area
-             open?
-             [:div.p-6
-              (if (seq search-graph-filters)
-                [:div
-                 (for [q search-graph-filters]
-                   [:div.flex.flex-row.justify-between.items-center.mb-2
-                    [:span.font-medium q]
-                    [:a.search-filter-close.opacity-70.opacity-100 {:on-click #(state/remove-search-filter! q)}
-                     svg/close]])
+      [:div.absolute.top-4.right-4.graph-filters
+       [:div.flex.flex-col
+        [:div.border
+         [:ul.shadow-box
+          (graph-filter-section
+           [:span.font-medium "Nodes"]
+           (fn [open?]
+             (filter-expand-area
+              open?
+              [:div.p-6
+               ;; [:div.flex.items-center.justify-between.mb-2
+               ;;  [:span "Layout"]
+               ;;  (ui/select
+               ;;    (mapv
+               ;;     (fn [item]
+               ;;       (if (= (:label item) layout)
+               ;;         (assoc item :selected "selected")
+               ;;         item))
+               ;;     [{:label "gForce"}
+               ;;      {:label "dagre"}])
+               ;;    (fn [value]
+               ;;      (set-setting! :layout value))
+               ;;    "graph-layout")]
+               [:div.flex.items-center.justify-between.mb-2
+                [:span "Journals"]
+                (ui/toggle journal?
+                           #(set-setting! :journal? (not journal?))
+                           true)]
+               [:div.flex.items-center.justify-between.mb-2
+                [:span "Orphan pages"]
+                (ui/toggle orphan-pages?
+                           #(set-setting! :orphan-pages? (not orphan-pages?))
+                           true)]
+               [:div.flex.items-center.justify-between.mb-2
+                [:span "Built-in pages"]
+                (ui/toggle builtin-pages?
+                           #(set-setting! :builtin-pages? (not builtin-pages?))
+                           true)]
+               (when (seq focus-nodes)
+                 [:div.flex.flex-col.mb-2
+                  [:p {:title "N hops from selected nodes"}
+                   "N hops from selected nodes"]
+                  (ui/tippy {:html [:span n-hops]}
+                            (ui/slider (or n-hops 10)
+                                       {:min 1
+                                        :max 10
+                                        :on-change #(reset! *n-hops (int %))}))])
 
-                 [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
-                  "Clear All"]]
-                [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
-                 "Click to search"])]))
-          {:search-filters search-graph-filters})]]]])))
+               [:a.opacity-70.opacity-100 {:on-click (fn []
+                                                       (reset! *graph-reset? true)
+                                                       (reset! *focus-nodes [])
+                                                       (reset! *n-hops nil))}
+                "Reset Graph"]])))
+          (graph-filter-section
+           [:span.font-medium "Search"]
+           (fn [open?]
+             (filter-expand-area
+              open?
+              [:div.p-6
+               (if (seq search-graph-filters)
+                 [:div
+                  (for [q search-graph-filters]
+                    [:div.flex.flex-row.justify-between.items-center.mb-2
+                     [:span.font-medium q]
+                     [:a.search-filter-close.opacity-70.opacity-100 {:on-click #(state/remove-search-filter! q)}
+                      svg/close]])
+
+                  [:a.opacity-70.opacity-100 {:on-click state/clear-search-filters!}
+                   "Clear All"]]
+                 [:a.opacity-70.opacity-100 {:on-click #(route-handler/go-to-search! :graph)}
+                  "Click to search"])]))
+           {:search-filters search-graph-filters})]]]])))
 
 (defn- graph-register-handlers
   [graph focus-nodes]
@@ -542,7 +549,8 @@
                         :height (- height 48)
                         :register-handlers-fn
                         (fn [graph]
-                          (graph-register-handlers graph *focus-nodes))})
+                          (graph-register-handlers graph *focus-nodes))
+                        :reset? @*graph-reset?})
        (graph-filters settings n-hops focus-nodes)])))
 
 (defn- filter-graph-nodes
@@ -571,7 +579,8 @@
         theme (state/sub :ui/theme)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)
-        graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
+        graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))
+        reset? (rum/react *graph-reset?)]
     (global-graph-inner graph settings theme)))
 
 (rum/defc page-graph < db-mixins/query rum/reactive

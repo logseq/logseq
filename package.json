@@ -84,7 +84,7 @@
         "jszip": "^3.5.0",
         "mldoc": "0.8.2",
         "path": "^0.12.7",
-        "pixi-graph-fork": "^0.0.4",
+        "pixi-graph-fork": "^0.0.9",
         "posthog-js": "^1.10.2",
         "react": "^17.0.2",
         "react-dom": "^17.0.2",
