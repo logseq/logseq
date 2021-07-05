@@ -1,7 +1,7 @@
 (ns frontend.handler.graph
   (:require [frontend.db :as db]
             [clojure.string :as string]
-            [frontend.util :as util]
+            [frontend.util :as util :refer [profile]]
             [frontend.date :as date]
             [frontend.state :as state]
             [clojure.set :as set]
@@ -23,49 +23,48 @@
                  links)))
 
 (defn- build-nodes
-  [dark? current-page links tags nodes]
-  (let [pages (->> (set (flatten nodes))
+  [dark? current-page page-links tags nodes]
+  (let [current-page (or current-page "")
+        pages (->> (set (flatten nodes))
                    (remove nil?))]
     (->>
      (mapv (fn [p]
              (when p
                (let [p (str p)
                      current-page? (= p current-page)
-                     block? (and p (util/uuid-string? p))
-                     parent (when (string/includes? p "/")
-                              (first (util/split-last "/" p)))
-                     color (if block?
-                             "#1a6376"
-                             (case [dark? current-page?] ; FIXME: Put it into CSS
-                               [false false] "#333"
-                               [false true]  "#045591"
-                               [true false]  "#8abbbb"
-                               [true true]   "#ffffff"))
-                     color (if (contains? tags (string/lower-case (str p)))
+                     color (case [dark? current-page?] ; FIXME: Put it into CSS
+                             [false false] "#333"
+                             [false true]  "#045591"
+                             [true false]  "#8abbbb"
+                             [true true]   "#ffffff")
+                     color (if (contains? tags p)
                              (if dark? "orange" "green")
                              color)]
-                 (let [size-v (js/Math.cbrt (get-connections (string/lower-case p) links))
-                       size (int (* (if (zero? size-v) 1 size-v) 8))]
-                   (cond->
-                     {:id p
-                      :label p
-                      :size size
-                      :color color}
-                     parent
-                     (assoc :parent parent))))))
+                 (let [n (get page-links p 1)
+                       size-v (if (> n 2)
+                                (js/Math.cbrt n)
+                                n)
+                       size-v (if (< size-v 1)
+                                1
+                                (int size-v))
+                       size (* size-v 8)]
+                   {:id p
+                    :label p
+                    :size size
+                    :color color}))))
            pages)
      (remove nil?))))
 
+;; slow
 (defn- uuid-or-asset?
   [id]
-  (let [id (str id)]
-    (or (util/uuid-string? id)
-       (string/starts-with? id "../assets/")
-       (= id "..")
-       (string/starts-with? id "assets/")
-       (string/ends-with? id ".gif")
-       (string/ends-with? id ".jpg")
-       (string/ends-with? id ".png"))))
+  (or (util/uuid-string? id)
+      (string/starts-with? id "../assets/")
+      (= id "..")
+      (string/starts-with? id "assets/")
+      (string/ends-with? id ".gif")
+      (string/ends-with? id ".jpg")
+      (string/ends-with? id ".png")))
 
 (defn- remove-uuids-and-files!
   [nodes]
@@ -74,64 +73,59 @@
    nodes))
 
 (defn- normalize-page-name
-  [{:keys [nodes links] :as g}]
-  (let [all-pages (->> (set (apply concat
-                                   [(map :id nodes)
-                                    (map :source links)
-                                    (map :target links)]))
-                       (map string/lower-case))
-        names (db/pull-many '[:block/name :block/original-name] (mapv (fn [page]
-                                                                        (if (util/uuid-string? page)
-                                                                          [:block/uuid (uuid page)]
-                                                                          [:block/name page])) all-pages))
-        names (zipmap (map (fn [x] (get x :block/name)) names)
-                      (map (fn [x]
-                             (get x :block/original-name (:block/name x))) names))
-        nodes (mapv (fn [node] (assoc node :id (get names (:id node) (:id node)))) nodes)
-        links (->>
-               links
-               (remove (fn [{:keys [source target]}]
-                         (or (nil? source) (nil? target))))
-               (mapv (fn [{:keys [source target]}]
-                       (when (and (not (uuid-or-asset? source))
-                                  (not (uuid-or-asset? target)))
-                         {:source (get names (string/lower-case source))
-                          :target (get names (string/lower-case target))})))
-               (remove nil?)
-               (remove (fn [{:keys [source target]}]
-                         (or (nil? source) (nil? target)))))
+  [{:keys [nodes links page-name->original-name]}]
+  (let [links (->>
+               (map
+                 (fn [{:keys [source target]}]
+                   (let [source (get page-name->original-name source)
+                         target (get page-name->original-name target)]
+                     (when (and source target)
+                       {:source source :target target})))
+                 links)
+               (remove nil?))
         nodes (->> (remove-uuids-and-files! nodes)
-                   (util/distinct-by #(string/lower-case (:id %))))]
+                   (util/distinct-by (fn [node] (:id node)))
+                   (map (fn [node]
+                          (if-let [original-name (get page-name->original-name (:id node))]
+                            (assoc node :id original-name :label original-name)
+                            nil)))
+                   (remove nil?))]
     {:nodes nodes
      :links links}))
 
+;; TODO: namespaces
 (defn build-global-graph
   [theme {:keys [journal? orphan-pages? builtin-pages?] :as settings}]
   (let [dark? (= "dark" theme)
-        current-page (:block/name (db/get-current-page))]
+        current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
       (let [relation (db/get-pages-relation repo journal?)
             tagged-pages (db/get-all-tagged-pages repo)
             tags (set (map second tagged-pages))
-            all-pages (db/get-pages repo)
-            ;; TODO: namespaces
+            full-pages (db/get-all-pages repo)
+            get-original-name (fn [p] (or (:block/original-name p)
+                                          (:block/name p)))
+            all-pages (map get-original-name full-pages)
+            page-name->original-name (zipmap (map :block/name full-pages) all-pages)
+            pages-after-journal-filter (if-not journal?
+                                         (remove :block/journal? full-pages)
+                                         full-pages)
             links (concat (seq relation)
                           (seq tagged-pages))
             linked (set (flatten links))
-            nodes (cond->> all-pages
-                          (not journal?)
-                          (remove date/valid-journal-title?)
-
-                          (not builtin-pages?)
-                          (remove (fn [p] (default-db/built-in-pages-names (string/upper-case p))))
-
-                          (not orphan-pages?)
-                          (filter #(contains? linked (string/lower-case %))))
+            nodes (cond->> (map :block/name pages-after-journal-filter)
+                    (not builtin-pages?)
+                    (remove (fn [p] (default-db/built-in-pages-names (string/upper-case p))))
+                    (not orphan-pages?)
+                    (filter #(contains? linked (string/lower-case %))))
+            page-links (reduce (fn [m [k v]] (-> (update m k inc)
+                                                 (update v inc))) {} links)
             links (build-links (remove (fn [[_ to]] (nil? to)) links))
-            nodes (build-nodes dark? current-page links tags nodes)]
+            nodes (build-nodes dark? (string/lower-case current-page) page-links tags nodes)]
         (normalize-page-name
          {:nodes nodes
-          :links links})))))
+          :links links
+          :page-name->original-name page-name->original-name})))))
 
 (defn build-page-graph
   [page theme]
@@ -179,10 +173,16 @@
                         tags)
                        (remove nil?)
                        (distinct)
-                       (build-nodes dark? page links (set tags)))]
+                       (build-nodes dark? page links (set tags)))
+            full-pages (db/get-all-pages repo)
+            get-original-name (fn [p] (or (:block/original-name p)
+                                         (:block/name p)))
+            all-pages (map get-original-name full-pages)
+            page-name->original-name (zipmap (map :block/name full-pages) all-pages)]
         (normalize-page-name
          {:nodes nodes
-          :links links})))))
+          :links links
+          :page-name->original-name page-name->original-name})))))
 
 (defn build-block-graph
   "Builds a citation/reference graph for a given block uuid."

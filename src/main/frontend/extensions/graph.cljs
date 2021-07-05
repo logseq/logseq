@@ -13,7 +13,7 @@
             [clojure.set :as set]
             [cljs-bean.core :as bean]
             [frontend.extensions.graph.pixi :as pixi]
-            [frontend.util :as util]
+            [frontend.util :as util :refer [profile]]
             [cljs-bean.core :as bean]))
 
 (defonce clicked-page-timestamps (atom nil))
@@ -72,14 +72,10 @@
   [^js graph]
   (.resetView graph))
 
-(rum/defcs graph-2d <
+(rum/defcs graph-2d < rum/static
   (rum/local nil :ref)
-  {:did-mount pixi/render!
-   :did-update pixi/render!
-   :should-update (fn [old new]
-                    (not=
-                     (dissoc (first (:rum/args old)) :register-handlers-fn)
-                     (dissoc (first (:rum/args new)) :register-handlers-fn)))
+  {:did-update (fn [state]
+                 (pixi/render! state))
    :will-unmount (fn [state]
                    (when-let [graph (:graph state)]
                      (.destroy graph))

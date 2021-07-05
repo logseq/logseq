@@ -500,9 +500,10 @@
                                         :on-change #(reset! *n-hops (int %))}))])
 
                [:a.opacity-70.opacity-100 {:on-click (fn []
-                                                       (reset! *graph-reset? true)
+                                                       (swap! *graph-reset? not)
                                                        (reset! *focus-nodes [])
-                                                       (reset! *n-hops nil))}
+                                                       (reset! *n-hops nil)
+                                                       (state/clear-search-filters!))}
                 "Reset Graph"]])))
           (graph-filter-section
            [:span.font-medium "Search"]
@@ -536,6 +537,7 @@
         dark? (= theme "dark")
         focus-nodes (rum/react *focus-nodes)
         n-hops (rum/react *n-hops)
+        reset? (rum/react *graph-reset?)
         graph (if (and (seq focus-nodes)
                        (integer? n-hops)
                        (not (:orphan-pages? settings)))
@@ -550,7 +552,7 @@
                         :register-handlers-fn
                         (fn [graph]
                           (graph-register-handlers graph *focus-nodes))
-                        :reset? @*graph-reset?})
+                        :reset? reset?})
        (graph-filters settings n-hops focus-nodes)])))
 
 (defn- filter-graph-nodes

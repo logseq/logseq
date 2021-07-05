@@ -4,6 +4,7 @@
             [frontend.ui :as ui]
             [shadow.lazy :as lazy]
             [frontend.handler.route :as route-handler]
+            [frontend.util :as util :refer [profile]]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]

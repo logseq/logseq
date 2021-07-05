@@ -130,6 +130,14 @@
         (conn/get-conn repo))
        (map first)))
 
+(defn get-all-pages
+  [repo]
+  (d/q
+    '[:find [(pull ?page [*]) ...]
+      :where
+      [?page :block/name]]
+    (conn/get-conn repo)))
+
 (defn get-modified-pages
   [repo]
   (-> (d/q
