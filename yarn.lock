@@ -6724,10 +6724,10 @@ pinkie@^2.0.0:
   resolved "https://registry.yarnpkg.com/pinkie/-/pinkie-2.0.4.tgz"
   integrity sha1-clVrgM+g1IqXToDnckjoDtT3+HA=
 
-pixi-graph-fork@^0.0.2:
-  version "0.0.2"
-  resolved "https://registry.yarnpkg.com/pixi-graph-fork/-/pixi-graph-fork-0.0.2.tgz#8f6d470a94f3549a5baab108be5b370c6f35aaa3"
-  integrity sha512-kO0dmQ8uojkoJ/qKHG0IdF9rOnvZCdFebRidXukIIvTJvY0P94Q7sn6ku9iLlWhe8eRajc/ISTOs0zADrUzVlA==
+pixi-graph-fork@^0.0.4:
+  version "0.0.4"
+  resolved "https://registry.yarnpkg.com/pixi-graph-fork/-/pixi-graph-fork-0.0.4.tgz#0969399f20232b0c43790f38935dfdd6150ac197"
+  integrity sha512-NzsV8nDctPrsk8abPHD9sKy8dW6FvV/FBYaAww0FGN0jKj/xzPZg4s3lLbeNT3qKeEItXNy28tUB4nR7kc5ukA==
   dependencies:
     "@pixi-essentials/cull" "^1.1.0"
     "@pixi/app" "^6.0.2"
