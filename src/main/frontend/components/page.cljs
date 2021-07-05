@@ -517,10 +517,15 @@
                  "Click to search"])]))
           {:search-filters search-graph-filters})]]]])))
 
+(defn- graph-register-handlers
+  [graph focus-nodes]
+  (.on graph "nodeClick"
+       (fn [event node]
+         (graph/on-click-handler graph node event focus-nodes))))
+
 (rum/defc global-graph-inner < rum/reactive
   [graph settings theme]
-  (let [sidebar-open? (state/sub :ui/sidebar-open?)
-        [width height] (rum/react layout)
+  (let [[width height] (rum/react layout)
         dark? (= theme "dark")
         focus-nodes (rum/react *focus-nodes)
         n-hops (rum/react *n-hops)
@@ -537,18 +542,7 @@
                         :height (- height 48)
                         :register-handlers-fn
                         (fn [graph]
-                          (.on graph "nodeClick"
-                               (fn [event node]
-                                 (graph/on-click-handler graph node event *focus-nodes))))
-                        ;; :defaultNode {:labelCfg {:position "bottom"}}
-                        ;; :defaultEdge {:style {:stroke (if dark? "#023643" "#eee")
-                        ;;                       :lineWidth 1}}
-                        ;; :nodeStateStyles {:inactive {:opacity 0.2
-                        ;;                              :node-label {:opacity 0.2}}}
-                        ;; :edgeStateStyles {:active {:stroke (if dark? "#08404f" "#ccc")}
-                        ;;                   :inactive {:stroke (if dark? "#023643" "#eee")
-                        ;;                              :opacity 0.2}}
-                        })
+                          (graph-register-handlers graph *focus-nodes))})
        (graph-filters settings n-hops focus-nodes)])))
 
 (defn- filter-graph-nodes
@@ -579,6 +573,27 @@
         search-graph-filters (state/sub :search/graph-filters)
         graph (update graph :nodes #(filter-graph-nodes % search-graph-filters))]
     (global-graph-inner graph settings theme)))
+
+(rum/defc page-graph < db-mixins/query rum/reactive
+  []
+  (let [page (or
+              (and (= :page (state/sub [:route-match :data :name]))
+                   (state/sub [:route-match :path-params :name]))
+              (date/today))
+        theme (:ui/theme @state/state)
+        dark? (= theme "dark")
+        graph (if (util/uuid-string? page)
+                (graph-handler/build-block-graph (uuid page) theme)
+                (graph-handler/build-page-graph page theme))]
+    (when (seq (:nodes graph))
+      [:div.sidebar-item.flex-col
+       (graph/graph-2d {:nodes (:nodes graph)
+                        :links (:links graph)
+                        :width 600
+                        :height 600
+                        :register-handlers-fn
+                        (fn [graph]
+                          (graph-register-handlers graph (atom nil)))})])))
 
 (rum/defc all-pages < rum/reactive
   ;; {:did-mount (fn [state]

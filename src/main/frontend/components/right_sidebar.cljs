@@ -44,27 +44,6 @@
               :sidebar?   true
               :repo       repo}))
 
-(rum/defc page-graph < db-mixins/query rum/reactive
-  []
-  (let [page (or
-              (and (= :page (state/sub [:route-match :data :name]))
-                   (state/sub [:route-match :path-params :name]))
-              (date/today))
-        theme (:ui/theme @state/state)
-        dark? (= theme "dark")
-        graph (if (util/uuid-string? page)
-                (graph-handler/build-block-graph (uuid page) theme)
-                (graph-handler/build-page-graph page theme))]
-    (when (seq (:nodes graph))
-      [:div.sidebar-item.flex-col
-       (graph/graph-2d
-        {:data graph}
-        ;; (graph/build-graph-opts
-        ;;  graph dark?
-        ;;  {:width  600
-        ;;   :height 600})
-        )])))
-
 (defn recent-pages
   []
   (let [pages (->> (db/get-key-value :recent/pages)
@@ -108,7 +87,7 @@
 
     :page-graph
     [(str (t :right-side-bar/page-graph))
-     (page-graph)]
+     (page/page-graph)]
 
     :block-ref
     (when-let [block (db/entity repo [:block/uuid (:block/uuid (:block block-data))])]
