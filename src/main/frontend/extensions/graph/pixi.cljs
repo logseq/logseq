@@ -31,16 +31,17 @@
    "#17becf"])
 
 (def default-style
-  {:node {:size 8
+  {:node {:size (fn [node]
+                  (or (.-size node) 8))
           :border {:width 0}
           :color (fn [node]
                    (if-let [parent (gobj/get node "parent")]
                      (let [v (js/Math.abs (hash parent))]
                        (nth colors (mod v (count colors))))
-                     "#333333"))
+                     (.-color node)))
           :label {:content (fn [node] (.-id node))
-                  :type js/window.PixiGraph.TextType.TEXT
-                  :fontSize 12
+                  :type (.-TEXT (.-TextType Pixi-Graph))
+                  :fontSize 24
                   :color "#333333"
                   :backgroundColor "rgba(255, 255, 255, 0.5)"
                   :padding 4}}
@@ -68,8 +69,10 @@
   [nodes links]
   (let [simulation (forceSimulation nodes)]
     (-> simulation
-     (.force "link" (.id (forceLink links)
-                         (fn [d] (.-id d))))
+        (.force "link" (-> (forceLink)
+                           (.id (fn [d] (.-id d)))
+                           (.distance 180)
+                           (.links links)))
      (.force "charge" (-> (forceManyBody)
                           (.distanceMax 4000)
                           (.theta 0.5)

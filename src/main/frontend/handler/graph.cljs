@@ -45,13 +45,12 @@
                              (if dark? "orange" "green")
                              color)]
                  (let [size-v (js/Math.cbrt (get-connections (string/lower-case p) links))
-                       size (* (if (zero? size-v) 1 size-v) 8)]
+                       size (int (* (if (zero? size-v) 1 size-v) 8))]
                    (cond->
                      {:id p
                       :label p
                       :size size
-                      :style {:fill color
-                              :stroke color}}
+                      :color color}
                      parent
                      (assoc :parent parent))))))
            pages)
