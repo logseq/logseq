@@ -94,9 +94,10 @@
      [:div
       {:class "mb-2"}
       (ui/button "Text"
-                 :class "mr-2"
+                 :class "mr-2 w-20"
                  :on-click #(reset! *export-block-type :text))
       (ui/button "OPML"
+                 :class "w-20"
                  :on-click #(reset! *export-block-type :opml))]
      [:textarea.overflow-y-auto.h-96 {:value content}]
      (let [options (->> text-indent-style-options
@@ -104,19 +105,21 @@
                                 (if (= text-indent-style (:label opt))
                                   (assoc opt :selected true)
                                   opt))))]
-       [:select.block.w-full.my-2.text-lg.rounded.border
-        {:style     {:padding "0 0 0 12px"
-                     :visibility (if (= :text type) "visible" "hidden")}
-         :on-change (fn [e]
-                      (let [value (util/evalue e)]
-                        (#(reset! *export-block-text-indent-style %) value)))}
-        (for [{:keys [label value selected]} options]
-          [:option (cond->
-                    {:key   label
-                     :value (or value label)}
-                     selected
-                     (assoc :selected selected))
-           label])])
+       [:div.flex.items-center
+        [:label.mr-8 "Indentation style:"]
+        [:select.block.my-2.text-lg.rounded.border
+         {:style     {:padding "0 0 0 12px"
+                      :visibility (if (= :text type) "visible" "hidden")}
+          :on-change (fn [e]
+                       (let [value (util/evalue e)]
+                         (#(reset! *export-block-text-indent-style %) value)))}
+         (for [{:keys [label value selected]} options]
+           [:option (cond->
+                        {:key   label
+                         :value (or value label)}
+                      selected
+                      (assoc :selected selected))
+            label])]])
      (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")
                 :on-click (fn []
                             (util/copy-to-clipboard! content)
