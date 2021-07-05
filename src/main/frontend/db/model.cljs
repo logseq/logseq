@@ -1255,7 +1255,7 @@
 (defn get-namespace-pages
   [repo namespace]
   (assert (string? namespace))
-  (let [db (conn/get-conn repo)]
+  (when-let [db (conn/get-conn repo)]
     (when-not (string/blank? namespace)
       (let [namespace (string/lower-case (string/trim namespace))
             ids (->> (d/datoms db :aevt :block/name)

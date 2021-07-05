@@ -96,8 +96,9 @@
               hover-style default-hover-style}} (first (:rum/args state))
         graph (graph.)
         nodes-set (set (map :id nodes))
-        links (filter (fn [link]
-                        (and (nodes-set (:source link)) (nodes-set (:target link)))) links)
+        links (->> (filter (fn [link]
+                             (and (nodes-set (:source link)) (nodes-set (:target link)))) links)
+                   (distinct))
         nodes-js (bean/->js nodes)
         links-js (bean/->js links)]
     (layout! nodes-js links-js)
