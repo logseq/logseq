@@ -45,10 +45,6 @@
     padding-left: 0;
 }
 
-.is-electron.is-mac.is-fullscreen .navigation {
-    display: none;
-}
-
 .cp__header a, .cp__header svg {
     -webkit-app-region: no-drag;
 }

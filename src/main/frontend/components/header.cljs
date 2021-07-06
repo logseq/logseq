@@ -153,12 +153,23 @@
      ;;                  [:div.px-2.py-2 (login logged?)])}
      )))
 
+(rum/defc back-and-forward
+  [electron-mac?]
+  [:div.flex.flex-row
+   [:a.opacity-60.hover:opacity-100.it.navigation.nav-left.block.p-2
+    {:title "Go Back" :on-click #(js/window.history.back)}
+    svg/arrow-narrow-left]
+   [:a.opacity-60.hover:opacity-100.it.navigation.nav-right.block.p-2
+    {:title "Go Forward" :on-click #(js/window.history.forward)}
+    svg/arrow-narrow-right]])
+
 (rum/defc header < rum/reactive
   [{:keys [open-fn current-repo white? logged? page? route-match me default-home new-block-mode]}]
   (let [local-repo? (= current-repo config/local-repo)
         repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
-        electron-mac? (and util/mac? (util/electron?))]
+        electron-mac? (and util/mac? (util/electron?))
+        electron-not-mac? (and (util/electron?) (not electron-mac?))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
        {:class (when electron-mac? "electron-mac")
@@ -174,13 +185,7 @@
        (when-not electron-mac?
          (logo {:white? white?}))
 
-       (when (util/electron?)
-         [:a.opacity-60.hover:opacity-100.it.navigation.nav-left.block.p-1
-          {:title "Go Back" :on-click #(js/window.history.back)} svg/arrow-narrow-left])
-
-       (when (util/electron?)
-         [:a.opacity-60.hover:opacity-100.it.navigation.nav-right.block.p-1
-          {:title "Go Forward" :on-click #(js/window.history.forward)} svg/arrow-narrow-right])
+       (when electron-not-mac? (back-and-forward))
 
        (if current-repo
          (search/search)
@@ -189,6 +194,8 @@
        (when electron-mac?
          (logo {:white? white?
                 :electron-mac? true}))
+
+       (when electron-mac? (back-and-forward true))
 
        (new-block-mode)
 
