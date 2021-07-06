@@ -155,7 +155,8 @@
                      (when logged?
                        (d/transact! db-conn [(me-tx (d/db db-conn) me)])))]
            (restore-config-handler repo)
-           (listen-and-persist! repo)))))))
+           (listen-and-persist! repo)
+           (state/pub-event! [:after-db-restore repo])))))))
 
 (defn run-batch-txs!
   []
