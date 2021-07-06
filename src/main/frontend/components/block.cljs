@@ -870,12 +870,10 @@
 
     ;; String to hiccup
     ["Inline_Hiccup" s]
-    (do
-      (js/console.log s)
-      (ui/catch-error
-       [:div.warning {:title "Invalid hiccup"} s]
-       (-> (safe-read-string s)
-           (security/remove-javascript-links-in-href))))
+    (ui/catch-error
+     [:div.warning {:title "Invalid hiccup"} s]
+     (-> (safe-read-string s)
+         (security/remove-javascript-links-in-href)))
 
     ["Inline_Html" s]
     (when (not html-export?)
