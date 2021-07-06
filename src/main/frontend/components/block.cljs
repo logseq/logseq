@@ -371,14 +371,14 @@
        :else
        (get page-entity :block/original-name page-name)))])
 
-(defn- use-delayed-open [open? page-name timeout]
+(defn- use-delayed-open [open? page-name]
   "A react hook to debounce open? value.
   If open? changed from false to open, there will be a `timeout` delay.
   Otherwise, the value will be changed to false immediately"
-  (let [[deval set-deval!] (rum/use-state false)]
+  (let [[deval set-deval!] (rum/use-state nil)]
     (rum/use-effect!
       (fn []
-        (if open? (let [timer (js/setTimeout #(set-deval! open?) timeout)]
+        (if open? (let [timer (js/setTimeout #(set-deval! open?) 1000)]
                     #(js/clearTimeout timer))
                   (set-deval! open?))) ;; immediately change
       [open? page-name])
@@ -386,10 +386,10 @@
 
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open?] :as config} page-name]
-  (let [page-entity (db/entity [:block/name page-name])
-        redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
+  (let [redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
         page-original-name (model/get-page-original-name redirect-page-name)
-        debounced-open? (use-delayed-open open? page-name 1000)
+        debounced-open? (use-delayed-open open? page-name)
+        manual? (not (nil? open?))
         html-template (fn []
                         [:div.tippy-wrapper.overflow-y-auto.p-4
                          {:style {:width          600
@@ -413,14 +413,16 @@
                            (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                            (when-let [f (state/get-page-blocks-cp)]
                              (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])]
-    (ui/tippy {:html            html-template
-               :interactive     true
-               :open?           debounced-open?
-               :delay           [1000, 100]
-               :fixed-position? fixed-position?
-               :position        (or tippy-position "top")
-               :distance        (or tippy-distance 10)}
-              children)))
+    (if (and manual? open?)
+      (ui/tippy {:html            html-template
+                 :interactive     true
+                 :open?           debounced-open?
+                 :delay           [1000, 100]
+                 :fixed-position? fixed-position?
+                 :position        (or tippy-position "top")
+                 :distance        (or tippy-distance 10)}
+                children)
+      children)))
 
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page? sidebar? preview?] :as config} page]
@@ -428,7 +430,6 @@
     (let [page-name (string/lower-case page-name)
           page-entity (db/entity [:block/name page-name])
           redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
-          page-original-name (model/get-page-original-name redirect-page-name)
           href (if html-export?
                  (util/encode-str page-name)
                  (rfe/href :page {:name redirect-page-name}))
