@@ -31,7 +31,8 @@
    "#bcbd22"
    "#17becf"])
 
-(def default-style
+(defn default-style
+  [dark?]
   {:node {:size (fn [node]
                   (or (.-size node) 8))
           :border {:width 0}
@@ -47,9 +48,10 @@
                   :backgroundColor "rgba(255, 255, 255, 0.5)"
                   :padding 4}}
    :edge {:width 1
-          :color "#cccccc"}})
+          :color (if dark? "#094b5a" "#cccccc")}})
 
-(def default-hover-style
+(defn default-hover-style
+  [dark?]
   {:node {:color "#6366F1"
           :border {:width 2
                    :color "#6366F1"}
@@ -92,9 +94,9 @@
   [state]
   (when-let [graph (:graph state)]
     (.destroy graph))
-  (let [{:keys [nodes links style hover-style height register-handlers-fn]
-         :or {style default-style
-              hover-style default-hover-style}} (first (:rum/args state))
+  (let [{:keys [nodes links style hover-style height register-handlers-fn dark?]} (first (:rum/args state))
+        style (or style (default-style dark?))
+        hover-style (or hover-style (default-hover-style dark?))
         graph (graph.)
         nodes-set (set (map :id nodes))
         links (->> (filter (fn [link]

@@ -423,7 +423,7 @@
   (let [open? (get state ::open?)]
     (when (and (seq search-filters) (not @open?))
       (reset! open? true))
-    [:li.relative.border-b.border-gray-200
+    [:li.relative
      [:div
       [:button.w-full.px-4.py-2.text-left {:on-click #(swap! open? not)}
        [:div.flex.items-center.justify-between
@@ -454,8 +454,8 @@
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.absolute.top-4.right-4.graph-filters
        [:div.flex.flex-col
-        [:div.border
-         [:ul.shadow-box
+        [:div.shadow-xl.rounded-sm
+         [:ul
           (graph-filter-section
            [:span.font-medium "Nodes"]
            (fn [open?]
@@ -550,6 +550,7 @@
                         :links (:links graph)
                         :width (- width 24)
                         :height (- height 48)
+                        :dark? dark?
                         :register-handlers-fn
                         (fn [graph]
                           (graph-register-handlers graph *focus-nodes))
@@ -603,6 +604,7 @@
                         :links (:links graph)
                         :width 600
                         :height 600
+                        :dark? dark?
                         :register-handlers-fn
                         (fn [graph]
                           (graph-register-handlers graph (atom nil)))})])))

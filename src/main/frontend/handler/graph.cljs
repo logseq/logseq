@@ -33,9 +33,9 @@
                (let [p (str p)
                      current-page? (= p current-page)
                      color (case [dark? current-page?] ; FIXME: Put it into CSS
-                             [false false] "#333"
+                             [false false] "#999"
                              [false true]  "#045591"
-                             [true false]  "#8abbbb"
+                             [true false]  "#93a1a1"
                              [true true]   "#ffffff")
                      color (if (contains? tags p)
                              (if dark? "orange" "green")
