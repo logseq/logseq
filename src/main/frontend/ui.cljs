@@ -634,10 +634,11 @@
 
 (defn slider
   [default-value {:keys [min max on-change]}]
-  [:input {:type  "range"
-           :value (int default-value)
-           :min   min
-           :max   max
-           :style {:width "100%"}
-           :on-change #(let [value (util/evalue %)]
-                         (on-change value))}])
+  [:input.cursor-pointer
+   {:type  "range"
+    :value (int default-value)
+    :min   min
+    :max   max
+    :style {:width "100%"}
+    :on-change #(let [value (util/evalue %)]
+                  (on-change value))}])
