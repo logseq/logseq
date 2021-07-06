@@ -72,10 +72,10 @@
   [^js graph]
   (.resetView graph))
 
-(rum/defcs graph-2d < rum/static
+(rum/defcs graph-2d <
   (rum/local nil :ref)
-  {:did-update (fn [state]
-                 (pixi/render! state))
+  {:did-mount pixi/render!
+   :did-update pixi/render!
    :will-unmount (fn [state]
                    (when-let [graph (:graph state)]
                      (.destroy graph))

@@ -442,14 +442,15 @@
 (defonce *graph-reset? (atom false))
 
 (rum/defc graph-filters < rum/reactive
-  [settings n-hops focus-nodes]
+  [settings n-hops]
   (let [{:keys [layout journal? orphan-pages? builtin-pages?]
          :or {layout "gForce"
               orphan-pages? true}} settings
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
-        search-graph-filters (state/sub :search/graph-filters)]
+        search-graph-filters (state/sub :search/graph-filters)
+        focus-nodes (rum/react *focus-nodes)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.absolute.top-4.right-4.graph-filters
        [:div.flex.flex-col
@@ -535,11 +536,11 @@
   [graph settings theme]
   (let [[width height] (rum/react layout)
         dark? (= theme "dark")
-        focus-nodes (rum/react *focus-nodes)
         n-hops (rum/react *n-hops)
         reset? (rum/react *graph-reset?)
-        graph (if (and (seq focus-nodes)
-                       (integer? n-hops)
+        focus-nodes (when n-hops (rum/react *focus-nodes))
+        graph (if (and (integer? n-hops)
+                       (seq focus-nodes)
                        (not (:orphan-pages? settings)))
                 (graph-handler/n-hops graph focus-nodes n-hops)
                 graph)]
@@ -553,7 +554,7 @@
                         (fn [graph]
                           (graph-register-handlers graph *focus-nodes))
                         :reset? reset?})
-       (graph-filters settings n-hops focus-nodes)])))
+       (graph-filters settings n-hops)])))
 
 (defn- filter-graph-nodes
   [nodes filters]
