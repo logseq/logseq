@@ -480,19 +480,23 @@
                ;;    "graph-layout")]
                [:div.flex.items-center.justify-between.mb-2
                 [:span "Journals"]
-                (ui/toggle journal?
-                           #(set-setting! :journal? (not journal?))
-                           true)]
+                ;; FIXME: why it's not aligned well?
+                [:div.mt-1
+                 (ui/toggle journal?
+                            #(set-setting! :journal? (not journal?))
+                            true)]]
                [:div.flex.items-center.justify-between.mb-2
                 [:span "Orphan pages"]
-                (ui/toggle orphan-pages?
-                           #(set-setting! :orphan-pages? (not orphan-pages?))
-                           true)]
+                [:div.mt-1
+                 (ui/toggle orphan-pages?
+                            #(set-setting! :orphan-pages? (not orphan-pages?))
+                            true)]]
                [:div.flex.items-center.justify-between.mb-2
                 [:span "Built-in pages"]
-                (ui/toggle builtin-pages?
-                           #(set-setting! :builtin-pages? (not builtin-pages?))
-                           true)]
+                [:div.mt-1
+                 (ui/toggle builtin-pages?
+                            #(set-setting! :builtin-pages? (not builtin-pages?))
+                            true)]]
                (when (seq focus-nodes)
                  [:div.flex.flex-col.mb-2
                   [:p {:title "N hops from selected nodes"}
