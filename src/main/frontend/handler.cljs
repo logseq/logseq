@@ -115,7 +115,8 @@
 
                             (watch-for-date!)
                             (file-handler/watch-for-local-dirs!)
-                            (state/pub-event! [:after-db-restore repos])))
+                            (when-not (state/logged?)
+                              (state/pub-event! [:after-db-restore repos]))))
                          (p/catch (fn [error]
                                     (log/error :db/restore-failed error))))))]
     ;; clear this interval
