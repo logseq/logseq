@@ -425,7 +425,7 @@
       (reset! open? true))
     [:li.relative
      [:div
-      [:button.w-full.px-4.py-2.text-left {:on-click #(swap! open? not)}
+      [:button.w-full.px-4.py-2.text-left.focus:outline-none {:on-click #(swap! open? not)}
        [:div.flex.items-center.justify-between
         title
         (if @open? (svg/caret-down) (svg/caret-right))]]
@@ -461,7 +461,7 @@
            (fn [open?]
              (filter-expand-area
               open?
-              [:div.p-6
+              [:div.p-6.border
                ;; [:div.flex.items-center.justify-between.mb-2
                ;;  [:span "Layout"]
                ;;  (ui/select
@@ -511,7 +511,7 @@
            (fn [open?]
              (filter-expand-area
               open?
-              [:div.p-6
+              [:div.p-6.border
                (if (seq search-graph-filters)
                  [:div
                   (for [q search-graph-filters]

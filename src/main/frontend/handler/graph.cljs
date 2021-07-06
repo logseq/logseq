@@ -6,7 +6,8 @@
             [frontend.state :as state]
             [clojure.set :as set]
             [medley.core :as medley]
-            [frontend.db.default :as default-db]))
+            [frontend.db.default :as default-db]
+            [frontend.text :as text]))
 
 (defn- build-links
   [links]
@@ -23,8 +24,9 @@
                  links)))
 
 (defn- build-nodes
-  [dark? current-page page-links tags nodes]
-  (let [current-page (or current-page "")
+  [dark? current-page page-links tags nodes namespaces]
+  (let [parents (set (map last namespaces))
+        current-page (or current-page "")
         pages (->> (set (flatten nodes))
                    (remove nil?))]
     (->>
@@ -48,10 +50,13 @@
                                 1
                                 (int size-v))
                        size (* size-v 8)]
-                   {:id p
-                    :label p
-                    :size size
-                    :color color}))))
+                   (cond->
+                     {:id p
+                      :label p
+                      :size size
+                      :color color}
+                     (contains? parents p)
+                     (assoc :parent true))))))
            pages)
      (remove nil?))))
 
@@ -93,7 +98,6 @@
     {:nodes nodes
      :links links}))
 
-;; TODO: namespaces
 (defn build-global-graph
   [theme {:keys [journal? orphan-pages? builtin-pages?] :as settings}]
   (let [dark? (= "dark" theme)
@@ -101,17 +105,18 @@
     (when-let [repo (state/get-current-repo)]
       (let [relation (db/get-pages-relation repo journal?)
             tagged-pages (db/get-all-tagged-pages repo)
+            namespaces (db/get-all-namespace-relation repo)
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)
-            get-original-name (fn [p] (or (:block/original-name p)
-                                          (:block/name p)))
+            get-original-name (fn [p] (or (:block/original-name p) (:block/name p)))
             all-pages (map get-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)
             pages-after-journal-filter (if-not journal?
                                          (remove :block/journal? full-pages)
                                          full-pages)
             links (concat (seq relation)
-                          (seq tagged-pages))
+                          (seq tagged-pages)
+                          (seq namespaces))
             linked (set (flatten links))
             nodes (cond->> (map :block/name pages-after-journal-filter)
                     (not builtin-pages?)
@@ -121,7 +126,7 @@
             page-links (reduce (fn [m [k v]] (-> (update m k inc)
                                                  (update v inc))) {} links)
             links (build-links (remove (fn [[_ to]] (nil? to)) links))
-            nodes (build-nodes dark? (string/lower-case current-page) page-links tags nodes)]
+            nodes (build-nodes dark? (string/lower-case current-page) page-links tags nodes namespaces)]
         (normalize-page-name
          {:nodes nodes
           :links links
@@ -138,7 +143,9 @@
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page)
             mentioned-pages (db/get-pages-that-mentioned-page repo page)
+            namespaces (db/get-all-namespace-relation repo)
             links (concat
+                   namespaces
                    (map (fn [[p aliases]]
                           [page p]) ref-pages)
                    (map (fn [[p aliases]]
@@ -173,7 +180,7 @@
                         tags)
                        (remove nil?)
                        (distinct)
-                       (build-nodes dark? page links (set tags)))
+                       (build-nodes dark? page links (set tags) namespaces))
             full-pages (db/get-all-pages repo)
             get-original-name (fn [p] (or (:block/original-name p)
                                          (:block/name p)))
@@ -190,9 +197,11 @@
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
       (let [ref-blocks (db/get-block-referenced-blocks block)
+            namespaces (db/get-all-namespace-relation repo)
             links (concat
                    (map (fn [[p aliases]]
-                          [block p]) ref-blocks))
+                          [block p]) ref-blocks)
+                   namespaces)
             other-blocks (->> (concat (map first ref-blocks))
                               (remove nil?)
                               (set))
@@ -214,7 +223,7 @@
                        (remove nil?)
                        (distinct)
                        ;; FIXME: get block tags
-                       (build-nodes dark? block links #{}))]
+                       (build-nodes dark? block links #{} namespaces))]
         (normalize-page-name
          {:nodes nodes
           :links links})))))

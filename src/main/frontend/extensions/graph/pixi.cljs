@@ -37,8 +37,8 @@
                   (or (.-size node) 8))
           :border {:width 0}
           :color (fn [node]
-                   (if-let [parent (gobj/get node "parent")]
-                     (let [v (js/Math.abs (hash parent))]
+                   (if (gobj/get node "parent")
+                     (let [v (js/Math.abs (hash (.-id node)))]
                        (nth colors (mod v (count colors))))
                      (.-color node)))
           :label {:content (fn [node] (.-id node))

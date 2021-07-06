@@ -118,7 +118,16 @@
          [?page :block/tags ?e]
          [?e :block/name ?tag]
          [?page :block/name ?page-name]]
-       (conn/get-conn repo)))
+    (conn/get-conn repo)))
+
+(defn get-all-namespace-relation
+  [repo]
+  (d/q '[:find ?page-name ?parent
+         :where
+         [?page :block/name ?page-name]
+         [?page :block/namespace ?e]
+         [?e :block/name ?parent]]
+    (conn/get-conn repo)))
 
 (defn get-pages
   [repo]
