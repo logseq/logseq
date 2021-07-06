@@ -155,7 +155,7 @@
     (if (and (seq matched)
              (> (count matched)
                 @current-idx))
-      (on-shift-chosen (nth matched @current-idx) false)
+      ((or on-shift-chosen on-chosen) (nth matched @current-idx) false)
       (and on-enter (on-enter state)))))
 
 ;; date-picker
