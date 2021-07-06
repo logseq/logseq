@@ -114,7 +114,8 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
-                            (file-handler/watch-for-local-dirs!)))
+                            (file-handler/watch-for-local-dirs!)
+                            (state/pub-event! [:after-db-restore repos])))
                          (p/catch (fn [error]
                                     (log/error :db/restore-failed error))))))]
     ;; clear this interval
