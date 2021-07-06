@@ -285,7 +285,7 @@
                   :else
                   300)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#search.flex-1.flex
+      [:div#search.flex-1.flex.p-2
        [:div.inner
         [:label.sr-only {:for "search-field"} (t :search)]
         [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600

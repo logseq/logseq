@@ -2,7 +2,7 @@
   @apply shadow z-10 h-12;
   -webkit-app-region: drag;
 
-  padding-right: 1rem;
+  padding: 0 0.5rem;
   display: flex;
   align-items: center;
   flex: 0 0 auto;
@@ -27,44 +27,10 @@
       min-width: 14rem;
     }
   }
-
-  &.electron-mac {
-    height: 38px;
-
-    .refresh {
-      margin: 0;
-    }
-
-    .open-button__icon-wrapper {
-      margin-right: 7px;
-    }
-
-    svg {
-      width: 18px;
-      height: 18px;
-    }
-
-    .navigation svg {
-      width: 24px;
-      height: 24px;
-    }
-
-    .open-button {
-      &__inner {
-        @apply items-center;
-
-        svg {
-          width: 18px;
-          height: 18px;
-        }
-      }
-    }
-
-  }
 }
 
 .is-electron.is-mac .cp__header {
-    padding-left: 72px;
+    padding-left: 78px;
     -moz-transition: padding-left .3s ease-in;
     -o-transition: padding-left  .3s ease-in;
     -webkit-transition: padding-left  .3s ease-in;
@@ -77,6 +43,10 @@
 
 .is-electron.is-mac.is-fullscreen .cp__header {
     padding-left: 0;
+}
+
+.is-electron.is-mac.is-fullscreen .navigation {
+    display: none;
 }
 
 .cp__header a, .cp__header svg {
@@ -97,8 +67,7 @@
 }
 
 .cp__header-logo {
-  @apply px-4;
-  height: 100%;
+  @apply p-2;
 }
 
 .cp__header-logo,
@@ -120,14 +89,6 @@
   height: 24px;
 }
 
-.cp__right-menu-button {
-  @apply ml-3;
-}
-
-.cp__right-menu-button {
-  display: block;
-}
-
 @screen sm {
   .cp__header {
     @apply shadow-none;
@@ -138,8 +99,7 @@
   }
 
   .cp__header-logo {
-    display: flex;
-    align-items: center;
+    display: block;
   }
 }
 

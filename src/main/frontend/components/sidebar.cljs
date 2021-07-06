@@ -270,9 +270,9 @@
                       [:ul
                        [:li "Shift + Enter to create new block"]
                        [:li "Click `D` or type `t d` to toggle document mode"]]]}
-     [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
-      {:on-click state/toggle-document-mode!}
-      "D"])))
+              [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
+               {:on-click state/toggle-document-mode!}
+               "D"])))
 
 (rum/defc help-button < rum/reactive
   []
@@ -345,6 +345,7 @@
           :close-fn    close-fn
           :route-match route-match})
         [:div.#app-container.h-screen.flex
+         {:class (if (state/sub :ui/sidebar-open?) "w-full" "overflow-hidden")}
          [:div.flex-1.h-full.w-full.flex.flex-col#left-container.relative
           [:div.scrollbar-spacing#main-container
            (header/header {:open-fn        open-fn

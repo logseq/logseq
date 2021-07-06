@@ -27,7 +27,7 @@
 (rum/defc toggle
   []
   (when-not (util/mobile?)
-    [:a.opacity-60.hover:opacity-100.ml-4 {:on-click state/toggle-sidebar-open?!}
+    [:a.opacity-60.hover:opacity-100.block.p-2 {:on-click state/toggle-sidebar-open?!}
     (svg/menu)]))
 
 (rum/defc block-cp < rum/reactive
@@ -244,7 +244,7 @@
 
           (sidebar-resizer)
           [:div.cp__right-sidebar-scrollable
-           [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-4.h-12
+           [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-2.h-12
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]

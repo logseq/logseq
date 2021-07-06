@@ -45,8 +45,8 @@
 
       (ui/dropdown-with-links
        (fn [{:keys [toggle-fn]}]
-         [:a.fade-link {:on-click toggle-fn}
-          [:span.ml-1 (t :login)]])
+         [:a.fade-link.block.p-2 {:on-click toggle-fn}
+          [:span (t :login)]])
        (let [list [
                    ;; {:title (t :login-google)
                    ;;  :url (str config/website "/login/google")}
@@ -80,7 +80,7 @@
         logged? (state/logged?)]
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
-       [:a.cp__right-menu-button
+       [:a.cp__right-menu-button.block.p-2
         {:on-click toggle-fn}
         (svg/horizontal-dots nil)])
      (->>
@@ -169,20 +169,23 @@
                                       (open-fn)
                                       (state/set-left-sidebar-open! true))})
 
-       (logo {:white? white?})
+       (when-not electron-mac?
+         (logo {:white? white?}))
 
        (when (util/electron?)
-         [:a.opacity-60.hover:opacity-100.mr-1.it.navigation.nav-left
+         [:a.opacity-60.hover:opacity-100.it.navigation.nav-left.block.p-1
           {:title "Go Back" :on-click #(js/window.history.back)} svg/arrow-narrow-left])
 
        (when (util/electron?)
-         [:a.opacity-60.hover:opacity-100.it.navigation.nav-right
-          {:style {:margin-right 5}
-           :title "Go Forward" :on-click #(js/window.history.forward)} svg/arrow-narrow-right])
+         [:a.opacity-60.hover:opacity-100.it.navigation.nav-right.block.p-1
+          {:title "Go Forward" :on-click #(js/window.history.forward)} svg/arrow-narrow-right])
 
        (if current-repo
          (search/search)
          [:div.flex-1])
+
+       (when electron-mac?
+         (logo {:white? white?}))
 
        (new-block-mode)
 
@@ -199,7 +202,7 @@
 
        (when (and (nfs/supported?) (empty? repos)
                   (not config/publishing?))
-         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block.open-button
+         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.block.p-2
           {:on-click (fn []
                        (page-handler/ls-dir-files!))}
           [:div.flex.flex-row.text-center.open-button__inner
@@ -209,7 +212,7 @@
               (t :open)])]])
 
        (if config/publishing?
-         [:a.text-sm.font-medium.ml-3 {:href (rfe/href :graph)}
+         [:a.text-sm.font-medium.block.p-2 {:href (rfe/href :graph)}
           (t :graph)])
 
        (dropdown-menu {:me me

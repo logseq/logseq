@@ -386,8 +386,7 @@
 (rum/defc logo
   [dark?]
   [:svg.svg-shadow
-   {:fill (if dark? "currentColor" "#002B36"), :view-box "0 0 21 21", :height "21", :width "21"
-    :style {:margin-top 2}}
+   {:fill (if dark? "currentColor" "#002B36"), :view-box "0 0 21 21", :height "21", :width "21"}
    [:ellipse
     {:transform
      "matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 2.59206)"
