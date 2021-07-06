@@ -26,16 +26,18 @@
             [frontend.handler.migrate :as migrate]))
 
 (rum/defc logo < rum/reactive
-  [{:keys [white?]}]
+  [{:keys [white? electron-mac?]}]
   [:a.cp__header-logo
    {:href     (rfe/href :home)
     :on-click (fn []
                 (util/scroll-to-top)
                 (state/set-journals-length! 2))}
-   (if-let [logo (and config/publishing?
-                      (get-in (state/get-config) [:project :logo]))]
-     [:img.cp__header-logo-img {:src logo}]
-     (svg/logo (not white?)))])
+   (if electron-mac?
+     svg/home
+     (if-let [logo (and config/publishing?
+                       (get-in (state/get-config) [:project :logo]))]
+      [:img.cp__header-logo-img {:src logo}]
+      (svg/logo (not white?))))])
 
 (rum/defc login
   [logged?]
@@ -185,7 +187,8 @@
          [:div.flex-1])
 
        (when electron-mac?
-         (logo {:white? white?}))
+         (logo {:white? white?
+                :electron-mac? true}))
 
        (new-block-mode)
 

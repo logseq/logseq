@@ -70,7 +70,6 @@
   @apply p-2;
 }
 
-.cp__header-logo,
 .cp__right-menu-button {
   opacity: 0.3;
 }
@@ -101,6 +100,10 @@
   .cp__header-logo {
     display: block;
   }
+}
+
+.cp__header-logo svg {
+    transform: scale(0.9);
 }
 
 #repo-name {
