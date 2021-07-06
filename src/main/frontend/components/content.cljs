@@ -197,12 +197,12 @@
            "Cut")
 
           (when (state/sub [:plugin/simple-commands])
-            (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu)]
+            (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
               (for [[_ {:keys [key label] :as cmd} action pid] cmds]
                 (ui/menu-link
                   {:key      key
                    :on-click #(commands/exec-plugin-simple-command!
-                                pid (assoc cmd :block-id block-id) action)}
+                                pid (assoc cmd :uuid block-id) action)}
                   label))))
 
           (when (state/sub [:ui/developer-mode?])

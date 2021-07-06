@@ -143,7 +143,6 @@
 
     &-btn {
       display: block;
-      padding: 13px 5px;
       white-space: nowrap;
     }
   }
@@ -156,6 +155,12 @@
       right: 0;
       background-color: var(--ls-secondary-background-color, #d8e1e8);
       z-index: 999;
+      user-select: none;
+      -webkit-app-region: drag;
+
+      a, svg {
+          -webkit-app-region: no-drag;
+      }
   }
 
   .page {

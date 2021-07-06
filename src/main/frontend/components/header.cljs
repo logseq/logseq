@@ -11,6 +11,7 @@
             [frontend.context.i18n :as i18n]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.components.svg :as svg]
             [frontend.components.repo :as repo]
             [frontend.components.search :as search]
@@ -19,6 +20,7 @@
             [frontend.components.right-sidebar :as sidebar]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
+            [frontend.mixins :as mixins]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.handler.migrate :as migrate]))
@@ -45,8 +47,9 @@
        (fn [{:keys [toggle-fn]}]
          [:a.fade-link {:on-click toggle-fn}
           [:span.ml-1 (t :login)]])
-       (let [list [{:title (t :login-google)
-                    :url (str config/website "/login/google")}
+       (let [list [
+                   ;; {:title (t :login-google)
+                   ;;  :url (str config/website "/login/google")}
                    {:title (t :login-github)
                     :url (str config/website "/login/github")}]]
          (mapv
@@ -148,15 +151,16 @@
      ;;                  [:div.px-2.py-2 (login logged?)])}
      )))
 
-(rum/defc header
-  < rum/reactive
+(rum/defc header < rum/reactive
   [{:keys [open-fn current-repo white? logged? page? route-match me default-home new-block-mode]}]
   (let [local-repo? (= current-repo config/local-repo)
         repos (->> (state/sub [:me :repos])
-                   (remove #(= (:url %) config/local-repo)))]
+                   (remove #(= (:url %) config/local-repo)))
+        electron-mac? (and util/mac? (util/electron?))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
-       {:on-double-click (fn [^js e]
+       {:class (when electron-mac? "electron-mac")
+        :on-double-click (fn [^js e]
                            (when-let [target (.-target e)]
                              (when (and (util/electron?)
                                         (or (.. target -classList (contains "cp__header"))))
@@ -168,14 +172,13 @@
        (logo {:white? white?})
 
        (when (util/electron?)
-         [:a.mr-1.opacity-60.hover:opacity-100.it.navigation
-          {:style {:margin-left -10}
-           :title "Go Back" :on-click #(js/window.history.back)} (svg/arrow-left)])
+         [:a.opacity-60.hover:opacity-100.mr-1.it.navigation.nav-left
+          {:title "Go Back" :on-click #(js/window.history.back)} svg/arrow-narrow-left])
 
        (when (util/electron?)
-         [:a.opacity-60.hover:opacity-100.it.navigation
-          {:style {:margin-right 15}
-           :title "Go Forward" :on-click #(js/window.history.forward)} (svg/arrow-right)])
+         [:a.opacity-60.hover:opacity-100.it.navigation.nav-right
+          {:style {:margin-right 5}
+           :title "Go Forward" :on-click #(js/window.history.forward)} svg/arrow-narrow-right])
 
        (if current-repo
          (search/search)
@@ -186,6 +189,9 @@
        (when-not (util/electron?)
          (login logged?))
 
+       (when plugin-handler/lsp-enabled?
+         (plugins/hook-ui-items :toolbar))
+
        (repo/sync-status current-repo)
 
        [:div.repos
@@ -193,13 +199,13 @@
 
        (when (and (nfs/supported?) (empty? repos)
                   (not config/publishing?))
-         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block
+         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.ml-3.block.open-button
           {:on-click (fn []
                        (page-handler/ls-dir-files!))}
-          [:div.flex.flex-row.text-center
-           [:span.inline-block svg/folder-add]
+          [:div.flex.flex-row.text-center.open-button__inner
+           [:span.inline-block.open-button__icon-wrapper svg/folder-add]
            (when-not config/mobile?
-             [:span.ml-1 {:style {:margin-top 2}}
+             [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
               (t :open)])]])
 
        (if config/publishing?

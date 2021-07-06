@@ -1,5 +1,6 @@
 .cp__header {
   @apply shadow z-10 h-12;
+  -webkit-app-region: drag;
 
   padding-right: 1rem;
   display: flex;
@@ -13,6 +14,7 @@
   right: 0;
   user-select: none;
   transition: width 0.3s;
+  line-height: 1;
 
   .it svg {
     transform: scale(0.8);
@@ -25,6 +27,60 @@
       min-width: 14rem;
     }
   }
+
+  &.electron-mac {
+    height: 38px;
+
+    .refresh {
+      margin: 0;
+    }
+
+    .open-button__icon-wrapper {
+      margin-right: 7px;
+    }
+
+    svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .navigation svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .open-button {
+      &__inner {
+        @apply items-center;
+
+        svg {
+          width: 18px;
+          height: 18px;
+        }
+      }
+    }
+
+  }
+}
+
+.is-electron.is-mac .cp__header {
+    padding-left: 72px;
+    -moz-transition: padding-left .3s ease-in;
+    -o-transition: padding-left  .3s ease-in;
+    -webkit-transition: padding-left  .3s ease-in;
+    transition: padding-left  .3s ease-in;
+}
+
+.cp__header .navigation svg {
+    transform: scale(0.7);
+}
+
+.is-electron.is-mac.is-fullscreen .cp__header {
+    padding-left: 0;
+}
+
+.cp__header a, .cp__header svg {
+    -webkit-app-region: no-drag;
 }
 
 .cp__header-left-menu {
@@ -41,7 +97,7 @@
 }
 
 .cp__header-logo {
-  @apply px-4 mr-3;
+  @apply px-4;
   height: 100%;
 }
 

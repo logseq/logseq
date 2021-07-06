@@ -140,7 +140,8 @@
     }
   }
 
-  &-details {}
+  &-details {
+  }
 }
 
 .cp__themes {
@@ -177,6 +178,24 @@
     width: 100%;
     height: 100%;
     visibility: visible;
+  }
+}
+
+.ui-items-container {
+  &[data-type=toolbar] {
+    @apply flex items-center mt-1 pl-2;
+
+    > .injected-ui-item-toolbar {
+      @apply px-2 opacity-50 hover:opacity-100 transition-opacity;
+    }
+  }
+
+  &[data-type=pagebar] {
+    @apply flex items-start pl-2;
+
+    > .injected-ui-item-pagebar {
+      @apply pr-3 opacity-30 hover:opacity-100 transition-opacity;
+    }
   }
 }
 

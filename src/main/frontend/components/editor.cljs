@@ -6,6 +6,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [frontend.components.block :as block]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
@@ -74,6 +75,9 @@
                                                      {:last-pattern commands/angle-bracket}))
         :class     "black"}))))
 
+(defn- in-sidebar? [el]
+  (not (.contains (.getElementById js/document "left-container") el)))
+
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id format]
@@ -84,6 +88,7 @@
         (let [current-pos (cursor/pos input)
               edit-content (or (state/sub [:editor/content id]) "")
               edit-block (state/sub :editor/block)
+              sidebar? (in-sidebar? input)
               q (or
                  @editor-handler/*selected-text
                  (when (state/sub :editor/show-page-search-hashtag?)
@@ -93,12 +98,20 @@
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))]
           (ui/auto-complete
-           matched-pages
-           {:on-chosen (page-handler/on-chosen-handler input id q pos format)
-            :on-enter #(page-handler/page-not-exists-handler input id q current-pos)
-            :item-render (fn [item] [:div.py-2 (search/highlight-exact-query item q)])
-            :empty-div [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
-            :class     "black"}))))))
+            matched-pages
+            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
+             :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
+             :item-render (fn [page-name chosen?]
+                            [:div.py-2.preview-trigger-wrapper
+                             (block/page-preview-trigger
+                               {:children        [:div (search/highlight-exact-query page-name q)]
+                                :open?           chosen?
+                                :fixed-position? true
+                                :tippy-distance  24
+                                :tippy-position  (if sidebar? "left" "right")}
+                               page-name)])
+             :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
+             :class       "black"}))))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]

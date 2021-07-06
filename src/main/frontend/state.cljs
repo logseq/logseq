@@ -53,6 +53,7 @@
       :modal/show? false
 
       ;; right sidebar
+      :ui/fullscreen? false
       :ui/settings-open? false
       :ui/sidebar-open? false
       :ui/left-sidebar-open? false
@@ -125,6 +126,7 @@
       :plugin/installed-plugins     {}
       :plugin/installed-themes      []
       :plugin/installed-commands    {}
+      :plugin/installed-ui-items    {}
       :plugin/simple-commands       {}
       :plugin/selected-theme        nil
       :plugin/selected-unpacked-pkg nil
@@ -1124,6 +1126,11 @@
   [type]
   (filterv #(= (keyword (first %)) (keyword type))
            (apply concat (vals (:plugin/simple-commands @state)))))
+
+(defn get-plugins-ui-items-with-type
+  [type]
+  (filterv #(= (keyword (first %)) (keyword type))
+           (apply concat (vals (:plugin/installed-ui-items @state)))))
 
 (defn get-scheduled-future-days
   []

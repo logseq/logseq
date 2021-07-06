@@ -278,7 +278,7 @@
         :parsing-files "Parsing files"
         :loading-files "Loading files"
         :login-github "Login with Github"
-        :login-google "Login with Google"
+        ;; :login-google "Login with Google"
         :login "Login"
         :go-to "Go to "
         :or "or"

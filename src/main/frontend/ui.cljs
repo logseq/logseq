@@ -293,6 +293,25 @@
     (state/sync-system-theme!)
     #(.removeEventListener schemaMedia "change" state/sync-system-theme!)))
 
+(defn setup-active-keystroke! []
+  (let [active-keystroke (atom #{})
+        handle-global-keystroke
+        (fn [down? e]
+          (let [handler (if down? conj disj)
+                keystroke e.key]
+            (swap! active-keystroke handler keystroke))
+          (.setAttribute
+            js/document.body
+            "data-active-keystroke"
+            (apply str (interpose "+" (vec @active-keystroke)))))
+        keydown-handler (partial handle-global-keystroke true)
+        keyup-handler (partial handle-global-keystroke false)]
+    (.addEventListener js/window "keydown" keydown-handler)
+    (.addEventListener js/window "keyup" keyup-handler)
+    (fn []
+      (.removeEventListener js/window "keydown" keydown-handler)
+      (.removeEventListener js/window "keyup" keyup-handler))))
+
 (defn on-scroll
   [node on-load on-top-reached]
   (let [full-height (gobj/get node "scrollHeight")
@@ -350,16 +369,17 @@
            {:key idx}
            (let [item-cp
                  [:div {:key idx}
-                  (menu-link
-                   {:id       (str "ac-" idx)
-                    :class    (when (= @current-idx idx)
-                                "chosen")
-                    :on-mouse-down (fn [e]
-                                     (util/stop e)
-                                     (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                       (on-shift-chosen item)
-                                       (on-chosen item)))}
-                   (if item-render (item-render item) item))]]
+                  (let [chosen? (= @current-idx idx)]
+                    (menu-link
+                      {:id            (str "ac-" idx)
+                       :class         (when chosen? "chosen")
+                       :on-mouse-enter #(reset! current-idx idx)
+                       :on-mouse-down (fn [e]
+                                        (util/stop e)
+                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                          (on-shift-chosen item)
+                                          (on-chosen item)))}
+                      (if item-render (item-render item chosen?) item)))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -611,20 +631,28 @@
 
 (rum/defcs tippy < rum/static
   (rum/local false ::mounted?)
-  [state opts child]
+  [state {:keys [fixed-position? open?] :as opts} child]
   (let [*mounted? (::mounted? state)
-        mounted? @*mounted?]
+        mounted? @*mounted?
+        manual (not= open? nil)]
     (Tippy (->
             (merge {:arrow true
                     :sticky true
                     :theme "customized"
                     :disabled (not (state/enable-tooltip?))
                     :unmountHTMLWhenHide true
-                    :open @*mounted?
+                    :open (if manual open? @*mounted?)
+                    :trigger (if manual "manual" "mouseenter focus")
+                    ;; See https://github.com/tvkhoa/react-tippy/issues/13
+                    :popperOptions (if fixed-position?
+                                      {:modifiers {:flip {:enabled false}
+                                                   :hide {:enabled false}
+                                                   :preventOverflow {:enabled false}}}
+                                      {})
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)
-            (assoc :html (if mounted?
+            (assoc :html (if (or open? mounted?)
                            (when-let [html (:html opts)]
                              (if (fn? html)
                                (html)

@@ -6,6 +6,8 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common :as common-handler]
+            [frontend.commands :as commands]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -61,16 +63,18 @@
 (defn- open-first-block!
   [state]
   (let [blocks (nth (:rum/args state) 1)
-        block (first blocks)]
+        block (first blocks)
+        preview? (nth (:rum/args state) 4)]
     (when (and (= (count blocks) 1)
-               (string/blank? (:block/content block)))
+               (string/blank? (:block/content block))
+               (not preview?))
       (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))
   state)
 
 (rum/defc page-blocks-inner <
   {:did-mount open-first-block!
    :did-update open-first-block!}
-  [page-name page-blocks hiccup sidebar?]
+  [page-name page-blocks hiccup sidebar? preview?]
   [:div.page-blocks-inner
    (rum/with-key
      (content/content page-name
@@ -128,7 +132,7 @@
                              config)
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (block/->hiccup page-blocks hiccup-config {})]
-          (page-blocks-inner page-name page-blocks hiccup sidebar?))))))
+          (page-blocks-inner page-name page-blocks hiccup sidebar? preview?))))))
 
 (defn contents-page
   [page]
@@ -290,7 +294,7 @@
                        (not block?))
               [:div.flex.flex-row.space-between
                [:div.flex-1.flex-row
-                [:a {:on-click (fn [e]
+                [:a.page-title {:on-click (fn [e]
                                  (.preventDefault e)
                                  (when (gobj/get e "shiftKey")
                                    (when-let [page (db/pull repo '[*] [:block/name page-name])]
@@ -350,6 +354,12 @@
                                                      (if public? false true))
                                                     (state/close-modal!))}})
 
+                                     (when plugin-handler/lsp-enabled?
+                                       (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
+                                         {:title label
+                                          :options {:on-click #(commands/exec-plugin-simple-command!
+                                                                 pid (assoc cmd :page (state/get-current-page)) action)}}))
+
                                      (when developer-mode?
                                        {:title   "(Dev) Show page data"
                                         :options {:on-click (fn []
@@ -366,11 +376,16 @@
                                     (flatten)
                                     (remove nil?)))]
                    [:div.flex.flex-row
-                    (plugins/hook-ui-slot :page-head-actions-slotted nil)
+
+                    (when plugin-handler/lsp-enabled?
+                      (plugins/hook-ui-slot :page-head-actions-slotted nil)
+                      (plugins/hook-ui-items :pagebar))
+
                     [:a.opacity-60.hover:opacity-100.page-op.mr-1
                      {:title "Search in current page"
                       :on-click #(route-handler/go-to-search! :page)}
                      svg/search]
+
                     (ui/dropdown-with-links
                      (fn [{:keys [toggle-fn]}]
                        [:a.cp__vertical-menu-button

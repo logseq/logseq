@@ -63,6 +63,18 @@
   [pid]
   (swap! state/state md/dissoc-in [:plugin/simple-commands (keyword pid)]))
 
+(defn register-plugin-ui-item
+  [pid {:keys [key type template] :as opts}]
+  (when-let [pid (keyword pid)]
+    (when (or true (contains? (:plugin/installed-plugins @state/state) pid))
+      (do (swap! state/state update-in [:plugin/installed-ui-items pid]
+                 (fnil conj []) [type opts pid])
+          true))))
+
+(defn unregister-plugin-ui-items
+  [pid]
+  (swap! state/state assoc-in [:plugin/installed-ui-items (keyword pid)] []))
+
 (defn update-plugin-settings
   [id settings]
   (swap! state/state update-in [:plugin/installed-plugins id] assoc :settings settings))
@@ -178,7 +190,14 @@
                                         ;; plugins
                                        (swap! state/state md/dissoc-in [:plugin/installed-plugins (keyword pid)])
                                         ;; commands
-                                       (unregister-plugin-slash-command pid))))
+                                       (unregister-plugin-slash-command pid)
+                                       (unregister-plugin-simple-command pid)
+                                       (unregister-plugin-ui-items pid))))
+
+               (.on "disabled" (fn [pid]
+                                 (unregister-plugin-slash-command pid)
+                                 (unregister-plugin-simple-command pid)
+                                 (unregister-plugin-ui-items pid)))
 
                (.on "theme-changed" (fn [^js themes]
                                       (swap! state/state assoc :plugin/installed-themes

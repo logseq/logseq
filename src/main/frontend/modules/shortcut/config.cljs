@@ -47,7 +47,11 @@
     :auto-complete/complete
     {:desc    "Auto-complete choose selected item"
      :binding "enter"
-     :fn      ui-handler/auto-complete-complete}}
+     :fn      ui-handler/auto-complete-complete}
+    :auto-complete/shift-complete
+    {:desc    "Auto-complete open selected item in sidebar"
+     :binding "shift+enter"
+     :fn      ui-handler/auto-complete-shift-complete}}
 
    :shortcut.handler/block-editing-only
    ^{:before m/enable-when-editing-mode!}
@@ -151,7 +155,7 @@
     {:desc "Replace block reference with its content at point"
      :binding "mod+shift+r"
      :fn editor-handler/replace-block-reference-with-content-at-point}
-    :editor-handler/paste-text-in-one-block-at-point
+    :editor/paste-text-in-one-block-at-point
     {:desc "Paste text into one block at point"
      :binding "mod+shift+v"
      :fn editor-handler/paste-text-in-one-block-at-point}}
@@ -380,7 +384,8 @@
     :editor/backward-word
     :editor/forward-kill-word
     :editor/backward-kill-word
-    :editor/replace-block-reference-at-point]
+    :editor/replace-block-reference-at-point
+    :editor/paste-text-in-one-block-at-point]
 
    :shortcut.category/block-selection
    ^{:doc "Block selection (press Esc to quit selection)"}
@@ -411,6 +416,7 @@
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete
+    :auto-complete/shift-complete
     :date-picker/prev-day
     :date-picker/next-day
     :date-picker/prev-week

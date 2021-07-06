@@ -29,6 +29,8 @@
                   {:width         (.-width win-state)
                    :height        (.-height win-state)
                    :frame         true
+                   :titleBarStyle "hiddenInset"
+                   :trafficLightPosition {:x 15 :y 15}
                    :autoHideMenuBar (not mac?)
                    :webPreferences
                    {:plugins                 true ; pdf
