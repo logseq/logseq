@@ -494,10 +494,10 @@
 
 (declare blocks-container)
 
-(defn- edit-parent-block [e parent-block]
+(defn- edit-parent-block [e config]
   (when-not (state/editing?)
     (.stopPropagation e)
-    (editor-handler/edit-block! parent-block :max (:block/format parent-block) (:block/uuid parent-block))))
+    (editor-handler/edit-block! config :max (:block/format config) (:block/uuid config))))
 
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
