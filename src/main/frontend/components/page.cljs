@@ -508,7 +508,7 @@
                  [:div.flex.flex-col.mb-2
                   [:p {:title "N hops from selected nodes"}
                    "N hops from selected nodes"]
-                  (ui/tippy {:html [:div.pr-2 n-hops]}
+                  (ui/tippy {:html [:div.pr-3 n-hops]}
                             (ui/slider (or n-hops 10)
                                        {:min 1
                                         :max 10
