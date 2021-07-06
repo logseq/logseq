@@ -658,7 +658,12 @@
        (true? (boolean metadata-show))))
 
      ;; markdown
-     (string/starts-with? (string/triml full-text) "!"))))
+     (string/starts-with? (string/triml full-text) "!")
+
+     ;; image http link
+     (and (or (string/starts-with? full-text "http://")
+              (string/starts-with? full-text "https://"))
+          (text/image-link? img-formats s)))))
 
 (defn inline
   [{:keys [html-export?] :as config} item]
