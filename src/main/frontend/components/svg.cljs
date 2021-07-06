@@ -72,10 +72,10 @@
      :d "M10 19L3 12M3 12L10 5M3 12L21 12"}]])
 
 (def arrow-narrow-left
-  [:svg.h-6.w-6 {:xmlns "http://www.w3.org/2000/svg" :fill "none" :viewbox "0 0 24 24" :stroke "currentColor"} [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M7 16l-4-4m0 0l4-4m-4 4h18"}]])
+  [:svg.h-6.w-6 {:xmlns "http://www.w3.org/2000/svg" :fill "none" :view-box "0 0 24 24" :stroke "currentColor"} [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M7 16l-4-4m0 0l4-4m-4 4h18"}]])
 
 (def arrow-narrow-right
-  [:svg.h-6.w-6 {:xmlns "http://www.w3.org/2000/svg" :fill "none" :viewbox "0 0 24 24" :stroke "currentColor"} [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M17 8l4 4m0 0l-4 4m4-4H3"}]])
+  [:svg.h-6.w-6 {:xmlns "http://www.w3.org/2000/svg" :fill "none" :view-box "0 0 24 24" :stroke "currentColor"} [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M17 8l4 4m0 0l-4 4m4-4H3"}]])
 
 (defonce arrow-right-v2
   [:svg.h-3.w-3
@@ -559,15 +559,14 @@
 
 
 (defn info []
-  [:svg {:class "info" :viewbox "0 0 16 16" :width "16px" :height "16px"}
+  [:svg {:class "info" :view-box "0 0 16 16" :width "16px" :height "16px"}
    [:g [:path {:style {:transform "scale(0.25)"} :d "m32 2c-16.568 0-30 13.432-30 30s13.432 30 30 30 30-13.432 30-30-13.432-30-30-30m5 49.75h-10v-24h10v24m-5-29.5c-2.761 0-5-2.238-5-5s2.239-5 5-5c2.762 0 5 2.238 5 5s-2.238 5-5 5"}]]])
 
 (defn play []
   [:svg
    {:stroke "currentColor"
-    :viewbox "0 0 24 24"
+    :view-box "0 0 24 24"
     :preserve-aspect-ratio "none"
-    :class "absolute transform bg-blue-300 w-16 h-16 -m-8 top-1/2 left-1/2 rounded-full"
     :fill "none"}
    [:path
     {:d
