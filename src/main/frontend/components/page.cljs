@@ -442,7 +442,7 @@
 (defonce *graph-reset? (atom false))
 
 (rum/defc graph-filters < rum/reactive
-  [settings n-hops]
+  [graph settings n-hops]
   (let [{:keys [layout journal? orphan-pages? builtin-pages?]
          :or {layout "gForce"
               orphan-pages? true}} settings
@@ -461,7 +461,10 @@
            (fn [open?]
              (filter-expand-area
               open?
-              [:div.p-6.border
+              [:div
+               [:p.text-sm.opacity-70.px-4
+                (util/format "%d pages, %d links" (count (:nodes graph)) (count (:links graph)))]
+               [:div.p-6.border
                ;; [:div.flex.items-center.justify-between.mb-2
                ;;  [:span "Layout"]
                ;;  (ui/select
@@ -505,7 +508,7 @@
                                                        (reset! *focus-nodes [])
                                                        (reset! *n-hops nil)
                                                        (state/clear-search-filters!))}
-                "Reset Graph"]])))
+                "Reset Graph"]]])))
           (graph-filter-section
            [:span.font-medium "Search"]
            (fn [open?]
@@ -555,7 +558,7 @@
                         (fn [graph]
                           (graph-register-handlers graph *focus-nodes))
                         :reset? reset?})
-       (graph-filters settings n-hops)])))
+       (graph-filters graph settings n-hops)])))
 
 (defn- filter-graph-nodes
   [nodes filters]
