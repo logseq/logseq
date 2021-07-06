@@ -259,7 +259,7 @@
     :go/search
     {:desc    "Full text search"
      :binding "mod+u"
-     :fn      route-handler/go-to-search!}
+     :fn      #(route-handler/go-to-search! nil)}
     :go/journals
     {:desc    "Jump to journals"
      :binding (if mac? "mod+j" "alt+j")

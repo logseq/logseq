@@ -4,7 +4,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.page :as page]
             [frontend.components.block :as block]
-            [frontend.extensions.graph-2d :as graph-2d]
+            [frontend.extensions.graph :as graph]
             [frontend.components.onboarding :as onboarding]
             [frontend.handler.route :as route-handler]
             [frontend.handler.page :as page-handler]
@@ -19,7 +19,6 @@
             [frontend.extensions.slide :as slide]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
-            [frontend.graph :as graph]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [frontend.db-mixins :as db-mixins]
@@ -44,25 +43,6 @@
   (page/page {:parameters {:path {:name page-name}}
               :sidebar?   true
               :repo       repo}))
-
-(rum/defc page-graph < db-mixins/query rum/reactive
-  []
-  (let [page (or
-              (and (= :page (state/sub [:route-match :data :name]))
-                   (state/sub [:route-match :path-params :name]))
-              (date/today))
-        theme (:ui/theme @state/state)
-        dark? (= theme "dark")
-        graph (if (util/uuid-string? page)
-                (graph-handler/build-block-graph (uuid page) theme)
-                (graph-handler/build-page-graph page theme))]
-    (when (seq (:nodes graph))
-      [:div.sidebar-item.flex-col
-       (graph-2d/graph
-        (graph/build-graph-opts
-         graph dark?
-         {:width  600
-          :height 600}))])))
 
 (defn recent-pages
   []
@@ -107,7 +87,7 @@
 
     :page-graph
     [(str (t :right-side-bar/page-graph))
-     (page-graph)]
+     (page/page-graph)]
 
     :block-ref
     (when-let [block (db/entity repo [:block/uuid (:block/uuid (:block block-data))])]

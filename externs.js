@@ -65,7 +65,16 @@ dummy.transaction = function() {};
 dummy.getPath = function() {};
 dummy.getDoc = function() {};
 dummy.setValue = function() {};
-
+dummy.data = function() {};
+dummy.triangle = function() {};
+dummy.vee = function() {};
+dummy.destroy = function() {};
+dummy.changeData = function() {};
+dummy.layout = function() {};
+dummy.render = function() {};
+dummy.get = function() {};
+dummy.addItem = function() {};
+dummy.removeItem = function() {};
 
 /**
  * @typedef {{

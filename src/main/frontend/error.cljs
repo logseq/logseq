@@ -1,8 +1,9 @@
 (ns frontend.error
   (:require [clojure.string :as string]))
 
-(defonce ignored
-  #{"ResizeObserver loop limit exceeded"})
+(def ignored
+  #{"ResizeObserver loop limit exceeded"
+    "Uncaught TypeError:"})
 
 (defn ignored?
   [message]
@@ -10,5 +11,5 @@
     (boolean
      (some
       ;; TODO: some cases might need regex check
-      #(= (string/lower-case message) (string/lower-case %))
+      #(string/starts-with? (string/lower-case message) (string/lower-case %))
       ignored))))
