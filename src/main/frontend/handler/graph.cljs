@@ -179,8 +179,8 @@
                         (map first mentioned-pages)
                         tags)
                        (remove nil?)
-                       (distinct)
-                       (build-nodes dark? page links (set tags) namespaces))
+                       (distinct))
+            nodes (build-nodes dark? page links (set tags) nodes namespaces)
             full-pages (db/get-all-pages repo)
             get-original-name (fn [p] (or (:block/original-name p)
                                          (:block/name p)))
@@ -223,7 +223,8 @@
                        (remove nil?)
                        (distinct)
                        ;; FIXME: get block tags
-                       (build-nodes dark? block links #{} namespaces))]
+                       )
+            nodes (build-nodes dark? block links #{} nodes namespaces)]
         (normalize-page-name
          {:nodes nodes
           :links links})))))
