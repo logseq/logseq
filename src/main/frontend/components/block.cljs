@@ -494,10 +494,18 @@
 
 (declare blocks-container)
 
+(defn- edit-parent-block [e config]
+  (when-not (state/editing?)
+    (.stopPropagation e)
+    (editor-handler/edit-block! config :max (:block/format config) (:block/uuid config))))
+
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.color-level.embed-block.bg-base-2 {:style {:z-index 2}}
+    [:div.color-level.embed-block.bg-base-2
+     {:style {:z-index 2}
+      :on-double-click #(edit-parent-block % config)
+      :on-mouse-down (fn [e] (.stopPropagation e))}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :id (str id)
@@ -510,7 +518,9 @@
   (let [page-name (string/trim (string/lower-case page-name))
         current-page (state/get-current-page)]
     [:div.color-level.embed.embed-page.bg-base-2
-     {:class (if (:sidebar? config) "in-sidebar")}
+     {:class (if (:sidebar? config) "in-sidebar")
+      :on-double-click #(edit-parent-block % config)
+      :on-mouse-down #(.stopPropagation %)}
      [:section.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
       (page-cp config {:block/name page-name})]
@@ -658,7 +668,12 @@
        (true? (boolean metadata-show))))
 
      ;; markdown
-     (string/starts-with? (string/triml full-text) "!"))))
+     (string/starts-with? (string/triml full-text) "!")
+
+     ;; image http link
+     (and (or (string/starts-with? full-text "http://")
+              (string/starts-with? full-text "https://"))
+          (text/image-link? img-formats s)))))
 
 (defn inline
   [{:keys [html-export?] :as config} item]
@@ -2058,7 +2073,7 @@
              [:ul#query-pages.mt-1
               (for [{:block/keys [name original-name] :as page-entity} result]
                 [:li.mt-1
-                 [:a {:href (rfe/href :page {:name name})
+                 [:a.page-ref {:href (rfe/href :page {:name name})
                       :on-click (fn [e]
                                   (util/stop e)
                                   (if (gobj/get e "shiftKey")

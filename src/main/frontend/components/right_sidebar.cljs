@@ -72,7 +72,7 @@
     [:div.recent-pages.text-sm.flex-col.flex.ml-3.mt-2
      (if (seq pages)
        (for [page pages]
-         [:a.mb-1 {:key      (str "recent-page-" page)
+         [:a.page-ref.mb-1 {:key      (str "recent-page-" page)
                    :href     (rfe/href :page {:name page})
                    :on-click (fn [e]
                                (when (gobj/get e "shiftKey")
@@ -133,7 +133,7 @@
     :page
     (let [page-name (or (:block/name block-data)
                         db-id)]
-      [[:a {:href     (rfe/href :page {:name page-name})
+      [[:a.page-title {:href     (rfe/href :page {:name page-name})
             :on-click (fn [e]
                         (when (gobj/get e "shiftKey")
                           (.preventDefault e)))}

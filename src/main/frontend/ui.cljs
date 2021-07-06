@@ -292,6 +292,25 @@
     (state/sync-system-theme!)
     #(.removeEventListener schemaMedia "change" state/sync-system-theme!)))
 
+(defn setup-active-keystroke! []
+  (let [active-keystroke (atom #{})
+        handle-global-keystroke
+        (fn [down? e]
+          (let [handler (if down? conj disj)
+                keystroke e.key]
+            (swap! active-keystroke handler keystroke))
+          (.setAttribute
+            js/document.body
+            "data-active-keystroke"
+            (apply str (interpose "+" (vec @active-keystroke)))))
+        keydown-handler (partial handle-global-keystroke true)
+        keyup-handler (partial handle-global-keystroke false)]
+    (.addEventListener js/window "keydown" keydown-handler)
+    (.addEventListener js/window "keyup" keyup-handler)
+    (fn []
+      (.removeEventListener js/window "keydown" keydown-handler)
+      (.removeEventListener js/window "keyup" keyup-handler))))
+
 (defn on-scroll
   [node on-load on-top-reached]
   (let [full-height (gobj/get node "scrollHeight")

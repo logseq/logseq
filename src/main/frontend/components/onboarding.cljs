@@ -207,11 +207,11 @@
             :target "_blank"}
         (t :help/docs)]]
       [:li
-       [:a {:href "/blog/privacy-policy"
+       [:a {:href "https://logseq.com/blog/privacy-policy"
             :target "_blank"}
         (t :help/privacy)]]
       [:li
-       [:a {:href "/blog/terms"
+       [:a {:href "https://logseq.com/blog/terms"
             :target "_blank"}
         (t :help/terms)]]
       [:li

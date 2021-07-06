@@ -1658,7 +1658,7 @@
                       :data [block]}]
             (db/refresh! repo opts)))
         (when-let [block-node (util/get-first-block-by-id block-id)]
-          (.scrollIntoView block-node #js {:behavior "smooth" :block "center"}))))))
+          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))))
 
 ;; selections
 (defn on-tab
