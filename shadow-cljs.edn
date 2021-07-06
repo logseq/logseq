@@ -20,6 +20,9 @@
               :depends-on #{:main}}
              :excalidraw
              {:entries [frontend.extensions.excalidraw]
+              :depends-on #{:main}}
+             :srs
+             {:entries [frontend.extensions.srs]
               :depends-on #{:main}}}
 
    :output-dir "./static/js"

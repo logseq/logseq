@@ -283,6 +283,20 @@
              (parse-int x)
              (catch Exception _
                nil)))))
+#?(:cljs
+   (defn parse-float
+     [x]
+     (if (string? x)
+       (js/parseFloat x)
+       x)))
+
+#?(:cljs
+   (defn safe-parse-float
+     [x]
+     (let [result (parse-float x)]
+       (if (js/isNaN result)
+         nil
+         result))))
 
 #?(:cljs
    (defn debounce
