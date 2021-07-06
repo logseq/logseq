@@ -120,5 +120,7 @@
                          :height height}))]
         (when register-handlers-fn
           (register-handlers-fn graph))
+
+        ;; (.addEventListener container-ref)
         (assoc state :graph graph))
       state)))

@@ -232,17 +232,19 @@
 (defn n-hops
   "Get all nodes that are n hops from nodes (a collection of node ids)"
   [{:keys [links] :as graph} nodes level]
-  (let [links (group-by :source links)
-        nodes (loop [nodes nodes
-                     level level]
-                (if (zero? level)
-                  nodes
-                  (recur (distinct (apply concat nodes
-                                     (map
-                                       (fn [id]
-                                         (->> (get links id) (map :target)))
-                                       nodes)))
-                         (dec level))))
+  (let [search-nodes (fn [forward?]
+                       (let [links (group-by (if forward? :source :target) links)]
+                         (loop [nodes nodes
+                               level level]
+                          (if (zero? level)
+                            nodes
+                            (recur (distinct (apply concat nodes
+                                               (map
+                                                 (fn [id]
+                                                   (->> (get links id) (map (if forward? :target :source))))
+                                                 nodes)))
+                                   (dec level))))))
+        nodes (concat (search-nodes true) (search-nodes false))
         nodes (set nodes)]
     (update graph :nodes
             (fn [full-nodes]

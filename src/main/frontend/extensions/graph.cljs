@@ -45,11 +45,13 @@
      (.resetEdgeStyle graph edge (bean/->js {:width 1
                                              :color "#A5B4FC"})))))
 
-(defn on-click-handler [graph node event *focus-nodes]
+(defn on-click-handler [graph node event *focus-nodes *n-hops]
   (let [page-name (string/lower-case node)]
-    (swap! *focus-nodes
-           (fn [v]
-             (vec (distinct (conj v node)))))
+    (when-not @*n-hops
+      ;; Don't trigger re-render
+      (swap! *focus-nodes
+            (fn [v]
+              (vec (distinct (conj v node))))))
     ;; highlight current node
     (let [node-attributes (-> (.getNodeAttributes (.-graph graph) node)
                               (bean/->clj))]
@@ -74,8 +76,7 @@
 
 (rum/defcs graph-2d <
   (rum/local nil :ref)
-  {:did-mount pixi/render!
-   :did-update pixi/render!
+  {:did-update pixi/render!
    :will-unmount (fn [state]
                    (when-let [graph (:graph state)]
                      (.destroy graph))

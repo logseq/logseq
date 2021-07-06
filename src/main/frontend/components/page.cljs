@@ -463,8 +463,15 @@
               open?
               [:div
                [:p.text-sm.opacity-70.px-4
-                (util/format "%d pages, %d links" (count (:nodes graph)) (count (:links graph)))]
-               [:div.p-6.border
+                (let [c1 (count (:nodes graph))
+                      s1 (if (> c1 1) "s" "")
+                      ;; c2 (count (:links graph))
+                      ;; s2 (if (> c2 1) "s" "")
+                      ]
+                  ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
+                  (util/format "%d page%s" c1 s1)
+                  )]
+               [:div.p-6
                ;; [:div.flex.items-center.justify-between.mb-2
                ;;  [:span "Layout"]
                ;;  (ui/select
@@ -518,7 +525,7 @@
            (fn [open?]
              (filter-expand-area
               open?
-              [:div.p-6.border
+              [:div.p-6
                (if (seq search-graph-filters)
                  [:div
                   (for [q search-graph-filters]
@@ -534,10 +541,10 @@
            {:search-filters search-graph-filters})]]]])))
 
 (defn- graph-register-handlers
-  [graph focus-nodes]
+  [graph focus-nodes n-hops]
   (.on graph "nodeClick"
        (fn [event node]
-         (graph/on-click-handler graph node event focus-nodes))))
+         (graph/on-click-handler graph node event focus-nodes n-hops))))
 
 (rum/defc global-graph-inner < rum/reactive
   [graph settings theme]
@@ -550,7 +557,13 @@
                        (seq focus-nodes)
                        (not (:orphan-pages? settings)))
                 (graph-handler/n-hops graph focus-nodes n-hops)
-                graph)]
+                graph)
+        graph (update graph :links (fn [links]
+                                     (let [nodes (set (map :id (:nodes graph)))]
+                                       (remove (fn [link]
+                                                 (and (not (nodes (:source link)))
+                                                      (not (nodes (:target link)))))
+                                               links))))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.relative#global-graph
        (graph/graph-2d {:nodes (:nodes graph)
@@ -560,7 +573,7 @@
                         :dark? dark?
                         :register-handlers-fn
                         (fn [graph]
-                          (graph-register-handlers graph *focus-nodes))
+                          (graph-register-handlers graph *focus-nodes *n-hops))
                         :reset? reset?})
        (graph-filters graph settings n-hops)])))
 
@@ -614,7 +627,7 @@
                         :dark? dark?
                         :register-handlers-fn
                         (fn [graph]
-                          (graph-register-handlers graph (atom nil)))})])))
+                          (graph-register-handlers graph (atom nil) (atom nil)))})])))
 
 (rum/defc all-pages < rum/reactive
   ;; {:did-mount (fn [state]
