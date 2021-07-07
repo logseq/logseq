@@ -120,7 +120,7 @@
     (let [{:keys [link protocol]} m]
       (if (= protocol "file")
         link
-        (str protocol ":" link)))))
+        (str protocol "://" link)))))
 
 (defn- get-file-absolute-path
   [config path]
