@@ -21,7 +21,7 @@
     (string/join (str "\n" spaces-tabs) lines)))
 
 (defn transform-content
-  [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline parent]} level {:keys [heading-to-list?]}]
+  [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline parent]} level {:keys [heading-to-list? markdown-list-char]}]
   (let [content (or content "")
         heading-with-title? (seq title)
         first-block? (= left page)
@@ -58,7 +58,7 @@
                                 spaces-tabs (->>
                                              (repeat (dec level) (state/get-export-bullet-indentation))
                                              (apply str))]
-                            [(str spaces-tabs "-") (str spaces-tabs "  ")]))
+                            [(str spaces-tabs markdown-list-char) (str spaces-tabs "  ")]))
                         content (if heading-to-list?
                                   (-> (string/replace content #"^\s?#+\s+" "")
                                       (string/replace #"^\s?#+\s?$" ""))
@@ -81,7 +81,7 @@
 
 (defn tree->file-content
   [tree {:keys [init-level heading-to-list?]
-         :or {heading-to-list? false}
+         :or {heading-to-list? false markdown-list-char "-"}
          :as opts}]
   (loop [block-contents []
          [f & r] tree

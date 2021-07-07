@@ -61,6 +61,13 @@
    (outliner-tree/blocks->vec-tree (str root-block-uuid))
    (outliner-file/tree->file-content {:init-level 1})))
 
+(defn- get-blocks-as-document
+  [repo root-block-uuid]
+  (->
+   (db/get-block-and-children repo root-block-uuid)
+   (outliner-tree/blocks->vec-tree (str root-block-uuid))
+   (outliner-file/tree->file-content {:init-level 1 :markdown-list-char "+"})))
+
 (defn- get-block-content
   [repo block]
   (->
@@ -73,6 +80,13 @@
   (when-let [block (db/pull [:block/uuid block-id])]
     (let [content (:block/content block)]
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content))))
+
+(defn copy-block-as-document!
+  [block-id]
+  (when-let [block (db/pull [:block/uuid block-id])]
+    (let [plain-text (get-blocks-as-document (state/get-current-repo) block-id)
+          html-text (f/to-html plain-text (:block/format block))]
+      (util/copy-to-clipboard! plain-text {:html-text html-text}))))
 
 (defn copy-block-as-json!
   [block-id]
