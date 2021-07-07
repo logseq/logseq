@@ -37,9 +37,12 @@
                   (or (.-size node) 8))
           :border {:width 0}
           :color (fn [node]
-                   (if (gobj/get node "parent")
-                     (let [v (js/Math.abs (hash (.-id node)))]
-                       (nth colors (mod v (count colors))))
+                   (if-let [parent (gobj/get node "parent")]
+                     (when-let [parent (if (= parent "ls-selected-nodes")
+                                         parent
+                                         (.-id node))]
+                       (let [v (js/Math.abs (hash parent))]
+                        (nth colors (mod v (count colors)))))
                      (.-color node)))
           :label {:content (fn [node] (.-id node))
                   :type (.-TEXT (.-TextType Pixi-Graph))

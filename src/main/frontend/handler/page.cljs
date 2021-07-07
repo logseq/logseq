@@ -50,20 +50,6 @@
   ([page-name] (when-let [page (db/entity [:block/name page-name])]
                  (:file/path (:block/file page)))))
 
-(defn default-properties-block
-  [title format page]
-  (let [properties (common-handler/get-page-default-properties title)
-        content (property/build-properties-str format properties)]
-    {:block/pre-block? true
-     :block/uuid (db/new-block-id)
-     :block/properties properties
-     :block/left page
-     :block/format format
-     :block/content content
-     :block/parent page
-     :block/unordered true
-     :block/page page}))
-
 (defn create!
   ([title]
    (create! title {}))
@@ -85,7 +71,7 @@
                    (let [page-entity [:block/uuid (:block/uuid page)]
                          create-title-property? (util/create-title-property? (:block/name page))]
                      (if create-title-property?
-                       (let [default-properties (default-properties-block (:block/original-name page) format page-entity)]
+                       (let [default-properties (editor-handler/default-properties-block (:block/original-name page) format page-entity)]
                          [page default-properties])
                        [page]))))
                pages)
