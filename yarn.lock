@@ -6049,10 +6049,10 @@ mkdirp@^0.5.0, mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@0.8.7:
-  version "0.8.7"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.8.7.tgz#85c3c94ba669667210ce7f0d4ab55ca571e2e0fe"
-  integrity sha512-8xCWx8ylNDh77kE4fbTlllJQdIllqM4YupN/bO/k0/JEtj3JlkkQPskaf/Qpu5bEhc9lQfnzmX/6JBhH1fgMbQ==
+mldoc@0.8.8:
+  version "0.8.8"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.8.8.tgz#4076f00712108caba3fbf4e5df4e2945b407d2c7"
+  integrity sha512-bulOsjdZS6jFVsgK2lwqZMNd5+liHlwFb2xwrovMdxnTFQ5F150k+RZF32RRZx6z62Y43RJUb+2vLGpXJK0qZQ==
   dependencies:
     yargs "^12.0.2"
 
