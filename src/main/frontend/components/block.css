@@ -234,28 +234,38 @@
 
 .ls-block h1,
 .editor-inner .h1 {
+  font-size: 2em;
+  min-height: 1.5em;
 }
 
 .ls-block h2,
 .editor-inner .h2 {
+  font-size: 1.5em;
+  min-height: 1.5em;
 }
 
 .ls-block h3,
 .editor-inner .h3 {
+  font-size: 1.17em;
+  min-height: 1.17em;
 }
 
 .ls-block h4,
 .editor-inner .h4 {
+  font-size: 1.12em;
+  min-height: 1.12em;
 }
 
 .ls-block h5,
 .editor-inner .h5 {
   font-size: 0.83em;
+  min-height: 0.83em;
 }
 
 .ls-block h6,
 .editor-inner .h6 {
   font-size: 0.75em;
+  min-height: 0.75em;
 }
 
 .ls-block :is(h1, h2, h3, h4, h5, h6),
