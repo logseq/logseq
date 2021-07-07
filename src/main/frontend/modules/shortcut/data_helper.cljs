@@ -7,7 +7,8 @@
             [frontend.modules.shortcut.config :as config]
             [frontend.state :as state]
             [frontend.util :as util]
-            [lambdaisland.glogi :as log])
+            [lambdaisland.glogi :as log]
+            [frontend.handler.common :as common-handler])
   (:import [goog.ui KeyboardShortcutHandler]))
 (defonce default-binding
   (->> (vals config/default-config)
@@ -130,8 +131,8 @@
                         result
                         :shortcuts
                         #(dissoc (rewrite/sexpr %) k))]
-        (state/set-config! repo new-result)
         (let [new-content (str new-result)]
+          (common-handler/reset-config! repo new-content)
           (file/set-file-content! repo path new-content))))))
 
 (defn get-group

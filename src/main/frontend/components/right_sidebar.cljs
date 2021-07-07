@@ -4,7 +4,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.page :as page]
             [frontend.components.block :as block]
-            [frontend.extensions.graph-2d :as graph-2d]
+            [frontend.extensions.graph :as graph]
             [frontend.components.onboarding :as onboarding]
             [frontend.handler.route :as route-handler]
             [frontend.handler.page :as page-handler]
@@ -19,7 +19,6 @@
             [frontend.extensions.slide :as slide]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
-            [frontend.graph :as graph]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [frontend.db-mixins :as db-mixins]
@@ -28,7 +27,7 @@
 (rum/defc toggle
   []
   (when-not (util/mobile?)
-    [:a.opacity-60.hover:opacity-100.ml-4 {:on-click state/toggle-sidebar-open?!}
+    [:a.opacity-60.hover:opacity-100.block.p-2 {:on-click state/toggle-sidebar-open?!}
     (svg/menu)]))
 
 (rum/defc block-cp < rum/reactive
@@ -44,25 +43,6 @@
   (page/page {:parameters {:path {:name page-name}}
               :sidebar?   true
               :repo       repo}))
-
-(rum/defc page-graph < db-mixins/query rum/reactive
-  []
-  (let [page (or
-              (and (= :page (state/sub [:route-match :data :name]))
-                   (state/sub [:route-match :path-params :name]))
-              (date/today))
-        theme (:ui/theme @state/state)
-        dark? (= theme "dark")
-        graph (if (util/uuid-string? page)
-                (graph-handler/build-block-graph (uuid page) theme)
-                (graph-handler/build-page-graph page theme))]
-    (when (seq (:nodes graph))
-      [:div.sidebar-item.flex-col
-       (graph-2d/graph
-        (graph/build-graph-opts
-         graph dark?
-         {:width  600
-          :height 600}))])))
 
 (defn recent-pages
   []
@@ -107,7 +87,7 @@
 
     :page-graph
     [(str (t :right-side-bar/page-graph))
-     (page-graph)]
+     (page/page-graph)]
 
     :block-ref
     (when-let [block (db/entity repo [:block/uuid (:block/uuid (:block block-data))])]
@@ -264,7 +244,7 @@
 
           (sidebar-resizer)
           [:div.cp__right-sidebar-scrollable
-           [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.px-4.h-12
+           [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-2.h-12
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]

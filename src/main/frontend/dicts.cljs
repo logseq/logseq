@@ -242,6 +242,7 @@
                   "Search"
                   "Search or Create Page")
         :page-search "Search in the current page"
+        :graph-search "Search graph"
         :new-page "New page"
         :new-file "New file"
         :new-graph "Add new graph"
@@ -910,6 +911,7 @@
                      "搜索"
                      "搜索或者创建新页面")
            :page-search "在当前页面搜索"
+           :graph-search "搜索图谱"
            :new-page "新页面"
            :new-file "新文件"
            :graph "图谱"

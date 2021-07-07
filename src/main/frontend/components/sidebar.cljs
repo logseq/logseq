@@ -270,9 +270,9 @@
                       [:ul
                        [:li "Shift + Enter to create new block"]
                        [:li "Click `D` or type `t d` to toggle document mode"]]]}
-     [:a.px-1.text-sm.font-medium.bg-base-2.mr-4.rounded-md
-      {:on-click state/toggle-document-mode!}
-      "D"])))
+              [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
+               {:on-click state/toggle-document-mode!}
+               "D"])))
 
 (rum/defc help-button < rum/reactive
   []

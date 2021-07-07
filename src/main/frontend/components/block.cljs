@@ -664,6 +664,29 @@
                 (not (= (:id config) "contents")))
        [:span.text-gray-500 "]]"])]))
 
+(rum/defcs tutorial-video  <
+  (rum/local true)
+  [state]
+  (let [lite-mode? (:rum/local state)]
+    [:div.tutorial-video-container.relative
+     {:style {:height 367 :width 653}}
+     (if @lite-mode?
+       [:div
+        [:img.w-full.h-full.absolute
+         {:src (if (util/electron?)
+                 "img/tutorial-thumb.jpg"
+                 "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg")}]
+        [:button
+         {:class "absolute bg-red-300 w-16 h-16 -m-8 top-1/2 left-1/2 rounded-full"
+          :on-click (fn [_] (swap! lite-mode? not))}
+         (svg/play)]]
+       [:iframe.w-full.h-full
+        {:allow-full-screen "allowfullscreen"
+         :allow
+         "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+         :frame-border "0"
+         :src "https://www.youtube.com/embed/Afmqowr0qEQ?autoplay=1"}])]))
+
 (declare custom-query)
 
 (defn- show-link?
@@ -988,6 +1011,9 @@
                     :src (str "https://www.youtube.com/embed/" youtube-id)
                     :height height
                     :width width}])))))
+
+        (= name "tutorial-video")
+        (tutorial-video)
 
         (= name "vimeo")
         (when-let [url (first arguments)]

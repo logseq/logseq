@@ -18,7 +18,8 @@
             [frontend.ui.date-picker]
             [frontend.context.i18n :as i18n]
             [frontend.modules.shortcut.core :as shortcut]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.config :as config]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -608,14 +609,15 @@
   (when error
     (js/console.error error)
     (log/error :ui/catch-error error))
-  (if (some? error)
+  (if (and (not config/dev?) (some? error))
     error-view
     view))
 
 (rum/defc select
-  [options on-change]
-  [:select.mt-1.form-select.block.w-full.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
-   {:style     {:padding "0 0 0 12px"}
+  [options on-change class]
+  [:select.mt-1.block.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
+   {:class     (or class "form-select")
+    :style     {:padding "0 0 0 12px"}
     :on-change (fn [e]
                  (let [value (util/evalue e)]
                    (on-change value)))}
@@ -657,3 +659,14 @@
                                html))
                            [:div {:key "tippy"} ""])))
            child)))
+
+(defn slider
+  [default-value {:keys [min max on-change]}]
+  [:input.cursor-pointer
+   {:type  "range"
+    :value (int default-value)
+    :min   min
+    :max   max
+    :style {:width "100%"}
+    :on-change #(let [value (util/evalue %)]
+                  (on-change value))}])

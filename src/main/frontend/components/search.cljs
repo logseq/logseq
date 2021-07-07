@@ -143,7 +143,7 @@
     (let [pages (when-not all? (map (fn [page] {:type :page :data page}) pages))
           files (when-not all? (map (fn [file] {:type :file :data file}) files))
           blocks (map (fn [block] {:type :block :data block}) blocks)
-          search-mode (state/get-search-mode)
+          search-mode (state/sub :search/mode)
           new-page (if (or
                         (and (seq pages)
                              (= (string/lower-case search-q)
@@ -154,7 +154,10 @@
                      [{:type :new-page}])
           result (if config/publishing?
                    (concat pages files blocks)
-                   (concat new-page pages files blocks))]
+                   (concat new-page pages files blocks))
+          result (if (= search-mode :graph)
+                   [{:type :graph-add-filter}]
+                   result)]
       [:div.rounded-md.shadow-lg.search-ac
        {:style (merge
                 {:top 48
@@ -171,6 +174,9 @@
                       (search-handler/clear-search!)
                       (leave-focus)
                       (case type
+                        :graph-add-filter
+                        (state/add-graph-search-filter! search-q)
+
                         :new-page
                         (page-handler/create! search-q)
 
@@ -212,11 +218,20 @@
                                  :block
                                  block))
 
-                              nil)
-                            (search-handler/clear-search!))
+                              :new-page
+                              (page-handler/create! search-q)
+
+                              :file
+                              (route/redirect! {:to :file
+                                                :path-params {:path data}})
+
+                              nil))
          :item-render (fn [{:keys [type data]}]
                         (let [search-mode (state/get-search-mode)]
                           [:div {:class "py-2"} (case type
+                                                  :graph-add-filter
+                                                  [:b search-q]
+
                                                   :new-page
                                                   [:div.text.font-bold (str (t :new-page) ": ")
                                                    [:span.ml-1 (str "\"" search-q "\"")]]
@@ -271,7 +286,7 @@
                   :else
                   300)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#search.flex-1.flex
+      [:div#search.flex-1.flex.p-2
        [:div.inner
         [:label.sr-only {:for "search-field"} (t :search)]
         [:div#search-wrapper.relative.w-full.text-gray-400.focus-within:text-gray-600
@@ -279,7 +294,10 @@
           svg/search]
          [:input#search-field.block.w-full.h-full.pr-3.py-2.rounded-md.focus:outline-none.placeholder-gray-500.focus:placeholder-gray-400.sm:text-sm.sm:bg-transparent
           {:style {:padding-left "2rem"}
-           :placeholder (if (= search-mode :page)
+           :placeholder (case search-mode
+                          :graph
+                          (t :graph-search)
+                          :page
                           (t :page-search)
                           (t :search))
            :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
