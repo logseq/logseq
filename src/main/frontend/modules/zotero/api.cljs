@@ -40,7 +40,11 @@
            (throw (ex-info "Http error"
                            {:response response})))))))
 
+(defn item [key]
+  (get* config (str "/items/" key)))
 
 (comment
   (get* config "/collections" {:limit 1})
-  (get* config "/items" {:limit 3}))
+  (get* config "/items" {:limit 3})
+  (get* config "/items" {:item-type "journalArticle"})
+  (item "JZCIN4K5"))
