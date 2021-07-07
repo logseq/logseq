@@ -471,7 +471,6 @@
         refs (f blocks)
         content (get-blocks-contents repo root-block-uuid)
         format (or (:block/format root-block) (state/get-preferred-format))]
-    (def aa refs)
     (fp/exportMarkdown f/mldoc-record content
                        (f/get-default-config format {:export-md-indent-style indent-style})
                        (js/JSON.stringify (clj->js refs)))))
