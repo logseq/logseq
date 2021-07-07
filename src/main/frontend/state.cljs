@@ -47,6 +47,7 @@
       :search/q ""
       :search/mode :global
       :search/result nil
+      :search/graph-filters []
 
       ;; modals
       :modal/show? false
@@ -142,6 +143,17 @@
 
       :view/components {}})))
 
+
+(defn sub
+  [ks]
+  (if (coll? ks)
+    (util/react (rum/cursor-in state ks))
+    (util/react (rum/cursor state ks))))
+
+(defn sub-current-route
+  []
+  (get-in (sub :route-match) [:data :name]))
+
 (defn get-route-match
   []
   (:route-match @state))
@@ -163,12 +175,6 @@
 (defn route-has-p?
   []
   (get-in (get-route-match) [:query-params :p]))
-
-(defn sub
-  [ks]
-  (if (coll? ks)
-    (util/react (rum/cursor-in state ks))
-    (util/react (rum/cursor state ks))))
 
 (defn set-state!
   [path value]
@@ -259,6 +265,10 @@
 
   ;; Disable block timestamps for now, because it doesn't work with undo/redo
   false)
+
+(defn sub-graph-config
+  []
+  (:graph/settings (get (sub-config) (get-current-repo))))
 
 ;; Enable by default
 (defn show-brackets?
@@ -1231,6 +1241,24 @@
 (defn clear-search-result!
   []
   (set-search-result! nil))
+
+(defn add-graph-search-filter!
+  [q]
+  (when-not (string/blank? q)
+    (update-state! :search/graph-filters
+                  (fn [value]
+                    (vec (distinct (conj value q)))))))
+
+(defn remove-search-filter!
+  [q]
+  (when-not (string/blank? q)
+    (update-state! :search/graph-filters
+                   (fn [value]
+                     (remove #{q} value)))))
+
+(defn clear-search-filters!
+  []
+  (set-state! :search/graph-filters []))
 
 (defn get-search-mode
   []

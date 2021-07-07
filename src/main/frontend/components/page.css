@@ -42,3 +42,33 @@
     width: 20px;
     height: 20px;
 }
+
+.graph-filters {
+    width: 200px;
+    background: var(--ls-secondary-background-color);
+}
+
+.graph-filters ul {
+    margin-left: 0;
+}
+
+.graph-filters li {
+    list-style: none;
+    margin: 0;
+}
+
+.graph-layout {
+    background: var(--ls-secondary-background-color);
+}
+
+.search-filter-close svg {
+    transform: scale(0.7);
+}
+
+/* Change to another cursor style if Shift key is active */
+[data-active-keystroke*="Shift" i]
+:is(.journal-title, .page-title,
+    .block-ref, .page-ref, a.tag, 
+    .bullet-container.cursor) {
+  cursor: e-resize;
+}

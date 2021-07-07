@@ -272,13 +272,19 @@
   [original-page-name with-id?]
   (when original-page-name
     (let [[original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
+          namespace? (and (string/includes? original-page-name "/")
+                          (text/namespace-page? original-page-name))
           m (merge
              {:block/name page-name
               :block/original-name original-page-name}
              (when with-id?
                (if-let [block (db/entity [:block/name page-name])]
                  {}
-                 {:block/uuid (db/new-block-id)})))]
+                 {:block/uuid (db/new-block-id)}))
+             (when namespace?
+               (let [namespace (first (util/split-last "/" original-page-name))]
+                 (when-not (string/blank? namespace)
+                   {:block/namespace {:block/name (string/lower-case namespace)}}))))]
       (if journal-day
         (merge m
                {:block/journal? true

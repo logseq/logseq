@@ -80,10 +80,11 @@
                                  (assoc me :repos repos)
                                  old-db-schema
                                  (fn [repo]
-                                   (file-handler/restore-config! repo false)
-                                   (ui-handler/add-style-if-exists!))))
+                                   (file-handler/restore-config! repo false))))
                          (p/then
                           (fn []
+                            ;; try to load custom css only for current repo
+                            (ui-handler/add-style-if-exists!)
 
                             ;; install after config is restored
                             (shortcut/refresh!)
@@ -113,7 +114,10 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
-                            (file-handler/watch-for-local-dirs!)))
+                            (file-handler/watch-for-local-dirs!)
+                            ;; (when-not (state/logged?)
+                            ;;   (state/pub-event! [:after-db-restore repos]))
+                            ))
                          (p/catch (fn [error]
                                     (log/error :db/restore-failed error))))))]
     ;; clear this interval

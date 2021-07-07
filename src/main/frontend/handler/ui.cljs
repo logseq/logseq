@@ -147,6 +147,17 @@
       (on-chosen (nth matched @current-idx) false)
       (and on-enter (on-enter state)))))
 
+(defn auto-complete-shift-complete
+  [state e]
+  (let [[matched {:keys [on-chosen on-shift-chosen on-enter]}] (:rum/args state)
+        current-idx (get state :frontend.ui/current-idx)]
+    (util/stop e)
+    (if (and (seq matched)
+             (> (count matched)
+                @current-idx))
+      ((or on-shift-chosen on-chosen) (nth matched @current-idx) false)
+      (and on-enter (on-enter state)))))
+
 ;; date-picker
 ;; TODO: find a better way
 (def *internal-model (rum/cursor state/state :date-picker/date))

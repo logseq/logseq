@@ -114,7 +114,7 @@
   [url]
   (match url
     ["File" s]
-    (string/replace s "file:" "")
+    (string/replace s "file://" "")
 
     ["Complex" m]
     (let [{:keys [link protocol]} m]
@@ -371,58 +371,73 @@
        :else
        (get page-entity :block/original-name page-name)))])
 
+(defn- use-delayed-open [open? page-name]
+  "A react hook to debounce open? value.
+  If open? changed from false to open, there will be a `timeout` delay.
+  Otherwise, the value will be changed to false immediately"
+  (let [[deval set-deval!] (rum/use-state nil)]
+    (rum/use-effect!
+      (fn []
+        (if open? (let [timer (js/setTimeout #(set-deval! open?) 1000)]
+                    #(js/clearTimeout timer))
+                  (set-deval! open?))) ;; immediately change
+      [open? page-name])
+    deval))
+
+(rum/defc page-preview-trigger
+  [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open?] :as config} page-name]
+  (let [redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
+        page-original-name (model/get-page-original-name redirect-page-name)
+        debounced-open? (use-delayed-open open? page-name)
+        manual? (not (nil? open?))
+        html-template (fn []
+                        [:div.tippy-wrapper.overflow-y-auto.p-4
+                         {:style {:width          600
+                                  :text-align     "left"
+                                  :font-weight    500
+                                  :max-height     600
+                                  :padding-bottom 64}}
+                         (if (and (string? page-original-name) (string/includes? page-original-name "/"))
+                           [:div.my-2
+                            (->>
+                              (for [page (string/split page-original-name #"/")]
+                                (when (and (string? page) page)
+                                  (page-reference false page {} nil)))
+                              (interpose [:span.mx-2.opacity-30 "/"]))]
+                           [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
+                                                    page-original-name
+                                                    [:span
+                                                     [:span.text-sm.mr-2 "Alias:"]
+                                                     page-original-name])])
+                         (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
+                           (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
+                           (when-let [f (state/get-page-blocks-cp)]
+                             (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])]
+    (if (and manual? open?)
+      (ui/tippy {:html            html-template
+                 :interactive     true
+                 :open?           debounced-open?
+                 :delay           [1000, 100]
+                 :fixed-position? fixed-position?
+                 :position        (or tippy-position "top")
+                 :distance        (or tippy-distance 10)}
+                children)
+      children)))
+
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page? sidebar? preview?] :as config} page]
   (when-let [page-name (:block/name page)]
-    (let [page (string/lower-case page-name)
-          page-entity (db/entity [:block/name page])
-          redirect-page-name (cond
-                               (:block/alias? config)
-                               page
-
-                               (db/page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
-                               (let [source-page (model/get-alias-source-page (state/get-current-repo)
-                                                                              (string/lower-case page-name))]
-                                 (or (when source-page (:block/name source-page))
-                                     page))
-
-                               :else
-                               page)
-          page-original-name (model/get-page-original-name redirect-page-name)
+    (let [page-name (string/lower-case page-name)
+          page-entity (db/entity [:block/name page-name])
+          redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
           href (if html-export?
-                 (util/encode-str page)
+                 (util/encode-str page-name)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config
                             page-name
                             href redirect-page-name page-entity contents-page? children html-export? label)]
       (if (and (not (util/mobile?)) (not preview?))
-        (ui/tippy {:html        (fn []
-                                  [:div.tippy-wrapper.overflow-y-auto.p-4
-                                   {:style {:width          600
-                                            :text-align     "left"
-                                            :font-weight    500
-                                            :max-height     600
-                                            :padding-bottom 64}}
-                                   (if (and (string? page-original-name) (string/includes? page-original-name "/"))
-                                     [:div.my-2
-                                      (->>
-                                       (for [page (string/split page-original-name #"/")]
-                                         (when (and (string? page) page)
-                                           (page-reference false page {} nil)))
-                                       (interpose [:span.mx-2.opacity-30 "/"]))]
-                                     [:h2.font-bold.text-lg (if (= page redirect-page-name)
-                                                              page-original-name
-                                                              [:span
-                                                               [:span.text-sm.mr-2 "Alias:"]
-                                                               page-original-name])])
-
-                                   (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
-                                     (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
-                                     (when-let [f (state/get-page-blocks-cp)]
-                                       (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])
-                   :interactive true
-                   :delay       [1000, 100]}
-                  inner)
+        (page-preview-trigger (assoc config :children inner) page-name)
         inner))))
 
 (rum/defc asset-reference
@@ -494,10 +509,18 @@
 
 (declare blocks-container)
 
+(defn- edit-parent-block [e config]
+  (when-not (state/editing?)
+    (.stopPropagation e)
+    (editor-handler/edit-block! config :max (:block/format config) (:block/uuid config))))
+
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.color-level.embed-block.bg-base-2 {:style {:z-index 2}}
+    [:div.color-level.embed-block.bg-base-2
+     {:style {:z-index 2}
+      :on-double-click #(edit-parent-block % config)
+      :on-mouse-down (fn [e] (.stopPropagation e))}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :id (str id)
@@ -510,7 +533,9 @@
   (let [page-name (string/trim (string/lower-case page-name))
         current-page (state/get-current-page)]
     [:div.color-level.embed.embed-page.bg-base-2
-     {:class (if (:sidebar? config) "in-sidebar")}
+     {:class (if (:sidebar? config) "in-sidebar")
+      :on-double-click #(edit-parent-block % config)
+      :on-mouse-down #(.stopPropagation %)}
      [:section.flex.items-center.p-1.embed-header
       [:div.mr-3 svg/page]
       (page-cp config {:block/name page-name})]
@@ -639,6 +664,29 @@
                 (not (= (:id config) "contents")))
        [:span.text-gray-500 "]]"])]))
 
+(rum/defcs tutorial-video  <
+  (rum/local true)
+  [state]
+  (let [lite-mode? (:rum/local state)]
+    [:div.tutorial-video-container.relative
+     {:style {:height 367 :width 653}}
+     (if @lite-mode?
+       [:div
+        [:img.w-full.h-full.absolute
+         {:src (if (util/electron?)
+                 "img/tutorial-thumb.jpg"
+                 "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg")}]
+        [:button
+         {:class "absolute bg-red-300 w-16 h-16 -m-8 top-1/2 left-1/2 rounded-full"
+          :on-click (fn [_] (swap! lite-mode? not))}
+         (svg/play)]]
+       [:iframe.w-full.h-full
+        {:allow-full-screen "allowfullscreen"
+         :allow
+         "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+         :frame-border "0"
+         :src "https://www.youtube.com/embed/Afmqowr0qEQ?autoplay=1"}])]))
+
 (declare custom-query)
 
 (defn- show-link?
@@ -658,7 +706,20 @@
        (true? (boolean metadata-show))))
 
      ;; markdown
-     (string/starts-with? (string/triml full-text) "!"))))
+     (string/starts-with? (string/triml full-text) "!")
+
+     ;; image http link
+     (and (or (string/starts-with? full-text "http://")
+              (string/starts-with? full-text "https://"))
+          (text/image-link? img-formats s)))))
+
+(defn- relative-assets-path->absolute-path
+  [path]
+  (if (util/absolute-path? path)
+    path
+    (.. util/node-path
+        (join (config/get-repo-dir (state/get-current-repo))
+              (config/get-local-asset-absolute-path path)))))
 
 (defn inline
   [{:keys [html-export?] :as config} item]
@@ -770,6 +831,20 @@
                (show-link? config metadata s full_text))
           (asset-reference (second (first label)) s)
 
+          ;; open file externally if s is "../assets/<...>"
+          (and (util/electron?)
+               (config/local-asset? s))
+          (let [path (relative-assets-path->absolute-path s)]
+            (->elem
+             :a
+             (cond->
+                 {:href      (str "file://" path)
+                  :data-href path
+                  :target    "_blank"}
+               title
+               (assoc :title title))
+             (map-inline config label)))
+
           :else
           (page-reference (:html-export? config) s config label))
 
@@ -807,15 +882,19 @@
                    (page-cp config page)
                    [:span.text-gray-500 "]]"]]
 
-                  (->elem
-                   :a
-                   (cond->
-                     {:href      (str "file://" href)
-                      :data-href href
-                      :target    "_blank"}
-                     title
-                     (assoc :title title))
-                   (map-inline config label)))))
+                  (let [href*
+                        (if (util/electron?)
+                          (relative-assets-path->absolute-path href)
+                          href)]
+                    (->elem
+                     :a
+                     (cond->
+                         {:href      (str "file://" href*)
+                          :data-href href*
+                          :target    "_blank"}
+                       title
+                       (assoc :title title))
+                     (map-inline config label))))))
 
             ;; image
             (show-link? config metadata href full_text)
@@ -932,6 +1011,9 @@
                     :src (str "https://www.youtube.com/embed/" youtube-id)
                     :height height
                     :width width}])))))
+
+        (= name "tutorial-video")
+        (tutorial-video)
 
         (= name "vimeo")
         (when-let [url (first arguments)]
@@ -2058,7 +2140,7 @@
              [:ul#query-pages.mt-1
               (for [{:block/keys [name original-name] :as page-entity} result]
                 [:li.mt-1
-                 [:a {:href (rfe/href :page {:name name})
+                 [:a.page-ref {:href (rfe/href :page {:name name})
                       :on-click (fn [e]
                                   (util/stop e)
                                   (if (gobj/get e "shiftKey")

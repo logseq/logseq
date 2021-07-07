@@ -99,8 +99,8 @@
       (when-not (= repo config/local-repo)
         (if (and nfs-repo? (nfs-handler/supported?))
           (let [syncing? (state/sub :graph/syncing?)]
-            [:div.ml-2.mr-1.mt-1.opacity-60.refresh.hover:opacity-100 {:class (if syncing? "loader" "initial")}
-             [:a
+            [:div.opacity-60.refresh.hover:opacity-100 {:class (if syncing? "loader" "initial")}
+             [:a.block.p-2
               {:on-click #(nfs-handler/refresh! repo refresh-cb)
                :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "
                            version/version)}
@@ -202,8 +202,7 @@
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch.fade-link {:on-click toggle-fn}
-
+             [:a#repo-switch.fade-link.block.pr-2 {:on-click toggle-fn}
               [:span
                [:span.repo-plus svg/plus]
                (let [repo-name (get-repo-name current-repo)

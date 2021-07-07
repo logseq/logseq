@@ -18,7 +18,8 @@
             [frontend.ui.date-picker]
             [frontend.context.i18n :as i18n]
             [frontend.modules.shortcut.core :as shortcut]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.config :as config]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -292,6 +293,25 @@
     (state/sync-system-theme!)
     #(.removeEventListener schemaMedia "change" state/sync-system-theme!)))
 
+(defn setup-active-keystroke! []
+  (let [active-keystroke (atom #{})
+        handle-global-keystroke
+        (fn [down? e]
+          (let [handler (if down? conj disj)
+                keystroke e.key]
+            (swap! active-keystroke handler keystroke))
+          (.setAttribute
+            js/document.body
+            "data-active-keystroke"
+            (apply str (interpose "+" (vec @active-keystroke)))))
+        keydown-handler (partial handle-global-keystroke true)
+        keyup-handler (partial handle-global-keystroke false)]
+    (.addEventListener js/window "keydown" keydown-handler)
+    (.addEventListener js/window "keyup" keyup-handler)
+    (fn []
+      (.removeEventListener js/window "keydown" keydown-handler)
+      (.removeEventListener js/window "keyup" keyup-handler))))
+
 (defn on-scroll
   [node on-load on-top-reached]
   (let [full-height (gobj/get node "scrollHeight")
@@ -349,16 +369,17 @@
            {:key idx}
            (let [item-cp
                  [:div {:key idx}
-                  (menu-link
-                   {:id       (str "ac-" idx)
-                    :class    (when (= @current-idx idx)
-                                "chosen")
-                    :on-mouse-down (fn [e]
-                                     (util/stop e)
-                                     (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                       (on-shift-chosen item)
-                                       (on-chosen item)))}
-                   (if item-render (item-render item) item))]]
+                  (let [chosen? (= @current-idx idx)]
+                    (menu-link
+                      {:id            (str "ac-" idx)
+                       :class         (when chosen? "chosen")
+                       :on-mouse-enter #(reset! current-idx idx)
+                       :on-mouse-down (fn [e]
+                                        (util/stop e)
+                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                          (on-shift-chosen item)
+                                          (on-chosen item)))}
+                      (if item-render (item-render item chosen?) item)))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -588,14 +609,15 @@
   (when error
     (js/console.error error)
     (log/error :ui/catch-error error))
-  (if (some? error)
+  (if (and (not config/dev?) (some? error))
     error-view
     view))
 
 (rum/defc select
-  [options on-change]
-  [:select.mt-1.form-select.block.w-full.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
-   {:style     {:padding "0 0 0 12px"}
+  [options on-change class]
+  [:select.mt-1.block.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
+   {:class     (or class "form-select")
+    :style     {:padding "0 0 0 12px"}
     :on-change (fn [e]
                  (let [value (util/evalue e)]
                    (on-change value)))}
@@ -609,23 +631,42 @@
 
 (rum/defcs tippy < rum/static
   (rum/local false ::mounted?)
-  [state opts child]
+  [state {:keys [fixed-position? open?] :as opts} child]
   (let [*mounted? (::mounted? state)
-        mounted? @*mounted?]
+        mounted? @*mounted?
+        manual (not= open? nil)]
     (Tippy (->
             (merge {:arrow true
                     :sticky true
                     :theme "customized"
                     :disabled (not (state/enable-tooltip?))
                     :unmountHTMLWhenHide true
-                    :open @*mounted?
+                    :open (if manual open? @*mounted?)
+                    :trigger (if manual "manual" "mouseenter focus")
+                    ;; See https://github.com/tvkhoa/react-tippy/issues/13
+                    :popperOptions (if fixed-position?
+                                      {:modifiers {:flip {:enabled false}
+                                                   :hide {:enabled false}
+                                                   :preventOverflow {:enabled false}}}
+                                      {})
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)
-            (assoc :html (if mounted?
+            (assoc :html (if (or open? mounted?)
                            (when-let [html (:html opts)]
                              (if (fn? html)
                                (html)
                                html))
                            [:div {:key "tippy"} ""])))
            child)))
+
+(defn slider
+  [default-value {:keys [min max on-change]}]
+  [:input.cursor-pointer
+   {:type  "range"
+    :value (int default-value)
+    :min   min
+    :max   max
+    :style {:width "100%"}
+    :on-change #(let [value (util/evalue %)]
+                  (on-change value))}])

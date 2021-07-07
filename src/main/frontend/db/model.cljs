@@ -118,7 +118,16 @@
          [?page :block/tags ?e]
          [?e :block/name ?tag]
          [?page :block/name ?page-name]]
-       (conn/get-conn repo)))
+    (conn/get-conn repo)))
+
+(defn get-all-namespace-relation
+  [repo]
+  (d/q '[:find ?page-name ?parent
+         :where
+         [?page :block/name ?page-name]
+         [?page :block/namespace ?e]
+         [?e :block/name ?parent]]
+    (conn/get-conn repo)))
 
 (defn get-pages
   [repo]
@@ -129,6 +138,14 @@
           [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]]
         (conn/get-conn repo))
        (map first)))
+
+(defn get-all-pages
+  [repo]
+  (d/q
+    '[:find [(pull ?page [*]) ...]
+      :where
+      [?page :block/name]]
+    (conn/get-conn repo)))
 
 (defn get-modified-pages
   [repo]
@@ -710,6 +727,23 @@
    (vector? block)
    (= "Heading" (first block))))
 
+(defn get-redirect-page-name
+  ([page-name] (get-redirect-page-name page-name false))
+  ([page-name alias?]
+   (let [page-entity (db-utils/entity [:block/name page-name])]
+     (cond
+       alias?
+       page-name
+
+       (page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
+       (let [source-page (get-alias-source-page (state/get-current-repo)
+                                                      (string/lower-case page-name))]
+         (or (when source-page (:block/name source-page))
+             page-name))
+
+       :else
+       page-name))))
+
 (defn get-page-original-name
   [page-name]
   (when page-name
@@ -1255,7 +1289,7 @@
 (defn get-namespace-pages
   [repo namespace]
   (assert (string? namespace))
-  (let [db (conn/get-conn repo)]
+  (when-let [db (conn/get-conn repo)]
     (when-not (string/blank? namespace)
       (let [namespace (string/lower-case (string/trim namespace))
             ids (->> (d/datoms db :aevt :block/name)

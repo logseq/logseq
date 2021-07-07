@@ -23,6 +23,7 @@
                                :sha "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
   cljs-drag-n-drop/cljs-drag-n-drop
   {:mvn/version "0.1.0"}
+  cljs-http/cljs-http {:mvn/version "0.1.46"}
   borkdude/sci                {:mvn/version "0.1.1-alpha.6"}
   hickory/hickory             {:mvn/version "0.7.1"}
   hiccups/hiccups             {:mvn/version "0.3.0"}

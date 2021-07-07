@@ -9,6 +9,7 @@
             [frontend.state :as state]
             [frontend.text :as text]))
 
+;; FIXME: use block/namespace to get the relation
 (defn get-relation
   [page]
   (when (text/namespace-page? page)
@@ -22,7 +23,11 @@
 (rum/defc structures
   [page]
   (let [namespaces (get-relation page)]
-    (when (seq namespaces)
+    (when (and (seq namespaces)
+               (not (and (= 1
+                            (count namespaces)
+                            (count (first namespaces)))
+                         (not (string/includes? (ffirst namespaces) "/")))))
       [:div.page-hierachy.mt-6
        (ui/foldable
         [:h2.font-bold.opacity-30 "Hierarchy"]
