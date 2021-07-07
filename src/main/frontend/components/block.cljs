@@ -385,11 +385,10 @@
     deval))
 
 (rum/defc page-preview-trigger
-  [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open?] :as config} page-name]
+  [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
   (let [redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
         page-original-name (model/get-page-original-name redirect-page-name)
         debounced-open? (use-delayed-open open? page-name)
-        manual? (not (nil? open?))
         html-template (fn []
                         [:div.tippy-wrapper.overflow-y-auto.p-4
                          {:style {:width          600
@@ -413,7 +412,7 @@
                            (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                            (when-let [f (state/get-page-blocks-cp)]
                              (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])]
-    (if (and manual? open?)
+    (if (or (not manual?) open?)
       (ui/tippy {:html            html-template
                  :interactive     true
                  :open?           debounced-open?
