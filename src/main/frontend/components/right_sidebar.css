@@ -1,4 +1,4 @@
-html[data-theme=light] {
+html[data-theme='light'] {
   .cp__right-sidebar-settings a {
     color: var(--ls-primary-text-color);
   }
@@ -8,5 +8,20 @@ html[data-theme=light] {
       --ls-page-inline-code-bg-color: var(--ls-quaternary-background-color);
       --ls-page-blockquote-bg-color: var(--ls-quaternary-background-color);
     }
+  }
+}
+
+.cp__right-sidebar-scrollable.electron-mac {
+  .cp__right-sidebar-topbar {
+    display: flex;
+    align-items: center;
+    height: 38px;
+    font-size: 13px;
+  }
+
+  .cp__right-sidebar-settings-btn {
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: 13px;
   }
 }
