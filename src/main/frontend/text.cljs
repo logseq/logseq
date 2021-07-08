@@ -82,18 +82,32 @@
                :else
                [(conj acc s) not-matched-s])) [[] nil] coll)))
 
+(defn- sep-by-quotes
+  [s]
+  (string/split s #"(\"[^\"]*\")"))
+
+(defn- surrounded-by-quotes
+  [s]
+  (and (string? s)
+       (= (first s) (last s) \")))
+
 (defn split-page-refs-without-brackets
   ([s]
    (split-page-refs-without-brackets s {}))
   ([s {:keys [un-brackets?]
        :or {un-brackets? true}}]
-   (cond
-     (and (string? s)
+   (if (and (string? s)
             ;; Either a page ref, a tag or a comma separated collection
             (or (util/safe-re-find page-ref-re s)
-                (util/safe-re-find #"[\,|，|#]+" s)))
-     (let [result (->> (string/split s page-ref-re-2)
-                       (mapcat (fn [s] (if (string/includes? (string/trimr s) "]],")
+                (util/safe-re-find #"[\,|，|#|\"]+" s)))
+     (let [result (->> (sep-by-quotes s)
+                       (mapcat
+                        (fn [s]
+                          (if (surrounded-by-quotes s)
+                            [s]
+                            (string/split s page-ref-re-2))))
+                       (mapcat (fn [s] (if (and (string/includes? (string/trimr s) "]],")
+                                               (not (surrounded-by-quotes s)))
                                         (let [idx (string/index-of s "]],")]
                                           [(subs s 0 idx)
                                            "]]"
@@ -107,8 +121,14 @@
                        concat-nested-pages
                        (remove string/blank?)
                        (mapcat (fn [s]
-                                 (if (page-ref? s)
+                                 (cond
+                                   (surrounded-by-quotes s)
+                                   [(subs s 1 (dec (count s)))]
+
+                                   (page-ref? s)
                                    [(if un-brackets? (page-ref-un-brackets! s) s)]
+
+                                   :else
                                    (sep-by-comma s))))
                        (distinct))]
        (if (or (coll? result)
@@ -118,8 +138,6 @@
                result (map (fn [s] (string/replace s #"^#+" "")) result)]
            (set result))
          (first result)))
-
-     :else
      s)))
 
 (defn extract-level-spaces
