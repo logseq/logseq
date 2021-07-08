@@ -61,18 +61,6 @@
           :label {:backgroundColor "rgba(238, 238, 238, 1)"}}
    :edge {:color "#A5B4FC"}})
 
-;; TODO: animation
-;; (defn ticked [^js link ^js node]
-;;   (-> link
-;;       (.attr "x1" (fn [d] (.. d -source -x)))
-;;       (.attr "y1" (fn [d] (.. d -source -y)))
-;;       (.attr "x2" (fn [d] (.. d -target -x)))
-;;       (.attr "y2" (fn [d] (.. d -target -y))))
-
-;;   (-> node
-;;       (.attr "cx" (fn [d] (.-x d)))
-;;       (.attr "cy" (fn [d] (.-y d)))))
-
 (defn layout!
   [nodes links]
   (let [simulation (forceSimulation nodes)]
@@ -90,7 +78,7 @@
         (.force "x" (-> (forceX 0) (.strength 0.02)))
         (.force "y" (-> (forceX 0) (.strength 0.02)))
         (.force "center" (forceCenter))
-        (.tick 30)
+        (.tick 3)
         (.stop))))
 
 (defn render!

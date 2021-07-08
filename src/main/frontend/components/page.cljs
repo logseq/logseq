@@ -455,12 +455,21 @@
 (defonce *n-hops (atom nil))
 (defonce *focus-nodes (atom []))
 (defonce *graph-reset? (atom false))
+(defonce *journal? (atom nil))
+(defonce *orphan-pages? (atom nil))
+(defonce *builtin-pages? (atom nil))
 
 (rum/defc graph-filters < rum/reactive
   [graph settings n-hops]
   (let [{:keys [layout journal? orphan-pages? builtin-pages?]
          :or {layout "gForce"
               orphan-pages? true}} settings
+        journal?' (rum/react *journal?)
+        orphan-pages?' (rum/react *orphan-pages?)
+        builtin-pages?' (rum/react *builtin-pages?)
+        journal? (if (nil? journal?') journal? journal?')
+        orphan-pages? (if (nil? orphan-pages?') orphan-pages? orphan-pages?')
+        builtin-pages? (if (nil? builtin-pages?') builtin-pages? builtin-pages?')
         set-setting! (fn [key value]
                        (let [new-settings (assoc settings key value)]
                          (config-handler/set-config! :graph/settings new-settings)))
@@ -505,19 +514,28 @@
                 ;; FIXME: why it's not aligned well?
                 [:div.mt-1
                  (ui/toggle journal?
-                            #(set-setting! :journal? (not journal?))
+                            (fn []
+                              (let [value (not journal?)]
+                                (reset! *journal? value)
+                                (set-setting! :journal? value)))
                             true)]]
                [:div.flex.items-center.justify-between.mb-2
                 [:span "Orphan pages"]
                 [:div.mt-1
                  (ui/toggle orphan-pages?
-                            #(set-setting! :orphan-pages? (not orphan-pages?))
+                            (fn []
+                              (let [value (not orphan-pages?)]
+                                (reset! *orphan-pages? value)
+                                (set-setting! :orphan-pages? value)))
                             true)]]
                [:div.flex.items-center.justify-between.mb-2
                 [:span "Built-in pages"]
                 [:div.mt-1
                  (ui/toggle builtin-pages?
-                            #(set-setting! :builtin-pages? (not builtin-pages?))
+                            (fn []
+                              (let [value (not builtin-pages?)]
+                                (reset! *builtin-pages? value)
+                                (set-setting! :builtin-pages? value)))
                             true)]]
                (when (seq focus-nodes)
                  [:div.flex.flex-col.mb-2
@@ -555,11 +573,18 @@
                   "Click to search"])]))
            {:search-filters search-graph-filters})]]]])))
 
+(defonce last-node-position (atom nil))
 (defn- graph-register-handlers
   [graph focus-nodes n-hops]
   (.on graph "nodeClick"
        (fn [event node]
-         (graph/on-click-handler graph node event focus-nodes n-hops))))
+         (let [x (.-x event)
+               y (.-y event)
+               drag? (not= [node x y] @last-node-position)]
+           (graph/on-click-handler graph node event focus-nodes n-hops drag?))))
+  (.on graph "nodeMousedown"
+       (fn [event node]
+         (reset! last-node-position [node (.-x event) (.-y event)]))))
 
 (rum/defc global-graph-inner < rum/reactive
   [graph settings theme]
