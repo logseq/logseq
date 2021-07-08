@@ -75,6 +75,35 @@ dummy.render = function() {};
 dummy.get = function() {};
 dummy.addItem = function() {};
 dummy.removeItem = function() {};
+dummy.resetNodeStyle = function() {};
+dummy.forEachNeighbor = function() {};
+dummy.graph = function() {};
+dummy.forEachEdge = function() {};
+dummy.resetEdgeStyle = function() {};
+dummy.getNodeAttributes = function() {};
+dummy.setNodeAttribute = function() {};
+dummy.resetView = function() {};
+dummy.destroy = function() {};
+dummy.size = function() {};
+dummy.id = function() {};
+dummy.color = function() {};
+dummy.TEXT = function() {};
+dummy.TextType = function() {};
+dummy.attr = function() {};
+dummy.force = function() {};
+dummy.distance = function() {};
+dummy.links = function() {};
+dummy.distanceMax = function() {};
+dummy.theta = function() {};
+dummy.strength = function() {};
+dummy.radius = function() {};
+dummy.tick = function() {};
+dummy.stop = function() {};
+dummy.addNode = function() {};
+dummy.addEdge = function() {};
+dummy.source = function() {};
+dummy.target = function() {};
+dummy.PixiGraph = function() {};
 
 /**
  * @typedef {{
