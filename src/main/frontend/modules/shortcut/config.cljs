@@ -241,11 +241,11 @@
      :binding "mod+shift+a"
      :fn      editor-handler/select-all-blocks!}
     :editor/zoom-in
-    {:desc    "Zoom in when editing / Forward"
+    {:desc    "Zoom in editing block / Forwards otherwise"
      :binding (if mac? "mod+." "alt+right")
      :fn      editor-handler/zoom-in!}
     :editor/zoom-out
-    {:desc    "Zoom out when editing / Back"
+    {:desc    "Zoom out editing block / Backwards otherwise"
      :binding (if mac? "mod+," "alt+left")
      :fn      editor-handler/zoom-out!}
     :ui/toggle-brackets
@@ -264,6 +264,14 @@
     {:desc    "Jump to journals"
      :binding (if mac? "mod+j" "alt+j")
      :fn      route-handler/go-to-journals!}
+    :go/backward
+    {:desc    "Backwards"
+     :binding "mod+open-square-bracket"
+     :fn      (fn [_] (js/window.history.back))}
+    :go/forward
+    {:desc    "Forwards"
+     :binding "mod+close-square-bracket"
+     :fn      (fn [_] (js/window.history.forward))}
     :search/re-index
     {:desc    "Rebuild search index"
      :binding "mod+c mod+s"
@@ -353,7 +361,9 @@
     :editor/zoom-out
     :editor/collapse-block-children
     :editor/expand-block-children
-    :editor/toggle-open-blocks]
+    :editor/toggle-open-blocks
+    :go/backward
+    :go/forward]
 
    :shortcut.category/block-editing
    ^{:doc "Block editing general"}
@@ -398,7 +408,6 @@
    :shortcut.category/toggle
    ^{:doc "Toggle"}
    [:ui/toggle-help
-    :ui/toggle-new-block
     :editor/toggle-open-blocks
     :ui/toggle-wide-mode
     :ui/toggle-document-mode

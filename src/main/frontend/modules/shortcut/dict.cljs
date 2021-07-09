@@ -26,6 +26,8 @@
      :shortcut.ui/toggle-help                 "显示/关闭帮助"
      :shortcut.git/commit                     "提交消息"
      :shortcut.go/search                      "全文搜索"
+     :shortcut.go/backward                    "回退"
+     :shortcut.go/forward                     "前进"
      :shortcut.go/search-in-page              "在当前页面搜索"
      :shortcut.ui/toggle-document-mode        "切换文档模式"
      :shortcut.ui/toggle-contents             "打开/关闭目录"
