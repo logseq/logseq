@@ -74,6 +74,7 @@
    :will-unmount (fn [state]
                    (when-let [graph (:graph state)]
                      (.destroy graph))
+                   (reset! pixi/*graph-instance nil)
                    state)}
   [state opts]
   [:div.graph {:style {:height "100vh"}

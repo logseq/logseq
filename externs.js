@@ -104,6 +104,10 @@ dummy.addEdge = function() {};
 dummy.source = function() {};
 dummy.target = function() {};
 dummy.PixiGraph = function() {};
+dummy.createGraphWithGraph = function() {};
+dummy.resetView = function() {};
+dummy.dropNode = function() {};
+dummy.dropEdge = function() {};
 
 /**
  * @typedef {{
