@@ -13,6 +13,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.modules.instrumentation.core :as instrument]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :refer [classnames] :as util]
@@ -170,8 +171,7 @@
                 config-handler/toggle-ui-show-brackets!
                 true)]]
    [:div {:style {:text-align "right"}}
-    ;; TODO: Fetch this shortcut from config.cljs so there's one source of truth
-    (ui/keyboard-shortcut [:meta :c :meta :b])]])
+    (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]])
 
 (defn language-row [t preferred-language]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -208,7 +208,7 @@
             :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]]
 
    [:div {:style {:text-align "right"}}
-    (ui/keyboard-shortcut [:t :t])]])
+    (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))]])
 
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start

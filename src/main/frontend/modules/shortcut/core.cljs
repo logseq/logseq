@@ -47,7 +47,6 @@
             (log/debug :shortcut/register-shortcut {:id id :binding k})
             (.registerShortcut handler (util/keyname id) k)
             (catch js/Object e
-              (def e e)
               (log/error :shortcut/register-shortcut {:id id
                                                       :binding k
                                                       :error e})
