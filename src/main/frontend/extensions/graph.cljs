@@ -24,7 +24,7 @@
                                         :color "#6366F1"}})))
 
 (defn- highlight-neighbours!
-  [^js graph node focus-nodes]
+  [^js graph node focus-nodes dark?]
   (.forEachNeighbor
    (.-graph graph) node
    (fn [node attributes]
@@ -37,16 +37,16 @@
          (.resetNodeStyle graph node (bean/->js attributes)))))))
 
 (defn- highlight-edges!
-  [^js graph node]
+  [^js graph node dark?]
   (.forEachEdge
    (.-graph graph) node
    (fn [edge attributes]
      (.resetEdgeStyle graph edge (bean/->js {:width 1
-                                             :color "#A5B4FC"})))))
+                                             :color (if dark? "#999" "#A5B4FC")})))))
 
-(defn on-click-handler [graph node event *focus-nodes *n-hops drag?]
+(defn on-click-handler [graph node event *focus-nodes *n-hops drag? dark?]
   ;; shift+click to select the page
-  (if (gobj/get event "shiftKey")
+  (if (or (gobj/get event "shiftKey") drag?)
     (let [page-name (string/lower-case node)]
       (when-not @*n-hops
         ;; Don't trigger re-render
@@ -57,8 +57,8 @@
       (let [node-attributes (-> (.getNodeAttributes (.-graph graph) node)
                                 (bean/->clj))]
         (.setNodeAttribute (.-graph graph) node "parent" "ls-selected-nodes"))
-      (highlight-neighbours! graph node (set @*focus-nodes))
-      (highlight-edges! graph node))
+      (highlight-neighbours! graph node (set @*focus-nodes) dark?)
+      (highlight-edges! graph node dark?))
     (when-not drag?
       (let [page-name (string/lower-case node)]
         (route-handler/redirect! {:to :page

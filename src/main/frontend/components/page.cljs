@@ -575,13 +575,13 @@
 
 (defonce last-node-position (atom nil))
 (defn- graph-register-handlers
-  [graph focus-nodes n-hops]
+  [graph focus-nodes n-hops dark?]
   (.on graph "nodeClick"
        (fn [event node]
          (let [x (.-x event)
                y (.-y event)
                drag? (not= [node x y] @last-node-position)]
-           (graph/on-click-handler graph node event focus-nodes n-hops drag?))))
+           (graph/on-click-handler graph node event focus-nodes n-hops drag? dark?))))
   (.on graph "nodeMousedown"
        (fn [event node]
          (reset! last-node-position [node (.-x event) (.-y event)]))))
@@ -613,7 +613,7 @@
                         :dark? dark?
                         :register-handlers-fn
                         (fn [graph]
-                          (graph-register-handlers graph *focus-nodes *n-hops))
+                          (graph-register-handlers graph *focus-nodes *n-hops dark?))
                         :reset? reset?})
        (graph-filters graph settings n-hops)])))
 
@@ -667,7 +667,7 @@
                         :dark? dark?
                         :register-handlers-fn
                         (fn [graph]
-                          (graph-register-handlers graph (atom nil) (atom nil)))})])))
+                          (graph-register-handlers graph (atom nil) (atom nil) dark?))})])))
 
 (rum/defc all-pages < rum/reactive
   ;; {:did-mount (fn [state]
