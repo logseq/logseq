@@ -116,7 +116,7 @@
      :binding (if mac? "mod+shift+down" "alt+shift+down")
      :fn      (editor-handler/move-up-down false)}
     :editor/clear-block
-    {:desc    "Clear entire block content"
+    {:desc    "Delete entire block content"
      :binding (if mac? "ctrl+l" "alt+l")
      :fn      editor-handler/clear-block-content!}
     :editor/kill-line-before
@@ -136,11 +136,11 @@
      :binding (if mac? false "alt+e")
      :fn      editor-handler/end-of-block}
     :editor/forward-word
-    {:desc    "Move cursor forward by a word"
+    {:desc    "Move cursor forward a word"
      :binding (if mac? "ctrl+shift+f" "alt+f")
      :fn      editor-handler/cursor-forward-word}
     :editor/backward-word
-    {:desc    "Move cursor backward by a word"
+    {:desc    "Move cursor backward a word"
      :binding (if mac? "ctrl+shift+b" "alt+b")
      :fn      editor-handler/cursor-backward-word}
     :editor/forward-kill-word
