@@ -1,4 +1,5 @@
 const path = require('path')
+const webpack = require('webpack')
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin
 
 module.exports = {
@@ -16,11 +17,14 @@ module.exports = {
     extensions: ['.tsx', '.ts', '.js'],
   },
   plugins: [
+    new webpack.ProvidePlugin({
+      process: 'process/browser',
+    }),
     // new BundleAnalyzerPlugin()
   ],
   output: {
-    library: "LSPluginEntry",
-    libraryTarget: "umd",
+    library: 'LSPluginEntry',
+    libraryTarget: 'umd',
     filename: 'lsplugin.user.js',
     path: path.resolve(__dirname, 'dist')
   },

@@ -93,16 +93,84 @@
           path (util/node-path.join path "package.json")]
       (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-mtime? true}))))
 
+(defn ^:private write_dotdir_file!
+  [file content sub-root]
+  (p/let [repo ""
+          path (plugin-handler/get-ls-dotdir-root)
+          path (util/node-path.join path sub-root)
+          exist? (fs/file-exists? path "")
+          _ (when-not exist? (fs/mkdir-recur! path))
+          user-path (util/node-path.join path file)
+          sub-dir? (string/starts-with? user-path path)
+          _ (if-not sub-dir? (do (log/info :debug user-path) (throw "write file denied")))
+          user-path-root (util/node-path.dirname user-path)
+          exist? (fs/file-exists? user-path-root "")
+          _ (when-not exist? (fs/mkdir-recur! user-path-root))
+          _ (fs/write-file! repo "" user-path content {:skip-mtime? true})]
+    user-path))
+
+(defn ^:private read_dotdir_file
+  [file sub-root]
+  (p/let [repo ""
+          path (plugin-handler/get-ls-dotdir-root)
+          path (util/node-path.join path sub-root)
+          user-path (util/node-path.join path file)
+          sub-dir? (string/starts-with? user-path path)
+          _ (if-not sub-dir? (do (log/info :debug user-path) (throw "read file denied")))
+          exist? (fs/file-exists? "" user-path)
+          _ (when-not exist? (do (log/info :debug user-path) (throw "file not existed")))
+          content (fs/read-file "" user-path)]
+    content))
+
+(defn ^:private unlink_dotdir_file!
+  [file sub-root]
+  (p/let [repo ""
+          path (plugin-handler/get-ls-dotdir-root)
+          path (util/node-path.join path sub-root)
+          user-path (util/node-path.join path file)
+          sub-dir? (string/starts-with? user-path path)
+          _ (if-not sub-dir? (do (log/info :debug user-path) (throw "access file denied")))
+          exist? (fs/file-exists? "" user-path)
+          _ (when-not exist? (do (log/info :debug user-path) (throw "file not existed")))
+          _ (fs/unlink! user-path {})]))
+
 (def ^:export write_user_tmp_file
   (fn [file content]
-    (p/let [repo ""
-            path (plugin-handler/get-ls-dotdir-root)
-            path (util/node-path.join path "tmp")
-            exist? (fs/file-exists? path "")
-            _ (when-not exist? (fs/mkdir! path))
-            path (util/node-path.join path file)
-            _ (fs/write-file! repo "" path content {:skip-mtime? true})]
-      path)))
+    (write_dotdir_file! file content "tmp")))
+
+(def ^:export write_plugin_storage_file
+  (fn [plugin-id file content]
+    (write_dotdir_file!
+     file content
+     (let [plugin-id (util/node-path.basename plugin-id)]
+       (util/node-path.join "storages" plugin-id)))))
+
+(def ^:export read_plugin_storage_file
+  (fn [plugin-id file]
+    (let [plugin-id (util/node-path.basename plugin-id)]
+      (read_dotdir_file
+       file (util/node-path.join "storages" plugin-id)))))
+
+(def ^:export unlink_plugin_storage_file
+  (fn [plugin-id file]
+    (let [plugin-id (util/node-path.basename plugin-id)]
+      (unlink_dotdir_file!
+       file (util/node-path.join "storages" plugin-id)))))
+
+(def ^:export exist_plugin_storage_file
+  (fn [plugin-id file]
+    (p/let [root (plugin-handler/get-ls-dotdir-root)
+            plugin-id (util/node-path.basename plugin-id)
+            exist? (fs/file-exists?
+                    (util/node-path.join root "storages" plugin-id)
+                    file)]
+      exist?)))
+
+(def ^:export clear_plugin_storage_files
+  (fn [plugin-id]
+    (p/let [root (plugin-handler/get-ls-dotdir-root)
+            plugin-id (util/node-path.basename plugin-id)]
+      (fs/rmdir! (util/node-path.join root  "storages" plugin-id)))))
 
 (def ^:export load_user_preferences
   (fn []

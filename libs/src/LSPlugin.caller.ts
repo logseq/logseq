@@ -220,7 +220,11 @@ class LSPluginCaller extends EventEmitter {
 
         this._call = async (...args: any) => {
           // parent all will get message before handshaked
-          await refChild.call(LSPMSGFn(pl.id), { type: args[0], payload: args[1] || {} })
+          await refChild.call(LSPMSGFn(pl.id), {
+            type: args[0], payload: Object.assign(args[1] || {}, {
+              $$pid: pl.id
+            })
+          })
         }
 
         this._callUserModel = async (type, payload: any) => {
@@ -263,7 +267,9 @@ class LSPluginCaller extends EventEmitter {
 
         // TODO: support sync call
         // @ts-ignore Call in same thread
-        this._pluginLocal?.emit(type, payload)
+        this._pluginLocal?.emit(type, Object.assign(payload, {
+          $$pid: pl.id
+        }))
 
         return actor?.promise
       }
