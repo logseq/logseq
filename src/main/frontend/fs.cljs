@@ -43,6 +43,10 @@
   [dir]
   (protocol/mkdir! (get-fs dir) dir))
 
+(defn mkdir-recur!
+  [dir]
+  (protocol/mkdir-recur! (get-fs dir) dir))
+
 (defn readdir
   [dir]
   (protocol/readdir (get-fs dir) dir))

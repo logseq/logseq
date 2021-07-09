@@ -1,6 +1,7 @@
 import EventEmitter from 'eventemitter3'
 import * as CSS from 'csstype'
 import { LSPluginCaller } from './LSPlugin.caller'
+import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
 
 export type PluginLocalIdentity = string
 
@@ -494,4 +495,6 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   App: IAppProxy & Record<string, any>
   Editor: IEditorProxy & Record<string, any>
   DB: IDBProxy
+
+  FileStorage: LSPluginFileStorage
 }

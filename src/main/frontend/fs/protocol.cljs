@@ -2,6 +2,7 @@
 
 (defprotocol Fs
   (mkdir! [this dir])
+  (mkdir-recur! [this dir])
   (readdir [this dir])
   (unlink! [this path opts])
   (rmdir! [this dir])

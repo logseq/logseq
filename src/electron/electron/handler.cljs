@@ -18,6 +18,12 @@
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))
 
+(defmethod handle :mkdir-recur [_window [_ dir]]
+  (fs/mkdirSync dir #js {:recursive true}))
+
+(defmethod handle :rmdir-recur [_window [_ dir]]
+  (fs/rmdirSync dir #js {:recursive true}))
+
 ;; {encoding: 'utf8', withFileTypes: true}
 (defn- readdir
   [dir]
