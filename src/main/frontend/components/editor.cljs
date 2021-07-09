@@ -386,6 +386,7 @@
 
 (defn get-editor-heading-class [content]
   (cond
+    (string/includes? content "\n") "multiline-block"
     (starts-with? content "# ") "h1"
     (starts-with? content "## ") "h2"
     (starts-with? content "### ") "h3"
