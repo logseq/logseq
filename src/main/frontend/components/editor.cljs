@@ -106,6 +106,7 @@
                              (block/page-preview-trigger
                                {:children        [:div (search/highlight-exact-query page-name q)]
                                 :open?           chosen?
+                                :manual?         true
                                 :fixed-position? true
                                 :tippy-distance  24
                                 :tippy-position  (if sidebar? "left" "right")}

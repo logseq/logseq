@@ -6049,10 +6049,10 @@ mkdirp@^0.5.0, mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@0.8.4:
-  version "0.8.4"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.8.4.tgz#264e95abfdbd66f36b8f55555df2d1b9caba9415"
-  integrity sha512-fNJLQPiOAmaz5t6VM6d8AvpwBs39sj21tIGLx782UBejnKLq1o5pGA3htI2nmY4ifvgwJDygxIf2mSkGZE44sg==
+mldoc@0.8.8:
+  version "0.8.8"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.8.8.tgz#4076f00712108caba3fbf4e5df4e2945b407d2c7"
+  integrity sha512-bulOsjdZS6jFVsgK2lwqZMNd5+liHlwFb2xwrovMdxnTFQ5F150k+RZF32RRZx6z62Y43RJUb+2vLGpXJK0qZQ==
   dependencies:
     yargs "^12.0.2"
 
@@ -6775,10 +6775,10 @@ pinkie@^2.0.0:
   resolved "https://registry.yarnpkg.com/pinkie/-/pinkie-2.0.4.tgz"
   integrity sha1-clVrgM+g1IqXToDnckjoDtT3+HA=
 
-pixi-graph-fork@^0.0.9:
-  version "0.0.9"
-  resolved "https://registry.yarnpkg.com/pixi-graph-fork/-/pixi-graph-fork-0.0.9.tgz#1eed19fb216da2ba618e7deaefef4194571a1e1b"
-  integrity sha512-N9j7BjCShk+3/beCT0ug70IVdzXQnXDvhGPAk3L1hFhcVnW/pyTpnXDGAIXpjFHZwU+Y/YrjMFFeRa1Hj3OcIA==
+pixi-graph-fork@^0.1.3:
+  version "0.1.3"
+  resolved "https://registry.yarnpkg.com/pixi-graph-fork/-/pixi-graph-fork-0.1.3.tgz#fc7beee363ba3ec71b35df30fce1d5b2ddf27732"
+  integrity sha512-NHmlG0FI2/xme/p9KXOPLbfrQ0UIcCq4GK36IsSYPGJznhUoJTlNbfT4ML7I3DL84vQx0TliGPAA+EmoVz6CDg==
   dependencies:
     "@pixi-essentials/cull" "^1.1.0"
     "@pixi/app" "^6.0.2"

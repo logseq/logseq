@@ -91,7 +91,7 @@
                            (string/replace matched link (util/node-path.join url link))
                            matched)))
                       content)]
-        (format/to-html content :markdown (mldoc/default-config :markdown false))))
+        (format/to-html content :markdown (mldoc/default-config :markdown))))
     (catch js/Error e
       (log/error :parse-user-md-exception e)
       content)))

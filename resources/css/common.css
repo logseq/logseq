@@ -728,6 +728,10 @@ li p:last-child,
   -webkit-animation: spin 2s infinite linear;
 }
 
+.loader-reverse {
+    -webkit-animation: spin 2s infinite linear reverse;
+}
+
 .canceled,
 .done {
   text-decoration: line-through;

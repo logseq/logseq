@@ -92,7 +92,18 @@
       (str/replace "mod" (if util/mac? "cmd" "ctrl"))
       (str/replace "alt" (if util/mac? "opt" "alt"))
       (str/replace "shift+/" "?")
+      (str/replace "open-square-bracket" "[")
+      (str/replace "close-square-bracket" "]")
       (str/lower-case)))
+
+;; if multiple bindings, gen seq for first binding only for now
+(defn gen-shortcut-seq [id]
+  (let [bindings (shortcut-binding id)]
+    (if (false? bindings)
+      []
+      (-> bindings
+          first
+          (str/split  #" |\+")))))
 
 (defn binding-for-display [k binding]
   (let [tmp (cond
