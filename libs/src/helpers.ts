@@ -18,7 +18,7 @@ export const IS_DEV = process.env.NODE_ENV === 'development'
 
 let _appPathRoot
 
-export async function getAppPathRoot () {
+export async function getAppPathRoot (): Promise<string> {
   if (_appPathRoot) {
     return _appPathRoot
   }
@@ -28,7 +28,7 @@ export async function getAppPathRoot () {
   )
 }
 
-export async function getSDKPathRoot () {
+export async function getSDKPathRoot (): Promise<string> {
   if (IS_DEV) {
     // TODO: cache in preference file
     return localStorage.getItem('LSP_DEV_SDK_ROOT') || 'http://localhost:8080'
