@@ -155,7 +155,7 @@ const editor: Partial<IEditorProxy> = {
       return false
     }
 
-    const key = +'_' + this.baseInfo.id
+    const key = tag + '_' + this.baseInfo.id
     const label = tag
     const type = 'block-context-menu-item'
 
