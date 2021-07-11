@@ -86,8 +86,8 @@ html[data-theme='dark'] {
 
 .white-theme,
 html[data-theme='light'] {
-  --ls-primary-background-color: #f6f6f6;
-  --ls-secondary-background-color: #f7f6f4;
+  --ls-primary-background-color: #ffffff;
+  --ls-secondary-background-color: #f7f7f7;
   --ls-tertiary-background-color: #f1eee8;
   --ls-quaternary-background-color: #e8e5de;
   --ls-table-tr-even-background-color: #f4f5f7;
