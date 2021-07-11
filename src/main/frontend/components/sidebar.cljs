@@ -341,7 +341,7 @@
           :route-match route-match})
         [:div.#app-container.h-screen.flex
          [:div.flex-1.h-full.flex.flex-col#left-container.relative
-          {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
+          {:class (if (state/sub :ui/sidebar-open?) "overflow-y-scroll" "w-full")}
           [:div.scrollbar-spacing#main-container
            (header/header {:open-fn        open-fn
                            :white?         white?
