@@ -140,7 +140,8 @@
 
 ;;; ================================================================
 ;;; card protocol
-(defprotocol ICard)
+(defprotocol ICard
+  (card-type [this]))
 
 (defprotocol ICardShow
   ;; `show-phase-1' shows cards without hidden contents
@@ -154,6 +155,7 @@
 
 (deftype SidedCard [block]
   ICard
+  (card-type [this] :sided)
   ICardShow
   (show-phase-1 [this] block)
   (show-phase-2 [this]
@@ -161,6 +163,7 @@
 
 (deftype ClozeCard [block]
   ICard
+  (card-type [this] :cloze)
   ICardShow
   (show-phase-1 [this] block)
   (show-phase-2 [this]
