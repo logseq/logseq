@@ -1219,7 +1219,9 @@
                     (not (:pre-block? block))
                     (or (and (coll? children) (seq children))
                         (seq body)))
-        control-show? (util/react *control-show?)
+        control-show? (and
+                       (seq (:block/title block))
+                       (util/react *control-show?))
         ref-collapsed? (util/react *ref-collapsed?)
         dark? (= "dark" (state/sub :ui/theme))
         ref? (:ref? config)
