@@ -334,6 +334,14 @@
                           (when (= "Enter" (util/ekey e))
                             (update-home-page e)))}]]]])])
 
+(defn enable-all-pages-public-row [t enable-all-pages-public?]
+  (toggle "all pages public"
+          (t :settings-page/enable-all-pages-public)
+          enable-all-pages-public?
+          (fn []
+            (let [value (not enable-all-pages-public?)]
+              (config-handler/set-config! :publishing/all-pages-public? value)))))
+
 (defn encryption-row [t enable-encryption?]
   (toggle "enable_encryption"
           (t :settings-page/enable-encryption)
@@ -417,6 +425,7 @@
         current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
+        enable-all-pages-public? (state/all-pages-public?)
         instrument-disabled? (state/sub :instrument/disabled?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
@@ -453,6 +462,7 @@
         (tooltip-row t enable-tooltip?)
         (timetracking-row t enable-timetracking?)
         (journal-row t enable-journals?)
+        (enable-all-pages-public-row t enable-all-pages-public?)
         (encryption-row t enable-encryption?)
         (keyboard-shortcuts-row t)
         (auto-push-row t current-repo enable-git-auto-push?)]

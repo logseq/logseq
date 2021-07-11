@@ -63,7 +63,8 @@
 
  [frontend.db.query-react
   react-query custom-query-result-transform]
- )
+
+ [frontend.db.default built-in-pages-names built-in-pages])
 
 ;; persisting DBs between page reloads
 (defn persist! [repo]

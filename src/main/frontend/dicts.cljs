@@ -213,6 +213,7 @@
         :settings-page/enable-timetracking "Enable timetracking"
         :settings-page/enable-tooltip "Enable tooltips"
         :settings-page/enable-journals "Enable journals"
+        :settings-page/enable-all-pages-public "Enable all pages public when publishing"
         :settings-page/enable-encryption "Enable encryption feature"
         :settings-page/customize-shortcuts "Keyboard shortcuts"
         :settings-page/shortcut-settings "Customize shortcuts"

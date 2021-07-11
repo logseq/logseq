@@ -2956,7 +2956,7 @@
     :else
     ;; expand one level
     (let [blocks-with-level (all-blocks-with-level {})
-          max-level (apply max (map :block/level blocks-with-level))]
+          max-level (or (apply max (map :block/level blocks-with-level)) 99)]
       (loop [level 1]
         (if (> level max-level)
           nil
@@ -2990,7 +2990,7 @@
     ;; collapse by one level from outside
     (let [blocks-with-level
           (all-blocks-with-level {:collapse? true})
-          max-level (apply max (map :block/level blocks-with-level))]
+          max-level (or (apply max (map :block/level blocks-with-level)) 99)]
       (loop [level max-level]
         (if (zero? level)
           nil

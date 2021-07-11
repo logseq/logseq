@@ -454,7 +454,9 @@
   [repo]
   (->> (db/get-modified-pages repo)
        (remove util/file-page?)
-       (remove util/uuid-string?)))
+       (remove util/uuid-string?)
+       (remove (fn [p]
+                 (db/built-in-pages-names (string/upper-case p))))))
 
 (defn get-filters
   [page-name]

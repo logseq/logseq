@@ -9,7 +9,8 @@
             [frontend.handler.notification :as notification]
             [goog.object :as gobj]
             [frontend.state :as state]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.config :as config]))
 
 (def write-chan (async/chan))
 
@@ -28,14 +29,15 @@
 
 (defn write-files!
   [page-db-ids]
-  (doseq [page-db-id (set page-db-ids)]
-    (try (do-write-file! page-db-id)
-         (catch js/Error e
-           (notification/show!
-            "Write file failed, please copy the changes to other editors in case of losing data."
-            [:div "Error: " (str (gobj/get e "stack"))]
-            :error)
-           (log/error :file/write-file-error {:error e})))))
+  (when-not config/publishing?
+    (doseq [page-db-id (set page-db-ids)]
+      (try (do-write-file! page-db-id)
+           (catch js/Error e
+             (notification/show!
+              "Write file failed, please copy the changes to other editors in case of losing data."
+              [:div "Error: " (str (gobj/get e "stack"))]
+              :error)
+             (log/error :file/write-file-error {:error e}))))))
 
 (defn sync-to-file
   [{page-db-id :db/id}]

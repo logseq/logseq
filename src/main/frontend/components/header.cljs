@@ -110,9 +110,10 @@
           :options {:href (rfe/href :all-journals)}
           :icon svg/calendar-sm})
 
-       {:title (t :settings)
-        :options {:on-click state/open-settings!}
-        :icon svg/settings-sm}
+       (when-not (state/publishing-enable-editing?)
+         {:title (t :settings)
+          :options {:on-click state/open-settings!}
+          :icon svg/settings-sm})
 
        (when developer-mode?
          {:title (t :plugins)
