@@ -83,47 +83,52 @@
         (.stop))))
 
 (defonce *graph-instance (atom nil))
+
+(defn- clear-nodes!
+  [graph]
+  (.forEachNode graph (fn [node]
+                        (.dropNode graph node))))
+
 (defn render!
   [state]
   (try
-    (let [old-instance @*graph-instance
-          {:keys [graph pixi]} old-instance
-          _ (when (and graph pixi)
-            (.forEachNode graph (fn [node]
-                                  (.dropNode graph node))))]
-      (let [{:keys [nodes links style hover-style height register-handlers-fn dark?]} (first (:rum/args state))
-            style (or style (default-style dark?))
-            hover-style (or hover-style (default-hover-style dark?))
-            graph (or graph (Graph.))
-            nodes-set (set (map :id nodes))
-            links (->> (filter (fn [link]
-                                 (and (nodes-set (:source link)) (nodes-set (:target link)))) links)
-                       (distinct))
-            nodes (remove nil? nodes)
-            links (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
-            nodes-js (bean/->js nodes)
-            links-js (bean/->js links)]
-        (layout! nodes-js links-js)
-        (doseq [node nodes-js]
-          (.addNode graph (.-id node) node))
-        (doseq [link links-js]
-          (let [source (.-id (.-source link))
-                target (.-id (.-target link))]
-            (.addEdge graph source target link)))
-        (if-let [{:keys [pixi]} @*graph-instance]
-          (.resetView pixi)
-          (when-let [container-ref (:ref state)]
-            (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
-                                  (bean/->js
-                                   {:container @container-ref
-                                    :graph graph
-                                    :style style
-                                    :hoverStyle hover-style
-                                    :height height}))]
-              (reset! *graph-instance {:graph graph
-                                       :pixi pixi-graph})
-              (when register-handlers-fn
-                (register-handlers-fn pixi-graph)))))))
-    (catch js/Error e
-      (js/console.error e)))
+     (let [old-instance @*graph-instance
+           {:keys [graph pixi]} old-instance]
+       (when (and graph pixi)
+         (clear-nodes! graph))
+       (let [{:keys [nodes links style hover-style height register-handlers-fn dark?]} (first (:rum/args state))
+             style (or style (default-style dark?))
+             hover-style (or hover-style (default-hover-style dark?))
+             graph (or graph (Graph.))
+             nodes-set (set (map :id nodes))
+             links (->> (filter (fn [link]
+                                  (and (nodes-set (:source link)) (nodes-set (:target link)))) links)
+                        (distinct))
+             nodes (remove nil? nodes)
+             links (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
+             nodes-js (bean/->js nodes)
+             links-js (bean/->js links)]
+         (layout! nodes-js links-js)
+         (doseq [node nodes-js]
+           (.addNode graph (.-id node) node))
+         (doseq [link links-js]
+           (let [source (.-id (.-source link))
+                 target (.-id (.-target link))]
+             (.addEdge graph source target link)))
+         (if-let [{:keys [pixi]} @*graph-instance]
+           (.resetView pixi)
+           (when-let [container-ref (:ref state)]
+             (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
+                                   (bean/->js
+                                    {:container @container-ref
+                                     :graph graph
+                                     :style style
+                                     :hoverStyle hover-style
+                                     :height height}))]
+               (reset! *graph-instance {:graph graph
+                                        :pixi pixi-graph})
+               (when register-handlers-fn
+                 (register-handlers-fn pixi-graph)))))))
+     (catch js/Error e
+       (js/console.error e)))
   state)

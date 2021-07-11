@@ -647,6 +647,18 @@
         reset? (rum/react *graph-reset?)]
     (global-graph-inner graph settings theme)))
 
+(rum/defc page-graph-inner < rum/static
+  [graph dark?]
+  [:div.sidebar-item.flex-col
+   (graph/graph-2d {:nodes (:nodes graph)
+                    :links (:links graph)
+                    :width 600
+                    :height 600
+                    :dark? dark?
+                    :register-handlers-fn
+                    (fn [graph]
+                      (graph-register-handlers graph (atom nil) (atom nil) dark?))})])
+
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
   (let [page (or
@@ -659,15 +671,7 @@
                 (graph-handler/build-block-graph (uuid page) theme)
                 (graph-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
-      [:div.sidebar-item.flex-col
-       (graph/graph-2d {:nodes (:nodes graph)
-                        :links (:links graph)
-                        :width 600
-                        :height 600
-                        :dark? dark?
-                        :register-handlers-fn
-                        (fn [graph]
-                          (graph-register-handlers graph (atom nil) (atom nil) dark?))})])))
+      (page-graph-inner graph dark?))))
 
 (rum/defc all-pages < rum/reactive
   ;; {:did-mount (fn [state]

@@ -108,6 +108,7 @@ dummy.createGraphWithGraph = function() {};
 dummy.resetView = function() {};
 dummy.dropNode = function() {};
 dummy.dropEdge = function() {};
+dummy.unhoverNode = function() {};
 
 /**
  * @typedef {{
