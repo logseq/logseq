@@ -9,7 +9,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            ["mldoc" :as mldoc :refer [Mldoc]]))
+            ["mldoc" :as mldoc :refer [Mldoc]]
+            [linked.core :as linked]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -139,9 +140,8 @@
                                    v (if (contains? #{:title :description :filters :roam_tags} k)
                                        v
                                        (text/split-page-refs-without-brackets v))]
-                               [k v])))
-                          (reverse)
-                          (into {}))
+                               [k v]))))
+          properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
           macros (if (seq macro-properties)
                    (->>
@@ -155,7 +155,7 @@
                     (into {}))
                    {})
           properties (->> (remove (fn [x] (= :macro (first x))) properties)
-                          (into {}))
+                          (into (linked/map)))
           properties (if (seq properties)
                        (cond-> properties
                          (:roam_key properties)

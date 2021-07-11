@@ -193,37 +193,40 @@
 ;; TODO: we should move this to mldoc
 (defn extract-properties
   [properties]
-  (let [properties (into {} properties)
-        page-refs (->>
-                   (map (fn [v]
-                          (when (string? v)
-                            (let [result (text/split-page-refs-without-brackets v {:un-brackets? false})]
-                              (if (coll? result)
-                                (map text/page-ref-un-brackets! result)
-                                []))))
-                     (vals properties))
-                   (apply concat)
-                   (remove string/blank?))
-        properties (->> properties
-                        (medley/map-kv (fn [k v]
-                                         (let [k (-> (string/lower-case (name k))
-                                                     (string/replace " " "-")
-                                                     (string/replace "_" "-"))
-                                               k (if (contains? #{"custom_id" "custom-id"} k)
-                                                   "id"
-                                                   k)
-                                               v (if (coll? v)
-                                                   v
-                                                   (property/parse-property k v))
-                                               k (keyword k)
-                                               v (if (and
-                                                      (string? v)
-                                                      (contains? #{:alias :aliases :tags} k))
-                                                   (set [v])
-                                                   v)]
-                                           [k v]))))]
-    {:properties properties
-     :page-refs page-refs}))
+  (when (seq properties)
+    (let [properties (seq properties)
+          properties-order (keys properties)
+          page-refs (->>
+                     (map (fn [v]
+                            (when (string? v)
+                              (let [result (text/split-page-refs-without-brackets v {:un-brackets? false})]
+                                (if (coll? result)
+                                  (map text/page-ref-un-brackets! result)
+                                  []))))
+                       (map last properties))
+                     (apply concat)
+                     (remove string/blank?))
+          properties (->> properties
+                          (map (fn [[k v]]
+                                 (let [k (-> (string/lower-case (name k))
+                                             (string/replace " " "-")
+                                             (string/replace "_" "-"))
+                                       k (if (contains? #{"custom_id" "custom-id"} k)
+                                           "id"
+                                           k)
+                                       v (if (coll? v)
+                                           v
+                                           (property/parse-property k v))
+                                       k (keyword k)
+                                       v (if (and
+                                              (string? v)
+                                              (contains? #{:alias :aliases :tags} k))
+                                           (set [v])
+                                           v)]
+                                   [k v]))))]
+      {:properties (into {} properties)
+       :properties-order (map first properties)
+       :page-refs page-refs})))
 
 (defn- paragraph-timestamp-block?
   [block]
@@ -525,16 +528,21 @@
                           (>= level last-level)
                           [(conj children [id level])
                            #{}])
+                        block (cond->
+                                (assoc block
+                                      :uuid id
+                                      :body (vec
+                                             (->> (reverse block-body)
+                                                  (map #(remove-indentations format (:level block) %))))
+                                      :refs ref-pages-in-properties
+                                      :children (or current-block-children [])
+                                      :format format)
+                                (seq (:properties properties))
+                                (assoc :properties (:properties properties))
 
-                        block (-> (assoc block
-                                         :uuid id
-                                         :body (vec
-                                                (->> (reverse block-body)
-                                                     (map #(remove-indentations format (:level block) %))))
-                                         :properties (:properties properties)
-                                         :refs ref-pages-in-properties
-                                         :children (or current-block-children [])
-                                         :format format)
+                                (seq (:properties-order properties))
+                                (assoc :properties-order (:properties-order properties)))
+                        block (-> block
                                   (assoc-in [:meta :start-pos] start_pos)
                                   (assoc-in [:meta :end-pos] last-pos)
                                   ((fn [block]

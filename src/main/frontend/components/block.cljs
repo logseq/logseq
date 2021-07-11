@@ -1468,7 +1468,9 @@
 (rum/defc properties-cp
   [config block]
   (let [properties (walk/keywordize-keys (:block/properties block))
+        properties-order (:block/properties-order block)
         properties (apply dissoc properties property/built-in-properties)
+        properties-order (remove property/built-in-properties properties-order)
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
                      (let [repo (state/get-current-repo)
@@ -1482,7 +1484,9 @@
                            (assoc properties :alias aliases))
                          properties))
                      properties)
-        properties (sort properties)]
+        properties (if (seq properties-order)
+                     (map (fn [k] [k (get properties k)]) properties-order)
+                     properties)]
     (cond
       (seq properties)
       [:div.block-properties

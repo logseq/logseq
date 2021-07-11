@@ -68,6 +68,8 @@
 
    ;; block key value properties
    :block/properties {}
+   ;; vector
+   :block/properties-order {}
 
    ;; parsed ast
    :block/body {}

@@ -327,7 +327,8 @@
                                                              (:db/id page)
                                                              :page-presentation
                                                              {:page page}))}}
-                                     (when-not contents?
+                                     (when (and (not contents?)
+                                                (not journal?))
                                        {:title   (t :page/rename)
                                         :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
 

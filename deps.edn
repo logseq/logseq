@@ -21,8 +21,7 @@
   ;; fork
   com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time",
                                :sha "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
-  cljs-drag-n-drop/cljs-drag-n-drop
-  {:mvn/version "0.1.0"}
+  cljs-drag-n-drop/cljs-drag-n-drop {:mvn/version "0.1.0"}
   borkdude/sci                {:mvn/version "0.1.1-alpha.6"}
   hickory/hickory             {:mvn/version "0.7.1"}
   hiccups/hiccups             {:mvn/version "0.3.0"}
@@ -34,7 +33,8 @@
   binaryage/devtools          {:mvn/version "1.0.2"}
   camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.2"}
   instaparse/instaparse       {:mvn/version "1.4.10"}
-  nubank/workspaces           {:mvn/version "1.1.1"}}
+  nubank/workspaces           {:mvn/version "1.1.1"}
+  frankiesardo/linked         {:mvn/version "1.3.0"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
                   :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.844"}
