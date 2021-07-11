@@ -39,7 +39,7 @@
   [:div
    [:p.text-sm
     [:span.opacity-70 "Tip: press "]
-    [:code "F"]
+    [:code "f"]
     [:span.opacity-70 " to go fullscreen"]]
    [:div.reveal {:style style}
     (when loading?
