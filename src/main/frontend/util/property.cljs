@@ -12,16 +12,23 @@
 (defonce properties-end-pattern
   (re-pattern (util/format "%s[\t\r ]*\n|(%s\\s*$)" properties-end properties-end)))
 
-(def built-in-properties
+(def built-in-extended-properties (atom #{}))
+(defn register-built-in-properties
+  [props]
+  (reset! built-in-extended-properties (set/union @built-in-extended-properties props)))
+
+(defn built-in-properties
+  []
   (set/union
    #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table :query-properties}
-   (set (map keyword config/markers))))
+   (set (map keyword config/markers))
+   @built-in-extended-properties))
 
 (defn properties-built-in?
   [properties]
   (and (seq properties)
        (let [ks (map (comp keyword string/lower-case name) (keys properties))]
-         (every? built-in-properties ks))))
+         (every? (built-in-properties) ks))))
 
 (defn contains-properties?
   [content]
@@ -102,7 +109,7 @@
 (defn with-built-in-properties
   [properties content format]
   (let [org? (= format :org)
-        properties (filter (fn [[k v]] (built-in-properties k)) properties)]
+        properties (filter (fn [[k v]] ((built-in-properties) k)) properties)]
     (if (seq properties)
       (let [[title & body] (string/split-lines content)
             properties-in-content? (and title (= (string/upper-case title) properties-start))
@@ -265,8 +272,9 @@
 
 (defn remove-built-in-properties
   [format content]
-  (let [content (reduce (fn [content key]
-                          (remove-property format key content)) content built-in-properties)]
+  (let [built-in-properties* (built-in-properties)
+        content (reduce (fn [content key]
+                          (remove-property format key content)) content built-in-properties*)]
     (if (= format :org)
       (string/replace-first content ":PROPERTIES:\n:END:" "")
       content)))
