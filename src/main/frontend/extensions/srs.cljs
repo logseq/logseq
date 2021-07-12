@@ -9,6 +9,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.components.block :as component-block]
             [frontend.components.macro :as component-macro]
+            [frontend.components.svg :as svg]
             [frontend.ui :as ui]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -23,11 +24,10 @@
 ;;;   and its children are the back side
 ;;; - When the card's type is ':cloze', '{{cloze: <content>}}' shows as '[...]'
 
-
 ;;; ================================================================
 ;;; const & vars
 
-(def card-type [:cloze :sided])
+(def card-type-set #{:cloze :sided})
 
 (def card-type-property          :card-type)
 (def card-last-interval-property :card-last-interval)
@@ -58,6 +58,10 @@
 ;;; ================================================================
 ;;; utils
 
+(defn- get-block-card-type
+  [block]
+  (keyword (get (:block/properties block) card-type-property)))
+
 (defn- get-block-card-properties
   [block]
   (when-let [properties (:block/properties block)]
@@ -87,6 +91,13 @@
      (f card-next-schedule-property)
      (#(do (println %) (identity %)))
      (editor-handler/save-block! repo (:block/uuid block)))))
+
+
+;;; used by other ns
+(defn card-block?
+  [block]
+  (let [type (keyword (get (:block/properties block) card-type-property))]
+    (and type (contains? card-type-set type))))
 
 ;;; ================================================================
 ;;; sr algorithm (sm-5)
@@ -184,6 +195,12 @@
   (show-phase-2-config [this] {}))
 
 
+(defn- ->card [block]
+  (case (get-block-card-type block)
+    :cloze (->ClozeCard block)
+    :sided (->SidedCard block)
+    :else (->SidedCard block)))
+
 ;;; ================================================================
 ;;;
 
@@ -276,6 +293,25 @@
 ;;; ================================================================
 ;;; UI
 
+(defn- score-help-info [days-3 days-4 days-5]
+  (ui/tippy {:html [:div
+                    [:p.text-sm "0-2: you have forgotten this card."]
+                    [:p.text-sm "3-5: you remember this card."]
+                    [:p.text-sm "0: completely forgot."]
+                    [:p.text-sm "1: it still takes a while to recall even after seeing the answer."]
+                    [:p.text-sm "2: immediately recall after seeing the answer."]
+                    [:p.text-sm
+                     (util/format "3: it takes a while to recall. (will reappear after %d days)" days-3)]
+                    [:p.text-sm
+                     (util/format "4: you recall this after a little thought. (will reappear after %d days)"
+                                  days-4)]
+                    [:p.text-sm
+                     (util/format "5: you remember it easily. (will reappear after %d days)" days-5)]]
+             :class "tippy-hover mr-2"
+             :interactive true
+             :disabled false}
+            (svg/info)))
+
 (rum/defcs view
   < rum/reactive
   (rum/local 1 ::phase)
@@ -292,9 +328,11 @@
                                  (operation-score! card score)
                                  (if (>= (inc @card-index) (count cards))
                                    (state/close-modal!)
-                                   (swap! card-index inc)))]
+                                   (do
+                                     (swap! card-index inc)
+                                     (reset! phase 1))))]
     [:div
-     [:div.w-144.h-96.resize
+     [:div.w-144.h-96.resize.overflow-y-auto
       (component-block/blocks-container
        blocks
        (merge
@@ -306,32 +344,50 @@
            (concat
             [:div.flex.items-start
              (ui/button (if (= 1 @phase) "Show Answers" "Hide Answers")
-                        :class "w-32"
+                        :class "w-32 mr-8"
                         :on-click #(swap! phase (fn [o] (if (= 1 o) 2 1))))]
             (when (and (not read-only) (= 2 @phase))
               (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
                     interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
                     interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
-                [(ui/button "0" :on-click #(score-and-next-card-fn 0))
-                 (ui/button "1" :on-click #(score-and-next-card-fn 1))
-                 (ui/button "2" :on-click #(score-and-next-card-fn 2))
-                 (ui/button (util/format "3 (+%ddays)" (Math/round interval-days-score-3))
-                            :on-click #(score-and-next-card-fn 3))
-                 (ui/button (util/format "4 (+%ddays)" (Math/round interval-days-score-4))
-                            :on-click #(score-and-next-card-fn 4))
-                 (ui/button (util/format "5 (+%ddays)" (Math/round interval-days-score-5))
-                            :on-click #(score-and-next-card-fn 5))]))))]))
+                [(ui/button "0" :on-click #(score-and-next-card-fn 0) :class "mr-2")
+                 (ui/button "1" :on-click #(score-and-next-card-fn 1) :class "mr-2")
+                 (ui/button "2" :on-click #(score-and-next-card-fn 2) :class "mr-2")
+                 (ui/button "3" :on-click #(score-and-next-card-fn 3) :class "mr-2")
+                 (ui/button "4" :on-click #(score-and-next-card-fn 4) :class "mr-2")
+                 (ui/button "5" :on-click #(score-and-next-card-fn 5) :class "mr-2")
+                 (score-help-info
+                  (Math/round interval-days-score-3)
+                  (Math/round interval-days-score-4)
+                  (Math/round interval-days-score-5))
+                 (ui/button "skip" :on-click #(if (>= (inc @card-index) (count cards))
+                                                (state/close-modal!)
+                                                (do
+                                                  (swap! card-index inc)
+                                                  (reset! phase 1))))]))))]))
 
 (defn preview
-  [card]
-  (state/set-modal! #(view [card] {}))
-  '())
+  [blocks]
+  (def aaa blocks)
+  (state/set-modal! #(view (mapv ->card blocks) {:read-only true})))
+
 
 ;;; register cloze macro
 (defn cloze-macro-show
   [config options]
   (if (:cloze config)
     [:span.text-blue-600 "[...]"]
-    (string/join ", " (:arguments options))))
+    [:span
+     [:span.text-blue-600 "["]
+     (string/join ", " (:arguments options))
+     [:span.text-blue-600 "]"]]))
 
 (component-macro/register cloze-macro-name cloze-macro-show)
+
+;;; register builtin properties
+
+(property/register-built-in-properties #{card-last-interval-property
+                                         card-repeats-property
+                                         card-last-reviewed-property
+                                         card-next-schedule-property
+                                         card-last-easiness-factor})
