@@ -800,10 +800,15 @@
           (block-reference (assoc config :reference? true) id label*))
 
         ["Page_ref" page]
-        (let [label* (if (seq (mldoc/plain->text label)) label nil)]
-          (if (and (string? page) (string/blank? page))
-            [:span (util/format "[[%s]]" page)]
-            (page-reference (:html-export? config) page config label*)))
+        (let [format (get-in config [:block :block/format])]
+          (if (and (= format :org)
+                   (show-link? config nil page page)
+                   (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
+            (image-link config url page nil nil page)
+            (let [label* (if (seq (mldoc/plain->text label)) label nil)]
+              (if (and (string? page) (string/blank? page))
+                [:span (util/format "[[%s]]" page)]
+                (page-reference (:html-export? config) page config label*)))))
 
         ["Search" s]
         (cond
