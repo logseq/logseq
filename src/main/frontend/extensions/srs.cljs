@@ -7,6 +7,9 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
+            [frontend.components.block :as component-block]
+            [frontend.components.macro :as component-macro]
+            [frontend.ui :as ui]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [clojure.string :as string]
@@ -89,6 +92,10 @@
 ;;; sr algorithm (sm-5)
 ;;; https://www.supermemo.com/zh/archives1990-2015/english/ol/sm5
 
+(defn- fix-2f
+  [n]
+  (/ (Math/round (* 100 n)) 100))
+
 (defn- get-of [of-matrix n ef]
   (or (get-in of-matrix [n ef])
       (if (<= n 1)
@@ -97,8 +104,7 @@
 
 (defn- set-of [of-matrix n ef of]
   (->>
-   (util/format "%.3f" of)
-   (cljs.reader/read-string)
+   (fix-2f of)
    (assoc-in of-matrix [n ef])))
 
 (defn- interval
@@ -126,16 +132,16 @@
   (assert (and (<= quality 5) (>= quality 0)))
   (let [ef (or ef 2.5)
         last-interval (if (or (nil? last-interval) (<= last-interval 0)) 1 last-interval)
-        next-interval (interval repeats ef of-matrix)
         next-ef (next-ef ef quality)
-        next-of-matrix (next-of-matrix of-matrix repeats quality learning-fraction ef)]
+        next-of-matrix (next-of-matrix of-matrix repeats quality learning-fraction ef)
+        next-interval (interval repeats next-ef next-of-matrix)]
 
     (if (< quality 3)
       ;; If the quality response was lower than 3
       ;; then start repetitions for the item from
       ;; the beginning without changing the E-Factor
       [-1 1 ef next-of-matrix]
-      [next-interval (+ 1 repeats) next-ef next-of-matrix])))
+      [(fix-2f next-interval) (+ 1 repeats) (fix-2f next-ef) next-of-matrix])))
 
 
 ;;; ================================================================
@@ -147,7 +153,10 @@
   ;; `show-phase-1' shows cards without hidden contents
   (show-phase-1 [this])
   ;; `show-phase-2' shows cards with all contents
-  (show-phase-2 [this]))
+  (show-phase-2 [this])
+
+  (show-phase-1-config [this])
+  (show-phase-2-config [this]))
 
 
 ;;; ================================================================
@@ -157,17 +166,22 @@
   ICard
   (card-type [this] :sided)
   ICardShow
-  (show-phase-1 [this] block)
+  (show-phase-1 [this] [block])
   (show-phase-2 [this]
-    (db/get-block-and-children (state/get-current-repo) (:block/uuid block))))
+    (db/get-block-and-children (state/get-current-repo) (:block/uuid block)))
+  (show-phase-1-config [this] {})
+  (show-phase-2-config [this] {}))
 
 (deftype ClozeCard [block]
   ICard
   (card-type [this] :cloze)
   ICardShow
-  (show-phase-1 [this] block)
+  (show-phase-1 [this]
+    (db/get-block-and-children (state/get-current-repo) (:block/uuid block)))
   (show-phase-2 [this]
-    (db/get-block-and-children (state/get-current-repo) (:block/uuid block))))
+    (db/get-block-and-children (state/get-current-repo) (:block/uuid block)))
+  (show-phase-1-config [this] {:cloze true})
+  (show-phase-2-config [this] {}))
 
 
 ;;; ================================================================
@@ -213,7 +227,7 @@
 ;;; ================================================================
 ;;; operations
 
-(defn- operation-score!
+(defn- get-next-interval
   [card score]
   {:pre [(and (<= score 5) (>= score 0))
          (satisfies? ICard card)]}
@@ -227,14 +241,29 @@
           next-interval* (if (< next-interval 0) 0 next-interval)
           next-schedule (tc/to-string (t/plus (t/now) (t/hours (* 24 next-interval*))))
           now (tc/to-string (t/now))]
-      (reset! of-matrix of-matrix*)
-      (save-block-card-properties! (state/get-current-repo)
-                                  (db/get-block-by-uuid (:block/uuid block))
-                                  {card-last-interval-property next-interval
-                                   card-repeats-property next-repeats
-                                   card-last-easiness-factor next-ef
-                                   card-next-schedule-property next-schedule
-                                   card-last-reviewed-property now}))))
+      {:next-of-matrix of-matrix*
+       card-last-interval-property next-interval
+       card-repeats-property next-repeats
+       card-last-easiness-factor next-ef
+       card-next-schedule-property next-schedule
+       card-last-reviewed-property now})))
+
+(defn- operation-score!
+  [card score]
+  {:pre [(and (<= score 5) (>= score 0))
+         (satisfies? ICard card)]}
+  (let [block (.-block card)
+        result (get-next-interval card score)
+        next-of-matrix (:next-of-matrix result)]
+    (reset! of-matrix next-of-matrix)
+    (save-block-card-properties! (state/get-current-repo)
+                                 (db/get-block-by-uuid (:block/uuid block))
+                                 (select-keys result
+                                              [card-last-interval-property
+                                               card-repeats-property
+                                               card-last-easiness-factor
+                                               card-next-schedule-property
+                                               card-last-reviewed-property]))))
 
 (defn- operation-reset!
   [card]
@@ -247,7 +276,62 @@
 ;;; ================================================================
 ;;; UI
 
-(rum/defc preview < rum/reactive
+(rum/defcs view
+  < rum/reactive
+  (rum/local 1 ::phase)
+  (rum/local 0 ::card-index)
+  [state cards {read-only :read-only}]
+  (let [card-index (::card-index state)
+        card (nth cards @card-index)
+        phase (::phase state)
+        blocks (case @phase
+                 1 (show-phase-1 card)
+                 2 (show-phase-2 card))
+        root-block (.-block card)
+        score-and-next-card-fn (fn [score]
+                                 (operation-score! card score)
+                                 (if (>= (inc @card-index) (count cards))
+                                   (state/close-modal!)
+                                   (swap! card-index inc)))]
+    [:div
+     [:div.w-144.h-96.resize
+      (component-block/blocks-container
+       blocks
+       (merge
+        (case @phase
+          1 (show-phase-1-config card)
+          2 (show-phase-2-config card))
+        {:id (str (:block/uuid root-block))}))]
+     (into []
+           (concat
+            [:div.flex.items-start
+             (ui/button (if (= 1 @phase) "Show Answers" "Hide Answers")
+                        :class "w-32"
+                        :on-click #(swap! phase (fn [o] (if (= 1 o) 2 1))))]
+            (when (and (not read-only) (= 2 @phase))
+              (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
+                    interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
+                    interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
+                [(ui/button "0" :on-click #(score-and-next-card-fn 0))
+                 (ui/button "1" :on-click #(score-and-next-card-fn 1))
+                 (ui/button "2" :on-click #(score-and-next-card-fn 2))
+                 (ui/button (util/format "3 (+%ddays)" (Math/round interval-days-score-3))
+                            :on-click #(score-and-next-card-fn 3))
+                 (ui/button (util/format "4 (+%ddays)" (Math/round interval-days-score-4))
+                            :on-click #(score-and-next-card-fn 4))
+                 (ui/button (util/format "5 (+%ddays)" (Math/round interval-days-score-5))
+                            :on-click #(score-and-next-card-fn 5))]))))]))
+
+(defn preview
   [card]
-  (assert (satisfies? ICardShow card))
-  [:div ""])
+  (state/set-modal! #(view [card] {}))
+  '())
+
+;;; register cloze macro
+(defn cloze-macro-show
+  [config options]
+  (if (:cloze config)
+    [:span.text-blue-600 "[...]"]
+    (string/join ", " (:arguments options))))
+
+(component-macro/register cloze-macro-name cloze-macro-show)
