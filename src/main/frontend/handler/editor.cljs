@@ -1053,7 +1053,7 @@
 (defn copy-selection-blocks
   []
   (when-let [blocks (seq (get-selected-blocks-with-children))]
-    (let [repo (dom/attr (first blocks) "repo")
+    (let [repo (state/get-current-repo)
           ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))
@@ -1070,7 +1070,7 @@
     ;; remove embeds and references
     (let [blocks (remove (fn [block] (= "true" (dom/attr block "data-transclude"))) blocks)]
       (when (seq blocks)
-        (let [repo (dom/attr (first blocks) "repo")
+        (let [repo (state/get-current-repo)
               ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
           (delete-blocks! repo ids))))))
 
