@@ -10,6 +10,12 @@ module.exports = {
   plugins: [require('@tailwindcss/ui')],
   darkMode: 'class',
   theme: {
+    extend: {
+      spacing: {
+        '128': '32rem',
+	'144': '36rem'
+      }
+    },
     colors: {
       transparent: 'transparent',
       current: 'currentColor',

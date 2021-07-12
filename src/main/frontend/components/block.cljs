@@ -12,6 +12,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
+            [frontend.components.macro :as macro]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.date :as date]
@@ -1101,6 +1102,9 @@
 
             :else                       ;TODO: maybe collections?
             nil))
+
+        (get @macro/macros name)
+        ((get @macro/macros name) config options)
 
         :else
         (if-let [block-uuid (:block/uuid config)]
