@@ -1,38 +1,28 @@
 (ns frontend.components.sidebar
-  (:require [rum.core :as rum]
-            [frontend.ui :as ui]
-            [frontend.components.theme :as theme]
-            [frontend.mixins :as mixins]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.db :as db]
-            [frontend.components.widgets :as widgets]
-            [frontend.components.journal :as journal]
-            [frontend.components.page :as page]
-            [frontend.components.settings :as settings]
-            [frontend.components.svg :as svg]
-            [frontend.components.repo :as repo]
-            [frontend.components.commit :as commit]
-            [frontend.components.header :as header]
-            [frontend.components.right-sidebar :as right-sidebar]
-            [frontend.storage :as storage]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.user :as user-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.export :as export]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.config :as config]
-            [dommy.core :as d]
+  (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
-            [goog.object :as gobj]
+            [frontend.components.header :as header]
+            [frontend.components.journal :as journal]
+            [frontend.components.repo :as repo]
+            [frontend.components.right-sidebar :as right-sidebar]
+            [frontend.components.settings :as settings]
+            [frontend.components.theme :as theme]
+            [frontend.components.widgets :as widgets]
+            [frontend.config :as config]
             [frontend.context.i18n :as i18n]
-            [reitit.frontend.easy :as rfe]
-            [goog.dom :as gdom]
+            [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [cljs-drag-n-drop.core :as dnd]))
+            [frontend.mixins :as mixins]
+            [frontend.modules.shortcut.data-helper :as shortcut-dh]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [goog.dom :as gdom]
+            [rum.core :as rum]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -268,8 +258,13 @@
     (ui/tippy {:html [:div.p-2
                       [:p.mb-2 [:b "Document mode"]]
                       [:ul
-                       [:li "Shift + Enter to create new block"]
-                       [:li "Click `D` or type `t d` to toggle document mode"]]]}
+                       [:li
+                        [:div.inline-block.mr-1 (ui/keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line))]
+                        [:p.inline-block  "to create new block"]]
+                       [:li
+                        [:p.inline-block.mr-1 "Click `D` or type"]
+                        [:div.inline-block.mr-1 (ui/keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode))]
+                        [:p.inline-block "to toggle document mode"]]]]}
               [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
                {:on-click state/toggle-document-mode!}
                "D"])))
@@ -345,8 +340,8 @@
           :close-fn    close-fn
           :route-match route-match})
         [:div.#app-container.h-screen.flex
-         {:class (if (state/sub :ui/sidebar-open?) "w-full" "overflow-hidden")}
-         [:div.flex-1.h-full.w-full.flex.flex-col#left-container.relative
+         [:div.flex-1.h-full.flex.flex-col#left-container.relative
+          {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
           [:div.scrollbar-spacing#main-container
            (header/header {:open-fn        open-fn
                            :white?         white?

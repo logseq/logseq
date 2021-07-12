@@ -416,8 +416,7 @@
            (if (or (= :meta key) (= "meta" key))
              (util/meta-key-name)
              (name key))])
-        sequence)]
-  )
+        sequence)])
 
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay

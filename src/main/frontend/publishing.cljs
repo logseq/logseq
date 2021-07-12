@@ -12,7 +12,8 @@
             [reitit.frontend.easy :as rfe]
             [cljs.reader :as reader]
             [frontend.components.page :as component-page]
-            [frontend.components.editor :as component-editor]))
+            [frontend.components.editor :as component-editor]
+            [frontend.modules.shortcut.core :as shortcut]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -70,6 +71,7 @@
   (register-components-fns!)
   (restore-from-transit-str!)
   (restore-state!)
+  (shortcut/refresh!)
   (start))
 
 (defn stop []

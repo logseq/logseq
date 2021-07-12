@@ -106,6 +106,7 @@
                              (block/page-preview-trigger
                                {:children        [:div (search/highlight-exact-query page-name q)]
                                 :open?           chosen?
+                                :manual?         true
                                 :fixed-position? true
                                 :tippy-distance  24
                                 :tippy-position  (if sidebar? "left" "right")}
@@ -382,12 +383,21 @@
     (set-up-key-down! repo state format)
     (set-up-key-up! state input input-id search-timeout)))
 
-(defn- get-editor-heading-class
-  [content heading-level]
-  (if (string/includes? content "\n")
-    nil
-    (if heading-level (str "h" heading-level))))
+(def starts-with? clojure.string/starts-with?)
 
+(defn get-editor-heading-class [content]
+  (cond
+    (string/includes? content "\n") "multiline-block"
+    (starts-with? content "# ") "h1"
+    (starts-with? content "## ") "h2"
+    (starts-with? content "### ") "h3"
+    (starts-with? content "#### ") "h4"
+    (starts-with? content "##### ") "h5"
+    (starts-with? content "###### ") "h6"
+    (starts-with? content "TODO ") "todo-block"
+    (starts-with? content "DOING ") "doing-block"
+    (starts-with? content "DONE ") "done-block"
+    :else "normal-block"))
 
 (rum/defc mock-textarea
   < rum/reactive
@@ -431,7 +441,10 @@
           :as   option} id config]
   (let [content (state/get-edit-content)
         heading-level (get state ::heading-level)]
-    [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
+    [:div.editor-inner {:class (str
+                                (if block "block-editor" "non-block-editor")
+                                " "
+                                (get-editor-heading-class content))}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
@@ -442,7 +455,7 @@
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
        :auto-focus        false
-       :class             (get-editor-heading-class content heading-level)})
+       :class             (get-editor-heading-class content)})
 
      (mock-textarea)
 

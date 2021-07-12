@@ -1119,6 +1119,31 @@
        db)
       (db-utils/seq-flatten)))
 
+(defn get-public-false-pages
+  [db]
+  (-> (d/q
+        '[:find ?p
+          :where
+          [?p :block/name]
+          [?p :block/properties ?properties]
+          [(get ?properties :public) ?pub]
+          [(= false ?pub)]]
+        db)
+      (db-utils/seq-flatten)))
+
+(defn get-public-false-block-ids
+  [db]
+  (-> (d/q
+        '[:find ?b
+          :where
+          [?p :block/name]
+          [?p :block/properties ?properties]
+          [(get ?properties :public) ?pub]
+          [(= false ?pub)]
+          [?b :block/page ?p]]
+        db)
+      (db-utils/seq-flatten)))
+
 (defn get-all-templates
   []
   (let [pred (fn [db properties]
@@ -1181,10 +1206,15 @@
 (defn clean-export!
   [db]
   (let [remove? #(contains? #{"me" "recent" "file"} %)
+        non-public-pages (get-public-false-pages db)
+        non-public-datoms (get-public-false-block-ids db)
+        non-public-datom-ids (set (concat non-public-pages non-public-datoms))
         filtered-db (d/filter db
                               (fn [db datom]
                                 (let [ns (namespace (:a datom))]
-                                  (not (remove? ns)))))
+                                  (and (not (remove? ns))
+                                       (not (contains? #{:block/file} (:a datom)))
+                                       (not (contains? non-public-datom-ids (:e datom)))))))
         datoms (d/datoms filtered-db :eavt)
         assets (get-assets datoms)]
     [@(d/conn-from-datoms datoms db-schema/schema) assets]))

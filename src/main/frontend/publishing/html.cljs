@@ -7,7 +7,7 @@
 (defn publishing-html
   [transit-db app-state]
   (let [{:keys [icon name alias title description url]} (:project (state/get-config))
-        icon (or icon "/static/img/logo.png")
+        icon (or icon "static/img/logo.png")
         project (or alias name)]
     (str "<!DOCTYPE html>\n"
          (hiccups.core/html
@@ -17,8 +17,8 @@
             {:content
              "minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no",
              :name "viewport"}]
-           [:link {:type "text/css", :href "/static/css/style.css", :rel "stylesheet"}]
-           [:link {:type "text/css", :href "/static/css/custom.css", :rel "stylesheet"}]
+           [:link {:type "text/css", :href "static/css/style.css", :rel "stylesheet"}]
+           [:link {:type "text/css", :href "static/css/custom.css", :rel "stylesheet"}]
            [:link
             {:href icon
              :type "image/png",
@@ -83,6 +83,6 @@
         }
       }(window.location))"]
             ;; TODO: should make this configurable
-           [:script {:src "/static/js/highlight.min.js"}]
-           [:script {:src "/static/js/interact.min.js"}]
-           [:script {:src "/static/js/main.js"}]]))))
+           [:script {:src "static/js/highlight.min.js"}]
+           [:script {:src "static/js/interact.min.js"}]
+           [:script {:src "static/js/main.js"}]]))))

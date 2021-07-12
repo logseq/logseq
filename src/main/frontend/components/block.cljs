@@ -120,7 +120,7 @@
     (let [{:keys [link protocol]} m]
       (if (= protocol "file")
         link
-        (str protocol ":" link)))))
+        (str protocol "://" link)))))
 
 (defn- get-file-absolute-path
   [config path]
@@ -335,19 +335,22 @@
     :href href
     :on-click (fn [e]
                 (util/stop e)
-                (if (gobj/get e "shiftKey")
-                  (do
-                    (js/setTimeout #(editor-handler/insert-first-page-block-if-not-exists! redirect-page-name) 310)
-                    (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-                      (state/sidebar-add-block!
-                       (state/get-current-repo)
-                       (:db/id page-entity)
-                       :page
-                       {:page page-entity})))
-                  (do
-                    (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
-                    (route-handler/redirect! {:to :page
-                                              :path-params {:name redirect-page-name}})))
+                (let [create-first-block! (fn []
+                                            (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
+                                              (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
+                  (if (gobj/get e "shiftKey")
+                   (do
+                     (js/setTimeout create-first-block! 310)
+                     (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+                       (state/sidebar-add-block!
+                        (state/get-current-repo)
+                        (:db/id page-entity)
+                        :page
+                        {:page page-entity})))
+                   (do
+                     (create-first-block!)
+                     (route-handler/redirect! {:to :page
+                                               :path-params {:name redirect-page-name}}))))
                 (when (and contents-page?
                            (state/get-left-sidebar-open?))
                   (ui-handler/close-left-sidebar!)))}
@@ -385,11 +388,10 @@
     deval))
 
 (rum/defc page-preview-trigger
-  [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open?] :as config} page-name]
+  [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
   (let [redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
         page-original-name (model/get-page-original-name redirect-page-name)
         debounced-open? (use-delayed-open open? page-name)
-        manual? (not (nil? open?))
         html-template (fn []
                         [:div.tippy-wrapper.overflow-y-auto.p-4
                          {:style {:width          600
@@ -413,7 +415,7 @@
                            (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                            (when-let [f (state/get-page-blocks-cp)]
                              (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))])]
-    (if (and manual? open?)
+    (if (or (not manual?) open?)
       (ui/tippy {:html            html-template
                  :interactive     true
                  :open?           debounced-open?
@@ -1217,7 +1219,9 @@
                     (not (:pre-block? block))
                     (or (and (coll? children) (seq children))
                         (seq body)))
-        control-show? (util/react *control-show?)
+        control-show? (and
+                       (seq (:block/title block))
+                       (util/react *control-show?))
         ref-collapsed? (util/react *ref-collapsed?)
         dark? (= "dark" (state/sub :ui/theme))
         ref? (:ref? config)
@@ -1464,7 +1468,9 @@
 (rum/defc properties-cp
   [config block]
   (let [properties (walk/keywordize-keys (:block/properties block))
+        properties-order (:block/properties-order block)
         properties (apply dissoc properties property/built-in-properties)
+        properties-order (remove property/built-in-properties properties-order)
         pre-block? (:block/pre-block? block)
         properties (if pre-block?
                      (let [repo (state/get-current-repo)
@@ -1478,7 +1484,9 @@
                            (assoc properties :alias aliases))
                          properties))
                      properties)
-        properties (sort properties)]
+        properties (if (seq properties-order)
+                     (map (fn [k] [k (get properties k)]) properties-order)
+                     properties)]
     (cond
       (seq properties)
       [:div.block-properties

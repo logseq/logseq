@@ -217,7 +217,9 @@
 
 (defn all-pages-public?
   []
-  (true? (:all-pages-public? (get-config))))
+  (let [value (:publishing/all-pages-public? (get-config))
+        value (if (some? value) value (:all-pages-public? (get-config)))]
+    (true? value)))
 
 (defn enable-grammarly?
   []
@@ -738,11 +740,20 @@
        :container (gobj/get container "id")
        :pos (cursor/pos (gdom/getElement edit-input-id))})))
 
+(defonce publishing? (atom nil))
+
+(defn publishing-enable-editing?
+  []
+  (and @publishing? (:publishing/enable-editing? (get-config))))
+
 (defn set-editing!
   ([edit-input-id content block cursor-range]
    (set-editing! edit-input-id content block cursor-range true))
   ([edit-input-id content block cursor-range move-cursor?]
-   (when (and edit-input-id block)
+   (when (and edit-input-id block
+              (or
+               (publishing-enable-editing?)
+               (not @publishing?)))
      (let [block-element (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block"))
            container (util/get-block-container block-element)
            block (if container

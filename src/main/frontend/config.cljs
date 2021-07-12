@@ -12,6 +12,8 @@
 (goog-define PUBLISHING false)
 (defonce publishing? PUBLISHING)
 
+(reset! state/publishing? publishing?)
+
 (def test? false)
 
 ;; :TODO: How to do this?

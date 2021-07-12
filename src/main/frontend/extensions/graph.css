@@ -7,15 +7,3 @@
     position: relative;
     z-index: 4;
 }
-
-#graphin-container {
-    height: 100%;
-    width: 100%;
-    position: relative;
-}
-.graphin-core {
-    height: 100%;
-    width: 100%;
-    min-height: 500px;
-    background: #fff;
-}

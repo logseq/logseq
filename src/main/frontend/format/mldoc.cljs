@@ -9,7 +9,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            ["mldoc" :as mldoc :refer [Mldoc]]))
+            ["mldoc" :as mldoc :refer [Mldoc]]
+            [linked.core :as linked]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -22,26 +23,20 @@
 
 (defn default-config
   ([format]
-   (default-config format false))
-  ([format export-heading-to-list?]
+   (default-config format {:export-heading-to-list? false}))
+  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style]}]
    (let [format (string/capitalize (name (or format :markdown)))]
-     (js/JSON.stringify
-      (bean/->js
-       {:toc false
-        :heading_number false
-        :keep_line_break true
-        :format format
-        :heading_to_list export-heading-to-list?}))))
-  ([format export-heading-to-list? exporting-keep-properties?]
-   (let [format (string/capitalize (name (or format :markdown)))]
-     (js/JSON.stringify
-      (bean/->js
-       {:toc false
-        :heading_number false
-        :keep_line_break true
-        :format format
-        :heading_to_list export-heading-to-list?
-        :exporting_keep_properties exporting-keep-properties?})))))
+     (->> {:toc false
+           :heading_number false
+           :keep_line_break true
+           :format format
+           :heading_to_list (or export-heading-to-list? false)
+           :exporting_keep_properties export-keep-properties?
+           :export_md_indent_style export-md-indent-style}
+          (filter #(not(nil? (second %))))
+          (into {})
+          (bean/->js)
+          (js/JSON.stringify)))))
 
 (def default-references
   (js/JSON.stringify
@@ -145,9 +140,8 @@
                                    v (if (contains? #{:title :description :filters :roam_tags} k)
                                        v
                                        (text/split-page-refs-without-brackets v))]
-                               [k v])))
-                          (reverse)
-                          (into {}))
+                               [k v]))))
+          properties (into (linked/map) properties)
           macro-properties (filter (fn [x] (= :macro (first x))) properties)
           macros (if (seq macro-properties)
                    (->>
@@ -161,7 +155,7 @@
                     (into {}))
                    {})
           properties (->> (remove (fn [x] (= :macro (first x))) properties)
-                          (into {}))
+                          (into (linked/map)))
           properties (if (seq properties)
                        (cond-> properties
                          (:roam_key properties)

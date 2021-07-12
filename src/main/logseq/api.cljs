@@ -376,6 +376,17 @@
 
 (def ^:export custom_query db/custom-query)
 
+(defn ^:export download_graph_db
+  []
+  (when-let [repo (state/get-current-repo)]
+    (when-let [db (db/get-conn repo)]
+      (let [db-str (if db (db/db->string db) "")
+            data-str (str "data:text/edn;charset=utf-8," (js/encodeURIComponent db-str))]
+        (when-let [anchor (gdom/getElement "download")]
+          (.setAttribute anchor "href" data-str)
+          (.setAttribute anchor "download" (str (string/replace repo "/" " ") ".transit"))
+          (.click anchor))))))
+
 ;; helpers
 (defn ^:export show_msg
   ([content] (show_msg content :success))
