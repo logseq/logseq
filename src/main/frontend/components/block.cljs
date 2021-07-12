@@ -1215,12 +1215,13 @@
 
 (rum/defcs block-control < rum/reactive
   [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show?]
-  (let [has-child? (and
+  (let [has-children-blocks? (and (coll? children) (seq children))
+        has-child? (and
                     (not (:pre-block? block))
-                    (or (and (coll? children) (seq children))
-                        (seq body)))
+                    (or has-children-blocks? (seq body)))
         control-show? (and
-                       (seq (:block/title block))
+                       (or (seq (:block/title block))
+                           has-children-blocks?)
                        (util/react *control-show?))
         ref-collapsed? (util/react *ref-collapsed?)
         dark? (= "dark" (state/sub :ui/theme))
