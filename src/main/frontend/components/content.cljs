@@ -184,7 +184,7 @@
             (ui/menu-link
              {:key "Preview Card"
               :on-click #(srs/preview [(db/pull [:block/uuid block-id])])}
-             "Preview"))
+             "Preview Card"))
 
           (ui/menu-link
            {:key "Copy as JSON"

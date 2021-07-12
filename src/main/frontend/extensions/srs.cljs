@@ -12,6 +12,7 @@
             [frontend.components.svg :as svg]
             [frontend.ui :as ui]
             [cljs-time.core :as t]
+            [cljs-time.local :as tl]
             [cljs-time.coerce :as tc]
             [clojure.string :as string]
             [rum.core :as rum]
@@ -75,22 +76,19 @@
                                card-last-easiness-factor]))))
 
 (defn- save-block-card-properties!
-  [repo block props]
-  (editor-handler/save-block!
-   repo (:block/uuid block)
-   (property/insert-properties (:block/format block) (:block/content block) props)))
+  [block props]
+  (editor-handler/save-block-if-changed!
+   block
+   (property/insert-properties (:block/format block) (:block/content block) props)
+   {:force? true}))
 
 (defn- reset-block-card-properties!
-  [repo block]
-  (let [f (fn [key content] (property/remove-property (:block/format block) (name key) content false))]
-    (->>
-     (f card-last-interval-property (:block/content block))
-     (f card-repeats-property)
-     (f card-last-easiness-factor)
-     (f card-last-reviewed-property)
-     (f card-next-schedule-property)
-     (#(do (println %) (identity %)))
-     (editor-handler/save-block! repo (:block/uuid block)))))
+  [block]
+  (save-block-card-properties! block {card-last-interval-property -1
+                                      card-repeats-property 0
+                                      card-last-easiness-factor 2.5
+                                      card-last-reviewed-property "nil"
+                                      card-next-schedule-property "nil"}))
 
 
 ;;; used by other ns
@@ -166,6 +164,7 @@
   ;; `show-phase-2' shows cards with all contents
   (show-phase-2 [this])
 
+  ;; show-phase-1-config & show-phase-2-config control display styles of cards at different phases
   (show-phase-1-config [this])
   (show-phase-2-config [this]))
 
@@ -227,17 +226,20 @@
 (defn- query-scheduled
   "Return blocks scheduled to 'time' or before"
   [repo query-string time]
-  (when-let [blocks @(query repo query-string)]
-    (->>
-     (flatten blocks)
-     (filterv (fn [b]
-                (let [props (:block/properties b)
-                      next-sched (get props card-next-schedule-property)
-                      repeats (get props card-repeats-property)]
-                  (or (nil? repeats)
-                      (< repeats 1)
-                      (nil? next-sched)
-                      (t/before? (tc/from-string next-sched) time))))))))
+  (when-let [*blocks (query repo query-string)]
+    (when-let [blocks @*blocks]
+      (->>
+       (flatten blocks)
+       (filterv (fn [b]
+                  (let [props (:block/properties b)
+                        next-sched (get props card-next-schedule-property)
+                        next-sched* (tc/from-string next-sched)
+                        repeats (get props card-repeats-property)]
+                    (or (nil? repeats)
+                        (< repeats 1)
+                        (nil? next-sched)
+                        (nil? next-sched*)
+                        (t/before? next-sched* time)))))))))
 
 
 
@@ -256,8 +258,8 @@
     (let [[next-interval next-repeats next-ef of-matrix*]
           (next-interval last-interval repeats last-ef score @of-matrix)
           next-interval* (if (< next-interval 0) 0 next-interval)
-          next-schedule (tc/to-string (t/plus (t/now) (t/hours (* 24 next-interval*))))
-          now (tc/to-string (t/now))]
+          next-schedule (tc/to-string (t/plus (tl/local-now) (t/hours (* 24 next-interval*))))
+          now (tc/to-string (tl/local-now))]
       {:next-of-matrix of-matrix*
        card-last-interval-property next-interval
        card-repeats-property next-repeats
@@ -273,8 +275,7 @@
         result (get-next-interval card score)
         next-of-matrix (:next-of-matrix result)]
     (reset! of-matrix next-of-matrix)
-    (save-block-card-properties! (state/get-current-repo)
-                                 (db/get-block-by-uuid (:block/uuid block))
+    (save-block-card-properties! (db/pull [:block/uuid (:block/uuid block)])
                                  (select-keys result
                                               [card-last-interval-property
                                                card-repeats-property
@@ -286,8 +287,7 @@
   [card]
   {:pre [(satisfies? ICard card)]}
   (let [block (.-block card)]
-    (reset-block-card-properties! (state/get-current-repo)
-                                  (db/get-block-by-uuid (:block/uuid block)))))
+    (reset-block-card-properties! (db/pull [:block/uuid (:block/uuid block)]))))
 
 
 ;;; ================================================================
@@ -316,7 +316,7 @@
   < rum/reactive
   (rum/local 1 ::phase)
   (rum/local 0 ::card-index)
-  [state cards {read-only :read-only}]
+  [state cards {read-only :read-only cb :callback}]
   (let [card-index (::card-index state)
         card (nth cards @card-index)
         phase (::phase state)
@@ -327,10 +327,10 @@
         score-and-next-card-fn (fn [score]
                                  (operation-score! card score)
                                  (if (>= (inc @card-index) (count cards))
-                                   (state/close-modal!)
-                                   (do
-                                     (swap! card-index inc)
-                                     (reset! phase 1))))]
+                                   (do (state/close-modal!)
+                                       (and cb (cb)))
+                                   (do (swap! card-index inc)
+                                       (reset! phase 1))))]
     [:div
      [:div.w-144.h-96.resize.overflow-y-auto
       (component-block/blocks-container
@@ -345,7 +345,10 @@
             [:div.flex.items-start
              (ui/button (if (= 1 @phase) "Show Answers" "Hide Answers")
                         :class "w-32 mr-8"
-                        :on-click #(swap! phase (fn [o] (if (= 1 o) 2 1))))]
+                        :on-click #(swap! phase (fn [o] (if (= 1 o) 2 1))))
+             (ui/button "Reset"
+                        :class "mr-8"
+                        :on-click #(operation-reset! card))]
             (when (and (not read-only) (= 2 @phase))
               (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
                     interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
@@ -361,16 +364,19 @@
                   (Math/round interval-days-score-4)
                   (Math/round interval-days-score-5))
                  (ui/button "skip" :on-click #(if (>= (inc @card-index) (count cards))
-                                                (state/close-modal!)
+                                                (do (state/close-modal!)
+                                                    (and cb (cb)))
                                                 (do
                                                   (swap! card-index inc)
                                                   (reset! phase 1))))]))))]))
 
 (defn preview
   [blocks]
-  (def aaa blocks)
   (state/set-modal! #(view (mapv ->card blocks) {:read-only true})))
 
+
+;;; ================================================================
+;;; register some external vars & related UI
 
 ;;; register cloze macro
 (defn cloze-macro-show
@@ -384,8 +390,32 @@
 
 (component-macro/register cloze-macro-name cloze-macro-show)
 
-;;; register builtin properties
+;;; register card-query macro
+(rum/defcs card-query-show
+  < rum/reactive
+  (rum/local false ::need-requery)
+  [state config options]
+  (let [query (string/join ", " (:arguments options))
+        sched-blocks (query-scheduled (state/get-current-repo) query (tl/local-now))]
+    [:div.opacity-70.custom-query-title.flex.flex-row
+     [:div.w-full.flex-1
+      [:code.p-1 (str "Card-Query: " query)]]
+     [:div
+      [:a.opacity-70.hover:opacity-100.svg-small.inline
+       {:on-click (fn [_]
+                    (let [sched-blocks* (query-scheduled (state/get-current-repo) query (tl/local-now))]
+                      (when (> (count sched-blocks*) 0)
+                        (state/set-modal! #(view (mapv ->card sched-blocks)
+                                                 {:callback (fn [] (swap! (::need-requery state) (fn [o] (not o))))})))))}
+       svg/edit]
+      [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+       {:title "click to refresh count"
+        :on-click #(swap! (::need-requery state) (fn [o] (not o)))}
+       (count sched-blocks)]]]))
 
+(component-macro/register query-macro-name card-query-show)
+
+;;; register builtin properties
 (property/register-built-in-properties #{card-last-interval-property
                                          card-repeats-property
                                          card-last-reviewed-property
