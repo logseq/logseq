@@ -1,4 +1,4 @@
-(ns frontend.modules.zotero.api
+(ns frontend.extensions.zotero.api
   (:require [cljs-http.client :as http]
             [cljs.core.async :refer [go <!]]
             [camel-snake-kebab.core :as csk]

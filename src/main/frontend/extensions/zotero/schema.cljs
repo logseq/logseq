@@ -1,4 +1,4 @@
-(ns frontend.modules.zotero.schema
+(ns frontend.extensions.zotero.schema
   (:require [frontend.util :as util]
             [shadow.resource :as rc]))
 
