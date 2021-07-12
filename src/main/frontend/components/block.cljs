@@ -1220,7 +1220,8 @@
                     (not (:pre-block? block))
                     (or has-children-blocks? (seq body)))
         control-show? (and
-                       (or (seq (:block/title block))
+                       (or (and (seq (:block/title block))
+                                (seq body))
                            has-children-blocks?)
                        (util/react *control-show?))
         ref-collapsed? (util/react *ref-collapsed?)
