@@ -551,7 +551,8 @@
 
 (defn get-edit-pos
   []
-  (.-selectionStart (get-input)))
+  (when-let [input (get-input)]
+    (.-selectionStart input)))
 
 (defn set-selection-start-block!
   [start-block]

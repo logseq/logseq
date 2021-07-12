@@ -895,29 +895,31 @@
                         (property/insert-property format content key value))
               block (outliner-core/block {:block/uuid block-id
                                           :block/properties properties
-                                          :block/content content})]
+                                          :block/content content})
+              input-pos (or (state/get-edit-pos) :max)]
           (outliner-core/save-node block)
+
+          (db/refresh! (state/get-current-repo)
+                       {:key :block/change
+                        :data [(db/pull [:block/uuid block-id])]})
 
           ;; update editing input content
           (when-let [editing-block (state/get-edit-block)]
-            (and (= (:block/uuid editing-block) block-id)
-                 (state/set-edit-content! (state/get-edit-input-id) content))))))))
+            (when (= (:block/uuid editing-block) block-id)
+              (edit-block! editing-block
+                           input-pos
+                           format
+                           (state/get-edit-input-id)))))))))
 
 (defn remove-block-property!
   [block-id key]
   (let [key (keyword key)]
-    (block-property-aux! block-id key nil))
-  (db/refresh! (state/get-current-repo)
-               {:key :block/change
-                :data [(db/pull [:block/uuid block-id])]}))
+    (block-property-aux! block-id key nil)))
 
 (defn set-block-property!
   [block-id key value]
   (let [key (keyword key)]
-    (block-property-aux! block-id key value))
-  (db/refresh! (state/get-current-repo)
-               {:key :block/change
-                :data [(db/pull [:block/uuid block-id])]}))
+    (block-property-aux! block-id key value)))
 
 (defn set-block-timestamp!
   [block-id key value]
@@ -2937,7 +2939,8 @@
   (remove-block-property! block-id :collapsed))
 
 (defn expand!
-  []
+  [e]
+  (util/stop e)
   (cond
     (state/editing?)
     (when-let [block-id (:block/uuid (state/get-edit-block))]
@@ -2970,7 +2973,8 @@
                 (expand-block! uuid)))))))))
 
 (defn collapse!
-  []
+  [e]
+  (util/stop e)
   (cond
     (state/editing?)
     (when-let [block-id (:block/uuid (state/get-edit-block))]
