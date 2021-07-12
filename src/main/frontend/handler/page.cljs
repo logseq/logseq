@@ -53,13 +53,14 @@
 (defn create!
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block?]
+  ([title {:keys [redirect? create-first-block? format]
            :or {redirect? true
-                create-first-block? true}}]
+                create-first-block? true
+                format false}}]
    (let [title (string/trim title)
          pages (util/split-namespace-pages title)
          page (string/lower-case title)
-         format (state/get-preferred-format)
+         format (or format (state/get-preferred-format))
          pages (map (fn [page]
                       (-> (block/page-name->map page true)
                           (assoc :block/format format)))
