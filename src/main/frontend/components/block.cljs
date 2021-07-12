@@ -330,49 +330,52 @@
 
 (rum/defc page-inner
   [config page-name href redirect-page-name page-entity contents-page? children html-export? label]
-  [:a.page-ref
-   {:data-ref page-name
-    :href href
-    :on-click (fn [e]
-                (util/stop e)
-                (let [create-first-block! (fn []
-                                            (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
-                                              (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
-                  (if (gobj/get e "shiftKey")
-                   (do
-                     (js/setTimeout create-first-block! 310)
-                     (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-                       (state/sidebar-add-block!
-                        (state/get-current-repo)
-                        (:db/id page-entity)
-                        :page
-                        {:page page-entity})))
-                   (do
-                     (create-first-block!)
-                     (route-handler/redirect! {:to :page
-                                               :path-params {:name redirect-page-name}}))))
-                (when (and contents-page?
-                           (state/get-left-sidebar-open?))
-                  (ui-handler/close-left-sidebar!)))}
+  (let [tag? (:tag? config)]
+    [:a
+     {:class (if tag? "tag" "page-ref")
+      :data-ref page-name
+      :href href
+      :on-click (fn [e]
+                  (util/stop e)
+                  (let [create-first-block! (fn []
+                                              (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
+                                                (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
+                    (if (gobj/get e "shiftKey")
+                      (do
+                        (js/setTimeout create-first-block! 310)
+                        (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+                          (state/sidebar-add-block!
+                           (state/get-current-repo)
+                           (:db/id page-entity)
+                           :page
+                           {:page page-entity})))
+                      (do
+                        (create-first-block!)
+                        (route-handler/redirect! {:to :page
+                                                  :path-params {:name redirect-page-name}}))))
+                  (when (and contents-page?
+                             (state/get-left-sidebar-open?))
+                    (ui-handler/close-left-sidebar!)))}
 
-   (if (and (coll? children) (seq children))
-     (for [child children]
-       (if (= (first child) "Label")
-         (last child)
-         (let [{:keys [content children]} (last child)
-               page-name (subs content 2 (- (count content) 2))]
-           (rum/with-key (page-reference html-export? page-name (assoc config :children children) nil) page-name))))
-     (cond
-       (and label
-            (string? label)
-            (not (string/blank? label))) ; alias
-       label
+     (if (and (coll? children) (seq children))
+       (for [child children]
+         (if (= (first child) "Label")
+           (last child)
+           (let [{:keys [content children]} (last child)
+                 page-name (subs content 2 (- (count content) 2))]
+             (rum/with-key (page-reference html-export? page-name (assoc config :children children) nil) page-name))))
+       (cond
+         (and label
+              (string? label)
+              (not (string/blank? label))) ; alias
+         label
 
-       (coll? label)
-       (->elem :span (map-inline config label))
+         (coll? label)
+         (->elem :span (map-inline config label))
 
-       :else
-       (get page-entity :block/original-name page-name)))])
+         :else
+         (let [s (get page-entity :block/original-name page-name)]
+           (if tag? (str "#" s) s))))]))
 
 (defn- use-delayed-open [open? page-name]
   "A react hook to debounce open? value.
@@ -737,19 +740,7 @@
     ["Tag" s]
     (when-let [s (block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
-        [:a.tag {:data-ref s
-                 :href (rfe/href :page {:name s})
-                 :on-click (fn [e]
-                             (let [repo (state/get-current-repo)
-                                   page (db/pull repo '[*] [:block/name (string/lower-case (util/url-decode s))])]
-                               (when (gobj/get e "shiftKey")
-                                 (state/sidebar-add-block!
-                                  repo
-                                  (:db/id page)
-                                  :page
-                                  {:page page})
-                                 (.preventDefault e))))}
-         (str "#" s)]))
+        (page-cp (assoc config :tag? true) {:block/name s})))
 
     ["Emphasis" [[kind] data]]
     (let [elem (case kind
