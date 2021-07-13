@@ -11,6 +11,8 @@
             [frontend.components.macro :as component-macro]
             [frontend.components.svg :as svg]
             [frontend.ui :as ui]
+            [frontend.format.mldoc :as mldoc]
+            [frontend.date :as date]
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
             [cljs-time.coerce :as tc]
@@ -30,16 +32,18 @@
 
 (def card-type-set #{:cloze :sided})
 
-(def card-type-property          :card-type)
-(def card-last-interval-property :card-last-interval)
-(def card-repeats-property       :card-repeats)
-(def card-last-reviewed-property :card-last-reviewed)
-(def card-next-schedule-property :card-next-schedule)
-(def card-last-easiness-factor   :card-ease-factor)
+(def card-type-property                 :card-type)
+(def card-last-interval-property        :card-last-interval)
+(def card-repeats-property              :card-repeats)
+(def card-last-reviewed-property        :card-last-reviewed)
+(def card-next-schedule-property        :card-next-schedule)
+(def card-last-easiness-factor-property :card-ease-factor)
+(def card-last-score-property           :card-last-score)
+
 
 (def default-card-properties-map {card-last-interval-property -1
                                   card-repeats-property 0
-                                  card-last-easiness-factor 2.5})
+                                  card-last-easiness-factor-property 2.5})
 
 (def cloze-macro-name
   "cloze syntax: {{cloze: ...}}"
@@ -73,7 +77,8 @@
                                card-repeats-property
                                card-last-reviewed-property
                                card-next-schedule-property
-                               card-last-easiness-factor]))))
+                               card-last-easiness-factor-property
+                               card-last-score-property]))))
 
 (defn- save-block-card-properties!
   [block props]
@@ -86,9 +91,10 @@
   [block]
   (save-block-card-properties! block {card-last-interval-property -1
                                       card-repeats-property 0
-                                      card-last-easiness-factor 2.5
+                                      card-last-easiness-factor-property 2.5
                                       card-last-reviewed-property "nil"
-                                      card-next-schedule-property "nil"}))
+                                      card-next-schedule-property "nil"
+                                      card-last-score-property "nil"}))
 
 
 ;;; used by other ns
@@ -156,7 +162,8 @@
 ;;; ================================================================
 ;;; card protocol
 (defprotocol ICard
-  (card-type [this]))
+  (card-type [this])
+  (get-root-block [this]))
 
 (defprotocol ICardShow
   ;; `show-phase-1' shows cards without hidden contents
@@ -175,6 +182,7 @@
 (deftype SidedCard [block]
   ICard
   (card-type [this] :sided)
+  (get-root-block [this] (db/pull [:block/uuid (:block/uuid block)]))
   ICardShow
   (show-phase-1 [this] [block])
   (show-phase-2 [this]
@@ -185,6 +193,7 @@
 (deftype ClozeCard [block]
   ICard
   (card-type [this] :cloze)
+  (get-root-block [this] (db/pull [:block/uuid (:block/uuid block)]))
   ICardShow
   (show-phase-1 [this]
     (db/get-block-and-children (state/get-current-repo) (:block/uuid block)))
@@ -256,7 +265,7 @@
         props (get-block-card-properties block)
         last-interval (or (util/safe-parse-float (get props card-last-interval-property)) 0)
         repeats (or (util/safe-parse-int (get props card-repeats-property)) 0)
-        last-ef (or (util/safe-parse-float (get props card-last-easiness-factor)) 2.5)]
+        last-ef (or (util/safe-parse-float (get props card-last-easiness-factor-property)) 2.5)]
     (let [[next-interval next-repeats next-ef of-matrix*]
           (next-interval last-interval repeats last-ef score @of-matrix)
           next-interval* (if (< next-interval 0) 0 next-interval)
@@ -265,9 +274,10 @@
       {:next-of-matrix of-matrix*
        card-last-interval-property next-interval
        card-repeats-property next-repeats
-       card-last-easiness-factor next-ef
+       card-last-easiness-factor-property next-ef
        card-next-schedule-property next-schedule
-       card-last-reviewed-property now})))
+       card-last-reviewed-property now
+       card-last-score-property score})))
 
 (defn- operation-score!
   [card score]
@@ -281,9 +291,10 @@
                                  (select-keys result
                                               [card-last-interval-property
                                                card-repeats-property
-                                               card-last-easiness-factor
+                                               card-last-easiness-factor-property
                                                card-next-schedule-property
-                                               card-last-reviewed-property]))))
+                                               card-last-reviewed-property
+                                               card-last-score-property]))))
 
 (defn- operation-reset!
   [card]
@@ -292,9 +303,36 @@
     (reset-block-card-properties! (db/pull [:block/uuid (:block/uuid block)]))))
 
 
-(defn- operation-card-info-summary
-  [cards]
-  "TODO")
+(defn- operation-card-info-summary!
+  [review-records review-cards card-query-block]
+  (let [review-count (count (flatten (vals review-records)))
+        review-cards-count (count review-cards)
+        score-5-count (count (get review-records 5))
+        score-4-count (count (get review-records 4))
+        score-3-count (count (get review-records 3))
+        score-2-count (count (get review-records 2))
+        score-1-count (count (get review-records 1))
+        score-0-count (count (get review-records 0))
+        skip-count (count (get review-records "skip"))]
+    (editor-handler/paste-block-tree-after-target
+     (:db/id card-query-block) false
+     [{:content (util/format "Summary: %d items, %d review counts [[%s]]"
+                             review-cards-count review-count (date/today))
+       :children [{:content
+                   (util/format "5: %d(%d%%)" score-5-count (* 100 (/ score-5-count review-count)))}
+                  {:content
+                   (util/format "4: %d(%d%%)" score-4-count (* 100 (/ score-4-count review-count)))}
+                  {:content
+                   (util/format "3: %d(%d%%)" score-3-count (* 100 (/ score-3-count review-count)))}
+                  {:content
+                   (util/format "2: %d(%d%%)" score-2-count (* 100 (/ score-2-count review-count)))}
+                  {:content
+                   (util/format "1: %d(%d%%)" score-1-count (* 100 (/ score-1-count review-count)))}
+                  {:content
+                   (util/format "0: %d(%d%%)" score-0-count (* 100 (/ score-0-count review-count)))}
+                  {:content
+                   (util/format "skip: %d(%d%%)" skip-count (* 100 (/ skip-count review-count)))}]}]
+     (:block/format card-query-block))))
 
 ;;; ================================================================
 ;;; UI
@@ -318,14 +356,34 @@
              :disabled false}
             (svg/info)))
 
+(defn- score-and-next-card [score card *card-index *cards *phase *review-records cb]
+  (operation-score! card score)
+  (swap! *review-records #(update % score (fn [ov] (conj ov card))) )
+  (if (>= (inc @*card-index) (count @*cards))
+    (do (state/close-modal!)
+        (and cb (cb @*review-records)))
+    (do (swap! *card-index inc)
+        (reset! *phase 1))))
+
+(defn- skip-card [card *card-index *cards *phase *review-records cb]
+  (swap! *review-records #(update % "skip" (fn [ov] (conj ov card))))
+  (if (>= (inc @*card-index) (count @*cards))
+    (do (state/close-modal!)
+        (and cb (cb @*review-records)))
+    (do
+      (swap! *card-index inc)
+      (reset! *phase 1))))
+
 (rum/defcs view
   < rum/reactive
   (rum/local 1 ::phase)
   (rum/local 0 ::card-index)
   (rum/local nil ::cards)
+  (rum/local {} ::review-records)
   [state cards {read-only :read-only cb :callback}]
   (let [cards* (::cards state)
         _ (when (nil? @cards*) (reset! cards* cards))
+        review-records (::review-records state)
         card-index (::card-index state)
         card (nth @cards* @card-index)
         phase (::phase state)
@@ -333,13 +391,6 @@
                  1 (show-phase-1 card)
                  2 (show-phase-2 card))
         root-block (.-block card)
-        score-and-next-card-fn (fn [score]
-                                 (operation-score! card score)
-                                 (if (>= (inc @card-index) (count @cards*))
-                                   (do (state/close-modal!)
-                                       (and cb (cb)))
-                                   (do (swap! card-index inc)
-                                       (reset! phase 1))))
         restore-card-fn #(swap! cards* (fn [o]
                                          (conj o (nth o @card-index))))]
     [:div
@@ -363,22 +414,23 @@
             (when (not read-only)
               [(ui/button "skip"
                           :class "mr-2"
-                          :on-click #(if (>= (inc @card-index) (count @cards*))
-                                       (do (state/close-modal!)
-                                           (and cb (cb)))
-                                       (do
-                                         (swap! card-index inc)
-                                         (reset! phase 1))))])
+                          :on-click #(skip-card card card-index cards* phase review-records cb))])
             (when (and (not read-only) (= 2 @phase))
               (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
                     interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
                     interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
-                [(ui/button "0" :on-click (fn [] (restore-card-fn) (score-and-next-card-fn 0)) :class "mr-2")
-                 (ui/button "1" :on-click (fn [] (restore-card-fn) (score-and-next-card-fn 1)) :class "mr-2")
-                 (ui/button "2" :on-click (fn [] (restore-card-fn) (score-and-next-card-fn 2)) :class "mr-2")
-                 (ui/button "3" :on-click #(score-and-next-card-fn 3) :class "mr-2")
-                 (ui/button "4" :on-click #(score-and-next-card-fn 4) :class "mr-2")
-                 (ui/button "5" :on-click #(score-and-next-card-fn 5) :class "mr-2")
+                [(ui/button "0" :on-click (fn []
+                                            (restore-card-fn)
+                                            (score-and-next-card 0 card card-index cards* phase review-records cb)) :class "mr-2")
+                 (ui/button "1" :on-click (fn []
+                                            (restore-card-fn)
+                                            (score-and-next-card 1 card card-index cards* phase review-records cb)) :class "mr-2")
+                 (ui/button "2" :on-click (fn []
+                                            (restore-card-fn)
+                                            (score-and-next-card 2 card card-index cards* phase review-records cb)) :class "mr-2")
+                 (ui/button "3" :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb) :class "mr-2")
+                 (ui/button "4" :on-click #(score-and-next-card 4 card card-index cards* phase review-records cb) :class "mr-2")
+                 (ui/button "5" :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb) :class "mr-2")
                  (score-help-info
                   (Math/round interval-days-score-3)
                   (Math/round interval-days-score-4)
@@ -419,8 +471,15 @@
        {:on-click (fn [_]
                     (let [sched-blocks* (query-scheduled (state/get-current-repo) query (tl/local-now))]
                       (when (> (count sched-blocks*) 0)
-                        (state/set-modal! #(view (mapv ->card sched-blocks)
-                                                 {:callback (fn [] (swap! (::need-requery state) (fn [o] (not o))))})))))}
+                        (let [review-cards (mapv ->card sched-blocks)
+                              card-query-block (db/entity [:block/uuid (:block/uuid config)])]
+                          (state/set-modal!
+                           #(view review-cards
+                                  {:callback
+                                   (fn [review-records]
+                                     (operation-card-info-summary!
+                                      review-records review-cards card-query-block)
+                                     (swap! (::need-requery state) (fn [o] (not o))))}))))))}
        svg/edit]
       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
        {:title "click to refresh count"
@@ -434,4 +493,5 @@
                                          card-repeats-property
                                          card-last-reviewed-property
                                          card-next-schedule-property
-                                         card-last-easiness-factor})
+                                         card-last-easiness-factor-property
+                                         card-last-score-property})
