@@ -90,11 +90,11 @@ html[data-theme='light'] {
   --ls-secondary-background-color: #f7f7f7;
   --ls-tertiary-background-color: #f1eee8;
   --ls-quaternary-background-color: #e8e5de;
-  --ls-table-tr-even-background-color: #f4f5f7;
+  --ls-table-tr-even-background-color: #f7f7f7;
   --ls-active-primary-color: rgb(4, 85, 145);
   --ls-active-secondary-color: #003761;
-  --ls-block-properties-background-color: #f7f6f4;
-  --ls-page-properties-background-color: #eae7e1;
+  --ls-block-properties-background-color: #f7f7f7;
+  --ls-page-properties-background-color: #f7f7f7;
   --ls-block-ref-link-text-color: #d8e1e8;
   --ls-search-background-color: var(--ls-primary-background-color);
   --ls-border-color: #ccc;
@@ -120,7 +120,7 @@ html[data-theme='light'] {
   --ls-page-blockquote-color: var(--ls-primary-text-color);
   --ls-page-blockquote-bg-color: #fbfaf8;
   --ls-page-blockquote-border-color: #799bbc;
-  --ls-page-inline-code-bg-color: #f7f6f4;
+  --ls-page-inline-code-bg-color: #f7f7f7;
   --ls-page-inline-code-color: var(--ls-primary-text-color);
   --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
   --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
@@ -128,7 +128,7 @@ html[data-theme='light'] {
   --ls-head-text-color: var(--ls-link-text-color);
   --ls-icon-color: #908e8b;
   --ls-search-icon-color: var(--ls-icon-color);
-  --ls-a-chosen-bg: #f4f5f7;
+  --ls-a-chosen-bg: #f7f7f7;
   --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
@@ -724,12 +724,12 @@ li p:last-child,
   overflow-y: scroll;
 }
 
-.loader {
-  -webkit-animation: spin 2s infinite linear;
-}
-
 .loader-reverse {
     -webkit-animation: spin 2s infinite linear reverse;
+}
+
+.loader {
+    -webkit-animation: spin 2s infinite linear;
 }
 
 .canceled,
