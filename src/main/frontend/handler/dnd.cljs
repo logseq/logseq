@@ -42,6 +42,9 @@
     (cond
       alt-key?
       (do
+        (editor-handler/set-block-property! (:block/uuid current-block)
+                                            :id
+                                            (str (:block/uuid current-block)))
         (editor-handler/api-insert-new-block!
          (util/format "((%s))" (str (:block/uuid current-block)))
          {:block-uuid (:block/uuid target-block)
