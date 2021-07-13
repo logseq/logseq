@@ -295,14 +295,14 @@
               [:div.flex.flex-row.space-between
                [:div.flex-1.flex-row
                 [:a.page-title {:on-click (fn [e]
-                                 (.preventDefault e)
-                                 (when (gobj/get e "shiftKey")
-                                   (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                                     (state/sidebar-add-block!
-                                      repo
-                                      (:db/id page)
-                                      :page
-                                      {:page page}))))}
+                                            (.preventDefault e)
+                                            (when (gobj/get e "shiftKey")
+                                              (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                                                (state/sidebar-add-block!
+                                                 repo
+                                                 (:db/id page)
+                                                 :page
+                                                 {:page page}))))}
                  [:h1.title {:style {:margin-left -2}}
                   (if page-original-name
                     (if (and (string/includes? page-original-name "[[")
@@ -316,66 +316,66 @@
                (when (not config/publishing?)
                  (let [contents? (= (string/lower-case (str page-name)) "contents")
                        links (fn [] (->>
-                                    [(when-not contents?
-                                       {:title   (t :page/add-to-favorites)
-                                        :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+                                     [(when-not contents?
+                                        {:title   (t :page/add-to-favorites)
+                                         :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
 
-                                     {:title "Go to presentation mode"
-                                      :options {:on-click (fn []
-                                                            (state/sidebar-add-block!
-                                                             repo
-                                                             (:db/id page)
-                                                             :page-presentation
-                                                             {:page page}))}}
-                                     (when (and (not contents?)
-                                                (not journal?))
-                                       {:title   (t :page/rename)
-                                        :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
+                                      {:title "Go to presentation mode"
+                                       :options {:on-click (fn []
+                                                             (state/sidebar-add-block!
+                                                              repo
+                                                              (:db/id page)
+                                                              :page-presentation
+                                                              {:page page}))}}
+                                      (when (and (not contents?)
+                                                 (not journal?))
+                                        {:title   (t :page/rename)
+                                         :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
 
-                                     (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
-                                       [{:title   (t :page/open-in-finder)
-                                         :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-                                        {:title   (t :page/open-with-default-app)
-                                         :options {:on-click #(js/window.apis.openPath file-path)}}])
+                                      (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
+                                        [{:title   (t :page/open-in-finder)
+                                          :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
+                                         {:title   (t :page/open-with-default-app)
+                                          :options {:on-click #(js/window.apis.openPath file-path)}}])
 
-                                     (when-not contents?
-                                       {:title   (t :page/delete)
-                                        :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+                                      (when-not contents?
+                                        {:title   (t :page/delete)
+                                         :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-                                     (when (state/get-current-page)
-                                       {:title   (t :export)
-                                        :options {:on-click #(state/set-modal! export/export-page)}})
+                                      (when (state/get-current-page)
+                                        {:title   (t :export)
+                                         :options {:on-click #(state/set-modal! export/export-page)}})
 
-                                     (when (util/electron?)
-                                       {:title   (t (if public? :page/make-private :page/make-public))
-                                        :options {:on-click
-                                                  (fn []
-                                                    (page-handler/update-public-attribute!
-                                                     page-name
-                                                     (if public? false true))
-                                                    (state/close-modal!))}})
+                                      (when (util/electron?)
+                                        {:title   (t (if public? :page/make-private :page/make-public))
+                                         :options {:on-click
+                                                   (fn []
+                                                     (page-handler/update-public-attribute!
+                                                      page-name
+                                                      (if public? false true))
+                                                     (state/close-modal!))}})
 
-                                     (when plugin-handler/lsp-enabled?
-                                       (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
-                                         {:title label
-                                          :options {:on-click #(commands/exec-plugin-simple-command!
+                                      (when plugin-handler/lsp-enabled?
+                                        (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
+                                          {:title label
+                                           :options {:on-click #(commands/exec-plugin-simple-command!
                                                                  pid (assoc cmd :page (state/get-current-page)) action)}}))
 
-                                     (when developer-mode?
-                                       {:title   "(Dev) Show page data"
-                                        :options {:on-click (fn []
-                                                              (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
-                                                                (println page-data)
-                                                                (notification/show!
-                                                                 [:div
-                                                                  [:pre.code page-data]
-                                                                  [:br]
-                                                                  (ui/button "Copy to clipboard"
-                                                                    :on-click #(.writeText js/navigator.clipboard page-data))]
-                                                                 :success
-                                                                 false)))}})]
-                                    (flatten)
-                                    (remove nil?)))]
+                                      (when developer-mode?
+                                        {:title   "(Dev) Show page data"
+                                         :options {:on-click (fn []
+                                                               (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
+                                                                 (println page-data)
+                                                                 (notification/show!
+                                                                  [:div
+                                                                   [:pre.code page-data]
+                                                                   [:br]
+                                                                   (ui/button "Copy to clipboard"
+                                                                     :on-click #(.writeText js/navigator.clipboard page-data))]
+                                                                  :success
+                                                                  false)))}})]
+                                     (flatten)
+                                     (remove nil?)))]
                    [:div.flex.flex-row
 
                     (when plugin-handler/lsp-enabled?
@@ -497,63 +497,63 @@
                   (util/format "%d page%s" c1 s1)
                   )]
                [:div.p-6
-               ;; [:div.flex.items-center.justify-between.mb-2
-               ;;  [:span "Layout"]
-               ;;  (ui/select
-               ;;    (mapv
-               ;;     (fn [item]
-               ;;       (if (= (:label item) layout)
-               ;;         (assoc item :selected "selected")
-               ;;         item))
-               ;;     [{:label "gForce"}
-               ;;      {:label "dagre"}])
-               ;;    (fn [value]
-               ;;      (set-setting! :layout value))
-               ;;    "graph-layout")]
-               [:div.flex.items-center.justify-between.mb-2
-                [:span "Journals"]
-                ;; FIXME: why it's not aligned well?
-                [:div.mt-1
-                 (ui/toggle journal?
-                            (fn []
-                              (let [value (not journal?)]
-                                (reset! *journal? value)
-                                (set-setting! :journal? value)))
-                            true)]]
-               [:div.flex.items-center.justify-between.mb-2
-                [:span "Orphan pages"]
-                [:div.mt-1
-                 (ui/toggle orphan-pages?
-                            (fn []
-                              (let [value (not orphan-pages?)]
-                                (reset! *orphan-pages? value)
-                                (set-setting! :orphan-pages? value)))
-                            true)]]
-               [:div.flex.items-center.justify-between.mb-2
-                [:span "Built-in pages"]
-                [:div.mt-1
-                 (ui/toggle builtin-pages?
-                            (fn []
-                              (let [value (not builtin-pages?)]
-                                (reset! *builtin-pages? value)
-                                (set-setting! :builtin-pages? value)))
-                            true)]]
-               (when (seq focus-nodes)
-                 [:div.flex.flex-col.mb-2
-                  [:p {:title "N hops from selected nodes"}
-                   "N hops from selected nodes"]
-                  (ui/tippy {:html [:div.pr-3 n-hops]}
-                            (ui/slider (or n-hops 10)
-                                       {:min 1
-                                        :max 10
-                                        :on-change #(reset! *n-hops (int %))}))])
+                ;; [:div.flex.items-center.justify-between.mb-2
+                ;;  [:span "Layout"]
+                ;;  (ui/select
+                ;;    (mapv
+                ;;     (fn [item]
+                ;;       (if (= (:label item) layout)
+                ;;         (assoc item :selected "selected")
+                ;;         item))
+                ;;     [{:label "gForce"}
+                ;;      {:label "dagre"}])
+                ;;    (fn [value]
+                ;;      (set-setting! :layout value))
+                ;;    "graph-layout")]
+                [:div.flex.items-center.justify-between.mb-2
+                 [:span "Journals"]
+                 ;; FIXME: why it's not aligned well?
+                 [:div.mt-1
+                  (ui/toggle journal?
+                             (fn []
+                               (let [value (not journal?)]
+                                 (reset! *journal? value)
+                                 (set-setting! :journal? value)))
+                             true)]]
+                [:div.flex.items-center.justify-between.mb-2
+                 [:span "Orphan pages"]
+                 [:div.mt-1
+                  (ui/toggle orphan-pages?
+                             (fn []
+                               (let [value (not orphan-pages?)]
+                                 (reset! *orphan-pages? value)
+                                 (set-setting! :orphan-pages? value)))
+                             true)]]
+                [:div.flex.items-center.justify-between.mb-2
+                 [:span "Built-in pages"]
+                 [:div.mt-1
+                  (ui/toggle builtin-pages?
+                             (fn []
+                               (let [value (not builtin-pages?)]
+                                 (reset! *builtin-pages? value)
+                                 (set-setting! :builtin-pages? value)))
+                             true)]]
+                (when (seq focus-nodes)
+                  [:div.flex.flex-col.mb-2
+                   [:p {:title "N hops from selected nodes"}
+                    "N hops from selected nodes"]
+                   (ui/tippy {:html [:div.pr-3 n-hops]}
+                             (ui/slider (or n-hops 10)
+                                        {:min 1
+                                         :max 10
+                                         :on-change #(reset! *n-hops (int %))}))])
 
-               [:a.opacity-70.opacity-100 {:on-click (fn []
-                                                       (swap! *graph-reset? not)
-                                                       (reset! *focus-nodes [])
-                                                       (reset! *n-hops nil)
-                                                       (state/clear-search-filters!))}
-                "Reset Graph"]]])))
+                [:a.opacity-70.opacity-100 {:on-click (fn []
+                                                        (swap! *graph-reset? not)
+                                                        (reset! *focus-nodes [])
+                                                        (reset! *n-hops nil)
+                                                        (state/clear-search-filters!))}
+                 "Reset Graph"]]])))
           (graph-filter-section
            [:span.font-medium "Search"]
            (fn [open?]
@@ -674,36 +674,68 @@
     (when (seq (:nodes graph))
       (page-graph-inner graph dark?))))
 
-(rum/defc all-pages < rum/reactive
+(defn- sort-pages-by
+  [by-item desc? pages]
+  (let [comp (if desc? > <)
+        by-item (if (= by-item :block/name)
+                  (fn [x] (string/lower-case (:block/name x)))
+                  by-item)]
+    (sort-by by-item comp pages)))
+
+(rum/defc sortable-title
+  [title key by-item desc?]
+  [:th
+   [:a {:on-click (fn []
+                    (reset! by-item key)
+                    (swap! desc? not))}
+    [:div.flex.items-center
+     [:span.mr-1 title]
+     (when (= @by-item key)
+       [:span
+        (if @desc? (svg/caret-down) (svg/caret-up))])]]])
+
+(rum/defcs all-pages < rum/reactive
+  (rum/local :block/updated-at ::sort-by-item)
+  (rum/local true ::desc?)
   ;; {:did-mount (fn [state]
   ;;               (let [current-repo (state/sub :git/current-repo)]
   ;;                 (js/setTimeout #(db/remove-orphaned-pages! current-repo) 0))
   ;;               state)}
-  []
-  (let [current-repo (state/sub :git/current-repo)]
+  [state]
+  (let [current-repo (state/sub :git/current-repo)
+        *sort-by-item (get state ::sort-by-item)
+        *desc? (get state ::desc?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1
        [:h1.title (t :all-pages)]
        (when current-repo
-         (let [pages (page-handler/get-pages-with-modified-at current-repo)]
+         (let [pages (->> (page-handler/get-all-pages current-repo)
+                         (map (fn [page] (assoc page :block/backlinks (count (:block/_refs (db/entity (:db/id page)))))))
+                         (sort-pages-by @*sort-by-item @*desc?))]
            [:table.table-auto
             [:thead
              [:tr
-              [:th (t :block/name)]
-              [:th (t :file/last-modified-at)]]]
+              (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
+              (sortable-title (t :page/backlinks) :block/backlinks  *sort-by-item *desc?)
+              (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?)
+              (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?)]]
             [:tbody
-             (for [page pages]
-               [:tr {:key page}
+             (for [{:block/keys [name created-at updated-at backlinks] :as page} pages]
+               [:tr {:key name}
                 [:td [:a {:on-click (fn [e]
-                                      (let [repo (state/get-current-repo)
-                                            page (db/pull repo '[*] [:block/name (string/lower-case page)])]
+                                      (let [repo (state/get-current-repo)]
                                         (when (gobj/get e "shiftKey")
                                           (state/sidebar-add-block!
                                            repo
                                            (:db/id page)
                                            :page
-                                           {:page page}))))
-                          :href (rfe/href :page {:name page})}
-                      page]]
-                [:td [:span.text-gray-500.text-sm
-                      (t :file/no-data)]]])]]))])))
+                                           {:page (:block/name page)}))))
+                          :href (rfe/href :page {:name (:block/name page)})}
+                      (block/page-cp {} page)]]
+                [:td [:span.text-gray-500.text-sm backlinks]]
+                [:td [:span.text-gray-500.text-sm (if created-at
+                                                    (date/int->local-time created-at)
+                                                    "Unknown")]]
+                [:td [:span.text-gray-500.text-sm (if updated-at
+                                                    (date/int->local-time updated-at)
+                                                    "Unknown")]]])]]))])))

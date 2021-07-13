@@ -193,3 +193,23 @@
   {:title page-name
    ;; :date (date/get-date-time-string)
    })
+
+(defn fix-pages-timestamps
+  [pages]
+  (map (fn [{:block/keys [name created-at updated-at journal-day] :as p}]
+         (cond->
+           p
+
+           (nil? created-at)
+           (assoc :block/created-at
+                  (if journal-day
+                    (date/journal-day->ts journal-day)
+                    (util/time-ms)))
+
+           (nil? updated-at)
+           (assoc :block/updated-at
+                  ;; Not exact true
+                  (if journal-day
+                    (date/journal-day->ts journal-day)
+                    (util/time-ms)))))
+    pages))

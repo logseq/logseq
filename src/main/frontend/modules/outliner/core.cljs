@@ -60,24 +60,6 @@
      (outliner-state/get-by-parent-id repo [:block/uuid id])
      (mapv block))))
 
-;; TODO: we might need to store created-at and updated-at as datom attributes
-;; instead of being attributes of properties.
-;; which might improve the db performance, we can improve it later
-(defn- with-timestamp
-  [m]
-  (let [updated-at (util/time-ms)
-        properties (assoc (:block/properties m)
-                          :id (:block/uuid m)
-                          :updated-at updated-at)
-        page-id (or (get-in m [:block/page :db/id])
-                    (:db/id (:block/page (db/entity (:db/id m)))))
-        page (db/entity page-id)
-        page-tx {:db/id page-id
-                 :block/updated-at updated-at
-                 :block/created-at (or (:block/created-at page)
-                                       updated-at)}]
-    [m page-tx]))
-
 (defn- update-block-unordered
   [block]
   (let [parent (:block/parent block)
@@ -153,26 +135,31 @@
                 (dissoc :block/children :block/meta)
                 (util/remove-nils))
           m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
-          other-tx (:db/other-tx m)]
+          other-tx (:db/other-tx m)
+          id (:db/id (:data this))]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
                            (vec (concat txs other-tx)))))
 
-      (when-let [id (:db/id (:data this))]
+      (when id
         (swap! txs-state (fn [txs]
                            (vec
                             (concat txs
                                     (map (fn [attribute]
                                            [:db/retract id attribute])
-                                      db-schema/retract-attributes))))))
+                                      db-schema/retract-attributes)))))
+
+        (when-let [e (:block/page (db/entity id))]
+          (let [m {:db/id (:db/id e)
+                   :block/updated-at (util/time-ms)}
+                m (if (:block/created-at e)
+                    m
+                    (assoc m :block/created-at (util/time-ms)))]
+            (swap! txs-state conj m))))
+
       (swap! txs-state conj (dissoc m :db/other-tx))
-      this
-      ;; TODO: enable for the database-only version
-      ;; (let [[m page-tx] (with-timestamp (:data this))]
-      ;;  (swap! txs-state conj m page-tx)
-      ;;  m)
-      )
-    )
+
+      this))
 
   (-del [this txs-state children?]
     (assert (ds/outliner-txs-state? txs-state)

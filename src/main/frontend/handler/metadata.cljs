@@ -4,9 +4,13 @@
             [cljs.reader :as reader]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.fs :as fs]
             [datascript.db :as ddb]
             [clojure.string :as string]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.util :as util]
+            [frontend.date :as date]
+            [frontend.handler.common :as common-handler]))
 
 (def default-metadata-str "{}")
 
@@ -33,9 +37,24 @@
               new-metadata (if encrypted?
                              (assoc new-metadata :db/encrypted? true)
                              new-metadata)
-              _ (prn "New metadata:\n" new-metadata)
               new-content (pr-str new-metadata)]
           (file-handler/set-file-content! repo path new-content))))))
+
+(defn set-pages-metadata!
+  [repo]
+  (let [path (config/get-pages-metadata-path)
+        all-pages (->> (db/get-all-pages repo)
+                       (common-handler/fix-pages-timestamps)
+                       (map #(select-keys % [:block/name :block/created-at :block/updated-at]))
+                       (vec))]
+    (-> (file-handler/create-pages-metadata-file repo)
+        (p/finally (fn []
+                     (let [new-content (pr-str all-pages)]
+                       (fs/write-file! repo
+                                       (config/get-repo-dir repo)
+                                       path
+                                       new-content
+                                       {})))))))
 
 (defn set-db-encrypted-secret!
   [encrypted-secret]
