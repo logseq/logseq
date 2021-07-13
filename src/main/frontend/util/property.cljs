@@ -14,7 +14,7 @@
 
 (def built-in-properties
   (set/union
-   #{:id :custom-id :background-color :heading :collapsed :created-at :last-modified-at :created_at :last_modified_at}
+   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at}
    (set (map keyword config/markers))))
 
 (defn properties-built-in?
@@ -271,7 +271,9 @@
                                  (let [[k v] (util/split-first ":" (subs text 1))]
                                    (if (and k v)
                                      (let [k (string/replace k "_" "-")
-                                           k (if (contains? #{:id :custom_id :custom-id} (string/lower-case k)) "id" k)]
+                                           compare-k (keyword (string/lower-case k))
+                                           k (if (contains? #{:id :custom_id :custom-id} compare-k) "id" k)
+                                           k (if (contains? #{:last-modified-at} compare-k) "updated-at" k)]
                                        (str k ":: " (string/trim v)))
                                      text)))))
               after (subvec lines (inc end-idx))

@@ -2114,11 +2114,13 @@
            ;; exclude the current one, otherwise it'll loop forever
            remove-blocks (if current-block-uuid [current-block-uuid] nil)
            query-result (and query-atom (rum/react query-atom))
+           not-grouped-by-page? (and (string? query) (string/includes? query "(by-page false)"))
            result (when query-result
-                    (db/custom-query-result-transform query-result remove-blocks q))
+                    (db/custom-query-result-transform query-result remove-blocks q not-grouped-by-page?))
            view-f (and view (sci/eval-string (pr-str view)))
            only-blocks? (:block/uuid (first result))
            blocks-grouped-by-page? (and (seq result)
+                                        (not not-grouped-by-page?)
                                         (coll? (first result))
                                         (:block/name (ffirst result))
                                         (:block/uuid (first (second (first result))))
@@ -2159,8 +2161,7 @@
                                                               :path-params {:name name}})))}
                   (or original-name name)]])]
 
-             (and (seq result)
-                  (or only-blocks? blocks-grouped-by-page?))
+             (and (seq result) (or only-blocks? blocks-grouped-by-page?))
              (->hiccup result (cond-> (assoc config
                                              :custom-query? true
                                              ;; :breadcrumb-show? true

@@ -10,7 +10,8 @@
             [clojure.set :as set]
             [clojure.zip :as zip]
             [frontend.modules.outliner.datascript :as ds]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.util.property :as property]))
 
 (defrecord Block [data])
 
@@ -68,18 +69,13 @@
         properties (assoc (:block/properties m)
                           :id (:block/uuid m)
                           :updated-at updated-at)
-        properties (if-let [created-at (get properties :created-at)]
-                     properties
-                     (assoc properties :created-at updated-at))
-        m (assoc m :block/properties properties)
         page-id (or (get-in m [:block/page :db/id])
                     (:db/id (:block/page (db/entity (:db/id m)))))
         page (db/entity page-id)
-        page-properties (:block/properties page)
         page-tx {:db/id page-id
-                 :block/properties (assoc page-properties
-                                          :updated-at updated-at
-                                          :created-at (get page-properties :created-at updated-at))}]
+                 :block/updated-at updated-at
+                 :block/created-at (or (:block/created-at page)
+                                       updated-at)}]
     [m page-tx]))
 
 (defn- update-block-unordered
@@ -90,6 +86,19 @@
     (if (and parent page type (= parent page) (= type :heading))
       (assoc block :block/unordered false)
       (assoc block :block/unordered true))))
+
+(defn- block-with-timestamps
+  [block]
+  (let [updated-at (util/time-ms)
+        block (cond->
+                (assoc block :block/updated-at updated-at)
+                (nil? (:block/created-at block))
+                (assoc :block/created-at updated-at))
+        content (property/insert-properties (:block/format block)
+                                            (or (:block/content block) "")
+                                            {:created-at (:block/created-at block)
+                                             :updated-at (:block/updated-at block)})]
+    (assoc block :block/content content)))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
@@ -143,6 +152,7 @@
           m (-> (:data this)
                 (dissoc :block/children :block/meta)
                 (util/remove-nils))
+          m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
           other-tx (:db/other-tx m)]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
