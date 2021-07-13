@@ -2047,7 +2047,7 @@
             (recur (zip/next loc))
             (let [content (:content node)
                   props (into [] (:properties node))
-                  content* (str "- "
+                  content* (str (if (= :markdown format) "- " "* ")
                                 (property/insert-properties format content props))
                   ast (mldoc/->edn content* (mldoc/default-config format))
                   blocks (block/extract-blocks ast content* true format)
