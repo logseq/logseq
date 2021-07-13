@@ -215,7 +215,9 @@
             (let [query* (concat `[[~'?b :block/properties ~'?prop]
                                    [(~'missing? ~'$ ~'?b :block/name)]
                                    [(~'get ~'?prop ~card-type-property) ~'?prop-v]]
-                                 query)]
+                                 (if (coll? (first query))
+                                   query
+                                   [query]))]
               (when-let [query** (query-dsl/query-wrapper query* blocks?)]
                 (react/react-query repo
                                    {:query query**}
@@ -290,6 +292,10 @@
     (reset-block-card-properties! (db/pull [:block/uuid (:block/uuid block)]))))
 
 
+(defn- operation-card-info-summary
+  [cards]
+  "TODO")
+
 ;;; ================================================================
 ;;; UI
 
@@ -316,9 +322,12 @@
   < rum/reactive
   (rum/local 1 ::phase)
   (rum/local 0 ::card-index)
+  (rum/local nil ::cards)
   [state cards {read-only :read-only cb :callback}]
-  (let [card-index (::card-index state)
-        card (nth cards @card-index)
+  (let [cards* (::cards state)
+        _ (when (nil? @cards*) (reset! cards* cards))
+        card-index (::card-index state)
+        card (nth @cards* @card-index)
         phase (::phase state)
         blocks (case @phase
                  1 (show-phase-1 card)
@@ -326,11 +335,13 @@
         root-block (.-block card)
         score-and-next-card-fn (fn [score]
                                  (operation-score! card score)
-                                 (if (>= (inc @card-index) (count cards))
+                                 (if (>= (inc @card-index) (count @cards*))
                                    (do (state/close-modal!)
                                        (and cb (cb)))
                                    (do (swap! card-index inc)
-                                       (reset! phase 1))))]
+                                       (reset! phase 1))))
+        restore-card-fn #(swap! cards* (fn [o]
+                                         (conj o (nth o @card-index))))]
     [:div
      [:div.w-144.h-96.resize.overflow-y-auto
       (component-block/blocks-container
@@ -344,31 +355,34 @@
            (concat
             [:div.flex.items-start
              (ui/button (if (= 1 @phase) "Show Answers" "Hide Answers")
-                        :class "w-32 mr-8"
+                        :class "w-32 mr-2"
                         :on-click #(swap! phase (fn [o] (if (= 1 o) 2 1))))
              (ui/button "Reset"
                         :class "mr-8"
                         :on-click #(operation-reset! card))]
+            (when (not read-only)
+              [(ui/button "skip"
+                          :class "mr-2"
+                          :on-click #(if (>= (inc @card-index) (count @cards*))
+                                       (do (state/close-modal!)
+                                           (and cb (cb)))
+                                       (do
+                                         (swap! card-index inc)
+                                         (reset! phase 1))))])
             (when (and (not read-only) (= 2 @phase))
               (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
                     interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
                     interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
-                [(ui/button "0" :on-click #(score-and-next-card-fn 0) :class "mr-2")
-                 (ui/button "1" :on-click #(score-and-next-card-fn 1) :class "mr-2")
-                 (ui/button "2" :on-click #(score-and-next-card-fn 2) :class "mr-2")
+                [(ui/button "0" :on-click (fn [] (restore-card-fn) (score-and-next-card-fn 0)) :class "mr-2")
+                 (ui/button "1" :on-click (fn [] (restore-card-fn) (score-and-next-card-fn 1)) :class "mr-2")
+                 (ui/button "2" :on-click (fn [] (restore-card-fn) (score-and-next-card-fn 2)) :class "mr-2")
                  (ui/button "3" :on-click #(score-and-next-card-fn 3) :class "mr-2")
                  (ui/button "4" :on-click #(score-and-next-card-fn 4) :class "mr-2")
                  (ui/button "5" :on-click #(score-and-next-card-fn 5) :class "mr-2")
                  (score-help-info
                   (Math/round interval-days-score-3)
                   (Math/round interval-days-score-4)
-                  (Math/round interval-days-score-5))
-                 (ui/button "skip" :on-click #(if (>= (inc @card-index) (count cards))
-                                                (do (state/close-modal!)
-                                                    (and cb (cb)))
-                                                (do
-                                                  (swap! card-index inc)
-                                                  (reset! phase 1))))]))))]))
+                  (Math/round interval-days-score-5))]))))]))
 
 (defn preview
   [blocks]
