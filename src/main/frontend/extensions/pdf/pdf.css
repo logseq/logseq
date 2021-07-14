@@ -1,0 +1,81 @@
+.extensions__pdf {
+  &-loader {
+    position: relative;
+    min-height: 90vh;
+  }
+
+  &-viewer {
+    position: absolute;
+    overflow: auto;
+    width: 100%;
+    height: 100%;
+
+    > .viewer-container {
+    }
+  }
+}
+
+body[data-page=home] {
+  #main-content-container {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .cp__sidebar-main-content {
+    > .pb-24 {
+      max-width: unset;
+    }
+  }
+
+  .extensions__pdf-loader {
+    width: 900px;
+  }
+
+  .extensions__pdf-container {
+  }
+}
+
+/* overrides for pdf_viewer.css from PDF.JS web viewer */
+
+.textLayer {
+  z-index: 2;
+  opacity: 1;
+  mix-blend-mode: multiply;
+}
+
+.annotationLayer {
+  position: absolute;
+  top: 0;
+
+  z-index: 3;
+}
+
+.textLayer > div:not(.PdfHighlighter__highlight-layer):not(.Highlight):not(.Highlight-emoji) {
+  opacity: 1;
+  mix-blend-mode: multiply;
+}
+
+.textLayer ::selection {
+  background: rgba(252, 232, 151, 1);
+  mix-blend-mode: multiply;
+}
+
+@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
+  .textLayer {
+    opacity: 0.5;
+  }
+}
+
+/* Internet Explorer support method */
+@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
+  .textLayer {
+    opacity: 0.5
+  }
+}
+
+/* Microsoft Edge Browser 12+ (All) - @supports method */
+@supports (-ms-ime-align:auto) {
+  .textLayer {
+    opacity: 0.5
+  }
+}
