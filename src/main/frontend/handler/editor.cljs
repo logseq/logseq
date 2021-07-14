@@ -264,9 +264,10 @@
                     (util/distinct-by :block/name))
           {:keys [tags alias]} page-properties
           page-tx (let [id (:db/id (:block/page block))
-                        retract-attributes (mapv (fn [attribute]
-                                                   [:db/retract id attribute])
-                                                 [:block/properties :block/tags :block/alias])
+                        retract-attributes (when id
+                                             (mapv (fn [attribute]
+                                                    [:db/retract id attribute])
+                                                   [:block/properties :block/tags :block/alias]))
                         tx (cond-> {:db/id id
                                     :block/properties page-properties}
                              (seq tags)
@@ -645,12 +646,14 @@
               new-block (-> (select-keys block [:block/page :block/file :block/journal?
                                                 :block/journal-day])
                             (assoc :block/content content
-                                   :block/format format)
+                                   :block/format format))
+              new-block (assoc new-block :block/page
+                               (if page
+                                 (:db/id block)
+                                 (:db/id (:block/page new-block))))
+              new-block (-> new-block
                             (wrap-parse-block)
                             (assoc :block/uuid (db/new-block-id)))
-              new-block (if (:block/page new-block)
-                          (assoc new-block :block/page (:db/id (:block/page new-block)))
-                          (assoc new-block :block/page (:db/id block)))
               new-block (if-let [db-id (:db/id (:block/file block))]
                           (assoc new-block :block/file db-id)
                           new-block)]
