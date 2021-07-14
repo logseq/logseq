@@ -1458,10 +1458,7 @@
            (rum/with-key elem (str (random-uuid)))))
 
        :else
-       (let [page-name (string/lower-case (str v))]
-         (if (db/entity [:block/name page-name])
-           (page-cp config {:block/name page-name})
-           (inline-text (:block/format block) (str v)))))]))
+       (inline-text (:block/format block) (str v)))]))
 
 (rum/defc properties-cp
   [config block]

@@ -635,13 +635,17 @@
                                  last-block-id (:db/id (last blocks))]
                              (when last-block-id
                                (db/pull last-block-id))))
+              format (or
+                      (:block/format block)
+                      (db/get-page-format (:db/id block))
+                      :markdown)
+              content (if (seq properties)
+                        (property/insert-properties format content properties)
+                        content)
               new-block (-> (select-keys block [:block/page :block/file :block/journal?
                                                 :block/journal-day])
                             (assoc :block/content content
-                                   :block/format (or
-                                                  (:block/format block)
-                                                  (db/get-page-format (:db/id block))
-                                                  :markdown))
+                                   :block/format format)
                             (wrap-parse-block)
                             (assoc :block/uuid (db/new-block-id)))
               new-block (if (:block/page new-block)
@@ -649,9 +653,6 @@
                           (assoc new-block :block/page (:db/id block)))
               new-block (if-let [db-id (:db/id (:block/file block))]
                           (assoc new-block :block/file db-id)
-                          new-block)
-              new-block (if (and (map? properties) (seq properties))
-                          (update new-block :block/properties (fn [m] (merge m properties)))
                           new-block)]
           (let [[block-m sibling?] (cond
                                      before?

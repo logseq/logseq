@@ -226,7 +226,21 @@
 
 (defn insert-properties
   [format content kvs]
-  (reduce (fn [content [k v]] (insert-property format content k v)) content kvs))
+  (reduce
+   (fn [content [k v]]
+     (let [k (if (string? k)
+               (keyword (-> (string/lower-case k)
+                            (string/replace " " "-")))
+               k)
+           v (if (coll? v)
+               (some->>
+                (seq v)
+                (distinct)
+                (map (fn [item] (util/format "[[%s]]" (text/page-ref-un-brackets! item))))
+                (string/join ", "))
+               v)]
+       (insert-property format content k v)))
+   content kvs))
 
 (defn remove-property
   ([format key content]

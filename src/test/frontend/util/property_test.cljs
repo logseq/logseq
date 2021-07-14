@@ -77,6 +77,29 @@
   #+END_QUOTE" "c" "d")
     "c:: d\n#+BEGIN_QUOTE\n hello world\n  #+END_QUOTE"))
 
+(deftest test-insert-properties
+  (are [x y] (= x y)
+    (property/insert-properties :markdown "" {:foo "bar"})
+    "foo:: bar"
+
+    (property/insert-properties :markdown "" {"foo" "bar"})
+    "foo:: bar"
+
+    (property/insert-properties :markdown "" {"foo space" "bar"})
+    "foo-space:: bar"
+
+    (property/insert-properties :markdown "" {:foo #{"bar" "baz"}})
+    "foo:: [[bar]], [[baz]]"
+
+    (property/insert-properties :markdown "" {:foo ["bar" "bar" "baz"]})
+    "foo:: [[bar]], [[baz]]"
+
+    (property/insert-properties :markdown "a\nb\n" {:foo ["bar" "bar" "baz"]})
+    "a\nfoo:: [[bar]], [[baz]]\nb"
+
+    (property/insert-properties :markdown "" {:foo "\"bar, baz\""})
+    "foo:: \"bar, baz\""))
+
 (deftest test->new-properties
   (are [x y] (= (property/->new-properties x) y)
     ":PROPERTIES:\n:foo: bar\n:END:"
