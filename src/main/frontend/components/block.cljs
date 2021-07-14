@@ -330,49 +330,52 @@
 
 (rum/defc page-inner
   [config page-name href redirect-page-name page-entity contents-page? children html-export? label]
-  [:a.page-ref
-   {:data-ref page-name
-    :href href
-    :on-click (fn [e]
-                (util/stop e)
-                (let [create-first-block! (fn []
-                                            (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
-                                              (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
-                  (if (gobj/get e "shiftKey")
-                   (do
-                     (js/setTimeout create-first-block! 310)
-                     (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-                       (state/sidebar-add-block!
-                        (state/get-current-repo)
-                        (:db/id page-entity)
-                        :page
-                        {:page page-entity})))
-                   (do
-                     (create-first-block!)
-                     (route-handler/redirect! {:to :page
-                                               :path-params {:name redirect-page-name}}))))
-                (when (and contents-page?
-                           (state/get-left-sidebar-open?))
-                  (ui-handler/close-left-sidebar!)))}
+  (let [tag? (:tag? config)]
+    [:a
+     {:class (if tag? "tag" "page-ref")
+      :data-ref page-name
+      :href href
+      :on-click (fn [e]
+                  (util/stop e)
+                  (let [create-first-block! (fn []
+                                              (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
+                                                (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
+                    (if (gobj/get e "shiftKey")
+                      (do
+                        (js/setTimeout create-first-block! 310)
+                        (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+                          (state/sidebar-add-block!
+                           (state/get-current-repo)
+                           (:db/id page-entity)
+                           :page
+                           {:page page-entity})))
+                      (do
+                        (create-first-block!)
+                        (route-handler/redirect! {:to :page
+                                                  :path-params {:name redirect-page-name}}))))
+                  (when (and contents-page?
+                             (state/get-left-sidebar-open?))
+                    (ui-handler/close-left-sidebar!)))}
 
-   (if (and (coll? children) (seq children))
-     (for [child children]
-       (if (= (first child) "Label")
-         (last child)
-         (let [{:keys [content children]} (last child)
-               page-name (subs content 2 (- (count content) 2))]
-           (rum/with-key (page-reference html-export? page-name (assoc config :children children) nil) page-name))))
-     (cond
-       (and label
-            (string? label)
-            (not (string/blank? label))) ; alias
-       label
+     (if (and (coll? children) (seq children))
+       (for [child children]
+         (if (= (first child) "Label")
+           (last child)
+           (let [{:keys [content children]} (last child)
+                 page-name (subs content 2 (- (count content) 2))]
+             (rum/with-key (page-reference html-export? page-name (assoc config :children children) nil) page-name))))
+       (cond
+         (and label
+              (string? label)
+              (not (string/blank? label))) ; alias
+         label
 
-       (coll? label)
-       (->elem :span (map-inline config label))
+         (coll? label)
+         (->elem :span (map-inline config label))
 
-       :else
-       (get page-entity :block/original-name page-name)))])
+         :else
+         (let [s (get page-entity :block/original-name page-name)]
+           (if tag? (str "#" s) s))))]))
 
 (defn- use-delayed-open [open? page-name]
   "A react hook to debounce open? value.
@@ -737,19 +740,7 @@
     ["Tag" s]
     (when-let [s (block/get-tag item)]
       (let [s (text/page-ref-un-brackets! s)]
-        [:a.tag {:data-ref s
-                 :href (rfe/href :page {:name s})
-                 :on-click (fn [e]
-                             (let [repo (state/get-current-repo)
-                                   page (db/pull repo '[*] [:block/name (string/lower-case (util/url-decode s))])]
-                               (when (gobj/get e "shiftKey")
-                                 (state/sidebar-add-block!
-                                  repo
-                                  (:db/id page)
-                                  :page
-                                  {:page page})
-                                 (.preventDefault e))))}
-         (str "#" s)]))
+        (page-cp (assoc config :tag? true) {:block/name s})))
 
     ["Emphasis" [[kind] data]]
     (let [elem (case kind
@@ -800,10 +791,15 @@
           (block-reference (assoc config :reference? true) id label*))
 
         ["Page_ref" page]
-        (let [label* (if (seq (mldoc/plain->text label)) label nil)]
-          (if (and (string? page) (string/blank? page))
-            [:span (util/format "[[%s]]" page)]
-            (page-reference (:html-export? config) page config label*)))
+        (let [format (get-in config [:block :block/format])]
+          (if (and (= format :org)
+                   (show-link? config nil page page)
+                   (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
+            (image-link config url page nil nil page)
+            (let [label* (if (seq (mldoc/plain->text label)) label nil)]
+              (if (and (string? page) (string/blank? page))
+                [:span (util/format "[[%s]]" page)]
+                (page-reference (:html-export? config) page config label*)))))
 
         ["Search" s]
         (cond
@@ -1215,12 +1211,14 @@
 
 (rum/defcs block-control < rum/reactive
   [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show?]
-  (let [has-child? (and
+  (let [has-children-blocks? (and (coll? children) (seq children))
+        has-child? (and
                     (not (:pre-block? block))
-                    (or (and (coll? children) (seq children))
-                        (seq body)))
+                    (or has-children-blocks? (seq body)))
         control-show? (and
-                       (seq (:block/title block))
+                       (or (and (seq (:block/title block))
+                                (seq body))
+                           has-children-blocks?)
                        (util/react *control-show?))
         ref-collapsed? (util/react *ref-collapsed?)
         dark? (= "dark" (state/sub :ui/theme))
@@ -1460,10 +1458,7 @@
            (rum/with-key elem (str (random-uuid)))))
 
        :else
-       (let [page-name (string/lower-case (str v))]
-         (if (db/entity [:block/name page-name])
-           (page-cp config {:block/name page-name})
-           (inline-text (:block/format block) (str v)))))]))
+       (inline-text (:block/format block) (str v)))]))
 
 (rum/defc properties-cp
   [config block]
@@ -2116,11 +2111,13 @@
            ;; exclude the current one, otherwise it'll loop forever
            remove-blocks (if current-block-uuid [current-block-uuid] nil)
            query-result (and query-atom (rum/react query-atom))
+           not-grouped-by-page? (and (string? query) (string/includes? query "(by-page false)"))
            result (when query-result
-                    (db/custom-query-result-transform query-result remove-blocks q))
+                    (db/custom-query-result-transform query-result remove-blocks q not-grouped-by-page?))
            view-f (and view (sci/eval-string (pr-str view)))
            only-blocks? (:block/uuid (first result))
            blocks-grouped-by-page? (and (seq result)
+                                        (not not-grouped-by-page?)
                                         (coll? (first result))
                                         (:block/name (ffirst result))
                                         (:block/uuid (first (second (first result))))
@@ -2161,8 +2158,7 @@
                                                               :path-params {:name name}})))}
                   (or original-name name)]])]
 
-             (and (seq result)
-                  (or only-blocks? blocks-grouped-by-page?))
+             (and (seq result) (or only-blocks? blocks-grouped-by-page?))
              (->hiccup result (cond-> (assoc config
                                              :custom-query? true
                                              ;; :breadcrumb-show? true

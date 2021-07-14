@@ -63,8 +63,7 @@
       (let [page-name (string/lower-case node)]
         (.unhoverNode ^js graph node)
         (route-handler/redirect! {:to :page
-                                  :path-params {:name page-name}})
-        ))))
+                                  :path-params {:name page-name}})))))
 
 (defn reset-graph!
   [^js graph]

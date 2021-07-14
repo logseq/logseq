@@ -50,7 +50,7 @@
     input))
 
 (defn custom-query-result-transform
-  [query-result remove-blocks q]
+  [query-result remove-blocks q not-grouped-by-page?]
   (try
     (let [repo (state/get-current-repo)
           result (db-utils/seq-flatten query-result)
@@ -75,7 +75,7 @@
                 (log/error :sci/call-error e)
                 result))
             result)
-          (if block?
+          (if (and block? (not not-grouped-by-page?))
             (db-utils/group-by-page result)
             result))))
     (catch js/Error e

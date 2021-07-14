@@ -10,7 +10,8 @@
             [clojure.set :as set]
             [clojure.zip :as zip]
             [frontend.modules.outliner.datascript :as ds]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.util.property :as property]))
 
 (defrecord Block [data])
 
@@ -59,29 +60,6 @@
      (outliner-state/get-by-parent-id repo [:block/uuid id])
      (mapv block))))
 
-;; TODO: we might need to store created-at and updated-at as datom attributes
-;; instead of being attributes of properties.
-;; which might improve the db performance, we can improve it later
-(defn- with-timestamp
-  [m]
-  (let [updated-at (util/time-ms)
-        properties (assoc (:block/properties m)
-                          :id (:block/uuid m)
-                          :updated-at updated-at)
-        properties (if-let [created-at (get properties :created-at)]
-                     properties
-                     (assoc properties :created-at updated-at))
-        m (assoc m :block/properties properties)
-        page-id (or (get-in m [:block/page :db/id])
-                    (:db/id (:block/page (db/entity (:db/id m)))))
-        page (db/entity page-id)
-        page-properties (:block/properties page)
-        page-tx {:db/id page-id
-                 :block/properties (assoc page-properties
-                                          :updated-at updated-at
-                                          :created-at (get page-properties :created-at updated-at))}]
-    [m page-tx]))
-
 (defn- update-block-unordered
   [block]
   (let [parent (:block/parent block)
@@ -90,6 +68,19 @@
     (if (and parent page type (= parent page) (= type :heading))
       (assoc block :block/unordered false)
       (assoc block :block/unordered true))))
+
+(defn- block-with-timestamps
+  [block]
+  (let [updated-at (util/time-ms)
+        block (cond->
+                (assoc block :block/updated-at updated-at)
+                (nil? (:block/created-at block))
+                (assoc :block/created-at updated-at))
+        content (property/insert-properties (:block/format block)
+                                            (or (:block/content block) "")
+                                            {:created-at (:block/created-at block)
+                                             :updated-at (:block/updated-at block)})]
+    (assoc block :block/content content)))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
@@ -143,26 +134,32 @@
           m (-> (:data this)
                 (dissoc :block/children :block/meta)
                 (util/remove-nils))
-          other-tx (:db/other-tx m)]
+          m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
+          other-tx (:db/other-tx m)
+          id (:db/id (:data this))]
       (when (seq other-tx)
         (swap! txs-state (fn [txs]
                            (vec (concat txs other-tx)))))
 
-      (when-let [id (:db/id (:data this))]
+      (when id
         (swap! txs-state (fn [txs]
                            (vec
                             (concat txs
                                     (map (fn [attribute]
                                            [:db/retract id attribute])
-                                      db-schema/retract-attributes))))))
+                                      db-schema/retract-attributes)))))
+
+        (when-let [e (:block/page (db/entity id))]
+          (let [m {:db/id (:db/id e)
+                   :block/updated-at (util/time-ms)}
+                m (if (:block/created-at e)
+                    m
+                    (assoc m :block/created-at (util/time-ms)))]
+            (swap! txs-state conj m))))
+
       (swap! txs-state conj (dissoc m :db/other-tx))
-      this
-      ;; TODO: enable for the database-only version
-      ;; (let [[m page-tx] (with-timestamp (:data this))]
-      ;;  (swap! txs-state conj m page-tx)
-      ;;  m)
-      )
-    )
+
+      this))
 
   (-del [this txs-state children?]
     (assert (ds/outliner-txs-state? txs-state)

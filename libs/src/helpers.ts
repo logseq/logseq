@@ -1,6 +1,7 @@
 import { StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import { snakeCase } from 'snake-case'
+import * as path from 'path'
 
 interface IObject {
   [key: string]: any;
@@ -11,6 +12,31 @@ declare global {
     api: any
     apis: any
   }
+}
+
+export const IS_DEV = process.env.NODE_ENV === 'development'
+
+let _appPathRoot
+
+export async function getAppPathRoot (): Promise<string> {
+  if (_appPathRoot) {
+    return _appPathRoot
+  }
+
+  return (_appPathRoot =
+      await invokeHostExportedApi('_callApplication', 'getAppPath')
+  )
+}
+
+export async function getSDKPathRoot (): Promise<string> {
+  if (IS_DEV) {
+    // TODO: cache in preference file
+    return localStorage.getItem('LSP_DEV_SDK_ROOT') || 'http://localhost:8080'
+  }
+
+  const appPathRoot = await getAppPathRoot()
+
+  return path.join(appPathRoot, 'js')
 }
 
 export function isObject (item: any) {

@@ -43,6 +43,10 @@
   [dir]
   (protocol/mkdir! (get-fs dir) dir))
 
+(defn mkdir-recur!
+  [dir]
+  (protocol/mkdir-recur! (get-fs dir) dir))
+
 (defn readdir
   [dir]
   (protocol/readdir (get-fs dir) dir))
@@ -61,20 +65,20 @@
   [repo dir path content opts]
   (when content
     (let [fs-record (get-fs dir)]
-      (p/let [metadata-or-css? (or (string/ends-with? path config/metadata-file)
-                                  (string/ends-with? path config/custom-css-file))
-             content (if metadata-or-css? content (encrypt/encrypt content))]
-       (->
-        (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
-          (when (= bfs-record fs-record)
-            (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
-        (p/catch (fn [error]
-                   (log/error :file/write-failed {:dir dir
-                                                  :path path
-                                                  :error error})
-                   ;; Disable this temporarily
-                   ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
-                   )))))))
+      (p/let [metadata-or-css? (or (string/ends-with? path (str "/" config/metadata-file))
+                                   (string/ends-with? path (str "/" config/custom-css-file)))
+              content (if metadata-or-css? content (encrypt/encrypt content))]
+        (->
+         (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
+           (when (= bfs-record fs-record)
+             (db/set-file-last-modified-at! repo (config/get-file-path repo path) (js/Date.))))
+         (p/catch (fn [error]
+                    (log/error :file/write-failed {:dir dir
+                                                   :path path
+                                                   :error error})
+                    ;; Disable this temporarily
+                    ;; (js/alert "Current file can't be saved! Please copy its content to your local file system and click the refresh button.")
+                    )))))))
 
 (defn read-file
   ([dir path]
@@ -90,7 +94,7 @@
 (defn rename!
   [repo old-path new-path]
   (cond
-    ; See https://github.com/isomorphic-git/lightning-fs/issues/41
+                                        ; See https://github.com/isomorphic-git/lightning-fs/issues/41
     (= old-path new-path)
     (p/resolved nil)
 
@@ -146,9 +150,9 @@
       (p/let [stat (stat dir path)]
         true)
       (p/catch
-       (fn [_error]
-         (p/let [_ (write-file! repo dir path initial-content nil)]
-           false)))))))
+          (fn [_error]
+            (p/let [_ (write-file! repo dir path initial-content nil)]
+              false)))))))
 
 (defn file-exists?
   [dir path]

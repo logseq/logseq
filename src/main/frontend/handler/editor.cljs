@@ -635,13 +635,17 @@
                                  last-block-id (:db/id (last blocks))]
                              (when last-block-id
                                (db/pull last-block-id))))
+              format (or
+                      (:block/format block)
+                      (db/get-page-format (:db/id block))
+                      :markdown)
+              content (if (seq properties)
+                        (property/insert-properties format content properties)
+                        content)
               new-block (-> (select-keys block [:block/page :block/file :block/journal?
                                                 :block/journal-day])
                             (assoc :block/content content
-                                   :block/format (or
-                                                  (:block/format block)
-                                                  (db/get-page-format (:db/id block))
-                                                  :markdown))
+                                   :block/format format)
                             (wrap-parse-block)
                             (assoc :block/uuid (db/new-block-id)))
               new-block (if (:block/page new-block)
@@ -649,9 +653,6 @@
                           (assoc new-block :block/page (:db/id block)))
               new-block (if-let [db-id (:db/id (:block/file block))]
                           (assoc new-block :block/file db-id)
-                          new-block)
-              new-block (if (and (map? properties) (seq properties))
-                          (update new-block :block/properties (fn [m] (merge m properties)))
                           new-block)]
           (let [[block-m sibling?] (cond
                                      before?
@@ -895,29 +896,31 @@
                         (property/insert-property format content key value))
               block (outliner-core/block {:block/uuid block-id
                                           :block/properties properties
-                                          :block/content content})]
+                                          :block/content content})
+              input-pos (or (state/get-edit-pos) :max)]
           (outliner-core/save-node block)
+
+          (db/refresh! (state/get-current-repo)
+                       {:key :block/change
+                        :data [(db/pull [:block/uuid block-id])]})
 
           ;; update editing input content
           (when-let [editing-block (state/get-edit-block)]
-            (and (= (:block/uuid editing-block) block-id)
-                 (state/set-edit-content! (state/get-edit-input-id) content))))))))
+            (when (= (:block/uuid editing-block) block-id)
+              (edit-block! editing-block
+                           input-pos
+                           format
+                           (state/get-edit-input-id)))))))))
 
 (defn remove-block-property!
   [block-id key]
   (let [key (keyword key)]
-    (block-property-aux! block-id key nil))
-  (db/refresh! (state/get-current-repo)
-               {:key :block/change
-                :data [(db/pull [:block/uuid block-id])]}))
+    (block-property-aux! block-id key nil)))
 
 (defn set-block-property!
   [block-id key value]
   (let [key (keyword key)]
-    (block-property-aux! block-id key value))
-  (db/refresh! (state/get-current-repo)
-               {:key :block/change
-                :data [(db/pull [:block/uuid block-id])]}))
+    (block-property-aux! block-id key value)))
 
 (defn set-block-timestamp!
   [block-id key value]
@@ -1051,7 +1054,7 @@
 (defn copy-selection-blocks
   []
   (when-let [blocks (seq (get-selected-blocks-with-children))]
-    (let [repo (dom/attr (first blocks) "repo")
+    (let [repo (state/get-current-repo)
           ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))
@@ -1068,7 +1071,7 @@
     ;; remove embeds and references
     (let [blocks (remove (fn [block] (= "true" (dom/attr block "data-transclude"))) blocks)]
       (when (seq blocks)
-        (let [repo (dom/attr (first blocks) "repo")
+        (let [repo (state/get-current-repo)
               ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
           (delete-blocks! repo ids))))))
 
@@ -2937,7 +2940,8 @@
   (remove-block-property! block-id :collapsed))
 
 (defn expand!
-  []
+  [e]
+  (util/stop e)
   (cond
     (state/editing?)
     (when-let [block-id (:block/uuid (state/get-edit-block))]
@@ -2970,7 +2974,8 @@
                 (expand-block! uuid)))))))))
 
 (defn collapse!
-  []
+  [e]
+  (util/stop e)
   (cond
     (state/editing?)
     (when-let [block-id (:block/uuid (state/get-edit-block))]

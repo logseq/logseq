@@ -260,13 +260,10 @@
   (not (false? (:git-auto-push
                 (get (sub-config) repo)))))
 
-(defn enable-block-time?
+(defn enable-block-timestamps?
   []
-  ;; (true? (:feature/enable-block-time?
-  ;;         (get (sub-config) (get-current-repo))))
-
-  ;; Disable block timestamps for now, because it doesn't work with undo/redo
-  false)
+  (true? (:feature/enable-block-timestamps?
+          (get (sub-config) (get-current-repo)))))
 
 (defn sub-graph-config
   []
@@ -551,7 +548,8 @@
 
 (defn get-edit-pos
   []
-  (.-selectionStart (get-input)))
+  (when-let [input (get-input)]
+    (.-selectionStart input)))
 
 (defn set-selection-start-block!
   [start-block]

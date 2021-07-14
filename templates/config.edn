@@ -9,13 +9,6 @@
  ;; or ":todo" for TODO/DOING style.
  :preferred-workflow :now
 
- ;; Git is only available in web app
- ;; Git settings
- :git-pull-secs 60
- :git-push-secs 10
- ;; Whether to enable git auto push
- :git-auto-push true
-
  ;; The app will ignore those directories or files.
  ;; E.g. "/archived" "/test.md"
  :hidden []
@@ -29,6 +22,8 @@
  ;; Whether to enable hover on tooltip preview feature
  ;; Default is true, you can also toggle this via setting page
  :ui/enable-tooltip? true
+
+ :feature/enable-block-timestamps? false
 
  ;; Specify a custom CSS import
  ;; This option take precedence over your local `logseq/custom.css` file

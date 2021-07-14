@@ -184,6 +184,31 @@
                      (remove-non-exists-refs!))]
     (db/transact! repo-url all-data)))
 
+(defn- load-pages-metadata!
+  [repo file-paths files]
+  (try
+    (let [file (config/get-pages-metadata-path)]
+      (when (contains? (set file-paths) file)
+        (when-let [content (some #(when (= (:file/path %) file) (:file/content %)) files)]
+          (let [metadata (common-handler/safe-read-string content "Parsing pages metadata file failed: ")
+                pages (db/get-all-pages repo)
+                pages (zipmap (map :block/name pages) pages)
+                metadata (->>
+                          (filter (fn [{:block/keys [name created-at updated-at]}]
+                                    (when-let [page (get pages name)]
+                                      (and
+                                       (or
+                                        (nil? (:block/created-at page))
+                                        (>= created-at (:block/created-at page)))
+                                       (or
+                                        (nil? (:block/updated-at page))
+                                        (>= updated-at (:block/created-at page)))))) metadata)
+                          (remove nil?))]
+            (when (seq metadata)
+              (db/transact! repo metadata))))))
+    (catch js/Error e
+      (log/error :exception e))))
+
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata]
   (let [parsed-files (filter
@@ -200,6 +225,7 @@
                                     (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
     (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
+    (load-pages-metadata! repo-url file-paths files)
     (when first-clone?
       (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
         (state/pub-event! [:modal/encryption-setup-dialog repo-url

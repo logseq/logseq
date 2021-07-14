@@ -65,12 +65,14 @@
   protocol/Fs
   (mkdir! [this dir]
     (ipc/ipc "mkdir" dir))
+  (mkdir-recur! [this dir]
+    (ipc/ipc "mkdir-recur" dir))
   (readdir [this dir]                   ; recursive
     (ipc/ipc "readdir" dir))
   (unlink! [this path _opts]
     (ipc/ipc "unlink" path))
   (rmdir! [this dir]
-    nil)
+    (ipc/ipc "rmdir-recur" dir))
   (read-file [this dir path _options]
     (let [path (concat-path dir path)]
       (ipc/ipc "readFile" path)))

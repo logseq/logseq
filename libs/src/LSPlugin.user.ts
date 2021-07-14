@@ -16,6 +16,7 @@ import Debug from 'debug'
 import * as CSS from 'csstype'
 import { snakeCase } from 'snake-case'
 import EventEmitter from 'eventemitter3'
+import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
 
 declare global {
   interface Window {
@@ -154,7 +155,7 @@ const editor: Partial<IEditorProxy> = {
       return false
     }
 
-    const key = + '_' + this.baseInfo.id
+    const key = tag + '_' + this.baseInfo.id
     const label = tag
     const type = 'block-context-menu-item'
 
@@ -192,6 +193,8 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
    */
   private _ui = new Map<number, uiState>()
 
+  private _fileStorage: LSPluginFileStorage
+
   /**
    * handler of before unload plugin
    * @private
@@ -226,6 +229,9 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
         actor?.reject(e)
       }
     })
+
+    // modules
+    this._fileStorage = new LSPluginFileStorage(this)
   }
 
   async ready (
@@ -399,6 +405,10 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
   get DB (): IDBProxy {
     return this._makeUserProxy(db)
+  }
+
+  get FileStorage (): LSPluginFileStorage {
+    return this._fileStorage
   }
 }
 

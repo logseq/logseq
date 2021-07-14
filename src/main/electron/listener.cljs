@@ -8,6 +8,7 @@
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [frontend.handler.notification :as notification]
+            [frontend.handler.metadata :as metadata-handler]
             [frontend.ui :as ui]))
 
 (defn listen-to-open-dir!
@@ -41,6 +42,8 @@
            (notification/show!
             (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
             :warning)
+           (doseq [repo repos]
+             (metadata-handler/set-pages-metadata! repo))
            (js/setTimeout
             (fn []
               (-> (p/all (map db/persist! repos))

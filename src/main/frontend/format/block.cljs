@@ -555,7 +555,14 @@
                                   (with-page-refs with-id?)
                                   with-block-refs
                                   block-tags->pages)
-                        last-pos' (get-in block [:meta :start-pos])]
+                        last-pos' (get-in block [:meta :start-pos])
+                        {:keys [created-at updated-at]} (:properties properties)
+                        block (cond-> block
+                                (and created-at (integer? created-at))
+                                (assoc :block/created-at created-at)
+
+                                (and updated-at (integer? updated-at))
+                                (assoc :block/updated-at updated-at))]
                     (recur (conj headings block) [] (rest blocks) {} {} last-pos' (:level block) children []))
 
                   :else

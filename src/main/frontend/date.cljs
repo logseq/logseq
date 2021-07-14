@@ -191,6 +191,12 @@
   (when day
     (format (tf/parse (tf/formatter "yyyyMMdd") (str day)))))
 
+(defn journal-day->ts
+  [day]
+  (when day
+    (-> (tf/parse (tf/formatter "yyyyMMdd") (str day))
+        (tc/to-long))))
+
 (defn journal-title->long
   [journal-title]
   (journal-title-> journal-title #(tc/to-long %)))
