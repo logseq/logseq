@@ -289,6 +289,7 @@
 
 (defonce local-repo "local")
 (defonce local-assets-dir "assets")
+(defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
 (def metadata-file "metadata.edn")

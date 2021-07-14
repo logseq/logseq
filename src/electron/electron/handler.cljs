@@ -40,8 +40,15 @@
 (defmethod handle :readdir [_window [_ dir]]
   (readdir dir))
 
-(defmethod handle :unlink [_window [_ path]]
-  (fs/unlinkSync path))
+(defmethod handle :unlink [_window [_ repo path]]
+  (let [basename (path/basename path)
+        file-name (-> (string/replace path (str repo "/") "")
+                      (string/replace "/" "_")
+                      (string/replace "\\" "_"))
+        recycle-dir (str repo "/logseq/.recycle")
+        _ (fs-extra/ensureDirSync recycle-dir)
+        new-path (str recycle-dir "/" file-name)]
+    (fs/renameSync path new-path)))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
@@ -56,8 +63,6 @@
 
 (defmethod handle :stat [_window [_ path]]
   (fs/statSync path))
-
-
 
 (defonce allowed-formats
   #{:org :markdown :md :edn :json :css :excalidraw})
@@ -176,7 +181,6 @@
 
 (defmethod handle :quitApp []
   (.quit app))
-
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))

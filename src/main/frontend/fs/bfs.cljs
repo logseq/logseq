@@ -14,7 +14,7 @@
   (readdir [this dir]
     (when js/window.pfs
       (js/window.pfs.readdir dir)))
-  (unlink! [this path opts]
+  (unlink! [this repo path opts]
     (when js/window.pfs
       (p/let [stat (js/window.pfs.stat path)]
         (if (= (.-type stat) "file")

@@ -1413,7 +1413,8 @@
     (when (and local? delete-local?)
       ;; FIXME: should be relative to current block page path
       (when-let [href (if (util/electron?) href (second (re-find #"\((.+)\)$" full-text)))]
-        (fs/unlink! (config/get-repo-path
+        (fs/unlink! repo
+                    (config/get-repo-path
                      repo (-> href
                               (string/replace #"^../" "/")
                               (string/replace #"^assets://" ""))) nil)))))

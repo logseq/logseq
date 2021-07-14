@@ -151,12 +151,15 @@
    (create-default-files! repo-url false))
   ([repo-url encrypted?]
    (spec/validate :repos/url repo-url)
-   (file-handler/create-metadata-file repo-url encrypted?)
-   ;; TODO: move to frontend.handler.file
-   (create-config-file-if-not-exists repo-url)
-   (create-today-journal-if-not-exists repo-url {:write-file? false})
-   (create-contents-file repo-url)
-   (create-custom-theme repo-url)))
+   (let [repo-dir (config/get-repo-dir repo-url)]
+     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+             _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))]
+       (file-handler/create-metadata-file repo-url encrypted?)
+       ;; TODO: move to frontend.handler.file
+       (create-config-file-if-not-exists repo-url)
+       (create-today-journal-if-not-exists repo-url {:write-file? false})
+       (create-contents-file repo-url)
+       (create-custom-theme repo-url)))))
 
 (defn- remove-non-exists-refs!
   [data]

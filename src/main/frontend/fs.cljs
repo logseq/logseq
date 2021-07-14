@@ -52,8 +52,9 @@
   (protocol/readdir (get-fs dir) dir))
 
 (defn unlink!
-  [path opts]
-  (protocol/unlink! (get-fs path) path opts))
+  "Should move the path to logseq/recycle instead of deleting it."
+  [repo path opts]
+  (protocol/unlink! (get-fs path) repo path opts))
 
 (defn rmdir!
   "Remove the directory recursively.

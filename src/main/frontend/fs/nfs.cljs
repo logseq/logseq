@@ -57,7 +57,11 @@
 (defrecord Nfs []
   protocol/Fs
   (mkdir! [this dir]
-    (let [[root new-dir] (rest (string/split dir "/"))
+    (let [parts (->> (string/split dir "/")
+                     (remove string/blank?))
+          root (->> (butlast parts)
+                    (string/join "/"))
+          new-dir (last parts)
           root-handle (str "handle/" root)]
       (->
        (p/let [handle (idb/get-item root-handle)
@@ -82,12 +86,25 @@
             (map (fn [path]
                    (string/replace path prefix "")))))))
 
-  (unlink! [this path opts]
+  (unlink! [this repo path opts]
     (let [[dir basename] (util/get-dir-and-basename path)
           handle-path (str "handle" path)]
       (->
-       (p/let [handle (idb/get-item (str "handle" dir))
-               _ (idb/remove-item! handle-path)]
+       (p/let [recycle-dir (str "/" repo (util/format "/%s/%s" config/app-name config/recycle-dir))
+               _ (protocol/mkdir! this recycle-dir)
+               handle (idb/get-item handle-path)
+               file (.getFile handle)
+               content (.text file)
+               handle (idb/get-item (str "handle" dir))
+               _ (idb/remove-item! handle-path)
+               file-name (-> (string/replace path (str "/" repo "/") "")
+                             (string/replace "/" "_")
+                             (string/replace "\\" "_"))
+               new-path (str recycle-dir "/" file-name)
+               _ (protocol/write-file! this repo
+                                       "/"
+                                       new-path
+                                       content nil)]
          (when handle
            (.removeEntry ^js handle basename))
          (remove-nfs-file-handle! handle-path))
@@ -119,6 +136,7 @@
           handle-path (if (= "/" (last sub-dir-handle-path))
                         (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))
                         sub-dir-handle-path)
+          handle-path (string/replace handle-path "//" "/")
           basename-handle-path (str handle-path "/" basename)]
       (p/let [file-handle (idb/get-item basename-handle-path)]
         (when file-handle
@@ -189,7 +207,7 @@
             file (.getFile handle)
             content (.text file)
             _ (protocol/write-file! this repo dir new-path content nil)]
-      (protocol/unlink! this old-path nil)))
+      (protocol/unlink! this repo old-path nil)))
   (stat [this dir path]
     (if-let [file (get-nfs-file-handle (str "handle/"
                                             (string/replace-first dir "/" "")
