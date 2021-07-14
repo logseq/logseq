@@ -59,7 +59,9 @@
   "Remove the directory recursively.
    Warning: only run it for browser cache."
   [dir]
-  (protocol/rmdir! (get-fs dir) dir))
+  (when-let [fs (get-fs dir)]
+    (when (= fs bfs-record)
+      (protocol/rmdir! fs dir))))
 
 (defn write-file!
   [repo dir path content opts]

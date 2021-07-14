@@ -96,6 +96,7 @@
                                            :error error}))))))
 
   (rmdir! [this dir]
+    ;; TOO dangerious, we should never implement this
     nil)
 
   (read-file [this dir path options]
