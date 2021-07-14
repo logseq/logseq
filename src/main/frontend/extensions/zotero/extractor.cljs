@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [frontend.util :as util]
             [frontend.extensions.zotero.schema :as schema]
+            [frontend.extensions.html-parser :as html-parser]
             [frontend.date :as date]
             [frontend.extensions.zotero.api :as api]))
 
@@ -81,6 +82,11 @@
         properties (properties item)]
     {:page-name page-name
      :properties properties}))
+
+(defmethod extract "note"
+  [item]
+  (let [note-html (-> item :data :note)]
+    (html-parser/parse :markdown note-html)))
 
 (comment
   (def test-item {:key     "JAHCZRNB",
