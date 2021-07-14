@@ -2,6 +2,7 @@
   (:require [clojure.string :as str]
             [frontend.util :as util]
             [frontend.extensions.zotero.schema :as schema]
+            [frontend.date :as date]
             [frontend.extensions.zotero.api :as api]))
 
 (defn item-type [item] (-> item :data :item-type))
@@ -44,14 +45,31 @@
              (mapv (fn [{:keys [tag]}] (util/format "[[%s]]" tag))))]
     (str/join ", " tags)))
 
+(defn date->journal [item]
+  (let [date    (-> item :data :date)]
+    (when-not (str/blank? date)
+      (->> (date/journal-name-s date)
+           (util/format "[[%s]]")))))
+
+(defn wrap-in-doublequotes [m]
+  (->> m
+       (map (fn [[k v]]
+              (if (str/includes? (str v) ",")
+                [k (pr-str v)]
+                [k v])))
+       (into (array-map))))
+
 (defn properties [item]
-  (let [fields    (schema/fields "journalArticle")
-        authors   (authors item)
-        tags      (tags item)
-        data      (-> item :data
+  (let [fields  (schema/fields "journalArticle")
+        authors (authors item)
+        tags    (tags item)
+        date    (date->journal item)
+        data    (-> item :data
                       (select-keys fields)
+                      (wrap-in-doublequotes)
                       (assoc :authors authors
-                             :tags tags)
+                             :tags tags
+                             :date date)
                       (dissoc :creators :extra))]
     (->> data
          (remove (comp str/blank? second))

@@ -38,7 +38,7 @@
 #?(:cljs
    (defn transact!
      [txs opts]
-     ;; (util/pprint txs)
+     (util/pprint txs)
      (when (and (seq txs)
                 (not (:skip-transact? opts)))
        (try

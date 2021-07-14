@@ -44,7 +44,10 @@
   (get* config (str "/items/" key)))
 
 (comment
-  (get* config "/collections" {:limit 1})
+  (get* config "/collections")
   (get* config "/items" {:limit 3})
   (get* config "/items" {:item-type "journalArticle"})
-  (item "JZCIN4K5"))
+  (item "JZCIN4K5")
+  (item "RFYNAQTN")
+  (item "3V6N8ECQ")
+  )
