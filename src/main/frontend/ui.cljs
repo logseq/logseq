@@ -570,10 +570,11 @@
          {:style    {:width       14
                      :height      16
                      :margin-left -24}
-          :on-click (fn [e]
-                      (util/stop e)
-                      (swap! collapsed? not))}
-         [:span {:class (if @control? "control-show" "control-hide")} (rotating-arrow @collapsed?)]]
+          :on-mouse-down (fn [e]
+                           (util/stop e)
+                           (swap! collapsed? not))}
+         [:span {:class (if @control? "control-show" "control-hide")}
+          (rotating-arrow @collapsed?)]]
         (if (fn? header)
           (header @collapsed?)
           header)]]]
