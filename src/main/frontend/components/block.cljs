@@ -2178,7 +2178,8 @@
                              (editor-handler/set-block-property! current-block-uuid
                                                                  "query-table"
                                                                  (not table?)))
-                           true)]])]
+                           true)]
+               [:span.ml-4.text-sm "Tip: Shift + Click a row to open its block in the right sidebar."]])]
            (cond
              (and (seq result) view-f)
              (let [result (try
