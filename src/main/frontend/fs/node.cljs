@@ -72,7 +72,8 @@
   (unlink! [this path _opts]
     (ipc/ipc "unlink" path))
   (rmdir! [this dir]
-    (ipc/ipc "rmdir-recur" dir))
+    ;; Too dangerious!!! We'll never implement this.
+    nil)
   (read-file [this dir path _options]
     (let [path (concat-path dir path)]
       (ipc/ipc "readFile" path)))

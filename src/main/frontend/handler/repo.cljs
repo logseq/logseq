@@ -525,7 +525,6 @@
                       (db/remove-conn! url)
                       (db/remove-db! url)
                       (search/remove-db! url)
-                      (fs/rmdir! (config/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (or (config/local-db? url) (= url "local"))
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
@@ -626,7 +625,6 @@
     (db/remove-conn! url)
     (db/clear-query-state!)
     (-> (p/do! (db/remove-db! url)
-               (fs/rmdir! (config/get-repo-dir url))
                (clone-and-load-db url))
         (p/catch (fn [error]
                    (prn "Delete repo failed, error: " error))))))
