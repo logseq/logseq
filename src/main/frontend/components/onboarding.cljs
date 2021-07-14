@@ -201,11 +201,11 @@
             :target "_blank"}
         (t :help/feature)]]
       [:li
-       [:a {:href "https://logseq.github.io/page/changelog"
+       [:a {:href "https://logseq.github.io/#/page/changelog"
             :target "_blank"}
         (t :help/changelog)]]
       [:li
-       [:a {:href "https://logseq.github.io/page/faq"
+       [:a {:href "https://logseq.github.io/#/page/faq"
             :target "_blank"}
         "FAQ"]]
       [:li
