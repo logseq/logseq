@@ -141,48 +141,51 @@
       (p/let [file-handle (idb/get-item basename-handle-path)]
         ;; check file-handle available, remove it when got 'NotFoundError'
         (p/let [test-get-file (when file-handle
-                    (p/catch (p/let [_ (.getFile file-handle)] true)
-                             (fn [e]
-                               (when (= "NotFoundError" (.-name e))
-                                 (idb/remove-item! basename-handle-path)
-                                 (remove-nfs-file-handle! basename-handle-path))
-                               false)))
+                                (p/catch (p/let [_ (.getFile file-handle)] true)
+                                         (fn [e]
+                                           (js/console.dir e)
+                                           (when (= "NotFoundError" (.-name e))
+                                             (idb/remove-item! basename-handle-path)
+                                             (remove-nfs-file-handle! basename-handle-path))
+                                           false)))
                 file-handle (if test-get-file file-handle nil)]
 
           (when file-handle
             (add-nfs-file-handle! basename-handle-path file-handle))
           (if file-handle
-            (p/let [local-file (.getFile file-handle)
-                    local-content (.text local-file)
-                    local-last-modified-at (gobj/get local-file "lastModified")
-                    current-time (util/time-ms)
-                    new? (> current-time local-last-modified-at)
-                    new-created? (nil? last-modified-at)
-                    not-changed? (= last-modified-at local-last-modified-at)
-                    format (-> (util/get-file-ext path)
-                               (config/get-file-format))
-                    pending-writes (state/get-write-chan-length)
-                    draw? (and path (string/ends-with? path ".excalidraw"))
-                    config? (and path (string/ends-with? path "/config.edn"))]
-              (p/let [_ (verify-permission repo file-handle true)
-                      _ (utils/writeFile file-handle content)
-                      file (.getFile file-handle)]
-                (if (and local-content new?
-                         (or
-                          draw?
-                          config?
-                          ;; Writing not finished
-                          (> pending-writes 0)
-                          ;; not changed by other editors
-                          not-changed?
-                          new-created?))
+            (-> (p/let [local-file (.getFile file-handle)
+                        local-content (.text local-file)
+                        local-last-modified-at (gobj/get local-file "lastModified")
+                        current-time (util/time-ms)
+                        new? (> current-time local-last-modified-at)
+                        new-created? (nil? last-modified-at)
+                        not-changed? (= last-modified-at local-last-modified-at)
+                        format (-> (util/get-file-ext path)
+                                   (config/get-file-format))
+                        pending-writes (state/get-write-chan-length)
+                        draw? (and path (string/ends-with? path ".excalidraw"))
+                        config? (and path (string/ends-with? path "/config.edn"))]
                   (p/let [_ (verify-permission repo file-handle true)
                           _ (utils/writeFile file-handle content)
                           file (.getFile file-handle)]
-                    (when file
-                      (nfs-saved-handler repo path file)))
-                  (js/alert (str "The file has been modified on your local disk! File path: " path
-                                 ", please save your changes and click the refresh button to reload it.")))))
+                    (if (and local-content new?
+                             (or
+                              draw?
+                              config?
+                             ;; Writing not finished
+                              (> pending-writes 0)
+                             ;; not changed by other editors
+                              not-changed?
+                              new-created?))
+                      (p/let [_ (verify-permission repo file-handle true)
+                              _ (utils/writeFile file-handle content)
+                              file (.getFile file-handle)]
+                        (when file
+                          (nfs-saved-handler repo path file)))
+                      (js/alert (str "The file has been modified on your local disk! File path: " path
+                                     ", please save your changes and click the refresh button to reload it.")))))
+                (p/catch (fn [e]
+                           (js/console.error e))))
             ;; create file handle
             (->
              (p/let [handle (idb/get-item handle-path)]

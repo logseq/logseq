@@ -1396,3 +1396,9 @@
 (defn get-favorites-name
   []
   (or (:name/favorites (get-config)) "Favorites"))
+
+(defn add-watch-state [key f]
+  (add-watch state key f))
+
+(defn remove-watch-state [key]
+  (remove-watch state key))

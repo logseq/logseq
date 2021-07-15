@@ -4,6 +4,7 @@
             [frontend.db.query-react :as react]
             [frontend.util :as util]
             [frontend.util.property :as property]
+            [frontend.util.persist-var :as persist-var]
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
@@ -23,7 +24,7 @@
 ;;; ================================================================
 ;;; Some Commentary
 ;;; - One block with property `card-type-property' is treated as a card.
-;;; - When the card's type is ':sided', this block's content is the front side,
+;;; - When the card's type is ':sided', root block's content is the front side,
 ;;;   and its children are the back side
 ;;; - When the card's type is ':cloze', '{{cloze: <content>}}' shows as '[...]'
 
@@ -57,8 +58,7 @@
   "any number between 0 and 1 (the greater it is the faster the changes of the OF matrix)"
   0.5)
 
-;;; TODO: persist var 'of-matrix'
-(def of-matrix (atom nil))
+(def of-matrix (persist-var/persist-var nil "srs-of-matrix"))
 
 ;;; ================================================================
 ;;; utils
@@ -479,7 +479,8 @@
                                    (fn [review-records]
                                      (operation-card-info-summary!
                                       review-records review-cards card-query-block)
-                                     (swap! (::need-requery state) (fn [o] (not o))))}))))))}
+                                     (swap! (::need-requery state) (fn [o] (not o)))
+                                     (persist-var/persist-save of-matrix))}))))))}
        svg/edit]
       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
        {:title "click to refresh count"
@@ -495,3 +496,6 @@
                                          card-next-schedule-property
                                          card-last-easiness-factor-property
                                          card-last-score-property})
+
+;; (def f []
+;;   (persist-def  1 2 3 " "))
