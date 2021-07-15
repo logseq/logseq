@@ -449,14 +449,15 @@
      (init-commands!)
      (shortcut/refresh!))))
 
-;; TODO: add use :file/last-modified-at
-(defn get-pages-with-modified-at
+(defn get-all-pages
   [repo]
-  (->> (db/get-modified-pages repo)
-       (remove util/file-page?)
-       (remove util/uuid-string?)
+  (->> (db/get-all-pages)
        (remove (fn [p]
-                 (db/built-in-pages-names (string/upper-case p))))))
+                 (let [name (:block/name p)]
+                   (or (util/file-page? name)
+                       (util/uuid-string? name)
+                       (db/built-in-pages-names (string/upper-case name))))))
+       (common-handler/fix-pages-timestamps)))
 
 (defn get-filters
   [page-name]

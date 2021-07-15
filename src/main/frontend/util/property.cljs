@@ -14,7 +14,7 @@
 
 (def built-in-properties
   (set/union
-   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at}
+   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table}
    (set (map keyword config/markers))))
 
 (defn properties-built-in?
@@ -226,7 +226,21 @@
 
 (defn insert-properties
   [format content kvs]
-  (reduce (fn [content [k v]] (insert-property format content k v)) content kvs))
+  (reduce
+   (fn [content [k v]]
+     (let [k (if (string? k)
+               (keyword (-> (string/lower-case k)
+                            (string/replace " " "-")))
+               k)
+           v (if (coll? v)
+               (some->>
+                (seq v)
+                (distinct)
+                (map (fn [item] (util/format "[[%s]]" (text/page-ref-un-brackets! item))))
+                (string/join ", "))
+               v)]
+       (insert-property format content k v)))
+   content kvs))
 
 (defn remove-property
   ([format key content]

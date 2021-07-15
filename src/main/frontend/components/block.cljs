@@ -383,11 +383,11 @@
   Otherwise, the value will be changed to false immediately"
   (let [[deval set-deval!] (rum/use-state nil)]
     (rum/use-effect!
-      (fn []
-        (if open? (let [timer (js/setTimeout #(set-deval! open?) 1000)]
-                    #(js/clearTimeout timer))
-                  (set-deval! open?))) ;; immediately change
-      [open? page-name])
+     (fn []
+       (if open? (let [timer (js/setTimeout #(set-deval! open?) 1000)]
+                   #(js/clearTimeout timer))
+           (set-deval! open?))) ;; immediately change
+     [open? page-name])
     deval))
 
 (rum/defc page-preview-trigger
@@ -405,10 +405,10 @@
                          (if (and (string? page-original-name) (string/includes? page-original-name "/"))
                            [:div.my-2
                             (->>
-                              (for [page (string/split page-original-name #"/")]
-                                (when (and (string? page) page)
-                                  (page-reference false page {} nil)))
-                              (interpose [:span.mx-2.opacity-30 "/"]))]
+                             (for [page (string/split page-original-name #"/")]
+                               (when (and (string? page) page)
+                                 (page-reference false page {} nil)))
+                             (interpose [:span.mx-2.opacity-30 "/"]))]
                            [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
                                                     page-original-name
                                                     [:span
@@ -836,9 +836,9 @@
             (->elem
              :a
              (cond->
-                 {:href      (str "file://" path)
-                  :data-href path
-                  :target    "_blank"}
+               {:href      (str "file://" path)
+                :data-href path
+                :target    "_blank"}
                title
                (assoc :title title))
              (map-inline config label)))
@@ -887,9 +887,9 @@
                     (->elem
                      :a
                      (cond->
-                         {:href      (str "file://" href*)
-                          :data-href href*
-                          :target    "_blank"}
+                       {:href      (str "file://" href*)
+                        :data-href href*
+                        :target    "_blank"}
                        title
                        (assoc :title title))
                      (map-inline config label))))))
@@ -987,7 +987,7 @@
         [:div.dsl-query
          (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
-                         {:title [:code.p-1 (str "Query: " query)]
+                         {:title [:span.font-medium.p-1 (str "Query: " query)]
                           :query query}))]
 
         (= name "youtube")
@@ -1458,10 +1458,7 @@
            (rum/with-key elem (str (random-uuid)))))
 
        :else
-       (let [page-name (string/lower-case (str v))]
-         (if (db/entity [:block/name page-name])
-           (page-cp config {:block/name page-name})
-           (inline-text (:block/format block) (str v)))))]))
+       (inline-text (:block/format block) (str v)))]))
 
 (rum/defc properties-cp
   [config block]
@@ -1736,13 +1733,13 @@
          show? (or (seq parents) show-page? page-name)]
      (when show?
        (let [page-name-props (when show-page?
-                                  [(rfe/href :page {:name page-name})
-                                   (or page-original-name page-name)])
+                               [(rfe/href :page {:name page-name})
+                                (or page-original-name page-name)])
              parents-props (doall
-                                (for [{:block/keys [uuid title name]} parents]
-                                  (when-not name ; not page
-                                    [(rfe/href :page {:name uuid})
-                                     (->elem :span (map-inline config title))])))
+                            (for [{:block/keys [uuid title name]} parents]
+                              (when-not name ; not page
+                                [(rfe/href :page {:name uuid})
+                                 (->elem :span (map-inline config title))])))
              breadcrumb (->> (into [] parents-props)
                              (concat [page-name-props])
                              (filterv identity)
@@ -2089,6 +2086,41 @@
                      result-atom)]
     (assoc state :query-atom query-atom)))
 
+(rum/defc query-result-table < rum/reactive
+  [config result {:keys [select-keys page?]}]
+  (let [editor-box (get config :editor-box)
+        all-keys (distinct (mapcat keys (map :block/properties result)))
+        keys (if (seq select-keys) select-keys all-keys)
+        keys (if page? (cons :page keys) keys)]
+    [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
+                           :style {:width "100%"}}
+     [:table.table-auto
+      (for [key keys]
+        [:th.whitespace-no-wrap (name key)])
+      (for [item result]
+        [:tr {:on-click (fn [e]
+                          (when (gobj/get e "shiftKey")
+                            (state/sidebar-add-block!
+                             (state/get-current-repo)
+                             (:db/id item)
+                             :block-ref
+                             {:block item})))}
+         (for [key keys]
+           (let [value (if (= key :page)
+                         (or (:block/original-name item)
+                             (:block/name item))
+                         (get-in item [:block/properties key]))]
+             [:td.whitespace-no-wrap
+              (when value
+                (if (coll? value)
+                  (let [vals (for [item value]
+                               (page-cp {} {:block/name item}))]
+                    (interpose [:span ", "] vals))
+                  (let [value (str value)]
+                    (if-let [page (db/entity [:block/name (string/lower-case value)])]
+                      (page-cp {} page)
+                      value))))]))])]]))
+
 (rum/defcs custom-query < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
@@ -2111,10 +2143,14 @@
          query-atom (:query-atom state)]
      (let [current-block-uuid (or (:block/uuid (:block config))
                                   (:block/uuid config))
+           current-block (db/entity [:block/uuid current-block-uuid])
            ;; exclude the current one, otherwise it'll loop forever
            remove-blocks (if current-block-uuid [current-block-uuid] nil)
            query-result (and query-atom (rum/react query-atom))
-           not-grouped-by-page? (and (string? query) (string/includes? query "(by-page false)"))
+           table? (or (get-in current-block [:block/properties :query-table])
+                      (and (string? query) (string/ends-with? (string/trim query) "table")))
+           not-grouped-by-page? (or table?
+                                    (and (string? query) (string/includes? query "(by-page false)")))
            result (when query-result
                     (db/custom-query-result-transform query-result remove-blocks q not-grouped-by-page?))
            view-f (and view (sci/eval-string (pr-str view)))
@@ -2125,12 +2161,25 @@
                                         (:block/name (ffirst result))
                                         (:block/uuid (first (second (first result))))
                                         true)
-           built-in? (built-in-custom-query? title)]
-       [:div.custom-query.mt-2 (get config :attr {})
+           built-in? (built-in-custom-query? title)
+           page-list? (and (seq result)
+                           (:block/name (first result)))]
+       [:div.custom-query.mt-4 (get config :attr {})
         (when-not (and built-in? (empty? result))
           (ui/foldable
-           [:div.opacity-70.custom-query-title
-            title]
+           [:div.custom-query-title
+            title
+            (when (and current-block (not page-list?))
+              [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
+               [:span.mr-2.ml-2.text-sm "Table view"]
+               [:div {:style {:margin-top 3}}
+                (ui/toggle table?
+                           (fn []
+                             (editor-handler/set-block-property! current-block-uuid
+                                                                 "query-table"
+                                                                 (not table?)))
+                           true)]
+               [:span.ml-4.text-sm "Tip: Shift + Click a row to open its block in the right sidebar."]])]
            (cond
              (and (seq result) view-f)
              (let [result (try
@@ -2142,24 +2191,11 @@
                                (str error)]))]
                (util/hiccup-keywordize result))
 
-             ;; page list
-             (and (seq result)
-                  (:block/name (first result)))
-             [:ul#query-pages.mt-1
-              (for [{:block/keys [name original-name] :as page-entity} result]
-                [:li.mt-1
-                 [:a.page-ref {:href (rfe/href :page {:name name})
-                      :on-click (fn [e]
-                                  (util/stop e)
-                                  (if (gobj/get e "shiftKey")
-                                    (state/sidebar-add-block!
-                                     (state/get-current-repo)
-                                     (:db/id page-entity)
-                                     :page
-                                     {:page page-entity})
-                                    (route-handler/redirect! {:to :page
-                                                              :path-params {:name name}})))}
-                  (or original-name name)]])]
+             page-list?
+             (query-result-table config result {:page? true})
+
+             table?
+             (query-result-table config result {:page? false})
 
              (and (seq result) (or only-blocks? blocks-grouped-by-page?))
              (->hiccup result (cond-> (assoc config
@@ -2173,7 +2209,7 @@
                        {:style {:margin-top "0.25rem"
                                 :margin-left "0.25rem"}})
 
-             (seq result)                     ;TODO: table
+             (seq result)
              (let [result (->>
                            (for [record result]
                              (if (map? record)

@@ -7,7 +7,7 @@ import {
   setupInjectedUI,
   deferred,
   invokeHostExportedApi,
-  isObject, withFileProtocol
+  isObject, withFileProtocol, IS_DEV, getSDKPathRoot
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -477,7 +477,7 @@ class PluginLocal
 
     if (!entry.endsWith('.js')) return
 
-    let sdkPath = await invokeHostExportedApi('_callApplication', 'getAppPath')
+    let sdkPathRoot = await getSDKPathRoot()
     let entryPath = await invokeHostExportedApi(
       'write_user_tmp_file',
       `${this._id}_index.html`,
@@ -486,7 +486,7 @@ class PluginLocal
   <head>
     <meta charset="UTF-8">
     <title>logseq plugin entry</title>
-    <script src="${sdkPath}/js/lsplugin.user.js"></script>
+    <script src="${sdkPathRoot}/lsplugin.user.js"></script>
   </head>
   <body>
   <div id="app"></div>

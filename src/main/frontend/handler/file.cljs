@@ -300,6 +300,17 @@
       (when-not file-exists?
         (reset-file! repo-url path default-content)))))
 
+(defn create-pages-metadata-file
+  [repo-url]
+  (let [repo-dir (config/get-repo-dir repo-url)
+        path (str config/app-name "/" config/pages-metadata-file)
+        file-path (str "/" path)
+        default-content "{}"]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+      (when-not file-exists?
+        (reset-file! repo-url path default-content)))))
+
 (defn edn-file-set-key-value
   [path k v]
   (when-let [repo (state/get-current-repo)]
