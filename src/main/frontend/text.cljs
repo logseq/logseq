@@ -91,12 +91,17 @@
   (and (string? s)
        (= (first s) (last s) \")))
 
+(def markdown-link #"\[([^\[]+)\](\(.*\))")
 (defn split-page-refs-without-brackets
   ([s]
    (split-page-refs-without-brackets s {}))
   ([s {:keys [un-brackets?]
        :or {un-brackets? true}}]
-   (if (and (string? s)
+   (cond
+     (and (string? s) (re-find markdown-link s))
+     s
+
+     (and (string? s)
             ;; Either a page ref, a tag or a comma separated collection
             (or (util/safe-re-find page-ref-re s)
                 (util/safe-re-find #"[\,|，|#|\"]+" s)))
@@ -138,6 +143,8 @@
                result (map (fn [s] (string/replace s #"^#+" "")) result)]
            (set result))
          (first result)))
+
+     :else
      s)))
 
 (defn extract-level-spaces
