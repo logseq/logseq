@@ -248,7 +248,7 @@
 (defn- query-scheduled
   "Return blocks scheduled to 'time' or before"
   [repo {query-string :query-string query-result :query-result} time]
-  (when-let [*blocks (or query-result (query repo query-string))]
+  (when-let [*blocks (or query-result (and query-string (query repo query-string)))]
     (when-let [blocks @*blocks]
       (->>
        (flatten blocks)
@@ -473,49 +473,55 @@
   (rum/local false ::need-requery)
   [state config options]
   (let [repo (state/get-current-repo)
-        query-string (string/join ", " (:arguments options))
-        *query-result (query repo query-string)
-        sched-blocks (query-scheduled repo {:query-result *query-result} (tl/local-now))]
-    [:div.opacity-70.custom-query-title.flex.flex-row
-     [:div.w-full.flex-1
-      [:code.p-1 (str "Card-Query: " query-string)]]
-     [:div
-      [:a.opacity-70.hover:opacity-100.svg-small.inline
-       {:title "click to start review cards"
-        :on-click (fn [_]
-                    (let [sched-blocks*
-                          (query-scheduled (state/get-current-repo) {:query-string query-string} (tl/local-now))]
-                      (when (> (count sched-blocks*) 0)
-                        (let [review-cards (mapv ->card sched-blocks*)
-                              card-query-block (db/entity [:block/uuid (:block/uuid config)])]
-                          (state/set-modal!
-                           #(view review-cards
-                                  {:callback
-                                   (fn [review-records]
-                                     (operation-card-info-summary!
-                                      review-records review-cards card-query-block)
-                                     (swap! (::need-requery state) not)
-                                     (persist-var/persist-save of-matrix))}))))))}
-       svg/edit]
-      [:a.opacity-70.hover:opacity-100.svg-small.inline
-       {:title "click to preview all cards"
-        :on-click (fn [_]
-                    (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
-                      (when (> (count all-blocks) 0)
-                        (let [review-cards (mapv ->card all-blocks)]
-                          (state/set-modal! #(view
-                                              review-cards
-                                              {:read-only true
-                                               :callback (fn [_]
-                                                           (swap! (::need-requery state) not))}))))))}
-       "A"]
+        query-string (string/join ", " (:arguments options))]
+    (if-let [*query-result (query repo query-string)]
+      (let [sched-blocks (query-scheduled repo {:query-result *query-result} (tl/local-now))]
+        [:div.opacity-70.custom-query-title.flex.flex-row
+         [:div.w-full.flex-1
+          [:code.p-1 (str "Card-Query: " query-string)]]
+         [:div
+          [:a.opacity-70.hover:opacity-100.svg-small.inline
+           {:title "click to start review cards"
+            :on-click (fn [_]
+                        (let [sched-blocks*
+                              (query-scheduled (state/get-current-repo) {:query-string query-string} (tl/local-now))]
+                          (when (> (count sched-blocks*) 0)
+                            (let [review-cards (mapv ->card sched-blocks*)
+                                  card-query-block (db/entity [:block/uuid (:block/uuid config)])]
+                              (state/set-modal!
+                               #(view review-cards
+                                      {:callback
+                                       (fn [review-records]
+                                         (operation-card-info-summary!
+                                          review-records review-cards card-query-block)
+                                         (swap! (::need-requery state) not)
+                                         (persist-var/persist-save of-matrix))}))))))}
+           svg/edit]
+          [:a.opacity-70.hover:opacity-100.svg-small.inline
+           {:title "click to preview all cards"
+            :on-click (fn [_]
+                        (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
+                          (when (> (count all-blocks) 0)
+                            (let [review-cards (mapv ->card all-blocks)]
+                              (state/set-modal! #(view
+                                                  review-cards
+                                                  {:read-only true
+                                                   :callback (fn [_]
+                                                               (swap! (::need-requery state) not))}))))))}
+           "A"]
 
-      [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
-       {:title "overdue / new / total\nclick to refresh count"
-        :on-click #(swap! (::need-requery state) (fn [o] (not o)))}
-       (let [group-by-repeat (card-group-by-repeat (mapv ->card (flatten @*query-result)))
-             new-card-count (count (flatten (vals (filterv (fn [[k _]] (< k 1))))))] ; repeats < 1
-         (str (count sched-blocks) "/"  new-card-count "/" (count (flatten @*query-result))))]]]))
+          [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+           {:title "overdue / new / total\nclick to refresh count"
+            :on-click #(swap! (::need-requery state) (fn [o] (not o)))}
+           (let [group-by-repeat (card-group-by-repeat (mapv ->card (flatten @*query-result)))
+                 new-card-count (count (flatten (vals (filterv (fn [[k _]] (< k 1))))))] ; repeats < 1
+             (str (count sched-blocks) "/"  new-card-count "/" (count (flatten @*query-result))))]]])
+
+      ;; bad query-string
+      [:div.opacity-70.custom-query-title
+       [:div.w-full.flex-1
+        [:code.p-1 (str "Card-Query: " query-string)]]
+       [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"]])))
 
 (component-macro/register query-macro-name card-query-show)
 
