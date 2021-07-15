@@ -103,6 +103,14 @@
   (let [type (keyword (get (:block/properties block) card-type-property))]
     (and type (contains? card-type-set type))))
 
+
+(declare get-root-block)
+(defn- card-group-by-repeat [cards]
+  (let [groups (group-by
+                #(get (get-block-card-properties (get-root-block %)) card-repeats-property)
+                cards)]
+    groups))
+
 ;;; ================================================================
 ;;; sr algorithm (sm-5)
 ;;; https://www.supermemo.com/zh/archives1990-2015/english/ol/sm5
@@ -234,10 +242,12 @@
                                      {:transform-fn sort-by}))))))))))
 
 
+
+
 (defn- query-scheduled
   "Return blocks scheduled to 'time' or before"
-  [repo query-string time]
-  (when-let [*blocks (query repo query-string)]
+  [repo {query-string :query-string query-result :query-result} time]
+  (when-let [*blocks (or query-result (query repo query-string))]
     (when-let [blocks @*blocks]
       (->>
        (flatten blocks)
@@ -411,7 +421,7 @@
              (ui/button "Reset"
                         :class "mr-8"
                         :on-click #(operation-reset! card))]
-            (when (not read-only)
+            (when (> (count cards) 1)
               [(ui/button "skip"
                           :class "mr-2"
                           :on-click #(skip-card card card-index cards* phase review-records cb))])
@@ -461,17 +471,21 @@
   < rum/reactive
   (rum/local false ::need-requery)
   [state config options]
-  (let [query (string/join ", " (:arguments options))
-        sched-blocks (query-scheduled (state/get-current-repo) query (tl/local-now))]
+  (let [repo (state/get-current-repo)
+        query-string (string/join ", " (:arguments options))
+        *query-result (query repo query-string)
+        sched-blocks (query-scheduled repo {:query-result *query-result} (tl/local-now))]
     [:div.opacity-70.custom-query-title.flex.flex-row
      [:div.w-full.flex-1
-      [:code.p-1 (str "Card-Query: " query)]]
+      [:code.p-1 (str "Card-Query: " query-string)]]
      [:div
       [:a.opacity-70.hover:opacity-100.svg-small.inline
-       {:on-click (fn [_]
-                    (let [sched-blocks* (query-scheduled (state/get-current-repo) query (tl/local-now))]
+       {:title "click to start review cards"
+        :on-click (fn [_]
+                    (let [sched-blocks*
+                          (query-scheduled (state/get-current-repo) {:query-string query-string} (tl/local-now))]
                       (when (> (count sched-blocks*) 0)
-                        (let [review-cards (mapv ->card sched-blocks)
+                        (let [review-cards (mapv ->card sched-blocks*)
                               card-query-block (db/entity [:block/uuid (:block/uuid config)])]
                           (state/set-modal!
                            #(view review-cards
@@ -479,13 +493,29 @@
                                    (fn [review-records]
                                      (operation-card-info-summary!
                                       review-records review-cards card-query-block)
-                                     (swap! (::need-requery state) (fn [o] (not o)))
+                                     (swap! (::need-requery state) not)
                                      (persist-var/persist-save of-matrix))}))))))}
        svg/edit]
+      [:a.opacity-70.hover:opacity-100.svg-small.inline
+       {:title "click to preview all cards"
+        :on-click (fn [_]
+                    (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
+                      (when (> (count all-blocks) 0)
+                        (let [review-cards (mapv ->card all-blocks)]
+                          (state/set-modal! #(view
+                                              review-cards
+                                              {:read-only true
+                                               :callback (fn [_]
+                                                           (swap! (::need-requery state) not))}))))))}
+       "A"]
+
       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
-       {:title "click to refresh count"
+       {:title "overdue / new / total\nclick to refresh count"
         :on-click #(swap! (::need-requery state) (fn [o] (not o)))}
-       (count sched-blocks)]]]))
+       (let [_ (println "xxxxx" @*query-result)
+             group-by-repeat (card-group-by-repeat (mapv ->card (flatten @*query-result)))
+             new-card-count (count (flatten (vals (filterv (fn [[k _]] (< k 1))))))] ; repeats < 1
+         (str (count sched-blocks) "/"  new-card-count "/" (count (flatten @*query-result))))]]]))
 
 (component-macro/register query-macro-name card-query-show)
 
@@ -496,6 +526,3 @@
                                          card-next-schedule-property
                                          card-last-easiness-factor-property
                                          card-last-score-property})
-
-;; (def f []
-;;   (persist-def  1 2 3 " "))
