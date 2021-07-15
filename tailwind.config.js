@@ -13,7 +13,7 @@ module.exports = {
     extend: {
       spacing: {
         '128': '32rem',
-	'144': '36rem'
+        '144': '36rem'
       }
     },
     colors: {
