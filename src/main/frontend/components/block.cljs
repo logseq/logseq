@@ -2105,21 +2105,23 @@
                              (:db/id item)
                              :block-ref
                              {:block item})))}
-         (for [key keys]
-           (let [value (if (= key :page)
-                         (or (:block/original-name item)
-                             (:block/name item))
-                         (get-in item [:block/properties key]))]
-             [:td.whitespace-no-wrap
-              (when value
-                (if (coll? value)
-                  (let [vals (for [item value]
-                               (page-cp {} {:block/name item}))]
-                    (interpose [:span ", "] vals))
-                  (let [value (str value)]
-                    (if-let [page (db/entity [:block/name (string/lower-case value)])]
-                      (page-cp {} page)
-                      value))))]))])]]))
+         (let [format (:block/format item)]
+           (for [key keys]
+             (let [value (if (= key :page)
+                           (or (:block/original-name item)
+                               (:block/name item))
+                           (get-in item [:block/properties key]))]
+               [:td.whitespace-no-wrap
+                (when value
+                  (if (coll? value)
+                    (let [vals (for [item value]
+                                 (page-cp {} {:block/name item}))]
+                      (interpose [:span ", "] vals))
+                    (if (not (string? value))
+                      value
+                      (if-let [page (db/entity [:block/name (string/lower-case value)])]
+                        (page-cp {} page)
+                        (inline-text format value)))))])))])]]))
 
 (rum/defcs custom-query < rum/reactive
   {:will-mount trigger-custom-query!
