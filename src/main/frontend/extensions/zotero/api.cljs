@@ -46,6 +46,9 @@
 (defn notes [key]
   (get* config (str "/items/" key "/children") {:item-type "note"}))
 
+(defn attachments [key]
+  (get* config (str "/items/" key "/children") {:item-type "attachment"}))
+
 (comment
   (get* config "/collections")
   (get* config "/items" {:limit 3})
@@ -54,4 +57,5 @@
   (item "RFYNAQTN")
   (item "3V6N8ECQ")
   (notes "3V6N8ECQ")
+  (attachments "3V6N8ECQ")
   )

@@ -4,6 +4,7 @@
             [frontend.extensions.zotero.schema :as schema]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.date :as date]
+            [clojure.set :refer [rename-keys]]
             [frontend.extensions.zotero.api :as api]))
 
 (defn item-type [item] (-> item :data :item-type))
@@ -60,18 +61,49 @@
                 [k v])))
        (into (array-map))))
 
+(defn markdown-link [label link]
+  (util/format "[%s](%s)" label link))
+
+(defn local-link [item]
+  (let [type (-> item :library :type)
+        id   (-> item :library :id)
+        library
+        (if (= type "user")
+          "library"
+          (str "groups/" id))
+        item-key (-> item :key)]
+    (util/format "zotero://select/%s/items/%s" library item-key)))
+
+(defn web-link [item]
+  (let [type (-> item :library :type)
+        id   (-> item :library :id)
+        library
+        (if (= type "user")
+          (str "users/" id)
+          (str "groups/" id))
+        item-key (-> item :key)]
+    (util/format "https://www.zotero.org/%s/items/%s" library item-key)))
+
+(defn zotero-links [item]
+  (str (markdown-link "Local library" (local-link item))
+       ", "
+       (markdown-link "Web library" (web-link item))))
+
 (defn properties [item]
   (let [fields  (schema/fields "journalArticle")
         authors (authors item)
         tags    (tags item)
+        links   (zotero-links item)
         date    (date->journal item)
         data    (-> item :data
-                      (select-keys fields)
-                      (wrap-in-doublequotes)
-                      (assoc :authors authors
-                             :tags tags
-                             :date date)
-                      (dissoc :creators :extra))]
+                         (select-keys fields)
+                         (wrap-in-doublequotes)
+                         (assoc :links links
+                                :authors authors
+                                :tags tags
+                                :date date)
+                         (dissoc :creators :extra)
+                         (rename-keys {:title :original-title}))]
     (->> data
          (remove (comp str/blank? second))
          (into {}))))
@@ -80,13 +112,27 @@
   [item]
   (let [page-name  (page-name item)
         properties (properties item)]
-    {:page-name page-name
+    {:page-name  page-name
      :properties properties}))
 
 (defmethod extract "note"
   [item]
   (let [note-html (-> item :data :note)]
     (html-parser/parse :markdown note-html)))
+
+(defmethod extract "attachment"
+  [item]
+  (let [{:keys [title url link-mode path]} (-> item :data)]
+    (case link-mode
+      "imported_file"
+      (markdown-link title (local-link item))
+      "imported_url"
+      (markdown-link title url)
+      "linked_file"
+      (markdown-link title (str "file://" path))
+      "linked_url"
+      (markdown-link title url)
+      nil)))
 
 (comment
   (def test-item {:key     "JAHCZRNB",

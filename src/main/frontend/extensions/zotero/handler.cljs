@@ -9,16 +9,22 @@
             [frontend.extensions.zotero.extractor :as extractor]
             [clojure.string :as str]))
 
-(defn add-notes [page-name key]
+(defn add [page-name type key]
   (go
-    (let [notes    (<! (zotero-api/notes key))
-          md-notes (->> notes
+    (let [api-fn   (case type
+                     :notes zotero-api/notes
+                     :attachments zotero-api/attachments)
+          first-block (case type
+                        :notes "[[notes]]"
+                        :attachments "[[attachments]]")
+          items (<! (api-fn key))
+          md-notes (->> items
                         (map extractor/extract)
                         (remove str/blank?))]
       (when-let [id
                  (:block/uuid
                   (editor-handler/api-insert-new-block!
-                   "[[notes]]"
+                   first-block
                    {:page page-name}))]
         (doseq [note md-notes]
           (editor-handler/api-insert-new-block!
@@ -38,10 +44,11 @@
        {:page page-name
         :properties properties})
 
-      (<! (add-notes page-name key))
+      (<! (add page-name :attachments key))
+
+      (<! (add page-name :notes key))
 
       (js/alert "finish"))))
-
 
 (comment
   (create-zotero-page "JAHCZRNB")
