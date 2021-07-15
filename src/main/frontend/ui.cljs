@@ -293,6 +293,12 @@
     (state/sync-system-theme!)
     #(.removeEventListener schemaMedia "change" state/sync-system-theme!)))
 
+(defn set-global-active-keystroke [val]
+  (.setAttribute js/document.body "data-active-keystroke" val))
+
+(defn clear-global-active-keystroke []
+  (set-global-active-keystroke ""))
+
 (defn setup-active-keystroke! []
   (let [active-keystroke (atom #{})
         handle-global-keystroke
@@ -300,17 +306,18 @@
           (let [handler (if down? conj disj)
                 keystroke e.key]
             (swap! active-keystroke handler keystroke))
-          (.setAttribute
-            js/document.body
-            "data-active-keystroke"
-            (apply str (interpose "+" (vec @active-keystroke)))))
+          (set-global-active-keystroke (apply str (interpose "+" (vec @active-keystroke)))))
         keydown-handler (partial handle-global-keystroke true)
         keyup-handler (partial handle-global-keystroke false)]
     (.addEventListener js/window "keydown" keydown-handler)
     (.addEventListener js/window "keyup" keyup-handler)
+    (.addEventListener js/window "blur" clear-global-active-keystroke)
+    (.addEventListener js/window "visibilitychange" clear-global-active-keystroke)
     (fn []
       (.removeEventListener js/window "keydown" keydown-handler)
-      (.removeEventListener js/window "keyup" keyup-handler))))
+      (.removeEventListener js/window "keyup" keyup-handler)
+      (.removeEventListener js/window "blur" clear-global-active-keystroke)
+      (.removeEventListener js/window "visibilitychange" clear-global-active-keystroke))))
 
 (defn on-scroll
   [node on-load on-top-reached]
@@ -570,10 +577,11 @@
          {:style    {:width       14
                      :height      16
                      :margin-left -24}
-          :on-click (fn [e]
-                      (util/stop e)
-                      (swap! collapsed? not))}
-         [:span {:class (if @control? "control-show" "control-hide")} (rotating-arrow @collapsed?)]]
+          :on-mouse-down (fn [e]
+                           (util/stop e)
+                           (swap! collapsed? not))}
+         [:span {:class (if @control? "control-show" "control-hide")}
+          (rotating-arrow @collapsed?)]]
         (if (fn? header)
           (header @collapsed?)
           header)]]]

@@ -151,12 +151,15 @@
    (create-default-files! repo-url false))
   ([repo-url encrypted?]
    (spec/validate :repos/url repo-url)
-   (file-handler/create-metadata-file repo-url encrypted?)
-   ;; TODO: move to frontend.handler.file
-   (create-config-file-if-not-exists repo-url)
-   (create-today-journal-if-not-exists repo-url {:write-file? false})
-   (create-contents-file repo-url)
-   (create-custom-theme repo-url)))
+   (let [repo-dir (config/get-repo-dir repo-url)]
+     (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
+             _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))]
+       (file-handler/create-metadata-file repo-url encrypted?)
+       ;; TODO: move to frontend.handler.file
+       (create-config-file-if-not-exists repo-url)
+       (create-today-journal-if-not-exists repo-url {:write-file? false})
+       (create-contents-file repo-url)
+       (create-custom-theme repo-url)))))
 
 (defn- remove-non-exists-refs!
   [data]
@@ -525,7 +528,6 @@
                       (db/remove-conn! url)
                       (db/remove-db! url)
                       (search/remove-db! url)
-                      (fs/rmdir! (config/get-repo-dir url))
                       (state/delete-repo! repo))]
     (if (or (config/local-db? url) (= url "local"))
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
@@ -626,7 +628,6 @@
     (db/remove-conn! url)
     (db/clear-query-state!)
     (-> (p/do! (db/remove-db! url)
-               (fs/rmdir! (config/get-repo-dir url))
                (clone-and-load-db url))
         (p/catch (fn [error]
                    (prn "Delete repo failed, error: " error))))))

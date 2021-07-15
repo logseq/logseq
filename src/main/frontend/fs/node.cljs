@@ -7,7 +7,8 @@
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.config :as config]))
 
 (defn concat-path
   [dir path]
@@ -69,10 +70,13 @@
     (ipc/ipc "mkdir-recur" dir))
   (readdir [this dir]                   ; recursive
     (ipc/ipc "readdir" dir))
-  (unlink! [this path _opts]
-    (ipc/ipc "unlink" path))
+  (unlink! [this repo path _opts]
+    (ipc/ipc "unlink"
+             (config/get-repo-dir repo)
+             path))
   (rmdir! [this dir]
-    (ipc/ipc "rmdir-recur" dir))
+    ;; Too dangerious!!! We'll never implement this.
+    nil)
   (read-file [this dir path _options]
     (let [path (concat-path dir path)]
       (ipc/ipc "readFile" path)))
