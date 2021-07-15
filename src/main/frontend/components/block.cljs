@@ -239,19 +239,21 @@
                    nil
                    (safe-read-string metadata false))
         title (second (first label))]
-    (if (and (config/local-asset? href)
-             (config/local-db? (state/get-current-repo)))
-      (asset-link config title href label metadata full_text)
-      (let [href (cond
-                   (util/starts-with? href "http")
-                   href
+    (ui/catch-error
+     [:span.warning full_text]
+     (if (and (config/local-asset? href)
+              (config/local-db? (state/get-current-repo)))
+       (asset-link config title href label metadata full_text)
+       (let [href (cond
+                    (util/starts-with? href "http")
+                    href
 
-                   config/publishing?
-                   (subs href 1)
+                    config/publishing?
+                    (subs href 1)
 
-                   :else
-                   (get-file-absolute-path config href))]
-        (resizable-image config title href metadata full_text false)))))
+                    :else
+                    (get-file-absolute-path config href))]
+         (resizable-image config title href metadata full_text false))))))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]
