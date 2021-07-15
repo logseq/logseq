@@ -37,6 +37,8 @@
    (let [m {:search/result nil
             :search/q ""}]
      (swap! state/state merge m))
+   (when-not (= (state/get-search-mode) :graph)
+     (state/set-search-mode! :global))
    (when-let [input (gdom/getElement "search-field")]
      (gobj/set input "value" ""))))
 
