@@ -9,6 +9,27 @@
 (defn dd [& args]
   (apply js/console.debug args))
 
+(rum/defc pdf-highlights-text-region
+  [{:keys [rects bounding]}]
+
+  [:div.extensions__pdf-hls-text-region
+   (map-indexed
+     (fn [idx rect]
+       [:div.hls-text-region-item
+        {:key        idx
+         :style      rect
+         :data-color "green"}])
+     rects)])
+
+(rum/defc pdf-highlights-region-container
+  [^js viewer page-hls]
+
+  [:div.hls-region-container
+   (for [hl page-hls]
+     (let [hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer %))]
+       (rum/with-key (pdf-highlights-text-region (:position hl)) (:id hl))
+       ))])
+
 (rum/defc pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages]
 
@@ -91,8 +112,17 @@
         (js/console.debug "[rebuild highlights] " (count highlights))
 
         (when-let [grouped-hls (and (seq highlights) (group-by :page highlights))]
+          (doseq [page loaded-pages]
+            (when-let [^js/HTMLDivElement hls-layer (pdf-utils/resolve-hls-layer! viewer page)]
+              (when-let [page-hls (get grouped-hls page)]
 
-          (dd "[hls]" grouped-hls))
+                (rum/mount
+                  ;; TODO: area & text hls
+                  (pdf-highlights-region-container viewer page-hls)
+
+                  hls-layer)
+                )
+              )))
 
         ;; destroy
         #())
@@ -157,7 +187,7 @@
                 fn-textlayer-ready
                 (fn [^js p]
                   (js/console.debug "text layer ready" p)
-                  (set-ano-state! {:loaded-pages (conj (:loaded-pages ano-state) (.-pageNumber p))}))
+                  (set-ano-state! {:loaded-pages (conj (:loaded-pages ano-state) (int (.-pageNumber p)))}))
 
                 fn-page-ready
                 (fn []

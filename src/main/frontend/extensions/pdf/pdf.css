@@ -1,3 +1,13 @@
+:root {
+  --ph-highlight-color-blue: #55b8fe;
+  --ph-highlight-color-green: #46da48;
+  --ph-highlight-color-red: #fd709a;
+  --ph-highlight-color-purple: #ac8cf1;
+  --ph-highlight-color-yellow: #fcd713;
+
+  --ph-highlight-scroll-into-color: rgba(255, 75, 93, 0.67);
+}
+
 .extensions__pdf {
   &-loader {
     position: relative;
@@ -13,7 +23,57 @@
     > .viewer-container {
     }
   }
+
+  &-hls-text-region {
+    position: absolute;
+    opacity: 1;
+  }
+
+  .Highlight__popup {
+    background-color: #3d464d;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 3px;
+    max-width: 300px;
+    max-height: 100px;
+    overflow-y: scroll;
+  }
+
+  .Highlight--scrolledTo .hls-text-region-item {
+    background: var(--ph-highlight-scroll-into-color);
+  }
 }
+
+.hls-text-region-item {
+  cursor: pointer;
+  position: absolute;
+  transition: background 0.3s;
+
+  background-color: rgba(252, 219, 97, 0.7);
+}
+
+.hls-text-region-item[data-color=yellow] {
+  background-color: var(--ph-highlight-color-yellow);
+  opacity: .5;
+}
+
+.hls-text-region-item[data-color=blue] {
+  background-color: var(--ph-highlight-color-blue);
+}
+
+.hls-text-region-item[data-color=green] {
+  background-color: var(--ph-highlight-color-green);
+}
+
+.hls-text-region-item[data-color=red] {
+  background-color: var(--ph-highlight-color-red);
+}
+
+.hls-text-region-item[data-color=purple] {
+  background-color: var(--ph-highlight-color-purple);
+}
+
 
 body[data-page=home] {
   #main-content-container {
@@ -45,6 +105,7 @@ body[data-page=home] {
 
     &-highlights {
       padding-right: 40px;
+
       pre {
         white-space: pre-wrap;
         font-size: 12px;

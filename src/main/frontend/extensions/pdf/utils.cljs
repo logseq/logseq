@@ -16,7 +16,6 @@
   [bounding ^js viewport]
   (bean/->clj (js-utils/scaledToViewport (bean/->js bounding) viewport)))
 
-
 (defn vw-to-scaled-pos
   [^js viewer {:keys [page bounding rects]}]
   (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
@@ -31,6 +30,19 @@
      :rects    (for [rect rects] (scaled-to-viewport rect viewport))
      :page     page}))
 
+(defn resolve-hls-layer!
+  [^js viewer page]
+  (when-let [^js text-layer (.. viewer (getPageView (dec page)) -textLayer)]
+    (let [cnt (.-textLayerDiv text-layer)
+          cls "extensions__pdf-hls-layer"
+          doc js/document
+          layer (.querySelector cnt (str "." cls))]
+      (if-not layer
+        (let [layer (.createElement doc "div")]
+          (set! (. layer -className) cls)
+          (.appendChild cnt layer)
+          layer)
+        layer))))
 
 (defn gen-id []
   (str (.toString (js/Date.now) 36)
