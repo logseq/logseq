@@ -1,12 +1,46 @@
 (ns frontend.extensions.pdf.utils
   (:require [promesa.core :as p]
+            [cljs-bean.core :as bean]
+            ["/frontend/extensions/pdf/utils" :as js-utils]
             [frontend.loader :refer [load]]))
+
+(defn get-bounding-rect
+  [rects]
+  (bean/->clj (js-utils/getBoundingRect (bean/->js rects))))
+
+(defn viewport-to-scaled
+  [bounding ^js viewport]
+  (bean/->clj (js-utils/viewportToScaled (bean/->js bounding) viewport)))
+
+(defn scaled-to-viewport
+  [bounding ^js viewport]
+  (bean/->clj (js-utils/scaledToViewport (bean/->js bounding) viewport)))
+
+
+(defn vw-to-scaled-pos
+  [^js viewer {:keys [page bounding rects]}]
+  (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
+    {:bounding (viewport-to-scaled bounding viewport)
+     :rects    (for [rect rects] (viewport-to-scaled rect viewport))
+     :page     page}))
+
+(defn scaled-to-vw-pos
+  [^js viewer {:keys [page bounding rects]}]
+  (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
+    {:bounding (scaled-to-viewport bounding viewport)
+     :rects    (for [rect rects] (scaled-to-viewport rect viewport))
+     :page     page}))
+
+
+(defn gen-id []
+  (str (.toString (js/Date.now) 36)
+       (.. (js/Math.random) (toString 36) (substr 2 4))))
 
 (defn js-load$
   [url]
   (p/create
-   (fn [resolve]
-     (load url resolve))))
+    (fn [resolve]
+      (load url resolve))))
 
 (defn load-base-assets$
   []
@@ -16,8 +50,8 @@
 (defn get-page-from-el
   [^js/HTMLElement el]
   (when-let [^js page-el (and el (.closest el ".page"))]
-    {:page-number  (.. page-el -dataset -pageNumber)
-     :page-el page-el}))
+    {:page-number (.. page-el -dataset -pageNumber)
+     :page-el     page-el}))
 
 (defn get-page-from-range
   [^js/Range r]

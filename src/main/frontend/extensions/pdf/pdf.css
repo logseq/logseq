@@ -28,10 +28,28 @@ body[data-page=home] {
   }
 
   .extensions__pdf-loader {
-    width: 900px;
+    width: 100%;
   }
 
-  .extensions__pdf-container {
+  .extensions__pdf {
+    &-viewer {
+      left: 0;
+      width: 900px;
+    }
+
+    &-viewer-cnt {
+      display: flex;
+      padding-left: 950px;
+      border-top: 1px solid #eee;
+    }
+
+    &-highlights {
+      padding-right: 40px;
+      pre {
+        white-space: pre-wrap;
+        font-size: 12px;
+      }
+    }
   }
 }
 
