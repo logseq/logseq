@@ -132,7 +132,7 @@
           _ (if-not sub-dir? (do (log/info :debug user-path) (throw "access file denied")))
           exist? (fs/file-exists? "" user-path)
           _ (when-not exist? (do (log/info :debug user-path) (throw "file not existed")))
-          _ (fs/unlink! user-path {})]))
+          _ (fs/unlink! repo user-path {})]))
 
 (def ^:export write_user_tmp_file
   (fn [file content]
@@ -170,7 +170,7 @@
   (fn [plugin-id]
     (p/let [root (plugin-handler/get-ls-dotdir-root)
             plugin-id (util/node-path.basename plugin-id)]
-      (fs/rmdir! (util/node-path.join root  "storages" plugin-id)))))
+      (fs/rmdir! (util/node-path.join root "storages" plugin-id)))))
 
 (def ^:export load_user_preferences
   (fn []

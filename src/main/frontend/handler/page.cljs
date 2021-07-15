@@ -173,7 +173,7 @@
               ;; remove file
               (->
                (p/let [_ (or (config/local-db? repo) (git/remove-file repo file-path))
-                       _ (fs/unlink! (config/get-repo-path repo file-path) nil)]
+                       _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)]
                  (common-handler/check-changed-files-status)
                  (repo-handler/push-if-auto-enabled! repo))
                (p/catch (fn [err]
