@@ -127,6 +127,7 @@
                     (reset! edit? true))}
        "Make template"))))
 
+
 (rum/defc block-context-menu-content
   [target block-id]
   (rum/with-context [[t] i18n/*tongue-context*]
@@ -180,11 +181,15 @@
                         (state/set-modal! #(export/export-blocks block-id)))}
            "Export")
 
-          (when (srs/card-block? block)
+          (if (srs/card-block? block)
             (ui/menu-link
              {:key "Preview Card"
               :on-click #(srs/preview [(db/pull [:block/uuid block-id])])}
-             "Preview Card"))
+             "Preview Card")
+            (ui/menu-link
+             {:key "Make Card"
+              :on-click #(srs/make-card [(db/pull [:block/uuid block-id])])}
+             "Make Card"))
 
           (ui/menu-link
            {:key "Copy as JSON"

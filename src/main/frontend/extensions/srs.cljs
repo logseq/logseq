@@ -213,10 +213,11 @@
 
 
 (defn- ->card [block]
+  {:pre [(map? block)]}
   (case (get-block-card-type block)
     :cloze (->ClozeCard block)
     :sided (->SidedCard block)
-    :else (->SidedCard block)))
+    (->SidedCard block)))
 
 ;;; ================================================================
 ;;;
@@ -391,7 +392,7 @@
   (rum/local 0 ::card-index)
   (rum/local nil ::cards)
   (rum/local {} ::review-records)
-  [state cards {read-only :read-only cb :callback}]
+  [state cards {read-only :read-only make-card :make-card cb :callback}]
   (let [cards* (::cards state)
         _ (when (nil? @cards*) (reset! cards* cards))
         review-records (::review-records state)
@@ -418,10 +419,26 @@
             [:div.flex.items-start
              (ui/button (if (= 1 @phase) "Show Answers" "Hide Answers")
                         :class "w-32 mr-2"
-                        :on-click #(swap! phase (fn [o] (if (= 1 o) 2 1))))
-             (ui/button "Reset"
-                        :class "mr-8"
-                        :on-click #(operation-reset! card))]
+                        :on-click #(swap! phase (fn [o] (if (= 1 o) 2 1))))]
+            (when make-card
+              [(ui/button "Make SidedCard"
+                          :class "mr-2"
+                          :on-click (fn [_]
+                                      (editor-handler/set-block-property! (:block/uuid (get-root-block card))
+                                                                          card-type-property
+                                                                          "sided")
+                                      (reset! cards* [(->card (db/pull [:block/uuid (:block/uuid (get-root-block card))]))])))
+               (ui/button "Make ClozeCard"
+                          :class "mr-2"
+                          :on-click (fn [_]
+                                      (editor-handler/set-block-property! (:block/uuid (get-root-block card))
+                                                                          card-type-property
+                                                                          "cloze")
+                                      (reset! cards* [(->card (db/pull [:block/uuid (:block/uuid (get-root-block card))]))])))])
+            (when (not make-card)
+              [(ui/button "Reset"
+                          :class "mr-8"
+                          :on-click #(operation-reset! card))])
             (when (> (count cards) 1)
               [(ui/button "skip"
                           :class "mr-2"
@@ -451,6 +468,10 @@
   [blocks]
   (state/set-modal! #(view (mapv ->card blocks) {:read-only true})))
 
+
+(defn make-card
+  [blocks]
+  (state/set-modal! #(view (mapv ->card blocks) {:read-only true :make-card true})))
 
 ;;; ================================================================
 ;;; register some external vars & related UI
