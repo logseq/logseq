@@ -14,6 +14,7 @@
             [frontend.ui :as ui]
             [frontend.format.mldoc :as mldoc]
             [frontend.date :as date]
+            [frontend.commands :as commands]
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
             [cljs-time.coerce :as tc]
@@ -512,8 +513,7 @@
       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
        {:title "overdue / new / total\nclick to refresh count"
         :on-click #(swap! (::need-requery state) (fn [o] (not o)))}
-       (let [_ (println "xxxxx" @*query-result)
-             group-by-repeat (card-group-by-repeat (mapv ->card (flatten @*query-result)))
+       (let [group-by-repeat (card-group-by-repeat (mapv ->card (flatten @*query-result)))
              new-card-count (count (flatten (vals (filterv (fn [[k _]] (< k 1))))))] ; repeats < 1
          (str (count sched-blocks) "/"  new-card-count "/" (count (flatten @*query-result))))]]]))
 
@@ -526,3 +526,12 @@
                                          card-next-schedule-property
                                          card-last-easiness-factor-property
                                          card-last-score-property})
+
+;;; register slash commands
+(commands/register-slash-command ["Card Query"
+                                  [[:editor/input "{{card-query }}" {:backward-pos 2}]]
+                                  "Create a card query"])
+
+(commands/register-slash-command ["Cloze"
+                                  [[:editor/input "{{cloze }}" {:backward-pos 2}]]
+                                  "Create a cloze"])
