@@ -37,6 +37,11 @@
                                        :id :label
                                        :placeholder "Label"}]]])
 
+(def *extend-slash-commands (atom []))
+
+(defn register-slash-command [cmd]
+  (swap! *extend-slash-commands conj cmd))
+
 (defn ->marker
   [marker]
   [[:editor/clear-current-slash]
@@ -266,7 +271,9 @@
      ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
                                                         :backward-pos 2}]]]]
 
+    @*extend-slash-commands
     ;; Allow user to modify or extend, should specify how to extend.
+
     (state/get-commands)
     (state/get-plugins-commands))
    (remove nil?)
