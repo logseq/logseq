@@ -439,7 +439,7 @@
               [(ui/button "Reset"
                           :class "mr-8"
                           :on-click #(operation-reset! card))])
-            (when (> (count cards) 1)
+            (when (or (> (count cards) 1) (not read-only))
               [(ui/button "skip"
                           :class "mr-2"
                           :on-click #(skip-card card card-index cards* phase review-records cb))])
