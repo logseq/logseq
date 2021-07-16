@@ -36,11 +36,11 @@
      :fn      ui-handler/shortcut-next-week}}
 
    :shortcut.handler/auto-complete
-   {:auto-complete/prev
+   {:auto-complete/complete
     {:desc    "Auto-complete: Choose selected item"
      :binding "enter"
      :fn      ui-handler/auto-complete-complete}
-    :auto-complete/shift-complete
+    :auto-complete/prev
     {:desc    "Auto-complete: Select previous item"
      :binding "up"
      :fn      ui-handler/auto-complete-prev}
@@ -48,7 +48,7 @@
     {:desc    "Auto-complete: Select next item"
      :binding "down"
      :fn      ui-handler/auto-complete-next}
-    :auto-complete/complete
+    :auto-complete/shift-complete
     {:desc    "Auto-complete: Open selected item in sidebar"
      :binding "shift+enter"
      :fn      ui-handler/auto-complete-shift-complete}}
@@ -259,7 +259,7 @@
     :go/search
     {:desc    "Full text search"
      :binding "mod+u"
-     :fn      #(route-handler/go-to-search! nil)}
+     :fn      #(route-handler/go-to-search! :global)}
     :go/journals
     {:desc    "Jump to journals"
      :binding (if mac? "mod+j" "alt+j")

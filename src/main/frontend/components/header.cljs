@@ -28,7 +28,8 @@
 (rum/defc logo < rum/reactive
   [{:keys [white? electron-mac?]}]
   [:a.cp__header-logo
-   {:href     (rfe/href :home)
+   {:class (when electron-mac? "button")
+    :href     (rfe/href :home)
     :on-click (fn []
                 (util/scroll-to-top)
                 (state/set-journals-length! 2))}
@@ -82,7 +83,7 @@
         logged? (state/logged?)]
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
-       [:a.cp__right-menu-button.block.p-2
+       [:a.cp__right-menu-button.button
         {:on-click toggle-fn}
         (svg/horizontal-dots nil)])
      (->>
@@ -157,10 +158,10 @@
 (rum/defc back-and-forward
   [electron-mac?]
   [:div.flex.flex-row
-   [:a.opacity-60.hover:opacity-100.it.navigation.nav-left.block.p-2
+   [:a.it.navigation.nav-left.button
     {:title "Go Back" :on-click #(js/window.history.back)}
     svg/arrow-narrow-left]
-   [:a.opacity-60.hover:opacity-100.it.navigation.nav-right.block.p-2
+   [:a.it.navigation.nav-right.button
     {:title "Go Forward" :on-click #(js/window.history.forward)}
     svg/arrow-narrow-right]])
 
@@ -213,7 +214,7 @@
 
        (when (and (nfs/supported?) (empty? repos)
                   (not config/publishing?))
-         [:a.text-sm.font-medium.opacity-70.hover:opacity-100.block.p-2
+         [:a.text-sm.font-medium.button
           {:on-click (fn []
                        (page-handler/ls-dir-files!))}
           [:div.flex.flex-row.text-center.open-button__inner
@@ -223,11 +224,12 @@
               (t :open)])]])
 
        (if config/publishing?
-         [:a.text-sm.font-medium.block.p-2 {:href (rfe/href :graph)}
+         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
           (t :graph)])
 
        (dropdown-menu {:me me
                        :t t
                        :current-repo current-repo
                        :default-home default-home})
+
        (when (not (state/sub :ui/sidebar-open?)) (sidebar/toggle))])))

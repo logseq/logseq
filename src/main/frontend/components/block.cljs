@@ -239,19 +239,21 @@
                    nil
                    (safe-read-string metadata false))
         title (second (first label))]
-    (if (and (config/local-asset? href)
-             (config/local-db? (state/get-current-repo)))
-      (asset-link config title href label metadata full_text)
-      (let [href (cond
-                   (util/starts-with? href "http")
-                   href
+    (ui/catch-error
+     [:span.warning full_text]
+     (if (and (config/local-asset? href)
+              (config/local-db? (state/get-current-repo)))
+       (asset-link config title href label metadata full_text)
+       (let [href (cond
+                    (util/starts-with? href "http")
+                    href
 
-                   config/publishing?
-                   (subs href 1)
+                    config/publishing?
+                    (subs href 1)
 
-                   :else
-                   (get-file-absolute-path config href))]
-        (resizable-image config title href metadata full_text false)))))
+                    :else
+                    (get-file-absolute-path config href))]
+         (resizable-image config title href metadata full_text false))))))
 
 (defn repetition-to-string
   [[[kind] [duration] n]]
@@ -2105,21 +2107,23 @@
                              (:db/id item)
                              :block-ref
                              {:block item})))}
-         (for [key keys]
-           (let [value (if (= key :page)
-                         (or (:block/original-name item)
-                             (:block/name item))
-                         (get-in item [:block/properties key]))]
-             [:td.whitespace-no-wrap
-              (when value
-                (if (coll? value)
-                  (let [vals (for [item value]
-                               (page-cp {} {:block/name item}))]
-                    (interpose [:span ", "] vals))
-                  (let [value (str value)]
-                    (if-let [page (db/entity [:block/name (string/lower-case value)])]
-                      (page-cp {} page)
-                      value))))]))])]]))
+         (let [format (:block/format item)]
+           (for [key keys]
+             (let [value (if (= key :page)
+                           (or (:block/original-name item)
+                               (:block/name item))
+                           (get-in item [:block/properties key]))]
+               [:td.whitespace-no-wrap
+                (when value
+                  (if (coll? value)
+                    (let [vals (for [item value]
+                                 (page-cp {} {:block/name item}))]
+                      (interpose [:span ", "] vals))
+                    (if (not (string? value))
+                      value
+                      (if-let [page (db/entity [:block/name (string/lower-case value)])]
+                        (page-cp {} page)
+                        (inline-text format value)))))])))])]]))
 
 (rum/defcs custom-query < rum/reactive
   {:will-mount trigger-custom-query!
