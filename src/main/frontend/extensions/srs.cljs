@@ -12,19 +12,17 @@
             [frontend.components.macro :as component-macro]
             [frontend.components.svg :as svg]
             [frontend.ui :as ui]
-            [frontend.format.mldoc :as mldoc]
             [frontend.date :as date]
             [frontend.commands :as commands]
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
             [cljs-time.coerce :as tc]
             [clojure.string :as string]
-            [rum.core :as rum]
-            [datascript.db :as d]))
+            [rum.core :as rum]))
 
 ;;; ================================================================
 ;;; Some Commentary
-;;; - One block with property `card-type-property' is treated as a card.
+;;; - One block with tag "#card" is treated as a card.
 ;;; - When the card's type is ':sided', root block's content is the front side,
 ;;;   and its children are the back side
 ;;; - When the card's type is ':cloze', '{{cloze: <content>}}' shows as '[...]'
@@ -32,16 +30,14 @@
 ;;; ================================================================
 ;;; const & vars
 
-(def card-type-set #{:cloze :sided})
+(def card-hash-tag "card")
 
-(def card-type-property                 :card-type)
 (def card-last-interval-property        :card-last-interval)
 (def card-repeats-property              :card-repeats)
 (def card-last-reviewed-property        :card-last-reviewed)
 (def card-next-schedule-property        :card-next-schedule)
 (def card-last-easiness-factor-property :card-ease-factor)
 (def card-last-score-property           :card-last-score)
-
 
 (def default-card-properties-map {card-last-interval-property -1
                                   card-repeats-property 0
@@ -64,17 +60,12 @@
 ;;; ================================================================
 ;;; utils
 
-(defn- get-block-card-type
-  [block]
-  (keyword (get (:block/properties block) card-type-property)))
-
 (defn- get-block-card-properties
   [block]
   (when-let [properties (:block/properties block)]
     (merge
      default-card-properties-map
-     (select-keys properties  [card-type-property
-                               card-last-interval-property
+     (select-keys properties  [card-last-interval-property
                                card-repeats-property
                                card-last-reviewed-property
                                card-next-schedule-property
@@ -99,11 +90,13 @@
 
 
 ;;; used by other ns
+
+
 (defn card-block?
   [block]
-  (let [type (keyword (get (:block/properties block) card-type-property))]
-    (and type (contains? card-type-set type))))
-
+  (let [card-entity (db/entity [:block/name card-hash-tag])
+        refs (into #{} (:block/refs block))]
+    (contains? refs card-entity)))
 
 (declare get-root-block)
 (defn- card-group-by-repeat [cards]
@@ -134,8 +127,8 @@
 (defn- interval
   [n ef of-matrix]
   (if (<= n 1)
-    (get-of of-matrix 1 ef )
-    (* (get-of of-matrix n ef )
+    (get-of of-matrix 1 ef)
+    (* (get-of of-matrix n ef)
        (interval (- n 1) ef of-matrix))))
 
 (defn- next-ef
@@ -147,7 +140,7 @@
   [of-matrix n quality fraction ef]
   (let [of (get-of of-matrix n ef)
         of* (* of (+ 0.72 (* quality 0.07)))
-        of** (+ (* (- 1 fraction) of ) (* of* fraction))]
+        of** (+ (* (- 1 fraction) of) (* of* fraction))]
     (set-of of-matrix n ef of**)))
 
 (defn next-interval
@@ -170,70 +163,63 @@
 
 ;;; ================================================================
 ;;; card protocol
+
+
 (defprotocol ICard
-  (card-type [this])
   (get-root-block [this]))
 
 (defprotocol ICardShow
-  ;; `show-phase-1' shows cards without hidden contents
-  (show-phase-1 [this])
-  ;; `show-phase-2' shows cards with all contents
-  (show-phase-2 [this])
+  ;; return {:value blocks :next-phase next-phase}
+  (show-cycle [this phase])
 
-  ;; show-phase-1-config & show-phase-2-config control display styles of cards at different phases
-  (show-phase-1-config [this])
-  (show-phase-2-config [this]))
+  (show-cycle-config [this phase]))
 
 
 ;;; ================================================================
 ;;; card impl
 
-(deftype SidedCard [block]
+
+(deftype Sided-Cloze-Card [block]
   ICard
-  (card-type [this] :sided)
   (get-root-block [this] (db/pull [:block/uuid (:block/uuid block)]))
   ICardShow
-  (show-phase-1 [this] [block])
-  (show-phase-2 [this]
-    (db/get-block-and-children (state/get-current-repo) (:block/uuid block)))
-  (show-phase-1-config [this] {})
-  (show-phase-2-config [this] {}))
+  (show-cycle [this phase]
+    (case phase
+      1
+      (let [blocks (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
+            blocks-count (count blocks)]
+        {:value [block] :next-phase (if (> blocks-count 1) 2 3)})
+      2
+      {:value (db/get-block-and-children (state/get-current-repo) (:block/uuid block)) :next-phase 3}
+      3
+      {:value (db/get-block-and-children (state/get-current-repo) (:block/uuid block)) :next-phase 1}))
 
-(deftype ClozeCard [block]
-  ICard
-  (card-type [this] :cloze)
-  (get-root-block [this] (db/pull [:block/uuid (:block/uuid block)]))
-  ICardShow
-  (show-phase-1 [this]
-    (db/get-block-and-children (state/get-current-repo) (:block/uuid block)))
-  (show-phase-2 [this]
-    (db/get-block-and-children (state/get-current-repo) (:block/uuid block)))
-  (show-phase-1-config [this] {:cloze true})
-  (show-phase-2-config [this] {}))
-
+  (show-cycle-config [this phase]
+    (case phase
+      1
+      {:cloze true}
+      2
+      {:cloze true}
+      3
+      {})))
 
 (defn- ->card [block]
   {:pre [(map? block)]}
-  (case (get-block-card-type block)
-    :cloze (->ClozeCard block)
-    :sided (->SidedCard block)
-    (->SidedCard block)))
+  (->Sided-Cloze-Card block))
 
 ;;; ================================================================
 ;;;
 
 (defn- query
   "Use same syntax as frontend.db.query-dsl.
-  Add an extra condition: blocks with `card-type-property'"
+  Add an extra condition: block's :block/refs contains `#card or [[card]]'"
   [repo query-string]
   (when (string? query-string)
     (let [query-string (template/resolve-dynamic-template! query-string)]
       (when-not (string/blank? query-string)
         (let [{:keys [query sort-by blocks?] :as result} (query-dsl/parse repo query-string)]
           (when query
-            (let [query* (concat `[[~'?b :block/properties ~'?prop]
-                                   [(~'missing? ~'$ ~'?b :block/name)]
-                                   [(~'get ~'?prop ~card-type-property) ~'?prop-v]]
+            (let [query* (concat `[[~'?b :block/refs [:block/name ~card-hash-tag]]]
                                  (if (coll? (first query))
                                    query
                                    [query]))]
@@ -242,9 +228,6 @@
                                    {:query query**}
                                    (if sort-by
                                      {:transform-fn sort-by}))))))))))
-
-
-
 
 (defn- query-scheduled
   "Return blocks scheduled to 'time' or before"
@@ -268,6 +251,7 @@
 
 ;;; ================================================================
 ;;; operations
+
 
 (defn- get-next-interval
   [card score]
@@ -313,7 +297,6 @@
   {:pre [(satisfies? ICard card)]}
   (let [block (.-block card)]
     (reset-block-card-properties! (db/pull [:block/uuid (:block/uuid block)]))))
-
 
 (defn- operation-card-info-summary!
   [review-records review-cards card-query-block]
@@ -370,7 +353,7 @@
 
 (defn- score-and-next-card [score card *card-index *cards *phase *review-records cb]
   (operation-score! card score)
-  (swap! *review-records #(update % score (fn [ov] (conj ov card))) )
+  (swap! *review-records #(update % score (fn [ov] (conj ov card))))
   (if (>= (inc @*card-index) (count @*cards))
     (do (state/close-modal!)
         (and cb (cb @*review-records)))
@@ -392,16 +375,14 @@
   (rum/local 0 ::card-index)
   (rum/local nil ::cards)
   (rum/local {} ::review-records)
-  [state cards {read-only :read-only make-card :make-card cb :callback}]
+  [state cards {read-only :read-only cb :callback}]
   (let [cards* (::cards state)
         _ (when (nil? @cards*) (reset! cards* cards))
         review-records (::review-records state)
         card-index (::card-index state)
         card (nth @cards* @card-index)
         phase (::phase state)
-        blocks (case @phase
-                 1 (show-phase-1 card)
-                 2 (show-phase-2 card))
+        {blocks :value next-phase :next-phase} (show-cycle card @phase)
         root-block (.-block card)
         restore-card-fn #(swap! cards* (fn [o]
                                          (conj o (nth o @card-index))))]
@@ -409,41 +390,22 @@
      [:div.w-144.h-96.resize.overflow-y-auto
       (component-block/blocks-container
        blocks
-       (merge
-        (case @phase
-          1 (show-phase-1-config card)
-          2 (show-phase-2-config card))
-        {:id (str (:block/uuid root-block))}))]
+       (merge (show-cycle-config card @phase)
+              {:id (str (:block/uuid root-block))}))]
      (into []
            (concat
             [:div.flex.items-start
-             (ui/button (if (= 1 @phase) "Show Answers" "Hide Answers")
+             (ui/button (if (= 1 next-phase) "Hide Answers" "Show Answers")
                         :class "w-32 mr-2"
-                        :on-click #(swap! phase (fn [o] (if (= 1 o) 2 1))))]
-            (when make-card
-              [(ui/button "Make SidedCard"
-                          :class "mr-2"
-                          :on-click (fn [_]
-                                      (editor-handler/set-block-property! (:block/uuid (get-root-block card))
-                                                                          card-type-property
-                                                                          "sided")
-                                      (reset! cards* [(->card (db/pull [:block/uuid (:block/uuid (get-root-block card))]))])))
-               (ui/button "Make ClozeCard"
-                          :class "mr-2"
-                          :on-click (fn [_]
-                                      (editor-handler/set-block-property! (:block/uuid (get-root-block card))
-                                                                          card-type-property
-                                                                          "cloze")
-                                      (reset! cards* [(->card (db/pull [:block/uuid (:block/uuid (get-root-block card))]))])))])
-            (when (not make-card)
-              [(ui/button "Reset"
-                          :class "mr-8"
-                          :on-click #(operation-reset! card))])
+                        :on-click #(reset! phase next-phase))]
+            [(ui/button "Reset"
+                        :class "mr-8"
+                        :on-click #(operation-reset! card))]
             (when (or (> (count cards) 1) (not read-only))
               [(ui/button "skip"
                           :class "mr-2"
                           :on-click #(skip-card card card-index cards* phase review-records cb))])
-            (when (and (not read-only) (= 2 @phase))
+            (when (and (not read-only) (= 1 next-phase))
               (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
                     interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
                     interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
@@ -469,14 +431,12 @@
   (state/set-modal! #(view (mapv ->card blocks) {:read-only true})))
 
 
-(defn make-card
-  [blocks]
-  (state/set-modal! #(view (mapv ->card blocks) {:read-only true :make-card true})))
-
 ;;; ================================================================
 ;;; register some external vars & related UI
 
 ;;; register cloze macro
+
+
 (defn cloze-macro-show
   [config options]
   (if (:cloze config)
