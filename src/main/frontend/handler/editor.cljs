@@ -1683,18 +1683,33 @@
   (-> (map :block/content block-children)
       string/join))
 
+(defn- move-block-up-down
+  [block-id block up?]
+  (outliner-core/move-node (outliner-core/block block) up?)
+  (when-let [repo (state/get-current-repo)]
+    (let [opts {:key :block/change
+                :data [block]}]
+      (db/refresh! repo opts)))
+  (when-let [block-node (util/get-first-block-by-id block-id)]
+    (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})))
+
 (defn move-up-down
   [up?]
   (fn [e]
     (when-let [block-id (:block/uuid (state/get-edit-block))]
       (when-let [block (db/pull [:block/uuid block-id])]
-        (outliner-core/move-node (outliner-core/block block) up?)
-        (when-let [repo (state/get-current-repo)]
-          (let [opts {:key :block/change
-                      :data [block]}]
-            (db/refresh! repo opts)))
-        (when-let [block-node (util/get-first-block-by-id block-id)]
-          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))))
+        (move-block-up-down block-id block up?)))))
+
+(defn move-selected-blocks-up-down
+  [up?]
+  (fn [e]
+    (let [blocks (if up?
+                   (state/get-selection-blocks)
+                   (reverse (state/get-selection-blocks)))]
+      (for [selected-block blocks]
+        (when-let [block-id (.getAttribute selected-block "blockid")]
+          (when-let [block (db/pull [:block/uuid (uuid block-id)])]
+            (move-block-up-down block-id block up?)))))))
 
 ;; selections
 (defn on-tab
