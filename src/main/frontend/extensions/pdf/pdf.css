@@ -1,3 +1,5 @@
+@import "_viewer.css";
+
 :root {
   --ph-highlight-color-blue: #55b8fe;
   --ph-highlight-color-green: #46da48;
@@ -49,6 +51,7 @@
   cursor: pointer;
   position: absolute;
   transition: background 0.3s;
+  border:1px solid red;
 
   background-color: rgba(252, 219, 97, 0.7);
 }
