@@ -29,7 +29,7 @@
                       :output-feature-set :es-next-in
                       :source-map true
                       :source-map-include-sources-content true
-                      :source-map-detail-level :simple
+                      :source-map-detail-level :all
                       :externs ["datascript/externs.js"
                                 "externs.js"]
                       :warnings {:fn-deprecated false}}
@@ -57,7 +57,7 @@
              {:infer-externs :auto
               :source-map true
               :source-map-include-sources-content true
-              :source-map-detail-level :simple
+              :source-map-detail-level :all
               :externs ["datascript/externs.js"
                         "externs.js"]
               :warnings {:fn-deprecated false}}}
