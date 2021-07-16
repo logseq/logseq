@@ -734,8 +734,8 @@
                       (block/page-cp {} page)]]
                 [:td [:span.text-gray-500.text-sm backlinks]]
                 [:td [:span.text-gray-500.text-sm (if created-at
-                                                    (date/int->local-time created-at)
+                                                    (date/int->local-time-2 created-at)
                                                     "Unknown")]]
                 [:td [:span.text-gray-500.text-sm (if updated-at
-                                                    (date/int->local-time updated-at)
+                                                    (date/int->local-time-2 updated-at)
                                                     "Unknown")]]])]]))])))

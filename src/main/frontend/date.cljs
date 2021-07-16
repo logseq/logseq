@@ -218,6 +218,12 @@
   [n]
   (get-date-time-string (t/to-default-time-zone (tc/from-long n))))
 
+(defn int->local-time-2
+  [n]
+  (tf/unparse
+   (tf/formatter "yyyy-MM-dd HH:mm")
+   (t/to-default-time-zone (tc/from-long n))))
+
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))
   (def zh-formatter (tf/formatter "YYYY年MM月dd日"))

@@ -2089,42 +2089,71 @@
                      result-atom)]
     (assoc state :query-atom query-atom)))
 
-(rum/defc query-result-table < rum/reactive
-  [config result {:keys [select-keys page?]}]
-  (let [editor-box (get config :editor-box)
-        all-keys (distinct (mapcat keys (map :block/properties result)))
+(rum/defcs query-result-table < rum/reactive
+  (rum/local false ::select?)
+  [state config result {:keys [select-keys page?]}]
+  (let [select? (get state ::select?)
+        editor-box (get config :editor-box)
+        ;; remove templates
+        result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
+        all-keys (->> (distinct (mapcat keys (map :block/properties result)))
+                      (remove property/built-in-properties))
         keys (if (seq select-keys) select-keys all-keys)
-        keys (if page? (cons :page keys) keys)]
+        keys (if page? (cons :page keys) (cons :block keys))
+        keys (concat keys [:created-at :updated-at])]
     [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                            :style {:width "100%"}}
      [:table.table-auto
       (for [key keys]
         [:th.whitespace-nowrap (name key)])
       (for [item result]
-        [:tr {:on-click (fn [e]
-                          (when (gobj/get e "shiftKey")
-                            (state/sidebar-add-block!
-                             (state/get-current-repo)
-                             (:db/id item)
-                             :block-ref
-                             {:block item})))}
-         (let [format (:block/format item)]
+        (let [format (:block/format item)
+              edit-input-id (str "edit-block-" (:id config) "-" (:block/uuid item))
+              heading-level (:block/heading-level item)]
+          [:tr.cursor
            (for [key keys]
-             (let [value (if (= key :page)
-                           (or (:block/original-name item)
-                               (:block/name item))
-                           (get-in item [:block/properties key]))]
-               [:td.whitespace-nowrap
+             (let [value (case key
+                           :page
+                           [:string (or (:block/original-name item)
+                                        (:block/name item))]
+
+                           :block       ; block title
+                           (let [title (:block/title item)]
+                             (if (seq title)
+                               [:element (->elem :div (map-inline config title))]
+                               [:string (:block/content item)]))
+
+                           :created-at
+                           [:string (when-let [created-at (:block/created-at item)]
+                                      (date/int->local-time-2 created-at))]
+
+                           :updated-at
+                           [:string (when-let [updated-at (:block/updated-at item)]
+                                      (date/int->local-time-2 updated-at))]
+
+                           [:string (get-in item [:block/properties key])])]
+               [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
+                                       :on-mouse-move (fn [] (reset! select? true))
+                                       :on-mouse-up (fn []
+                                                      (when-not @select?
+                                                        (state/sidebar-add-block!
+                                                         (state/get-current-repo)
+                                                         (:db/id item)
+                                                         :block-ref
+                                                         {:block item})))}
                 (when value
-                  (if (coll? value)
-                    (let [vals (for [item value]
-                                 (page-cp {} {:block/name item}))]
-                      (interpose [:span ", "] vals))
-                    (if (not (string? value))
-                      value
-                      (if-let [page (db/entity [:block/name (string/lower-case value)])]
-                        (page-cp {} page)
-                        (inline-text format value)))))])))])]]))
+                  (if (= :element (first value))
+                    (second value)
+                    (let [value (second value)]
+                      (if (coll? value)
+                        (let [vals (for [item value]
+                                     (page-cp {} {:block/name item}))]
+                          (interpose [:span ", "] vals))
+                        (if (not (string? value))
+                          value
+                          (if-let [page (db/entity [:block/name (string/lower-case value)])]
+                            (page-cp {} page)
+                            (inline-text format value)))))))]))]))]]))
 
 (rum/defcs custom-query < rum/reactive
   {:will-mount trigger-custom-query!
@@ -2183,8 +2212,7 @@
                              (editor-handler/set-block-property! current-block-uuid
                                                                  "query-table"
                                                                  (not table?)))
-                           true)]
-               [:span.ml-4.text-sm "Tip: Shift + Click a row to open its block in the right sidebar."]])]
+                           true)]])]
            (cond
              (and (seq result) view-f)
              (let [result (try
