@@ -312,13 +312,9 @@
      [{:content (util/format "Summary: %d items, %d review counts [[%s]]"
                              review-cards-count review-count (date/today))
        :children [{:content
-                   (util/format "Easy:   %d (%d%%)" score-5-count (* 100 (/ score-5-count review-count)))}
+                   (util/format "Remembered:   %d (%d%%)" score-5-count (* 100 (/ score-5-count review-count)))}
                   {:content
-                   (util/format "Medium: %d (%d%%)" score-3-count (* 100 (/ score-3-count review-count)))}
-                  {:content
-                   (util/format "Hard:   %d (%d%%)" score-1-count (* 100 (/ score-1-count review-count)))}
-                  {:content
-                   (util/format "Skip:   %d (%d%%)" skip-count (* 100 (/ skip-count review-count)))}]}]
+                   (util/format "Forgotten :   %d (%d%%)" score-1-count (* 100 (/ score-1-count review-count)))}]}]
      (:block/format card-query-block))))
 
 ;;; ================================================================
@@ -367,7 +363,7 @@
   (rum/local 0 ::card-index)
   (rum/local nil ::cards)
   (rum/local {} ::review-records)
-  [state cards {read-only :read-only cb :callback}]
+  [state cards {preview :preview cb :callback}]
   (let [cards* (::cards state)
         _ (when (nil? @cards*) (reset! cards* cards))
         review-records (::review-records state)
@@ -390,43 +386,42 @@
              (ui/button (if (= 1 next-phase) "Hide Answers" "Show Answers")
                         :class "w-32 mr-2"
                         :on-click #(reset! phase next-phase))]
-            [(ui/button "Reset"
-                        :class "mr-8"
-                        :on-click #(operation-reset! card))]
-            (when (or (> (count cards) 1) (not read-only))
-              [(ui/button "Skip"
+            (when preview
+              [(ui/button "Reset"
+                          :class "mr-8"
+                          :on-click #(operation-reset! card))])
+            (when (and (> (count cards) 1) preview)
+              [(ui/button "Next"
                           :class "mr-2"
                           :on-click #(skip-card card card-index cards* phase review-records cb))])
-            (when (and (not read-only) (= 1 next-phase))
+            (when (and (not preview) (= 1 next-phase))
               (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
                     interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
                     interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
-                [(ui/tippy
-                  {:html [:p.text-sm "Forgotten"]
-                   :class "tippy-hover"
-                   :interactive true
-                   :disabled false}
-                  (ui/button "Hard" :on-click (fn []
+                [(ui/button "Forgotten" :on-click (fn []
                                                   (restore-card-fn)
-                                                  (score-and-next-card 1 card card-index cards* phase review-records cb)) :class "mr-2"))
-                 (ui/tippy
-                  {:html [:p.text-sm (util/format "Takes a while to recall, (+ %d days)"
-                                                  (Math/round interval-days-score-3))]
-                   :class "tippy-hover"
-                   :interactive true
-                   :disabled false}
-                  (ui/button "Medium" :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb) :class "mr-2"))
+                                                  (score-and-next-card 1 card card-index cards* phase review-records cb)) :class "mr-2")
+
                  (ui/tippy
                   {:html [:p.text-sm (util/format "Remember it easily, (+ %d days)"
                                                   (Math/round interval-days-score-5))]
                    :class "tippy-hover"
                    :interactive true
                    :disabled false}
-                  (ui/button "Easy" :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb) :class "mr-2"))]))))]))
+                  (ui/button "Remembered" :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb) :class "mr-2"))
+
+                 ;; (ui/tippy
+                 ;;  {:html [:p.text-sm (util/format "Takes a while to recall, (+ %d days)"
+                 ;;                                  (Math/round interval-days-score-3))]
+                 ;;   :class "tippy-hover"
+                 ;;   :interactive true
+                 ;;   :disabled false}
+                 ;;  (ui/button "Take a while to recall" :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb) :class "mr-2 delay-1000"))
+                 ]))))]))
 
 (defn preview
   [blocks]
-  (state/set-modal! #(view (mapv ->card blocks) {:read-only true})))
+  (state/set-modal! #(view (mapv ->card blocks) {:preview true})))
 
 
 ;;; ================================================================
@@ -494,7 +489,7 @@
                              (let [review-cards (mapv ->card all-blocks)]
                                (state/set-modal! #(view
                                                    review-cards
-                                                   {:read-only true
+                                                   {:preview true
                                                     :callback (fn [_]
                                                                 (swap! (::need-requery state) not))}))))))}
             "A"])
