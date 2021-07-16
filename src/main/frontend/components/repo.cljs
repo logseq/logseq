@@ -202,7 +202,7 @@
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch.fade-link.block.pr-2 {:on-click toggle-fn}
+             [:a#repo-switch.fade-link.block.pr-2.whitespace-nowrap {:on-click toggle-fn}
               [:span
                [:span.repo-plus svg/plus]
                (let [repo-name (get-repo-name current-repo)

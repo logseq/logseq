@@ -2099,7 +2099,7 @@
                            :style {:width "100%"}}
      [:table.table-auto
       (for [key keys]
-        [:th.whitespace-no-wrap (name key)])
+        [:th.whitespace-nowrap (name key)])
       (for [item result]
         [:tr {:on-click (fn [e]
                           (when (gobj/get e "shiftKey")
@@ -2114,7 +2114,7 @@
                            (or (:block/original-name item)
                                (:block/name item))
                            (get-in item [:block/properties key]))]
-               [:td.whitespace-no-wrap
+               [:td.whitespace-nowrap
                 (when value
                   (if (coll? value)
                     (let [vals (for [item value]
