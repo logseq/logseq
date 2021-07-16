@@ -33,15 +33,15 @@
             :sibling?   false
             :before?    false}))))))
 
-(defn create-zotero-page [key]
+(defn create-zotero-page [item]
   (go
-    (let [item                           (<! (zotero-api/item key))
-          {:keys [page-name properties]} (extractor/extract item)]
+    (let [{:keys [page-name properties]} (extractor/extract item)
+          key                            (-> item :key)]
       (page-handler/create! page-name {:redirect? false :format :markdown :create-first-block? false})
 
       (editor-handler/api-insert-new-block!
        ""
-       {:page page-name
+       {:page       page-name
         :properties properties})
 
       (<! (add page-name :attachments key))
