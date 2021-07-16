@@ -1639,6 +1639,7 @@
        (when (and (seq properties)
                   (let [hidden? (property/properties-built-in? properties)]
                     (not hidden?))
+                  (not block-ref?)
                   (not (:slide? config)))
          (properties-cp config block))
 
