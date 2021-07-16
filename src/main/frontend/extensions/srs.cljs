@@ -21,11 +21,9 @@
             [rum.core :as rum]))
 
 ;;; ================================================================
-;;; Some Commentary
-;;; - One block with tag "#card" is treated as a card.
-;;; - When the card's type is ':sided', root block's content is the front side,
-;;;   and its children are the back side
-;;; - When the card's type is ':cloze', '{{cloze: <content>}}' shows as '[...]'
+;;; Commentary
+;;; - One block with tag "#card" or "[[card]]" is treated as a card.
+;;; - {{cloze content}} show as "[...]" when reviewing cards
 
 ;;; ================================================================
 ;;; const & vars
@@ -402,29 +400,35 @@
                         :class "mr-8"
                         :on-click #(operation-reset! card))]
             (when (or (> (count cards) 1) (not read-only))
-              [(ui/button "skip"
+              [(ui/button "Skip"
                           :class "mr-2"
                           :on-click #(skip-card card card-index cards* phase review-records cb))])
             (when (and (not read-only) (= 1 next-phase))
               (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
                     interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
                     interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
-                [(ui/button "0" :on-click (fn []
-                                            (restore-card-fn)
-                                            (score-and-next-card 0 card card-index cards* phase review-records cb)) :class "mr-2")
-                 (ui/button "1" :on-click (fn []
-                                            (restore-card-fn)
-                                            (score-and-next-card 1 card card-index cards* phase review-records cb)) :class "mr-2")
-                 (ui/button "2" :on-click (fn []
-                                            (restore-card-fn)
-                                            (score-and-next-card 2 card card-index cards* phase review-records cb)) :class "mr-2")
-                 (ui/button "3" :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb) :class "mr-2")
-                 (ui/button "4" :on-click #(score-and-next-card 4 card card-index cards* phase review-records cb) :class "mr-2")
-                 (ui/button "5" :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb) :class "mr-2")
-                 (score-help-info
-                  (Math/round interval-days-score-3)
-                  (Math/round interval-days-score-4)
-                  (Math/round interval-days-score-5))]))))]))
+                [(ui/tippy
+                  {:html [:p.text-sm "Forgotten"]
+                   :class "tippy-hover"
+                   :interactive true
+                   :disabled false}
+                  (ui/button "Hard" :on-click (fn []
+                                                  (restore-card-fn)
+                                                  (score-and-next-card 1 card card-index cards* phase review-records cb)) :class "mr-2"))
+                 (ui/tippy
+                  {:html [:p.text-sm (util/format "Takes a while to recall, (+ %d days)"
+                                                  (Math/round interval-days-score-3))]
+                   :class "tippy-hover"
+                   :interactive true
+                   :disabled false}
+                  (ui/button "Medium" :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb) :class "mr-2"))
+                 (ui/tippy
+                  {:html [:p.text-sm (util/format "Remember it easily, (+ %d days)"
+                                                  (Math/round interval-days-score-5))]
+                   :class "tippy-hover"
+                   :interactive true
+                   :disabled false}
+                  (ui/button "Easy" :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb) :class "mr-2"))]))))]))
 
 (defn preview
   [blocks]
@@ -461,42 +465,58 @@
          [:div.w-full.flex-1
           [:code.p-1 (str "Card-Query: " query-string)]]
          [:div
-          [:a.opacity-70.hover:opacity-100.svg-small.inline
-           {:title "click to start review cards"
-            :on-click (fn [_]
-                        (let [sched-blocks*
-                              (query-scheduled (state/get-current-repo) {:query-string query-string} (tl/local-now))]
-                          (when (> (count sched-blocks*) 0)
-                            (let [review-cards (mapv ->card sched-blocks*)
-                                  card-query-block (db/entity [:block/uuid (:block/uuid config)])]
-                              (state/set-modal!
-                               #(view review-cards
-                                      {:callback
-                                       (fn [review-records]
-                                         (operation-card-info-summary!
-                                          review-records review-cards card-query-block)
-                                         (swap! (::need-requery state) not)
-                                         (persist-var/persist-save of-matrix))}))))))}
-           svg/edit]
-          [:a.opacity-70.hover:opacity-100.svg-small.inline
-           {:title "click to preview all cards"
-            :on-click (fn [_]
-                        (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
-                          (when (> (count all-blocks) 0)
-                            (let [review-cards (mapv ->card all-blocks)]
-                              (state/set-modal! #(view
-                                                  review-cards
-                                                  {:read-only true
-                                                   :callback (fn [_]
-                                                               (swap! (::need-requery state) not))}))))))}
-           "A"]
-
-          [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
-           {:title "overdue / new / total\nclick to refresh count"
-            :on-click #(swap! (::need-requery state) (fn [o] (not o)))}
-           (let [group-by-repeat (card-group-by-repeat (mapv ->card (flatten @*query-result)))
-                 new-card-count (count (flatten (vals (filterv (fn [[k _]] (< k 1))))))] ; repeats < 1
-             (str (count sched-blocks) "/"  new-card-count "/" (count (flatten @*query-result))))]]])
+          (ui/tippy
+           {:html [:p.text-sm "click to start review overdue cards"]
+            :delay [1000, 100]
+            :class "tippy-hover"
+            :interactive true
+            :disabled false}
+           [:a.opacity-70.hover:opacity-100.svg-small.inline
+            {:on-click (fn [_]
+                         (let [sched-blocks*
+                               (query-scheduled (state/get-current-repo) {:query-string query-string} (tl/local-now))]
+                           (when (> (count sched-blocks*) 0)
+                             (let [review-cards (mapv ->card sched-blocks*)
+                                   card-query-block (db/entity [:block/uuid (:block/uuid config)])]
+                               (state/set-modal!
+                                #(view review-cards
+                                       {:callback
+                                        (fn [review-records]
+                                          (operation-card-info-summary!
+                                           review-records review-cards card-query-block)
+                                          (swap! (::need-requery state) not)
+                                          (persist-var/persist-save of-matrix))}))))))}
+            svg/edit])
+          (ui/tippy
+           {:html [:p.text-sm "click to preview all cards"]
+            :delay [1000, 100]
+            :class "tippy-hover"
+            :interactive true
+            :disabled false}
+           [:a.opacity-70.hover:opacity-100.svg-small.inline
+            {:on-click (fn [_]
+                         (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
+                           (when (> (count all-blocks) 0)
+                             (let [review-cards (mapv ->card all-blocks)]
+                               (state/set-modal! #(view
+                                                   review-cards
+                                                   {:read-only true
+                                                    :callback (fn [_]
+                                                                (swap! (::need-requery state) not))}))))))}
+            "A"])
+          (ui/tippy
+           {:html [:div
+                   [:p.text-sm "overdue / new / total"]
+                   [:p.text-sm "click to refresh count"]]
+            :delay [1000, 100]
+            :class "tippy-hover"
+            :interactive true
+            :disabled false}
+           [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+            {:on-click #(swap! (::need-requery state) (fn [o] (not o)))}
+            (let [group-by-repeat (card-group-by-repeat (mapv ->card (flatten @*query-result)))
+                  new-card-count (count (flatten (vals (filterv (fn [[k _]] (< k 1))))))] ; repeats < 1
+              (str (count sched-blocks) "/"  new-card-count "/" (count (flatten @*query-result))))])]])
 
       ;; bad query-string
       [:div.opacity-70.custom-query-title
