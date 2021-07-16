@@ -30,6 +30,11 @@
      :rects    (for [rect rects] (scaled-to-viewport rect viewport))
      :page     page}))
 
+(defn get-page-bounding
+  [^js viewer page-number]
+  (when-let [^js el (and page-number (.. viewer (getPageView (dec page-number)) -div))]
+    (bean/->clj (.toJSON (.getBoundingClientRect el)))))
+
 (defn resolve-hls-layer!
   [^js viewer page]
   (when-let [^js text-layer (.. viewer (getPageView (dec page)) -textLayer)]
@@ -43,6 +48,10 @@
           (.appendChild cnt layer)
           layer)
         layer))))
+
+(defn clear-all-selection
+  []
+  (.removeAllRanges (js/window.getSelection)))
 
 (defn gen-id []
   (str (.toString (js/Date.now) 36)

@@ -31,15 +31,93 @@
     opacity: 1;
   }
 
-  .Highlight__popup {
-    background-color: #3d464d;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    color: white;
-    padding: 0.5rem 1rem;
-    border-radius: 3px;
-    max-width: 300px;
-    max-height: 100px;
-    overflow-y: scroll;
+  &-hls-ctx-menu {
+    position: absolute;
+    z-index: 9;
+
+    color: #343434;
+    border-radius: 4px;
+
+    font-size: 13px;
+    padding: 8px 10px;
+    background-color: #e3e7e8;
+
+    box-shadow: 0 2px 4px 0 rgba(134, 134, 134, 0.59);
+
+    list-style: none;
+    margin: 0;
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      bottom: -50%;
+      left: -50%;
+      border: solid 1px #b2b2b2;
+      transform: scale(0.5);
+      transform-origin: center center;
+      pointer-events: none;
+      border-radius: 10px;
+    }
+
+    > li {
+      margin: 0;
+      padding: 5px 8px;
+      display: flex;
+      align-items: center;
+      user-select: none;
+      cursor: default;
+
+      &.item:hover {
+        background-color: #cecece;
+        border-radius: 4px;
+      }
+
+      &.item-colors {
+        display: flex;
+        justify-content: space-between;
+        margin: 0 -5px;
+
+        > a {
+          width: 14px;
+          height: 14px;
+          border-radius: 20px;
+          background-color: #b2b2b2;
+          overflow: hidden;
+          opacity: 1;
+          margin: 0 5px;
+          font-size: 0;
+          border: 1px inset rgba(0, 0, 0, .2);
+          cursor: default;
+
+          &:hover {
+            opacity: .8;
+            transform: scale(1.1);
+          }
+
+          &[data-color=yellow] {
+            background-color: var(--ph-highlight-color-yellow);
+          }
+
+          &[data-color=blue] {
+            background-color: var(--ph-highlight-color-blue);
+          }
+
+          &[data-color=green] {
+            background-color: var(--ph-highlight-color-green);
+          }
+
+          &[data-color=red] {
+            background-color: var(--ph-highlight-color-red);
+          }
+
+          &[data-color=purple] {
+            background-color: var(--ph-highlight-color-purple);
+          }
+        }
+      }
+    }
   }
 
   .Highlight--scrolledTo .hls-text-region-item {
@@ -51,7 +129,7 @@
   cursor: pointer;
   position: absolute;
   transition: background 0.3s;
-  border:1px solid red;
+  border: 1px solid red;
 
   background-color: rgba(252, 219, 97, 0.7);
 }
@@ -121,8 +199,10 @@ body[data-page=home] {
 
 .textLayer {
   z-index: 2;
-  opacity: 1;
+  opacity: .8;
   mix-blend-mode: multiply;
+
+  //background-color: burlywood;
 }
 
 .annotationLayer {
@@ -132,32 +212,10 @@ body[data-page=home] {
   z-index: 3;
 }
 
-.textLayer > div:not(.PdfHighlighter__highlight-layer):not(.Highlight):not(.Highlight-emoji) {
-  opacity: 1;
-  mix-blend-mode: multiply;
-}
-
 .textLayer ::selection {
-  background: rgba(252, 232, 151, 1);
+  background: rgb(185, 231, 255);
   mix-blend-mode: multiply;
+  color: unset;
 }
 
-@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
-  .textLayer {
-    opacity: 0.5;
-  }
-}
 
-/* Internet Explorer support method */
-@media all and (-ms-high-contrast: none), (-ms-high-contrast: active) {
-  .textLayer {
-    opacity: 0.5
-  }
-}
-
-/* Microsoft Edge Browser 12+ (All) - @supports method */
-@supports (-ms-ime-align:auto) {
-  .textLayer {
-    opacity: 0.5
-  }
-}
