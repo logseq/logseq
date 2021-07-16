@@ -342,17 +342,17 @@
         [:div.#app-container.h-screen.flex
          [:div.flex-1.h-full.flex.flex-col#left-container.relative
           {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
-          [:div.scrollbar-spacing#main-container
-           (header/header {:open-fn        open-fn
-                           :white?         white?
-                           :current-repo   current-repo
-                           :logged?        logged?
-                           :page?          page?
-                           :route-match    route-match
-                           :me             me
-                           :default-home   default-home
-                           :new-block-mode new-block-mode})
+          (header/header {:open-fn        open-fn
+                          :white?         white?
+                          :current-repo   current-repo
+                          :logged?        logged?
+                          :page?          page?
+                          :route-match    route-match
+                          :me             me
+                          :default-home   default-home
+                          :new-block-mode new-block-mode})
 
+          [:div#main-container.scrollbar-spacing
            (main {:route-match         route-match
                   :global-graph-pages? global-graph-pages?
                   :logged?             logged?
@@ -361,9 +361,9 @@
                   :indexeddb-support?  indexeddb-support?
                   :white?              white?
                   :db-restoring?       db-restoring?
-                  :main-content        main-content})
+                  :main-content        main-content})]
 
-           (footer)]]
+          (footer)]
          (right-sidebar/sidebar)]
 
         (ui/notification)
@@ -374,11 +374,4 @@
         (when
          (and (not config/mobile?)
               (not config/publishing?))
-          (help-button)
-         ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-         ;;  {:style {:left 24}
-         ;;   :title "Click to show/hide sidebar"
-         ;;   :on-click (fn []
-         ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
-         ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-          )]))))
+          (help-button))]))))

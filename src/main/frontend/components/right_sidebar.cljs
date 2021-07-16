@@ -27,7 +27,7 @@
 (rum/defc toggle
   []
   (when-not (util/mobile?)
-    [:a.opacity-60.hover:opacity-100.block.p-2 {:on-click state/toggle-sidebar-open?!}
+    [:a.button {:on-click state/toggle-sidebar-open?!}
     (svg/menu)]))
 
 (rum/defc block-cp < rum/reactive
@@ -237,7 +237,7 @@
         theme (state/sub :ui/theme)
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div#right-sidebar.cp__right-sidebar.h-screen.scrollbar-spacing
+      [:div#right-sidebar.cp__right-sidebar.h-screen
        {:class (if sidebar-open? "open" "closed")}
        (if sidebar-open?
          [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
@@ -278,7 +278,7 @@
                                              :margin-right 2}}
               (toggle)])]
 
-           [:.sidebar-item-list.flex-1
+           [:.sidebar-item-list.flex-1.scrollbar-spacing {:style {:height "100vh"}}
             (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
               (rum/with-key
                 (sidebar-item repo idx db-id block-type block-data t)

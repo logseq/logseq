@@ -100,7 +100,7 @@
         (if (and nfs-repo? (nfs-handler/supported?))
           (let [syncing? (state/sub :graph/syncing?)]
             [:div.opacity-60.refresh.hover:opacity-100 {:class (if syncing? "loader-reverse" "initial")}
-             [:a.block.p-2
+             [:a.button
               {:on-click #(nfs-handler/refresh! repo refresh-cb)
                :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "
                            version/version)}

@@ -66,16 +66,11 @@
   @apply p-2;
 }
 
-.cp__right-menu-button {
-  opacity: 0.3;
-}
-
 .cp__header-logo {
   display: none;
 }
 
-.cp__header-logo:hover,
-.cp__right-menu-button:hover {
+.cp__header-logo:hover {
   opacity: 1;
 }
 
@@ -111,4 +106,16 @@
   text-overflow: ellipsis;
   max-width: 7ch;
   color: var(--ls-icon-color, #045591);
+}
+
+a.button {
+    padding: 0.5rem;
+    opacity: 0.6;
+    display: block;
+    border-radius: 4px;
+}
+
+a.button:hover {
+    opacity: 1;
+    background: var(--ls-tertiary-background-color);
 }
