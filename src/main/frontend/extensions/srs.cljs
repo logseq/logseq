@@ -312,19 +312,13 @@
      [{:content (util/format "Summary: %d items, %d review counts [[%s]]"
                              review-cards-count review-count (date/today))
        :children [{:content
-                   (util/format "5: %d(%d%%)" score-5-count (* 100 (/ score-5-count review-count)))}
+                   (util/format "Easy:   %d (%d%%)" score-5-count (* 100 (/ score-5-count review-count)))}
                   {:content
-                   (util/format "4: %d(%d%%)" score-4-count (* 100 (/ score-4-count review-count)))}
+                   (util/format "Medium: %d (%d%%)" score-3-count (* 100 (/ score-3-count review-count)))}
                   {:content
-                   (util/format "3: %d(%d%%)" score-3-count (* 100 (/ score-3-count review-count)))}
+                   (util/format "Hard:   %d (%d%%)" score-1-count (* 100 (/ score-1-count review-count)))}
                   {:content
-                   (util/format "2: %d(%d%%)" score-2-count (* 100 (/ score-2-count review-count)))}
-                  {:content
-                   (util/format "1: %d(%d%%)" score-1-count (* 100 (/ score-1-count review-count)))}
-                  {:content
-                   (util/format "0: %d(%d%%)" score-0-count (* 100 (/ score-0-count review-count)))}
-                  {:content
-                   (util/format "skip: %d(%d%%)" skip-count (* 100 (/ skip-count review-count)))}]}]
+                   (util/format "Skip:   %d (%d%%)" skip-count (* 100 (/ skip-count review-count)))}]}]
      (:block/format card-query-block))))
 
 ;;; ================================================================
