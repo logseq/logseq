@@ -217,7 +217,7 @@
          [:a.text-sm.font-medium.button
           {:on-click (fn []
                        (page-handler/ls-dir-files!))}
-          [:div.flex.flex-row.text-center.open-button__inner
+          [:div.flex.flex-row.text-center.open-button__inner.items-center
            [:span.inline-block.open-button__icon-wrapper svg/folder-add]
            (when-not config/mobile?
              [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
