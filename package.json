@@ -62,6 +62,7 @@
         "@excalidraw/excalidraw": "^0.4.2",
         "@kanru/rage-wasm": "^0.2.1",
         "@sentry/browser": "^6.4.1",
+        "@sentry/electron": "^2.5.1",
         "@tippyjs/react": "^4.2.5",
         "chokidar": "^3.5.1",
         "chrono-node": "^2.2.4",
