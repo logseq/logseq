@@ -18,6 +18,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.extensions.zotero.handler :as zotero-handler]
+            [cljs-bean.core :as bean]
             [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -31,6 +33,7 @@
                (not (state/sub :editor/show-block-search?))
                (not (state/sub :editor/show-template-search?))
                (not (state/sub :editor/show-input))
+               (not (state/sub :editor/show-zotero))
                (not (state/sub :editor/show-date-picker?)))
       (let [matched (util/react *matched-commands)]
         (ui/auto-complete
@@ -229,6 +232,70 @@
    [:button.font-extrabold.bottom-action.-mt-1
     {:on-click #(commands/simple-insert! parent-id "/" {})}
     "/"]])
+
+(rum/defc zoteor-search-item [item]
+  (let [data (:data item)
+        type (:itemType data)
+        abstract (str (subs (:abstractNote data) 0 200) "...")
+        title (:title data)]
+
+    (if (= type "journalArticle")
+      [:div.px-2.py-4.border-b.cursor-pointer.border-solid.hover:bg-gray-100.last:border-none
+       {:on-click (fn [] (zotero-handler/create-zotero-page item))}
+       [[:div.font-bold.mb-1 title]
+        [:div.text-sm abstract]]]
+      nil)))
+
+(rum/defc zotero-search []
+
+  (let [cache-api-key (js/localStorage.getItem "zotero-api-key")
+        cache-user-id (js/localStorage.getItem "zotero-user-id")
+        cache-api-key-empty (clojure.string/blank? cache-api-key)
+        cache-user-id-empty (clojure.string/blank? cache-user-id)]
+
+    (let
+     [api-key
+      (if cache-api-key-empty (js/prompt "Please enter your Zotero API key (https://www.zotero.org/settings/keys/new)") cache-api-key)
+      user-id
+      (if cache-user-id-empty (js/prompt "Please enter your Zotero user id (https://www.zotero.org/settings/keys)") cache-user-id)]
+
+      (when cache-api-key-empty (js/localStorage.setItem "zotero-api-key" api-key))
+      (when cache-user-id-empty (js/localStorage.setItem "zotero-user-id" user-id))
+
+
+
+
+
+      (let [[term set-term!] (rum/use-state "")
+            [search-result set-search-result!] (rum/use-state [])
+            [search-error set-search-error!] (rum/use-state nil)]
+
+
+        (rum/use-effect!
+         (fn []
+           (when (not (clojure.string/blank? term))
+             (util/fetch (str "https://api.zotero.org/users/" user-id "/items?itemType=journalArticle&qmode=everything&q=" term)
+                         (bean/->js {:method "get"
+                                     :headers {:Accept "application/json"
+                                               :Content-Type "application/json"
+                                               :Authorization (str "Bearer " api-key)}})
+                         (fn [result] (set-search-result! result))
+                         (fn [error] (set-search-error! error)))))
+         [term])
+
+
+        [:div.zotero-search.p-4
+
+         [:input.p-2.border.block.w-full.mb-3
+          {:autoFocus true
+           :placeholder "Search for your Zotero journal article (title, author, text, anything)"
+           :value term :on-change (fn [e] (set-term! (util/evalue e)))}]
+
+         [:div
+          (map
+           (fn [item] (rum/with-key (zoteor-search-item item) (:key item)))
+           search-result)]]))))
+
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -496,6 +563,12 @@
                (editor-handler/handle-command-input command id format m pos)))
       true
       *slash-caret-pos)
+
+     (when (state/sub :editor/show-zotero)
+       (transition-cp
+        (zotero-search)
+        false
+        *slash-caret-pos))
 
      (when format
        (image-uploader id format))]))

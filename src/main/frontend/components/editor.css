@@ -68,3 +68,7 @@ pre {
 .preview-trigger-wrapper > [data-tooltipped] {
   display: block !important;
 }
+
+.zotero-search {
+  width: 600px;
+}
