@@ -54,6 +54,7 @@
       1.0   "1 ^ 0"
       4.0   "2^2 "
       27.0  " 3^ 3"
+      0.125 " 2^ -3"
       16.0  "2 ^ 2 ^ 2"
       256.0 "4.000 ^ 4.0"))
   (testing "operator precedence"
@@ -63,6 +64,8 @@
       4     "8 / 4 + 2 * 1 - 25 * 0 / 1"
       14.0  "3 *2 ^ 2 + 1 * 2"
       74.0  "((3*2) ^ 2 + 1) * 2"
+      -74.0 "((3*2) ^ 2 + 1) * -2"
+      74.0  "-((3*2) ^ 2 + 1) * -2"
       432.0 "(3*2) ^ (2 + 1) * 2"
       97.0  "(2 * 3) * 2 ^ (2 * 2) + 1"
       4.0   "2 * 3 / 2 ^ 2 * 2 + 1"))
@@ -80,8 +83,10 @@
       0.0  "sin( 1 -1 )"
       0.0  "atan(tan(0))"
       1.0  "sin(asin(0)) + 1"
+      1.0  "-sin(asin(0)) + 1"
       0.0  "acos(cos(0))"
       5.0  "2 * log(10) + 3"
+      1.0  "-2 * log(10) + 3"
       10.0 "ln(1) + 10")))
 
 (deftest variables
@@ -103,13 +108,14 @@
                             (= final-env @env))
       {"a_a" 1}         "a_a = 1"
       {"x_yy_zzz" 1}    "x_yy_zzz= 1"
-      {"foo_bar_baz" 1} "foo_bar_baz = 1 + 0 * 2"))
+      {"foo_bar_baz" 1} "foo_bar_baz = 1 + -0 * 2"))
   (testing "variables can be reused"
     (are [final-env exprs] (let [env (calc/new-env)]
                              (doseq [expr exprs]
                                (calc/eval env (calc/parse expr)))
                              (= final-env @env))
       {"a" 1 "b" 2}          ["a = 1" "b = a + 1"]
+      {"a" 1 "b" 0}          ["a = 1" "b = -a + 1"]
       {"a" 1 "b" 3}          ["a = 1" "b=a*2+1"]
       {"a_a" 1 "b_b" 2}      ["a_a = 1" "b_b = a_a + 1"]
       {"variable" 1 "x" 0.0} ["variable = 1 + 0 * 2" "x = log(variable)"]
