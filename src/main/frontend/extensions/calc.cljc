@@ -27,39 +27,38 @@
 
 (defn eval* [env ast]
   (insta/transform
-   {:number        (comp edn/read-string #(str/replace % "," ""))
-    :negnumber     (comp edn/read-string #(str/replace % "," ""))
-    :scientific    edn/read-string
-    :negscientific edn/read-string
-    :expr          identity
-    :add           +
-    :sub           -
-    :mul           *
-    :div           /
-    :pow           (fn [a b]
+   {:number     (comp edn/read-string #(str/replace % "," ""))
+    :scientific edn/read-string
+    :negterm    (fn neg [a] (- a))
+    :expr       identity
+    :add        +
+    :sub        -
+    :mul        *
+    :div        /
+    :pow        (fn pow [a b]
                   #?(:clj (java.lang.Math/pow a b) :cljs (js/Math.pow a b)))
-    :log           (fn [a]
+    :log        (fn log [a]
                   #?(:clj (java.lang.Math/log10 a) :cljs (js/Math.log10 a)))
-    :ln            (fn [a]
+    :ln         (fn ln [a]
                   #?(:clj (java.lang.Math/log a) :cljs (js/Math.log a)))
-    :sin           (fn [a]
+    :sin        (fn sin [a]
                   #?(:clj (java.lang.Math/sin a) :cljs (js/Math.sin a)))
-    :cos           (fn [a]
+    :cos        (fn cos [a]
                   #?(:clj (java.lang.Math/cos a) :cljs (js/Math.cos a)))
-    :tan           (fn [a]
+    :tan        (fn tan [a]
                   #?(:clj (java.lang.Math/tan a) :cljs (js/Math.tan a)))
-    :atan          (fn [a]
+    :atan       (fn atan [a]
                   #?(:clj (java.lang.Math/atan a) :cljs (js/Math.atan a)))
-    :asin          (fn [a]
+    :asin       (fn asin [a]
                   #?(:clj (java.lang.Math/asin a) :cljs (js/Math.asin a)))
-    :acos          (fn [a]
+    :acos       (fn acos [a]
                   #?(:clj (java.lang.Math/acos a) :cljs (js/Math.acos a)))
-    :assignment    (fn [var val]
+    :assignment (fn assign! [var val]
                   (swap! env assoc var val)
                   val)
-    :toassign      str/trim
-    :variable      (fn [var]
-                     (let [var (str/trim var)]
+    :toassign   str/trim
+    :variable   (fn resolve [var]
+                  (let [var (str/trim var)]
                     (or (get @env var)
                         (throw
                          (ex-info (util/format "Can't find variable %s" var)
