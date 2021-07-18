@@ -37,6 +37,9 @@
                                        :id :label
                                        :placeholder "Label"}]]])
 
+(def zotero-steps [[:editor/input (str slash "zotero")]
+                   [:editor/show-zotero]])
+
 (defn ->marker
   [marker]
   [[:editor/clear-current-slash]
@@ -244,6 +247,7 @@
     ;; advanced
 
     [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] "Create a DataScript query"]
+     ["Zoteor" zotero-steps "Import Zotero journal article"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
      ["Draw" (fn []
@@ -323,9 +327,9 @@
                      (or backward-pos 0))]
       (state/set-block-content-and-last-pos! id new-value new-pos)
       (cursor/move-cursor-to input
-                           (if (or backward-pos forward-pos)
-                             new-pos
-                             (+ new-pos 1))))))
+                             (if (or backward-pos forward-pos)
+                               new-pos
+                               (+ new-pos 1))))))
 
 (defn simple-insert!
   [id value
@@ -535,6 +539,9 @@
 
 (defmethod handle-step :editor/show-input [[_ option]]
   (state/set-editor-show-input! option))
+
+(defmethod handle-step :editor/show-zotero [[_]]
+  (state/set-editor-show-zotero! true))
 
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and
