@@ -32,7 +32,7 @@
   ;;page-bounding (and highlight (pdf-utils/get-page-bounding viewer (:page highlight)))
   ;;])
 
-  (let [head-height 48                                      ;; temp
+  (let [head-height 0                                       ;; 48 temp
         top (- (+ (:y point) (.. viewer -container -scrollTop)) head-height)
         left (:x point)
         id (:id highlight)
@@ -216,7 +216,7 @@
         #())
       [loaded-pages highlights])
 
-    [:div.extensions__pdf-highlights
+    [:div.extensions__pdf-highlights-cnt
 
      ;; hl context tip menu
      (if (:highlight tip-state)
@@ -231,15 +231,15 @@
 
          (.querySelector el ".pp-holder")))
 
-     [:ul
-      (for [hl highlights]
-        [:li
-         [:a
-          {:on-click #(pdf-utils/scroll-to-highlight viewer hl)}
-          (str "#" (:id hl) "#  ")]
-         (:text (:content hl))])
-      ;;(js/JSON.stringify (bean/->js highlights) nil 2)
-      ]]))
+     (if (seq highlights)
+       [:ul.extensions__pdf-highlights
+        (for [hl highlights]
+          [:li
+           [:a
+            {:on-click #(pdf-utils/scroll-to-highlight viewer hl)}
+            (str "#" (:id hl) "#  ")]
+           (:text (:content hl))])
+        ])]))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document]
@@ -355,7 +355,8 @@
 
     [:div.extensions__pdf-loader {:ref *doc-ref}
      (if (= (:status state) :loading)
-       [:h1 "Downloading PDF #" url]
+       [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-md
+        "Downloading PDF file " url]
        (pdf-viewer url [] (:pdf-document state)))
      [:h3 (str (:error state))]]))
 
@@ -377,5 +378,22 @@
 
 (rum/defc playground
   []
-  [:div.extensions__pdf-playground
-   (container)])
+  (let [[state, set-state!] (rum/use-state {:active false})]
+
+    (rum/use-effect!
+      #(js/setTimeout (fn [] (set-state! {:active true})) 100)
+      [])
+
+    (rum/use-effect!
+      (fn []
+        (let [flg "is-pdf-active"
+              ^js cls (.-classList js/document.body)]
+          (.add cls flg)
+          #(.remove cls flg)))
+      [(:active state)])
+
+    [:div.extensions__pdf-playground
+     (when (:active state)
+       (js/ReactDOM.createPortal
+         (container)
+         (js/document.querySelector "#app-single-container")))]))

@@ -134,7 +134,7 @@
        [:div.cp__sidebar-main-content
         {:data-is-global-graph-pages global-graph-pages?
          :data-is-full-width (or global-graph-pages?
-                                 (contains? #{:all-files :all-pages :my-publishing} route-name))}
+                                 (contains? #{:all-files :all-pages :my-publishing :home} route-name))}
         (cond
           (not indexeddb-support?)
           nil
@@ -364,7 +364,9 @@
                   :main-content        main-content})]
 
           (footer)]
-         (right-sidebar/sidebar)]
+         (right-sidebar/sidebar)
+
+         [:div#app-single-container]]
 
         (ui/notification)
         (ui/modal)
