@@ -33,6 +33,8 @@
      "EEE, yyyy/MM/dd"
      "EEEE, MM/dd/yyyy"
      "EEEE, yyyy/MM/dd"
+     "dd-MM-yyyy"
+     "dd.MM.yyyy"
      "MM/dd/yyyy"
      "MM-dd-yyyy"
      "MM_dd_yyyy"
