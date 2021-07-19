@@ -46,7 +46,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [frontend.components.query-table :as query-table]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -2089,72 +2090,6 @@
                      result-atom)]
     (assoc state :query-atom query-atom)))
 
-(rum/defcs query-result-table < rum/reactive
-  (rum/local false ::select?)
-  [state config result {:keys [select-keys page?]}]
-  (let [select? (get state ::select?)
-        editor-box (get config :editor-box)
-        ;; remove templates
-        result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
-        all-keys (->> (distinct (mapcat keys (map :block/properties result)))
-                      (remove property/built-in-properties))
-        keys (if (seq select-keys) select-keys all-keys)
-        keys (if page? (cons :page keys) (cons :block keys))
-        keys (concat keys [:created-at :updated-at])]
-    [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
-                           :style {:width "100%"}}
-     [:table.table-auto
-      (for [key keys]
-        [:th.whitespace-nowrap (name key)])
-      (for [item result]
-        (let [format (:block/format item)
-              edit-input-id (str "edit-block-" (:id config) "-" (:block/uuid item))
-              heading-level (:block/heading-level item)]
-          [:tr.cursor
-           (for [key keys]
-             (let [value (case key
-                           :page
-                           [:string (or (:block/original-name item)
-                                        (:block/name item))]
-
-                           :block       ; block title
-                           (let [title (:block/title item)]
-                             (if (seq title)
-                               [:element (->elem :div (map-inline config title))]
-                               [:string (:block/content item)]))
-
-                           :created-at
-                           [:string (when-let [created-at (:block/created-at item)]
-                                      (date/int->local-time-2 created-at))]
-
-                           :updated-at
-                           [:string (when-let [updated-at (:block/updated-at item)]
-                                      (date/int->local-time-2 updated-at))]
-
-                           [:string (get-in item [:block/properties key])])]
-               [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
-                                       :on-mouse-move (fn [] (reset! select? true))
-                                       :on-mouse-up (fn []
-                                                      (when-not @select?
-                                                        (state/sidebar-add-block!
-                                                         (state/get-current-repo)
-                                                         (:db/id item)
-                                                         :block-ref
-                                                         {:block item})))}
-                (when value
-                  (if (= :element (first value))
-                    (second value)
-                    (let [value (second value)]
-                      (if (coll? value)
-                        (let [vals (for [item value]
-                                     (page-cp {} {:block/name item}))]
-                          (interpose [:span ", "] vals))
-                        (if (not (string? value))
-                          value
-                          (if-let [page (db/entity [:block/name (string/lower-case value)])]
-                            (page-cp {} page)
-                            (inline-text format value)))))))]))]))]]))
-
 (rum/defcs custom-query < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
@@ -2225,10 +2160,10 @@
                (util/hiccup-keywordize result))
 
              page-list?
-             (query-result-table config result {:page? true})
+             (query-table/result-table config result {:page? true} map-inline page-cp ->elem inline-text)
 
              table?
-             (query-result-table config result {:page? false})
+             (query-table/result-table config result {:page? false} map-inline page-cp ->elem inline-text)
 
              (and (seq result) (or only-blocks? blocks-grouped-by-page?))
              (->hiccup result (cond-> (assoc config
