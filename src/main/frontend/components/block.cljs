@@ -2138,16 +2138,26 @@
           (ui/foldable
            [:div.custom-query-title
             title
-            (when (and current-block (not page-list?))
+            (when current-block
               [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
-               [:span.mr-2.ml-2.text-sm "Table view"]
-               [:div {:style {:margin-top 3}}
-                (ui/toggle table?
-                           (fn []
-                             (editor-handler/set-block-property! current-block-uuid
-                                                                 "query-table"
-                                                                 (not table?)))
-                           true)]])]
+               (when-not page-list?
+                 [:div.flex.flex-row
+                  [:div.mx-2 [:span.text-sm "Table view"]]
+                  [:div {:style {:margin-top 5}}
+                   (ui/toggle table?
+                              (fn []
+                                (editor-handler/set-block-property! current-block-uuid
+                                                                    "query-table"
+                                                                    (not table?)))
+                              true)]])
+
+               [:a.mx-2.opacity-60.hover:opacity-100.block
+                {:on-click (fn []
+                             (let [all-keys (query-table/get-keys result page-list?)]
+                               (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
+                [:span.table-query-properties
+                 [:span.text-sm.mr-1 "Set properties"]
+                 svg/settings-sm]]])]
            (cond
              (and (seq result) view-f)
              (let [result (try
@@ -2160,10 +2170,10 @@
                (util/hiccup-keywordize result))
 
              page-list?
-             (query-table/result-table config result {:page? true} map-inline page-cp ->elem inline-text)
+             (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
 
              table?
-             (query-table/result-table config result {:page? false} map-inline page-cp ->elem inline-text)
+             (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
              (and (seq result) (or only-blocks? blocks-grouped-by-page?))
              (->hiccup result (cond-> (assoc config

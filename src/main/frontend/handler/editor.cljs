@@ -923,6 +923,22 @@
   (let [key (keyword key)]
     (block-property-aux! block-id key value)))
 
+(defn set-block-query-properties!
+  [block-id all-properties key add?]
+  (when-let [block (db/entity [:block/uuid block-id])]
+    (let [query-properties (-> (get-in block [:block/properties :query-properties] "")
+                               (common-handler/safe-read-string "Failed to parse query properties"))
+          query-properties (if (seq query-properties)
+                             query-properties
+                             all-properties)
+          query-properties (if add?
+                             (distinct (conj query-properties key))
+                             (remove #{key} query-properties))
+          query-properties (vec query-properties)]
+      (if (seq query-properties)
+        (set-block-property! block-id :query-properties (str query-properties))
+        (remove-block-property! block-id :query-properties)))))
+
 (defn set-block-timestamp!
   [block-id key value]
   (let [key (string/lower-case key)
