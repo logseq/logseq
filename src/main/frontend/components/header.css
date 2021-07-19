@@ -124,3 +124,7 @@ a.button:hover {
     opacity: 1;
     background: var(--ls-tertiary-background-color);
 }
+
+.is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
+    cursor: default !important;
+}
