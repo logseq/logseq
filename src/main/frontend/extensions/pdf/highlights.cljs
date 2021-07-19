@@ -5,6 +5,7 @@
             [medley.core :as medley]
             [frontend.handler.notification :as notification]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.util :as front-utils]
             [medley.core :as medley]))
 
 (defonce ACTIVE_FILE "https://phx-nine.vercel.app/clojure-hopl-iv-final.pdf")
@@ -14,59 +15,66 @@
 
 (rum/defc pdf-highlights-ctx-menu
   [^js viewer {:keys [highlight vw-pos point]}
-   {:keys [clear-tip! add-hl! upd-hl! del-hl!]}]
+   {:keys [clear-ctx-tip! add-hl! upd-hl! del-hl!]}]
 
   (let [mounted (rum/use-ref false)]
     (rum/use-effect!
       (fn []
         (let [cb #(if-not (rum/deref mounted)
                     (rum/set-ref! mounted true)
-                    (clear-tip!))]
+                    (clear-ctx-tip!))]
           (js/document.addEventListener "click" cb)
           #(js/document.removeEventListener "click" cb)))
-      [clear-tip!]))
+      [clear-ctx-tip!]))
 
   ;; TODO: precise position
-  (when-let [page-bounding (and highlight (pdf-utils/get-page-bounding viewer (:page highlight)))]
-    (let [head-height 48                                    ;; temp
-          top (- (+ (:y point) (.. viewer -container -scrollTop)) head-height)
-          left (:x point)]
+  ;;(when-let [
+  ;;page-bounding (and highlight (pdf-utils/get-page-bounding viewer (:page highlight)))
+  ;;])
 
-      [:ul.extensions__pdf-hls-ctx-menu
-       {:style    {:top top :left left}
-        :on-click (fn [^js/MouseEvent e]
-                    (when-let [action (.. e -target -dataset -action)]
-                      (case action
-                        "copy"
-                        (do
-                          (dd action)
-                          (pdf-utils/clear-all-selection))
+  (let [head-height 48                                      ;; temp
+        top (- (+ (:y point) (.. viewer -container -scrollTop)) head-height)
+        left (:x point)
+        id (:id highlight)
+        content (:content highlight)]
 
-                        "del" (dd action)
+    [:ul.extensions__pdf-hls-ctx-menu
+     {:style    {:top top :left left}
+      :on-click (fn [^js/MouseEvent e]
+                  (when-let [action (.. e -target -dataset -action)]
+                    (case action
+                      "copy"
+                      (do
+                        (front-utils/copy-to-clipboard! (:text content))
+                        (pdf-utils/clear-all-selection))
 
-                        ;; colors
-                        (let [properties {:color action}]
-                          (if-not (:id highlight)
-                            ;; add highlight
-                            (do
-                              (add-hl! (merge highlight
-                                              {:id         (pdf-utils/gen-id)
-                                               :properties properties}))
-                              (pdf-utils/clear-all-selection))
+                      "del"
+                      (del-hl! highlight)
 
-                            ;; update highlight
-                            (do
-                              (upd-hl! (assoc highlight :properties properties)))))))
+                      ;; colors
+                      (let [properties {:color action}]
+                        (if-not id
+                          ;; add highlight
+                          (do
+                            (add-hl! (merge highlight
+                                            {:id         (pdf-utils/gen-id)
+                                             :properties properties}))
+                            (pdf-utils/clear-all-selection))
 
-                    (clear-tip!))}
+                          ;; update highlight
+                          (do
+                            (upd-hl! (assoc highlight :properties properties)))))))
 
-       [:li.item-colors
-        (for [it ["yellow", "blue", "green", "red", "purple"]]
-          [:a {:key it :data-color it :data-action it} it])]
+                  (clear-ctx-tip!))}
 
-       [:li.item {:data-action "copy"} "Copy text"]
-       [:li.item {:data-action "del"} "Delete"]
-       ])))
+     [:li.item-colors
+      (for [it ["yellow", "blue", "green", "red", "purple"]]
+        [:a {:key it :data-color it :data-action it} it])]
+
+     [:li.item {:data-action "copy"} "Copy text"]
+
+     (and id [:li.item {:data-action "del"} "Delete"])
+     ]))
 
 (rum/defc pdf-highlights-text-region
   [^js viewer vw-hl hl
@@ -81,9 +89,8 @@
         (let [x (.-clientX e)
               y (.-clientY e)]
 
-          (show-ctx-tip! viewer hl {:x x :y y})
+          (show-ctx-tip! viewer hl {:x x :y y})))}
 
-          (notification/show! (str "HL#" id) :success)))}
      (map-indexed
        (fn [idx rect]
          [:div.hls-text-region-item
@@ -107,7 +114,7 @@
   (let [[sel-state, set-sel-state!] (rum/use-state {:range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
         [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :point nil})
-        clear-tip! #(set-tip-state! {})
+        clear-ctx-tip! #(set-tip-state! {})
         show-ctx-tip! (fn [^js viewer hl point]
                         (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
                           (set-tip-state! {:highlight hl :vw-pos vw-pos :point point})))
@@ -115,7 +122,7 @@
         upd-hl! (fn [hl]
                   (when-let [pp (medley/find-first #(= (:id (second %)) (:id hl)) (medley/indexed highlights))]
                     (set-highlights! (assoc-in highlights [(first pp)] hl))))
-        del-hl! (fn [id] (if id (set-highlights! (remove #(= id (:id %) highlights)))))]
+        del-hl! (fn [hl] (when-let [id (:id hl)] (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
 
     ;; selection events
     (rum/use-effect!
@@ -192,20 +199,18 @@
     ;; render hls
     (rum/use-effect!
       (fn []
-        (js/console.debug "[rebuild highlights] " (count highlights))
+        (dd "[rebuild highlights] " (count highlights))
 
-        (when-let [grouped-hls (and (seq highlights) (group-by :page highlights))]
+        (when-let [grouped-hls (and (sequential? highlights) (group-by :page highlights))]
           (doseq [page loaded-pages]
             (when-let [^js/HTMLDivElement hls-layer (pdf-utils/resolve-hls-layer! viewer page)]
-              (when-let [page-hls (get grouped-hls page)]
+              (let [page-hls (get grouped-hls page)]
 
                 (rum/mount
                   ;; TODO: area & text hls
                   (pdf-highlights-region-container viewer page-hls {:show-ctx-tip! show-ctx-tip!})
 
-                  hls-layer)
-                )
-              )))
+                  hls-layer)))))
 
         ;; destroy
         #())
@@ -219,10 +224,10 @@
          (pdf-highlights-ctx-menu
            viewer tip-state
 
-           {:clear-tip! clear-tip!
-            :add-hl!    add-hl!
-            :del-hl!    del-hl!
-            :upd-hl!    upd-hl!})
+           {:clear-ctx-tip! clear-ctx-tip!
+            :add-hl!        add-hl!
+            :del-hl!        del-hl!
+            :upd-hl!        upd-hl!})
 
          (.querySelector el ".pp-holder")))
 

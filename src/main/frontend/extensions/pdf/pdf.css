@@ -13,7 +13,7 @@
 .extensions__pdf {
   &-loader {
     position: relative;
-    min-height: 90vh;
+    height: 88vh;
   }
 
   &-viewer {
@@ -186,6 +186,9 @@ body[data-page=home] {
 
     &-highlights {
       padding-right: 40px;
+      margin-right: 80px;
+      height: 88vh;
+      overflow: auto;
 
       pre {
         white-space: pre-wrap;
