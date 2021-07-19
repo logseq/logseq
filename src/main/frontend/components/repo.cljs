@@ -104,7 +104,7 @@
               {:on-click #(nfs-handler/refresh! repo refresh-cb)
                :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "
                            version/version)}
-              [:div {:class (if syncing? "loader-reverse" "initial")} svg/refresh]]])
+              [:div {:class (if syncing? "animate-spin-reverse" "initial")} svg/refresh]]])
           (let [changed-files (state/sub [:repo/changed-files repo])
                 should-push? (seq changed-files)
                 git-status (state/sub [:git/status repo])

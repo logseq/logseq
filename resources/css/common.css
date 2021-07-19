@@ -724,16 +724,6 @@ li p:last-child,
   overflow-y: scroll;
 }
 
-.loader-reverse {
-    -webkit-animation: spin 2s infinite linear reverse;
-    animation: spin 2s infinite linear reverse;
-}
-
-.loader {
-    -webkit-animation: spin 2s infinite linear;
-    animation: spin 2s infinite linear;
-}
-
 .canceled,
 .done {
   text-decoration: line-through;
