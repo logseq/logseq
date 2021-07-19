@@ -6165,10 +6165,10 @@ mkdirp@^0.5.0, mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@0.8.8:
-  version "0.8.8"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.8.8.tgz#4076f00712108caba3fbf4e5df4e2945b407d2c7"
-  integrity sha512-bulOsjdZS6jFVsgK2lwqZMNd5+liHlwFb2xwrovMdxnTFQ5F150k+RZF32RRZx6z62Y43RJUb+2vLGpXJK0qZQ==
+mldoc@0.8.9:
+  version "0.8.9"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.8.9.tgz#801092f7fabfaa5a4173b05da3876d311e634dda"
+  integrity sha512-WIZMqQYPFAxQi1O8lkPcx1cxSCyzLSCr1x6ZvdTwhY3YnEUjywe2pD5poMg0meSkfEme7H6yX+/jKZLHPgNRUw==
   dependencies:
     yargs "^12.0.2"
 
