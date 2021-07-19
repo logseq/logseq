@@ -92,3 +92,19 @@ export const getBoundingRect = (clientRects) => {
     height: Y1 - Y0,
   }
 }
+
+export const scrollToHighlight = (viewer, highlight) => {
+  if (!highlight) return
+  const { page, bounding } = highlight.position
+  const viewport = viewer.getPageView(page - 1)?.viewport
+  if (!viewport) return
+
+  viewer.scrollPageIntoView({
+    pageNumber: page,
+    destArray: [
+      null, { name: 'XYZ' },
+      ...viewport.convertToPdfPoint(0, scaledToViewport(bounding, viewport).top - 100),
+      0 // scale
+    ]
+  })
+}

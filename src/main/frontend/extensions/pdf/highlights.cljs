@@ -231,8 +231,15 @@
 
          (.querySelector el ".pp-holder")))
 
-     [:pre
-      (js/JSON.stringify (bean/->js highlights) nil 2)]]))
+     [:ul
+      (for [hl highlights]
+        [:li
+         [:a
+          {:on-click #(pdf-utils/scroll-to-highlight viewer hl)}
+          (str "#" (:id hl) "#  ")]
+         (:text (:content hl))])
+      ;;(js/JSON.stringify (bean/->js highlights) nil 2)
+      ]]))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document]

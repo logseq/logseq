@@ -49,6 +49,11 @@
           layer)
         layer))))
 
+(defn scroll-to-highlight
+  [^js viewer hl]
+  (when-let [js-hl (bean/->js hl)]
+    (js-utils/scrollToHighlight viewer js-hl)))
+
 (defn clear-all-selection
   []
   (.removeAllRanges (js/window.getSelection)))
