@@ -99,12 +99,12 @@
       (when-not (= repo config/local-repo)
         (if (and nfs-repo? (nfs-handler/supported?))
           (let [syncing? (state/sub :graph/syncing?)]
-            [:div.opacity-60.refresh.hover:opacity-100 {:class (if syncing? "loader-reverse" "initial")}
+            [:div.opacity-60.refresh.hover:opacity-100
              [:a.button
               {:on-click #(nfs-handler/refresh! repo refresh-cb)
                :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "
                            version/version)}
-              svg/refresh]])
+              [:div {:class (if syncing? "loader-reverse" "initial")} svg/refresh]]])
           (let [changed-files (state/sub [:repo/changed-files repo])
                 should-push? (seq changed-files)
                 git-status (state/sub [:git/status repo])
