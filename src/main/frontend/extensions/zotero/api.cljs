@@ -43,6 +43,12 @@
 (defn item [key]
   (get* config (str "/items/" key)))
 
+(defn query-items [type term]
+  (get* config (str "/items")
+        {:qmode "everything"
+         :q term
+         :item-type type}))
+
 (defn notes [key]
   (get* config (str "/items/" key "/children") {:item-type "note"}))
 
