@@ -2,8 +2,10 @@
   (:require [rum.core :as rum]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
+            [medley.core :as medley]
             [frontend.handler.notification :as notification]
-            [frontend.extensions.pdf.utils :as pdf-utils]))
+            [frontend.extensions.pdf.utils :as pdf-utils]
+            [medley.core :as medley]))
 
 (defonce ACTIVE_FILE "https://phx-nine.vercel.app/clojure-hopl-iv-final.pdf")
 
@@ -12,7 +14,7 @@
 
 (rum/defc pdf-highlights-ctx-menu
   [^js viewer {:keys [highlight vw-pos point]}
-   clear-tip! add-hl! del-hl!]
+   {:keys [clear-tip! add-hl! upd-hl! del-hl!]}]
 
   (let [mounted (rum/use-ref false)]
     (rum/use-effect!
@@ -43,15 +45,19 @@
                         "del" (dd action)
 
                         ;; colors
-                        (if-not (:id highlight)
-                          ;; add highlight
-                          (do
-                            (add-hl! (merge highlight
-                                            {:id         (pdf-utils/gen-id)
-                                             :properties {:color action}}))
-                            (pdf-utils/clear-all-selection))
-                          ;; update highlight
-                          (dd "update hl=>" highlight))))
+                        (let [properties {:color action}]
+                          (if-not (:id highlight)
+                            ;; add highlight
+                            (do
+                              (add-hl! (merge highlight
+                                              {:id         (pdf-utils/gen-id)
+                                               :properties properties}))
+                              (pdf-utils/clear-all-selection))
+
+                            ;; update highlight
+                            (do
+                              (upd-hl! (assoc highlight :properties properties)))))))
+
                     (clear-tip!))}
 
        [:li.item-colors
@@ -63,14 +69,21 @@
        ])))
 
 (rum/defc pdf-highlights-text-region
-  [{:keys [id position properties]}]
+  [^js viewer vw-hl hl
+   {:keys [show-ctx-tip!]}]
 
-  (let [{:keys [rects bounding]} position
-        {:keys [color]} properties]
+  (let [id (:id hl)
+        {:keys [rects]} (:position vw-hl)
+        {:keys [color]} (:properties hl)]
     [:div.extensions__pdf-hls-text-region
      {:on-click
-      (fn []
-        (notification/show! (str "HL#" id) :success))}
+      (fn [e]
+        (let [x (.-clientX e)
+              y (.-clientY e)]
+
+          (show-ctx-tip! viewer hl {:x x :y y})
+
+          (notification/show! (str "HL#" id) :success)))}
      (map-indexed
        (fn [idx rect]
          [:div.hls-text-region-item
@@ -80,12 +93,12 @@
        rects)]))
 
 (rum/defc pdf-highlights-region-container
-  [^js viewer page-hls]
+  [^js viewer page-hls ops]
 
   [:div.hls-region-container
    (for [hl page-hls]
-     (let [hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer %))]
-       (rum/with-key (pdf-highlights-text-region hl) (:id hl))
+     (let [vw-hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer %))]
+       (rum/with-key (pdf-highlights-text-region viewer vw-hl hl ops) (:id hl))
        ))])
 
 (rum/defc pdf-highlights
@@ -95,7 +108,13 @@
         [highlights, set-highlights!] (rum/use-state initial-hls)
         [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :point nil})
         clear-tip! #(set-tip-state! {})
+        show-ctx-tip! (fn [^js viewer hl point]
+                        (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
+                          (set-tip-state! {:highlight hl :vw-pos vw-pos :point point})))
         add-hl! (fn [hl] (if (:id hl) (set-highlights! (conj highlights hl))))
+        upd-hl! (fn [hl]
+                  (when-let [pp (medley/find-first #(= (:id (second %)) (:id hl)) (medley/indexed highlights))]
+                    (set-highlights! (assoc-in highlights [(first pp)] hl))))
         del-hl! (fn [id] (if id (set-highlights! (remove #(= id (:id %) highlights)))))]
 
     ;; selection events
@@ -182,7 +201,7 @@
 
                 (rum/mount
                   ;; TODO: area & text hls
-                  (pdf-highlights-region-container viewer page-hls)
+                  (pdf-highlights-region-container viewer page-hls {:show-ctx-tip! show-ctx-tip!})
 
                   hls-layer)
                 )
@@ -199,9 +218,12 @@
        (js/ReactDOM.createPortal
          (pdf-highlights-ctx-menu
            viewer tip-state
-           clear-tip!
-           add-hl!
-           del-hl!)
+
+           {:clear-tip! clear-tip!
+            :add-hl!    add-hl!
+            :del-hl!    del-hl!
+            :upd-hl!    upd-hl!})
+
          (.querySelector el ".pp-holder")))
 
      [:pre
