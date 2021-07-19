@@ -22,6 +22,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.export :as export]
             [frontend.extensions.graph :as graph]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.components.hierarchy :as hierarchy]
             [frontend.ui :as ui]
             [frontend.components.content :as content]
@@ -397,6 +398,10 @@
                      {:modal-class (util/hiccup->class
                                     "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
                       :z-index     1})]))])
+
+            ;; related assets upload
+            (pdf-assets/uploader page-name)
+
             [:div
              (when (and block? (not sidebar?))
                (let [config {:id "block-parent"
