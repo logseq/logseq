@@ -247,7 +247,7 @@
     ;; advanced
 
     [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] "Create a DataScript query"]
-     ["Zoteor" zotero-steps "Import Zotero journal article"]
+     ["Zotero" zotero-steps "Import Zotero journal article"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
      ["Draw" (fn []

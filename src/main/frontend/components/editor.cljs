@@ -6,6 +6,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [cljs.core.async :refer [go <!]]
             [frontend.components.block :as block]
             [frontend.config :as config]
             [frontend.db :as db]
@@ -101,21 +102,21 @@
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))]
           (ui/auto-complete
-            matched-pages
-            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
-             :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
-             :item-render (fn [page-name chosen?]
-                            [:div.py-2.preview-trigger-wrapper
-                             (block/page-preview-trigger
-                               {:children        [:div (search/highlight-exact-query page-name q)]
-                                :open?           chosen?
-                                :manual?         true
-                                :fixed-position? true
-                                :tippy-distance  24
-                                :tippy-position  (if sidebar? "left" "right")}
-                               page-name)])
-             :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
-             :class       "black"}))))))
+           matched-pages
+           {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
+            :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
+            :item-render (fn [page-name chosen?]
+                           [:div.py-2.preview-trigger-wrapper
+                            (block/page-preview-trigger
+                             {:children        [:div (search/highlight-exact-query page-name q)]
+                              :open?           chosen?
+                              :manual?         true
+                              :fixed-position? true
+                              :tippy-distance  24
+                              :tippy-position  (if sidebar? "left" "right")}
+                             page-name)])
+            :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
+            :class       "black"}))))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
@@ -233,15 +234,16 @@
     {:on-click #(commands/simple-insert! parent-id "/" {})}
     "/"]])
 
-(rum/defc zoteor-search-item [item]
+(rum/defc zotero-search-item [item]
   (let [data (:data item)
         type (:itemType data)
         abstract (str (subs (:abstractNote data) 0 200) "...")
         title (:title data)]
 
+
     (if (= type "journalArticle")
       [:div.px-2.py-4.border-b.cursor-pointer.border-solid.hover:bg-gray-100.last:border-none
-       {:on-click (fn [] (zotero-handler/create-zotero-page item))}
+       {:on-click (fn [] (go (<! (zotero-handler/create-zotero-page item))))}
        [[:div.font-bold.mb-1 title]
         [:div.text-sm abstract]]]
       nil)))
@@ -268,19 +270,23 @@
 
       (let [[term set-term!] (rum/use-state "")
             [search-result set-search-result!] (rum/use-state [])
-            [search-error set-search-error!] (rum/use-state nil)]
+            [search-error set-search-error!] (rum/use-state nil)
+            [is-searching set-is-searching!] (rum/use-state false)]
 
 
         (rum/use-effect!
          (fn []
-           (when (not (clojure.string/blank? term))
-             (util/fetch (str "https://api.zotero.org/users/" user-id "/items?itemType=journalArticle&qmode=everything&q=" term)
-                         (bean/->js {:method "get"
-                                     :headers {:Accept "application/json"
-                                               :Content-Type "application/json"
-                                               :Authorization (str "Bearer " api-key)}})
-                         (fn [result] (set-search-result! result))
-                         (fn [error] (set-search-error! error)))))
+           (let [do-search (fn [] (when (not (clojure.string/blank? term))
+                                    (util/fetch (str "https://api.zotero.org/users/" user-id "/items?itemType=journalArticle&qmode=everything&q=" term)
+                                                (bean/->js {:method "get"
+                                                            :headers {:Accept "application/json"
+                                                                      :Content-Type "application/json"
+                                                                      :Authorization (str "Bearer " api-key)}})
+                                                (fn [result] (set-search-result! result))
+                                                (fn [error] (set-search-error! error)))))
+                 do-search (util/debounce 200 do-search)]
+
+             (do-search)))
          [term])
 
 
@@ -293,7 +299,7 @@
 
          [:div
           (map
-           (fn [item] (rum/with-key (zoteor-search-item item) (:key item)))
+           (fn [item] (rum/with-key (zotero-search-item item) (:key item)))
            search-result)]]))))
 
 
