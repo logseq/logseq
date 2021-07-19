@@ -30,6 +30,8 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.query :as query-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.security :as security]
@@ -990,8 +992,25 @@
         [:div.dsl-query
          (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
-                         {:title [:span.font-medium.p-1 (str "Query: " query)]
+                         {:title [:span.font-medium.p-1.query-title
+                                  (str "Query: " query)]
                           :query query}))]
+
+        (= name "function")
+        (or
+         (when (:query-result config)
+           (when-let [query-result (rum/react (:query-result config))]
+             (let [fn-string (-> (util/format "(fn [result] %s)" (first arguments))
+                                 (common-handler/safe-read-string "failed to parse function")
+                                 (query-handler/normalize-query-function query-result)
+                                 (str))
+                   f (sci/eval-string fn-string)]
+               (when (fn? f)
+                 (try (f query-result)
+                      (catch js/Error e
+                        (js/console.error e)))))))
+         [:span.warning
+          (util/format "{{function %s}}" (first arguments))])
 
         (= name "youtube")
         (when-let [url (first arguments)]
@@ -1866,6 +1885,11 @@
   [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
+
+        ;; Each block might have multiple queries, but we store only the first query's result
+        config (if (nil? (:query-result config))
+                 (assoc config :query-result (atom nil))
+                 config)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
         *ref-collapsed? (get state ::ref-collapsed?)
@@ -2122,6 +2146,9 @@
                                     (and (string? query) (string/includes? query "(by-page false)")))
            result (when query-result
                     (db/custom-query-result-transform query-result remove-blocks q not-grouped-by-page?))
+           _ (when-let [query-result (:query-result config)]
+               (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
+                     (reset! query-result result)))
            view-f (and view (sci/eval-string (pr-str view)))
            only-blocks? (:block/uuid (first result))
            blocks-grouped-by-page? (and (seq result)

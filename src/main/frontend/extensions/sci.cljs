@@ -1,10 +1,18 @@
 (ns frontend.extensions.sci
   (:require [sci.core :as sci]))
 
+;; Some helpers
+(def sum (partial apply +))
+
+(defn average [coll]
+  (def coll coll)
+  (/ (reduce + coll) (count coll)))
+
 (defn eval-string
   [s]
   (try
-    (sci/eval-string s)
+    (sci/eval-string s {:bindings {'sum sum
+                                   'average average}})
     (catch js/Error e
       (println "Query: sci eval failed:")
       (js/console.error e))))

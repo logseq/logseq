@@ -57,6 +57,11 @@
           keys (if (seq query-properties)
                  query-properties
                  (get-keys result page?))
+          keys (if (some #{:created-at :updated-at} keys)
+                 (concat
+                  (remove #{:created-at :updated-at} keys)
+                  (filter #{:created-at :updated-at} keys))
+                 keys)
           sort-by-fn (fn [item]
                        (let [key @*sort-by-item]
                          (case key
