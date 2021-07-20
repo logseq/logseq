@@ -55,8 +55,7 @@
           [search-error set-search-error!]   (rum/use-state nil)
           [is-searching set-is-searching!]   (rum/use-state false)]
 
-      (println search-error)
-
+      (println "is-searching" is-searching)
 
       (go
         (let [d-term   (<! debounce-chan)]
@@ -74,8 +73,8 @@
       [:div.zotero-search.p-4
        {:style {:width 600}}
 
-       [:div.flex
-        [[:input.p-2.border.block.w-full.mb-2
+       [:div.flex.items-center.mb-2
+        [[:input.p-2.border.mr-2.flex-1
           {:autoFocus   true
            :placeholder "Search for your Zotero journal article (title, author, text, anything)"
            :value       term :on-change (fn [e]
@@ -84,7 +83,7 @@
                                             (>! term-chan (util/evalue e)))
                                           (set-term! (util/evalue e)))}]
 
-         [:span {:class (when is-searching "loader-reverse")} svg/refresh]]]
+         (when is-searching [:span.loader-reverse  svg/refresh])]]
 
 
        [:div
