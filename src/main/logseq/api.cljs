@@ -242,14 +242,18 @@
       (js/apis.openExternal url))))
 
 (def ^:export push_state
-  (fn [^js k ^js params]
+  (fn [^js k ^js params ^js query]
     (rfe/push-state
-     (keyword k) (bean/->clj params))))
+     (keyword k)
+     (bean/->clj params)
+     (bean/->clj query))))
 
 (def ^:export replace_state
-  (fn [^js k ^js params]
+  (fn [^js k ^js params ^js query]
     (rfe/replace-state
-     (keyword k) (bean/->clj params))))
+     (keyword k)
+     (bean/->clj params)
+     (bean/->clj query))))
 
 ;; editor
 (def ^:export check_editing

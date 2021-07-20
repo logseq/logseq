@@ -10,7 +10,7 @@ import {
   BlockCommandCallback,
   StyleString,
   ThemeOptions,
-  UIOptions, IHookEvent
+  UIOptions, IHookEvent, BlockIdentity, BlockPageName
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -24,6 +24,7 @@ declare global {
   }
 }
 
+const PROXY_CONTINUE = Symbol.for('proxy-continue')
 const debug = Debug('LSPlugin:user')
 
 /**
@@ -67,15 +68,13 @@ const app: Partial<IAppProxy> = {
       method: 'register-plugin-ui-item',
       args: [pid, type, opts]
     })
-
-    return false
   },
 
   registerPageMenuItem (
     this: LSPluginUser,
     tag: string,
     action: (e: IHookEvent & { page: string }) => void
-  ): unknown {
+  ) {
     if (typeof action !== 'function') {
       return false
     }
@@ -88,8 +87,6 @@ const app: Partial<IAppProxy> = {
       type, {
         key, label
       }, action)
-
-    return false
   }
 }
 
@@ -142,15 +139,13 @@ const editor: Partial<IEditorProxy> = {
       method: 'register-plugin-slash-command',
       args: [this.baseInfo.id, [tag, actions]]
     })
-
-    return false
   },
 
   registerBlockContextMenuItem (
     this: LSPluginUser,
     tag: string,
     action: BlockCommandCallback
-  ): unknown {
+  ) {
     if (typeof action !== 'function') {
       return false
     }
@@ -163,8 +158,19 @@ const editor: Partial<IEditorProxy> = {
       type, {
         key, label
       }, action)
+  },
 
-    return false
+  scrollToBlockInPage (
+    this: LSPluginUser,
+    pageName: BlockPageName,
+    blockId: BlockIdentity
+  ) {
+    const anchor = `block-content-` + blockId
+    this.App.pushState(
+      'page',
+      { name: pageName },
+      { anchor }
+    )
   }
 }
 
@@ -363,7 +369,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
         return function (this: any, ...args: any) {
           if (origMethod) {
             const ret = origMethod.apply(that, args)
-            if (ret === false) return
+            if (ret !== PROXY_CONTINUE) return
           }
 
           // Handle hook

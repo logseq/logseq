@@ -1147,7 +1147,3 @@ html[data-theme='dark'] .keyboard-shortcut > code {
 .overflow-y-scroll {
     overflow-y: scroll;
 }
-
-.whitespace-no-wrap {
-    white-space: nowrap;
-}

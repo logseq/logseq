@@ -7,6 +7,8 @@
             [frontend.util :as util :refer [profile]]
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
+            [frontend.handler.common :as common-handler]
+            [frontend.handler.editor :as editor-handler]
             [frontend.components.encryption :as encryption]
             [frontend.fs.nfs :as nfs]
             [frontend.db.conn :as conn]
@@ -14,7 +16,9 @@
             [frontend.db-schema :as db-schema]
             [frontend.db :as db]
             [datascript.core :as d]
-            ["semver" :as semver]))
+            ["semver" :as semver]
+            [clojure.set :as set]
+            [rum.core :as rum]))
 
 ;; TODO: should we move all events here?
 
@@ -30,8 +34,8 @@
       "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
       repo-url)
      (ui/button
-      "Install Logseq on GitHub"
-      :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
+       "Install Logseq on GitHub"
+       :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]]
    :error
    false))
 
@@ -86,17 +90,56 @@
         "Grant native filesystem permission for directory: "
         [:b (config/get-local-dir repo)]]
        (ui/button
-        "Grant"
-        :class "ui__modal-enter"
-        :on-click (fn []
-                    (nfs/check-directory-permission! repo)
-                    (close-fn)))])))
+         "Grant"
+         :class "ui__modal-enter"
+         :on-click (fn []
+                     (nfs/check-directory-permission! repo)
+                     (close-fn)))])))
 
 (defmethod handle :modal/nfs-ask-permission []
   (when-let [repo (get-local-repo)]
     (state/set-modal! (ask-permission repo))))
 
+(defonce *query-properties (atom {}))
+(rum/defc query-properties-settings-inner < rum/reactive
+  {:will-unmount (fn [state]
+                   (reset! *query-properties {})
+                   state)}
+  [block shown-properties all-properties close-fn]
+  (let [query-properties (rum/react *query-properties)]
+    [:div.p-4
+     [:div.font-bold "Properties settings for this query:"]
+     (for [property all-properties]
+       (let [property-value (get query-properties property)
+             shown? (if (nil? property-value)
+                      (contains? shown-properties property)
+                      property-value)]
+         [:div.flex.flex-row.m-2.justify-between.align-items
+          [:div (name property)]
+          [:div.mt-1 (ui/toggle shown?
+                                (fn []
+                                  (let [value (not shown?)]
+                                    (swap! *query-properties assoc property value)
+                                    (editor-handler/set-block-query-properties!
+                                     (:block/uuid block)
+                                     all-properties
+                                     property
+                                     value)))
+                                true)]]))]))
 
+(defn query-properties-settings
+  [block shown-properties all-properties]
+  (fn [close-fn]
+    (query-properties-settings-inner block shown-properties all-properties close-fn)))
+
+(defmethod handle :modal/set-query-properties [[_ block all-properties]]
+  (let [block-properties (some-> (get-in block [:block/properties :query-properties])
+                                 (common-handler/safe-read-string "Parsing query properties failed"))
+        shown-properties (if (seq block-properties)
+                           (set block-properties)
+                           (set all-properties))
+        shown-properties (set/intersection (set all-properties) shown-properties)]
+    (state/set-modal! (query-properties-settings block shown-properties all-properties))))
 
 (defmethod handle :after-db-restore [[_ repos]]
   (mapv (fn [{url :url} repo]

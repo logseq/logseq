@@ -30,6 +30,8 @@
             [frontend.handler.repeated :as repeated]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.query :as query-handler]
+            [frontend.handler.common :as common-handler]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.security :as security]
@@ -46,7 +48,8 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]))
+            [shadow.loader :as loader]
+            [frontend.components.query-table :as query-table]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -989,8 +992,25 @@
         [:div.dsl-query
          (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
-                         {:title [:span.font-medium.p-1 (str "Query: " query)]
+                         {:title [:span.font-medium.p-1.query-title
+                                  (str "Query: " query)]
                           :query query}))]
+
+        (= name "function")
+        (or
+         (when (:query-result config)
+           (when-let [query-result (rum/react (:query-result config))]
+             (let [fn-string (-> (util/format "(fn [result] %s)" (first arguments))
+                                 (common-handler/safe-read-string "failed to parse function")
+                                 (query-handler/normalize-query-function query-result)
+                                 (str))
+                   f (sci/eval-string fn-string)]
+               (when (fn? f)
+                 (try (f query-result)
+                      (catch js/Error e
+                        (js/console.error e)))))))
+         [:span.warning
+          (util/format "{{function %s}}" (first arguments))])
 
         (= name "youtube")
         (when-let [url (first arguments)]
@@ -1639,6 +1659,7 @@
        (when (and (seq properties)
                   (let [hidden? (property/properties-built-in? properties)]
                     (not hidden?))
+                  (not block-ref?)
                   (not (:slide? config)))
          (properties-cp config block))
 
@@ -1864,6 +1885,11 @@
   [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
+
+        ;; Each block might have multiple queries, but we store only the first query's result
+        config (if (nil? (:query-result config))
+                 (assoc config :query-result (atom nil))
+                 config)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
         *ref-collapsed? (get state ::ref-collapsed?)
@@ -2088,43 +2114,6 @@
                      result-atom)]
     (assoc state :query-atom query-atom)))
 
-(rum/defc query-result-table < rum/reactive
-  [config result {:keys [select-keys page?]}]
-  (let [editor-box (get config :editor-box)
-        all-keys (distinct (mapcat keys (map :block/properties result)))
-        keys (if (seq select-keys) select-keys all-keys)
-        keys (if page? (cons :page keys) keys)]
-    [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
-                           :style {:width "100%"}}
-     [:table.table-auto
-      (for [key keys]
-        [:th.whitespace-no-wrap (name key)])
-      (for [item result]
-        [:tr {:on-click (fn [e]
-                          (when (gobj/get e "shiftKey")
-                            (state/sidebar-add-block!
-                             (state/get-current-repo)
-                             (:db/id item)
-                             :block-ref
-                             {:block item})))}
-         (let [format (:block/format item)]
-           (for [key keys]
-             (let [value (if (= key :page)
-                           (or (:block/original-name item)
-                               (:block/name item))
-                           (get-in item [:block/properties key]))]
-               [:td.whitespace-no-wrap
-                (when value
-                  (if (coll? value)
-                    (let [vals (for [item value]
-                                 (page-cp {} {:block/name item}))]
-                      (interpose [:span ", "] vals))
-                    (if (not (string? value))
-                      value
-                      (if-let [page (db/entity [:block/name (string/lower-case value)])]
-                        (page-cp {} page)
-                        (inline-text format value)))))])))])]]))
-
 (rum/defcs custom-query < rum/reactive
   {:will-mount trigger-custom-query!
    :did-mount (fn [state]
@@ -2157,6 +2146,9 @@
                                     (and (string? query) (string/includes? query "(by-page false)")))
            result (when query-result
                     (db/custom-query-result-transform query-result remove-blocks q not-grouped-by-page?))
+           _ (when-let [query-result (:query-result config)]
+               (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
+                     (reset! query-result result)))
            view-f (and view (sci/eval-string (pr-str view)))
            only-blocks? (:block/uuid (first result))
            blocks-grouped-by-page? (and (seq result)
@@ -2173,17 +2165,26 @@
           (ui/foldable
            [:div.custom-query-title
             title
-            (when (and current-block (not page-list?))
+            (when current-block
               [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
-               [:span.mr-2.ml-2.text-sm "Table view"]
-               [:div {:style {:margin-top 3}}
-                (ui/toggle table?
-                           (fn []
-                             (editor-handler/set-block-property! current-block-uuid
-                                                                 "query-table"
-                                                                 (not table?)))
-                           true)]
-               [:span.ml-4.text-sm "Tip: Shift + Click a row to open its block in the right sidebar."]])]
+               (when-not page-list?
+                 [:div.flex.flex-row
+                  [:div.mx-2 [:span.text-sm "Table view"]]
+                  [:div {:style {:margin-top 5}}
+                   (ui/toggle table?
+                              (fn []
+                                (editor-handler/set-block-property! current-block-uuid
+                                                                    "query-table"
+                                                                    (not table?)))
+                              true)]])
+
+               [:a.mx-2.opacity-60.hover:opacity-100.block
+                {:on-click (fn []
+                             (let [all-keys (query-table/get-keys result page-list?)]
+                               (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
+                [:span.table-query-properties
+                 [:span.text-sm.mr-1 "Set properties"]
+                 svg/settings-sm]]])]
            (cond
              (and (seq result) view-f)
              (let [result (try
@@ -2196,10 +2197,10 @@
                (util/hiccup-keywordize result))
 
              page-list?
-             (query-result-table config result {:page? true})
+             (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
 
              table?
-             (query-result-table config result {:page? false})
+             (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
              (and (seq result) (or only-blocks? blocks-grouped-by-page?))
              (->hiccup result (cond-> (assoc config

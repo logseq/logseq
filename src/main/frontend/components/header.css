@@ -27,6 +27,11 @@
       min-width: 14rem;
     }
   }
+
+  a.button {
+    padding: 0.25rem;
+    margin: 0 4px;
+  }
 }
 
 .is-electron.is-mac .cp__header {

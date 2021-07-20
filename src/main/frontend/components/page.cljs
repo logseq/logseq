@@ -396,7 +396,7 @@
                         (svg/vertical-dots nil)])
                      links
                      {:modal-class (util/hiccup->class
-                                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-no-wrap.dropdown-overflow-auto.page-drop-options")
+                                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-nowrap.dropdown-overflow-auto.page-drop-options")
                       :z-index     1})]))])
 
             ;; related assets upload
@@ -739,8 +739,8 @@
                       (block/page-cp {} page)]]
                 [:td [:span.text-gray-500.text-sm backlinks]]
                 [:td [:span.text-gray-500.text-sm (if created-at
-                                                    (date/int->local-time created-at)
+                                                    (date/int->local-time-2 created-at)
                                                     "Unknown")]]
                 [:td [:span.text-gray-500.text-sm (if updated-at
-                                                    (date/int->local-time updated-at)
+                                                    (date/int->local-time-2 updated-at)
                                                     "Unknown")]]])]]))])))
