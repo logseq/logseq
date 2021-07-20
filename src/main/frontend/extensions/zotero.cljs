@@ -55,7 +55,6 @@
           [search-error set-search-error!]   (rum/use-state nil)
           [is-searching set-is-searching!]   (rum/use-state false)]
 
-      (println "is-searching" is-searching)
 
       (go
         (let [d-term   (<! debounce-chan)]
