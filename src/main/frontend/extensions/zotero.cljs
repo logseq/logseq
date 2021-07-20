@@ -1,5 +1,5 @@
 (ns frontend.extensions.zotero
-  (:require [cljs.core.async :refer [<! go]]
+  (:require [cljs.core.async :refer [<! >! go chan]]
             [clojure.string :as str]
             [frontend.extensions.zotero.api :as api]
             [frontend.extensions.zotero.handler :as zotero-handler]
@@ -38,18 +38,18 @@
     (let [[term set-term!]                   (rum/use-state "")
           [search-result set-search-result!] (rum/use-state [])
           [search-error set-search-error!]   (rum/use-state nil)
-          [is-searching set-is-searching!]   (rum/use-state false)]
+          [is-searching set-is-searching!]   (rum/use-state false)
+          term-chan                          (chan)
+          debounce-chan                      (api/debounce term-chan 500)]
 
 
       (rum/use-effect!
        (fn []
-         (let [do-search (fn [] (when-not (str/blank? term)
-                                  (go
-                                    (let [result (<! (api/query-items "journalArticle" term))]
-                                      (set-search-result! result)))))
-               do-search (util/debounce 200 do-search)]
-
-           (do-search)))
+         (go
+           (let [term   (<! debounce-chan)]
+             (when-not (str/blank? term)
+               (set-search-result!
+                (<! (api/query-items "journalArticle" term)))))))
        [term])
 
 
@@ -59,7 +59,9 @@
        [:input.p-2.border.block.w-full.mb-3
         {:autoFocus   true
          :placeholder "Search for your Zotero journal article (title, author, text, anything)"
-         :value       term :on-change (fn [e] (set-term! (util/evalue e)))}]
+         :value       term :on-change (fn [e]
+                                        (set-term! (util/evalue e))
+                                        (go (>! term-chan (util/evalue e))))}]
 
        [:div
         (map

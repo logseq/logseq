@@ -1,6 +1,7 @@
 (ns frontend.extensions.zotero.api
   (:require [cljs-http.client :as http]
-            [cljs.core.async :refer [go <!]]
+            [cljs.core.async
+             :refer [go <! >! go-loop timeout close! chan alt!]]
             [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [frontend.util :as util]))
@@ -13,6 +14,24 @@
              :timeout     150000
              :type        :user
              :type-id     8234867})
+
+;; taken from https://github.com/metosin/metosin-common/blob/master/src/cljc/metosin/core/async/debounce.cljc
+(defn debounce
+  "Creates a channel which will change put a new value to the output channel
+   after timeout has passed. Each value change resets the timeout. If value
+   changes more frequently only the latest value is put out.
+   When input channel closes, the output channel is closed."
+  [in ms]
+  (let [out (chan)]
+    (go-loop [last-val nil]
+      (let [val   (if (nil? last-val) (<! in) last-val)
+            timer (timeout ms)]
+        (alt!
+          in ([v] (if v
+                    (recur v)
+                    (close! out)))
+          timer ([_] (do (>! out val) (recur nil))))))
+    out))
 
 ;; "/users/475425/collections?v=3"
 (defn get*
