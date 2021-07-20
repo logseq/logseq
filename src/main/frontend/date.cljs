@@ -25,7 +25,9 @@
 (defn journal-title-formatters
   []
   (conj
-   #{"MMM do, yyyy"
+   #{"do MMM yyyy"
+	   "do MMMM yyyy"
+     "MMM do, yyyy"
      "MMMM do, yyyy"
      "E, dd-MM-yyyy"
      "E, dd.MM.yyyy"
