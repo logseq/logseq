@@ -38,7 +38,9 @@
            (let [vals (map #(get-in % [:block/properties f]) result)
                  int? (some integer? vals)]
              `(~'fn [~'b]
-               (~'let [~'result (~'get-in ~'b [:block/properties ~f])]
+               (~'let [~'result-str (~'get-in ~'b [:block/properties ~f])
+                       ~'result-num (~'parseFloat ~'result-str)
+                       ~'result (if (~'isNaN ~'result-num) ~'result-str ~'result-num)]
                 (~'or ~'result (~'when ~int? 0))))))
 
          :else
