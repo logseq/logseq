@@ -108,46 +108,35 @@
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
                 state)}
   [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
-  (ui/catch-error
-   [:div#main-content-container.w-full.flex.justify-center
-    [:div.mt-8
-     [:span.error "⚠️ Oops, Something Went Wrong, please back up your data first!"]
-     [:div.my-2 "Usually, a re-index could fix it. If it doesn't, you can join our "
-      [:a.inline {:href "https://discord.gg/KpN4eHY"
-                  :target "_blank"}
-       "discord group"]
-      " to ask for help."]
-     (ui/button "Re-index current graph"
-       :on-click #(repo-handler/re-index! nfs-handler/rebuild-index!))]]
-   (rum/with-context [[t] i18n/*tongue-context*]
-     [:div#main-content.cp__sidebar-main-layout.flex-1.flex
-      [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
-       {:style {:flex (if (state/get-left-sidebar-open?)
-                        "0 1 20%"
-                        "0 0 0px")
-                :border-right (str "1px solid "
-                                   (if white? "#f0f8ff" "#073642"))}}
-       (when (state/sub :ui/left-sidebar-open?)
-         (sidebar-nav route-match nil))]
-      [:div#main-content-container.w-full.flex.justify-center
-       {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
-       [:div.cp__sidebar-main-content
-        {:data-is-global-graph-pages global-graph-pages?
-         :data-is-full-width (or global-graph-pages?
-                                 (contains? #{:all-files :all-pages :my-publishing} route-name))}
-        (cond
-          (not indexeddb-support?)
-          nil
+  (rum/with-context [[t] i18n/*tongue-context*]
+    [:div#main-content.cp__sidebar-main-layout.flex-1.flex
+     [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
+      {:style {:flex (if (state/get-left-sidebar-open?)
+                       "0 1 20%"
+                       "0 0 0px")
+               :border-right (str "1px solid "
+                                  (if white? "#f0f8ff" "#073642"))}}
+      (when (state/sub :ui/left-sidebar-open?)
+        (sidebar-nav route-match nil))]
+     [:div#main-content-container.w-full.flex.justify-center
+      {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
+      [:div.cp__sidebar-main-content
+       {:data-is-global-graph-pages global-graph-pages?
+        :data-is-full-width (or global-graph-pages?
+                                (contains? #{:all-files :all-pages :my-publishing} route-name))}
+       (cond
+         (not indexeddb-support?)
+         nil
 
-          db-restoring?
-          [:div.mt-20
-           [:div.ls-center
-            (ui/loading (t :loading))]]
+         db-restoring?
+         [:div.mt-20
+          [:div.ls-center
+           (ui/loading (t :loading))]]
 
-          :else
-          [:div.pb-24 {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
-                       :style {:margin-bottom (if global-graph-pages? 0 120)}}
-           main-content])]]])))
+         :else
+         [:div.pb-24 {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
+                      :style {:margin-bottom (if global-graph-pages? 0 120)}}
+          main-content])]]]))
 
 (rum/defc footer
   []
@@ -342,17 +331,17 @@
         [:div.#app-container.h-screen.flex
          [:div.flex-1.h-full.flex.flex-col#left-container.relative
           {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
-          [:div.scrollbar-spacing#main-container
-           (header/header {:open-fn        open-fn
-                           :white?         white?
-                           :current-repo   current-repo
-                           :logged?        logged?
-                           :page?          page?
-                           :route-match    route-match
-                           :me             me
-                           :default-home   default-home
-                           :new-block-mode new-block-mode})
+          (header/header {:open-fn        open-fn
+                          :white?         white?
+                          :current-repo   current-repo
+                          :logged?        logged?
+                          :page?          page?
+                          :route-match    route-match
+                          :me             me
+                          :default-home   default-home
+                          :new-block-mode new-block-mode})
 
+          [:div#main-container.scrollbar-spacing
            (main {:route-match         route-match
                   :global-graph-pages? global-graph-pages?
                   :logged?             logged?
@@ -361,9 +350,9 @@
                   :indexeddb-support?  indexeddb-support?
                   :white?              white?
                   :db-restoring?       db-restoring?
-                  :main-content        main-content})
+                  :main-content        main-content})]
 
-           (footer)]]
+          (footer)]
          (right-sidebar/sidebar)]
 
         (ui/notification)
@@ -374,11 +363,4 @@
         (when
          (and (not config/mobile?)
               (not config/publishing?))
-          (help-button)
-         ;; [:div.font-bold.absolute.bottom-4.bg-base-2.rounded-full.h-8.w-8.flex.items-center.justify-center.font-bold.cursor.opacity-70.hover:opacity-100
-         ;;  {:style {:left 24}
-         ;;   :title "Click to show/hide sidebar"
-         ;;   :on-click (fn []
-         ;;               (state/set-left-sidebar-open! (not (state/get-left-sidebar-open?))))}
-         ;;  (if (state/sub :ui/left-sidebar-open?) "<" ">")]
-          )]))))
+          (help-button))]))))

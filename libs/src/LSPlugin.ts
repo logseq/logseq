@@ -177,8 +177,8 @@ export interface IAppProxy {
   getCurrentGraph: () => Promise<AppGraphInfo | null>
 
   // router
-  pushState: (k: string, params?: {}) => void
-  replaceState: (k: string, params?: {}) => void
+  pushState: (k: string, params?: Record<string, any>, query?: Record<string, any>) => void
+  replaceState: (k: string, params?: Record<string, any>, query?: Record<string, any>) => void
 
   // ui
   showMsg: (content: string, status?: 'success' | 'warning' | string) => void
@@ -187,12 +187,12 @@ export interface IAppProxy {
   registerUIItem: (
     type: 'toolbar' | 'pagebar',
     opts: { key: string, template: string }
-  ) => boolean
+  ) => void
 
   registerPageMenuItem: (
     tag: string,
     action: (e: IHookEvent & { page: string }) => void
-  ) => unknown
+  ) => void
 
   // events
   onCurrentGraphChanged: IUserHook
@@ -231,7 +231,7 @@ export interface IEditorProxy extends Record<string, any> {
   registerSlashCommand: (
     tag: string,
     action: BlockCommandCallback | Array<SlashCommandAction>
-  ) => boolean
+  ) => unknown
 
   /**
    * register a custom command in the block context menu (triggered by right clicking the block dot)
@@ -339,6 +339,11 @@ export interface IEditorProxy extends Record<string, any> {
   getBlockProperty: (block: BlockIdentity, key: string) => Promise<any>
 
   getBlockProperties: (block: BlockIdentity) => Promise<any>
+
+  scrollToBlockInPage: (
+    pageName: BlockPageName,
+    blockId: BlockIdentity
+  ) => void
 }
 
 /**

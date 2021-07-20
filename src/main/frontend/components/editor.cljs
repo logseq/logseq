@@ -388,24 +388,27 @@
 (def starts-with? clojure.string/starts-with?)
 
 (defn get-editor-heading-class [content]
-  (cond
-    (string/includes? content "\n") "multiline-block"
-    (starts-with? content "# ") "h1"
-    (starts-with? content "## ") "h2"
-    (starts-with? content "### ") "h3"
-    (starts-with? content "#### ") "h4"
-    (starts-with? content "##### ") "h5"
-    (starts-with? content "###### ") "h6"
-    (starts-with? content "TODO ") "todo-block"
-    (starts-with? content "DOING ") "doing-block"
-    (starts-with? content "DONE ") "done-block"
-    :else "normal-block"))
+  (let [content (if content (str content) "")]
+    (cond
+     (string/includes? content "\n") "multiline-block"
+     (starts-with? content "# ") "h1"
+     (starts-with? content "## ") "h2"
+     (starts-with? content "### ") "h3"
+     (starts-with? content "#### ") "h4"
+     (starts-with? content "##### ") "h5"
+     (starts-with? content "###### ") "h6"
+     (starts-with? content "TODO ") "todo-block"
+     (starts-with? content "DOING ") "doing-block"
+     (starts-with? content "DONE ") "done-block"
+     :else "normal-block")))
 
 (rum/defc mock-textarea
   < rum/reactive
   {:did-update
    (fn [state]
-     (editor-handler/handle-last-input)
+     (try (editor-handler/handle-last-input)
+          (catch js/Error _e
+            nil))
      state)}
   []
   [:div#mock-text

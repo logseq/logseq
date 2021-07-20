@@ -427,3 +427,11 @@ a:hover > .bullet-container .bullet {
 a.filter svg {
   transform: scale(0.9);
 }
+
+.table-query-properties svg {
+    display: inline;
+}
+
+.query-title {
+    background: var(--ls-page-properties-background-color);
+}

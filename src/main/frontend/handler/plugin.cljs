@@ -40,11 +40,11 @@
 
 (defn register-plugin-slash-command
   [pid [cmd actions]]
-  (prn (if-let [pid (keyword pid)]
-         (when (contains? (:plugin/installed-plugins @state/state) pid)
-           (do (swap! state/state update-in [:plugin/installed-commands pid]
-                      (fnil merge {}) (hash-map cmd (mapv #(conj % {:pid pid}) actions)))
-               true)))))
+  (when-let [pid (keyword pid)]
+    (when (contains? (:plugin/installed-plugins @state/state) pid)
+      (do (swap! state/state update-in [:plugin/installed-commands pid]
+                 (fnil merge {}) (hash-map cmd (mapv #(conj % {:pid pid}) actions)))
+          true))))
 
 (defn unregister-plugin-slash-command
   [pid]
@@ -52,8 +52,8 @@
 
 (defn register-plugin-simple-command
   ;; action => [:action-key :event-key]
-  [pid {:keys [key label type] :as cmd}  action]
-  (if-let [pid (keyword pid)]
+  [pid {:keys [key label type] :as cmd} action]
+  (when-let [pid (keyword pid)]
     (when (contains? (:plugin/installed-plugins @state/state) pid)
       (do (swap! state/state update-in [:plugin/simple-commands pid]
                  (fnil conj []) [type cmd action pid])
@@ -66,7 +66,7 @@
 (defn register-plugin-ui-item
   [pid {:keys [key type template] :as opts}]
   (when-let [pid (keyword pid)]
-    (when (or true (contains? (:plugin/installed-plugins @state/state) pid))
+    (when (contains? (:plugin/installed-plugins @state/state) pid)
       (do (swap! state/state update-in [:plugin/installed-ui-items pid]
                  (fnil conj []) [type opts pid])
           true))))
