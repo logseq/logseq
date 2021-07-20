@@ -27,6 +27,7 @@
   (rum/use-effect!
     (fn []
       (ui-handler/add-style-if-exists!)
+      (pdf/reset-current-pdf!)
       (plugin-handler/hook-plugin-app :current-graph-changed {}))
     [current-repo])
 

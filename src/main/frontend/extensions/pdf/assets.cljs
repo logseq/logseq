@@ -20,10 +20,12 @@
                    (string/replace-first filename ".pdf" ""))]
     {:key      key
      :filename filename
-     :fullpath (utils/node-path.join
+     :url      (utils/node-path.join
                  "file://"                                  ;; TODO: bfs
                  (config/get-repo-dir (state/get-current-repo))
-                 "assets" filename)}))
+                 "assets" filename)
+
+     :hls-file (str "assets/" key ".json")}))
 
 (defn upload-asset!
   [page-block files refresh-file!]
@@ -69,7 +71,8 @@
         [:div.extensions__pdf-assets-uploader
          (for [file files]
            [:a.ui__button
-            {:intent   "logseq"
+            {:key file
+             :intent   "logseq"
              :on-click (fn []
                          (when-let [current (inflate-asset file)]
                            (state/set-state! :pdf/current current)))}

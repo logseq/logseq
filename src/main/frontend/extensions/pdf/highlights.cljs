@@ -7,10 +7,17 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util :as front-utils]
             [frontend.state :as state]
-            [medley.core :as medley]))
+            [frontend.config :as config]
+            [medley.core :as medley]
+            [frontend.fs :as fs]
+            [clojure.string :as string]))
 
 (defn dd [& args]
   (apply js/console.debug args))
+
+(defn reset-current-pdf!
+  []
+  (state/set-state! :pdf/current nil))
 
 (rum/defc pdf-highlights-ctx-menu
   [^js viewer {:keys [highlight vw-pos point]}
@@ -108,9 +115,10 @@
        ))])
 
 (rum/defc pdf-highlights
-  [^js el ^js viewer initial-hls loaded-pages]
+  [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
 
-  (let [[sel-state, set-sel-state!] (rum/use-state {:range nil :collapsed nil :point nil})
+  (let [*mounted (rum/use-ref false)
+        [sel-state, set-sel-state!] (rum/use-state {:range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
         [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :point nil})
         clear-ctx-tip! #(set-tip-state! {})
@@ -122,6 +130,14 @@
                   (when-let [pp (medley/find-first #(= (:id (second %)) (:id hl)) (medley/indexed highlights))]
                     (set-highlights! (assoc-in highlights [(first pp)] hl))))
         del-hl! (fn [hl] (when-let [id (:id hl)] (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
+
+    ;; consume dirtied
+    (rum/use-effect!
+      (fn []
+        (if (rum/deref *mounted)
+          (set-dirty-hls! highlights)
+          (rum/set-ref! *mounted true)))
+      [highlights])
 
     ;; selection events
     (rum/use-effect!
@@ -241,14 +257,13 @@
         ])]))
 
 (rum/defc pdf-viewer
-  [url initial-hls ^js pdf-document]
+  [url initial-hls ^js pdf-document ops]
 
-  (js/console.debug "==== render pdf-viewer ====")
+  (dd "==== render pdf-viewer ====")
 
   (let [*el-ref (rum/create-ref)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
-        [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})
-        [hls-state, set-hls-state!] (rum/use-state {:dirties 0})]
+        [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})]
 
     ;; instant pdfjs viewer
     (rum/use-effect!
@@ -321,7 +336,8 @@
        (pdf-highlights
          (:el state) (:viewer state)
          initial-hls
-         (:loaded-pages ano-state)))]))
+         (:loaded-pages ano-state)
+         ops))]))
 
 (rum/defc pdf-toolbar
   []
@@ -331,11 +347,54 @@
     ]])
 
 (rum/defc pdf-loader
-  [url]
+  [{:keys [url hls-file]}]
   (let [*doc-ref (rum/use-ref nil)
-        [state set-state!] (rum/use-state {:error nil :pdf-document nil :status nil})]
+        [state, set-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
+        [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil})
+        repo-cur (state/get-current-repo)
+        repo-dir (config/get-repo-dir repo-cur)
+        set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
+                         (set-hls-state! (merge hls-state {:latest-hls latest-hls})))]
 
-    ;; load
+    ;; load highlights
+    (rum/use-effect!
+      (fn []
+        (p/catch
+          (p/let [_ (fs/create-if-not-exists repo-cur repo-dir hls-file "[]")
+                  res (fs/read-file repo-dir hls-file)
+                  data (if res (bean/->clj (js/JSON.parse res)) [])]
+
+            (dd "[initial hls] " res)
+
+            (set-hls-state! {:initial-hls data}))
+
+          ;; error
+          (fn [e]
+            (js/console.error "[load hls error]" e)
+            (set-hls-state! {:initial-hls []})))
+
+        ;; cancel
+        #())
+      [hls-file])
+
+    ;; cache highlights
+    (rum/use-effect!
+      (fn []
+        (when-let [hls (:latest-hls hls-state)]
+          (dd "latest hls ===>" hls)
+          (p/catch
+            (p/let [hls (if hls
+                          (js/JSON.stringify (bean/->js hls) nil 2)
+                          "[]")
+                    _ (fs/write-file! repo-cur repo-dir hls-file hls {:skip-mtime? true})])
+
+            ;; write hls file error
+            (fn [e]
+              (js/console.error "[write hls error]" e)))))
+
+      [(:latest-hls hls-state)])
+
+    ;; load document
     (rum/use-effect!
       (fn []
         (let [get-doc$ (fn [^js opts] (.-promise (js/pdfjsLib.getDocument opts)))
@@ -364,15 +423,25 @@
       [(:error state)])
 
     [:div.extensions__pdf-loader {:ref *doc-ref}
-     (if (= (:status state) :loading)
-       [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-md
-        "Downloading PDF file " url]
-       [(pdf-toolbar)
-        (pdf-viewer url [] (:pdf-document state))])]))
+     (let [status-doc (:status state)
+           initial-hls (:initial-hls hls-state)]
+
+       (if (or (= status-doc :loading)
+               (nil? initial-hls))
+
+         [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-md
+          "Downloading PDF file " url]
+
+         [(rum/with-key (pdf-toolbar) "pdf-toolbar")
+          (rum/with-key (pdf-viewer
+                          url initial-hls
+                          (:pdf-document state)
+                          {:set-dirty-hls! set-dirty-hls!}) "pdf-viewer")]))]))
 
 (rum/defc pdf-container
-  [file]
-  (let [[prepared set-prepared!] (rum/use-state false)]
+  [pdf-current]
+  (let [[prepared set-prepared!] (rum/use-state false)
+        [ready set-ready!] (rum/use-state false)]
 
     ;; load assets
     (rum/use-effect!
@@ -382,9 +451,16 @@
           (fn [] (set-prepared! true))))
       [])
 
+    ;; refresh loader
+    (rum/use-effect!
+      (fn []
+        (js/setTimeout #(set-ready! true) 100)
+        #(set-ready! false))
+      [pdf-current])
+
     [:div.extensions__pdf-container
-     (if (and prepared file)
-       (pdf-loader file))]))
+     (if (and prepared pdf-current ready)
+       (pdf-loader pdf-current))]))
 
 (rum/defc playground-effects
   [active]
@@ -399,8 +475,9 @@
 
     [active])
   nil)
+
 (rum/defcs playground < rum/reactive
-  []
+  [state]
   (let [pdf-current (state/sub :pdf/current)]
     [:div.extensions__pdf-playground
 
@@ -408,5 +485,5 @@
 
      (when pdf-current
        (js/ReactDOM.createPortal
-         (pdf-container (:fullpath pdf-current))
+         (pdf-container pdf-current)
          (js/document.querySelector "#app-single-container")))]))
