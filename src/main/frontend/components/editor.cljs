@@ -504,7 +504,8 @@
 
      (when (state/sub :editor/show-zotero)
        (transition-cp
-        (zotero/zotero-search)
+        (zotero/zotero-search (fn [page-name]
+                                (editor-handler/handle-command-zotero id page-name format)))
         false
         *slash-caret-pos))
 

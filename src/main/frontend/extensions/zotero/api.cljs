@@ -10,10 +10,10 @@
 
 (def config {:api-version 3
              :base        "https://api.zotero.org"
-             :api-key     "api_key"
              :timeout     150000
+             :api-key     "NlJI2bAuhYcQ4UgXSwHHsWRD"
              :type        :user
-             :type-id     8234867})
+             :type-id     8237615})
 
 ;; taken from https://github.com/metosin/metosin-common/blob/master/src/cljc/metosin/core/async/debounce.cljc
 (defn debounce
@@ -77,11 +77,10 @@
 
 (comment
   (get* config "/collections")
-  (get* config "/items" )
+  (get* config "/items")
   (get* config "/items" {:item-type "journalArticle"})
   (item "JZCIN4K5")
   (item "RFYNAQTN")
   (item "3V6N8ECQ")
   (notes "3V6N8ECQ")
-  (attachments "3V6N8ECQ")
-  )
+  (attachments "3V6N8ECQ"))
