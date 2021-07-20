@@ -3,6 +3,7 @@
             [clojure.string :as str]
             [frontend.extensions.zotero.api :as api]
             [frontend.extensions.zotero.handler :as zotero-handler]
+            [frontend.extensions.zotero.extractor :as extractor]
             [frontend.state :as state]
             [frontend.util :as util]
             [rum.core :as rum]))
@@ -10,18 +11,28 @@
 (defonce term-chan (chan))
 (defonce debounce-chan  (api/debounce term-chan 5000))
 
-(rum/defc zotero-search-item [{:keys [data title] :as item}]
+
+(rum/defc zotero-search-item [{:keys [data] :as item} handle-command-zotero]
   (let [type (:item-type data)
+        title (:title data)
         abstract (str (subs (:abstract-note data) 0 200) "...")]
 
     (if (= type "journalArticle")
       [:div.px-2.py-4.border-b.cursor-pointer.border-solid.hover:bg-gray-100.last:border-none
-       {:on-click (fn [] (go (<! (zotero-handler/create-zotero-page item))))}
+       {:on-click (fn [] (go (<! (zotero-handler/create-zotero-page item))
+                             (let [{:keys [page-name]} (extractor/extract item)]
+                               (handle-command-zotero page-name)
+
+                               (state/sidebar-add-block!
+                                (state/get-current-repo)
+                                (:db/id page-name)
+                                :page
+                                {:page page-name}))))}
        [[:div.font-bold.mb-1 title]
         [:div.text-sm abstract]]]
       nil)))
 
-(rum/defc zotero-search []
+(rum/defc zotero-search [handle-command-zotero]
 
   (let [cache-api-key       (js/localStorage.getItem "zotero-api-key")
         cache-user-id       (js/localStorage.getItem "zotero-user-id")
@@ -64,7 +75,7 @@
 
        [:div
         (map
-         (fn [item] (rum/with-key (zotero-search-item item) (:key item)))
+         (fn [item] (rum/with-key (zotero-search-item item handle-command-zotero) (:key item)))
          search-result)]])))
 
 (rum/defc setting []

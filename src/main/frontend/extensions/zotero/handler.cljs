@@ -46,9 +46,7 @@
 
       (<! (add page-name :attachments key))
 
-      (<! (add page-name :notes key))
-
-      (js/alert "finish"))))
+      (<! (add page-name :notes key)))))
 
 (comment
   (create-zotero-page "JAHCZRNB")
@@ -71,8 +69,7 @@
 ;; => #:block{:properties {}, :tags [], :format :markdown, :children #{}, :path-refs (#:block{:name "notes", :original-name "notes", :journal? false}), :meta {:timestamps [], :properties [], :start-pos 0, :end-pos 11}, :unordered true, :content "[[notes]]", :refs (#:block{:name "notes", :original-name "notes", :journal? false}), :file 60, :page 58, :title [["Link" {:url ["Page_ref" "notes"], :label [["Plain" ""]], :full_text "[[notes]]", :metadata ""}]], :level 1, :journal? false, :anchor "", :uuid #uuid "60eee44e-7b9f-439d-8113-c8e5ab7a63e8", :body []}
 
 
-  #_
-  (item "3V6N8ECQ")
+  #_(item "3V6N8ECQ")
   ;; (db/get-page-blocks)
   ;; (page-handler/page-add-property! )
   ;; (editor-handler/insert-new-block-aux! )
@@ -82,8 +79,7 @@
   ;; (db/get-page-blocks "ccc")
 
   ;; (def block (state/get-edit-block))
-  #_
-  (editor-handler/save-block-if-changed!
-   block
-   (property-util/insert-property :markdown "xxx" :test "value")
-   {:force? true}))
+  #_(editor-handler/save-block-if-changed!
+     block
+     (property-util/insert-property :markdown "xxx" :test "value")
+     {:force? true}))

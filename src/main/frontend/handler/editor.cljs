@@ -266,7 +266,7 @@
           page-tx (let [id (:db/id (:block/page block))
                         retract-attributes (when id
                                              (mapv (fn [attribute]
-                                                    [:db/retract id attribute])
+                                                     [:db/retract id attribute])
                                                    [:block/properties :block/tags :block/alias]))
                         tx (cond-> {:db/id id
                                     :block/properties page-properties}
@@ -538,6 +538,7 @@
 (defn clear-when-saved!
   []
   (state/set-editor-show-input! nil)
+  (state/set-editor-show-zotero! false)
   (state/set-editor-show-date-picker! false)
   (state/set-editor-show-page-search! false)
   (state/set-editor-show-block-search! false)
@@ -957,7 +958,7 @@
                                                (if (string/starts-with? (string/lower-case line) key)
                                                  new-line
                                                  line))
-                                          lines)
+                                             lines)
                               new-lines (if (not= lines new-lines)
                                           new-lines
                                           (cons (first new-lines) ;; title
@@ -1039,8 +1040,8 @@
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         blocks* (flatten
                  (mapv (fn [b] (if (:collapsed (:block/properties b))
-                                (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
-                                [b])) blocks))
+                                 (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
+                                 [b])) blocks))
         block-ids* (mapv :block/uuid blocks*)
         unordered? (:block/unordered (first blocks*))
         format (:block/format (first blocks*))
@@ -1727,7 +1728,7 @@
         (seq blocks)
         (do
           (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                                   [:block/uuid (medley/uuid id)])) blocks)
+                                                    [:block/uuid (medley/uuid id)])) blocks)
                                  (remove nil?))
                 blocks (db/pull-many repo '[*] lookup-refs)
                 blocks (reorder-blocks blocks)
@@ -1742,12 +1743,12 @@
               (db/refresh! repo opts)
               (let [blocks (doall
                             (map
-                              (fn [block]
-                                (when-let [id (gobj/get block "id")]
-                                  (when-let [block (gdom/getElement id)]
-                                    (dom/add-class! block "selected noselect")
-                                    block)))
-                              blocks-dom-nodes))]
+                             (fn [block]
+                               (when-let [id (gobj/get block "id")]
+                                 (when-let [block (gdom/getElement id)]
+                                   (dom/add-class! block "selected noselect")
+                                   block)))
+                             blocks-dom-nodes))]
                 (state/set-selection-blocks! blocks)))))))))
 
 (defn- get-link
@@ -1758,6 +1759,11 @@
       :markdown (util/format "[%s](%s)" label link)
       :org (util/format "[[%s][%s]]" link label)
       nil)))
+
+(defn handle-command-zotero
+  [id page-name format]
+  (state/set-editor-show-zotero! false)
+  (insert-command! id (str "[[" page-name "]]") format {}))
 
 (defn handle-command-input
   [command id format m pos]
@@ -2108,11 +2114,11 @@
           tree (blocks-vec->tree result-blocks)]
       (insert-command! id "" format {})
       (let [last-block (paste-block-vec-tree-at-target tree [:template :template-including-parent]
-                                                  (fn [content]
-                                                    (->> content
-                                                         (property/remove-property format "template")
-                                                         (property/remove-property format "template-including-parent")
-                                                         template/resolve-dynamic-template!)))]
+                                                       (fn [content]
+                                                         (->> content
+                                                              (property/remove-property format "template")
+                                                              (property/remove-property format "template-including-parent")
+                                                              template/resolve-dynamic-template!)))]
         (clear-when-saved!)
         (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]})
         ;; FIXME:
@@ -2637,8 +2643,8 @@
   (let [min-level (apply min (mapv :block/level blocks))
         prefix-level (if (> min-level 1) (- min-level 1) 0)]
     (->> blocks
-                   (mapv #(assoc % :level (- (:block/level %) prefix-level)))
-                   (blocks-vec->tree))))
+         (mapv #(assoc % :level (- (:block/level %) prefix-level)))
+         (blocks-vec->tree))))
 
 (defn- paste-text-parseable
   [format text]
