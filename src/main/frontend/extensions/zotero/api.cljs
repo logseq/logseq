@@ -10,6 +10,7 @@
 (def config {:api-version 3
              :base        "https://api.zotero.org"
              :api-key     "api_key"
+             :timeout     150000
              :type        :user
              :type-id     8234867})
 
@@ -18,7 +19,7 @@
   ([config api]
    (get* config api nil))
   ([config api query-params]
-   (go (let [{:keys [api-version base type type-id api-key]} config
+   (go (let [{:keys [api-version base type type-id api-key timeout]} config
              {:keys [status body] :as response}
              (<! (http/get (str base
                                 (if (= type :user)
@@ -26,19 +27,20 @@
                                   "/groups/")
                                 type-id
                                 api)
-                           {:with-credentials? false
-                            :headers {"Zotero-API-Key" api-key
-                                      "Zotero-API-Version" api-version}
-                            :query-params (cske/transform-keys csk/->camelCaseString
-                                                               query-params)}))]
-         (if (http/unexceptional-status? status)
+                           {:timeout           timeout
+                            :with-credentials? false
+                            :headers           {"Zotero-API-Key"     api-key
+                                                "Zotero-API-Version" api-version}
+                            :query-params      (cske/transform-keys csk/->camelCaseString
+                                                                    query-params)}))]
+         (case (:error-code response)
+           :no-error
            (let [result (cske/transform-keys csk/->kebab-case-keyword body)]
              (when *debug*
                (def rr result)
                (println result))
              result)
-           (throw (ex-info "Http error"
-                           {:response response})))))))
+           response)))))
 
 (defn item [key]
   (get* config (str "/items/" key)))
