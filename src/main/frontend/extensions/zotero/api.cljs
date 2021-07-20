@@ -20,7 +20,7 @@
    (get* config api nil))
   ([config api query-params]
    (go (let [{:keys [api-version base type type-id api-key timeout]} config
-             {:keys [status body] :as response}
+             {:keys [success body] :as response}
              (<! (http/get (str base
                                 (if (= type :user)
                                   "/users/"
@@ -33,8 +33,7 @@
                                                 "Zotero-API-Version" api-version}
                             :query-params      (cske/transform-keys csk/->camelCaseString
                                                                     query-params)}))]
-         (case (:error-code response)
-           :no-error
+         (if success
            (let [result (cske/transform-keys csk/->kebab-case-keyword body)]
              (when *debug*
                (def rr result)
@@ -59,7 +58,7 @@
 
 (comment
   (get* config "/collections")
-  (get* config "/items" {:limit 3})
+  (get* config "/items" )
   (get* config "/items" {:item-type "journalArticle"})
   (item "JZCIN4K5")
   (item "RFYNAQTN")
