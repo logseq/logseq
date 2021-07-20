@@ -85,6 +85,7 @@
 
          (when is-searching [:span.loader-reverse  svg/refresh])]]
 
+       [:div.h-2.text-sm.text-red-400.mb-2 (if search-error (str "Search error: " search-error) "")]
 
        [:div
         (map
