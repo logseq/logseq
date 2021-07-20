@@ -6,9 +6,8 @@
             [frontend.handler.notification :as notification]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util :as front-utils]
+            [frontend.state :as state]
             [medley.core :as medley]))
-
-(defonce ACTIVE_FILE "https://phx-nine.vercel.app/clojure-hopl-iv-final.pdf")
 
 (defn dd [& args]
   (apply js/console.debug args))
@@ -324,6 +323,13 @@
          initial-hls
          (:loaded-pages ano-state)))]))
 
+(rum/defc pdf-toolbar
+  []
+  [:div.extensions__pdf-toolbar
+   [:div.r
+    [:a.button {:on-click #(state/set-state! :pdf/current nil)} "close"]
+    ]])
+
 (rum/defc pdf-loader
   [url]
   (let [*doc-ref (rum/use-ref nil)
@@ -345,23 +351,27 @@
                        (do
                          (set-state! {:status :loading})
                          (get-doc$ (clj->js opts)))
-                       #(do (js/console.log "+++" %)
-                            (set-state! {:pdf-document %})))
+                       #(set-state! {:pdf-document %}))
                      #(set-state! {:error %}))
             #(set-state! {:status :completed}))
 
           #()))
       [url])
 
+    (rum/use-effect!
+      (fn []
+        (dd "[ERROR loader]" (:error state)))
+      [(:error state)])
+
     [:div.extensions__pdf-loader {:ref *doc-ref}
      (if (= (:status state) :loading)
        [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-md
         "Downloading PDF file " url]
-       (pdf-viewer url [] (:pdf-document state)))
-     [:h3 (str (:error state))]]))
+       [(pdf-toolbar)
+        (pdf-viewer url [] (:pdf-document state))])]))
 
-(rum/defc container
-  []
+(rum/defc pdf-container
+  [file]
   (let [[prepared set-prepared!] (rum/use-state false)]
 
     ;; load assets
@@ -372,28 +382,31 @@
           (fn [] (set-prepared! true))))
       [])
 
-    [:div.extensions__pdf-container.flex
-     (if prepared
-       (pdf-loader ACTIVE_FILE))]))
+    [:div.extensions__pdf-container
+     (if (and prepared file)
+       (pdf-loader file))]))
 
-(rum/defc playground
+(rum/defc playground-effects
+  [active]
+
+  (rum/use-effect!
+    (fn []
+      (let [flg "is-pdf-active"
+            ^js cls (.-classList js/document.body)]
+        (and active (.add cls flg))
+
+        #(.remove cls flg)))
+
+    [active])
+  nil)
+(rum/defcs playground < rum/reactive
   []
-  (let [[state, set-state!] (rum/use-state {:active false})]
-
-    (rum/use-effect!
-      #(js/setTimeout (fn [] (set-state! {:active true})) 100)
-      [])
-
-    (rum/use-effect!
-      (fn []
-        (let [flg "is-pdf-active"
-              ^js cls (.-classList js/document.body)]
-          (.add cls flg)
-          #(.remove cls flg)))
-      [(:active state)])
-
+  (let [pdf-current (state/sub :pdf/current)]
     [:div.extensions__pdf-playground
-     (when (:active state)
+
+     (playground-effects (not (nil? pdf-current)))
+
+     (when pdf-current
        (js/ReactDOM.createPortal
-         (container)
+         (pdf-container (:fullpath pdf-current))
          (js/document.querySelector "#app-single-container")))]))

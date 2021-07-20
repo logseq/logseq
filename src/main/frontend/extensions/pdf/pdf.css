@@ -44,8 +44,26 @@
     }
   }
 
+  &-container {
+    display: flex;
+  }
+
   &-loader {
     position: relative;
+  }
+
+  &-toolbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 38px;
+    z-index: 5;
+    background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, rgba(255, 255, 255, 1) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 20px;
   }
 
   &-viewer {
@@ -152,10 +170,6 @@
       }
     }
   }
-
-  .Highlight--scrolledTo .hls-text-region-item {
-    background: var(--ph-highlight-scroll-into-color);
-  }
 }
 
 .hls-text-region-item {
@@ -252,6 +266,10 @@ body.is-pdf-active {
 
   #sidebar-nav-wrapper {
     border: none !important;
+  }
+
+  #head {
+    padding-left: 0;
   }
 }
 

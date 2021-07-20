@@ -353,7 +353,9 @@
                                    :main-content        main-content})]
 
                            (footer)]
-                          (right-sidebar/sidebar)]
+                          (right-sidebar/sidebar)
+
+                          [:div#app-single-container]]
 
                          (ui/notification)
                          (ui/modal)

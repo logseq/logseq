@@ -13,6 +13,18 @@
 
 (defonce *asset-uploading? (atom false))
 
+(defn inflate-asset
+  [filename]
+  (when-let [key (and
+                   (string/ends-with? filename ".pdf")
+                   (string/replace-first filename ".pdf" ""))]
+    {:key      key
+     :filename filename
+     :fullpath (utils/node-path.join
+                 "file://"                                  ;; TODO: bfs
+                 (config/get-repo-dir (state/get-current-repo))
+                 "assets" filename)}))
+
 (defn upload-asset!
   [page-block files refresh-file!]
   (let [repo (state/get-current-repo)
@@ -38,28 +50,31 @@
           [files, set-files!] (rum/use-state (get-in page [:block/properties :files]))
           files (if (string? files) [files] files)
           refresh-file! (rum/use-callback
-                           (fn [file-name]
-                             (let [files' (if-not (vector? files)
-                                            [file-name]
-                                            (conj files file-name))]
+                          (fn [file-name]
+                            (let [files' (if-not (vector? files)
+                                           [file-name]
+                                           (conj files file-name))]
 
-                               ;; sync
-                               (editor-handler/set-block-property!
-                                 page-uuid
-                                 :files (string/join "," files'))
+                              ;; sync
+                              (editor-handler/set-block-property!
+                                page-uuid
+                                :files files'               ;;(string/join "," files')
+                                )
 
-                               (let [props (db-model/get-page-properties page-name)]
-                                 (set-files! (:files props)))))
-                           [files])]
+                              (let [props (db-model/get-page-properties page-name)]
+                                (set-files! (:files props)))))
+                          [files])]
 
       (let [block-uuid (:block/uuid page)]
         [:div.extensions__pdf-assets-uploader
          (for [file files]
            [:a.ui__button
-            {:intent "logseq"}
+            {:intent   "logseq"
+             :on-click (fn []
+                         (when-let [current (inflate-asset file)]
+                           (state/set-state! :pdf/current current)))}
             svg/external-link
-            file]
-           )
+            file])
 
          [:label.ui__button.is-link
           {:for "upload-page-assets"}

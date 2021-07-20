@@ -400,7 +400,8 @@
                       :z-index     1})]))])
 
             ;; related assets upload
-            (pdf-assets/uploader page-name)
+            (when (and (config/local-db? repo) (not block?))
+              (pdf-assets/uploader page-name))
 
             [:div
              (when (and block? (not sidebar?))
