@@ -1,11 +1,14 @@
 (ns frontend.extensions.zotero
-  (:require [cljs.core.async :refer [<! >! go chan]]
+  (:require [cljs.core.async :refer [<! >! go chan] :as a]
             [clojure.string :as str]
             [frontend.extensions.zotero.api :as api]
             [frontend.extensions.zotero.handler :as zotero-handler]
             [frontend.state :as state]
             [frontend.util :as util]
             [rum.core :as rum]))
+
+(defonce term-chan (chan))
+(defonce debounce-chan  (api/debounce term-chan 5000))
 
 (rum/defc zotero-search-item [{:keys [data title] :as item}]
   (let [type (:item-type data)
@@ -38,20 +41,14 @@
     (let [[term set-term!]                   (rum/use-state "")
           [search-result set-search-result!] (rum/use-state [])
           [search-error set-search-error!]   (rum/use-state nil)
-          [is-searching set-is-searching!]   (rum/use-state false)
-          term-chan                          (chan)
-          debounce-chan                      (api/debounce term-chan 500)]
+          [is-searching set-is-searching!]   (rum/use-state false)]
 
-
-      (rum/use-effect!
-       (fn []
-         (go
-           (let [term   (<! debounce-chan)]
-             (when-not (str/blank? term)
-               (set-search-result!
-                (<! (api/query-items "journalArticle" term)))))))
-       [term])
-
+      (go
+        (let [d-term   (<! debounce-chan)]
+          ;; (js/console.log "xxx term:::" d-term)
+          (when-not (str/blank? d-term)
+            (set-search-result!
+             (<! (api/query-items "journalArticle" d-term))))))
 
       [:div.zotero-search.p-4
        {:style {:width 600}}
@@ -60,10 +57,16 @@
         {:autoFocus   true
          :placeholder "Search for your Zotero journal article (title, author, text, anything)"
          :value       term :on-change (fn [e]
-                                        (set-term! (util/evalue e))
-                                        (go (>! term-chan (util/evalue e))))}]
+                                        (go
+                                          (js/console.log "sending term-chan!!" (util/evalue e))
+                                          (>! term-chan (util/evalue e)))
+                                        (set-term! (util/evalue e)))}]
 
        [:div
         (map
          (fn [item] (rum/with-key (zotero-search-item item) (:key item)))
          search-result)]])))
+
+(rum/defc setting []
+  [:div
+   [:h1.title "Zotero setting"]])
