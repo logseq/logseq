@@ -52,7 +52,21 @@
     (let [[term set-term!]                   (rum/use-state "")
           [search-result set-search-result!] (rum/use-state [])
           [search-error set-search-error!]   (rum/use-state nil)
-          [is-searching set-is-searching!]   (rum/use-state false)]
+          [is-searching set-is-searching!]   (rum/use-state false)
+          term-chan                          (chan)
+          debounce-chan                      (api/debounce term-chan 500)]
+
+
+      (rum/use-effect!
+       (fn []
+         (go
+           (let [term   (<! debounce-chan)]
+             (when-not (str/blank? term)
+               (set-is-searching! true)
+               (set-search-result!
+                (<! (api/query-items "journalArticle" term)))
+               (set-is-searching! false)))))
+       [term])
 
       (go
         (let [d-term   (<! debounce-chan)]
@@ -64,7 +78,7 @@
       [:div.zotero-search.p-4
        {:style {:width 600}}
 
-       [:input.p-2.border.block.w-full.mb-3
+       [:input.p-2.border.block.w-full.mb-2
         {:autoFocus   true
          :placeholder "Search for your Zotero journal article (title, author, text, anything)"
          :value       term :on-change (fn [e]
@@ -72,6 +86,8 @@
                                           (js/console.log "sending term-chan!!" (util/evalue e))
                                           (>! term-chan (util/evalue e)))
                                         (set-term! (util/evalue e)))}]
+
+       [:div.h-2.text-sm.mb-2 (when is-searching "loading...")]
 
        [:div
         (map
