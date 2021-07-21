@@ -181,11 +181,11 @@
                         (state/set-modal! #(export/export-blocks block-id)))}
            "Export")
 
-          (if (srs/card-block? block)
-            (ui/menu-link
-             {:key "Preview Card"
-              :on-click #(srs/preview [(db/pull [:block/uuid block-id])])}
-             "Preview Card"))
+          ;; (if (srs/card-block? block)
+          ;;   (ui/menu-link
+          ;;    {:key "Preview Card"
+          ;;     :on-click #(srs/preview [(db/pull [:block/uuid block-id])])}
+          ;;    "Preview Card"))
 
           (ui/menu-link
            {:key "Copy as JSON"

@@ -197,6 +197,13 @@
   (->> (map :block/content blocks)
        (some #(string/includes? % "{{cloze "))))
 
+(defn- clear-collapsed-property
+  "Clear block's collapsed property if exists"
+  [blocks]
+  (let [result (map (fn [block] (assoc-in block [:block/properties :collapsed] false)) blocks)]
+    (def result result)
+    result))
+
 ;;; ================================================================
 ;;; card impl
 
@@ -205,7 +212,8 @@
   (get-root-block [this] (db/pull [:block/uuid (:block/uuid block)]))
   ICardShow
   (show-cycle [this phase]
-    (let [blocks (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
+    (let [blocks (-> (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
+                     clear-collapsed-property)
           cloze? (has-cloze? blocks)]
       (def blocks blocks)
       (case phase
@@ -402,8 +410,8 @@
   [score* on-click _interval-days-score-3 _interval-days-score-5]
   (let [score (rum/react score*)]
     (ui/button (if (= @score* 3)
-                 "Take a while to recall"
-                 "Remembered")
+                 "Take a while to recall(r)"
+                 "Remembered(r)")
      :small? true
      :on-click #(on-click @score*))))
 
@@ -434,23 +442,19 @@
           blocks
           (merge (show-cycle-config card @phase)
                  {:id (str root-block-id)}))
-         [:div.flex.items-start.my-4
-          (when (not= next-phase 1)
-            (ui/button (if (= next-phase 2)
-                         "Reveal Answers"
-                         "Reveal clozes")
+         [:div.flex.my-4.justify-between
+          [:div.flex.items-start
+           (when-not (and (not preview?) (= next-phase 1))
+             (ui/button (case next-phase
+                          1 "Hide answers(h)"
+                          2 "Show Answers(s)"
+                          3 "Show clozes(s)")
               :class "mr-2"
               :small? true
               :on-click #(reset! phase next-phase)))
 
-          (when preview?
-            (ui/button "Reset"
-              :small? true
-              :class "mr-8"
-              :on-click #(operation-reset! card)))
-
           (when (and (> (count cards) 1) preview?)
-            (ui/button "Next"
+            (ui/button "Next(n)"
               :small? true
               :class "mr-2"
               :on-click #(skip-card card card-index cards* phase review-records cb)))
@@ -460,7 +464,7 @@
                   interval-days-score-4 (get (get-next-interval card 5) card-last-interval-property)
                   interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
               [:div
-               (ui/button "Forgotten"
+               (ui/button "Forgotten(f)"
                  :small? true
                  :on-click (fn []
                              (score-and-next-card 1 card card-index cards* phase review-records cb)
@@ -472,16 +476,12 @@
                 (fn [score]
                   (score-and-next-card score card card-index cards* phase review-records cb))
                 interval-days-score-3
-                interval-days-score-5)
+                interval-days-score-5)]))]
 
-               ;; (ui/tippy
-               ;;  {:html [:p.text-sm (util/format "Takes a while to recall, (+ %d days)"
-               ;;                                  (Math/round interval-days-score-3))]
-               ;;   :class "tippy-hover"
-               ;;   :interactive true
-               ;;   :disabled false}
-               ;;  (ui/button "Take a while to recall" :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb) :class "mr-2 delay-1000"))
-               ]))]]))))
+          (when preview?
+            (ui/button "Reset"
+              :small? true
+              :on-click #(operation-reset! card)))]]))))
 
 (defn preview
   [blocks]
