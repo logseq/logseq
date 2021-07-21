@@ -111,10 +111,12 @@
    opts))
 
 (defn button
-  [text & {:keys [background href class intent on-click]
+  [text & {:keys [background href class intent on-click small?]
+           :or {small? false}
            :as   option}]
   (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700")
-        klass (if background (string/replace klass "indigo" background) klass)]
+        klass (if background (string/replace klass "indigo" background) klass)
+        klass (if small? (str klass ".px-2.py-1") klass)]
     (if href
       [:a.ui__button.is-link
        (merge
@@ -661,7 +663,8 @@
                            (when-let [html (:html opts)]
                              (if (fn? html)
                                (html)
-                               html))
+                               [:div.pr-3.py-1
+                                html]))
                            [:div {:key "tippy"} ""])))
            child)))
 

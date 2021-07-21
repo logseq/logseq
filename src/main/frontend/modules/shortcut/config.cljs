@@ -311,7 +311,7 @@
      :fn      state/toggle-theme!}
     :ui/toggle-contents
     {:desc    "Toggle Favorites in sidebar"
-     :binding "t c"
+     :binding "t f"
      :fn      ui-handler/toggle-contents!}
     :ui/toggle-wide-mode
     {:desc    "Toggle wide mode"

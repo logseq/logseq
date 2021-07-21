@@ -252,6 +252,7 @@
         :new-graph "Add new graph"
         :graph "Graph"
         :graph-view "View Graph"
+        :cards-view "View Cards"
         :publishing "Publishing"
         :export "Export"
         :export-markdown "Export as standard Markdown (no block properties)"

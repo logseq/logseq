@@ -92,6 +92,10 @@
           :options {:on-click state/toggle-sidebar-open?!}})
 
        (when current-repo
+         {:title (t :cards-view)
+          :options {:on-click #(state/pub-event! [:modal/show-cards])}})
+
+       (when current-repo
          {:title (t :graph-view)
           :options {:href (rfe/href :graph)}
           :icon svg/graph-sm})

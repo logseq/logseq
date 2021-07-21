@@ -495,6 +495,7 @@
                               (.stopPropagation e))}
        (excalidraw s)]
       [:span.page-reference
+       {:data-ref s}
        (when (and (or show-brackets? nested-link?)
                   (not html-export?)
                   (not contents-page?))
@@ -1847,11 +1848,7 @@
    :on-drag-leave (fn [event]
                     (block-drag-leave *move-to))
    :on-drop (fn [event]
-              (block-drop event uuid block *move-to))
-   :on-mouse-over (fn [e]
-                    (block-mouse-over e has-child? *control-show? block-id doc-mode?))
-   :on-mouse-leave (fn [e]
-                     (block-mouse-leave e has-child? *control-show? block-id doc-mode?))})
+              (block-drop event uuid block *move-to))})
 
 (defn- build-refs-data-value
   [block refs]
@@ -1944,7 +1941,12 @@
      (when top?
        (dnd-separator-wrapper block block-id slide? true false))
 
-     [:div.flex.flex-row.pr-2 {:class (if heading? "items-baseline" "")}
+     [:div.flex.flex-row.pr-2
+      {:class (if heading? "items-baseline" "")
+       :on-mouse-over (fn [e]
+                        (block-mouse-over e has-child? *control-show? block-id doc-mode?))
+       :on-mouse-leave (fn [e]
+                         (block-mouse-leave e has-child? *control-show? block-id doc-mode?))}
       (when (not slide?)
         (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show?))
 
