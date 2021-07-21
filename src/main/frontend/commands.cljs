@@ -424,8 +424,8 @@
 
 (defmulti handle-step first)
 
-(defmethod handle-step :editor/hook [[_ event {:keys [pid] :as payload}] format]
-  (plugin-handler/hook-plugin-editor event (merge payload {:format format :uuid (:block/uuid (state/get-edit-block))}) pid))
+(defmethod handle-step :editor/hook [[_ event {:keys [pid uuid] :as payload}] format]
+  (plugin-handler/hook-plugin-editor event (merge payload {:format format :uuid (or uuid (:block/uuid (state/get-edit-block)))}) pid))
 
 (defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]
