@@ -321,6 +321,10 @@
     {:desc    "Toggle open blocks (collapse or expand all blocks)"
      :binding "t o"
      :fn      editor-handler/toggle-open!}
+    :ui/open-cards
+    {:desc    "toggle cards"
+     :binding "t c"
+     :fn      ui-handler/toggle-cards!}
     ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
     :git/commit
     {:desc    "Git commit message"

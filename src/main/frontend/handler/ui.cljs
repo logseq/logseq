@@ -210,3 +210,9 @@
   (when-not (input-or-select?)
     (util/stop e)
     (swap! *internal-model inc-week 1)))
+
+(defn toggle-cards!
+  []
+  (if (:modal/show? @state/state)
+    (state/close-modal!)
+    (state/pub-event! [:modal/show-cards])))
