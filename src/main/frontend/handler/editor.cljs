@@ -26,6 +26,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.export :as export]
             [frontend.image :as image]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
@@ -1045,28 +1046,10 @@
         level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
         level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
         tree (blocks-vec->tree level-blocks)
-        contents
-        (mapv (fn [block]
-                (let [header
-                      (if (= format :markdown)
-                        (str (string/join (repeat (- (:level block) 1) "\t")) "-")
-                        (string/join (repeat (:level block) "*")))]
-                  (str header " " (:block/content block) "\n")))
-              level-blocks)
-        content-without-properties
-        (mapv
-         (fn [content]
-           (let [ast (mldoc/->edn content (mldoc/default-config format))
-                 properties-loc
-                 (->> ast
-                      (filterv (fn [[[type _] loc]] (= type "Property_Drawer")))
-                      (mapv second)
-                      first)]
-             (if properties-loc
-               (utf8/delete! content (:start_pos properties-loc) (:end_pos properties-loc))
-               content)))
-         contents)]
-    [(string/join content-without-properties) tree]))
+        top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
+        exported-md-contents (mapv #(export/export-blocks-as-markdown repo % "spaces")
+                                   top-level-block-uuids)]
+    [(string/join "\n" (mapv string/trim-newline exported-md-contents)) tree]))
 
 (defn copy-selection-blocks
   []
