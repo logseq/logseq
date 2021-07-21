@@ -49,11 +49,30 @@
   "{{card-query ...}}"
   "card-query")
 
-(def learning-fraction
+(def learning-fraction-default
   "any number between 0 and 1 (the greater it is the faster the changes of the OF matrix)"
   0.5)
 
+(defn- learning-fraction []
+  (if-let [learning-fraction (:srs/learning-fraction (state/get-config))]
+    (if (and (number? learning-fraction)
+             (< learning-fraction 1)
+             (> learning-fraction 0))
+      learning-fraction
+      learning-fraction-default)
+    learning-fraction-default))
+
 (def of-matrix (persist-var/persist-var nil "srs-of-matrix"))
+
+(def initial-interval-default 4)
+
+(defn- initial-interval []
+  (if-let [initial-interval (:srs/initial-interval (state/get-config))]
+    (if (and (number? initial-interval)
+             (> initial-interval 0))
+      initial-interval
+      initial-interval-default)
+    initial-interval-default))
 
 ;;; ================================================================
 ;;; utils
@@ -114,7 +133,7 @@
 (defn- get-of [of-matrix n ef]
   (or (get-in of-matrix [n ef])
       (if (<= n 1)
-        4
+        (initial-interval)
         ef)))
 
 (defn- set-of [of-matrix n ef of]
@@ -148,7 +167,7 @@
   (let [ef (or ef 2.5)
         last-interval (if (or (nil? last-interval) (<= last-interval 0)) 1 last-interval)
         next-ef (next-ef ef quality)
-        next-of-matrix (next-of-matrix of-matrix repeats quality learning-fraction ef)
+        next-of-matrix (next-of-matrix of-matrix repeats quality (learning-fraction) ef)
         next-interval (interval repeats next-ef next-of-matrix)]
 
     (if (< quality 3)
