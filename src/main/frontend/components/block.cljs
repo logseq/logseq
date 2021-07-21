@@ -1574,7 +1574,7 @@
                  (and (util/sup? target)
                       (d/has-class? target "fn"))
                  (d/has-class? target "image-resize"))
-        (editor-handler/clear-selection! nil)
+        (editor-handler/clear-selection!)
         (editor-handler/unhighlight-blocks!)
         (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
               f #(let [cursor-range (util/caret-range (gdom/getElement block-id))

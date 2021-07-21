@@ -183,7 +183,7 @@
                     "edit-block")))
 
 (defn clear-selection!
-  [_e]
+  []
   (util/select-unhighlight! (dom/by-class "selected"))
   (state/clear-selection!))
 
@@ -228,7 +228,7 @@
                           (subs content 0 pos))
              content (property/remove-built-in-properties (:block/format block)
                                                           content)]
-         (clear-selection! nil)
+         (clear-selection!)
          (state/set-editing! edit-input-id content block text-range move-cursor?))))))
 
 (defn edit-last-block-for-new-page!
@@ -2735,8 +2735,7 @@
 (defn- cut-blocks-and-clear-selections!
   [copy?]
   (cut-selection-blocks copy?)
-  (clear-selection! nil))
-
+  (clear-selection!))
 (defn shortcut-copy-selection
   [e]
   (copy-selection-blocks))
@@ -2956,7 +2955,7 @@
                       medley/uuid
                       expand-block!)))
            doall)
-      (clear-selection! nil))
+      (clear-selection!))
 
     :else
     ;; expand one level
@@ -2990,7 +2989,7 @@
                       medley/uuid
                       collapse-block!)))
            doall)
-      (clear-selection! nil))
+      (clear-selection!))
 
     :else
     ;; collapse by one level from outside
