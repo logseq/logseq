@@ -379,8 +379,8 @@
     (and cb (cb @*review-records))
     (reset! *phase 1)))
 
-(defonce review-finished
-  [:p.p-2 "Congrats, review finished! 🎉🎉"])
+(def review-finished
+  [:p.p-2 "Congrats, you've reviewed all the cards for this query, see you next time! 💯"])
 
 (defn- clear-timeout!
   [state]
