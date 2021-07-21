@@ -1,5 +1,7 @@
 (ns frontend.extensions.zotero.setting
-  (:require [frontend.handler.config :as config-handler]
+  (:require [clojure.string :as str]
+            [frontend.extensions.zotero.setting :as setting]
+            [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.storage :as storage]))
 
@@ -29,3 +31,8 @@
   (get (sub-zotero-config)
        k
        (get default-settings k)))
+
+(defn valid? []
+  (and
+   (not (str/blank? (api-key)))
+   (not (str/blank? (setting :type-id)))))

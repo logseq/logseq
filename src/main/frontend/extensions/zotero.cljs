@@ -6,6 +6,8 @@
             [frontend.extensions.zotero.extractor :as extractor]
             [frontend.extensions.zotero.handler :as zotero-handler]
             [frontend.extensions.zotero.setting :as setting]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -40,7 +42,9 @@
         [search-result set-search-result!] (rum/use-state [])
         [search-error set-search-error!]   (rum/use-state nil)
         [is-searching set-is-searching!]   (rum/use-state false)]
-
+    (when-not (setting/valid?)
+      (route-handler/redirect! {:to :zotero-setting})
+      (notification/show! "Please setup Zotero API key and user/group id first!" :warn false))
 
     (go
       (let [d-term   (<! debounce-chan)]
