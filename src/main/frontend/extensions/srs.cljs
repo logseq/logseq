@@ -368,7 +368,7 @@
                                   days-4)]
                     [:p.text-sm
                      (util/format "5: you remember it easily. (will reappear after %d days)" days-5)]]
-             :class "tippy-hover mr-2"
+             :class "tippy-hover"
              :interactive true
              :disabled false}
             (svg/info)))
@@ -463,11 +463,15 @@
                     :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb))]))]
 
             (when preview?
-              (ui/button "Reset"
-                :id "card-reset"
-                :class (util/hiccup->class "opacity-60.hover:opacity-100")
-                :small? true
-                :on-click #(operation-reset! card)))]
+              (ui/tippy {:html [:div.text-sm
+                                "Reset this card so that you can review it immediately."]
+                         :class "tippy-hover"
+                         :interactive true}
+               (ui/button "Reset"
+                 :id "card-reset"
+                 :class (util/hiccup->class "opacity-60.hover:opacity-100")
+                 :small? true
+                 :on-click #(operation-reset! card))))]
            [:div.my-4
             (ui/button "Click to review"
               :small? true)])]))))
