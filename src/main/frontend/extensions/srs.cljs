@@ -46,8 +46,8 @@
   "cloze")
 
 (def query-macro-name
-  "{{card-query ...}}"
-  "card-query")
+  "{{cards ...}}"
+  "cards")
 
 (def learning-fraction-default
   "any number between 0 and 1 (the greater it is the faster the changes of the OF matrix)"
@@ -192,24 +192,30 @@
   (show-cycle-config [this phase]))
 
 
+(defn- has-cloze?
+  [blocks]
+  (->> (map :block/content blocks)
+       (some #(string/includes? % "{{cloze "))))
+
 ;;; ================================================================
 ;;; card impl
-
 
 (deftype Sided-Cloze-Card [block]
   ICard
   (get-root-block [this] (db/pull [:block/uuid (:block/uuid block)]))
   ICardShow
   (show-cycle [this phase]
-    (case phase
-      1
-      (let [blocks (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
-            blocks-count (count blocks)]
-        {:value [block] :next-phase (if (> blocks-count 1) 2 3)})
-      2
-      {:value (db/get-block-and-children (state/get-current-repo) (:block/uuid block)) :next-phase 3}
-      3
-      {:value (db/get-block-and-children (state/get-current-repo) (:block/uuid block)) :next-phase 1}))
+    (let [blocks (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
+          cloze? (has-cloze? blocks)]
+      (def blocks blocks)
+      (case phase
+        1
+        (let [blocks-count (count blocks)]
+          {:value [block] :next-phase (if (> blocks-count 1) 2 3)})
+        2
+        {:value blocks :next-phase (if cloze? 3 1)}
+        3
+        {:value blocks :next-phase 1})))
 
   (show-cycle-config [this phase]
     (case phase
@@ -233,37 +239,36 @@
   [repo query-string]
   (when (string? query-string)
     (let [query-string (template/resolve-dynamic-template! query-string)]
-      (when-not (string/blank? query-string)
-        (let [{:keys [query sort-by blocks?] :as result} (query-dsl/parse repo query-string)]
-          (when query
-            (let [query* (concat `[[~'?b :block/refs [:block/name ~card-hash-tag]]]
-                                 (if (coll? (first query))
-                                   query
-                                   [query]))]
-              (when-let [query** (query-dsl/query-wrapper query* blocks?)]
-                (react/react-query repo
-                                   {:query query**}
-                                   (if sort-by
-                                     {:transform-fn sort-by}))))))))))
+      (let [{:keys [query sort-by] :as result} (query-dsl/parse repo query-string)]
+        (let [query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
+                             (if (coll? (first query))
+                               query
+                               [query]))]
+          (when-let [query** (query-dsl/query-wrapper query* true)]
+            (react/react-query repo
+                               {:query query**}
+                               (if sort-by
+                                 {:transform-fn sort-by}))))))))
 
 (defn- query-scheduled
   "Return blocks scheduled to 'time' or before"
   [repo {query-string :query-string query-result :query-result} time]
   (when-let [*blocks (or query-result (and query-string (query repo query-string)))]
     (when-let [blocks @*blocks]
-      (->>
-       (flatten blocks)
-       (filterv (fn [b]
-                  (let [props (:block/properties b)
-                        next-sched (get props card-next-schedule-property)
-                        next-sched* (tc/from-string next-sched)
-                        repeats (get props card-repeats-property)]
-                    (or (nil? repeats)
-                        (< repeats 1)
-                        (nil? next-sched)
-                        (nil? next-sched*)
-                        (t/before? next-sched* time)))))))))
-
+      (let [filtered-result (->>
+                             (flatten blocks)
+                             (filterv (fn [b]
+                                        (let [props (:block/properties b)
+                                              next-sched (get props card-next-schedule-property)
+                                              next-sched* (tc/from-string next-sched)
+                                              repeats (get props card-repeats-property)]
+                                          (or (nil? repeats)
+                                              (< repeats 1)
+                                              (nil? next-sched)
+                                              (nil? next-sched*)
+                                              (t/before? next-sched* time))))))]
+        {:total (count blocks)
+         :result filtered-result}))))
 
 
 ;;; ================================================================
@@ -317,24 +322,25 @@
 
 (defn- operation-card-info-summary!
   [review-records review-cards card-query-block]
-  (let [review-count (count (flatten (vals review-records)))
-        review-cards-count (count review-cards)
-        score-5-count (count (get review-records 5))
-        score-4-count (count (get review-records 4))
-        score-3-count (count (get review-records 3))
-        score-2-count (count (get review-records 2))
-        score-1-count (count (get review-records 1))
-        score-0-count (count (get review-records 0))
-        skip-count (count (get review-records "skip"))]
-    (editor-handler/paste-block-tree-after-target
-     (:db/id card-query-block) false
-     [{:content (util/format "Summary: %d items, %d review counts [[%s]]"
-                             review-cards-count review-count (date/today))
-       :children [{:content
-                   (util/format "Remembered:   %d (%d%%)" score-5-count (* 100 (/ score-5-count review-count)))}
-                  {:content
-                   (util/format "Forgotten :   %d (%d%%)" score-1-count (* 100 (/ score-1-count review-count)))}]}]
-     (:block/format card-query-block))))
+  (when card-query-block
+    (let [review-count (count (flatten (vals review-records)))
+          review-cards-count (count review-cards)
+          score-5-count (count (get review-records 5))
+          score-4-count (count (get review-records 4))
+          score-3-count (count (get review-records 3))
+          score-2-count (count (get review-records 2))
+          score-1-count (count (get review-records 1))
+          score-0-count (count (get review-records 0))
+          skip-count (count (get review-records "skip"))]
+      (editor-handler/paste-block-tree-after-target
+       (:db/id card-query-block) false
+       [{:content (util/format "Summary: %d items, %d review counts [[%s]]"
+                               review-cards-count review-count (date/today))
+         :children [{:content
+                     (util/format "Remembered:   %d (%d%%)" score-5-count (* 100 (/ score-5-count review-count)))}
+                    {:content
+                     (util/format "Forgotten :   %d (%d%%)" score-1-count (* 100 (/ score-1-count review-count)))}]}]
+       (:block/format card-query-block)))))
 
 ;;; ================================================================
 ;;; UI
@@ -361,20 +367,20 @@
 (defn- score-and-next-card [score card *card-index *cards *phase *review-records cb]
   (operation-score! card score)
   (swap! *review-records #(update % score (fn [ov] (conj ov card))))
+  (swap! *card-index inc)
   (if (>= (inc @*card-index) (count @*cards))
-    (do (state/close-modal!)
-        (and cb (cb @*review-records)))
-    (do (swap! *card-index inc)
-        (reset! *phase 1))))
+    (and cb (cb @*review-records))
+    (reset! *phase 1)))
 
 (defn- skip-card [card *card-index *cards *phase *review-records cb]
   (swap! *review-records #(update % "skip" (fn [ov] (conj ov card))))
+  (swap! *card-index inc)
   (if (>= (inc @*card-index) (count @*cards))
-    (do (state/close-modal!)
-        (and cb (cb @*review-records)))
-    (do
-      (swap! *card-index inc)
-      (reset! *phase 1))))
+    (and cb (cb @*review-records))
+    (reset! *phase 1)))
+
+(defonce review-finished
+  [:p.p-2 "Congrats, review finished! 🎉🎉"])
 
 (rum/defcs view
   < rum/reactive
@@ -382,65 +388,82 @@
   (rum/local 0 ::card-index)
   (rum/local nil ::cards)
   (rum/local {} ::review-records)
-  [state cards {preview :preview cb :callback}]
+  [state cards {preview? :preview?
+                modal? :modal?
+                cb :callback}]
   (let [cards* (::cards state)
         _ (when (nil? @cards*) (reset! cards* cards))
         review-records (::review-records state)
         card-index (::card-index state)
-        card (nth @cards* @card-index)
-        phase (::phase state)
-        {blocks :value next-phase :next-phase} (show-cycle card @phase)
-        root-block (.-block card)
-        restore-card-fn #(swap! cards* (fn [o]
-                                         (conj o (nth o @card-index))))]
-    [:div
-     [:div.w-144.h-96.resize.overflow-y-auto
-      (component-block/blocks-container
-       blocks
-       (merge (show-cycle-config card @phase)
-              {:id (str (:block/uuid root-block))}))]
-     (into []
-           (concat
-            [:div.flex.items-start
-             (ui/button (if (= 1 next-phase) "Hide Answers" "Show Answers")
-                        :class "w-32 mr-2"
-                        :on-click #(reset! phase next-phase))]
-            (when preview
-              [(ui/button "Reset"
-                          :class "mr-8"
-                          :on-click #(operation-reset! card))])
-            (when (and (> (count cards) 1) preview)
-              [(ui/button "Next"
-                          :class "mr-2"
-                          :on-click #(skip-card card card-index cards* phase review-records cb))])
-            (when (and (not preview) (= 1 next-phase))
-              (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
-                    interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
-                    interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
-                [(ui/button "Forgotten" :on-click (fn []
-                                                  (restore-card-fn)
-                                                  (score-and-next-card 1 card card-index cards* phase review-records cb)) :class "mr-2")
+        card (util/nth-safe @cards* @card-index)]
+    (if-not card
+      review-finished
+      (let [phase (::phase state)
+            {blocks :value next-phase :next-phase} (show-cycle card @phase)
+            root-block (.-block card)
+            root-block-id (:block/uuid root-block)]
+        [:div.ls-card
+         {:class (if (or preview? modal?)
+                   (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto.px-4"))}
+         (component-block/blocks-container
+          blocks
+          (merge (show-cycle-config card @phase)
+                 {:id (str root-block-id)}))
+         [:div.flex.items-start.my-4
+          (when (not= next-phase 1)
+            (ui/button (if (= next-phase 2)
+                         "Reveal Answers"
+                         "Reveal clozes")
+              :class "mr-2"
+              :small? true
+              :on-click #(reset! phase next-phase)))
 
-                 (ui/tippy
-                  {:html [:p.text-sm (util/format "Remember it easily, (+ %d days)"
-                                                  (Math/round interval-days-score-5))]
-                   :class "tippy-hover"
-                   :interactive true
-                   :disabled false}
-                  (ui/button "Remembered" :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb) :class "mr-2"))
+          (when preview?
+            (ui/button "Reset"
+              :small? true
+              :class "mr-8"
+              :on-click #(operation-reset! card)))
 
-                 ;; (ui/tippy
-                 ;;  {:html [:p.text-sm (util/format "Takes a while to recall, (+ %d days)"
-                 ;;                                  (Math/round interval-days-score-3))]
-                 ;;   :class "tippy-hover"
-                 ;;   :interactive true
-                 ;;   :disabled false}
-                 ;;  (ui/button "Take a while to recall" :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb) :class "mr-2 delay-1000"))
-                 ]))))]))
+          (when (and (> (count cards) 1) preview?)
+            (ui/button "Next"
+              :small? true
+              :class "mr-2"
+              :on-click #(skip-card card card-index cards* phase review-records cb)))
+
+          (when (and (not preview?) (= 1 next-phase))
+            (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
+                  interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
+                  interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
+              [:div
+               (ui/button "Forgotten"
+                 :small? true
+                 :on-click (fn []
+                             (score-and-next-card 1 card card-index cards* phase review-records cb)
+                             (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
+                               (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))) :class "mr-2")
+
+               (ui/tippy
+                {:html [:p.text-sm (util/format "Remember it easily, (+ %d days)"
+                                                (Math/round interval-days-score-5))]
+                 :class "tippy-hover"
+                 :interactive true
+                 :disabled false}
+                (ui/button "Remembered"
+                  :small? true
+                  :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb) :class "mr-2"))
+
+               ;; (ui/tippy
+               ;;  {:html [:p.text-sm (util/format "Takes a while to recall, (+ %d days)"
+               ;;                                  (Math/round interval-days-score-3))]
+               ;;   :class "tippy-hover"
+               ;;   :interactive true
+               ;;   :disabled false}
+               ;;  (ui/button "Take a while to recall" :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb) :class "mr-2 delay-1000"))
+               ]))]]))))
 
 (defn preview
   [blocks]
-  (state/set-modal! #(view (mapv ->card blocks) {:preview true})))
+  (state/set-modal! #(view (mapv ->card blocks) {:preview? true})))
 
 
 ;;; ================================================================
@@ -452,87 +475,96 @@
 (defn cloze-macro-show
   [config options]
   (if (:cloze config)
-    [:span.text-blue-600 "[...]"]
-    [:span
-     [:span.text-blue-600 "["]
-     (string/join ", " (:arguments options))
-     [:span.text-blue-600 "]"]]))
+    [:span.cloze "[...]"]
+    [:span.cloze-revealed
+     (string/join ", " (:arguments options))]))
 
 (component-macro/register cloze-macro-name cloze-macro-show)
 
-;;; register card-query macro
-(rum/defcs card-query-show
+;;; register cards macro
+(rum/defcs cards
   < rum/reactive
   (rum/local false ::need-requery)
   [state config options]
   (let [repo (state/get-current-repo)
         query-string (string/join ", " (:arguments options))]
     (if-let [*query-result (query repo query-string)]
-      (let [sched-blocks (query-scheduled repo {:query-result *query-result} (tl/local-now))]
-        [:div.opacity-70.custom-query-title.flex.flex-row
-         [:div.w-full.flex-1
-          [:code.p-1 (str "Card-Query: " query-string)]]
-         [:div
-          (ui/tippy
-           {:html [:p.text-sm "click to start review overdue cards"]
-            :delay [1000, 100]
-            :class "tippy-hover"
-            :interactive true
-            :disabled false}
-           [:a.opacity-70.hover:opacity-100.svg-small.inline
-            {:on-click (fn [_]
-                         (let [sched-blocks*
-                               (query-scheduled (state/get-current-repo) {:query-string query-string} (tl/local-now))]
-                           (when (> (count sched-blocks*) 0)
-                             (let [review-cards (mapv ->card sched-blocks*)
-                                   card-query-block (db/entity [:block/uuid (:block/uuid config)])]
-                               (state/set-modal!
-                                #(view review-cards
-                                       {:callback
-                                        (fn [review-records]
-                                          (operation-card-info-summary!
-                                           review-records review-cards card-query-block)
-                                          (swap! (::need-requery state) not)
-                                          (persist-var/persist-save of-matrix))}))))))}
-            svg/edit])
-          (ui/tippy
-           {:html [:p.text-sm "click to preview all cards"]
-            :delay [1000, 100]
-            :class "tippy-hover"
-            :interactive true
-            :disabled false}
-           [:a.opacity-70.hover:opacity-100.svg-small.inline
-            {:on-click (fn [_]
-                         (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
-                           (when (> (count all-blocks) 0)
-                             (let [review-cards (mapv ->card all-blocks)]
-                               (state/set-modal! #(view
-                                                   review-cards
-                                                   {:preview true
-                                                    :callback (fn [_]
-                                                                (swap! (::need-requery state) not))}))))))}
-            "A"])
-          (ui/tippy
-           {:html [:div
-                   [:p.text-sm "overdue / new / total"]
-                   [:p.text-sm "click to refresh count"]]
-            :delay [1000, 100]
-            :class "tippy-hover"
-            :interactive true
-            :disabled false}
-           [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
-            {:on-click #(swap! (::need-requery state) (fn [o] (not o)))}
-            (let [group-by-repeat (card-group-by-repeat (mapv ->card (flatten @*query-result)))
-                  new-card-count (count (flatten (vals (filterv (fn [[k _]] (< k 1)) group-by-repeat))))] ; repeats < 1
-              (str (count sched-blocks) "/"  new-card-count "/" (count (flatten @*query-result))))])]])
+      (let [{:keys [total result]} (query-scheduled repo {:query-result *query-result} (tl/local-now))
+            review-cards (mapv ->card result)
+            query-string (if (string/blank? query-string) "All" query-string)
+            card-query-block (db/entity [:block/uuid (:block/uuid config)])
+            filtered-total (count result)
+            modal? (:modal? config)]
+        [:div.flex-1 {:style (if modal? {:height "100%"})}
+         [:div.flex.flex-row.items-center.justify-between.cards-title
+          [:div
+           [:span.text-sm [:span.font-bold "🗂️"]
+            (str ": " query-string)]]
+
+          [:div.flex.flex-row.items-center
+
+           ;; FIXME: CSS issue
+           (ui/tippy {:html [:div.text-sm.pr-3 "overdue/total"]
+                      ;; :class "tippy-hover"
+                      :interactive true}
+                     [:div.opacity-60.text-sm
+                      filtered-total
+                      [:span "/"]
+                      total])
+
+           (when-not modal?
+             (ui/tippy
+              {:html [:p.text-sm "Click to preview all cards"]
+               :delay [1000, 100]
+               :class "tippy-hover"
+               :interactive true
+               :disabled false}
+              [:a.opacity-60.hover:opacity-100.svg-small.inline.ml-3.font-bold
+               {:on-click (fn [_]
+                            (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
+                              (when (> (count all-blocks) 0)
+                                (let [review-cards (mapv ->card all-blocks)]
+                                  (state/set-modal! #(view
+                                                      review-cards
+                                                      {:preview? true
+                                                       :callback (fn [_]
+                                                                   (swap! (::need-requery state) not))}))))))}
+               "A"]))
+
+           (when-not modal?
+             [:a.opacity-60.hover:opacity-100.svg-small.inline.ml-2.font-bold.grid
+              {:on-click (fn []
+                           (state/set-modal! #(view review-cards
+                                                    {:modal? true
+                                                     :callback
+                                                     (fn [review-records]
+                                                       (operation-card-info-summary!
+                                                        review-records review-cards card-query-block)
+                                                       (swap! (::need-requery state) not)
+                                                       (persist-var/persist-save of-matrix))})))}
+              svg/arrow-expand])]]
+         (if (seq review-cards)
+           (view review-cards
+                 (merge config
+                        {:callback
+                         (fn [review-records]
+                           (operation-card-info-summary!
+                            review-records review-cards card-query-block)
+                           (swap! (::need-requery state) not)
+                           (persist-var/persist-save of-matrix))}))
+           review-finished)])
 
       ;; bad query-string
-      [:div.opacity-70.custom-query-title
+      [:div.opacity-60.custom-query-title
        [:div.w-full.flex-1
-        [:code.p-1 (str "Card-Query: " query-string)]]
+        [:code.p-1 (str "Cards: " query-string)]]
        [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"]])))
 
-(component-macro/register query-macro-name card-query-show)
+(rum/defc global-cards
+  []
+  (cards {:modal? true} {}))
+
+(component-macro/register query-macro-name cards)
 
 ;;; register builtin properties
 (property/register-built-in-properties #{card-last-interval-property
@@ -543,9 +575,9 @@
                                          card-last-score-property})
 
 ;;; register slash commands
-(commands/register-slash-command ["Card Query"
-                                  [[:editor/input "{{card-query }}" {:backward-pos 2}]]
-                                  "Create a card query"])
+(commands/register-slash-command ["Cards"
+                                  [[:editor/input "{{cards }}" {:backward-pos 2}]]
+                                  "Create a cards query"])
 
 (commands/register-slash-command ["Cloze"
                                   [[:editor/input "{{cloze }}" {:backward-pos 2}]]

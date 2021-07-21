@@ -435,3 +435,26 @@ a.filter svg {
 .query-title {
     background: var(--ls-page-properties-background-color);
 }
+
+.ls-card {
+    height: 100%;
+}
+
+.ls-card a[data-ref*="card"], .ls-card .page-reference[data-ref*="card"] {
+    display: none;
+}
+
+.cards-title {
+    background: var(--ls-page-properties-background-color);
+    border-radius: 4px;
+    padding: 2px 8px;
+}
+
+span.cloze {
+    color: var(--ls-cloze-text-color);
+}
+
+span.cloze-revealed {
+    text-decoration: underline;
+    text-underline-position: under;
+}
