@@ -1,6 +1,7 @@
 (ns frontend.extensions.pdf.utils
   (:require [promesa.core :as p]
             [cljs-bean.core :as bean]
+            [frontend.util :as front-utils]
             ["/frontend/extensions/pdf/utils" :as js-utils]
             [frontend.loader :refer [load]]))
 
@@ -57,6 +58,10 @@
 (defn clear-all-selection
   []
   (.removeAllRanges (js/window.getSelection)))
+
+(def adjust-viewer-size!
+  (front-utils/debounce
+    200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
 
 (defn gen-id []
   (str (.toString (js/Date.now) 36)

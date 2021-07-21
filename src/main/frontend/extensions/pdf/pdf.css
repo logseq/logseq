@@ -76,6 +76,18 @@
     }
   }
 
+  &-resizer {
+    position: absolute;
+    width: 3px;
+    height: 88vh;
+    background-color: rgba(0, 0, 0, 0);
+    overflow: hidden;
+    z-index: 4;
+    top: 10vh;
+    cursor: col-resize;
+    right: 0;;
+  }
+
   &-hls-text-region {
     position: absolute;
     opacity: 1;

@@ -19,6 +19,42 @@
   []
   (state/set-state! :pdf/current nil))
 
+(rum/defc pdf-resizer
+  [^js viewer]
+  (let [el-ref (rum/use-ref nil)
+        adjust-main-size!
+        (front-utils/debounce
+          200 (fn [width]
+                (let [root-el js/document.documentElement]
+                  (.setProperty (.-style root-el) "--ph-view-container-width" width)
+                  (pdf-utils/adjust-viewer-size! viewer))))]
+
+    ;; draggable handler
+    (rum/use-effect!
+      (fn []
+        (when-let [el (and (fn? js/window.interact) (rum/deref el-ref))]
+          (-> (js/interact el)
+              (.draggable
+                (bean/->js
+                  {:listeners
+                   {:move
+                    (fn [^js/MouseEvent e]
+                      (let [width js/document.documentElement.clientWidth
+                            offset (.-left (.-rect e))
+                            el-ratio (.toFixed (/ offset width) 6)
+                            target-el (js/document.getElementById "pdf-layout-container")]
+                        (when target-el
+                          (let [width (str (* el-ratio 100) "vw")]
+                            (.setProperty (.-style target-el) "width" width)
+                            (adjust-main-size! width)))))}}))
+
+              (.styleCursor false)
+              (.on "dragstart" #(.. js/document.documentElement -classList (add "is-resizing-buf")))
+              (.on "dragend" #(.. js/document.documentElement -classList (remove "is-resizing-buf")))))
+        #())
+      [])
+    [:span.extensions__pdf-resizer {:ref el-ref}]))
+
 (rum/defc pdf-highlights-ctx-menu
   [^js viewer {:keys [highlight vw-pos point]}
    {:keys [clear-ctx-tip! add-hl! upd-hl! del-hl!]}]
@@ -117,7 +153,9 @@
 (rum/defc pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
 
-  (let [*mounted (rum/use-ref false)
+  (let [^js doc (.-ownerDocument el)
+        ^js win (.-defaultView doc)
+        *mounted (rum/use-ref false)
         [sel-state, set-sel-state!] (rum/use-state {:range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
         [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :point nil})
@@ -125,7 +163,10 @@
         show-ctx-tip! (fn [^js viewer hl point]
                         (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
                           (set-tip-state! {:highlight hl :vw-pos vw-pos :point point})))
-        add-hl! (fn [hl] (if (:id hl) (set-highlights! (conj highlights hl))))
+        add-hl! (fn [hl] (when (:id hl)
+                           ;; fix js object
+                           (let [highlights (map #(if (map? %) % (bean/->clj %)) highlights)]
+                             (set-highlights! (conj highlights hl)))))
         upd-hl! (fn [hl]
                   (when-let [pp (medley/find-first #(= (:id (second %)) (:id hl)) (medley/indexed highlights))]
                     (set-highlights! (assoc-in highlights [(first pp)] hl))))
@@ -164,19 +205,28 @@
                                                 (fn [^js e]
                                                   (and @*dirty (fn-selection-ok e))
                                                   (js/document.removeEventListener "selectionchange" fn-dirty))
-                                                #js {:once true})))]
+                                                #js {:once true})))
+
+              fn-resize
+              (partial pdf-utils/adjust-viewer-size! viewer)]
 
           ;;(doto (.-eventBus viewer))
 
           (doto el
             (.addEventListener "mousedown" fn-selection))
 
+          (doto win
+            (.addEventListener "resize" fn-resize))
+
           ;; destroy
           #(do
              ;;(doto (.-eventBus viewer))
 
              (doto el
-               (.removeEventListener "mousedown" fn-selection)))))
+               (.removeEventListener "mousedown" fn-selection))
+
+             (doto win
+               (.removeEventListener "resize" fn-resize)))))
 
       [viewer])
 
@@ -332,12 +382,15 @@
       [:div.pdfViewer "viewer pdf"]
       [:div.pp-holder]]
 
-     (if (:viewer state)
-       (pdf-highlights
-         (:el state) (:viewer state)
-         initial-hls
-         (:loaded-pages ano-state)
-         ops))]))
+     (if-let [^js viewer (:viewer state)]
+       [(rum/with-key
+          (pdf-highlights
+            (:el state) viewer
+            initial-hls (:loaded-pages ano-state)
+            ops) "pdf-highlights")
+
+        (rum/with-key
+          (pdf-resizer viewer) "pdf-resizer")])]))
 
 (rum/defc pdf-toolbar
   []
@@ -354,7 +407,7 @@
         repo-cur (state/get-current-repo)
         repo-dir (config/get-repo-dir repo-cur)
         set-dirty-hls! (fn [latest-hls]                     ;; TODO: incremental
-                         (set-hls-state! (merge hls-state {:latest-hls latest-hls})))]
+                         (set-hls-state! {:initial-hls [] :latest-hls latest-hls}))]
 
     ;; load highlights
     (rum/use-effect!
@@ -364,7 +417,7 @@
                   res (fs/read-file repo-dir hls-file)
                   data (if res (bean/->clj (js/JSON.parse res)) [])]
 
-            (dd "[initial hls] " res)
+            (dd "[initial hls] " data)
 
             (set-hls-state! {:initial-hls data}))
 
@@ -382,6 +435,7 @@
       (fn []
         (when-let [hls (:latest-hls hls-state)]
           (dd "latest hls ===>" hls)
+
           (p/catch
             (p/let [hls (if hls
                           (js/JSON.stringify (bean/->js hls) nil 2)
@@ -458,7 +512,7 @@
         #(set-ready! false))
       [pdf-current])
 
-    [:div.extensions__pdf-container
+    [:div#pdf-layout-container.extensions__pdf-container
      (if (and prepared pdf-current ready)
        (pdf-loader pdf-current))]))
 
