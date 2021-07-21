@@ -319,10 +319,11 @@
         :db-restoring? db-restoring?
         :sidebar-open? sidebar-open?
         :system-theme? system-theme?
-        :on-click      #(do
-                          (util/clear-selection!)
-                          (editor-handler/unhighlight-blocks!)
-                          (util/fix-open-external-with-shift! %))}
+        :on-click      (fn [e]
+                         (when-not (util/input? (.-target e))
+                           (util/clear-selection!))
+                         (editor-handler/unhighlight-blocks!)
+                         (util/fix-open-external-with-shift! e))}
 
        [:div.theme-inner
         (sidebar-mobile-sidebar
