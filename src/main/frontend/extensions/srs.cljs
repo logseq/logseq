@@ -442,46 +442,50 @@
           blocks
           (merge (show-cycle-config card @phase)
                  {:id (str root-block-id)}))
-         [:div.flex.my-4.justify-between
-          [:div.flex.items-start
-           (when-not (and (not preview?) (= next-phase 1))
-             (ui/button (case next-phase
-                          1 "Hide answers(h)"
-                          2 "Show Answers(s)"
-                          3 "Show clozes(s)")
-              :class "mr-2"
-              :small? true
-              :on-click #(reset! phase next-phase)))
-
-          (when (and (> (count cards) 1) preview?)
-            (ui/button "Next(n)"
-              :small? true
-              :class "mr-2"
-              :on-click #(skip-card card card-index cards* phase review-records cb)))
-
-          (when (and (not preview?) (= 1 next-phase))
-            (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
-                  interval-days-score-4 (get (get-next-interval card 5) card-last-interval-property)
-                  interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
-              [:div
-               (ui/button "Forgotten(f)"
+         (if (or preview? modal?)
+           [:div.flex.my-4.justify-between
+            [:div.flex.items-start
+             (when-not (and (not preview?) (= next-phase 1))
+               (ui/button (case next-phase
+                            1 "Hide answers(h)"
+                            2 "Show Answers(s)"
+                            3 "Show clozes(s)")
+                 :class "mr-2"
                  :small? true
-                 :on-click (fn []
-                             (score-and-next-card 1 card card-index cards* phase review-records cb)
-                             (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                               (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))) :class "mr-2")
+                 :on-click #(reset! phase next-phase)))
 
-               (remember
-                (atom 5)
-                (fn [score]
-                  (score-and-next-card score card card-index cards* phase review-records cb))
-                interval-days-score-3
-                interval-days-score-5)]))]
+             (when (and (> (count cards) 1) preview?)
+               (ui/button "Next(n)"
+                 :small? true
+                 :class "mr-2"
+                 :on-click #(skip-card card card-index cards* phase review-records cb)))
 
-          (when preview?
-            (ui/button "Reset"
-              :small? true
-              :on-click #(operation-reset! card)))]]))))
+             (when (and (not preview?) (= 1 next-phase))
+               (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
+                     interval-days-score-4 (get (get-next-interval card 5) card-last-interval-property)
+                     interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
+                 [:div
+                  (ui/button "Forgotten(f)"
+                    :small? true
+                    :on-click (fn []
+                                (score-and-next-card 1 card card-index cards* phase review-records cb)
+                                (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
+                                  (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))) :class "mr-2")
+
+                  (remember
+                   (atom 5)
+                   (fn [score]
+                     (score-and-next-card score card card-index cards* phase review-records cb))
+                   interval-days-score-3
+                   interval-days-score-5)]))]
+
+            (when preview?
+              (ui/button "Reset(r)"
+                :small? true
+                :on-click #(operation-reset! card)))]
+           [:div.my-4
+            (ui/button "Click to review"
+              :small? true)])]))))
 
 (defn preview
   [blocks]
@@ -558,29 +562,26 @@
                                                       {:preview? true
                                                        :callback (fn [_]
                                                                    (swap! (::need-requery state) not))}))))))}
-               "A"]))
-
-           (when-not modal?
-             [:a.opacity-60.hover:opacity-100.svg-small.inline.ml-2.font-bold.grid
-              {:on-click (fn []
-                           (state/set-modal! #(view review-cards
-                                                    {:modal? true
-                                                     :callback
-                                                     (fn [review-records]
-                                                       (operation-card-info-summary!
-                                                        review-records review-cards card-query-block)
-                                                       (swap! (::need-requery state) not)
-                                                       (persist-var/persist-save of-matrix))})))}
-              svg/arrow-expand])]]
+               "A"]))]]
          (if (seq review-cards)
-           (view review-cards
-                 (merge config
-                        {:callback
-                         (fn [review-records]
-                           (operation-card-info-summary!
-                            review-records review-cards card-query-block)
-                           (swap! (::need-requery state) not)
-                           (persist-var/persist-save of-matrix))}))
+           [:div (when-not modal?
+                   {:on-click (fn []
+                                (state/set-modal! #(view review-cards
+                                                         {:modal? true
+                                                          :callback
+                                                          (fn [review-records]
+                                                            (operation-card-info-summary!
+                                                             review-records review-cards card-query-block)
+                                                            (swap! (::need-requery state) not)
+                                                            (persist-var/persist-save of-matrix))})))})
+            (view review-cards
+                  (merge config
+                         {:callback
+                          (fn [review-records]
+                            (operation-card-info-summary!
+                             review-records review-cards card-query-block)
+                            (swap! (::need-requery state) not)
+                            (persist-var/persist-save of-matrix))}))]
            review-finished)])
 
       ;; bad query-string
