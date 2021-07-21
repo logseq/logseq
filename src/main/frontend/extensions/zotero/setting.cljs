@@ -1,6 +1,5 @@
 (ns frontend.extensions.zotero.setting
   (:require [clojure.string :as str]
-            [frontend.extensions.zotero.setting :as setting]
             [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.storage :as storage]))
