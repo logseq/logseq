@@ -504,7 +504,7 @@
            [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
             {:on-click #(swap! (::need-requery state) (fn [o] (not o)))}
             (let [group-by-repeat (card-group-by-repeat (mapv ->card (flatten @*query-result)))
-                  new-card-count (count (flatten (vals (filterv (fn [[k _]] (< k 1))))))] ; repeats < 1
+                  new-card-count (count (flatten (vals (filterv (fn [[k _]] (< k 1)) group-by-repeat))))] ; repeats < 1
               (str (count sched-blocks) "/"  new-card-count "/" (count (flatten @*query-result))))])]])
 
       ;; bad query-string
