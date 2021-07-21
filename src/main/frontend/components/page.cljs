@@ -411,23 +411,24 @@
                (page-blocks-cp repo page {:sidebar? sidebar?}))]]
 
            (when-not block?
-             (today-queries repo today? sidebar?))
+             [:div
+              (today-queries repo today? sidebar?)
 
-           (tagged-pages repo page-name)
+              (tagged-pages repo page-name)
 
-           ;; referenced blocks
-           [:div {:key "page-references"}
-            (rum/with-key
-              (reference/references route-page-name false)
-              (str route-page-name "-refs"))]
+              ;; referenced blocks
+              [:div {:key "page-references"}
+               (rum/with-key
+                 (reference/references route-page-name false)
+                 (str route-page-name "-refs"))]
 
-           (when (text/namespace-page? route-page-name)
-             (hierarchy/structures route-page-name))
+              (when (text/namespace-page? route-page-name)
+                (hierarchy/structures route-page-name))
 
-           ;; TODO: or we can lazy load them
-           (when-not sidebar?
-             [:div {:key "page-unlinked-references"}
-              (reference/unlinked-references route-page-name)])])))))
+              ;; TODO: or we can lazy load them
+              (when-not sidebar?
+                [:div {:key "page-unlinked-references"}
+                 (reference/unlinked-references route-page-name)])])])))))
 
 (defonce layout (atom [js/window.innerWidth js/window.innerHeight]))
 

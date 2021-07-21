@@ -289,7 +289,7 @@
                     (fn [e]
                       ;; hide context menu
                       (state/hide-custom-context-menu!)
-                      (editor-handler/clear-selection! e)))))
+                      (editor-handler/clear-selection!)))))
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
@@ -320,6 +320,7 @@
         :sidebar-open? sidebar-open?
         :system-theme? system-theme?
         :on-click      #(do
+                          (util/clear-selection!)
                           (editor-handler/unhighlight-blocks!)
                           (util/fix-open-external-with-shift! %))}
 

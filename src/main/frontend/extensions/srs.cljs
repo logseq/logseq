@@ -504,7 +504,7 @@
           [:div.flex.flex-row.items-center
 
            ;; FIXME: CSS issue
-           (ui/tippy {:html [:div.text-sm.pr-3 "overdue/total"]
+           (ui/tippy {:html [:div.text-sm "overdue/total"]
                       ;; :class "tippy-hover"
                       :interactive true}
                      [:div.opacity-60.text-sm
@@ -514,7 +514,7 @@
 
            (when-not modal?
              (ui/tippy
-              {:html [:p.text-sm "Click to preview all cards"]
+              {:html [:div.text-sm "Click to preview all cards"]
                :delay [1000, 100]
                :class "tippy-hover"
                :interactive true
