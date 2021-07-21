@@ -382,6 +382,31 @@
 (defonce review-finished
   [:p.p-2 "Congrats, review finished! 🎉🎉"])
 
+(defn- clear-timeout!
+  [state]
+  (when-let [timeout (:timeout state)]
+    (js/clearTimeout timeout))
+  state)
+
+(defn- set-timeout!
+  [state]
+  (clear-timeout! state)
+  (let [score* (first (:rum/args state))
+        timeout (js/setTimeout #(reset! score* 3) (* 6 1000))]
+    (assoc state :timeout state)))
+
+(rum/defc remember < rum/reactive
+  {:did-mount set-timeout!
+   :will-update set-timeout!
+   :will-unmount clear-timeout!}
+  [score* on-click _interval-days-score-3 _interval-days-score-5]
+  (let [score (rum/react score*)]
+    (ui/button (if (= @score* 3)
+                 "Take a while to recall"
+                 "Remembered")
+     :small? true
+     :on-click #(on-click @score*))))
+
 (rum/defcs view
   < rum/reactive
   (rum/local 1 ::phase)
@@ -432,7 +457,7 @@
 
           (when (and (not preview?) (= 1 next-phase))
             (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
-                  interval-days-score-4 (get (get-next-interval card 4) card-last-interval-property)
+                  interval-days-score-4 (get (get-next-interval card 5) card-last-interval-property)
                   interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
               [:div
                (ui/button "Forgotten"
@@ -442,15 +467,12 @@
                              (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
                                (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))) :class "mr-2")
 
-               (ui/tippy
-                {:html [:p.text-sm (util/format "Remember it easily, (+ %d days)"
-                                                (Math/round interval-days-score-5))]
-                 :class "tippy-hover"
-                 :interactive true
-                 :disabled false}
-                (ui/button "Remembered"
-                  :small? true
-                  :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb) :class "mr-2"))
+               (remember
+                (atom 5)
+                (fn [score]
+                  (score-and-next-card score card card-index cards* phase review-records cb))
+                interval-days-score-3
+                interval-days-score-5)
 
                ;; (ui/tippy
                ;;  {:html [:p.text-sm (util/format "Takes a while to recall, (+ %d days)"
