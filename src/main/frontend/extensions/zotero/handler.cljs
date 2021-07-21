@@ -1,37 +1,38 @@
 (ns frontend.extensions.zotero.handler
-  (:require [frontend.handler.page :as page-handler]
+  (:require [cljs.core.async :refer [<! go]]
+            [clojure.string :as str]
             [frontend.extensions.zotero.api :as zotero-api]
-            [cljs.core.async :refer [go <!]]
-            [frontend.util.property :as property-util]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.state :as state]
-            [frontend.db :as db]
             [frontend.extensions.zotero.extractor :as extractor]
-            [clojure.string :as str]))
+            [frontend.extensions.zotero.setting :as setting]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]))
 
 (defn add [page-name type key]
   (go
-    (let [api-fn   (case type
-                     :notes zotero-api/notes
-                     :attachments zotero-api/attachments)
+    (let [api-fn      (case type
+                        :notes       zotero-api/notes
+                        :attachments zotero-api/attachments)
           first-block (case type
-                        :notes "[[notes]]"
-                        :attachments "[[attachments]]")
-          items (<! (api-fn key))
-          md-notes (->> items
-                        (map extractor/extract)
-                        (remove str/blank?))]
-      (when-let [id
-                 (:block/uuid
-                  (editor-handler/api-insert-new-block!
-                   first-block
-                   {:page page-name}))]
-        (doseq [note md-notes]
-          (editor-handler/api-insert-new-block!
-           note
-           {:block-uuid id
-            :sibling?   false
-            :before?    false}))))))
+                        :notes       (setting/setting :notes-block-text)
+                        :attachments (setting/setting :attachments-block-text))
+          should-add? (case type
+                        :notes       (setting/setting :include-notes?)
+                        :attachments (setting/setting :include-attachments?))]
+      (when should-add?
+        (let [items    (<! (api-fn key))
+              md-notes (->> items
+                            (map extractor/extract)
+                            (remove str/blank?))
+              id       (:block/uuid
+                        (editor-handler/api-insert-new-block!
+                         first-block {:page page-name}))]
+          (when (and id (not-empty md-notes))
+            (doseq [note md-notes]
+              (editor-handler/api-insert-new-block!
+               note
+               {:block-uuid id
+                :sibling?   false
+                :before?    false}))))))))
 
 (defn create-zotero-page [item]
   (go

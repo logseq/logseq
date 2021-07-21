@@ -9,7 +9,8 @@
             [frontend.components.search :as search]
             [frontend.components.settings :as settings]
             [frontend.components.external :as external]
-            [frontend.components.shortcut :as shortcut]))
+            [frontend.components.shortcut :as shortcut]
+            [frontend.extensions.zotero :as zotero]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -57,6 +58,14 @@
     {:name :settings
      :view settings/settings}]
 
+   ["/settings/shortcut"
+    {:name :shortcut-setting
+     :view shortcut/shortcut}]
+
+   ["/settings/zotero"
+    {:name :zotero-setting
+     :view zotero/settings}]
+
    ["/import"
     {:name :import
      :view external/import-cp}]
@@ -67,8 +76,4 @@
 
    ["/plugins"
     {:name :plugins
-     :view plugins/installed-page}]
-
-   ["/helper/shortcut"
-    {:name :shortcut
-     :view shortcut/shortcut}]])
+     :view plugins/installed-page}]])

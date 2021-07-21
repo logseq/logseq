@@ -1,19 +1,20 @@
 (ns frontend.extensions.zotero.api
-  (:require [cljs-http.client :as http]
-            [cljs.core.async
-             :refer [go <! >! go-loop timeout close! chan alt!]]
-            [camel-snake-kebab.core :as csk]
+  (:require [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
-            [frontend.util :as util]))
+            [cljs-http.client :as http]
+            [cljs.core.async
+             :refer [<! >! alt! chan close! go go-loop timeout]]
+            [frontend.extensions.zotero.setting :as setting]))
 
 (def ^:dynamic *debug* true)
 
-(def config {:api-version 3
-             :base        "https://api.zotero.org"
-             :timeout     150000
-             :api-key     "NlJI2bAuhYcQ4UgXSwHHsWRD"
-             :type        :user
-             :type-id     8237615})
+(defn config []
+  {:api-version 3
+   :base        "https://api.zotero.org"
+   :timeout     150000
+   :api-key     (setting/api-key)
+   :type        (setting/setting :type)
+   :type-id     (setting/setting :type-id)})
 
 ;; taken from https://github.com/metosin/metosin-common/blob/master/src/cljc/metosin/core/async/debounce.cljc
 (defn debounce
@@ -61,24 +62,25 @@
            response)))))
 
 (defn item [key]
-  (get* config (str "/items/" key)))
+  (get* (config) (str "/items/" key)))
 
 (defn query-items [type term]
-  (get* config (str "/items")
-        {:qmode "everything"
-         :q term
+  (js/console.log "query!!" term)
+  (get* (config) (str "/items")
+        {:qmode     "everything"
+         :q         term
          :item-type type}))
 
 (defn notes [key]
-  (get* config (str "/items/" key "/children") {:item-type "note"}))
+  (get* (config) (str "/items/" key "/children") {:item-type "note"}))
 
 (defn attachments [key]
-  (get* config (str "/items/" key "/children") {:item-type "attachment"}))
+  (get* (config) (str "/items/" key "/children") {:item-type "attachment"}))
 
 (comment
-  (get* config "/collections")
-  (get* config "/items")
-  (get* config "/items" {:item-type "journalArticle"})
+  (get* (config) "/collections")
+  (get* (config) "/items")
+  (get* (config) "/items" {:item-type "journalArticle"})
   (item "JZCIN4K5")
   (item "RFYNAQTN")
   (item "3V6N8ECQ")

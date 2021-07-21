@@ -5,6 +5,7 @@
             [frontend.extensions.html-parser :as html-parser]
             [frontend.date :as date]
             [clojure.set :refer [rename-keys]]
+            [frontend.extensions.zotero.setting :as setting]
             [frontend.extensions.zotero.api :as api]))
 
 (defn item-type [item] (-> item :data :item-type))
@@ -21,14 +22,15 @@
                       (filterv (fn [s] (str/includes? s "Citation Key: ")))
                       first)]
     (when citation
-      (str "@" (str/trim (str/replace citation "Citation Key: " ""))))))
+      (str/trim (str/replace citation "Citation Key: " "")))))
 
 (defn title [item] (-> item :data :title))
 
 (defn page-name [item]
   (let [citation-key (citation-key item)
         title        (title item)]
-    (or citation-key title)))
+    (str (setting/setting :page-insert-prefix)
+         (or citation-key title))))
 
 (defn authors [item]
   (let [creators (-> item :data :creators)
