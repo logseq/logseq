@@ -83,107 +83,98 @@
 
 
 (rum/defcs settings
-  <
-  (rum/local (setting/api-key) ::api-key)
-  rum/reactive
+  < rum/reactive
   [state]
-  (let [api-key (::api-key state)]
-    [:div#zotero-settings
-     [:h1.title "Zotero settings"]
+  [:div#zotero-settings
+   [:h1.title "Zotero settings"]
 
+   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:label.block.text-bg.font-medium.leading-5.opacity-70
+     {:for "zotero_api_key"}
+     "Zotero API key"]
+    [:div.mt-1.sm:mt-0.sm:col-span-2
+     [:div.max-w-lg.rounded-md
+      [:input.form-input.block
+       {:default-value (setting/api-key)
+        :placeholder   "Please enter your Zotero API key"
+        :on-blur       (fn [e] (setting/set-api-key (util/evalue e)))}]]]]
+
+   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:label.block.text-sm.font-medium.leading-5.opacity-70
+     {:for "zotero_type"}
+     "Zotero user or group?"]
+    [:div.mt-1.sm:mt-0.sm:col-span-2
+     [:div.max-w-lg.rounded-md
+      [:select.form-select.is-small
+       {:value     (-> (setting/setting :type) name)
+        :on-change (fn [e]
+                     (let [type (-> (util/evalue e)
+                                    (str/lower-case)
+                                    keyword)]
+                       (setting/set-setting! :type type)))}
+       (for [type (map name [:user :group])]
+         [:option {:key type :value type} (str/capitalize type)])]]]]
+
+   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:label.block.text-bg.font-medium.leading-5.opacity-70
+     {:for "zotero_type_id"}
+     "User or Group id"]
+    [:div.mt-1.sm:mt-0.sm:col-span-2
+     [:div.max-w-lg.rounded-md
+      [:input.form-input.block
+       {:default-value (setting/setting :type-id)
+        :placeholder   "User/Group id"
+        :on-blur       (fn [e] (setting/set-setting! :type-id (util/evalue e)))}]]]]
+
+   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:label.block.text-sm.font-medium.leading-5.opacity-70
+     {:for "zotero_include_attachment_links"}
+     "Include attachment links?"]
+    [:div
+     [:div.rounded-md.sm:max-w-xs
+      (ui/toggle (setting/setting :include-attachments?)
+                 (fn [] (setting/set-setting! :include-attachments? (not (setting/setting :include-attachments?))))
+                 true)]]]
+
+   (when (setting/setting :include-attachments?)
      [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
       [:label.block.text-bg.font-medium.leading-5.opacity-70
-       {:for "zotero_api_key"}
-       "Zotero API key"]
+       {:for "zotero_attachments_block_text"}
+       "Attachtment under block of:"]
       [:div.mt-1.sm:mt-0.sm:col-span-2
        [:div.max-w-lg.rounded-md
         [:input.form-input.block
-         {:value       @api-key
-          :placeholder "Please enter your Zotero API key"
-          :on-change   (fn [e]
-                         (reset! api-key (util/evalue e))
-                         (setting/set-api-key (util/evalue e)))}]]]]
+         {:default-value (setting/setting :attachments-block-text)
+          :on-blur       (fn [e] (setting/set-setting! :attachments-block-text (util/evalue e)))}]]]])
 
-     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-      [:label.block.text-sm.font-medium.leading-5.opacity-70
-       {:for "zotero_type"}
-       "Zotero user or group?"]
-      [:div.mt-1.sm:mt-0.sm:col-span-2
-       [:div.max-w-lg.rounded-md
-        [:select.form-select.is-small
-         {:value     (-> (setting/setting :type) name)
-          :on-change (fn [e]
-                       (let [type (-> (util/evalue e)
-                                      (str/lower-case)
-                                      keyword)]
-                         (setting/set-setting! :type type)))}
-         (for [type (map name [:user :group])]
-           [:option {:key type :value type} (str/capitalize type)])]]]]
+   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:label.block.text-sm.font-medium.leading-5.opacity-70
+     {:for "zotero_include_notes"}
+     "Include notes?"]
+    [:div
+     [:div.rounded-md.sm:max-w-xs
+      (ui/toggle (setting/setting :include-notes?)
+                 (fn [] (setting/set-setting! :include-notes?
+                                              (not (setting/setting :include-notes?))))
+                 true)]]]
 
+   (when (setting/setting :include-notes?)
      [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
       [:label.block.text-bg.font-medium.leading-5.opacity-70
-       {:for "zotero_type_id"}
-       "User or Group id"]
+       {:for "zotero_notes_block_text"}
+       "Notes under block of:"]
       [:div.mt-1.sm:mt-0.sm:col-span-2
        [:div.max-w-lg.rounded-md
         [:input.form-input.block
-         {:value       (setting/setting :type-id)
-          :placeholder "User/Group id"
-          :on-change   (fn [e]
-                         (setting/set-setting! :type-id (util/evalue e)))}]]]]
+         {:default-value (setting/setting :notes-block-text)
+          :on-blur       (fn [e] (setting/set-setting! :notes-block-text (util/evalue e)))}]]]])
 
-     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-      [:label.block.text-sm.font-medium.leading-5.opacity-70
-       {:for "zotero_include_attachment_links"}
-       "Include attachment links?"]
-      [:div
-       [:div.rounded-md.sm:max-w-xs
-        (ui/toggle (setting/setting :include-attachments?)
-                   (fn [] (setting/set-setting! :include-attachments? (not (setting/setting :include-attachments?))))
-                   true)]]]
-
-     (when (setting/setting :include-attachments?)
-       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-        [:label.block.text-bg.font-medium.leading-5.opacity-70
-         {:for "zotero_attachments_block_text"}
-         "Attachtment under block of:"]
-        [:div.mt-1.sm:mt-0.sm:col-span-2
-         [:div.max-w-lg.rounded-md
-          [:input.form-input.block
-           {:value     (setting/setting :attachments-block-text)
-            :on-change (fn [e]
-                           (setting/set-setting! :attachments-block-text (util/evalue e)))}]]]])
-
-     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-      [:label.block.text-sm.font-medium.leading-5.opacity-70
-       {:for "zotero_include_notes"}
-       "Include notes?"]
-      [:div
-       [:div.rounded-md.sm:max-w-xs
-        (ui/toggle (setting/setting :include-notes?)
-                   (fn [] (setting/set-setting! :include-notes?
-                                                (not (setting/setting :include-notes?))))
-                   true)]]]
-
-     (when (setting/setting :include-notes?)
-       [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-        [:label.block.text-bg.font-medium.leading-5.opacity-70
-         {:for "zotero_notes_block_text"}
-         "Notes under block of:"]
-        [:div.mt-1.sm:mt-0.sm:col-span-2
-         [:div.max-w-lg.rounded-md
-          [:input.form-input.block
-           {:value     (setting/setting :notes-block-text)
-            :on-change (fn [e]
-                           (setting/set-setting! :notes-block-text (util/evalue e)))}]]]])
-
-     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-      [:label.block.text-bg.font-medium.leading-5.opacity-70
-       {:for "zotero_page_prefix"}
-       "Insert page name with prefix:"]
-      [:div.mt-1.sm:mt-0.sm:col-span-2
-       [:div.max-w-lg.rounded-md
-        [:input.form-input.block
-         {:value     (setting/setting :page-insert-prefix)
-          :on-change (fn [e]
-                         (setting/set-setting! :page-insert-prefix (util/evalue e)))}]]]]]))
+   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+    [:label.block.text-bg.font-medium.leading-5.opacity-70
+     {:for "zotero_page_prefix"}
+     "Insert page name with prefix:"]
+    [:div.mt-1.sm:mt-0.sm:col-span-2
+     [:div.max-w-lg.rounded-md
+      [:input.form-input.block
+       {:default-value (setting/setting :page-insert-prefix)
+        :on-blur       (fn [e] (setting/set-setting! :page-insert-prefix (util/evalue e)))}]]]]])
