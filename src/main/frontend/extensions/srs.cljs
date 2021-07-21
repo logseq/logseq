@@ -220,11 +220,11 @@
   (show-cycle-config [this phase]
     (case phase
       1
-      {:cloze true}
+      {}
       2
-      {:cloze true}
+      {}
       3
-      {})))
+      {:show-cloze? true})))
 
 (defn- ->card [block]
   {:pre [(map? block)]}
@@ -494,12 +494,19 @@
 ;;; register cloze macro
 
 
-(defn cloze-macro-show
-  [config options]
-  (if (:cloze config)
-    [:span.cloze "[...]"]
-    [:span.cloze-revealed
-     (string/join ", " (:arguments options))]))
+(rum/defcs cloze-macro-show < rum/reactive
+  {:init (fn [state]
+           (let [shown? (atom (:show-cloze? config))]
+             (assoc state :shown? shown?)))}
+  [state config options]
+  (let [shown?* (:shown? state)
+        shown? (rum/react shown?*)
+        toggle! #(swap! shown?* not)]
+    (if (or shown? (:show-cloze? config))
+      [:a.cloze-revealed {:on-click toggle!}
+       (util/format "[%s]" (string/join ", " (:arguments options)))]
+      [:a.cloze {:on-click toggle!}
+       "[...]"])))
 
 (component-macro/register cloze-macro-name cloze-macro-show)
 
