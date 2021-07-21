@@ -1894,7 +1894,8 @@
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
         *ref-collapsed? (get state ::ref-collapsed?)
-        collapsed? (or @*ref-collapsed? (get properties :collapsed))
+        collapsed? (or @*ref-collapsed?
+                       (get properties :collapsed))
         ref? (boolean (:ref? config))
         breadcrumb-show? (:breadcrumb-show? config)
         sidebar? (boolean (:sidebar? config))
