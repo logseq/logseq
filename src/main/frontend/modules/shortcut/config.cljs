@@ -321,7 +321,7 @@
     {:desc    "Toggle open blocks (collapse or expand all blocks)"
      :binding "t o"
      :fn      editor-handler/toggle-open!}
-    :ui/open-cards
+    :ui/toggle-cards
     {:desc    "toggle cards"
      :binding "t c"
      :fn      ui-handler/toggle-cards!}
@@ -414,6 +414,7 @@
    [:ui/toggle-help
     :editor/toggle-open-blocks
     :ui/toggle-wide-mode
+    :ui/toggle-cards
     :ui/toggle-document-mode
     :ui/toggle-brackets
     :ui/toggle-theme
