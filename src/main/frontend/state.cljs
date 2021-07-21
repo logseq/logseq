@@ -602,12 +602,13 @@
   (dom/add-class! block "selected noselect")
   (swap! state assoc
          :selection/mode true
-         :selection/blocks (conj (:selection/blocks @state) block)
+         :selection/blocks (conj (vec (:selection/blocks @state)) block)
          :selection/direction direction))
 
 (defn drop-last-selection-block!
   []
-  (let [last-block (peek (:selection/blocks @state))]
+  (def blocks (:selection/blocks @state))
+  (let [last-block (peek (vec (:selection/blocks @state)))]
     (swap! state assoc
            :selection/mode true
            :selection/blocks (vec (pop (:selection/blocks @state))))
