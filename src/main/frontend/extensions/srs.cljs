@@ -18,7 +18,8 @@
             [cljs-time.local :as tl]
             [cljs-time.coerce :as tc]
             [clojure.string :as string]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.modules.shortcut.core :as shortcut]))
 
 ;;; ================================================================
 ;;; Commentary
@@ -422,15 +423,17 @@
             [:div.flex-1
              (when-not (and (not preview?) (= next-phase 1))
                (ui/button (case next-phase
-                            1 "Hide answers(h)"
+                            1 "Hide answers(s)"
                             2 "Show Answers(s)"
                             3 "Show clozes(s)")
+                 :id "card-answers"
                  :class "mr-2"
                  :small? true
                  :on-click #(reset! phase next-phase)))
 
              (when (and (> (count cards) 1) preview?)
                (ui/button "Next(n)"
+                 :id "card-next"
                  :small? true
                  :class "mr-2"
                  :on-click #(skip-card card card-index cards* phase review-records cb)))
@@ -441,6 +444,7 @@
                      interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
                  [:div.flex.flex-row.justify-between
                   (ui/button "Forgotten(f)"
+                    :id "card-forgotten"
                     :small? true
                     :on-click (fn []
                                 (score-and-next-card 1 card card-index cards* phase review-records cb)
@@ -448,21 +452,30 @@
                                   (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))))
 
                   (ui/button "Remembered(r)"
+                    :id "card-remembered"
                     :small? true
                     :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb))
 
                   (ui/button "Take a while to recall(t)"
+                    :id "card-recall"
                     :class (util/hiccup->class "opacity-60.hover:opacity-100")
                     :small? true
                     :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb))]))]
 
             (when preview?
-              (ui/button "Reset(r)"
+              (ui/button "Reset"
+                :id "card-reset"
+                :class (util/hiccup->class "opacity-60.hover:opacity-100")
                 :small? true
                 :on-click #(operation-reset! card)))]
            [:div.my-4
             (ui/button "Click to review"
               :small? true)])]))))
+
+(rum/defc view-modal <
+  (shortcut/mixin :shortcut.handler/cards)
+  [cards option]
+  (view cards option))
 
 (defn preview
   [blocks]
@@ -534,7 +547,7 @@
                             (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
                               (when (> (count all-blocks) 0)
                                 (let [review-cards (mapv ->card all-blocks)]
-                                  (state/set-modal! #(view
+                                  (state/set-modal! #(view-modal
                                                       review-cards
                                                       {:preview? true
                                                        :callback (fn [_]
@@ -543,22 +556,24 @@
          (if (seq review-cards)
            [:div (when-not modal?
                    {:on-click (fn []
-                                (state/set-modal! #(view review-cards
-                                                         {:modal? true
-                                                          :callback
-                                                          (fn [review-records]
-                                                            (operation-card-info-summary!
-                                                             review-records review-cards card-query-block)
-                                                            (swap! (::need-requery state) not)
-                                                            (persist-var/persist-save of-matrix))})))})
-            (view review-cards
-                  (merge config
-                         {:callback
-                          (fn [review-records]
-                            (operation-card-info-summary!
-                             review-records review-cards card-query-block)
-                            (swap! (::need-requery state) not)
-                            (persist-var/persist-save of-matrix))}))]
+                                (state/set-modal! #(view-modal
+                                                    review-cards
+                                                    {:modal? true
+                                                     :callback
+                                                     (fn [review-records]
+                                                       (operation-card-info-summary!
+                                                        review-records review-cards card-query-block)
+                                                       (swap! (::need-requery state) not)
+                                                       (persist-var/persist-save of-matrix))})))})
+            (let [view-fn (if modal? view-modal view)]
+              (view-fn review-cards
+                       (merge config
+                              {:callback
+                               (fn [review-records]
+                                 (operation-card-info-summary!
+                                  review-records review-cards card-query-block)
+                                 (swap! (::need-requery state) not)
+                                 (persist-var/persist-save of-matrix))})))]
            review-finished)])
 
       ;; bad query-string
