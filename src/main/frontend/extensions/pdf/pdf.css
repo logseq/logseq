@@ -64,6 +64,15 @@
     align-items: center;
     justify-content: flex-end;
     padding-right: 20px;
+
+    > .r {
+      a.button {
+        user-select: none;
+        display: flex;
+        align-items: center;
+        margin-left: 8px;
+      }
+    }
   }
 
   &-viewer {

@@ -8,6 +8,7 @@
             [frontend.util :as front-utils]
             [frontend.state :as state]
             [frontend.config :as config]
+            [frontend.components.svg :as svg]
             [medley.core :as medley]
             [frontend.fs :as fs]
             [clojure.string :as string]))
@@ -163,13 +164,19 @@
         show-ctx-tip! (fn [^js viewer hl point]
                         (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
                           (set-tip-state! {:highlight hl :vw-pos vw-pos :point point})))
+
         add-hl! (fn [hl] (when (:id hl)
                            ;; fix js object
-                           (let [highlights (map #(if (map? %) % (bean/->clj %)) highlights)]
+                           (let [highlights (pdf-utils/fix-nested-js highlights)]
                              (set-highlights! (conj highlights hl)))))
+
         upd-hl! (fn [hl]
-                  (when-let [pp (medley/find-first #(= (:id (second %)) (:id hl)) (medley/indexed highlights))]
-                    (set-highlights! (assoc-in highlights [(first pp)] hl))))
+                  (let [highlights (pdf-utils/fix-nested-js highlights)]
+                    (when-let [[target-idx] (medley/find-first
+                                              #(= (:id (second %)) (:id hl))
+                                              (medley/indexed highlights))]
+                      (set-highlights! (assoc-in highlights [target-idx] hl)))))
+
         del-hl! (fn [hl] (when-let [id (:id hl)] (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
 
     ;; consume dirtied
@@ -306,6 +313,24 @@
            (:text (:content hl))])
         ])]))
 
+(rum/defc pdf-toolbar
+  [^js viewer]
+  [:div.extensions__pdf-toolbar
+   [:div.r.flex
+
+    ;; zoom
+    [:a.button
+     {:on-click (partial pdf-utils/zoom-out-viewer viewer)}
+     (svg/zoom-out)]
+
+    [:a.button
+     {:on-click (partial pdf-utils/zoom-in-viewer viewer)}
+     (svg/zoom-in)]
+
+    [:a.button
+     {:on-click #(state/set-state! :pdf/current nil)}
+     "close"]]])
+
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]
 
@@ -389,15 +414,8 @@
             initial-hls (:loaded-pages ano-state)
             ops) "pdf-highlights")
 
-        (rum/with-key
-          (pdf-resizer viewer) "pdf-resizer")])]))
-
-(rum/defc pdf-toolbar
-  []
-  [:div.extensions__pdf-toolbar
-   [:div.r
-    [:a.button {:on-click #(state/set-state! :pdf/current nil)} "close"]
-    ]])
+        (rum/with-key (pdf-toolbar viewer) "pdf-toolbar")
+        (rum/with-key (pdf-resizer viewer) "pdf-resizer")])]))
 
 (rum/defc pdf-loader
   [{:keys [url hls-file]}]
@@ -486,8 +504,7 @@
          [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-md
           "Downloading PDF file " url]
 
-         [(rum/with-key (pdf-toolbar) "pdf-toolbar")
-          (rum/with-key (pdf-viewer
+         [(rum/with-key (pdf-viewer
                           url initial-hls
                           (:pdf-document state)
                           {:set-dirty-hls! set-dirty-hls!}) "pdf-viewer")]))]))

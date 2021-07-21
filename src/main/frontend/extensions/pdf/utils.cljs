@@ -5,6 +5,10 @@
             ["/frontend/extensions/pdf/utils" :as js-utils]
             [frontend.loader :refer [load]]))
 
+(defonce MAX-SCALE 5.0)
+(defonce MIN-SCALE 0.25)
+(defonce DELTA_SCALE 1.1)
+
 (defn get-bounding-rect
   [rects]
   (bean/->clj (js-utils/getBoundingRect (bean/->js rects))))
@@ -55,6 +59,26 @@
   (when-let [js-hl (bean/->js hl)]
     (js-utils/scrollToHighlight viewer js-hl)))
 
+(defn zoom-in-viewer
+  [^js viewer]
+  (let [cur-scale (.-currentScale viewer)]
+    (when (< cur-scale MAX-SCALE)
+      (let [new-scale (.toFixed (* cur-scale DELTA_SCALE) 2)
+            new-scale (/ (js/Math.ceil (* new-scale 10)) 10)
+            new-scale (min MAX-SCALE new-scale)]
+
+        (set! (.-currentScale viewer) new-scale)))))
+
+(defn zoom-out-viewer
+  [^js viewer]
+  (let [cur-scale (.-currentScale viewer)]
+    (when (> cur-scale MIN-SCALE)
+      (let [new-scale (.toFixed (/ cur-scale DELTA_SCALE) 2)
+            new-scale (/ (js/Math.floor (* new-scale 10)) 10)
+            new-scale (max MIN-SCALE new-scale)]
+
+        (set! (.-currentScale viewer) new-scale)))))
+
 (defn clear-all-selection
   []
   (.removeAllRanges (js/window.getSelection)))
@@ -62,6 +86,11 @@
 (def adjust-viewer-size!
   (front-utils/debounce
     200 (fn [^js viewer] (set! (. viewer -currentScaleValue) "auto"))))
+
+(defn fix-nested-js
+  [its]
+  (when (sequential? its)
+    (mapv #(if (map? %) % (bean/->clj %)) its)))
 
 (defn gen-id []
   (str (.toString (js/Date.now) 36)
