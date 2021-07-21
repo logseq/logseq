@@ -113,8 +113,8 @@
 
 @media (min-width: 1024px) {
     .panel-content {
-        width: 36rem;
-        height: 24rem;
+        min-width: 36rem;
+        min-height: 24rem;
     }
 }
 
