@@ -1237,7 +1237,7 @@
                  (:block/uuid child)))))]))))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show?]
+  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id]
   (let [has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
@@ -1250,7 +1250,9 @@
         ref-collapsed? (util/react *ref-collapsed?)
         dark? (= "dark" (state/sub :ui/theme))
         ref? (:ref? config)
-        collapsed? (if ref? ref-collapsed? collapsed?)]
+        collapsed? (if ref? ref-collapsed? collapsed?)
+        empty-content? (string/blank? (:block/content block))
+        edit? (state/sub [:editor/editing? edit-input-id])]
     [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
               :margin-top 0
@@ -1271,20 +1273,23 @@
                          (editor-handler/collapse-block! uuid)))))}
       [:span {:class (if control-show? "control-show" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
-     [:a {:on-click (fn [e]
-                      (bullet-on-click e block config uuid))}
-      [:span.bullet-container.cursor
-       {:id (str "dot-" uuid)
-        :draggable true
-        :on-drag-start (fn [event]
-                         (bullet-drag-start event block uuid block-id))
-        :blockid (str uuid)
-        :class (str (when collapsed? "bullet-closed")
-                    " "
-                    (when (and (:document/mode? config)
-                               (not collapsed?))
-                      "hide-inner-bullet"))}
-       [:span.bullet {:blockid (str uuid)}]]]]))
+     (if (and empty-content? (not edit?))
+       [:span.bullet-container]
+
+       [:a {:on-click (fn [e]
+                        (bullet-on-click e block config uuid))}
+        [:span.bullet-container.cursor
+         {:id (str "dot-" uuid)
+          :draggable true
+          :on-drag-start (fn [event]
+                           (bullet-drag-start event block uuid block-id))
+          :blockid (str uuid)
+          :class (str (when collapsed? "bullet-closed")
+                      " "
+                      (when (and (:document/mode? config)
+                                 (not collapsed?))
+                        "hide-inner-bullet"))}
+         [:span.bullet {:blockid (str uuid)}]]])]))
 
 (rum/defc dnd-separator
   [block move-to block-content?]
@@ -1911,7 +1916,8 @@
                          (seq body))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to has-child? *control-show? doc-mode?)
         data-refs (build-refs-data-value block (remove (set refs) path-refs))
-        data-refs-self (build-refs-data-value block refs)]
+        data-refs-self (build-refs-data-value block refs)
+        edit-input-id (str "edit-block-" blocks-container-id "-" uuid)]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
        {:id block-id
@@ -1949,10 +1955,9 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e has-child? *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show?))
+        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id))
 
-      (let [edit-input-id (str "edit-block-" blocks-container-id "-" uuid)]
-        (block-content-or-editor config block edit-input-id block-id slide? heading-level))]
+      (block-content-or-editor config block edit-input-id block-id slide? heading-level)]
 
      (block-children config children collapsed? *ref-collapsed?)
 
