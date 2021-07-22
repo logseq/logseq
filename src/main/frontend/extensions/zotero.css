@@ -1,0 +1,13 @@
+.zotero-settings {
+  .row {
+    @apply sm:grid sm:grid-cols-3 sm:gap-4 mb-4 flex items-center;
+  }
+
+  .title {
+    @apply block font-medium leading-5;
+  }
+
+  .form-select {
+    @apply py-2;
+  }
+}
