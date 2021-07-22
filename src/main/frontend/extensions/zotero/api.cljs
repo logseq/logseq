@@ -65,7 +65,6 @@
   (get* (config) (str "/items/" key)))
 
 (defn query-items [type term]
-  (js/console.log "query!!" term)
   (get* (config) (str "/items")
         {:qmode     "everything"
          :q         term
