@@ -250,9 +250,9 @@
                     sc-pos (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
 
                 ;; TODO: debug
-                (js/console.debug "[VW x SC] ====>" vw-pos sc-pos)
-                (js/console.debug "[Range] ====> [" page-info "]" (.toString sel-range) point)
-                (js/console.debug "[Rects] ====>" sel-rects " [Bounding] ====>" bounding)
+                ;;(dd "[VW x SC] ====>" vw-pos sc-pos)
+                ;;(dd "[Range] ====> [" page-info "]" (.toString sel-range) point)
+                ;;(dd "[Rects] ====>" sel-rects " [Bounding] ====>" bounding)
 
 
                 (let [hl {:id         nil
@@ -303,33 +303,116 @@
 
          (.querySelector el ".pp-holder")))
 
-     (if (seq highlights)
-       [:ul.extensions__pdf-highlights
-        (for [hl highlights]
-          [:li
-           [:a
-            {:on-click #(pdf-utils/scroll-to-highlight viewer hl)}
-            (str "#" (:id hl) "#  ")]
-           (:text (:content hl))])
-        ])]))
+     ;; debug highlights anchor
+     ;;(if (seq highlights)
+     ;;  [:ul.extensions__pdf-highlights
+     ;;   (for [hl highlights]
+     ;;     [:li
+     ;;      [:a
+     ;;       {:on-click #(pdf-utils/scroll-to-highlight viewer hl)}
+     ;;       (str "#" (:id hl) "#  ")]
+     ;;      (:text (:content hl))])
+     ;;   ])
+     ]))
+
+(rum/defc pdf-outline-item
+  [^js viewer {:keys [title items href parent dest] :as node}]
+  (let [has-child? (seq items)]
+
+    [:div.extensions__pdf-outline-item
+     {:class (if has-child? "has-children")}
+     [:div.inner
+      [:a
+       {:href      "javascript:;"
+        :data-dest (js/JSON.stringify (bean/->js dest))
+        :on-click  (fn []
+                     (when-let [^js dest (and dest (bean/->js dest))]
+                       (.goToDestination (.-linkService viewer) dest)))}
+       [:span title]]]
+
+     ;; children
+     (when has-child?
+       [:div.children
+        (map-indexed
+          (fn [idx itm]
+            (let [parent (str parent "-" idx)]
+              (rum/with-key
+                (pdf-outline-item viewer (merge itm {:parent parent})) parent))) items)])]))
+
+(rum/defc pdf-outline
+  [^js viewer hide!]
+  (when-let [^js pdf-doc (and viewer (.-pdfDocument viewer))]
+    (let [*el-outline (rum/use-ref nil)
+          [outline-data, set-outline-data!] (rum/use-state [])]
+
+      (rum/use-effect!
+        (fn []
+          (p/catch
+            (p/let [^js data (.getOutline pdf-doc)]
+              (when-let [data (and data (.map data (fn [^js it]
+                                                     (set! (.-href it) (.. viewer -linkService (getDestinationHash (.-dest it))))
+                                                     it)))])
+              (set-outline-data! (bean/->clj data)))
+
+            (fn [e]
+              (js/console.error "[Load outline Error]" e))))
+        [pdf-doc])
+
+      (rum/use-effect!
+        (fn []
+          (let [el-outline (rum/deref *el-outline)
+                cb (fn [^js e]
+                     (and (= e.which 27) (hide!)))]
+
+            (js/setTimeout #(.focus el-outline))
+            (.addEventListener el-outline "keyup" cb)
+            #(.removeEventListener el-outline "keyup" cb)))
+        [])
+
+      [:div.extensions__pdf-outline-wrap
+       {:on-click (fn [^js/MouseEvent e]
+                    (let [target (.-target e)]
+                      (when-not (.contains (rum/deref *el-outline) target)
+                        (hide!))))}
+
+       [:div.extensions__pdf-outline
+        {:ref       *el-outline
+         :tab-index -1}
+        (if (seq outline-data)
+          [:section
+           (map-indexed (fn [idx itm]
+                          (rum/with-key
+                            (pdf-outline-item viewer (merge itm {:parent idx}))
+                            idx))
+                        outline-data)]
+          [:section.is-empty "No outlines"])]])))
 
 (rum/defc pdf-toolbar
   [^js viewer]
-  [:div.extensions__pdf-toolbar
-   [:div.r.flex
+  (let [[outline-visible?, set-outline-visible!] (rum/use-state false)]
+    [:div.extensions__pdf-toolbar
+     [:div.inner
+      [:div.r.flex
 
-    ;; zoom
-    [:a.button
-     {:on-click (partial pdf-utils/zoom-out-viewer viewer)}
-     (svg/zoom-out)]
+       ;; zoom
+       [:a.button
+        {:on-click (partial pdf-utils/zoom-out-viewer viewer)}
+        (svg/zoom-out 18)]
 
-    [:a.button
-     {:on-click (partial pdf-utils/zoom-in-viewer viewer)}
-     (svg/zoom-in)]
+       [:a.button
+        {:on-click (partial pdf-utils/zoom-in-viewer viewer)}
+        (svg/zoom-in 18)]
 
-    [:a.button
-     {:on-click #(state/set-state! :pdf/current nil)}
-     "close"]]])
+       [:a.button
+        {:on-click #(set-outline-visible! (not outline-visible?))}
+        (svg/view-list 16)]
+
+       [:a.button
+        {:on-click #(state/set-state! :pdf/current nil)}
+        "close"]]]
+
+     ;; contents outline
+     (when outline-visible? (pdf-outline viewer #(set-outline-visible! false)))]))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]
@@ -364,26 +447,14 @@
         #())
       [])
 
-    ;; highlights & annotations
-    (rum/use-effect!
-      (fn []
-        (js/console.debug "[rebuild loaded pages] " (:loaded-pages ano-state))
-        ;;(set-hls-state! (update-in hls-state [:dirties] inc))
-        ;; destroy
-        #())
-      [(:loaded-pages ano-state)])
-
     ;; interaction events
     (rum/use-effect!
       (fn []
-        (js/console.debug "[rebuild interaction events]" (:viewer state))
-
         (when-let [^js viewer (:viewer state)]
           (let [^js el (rum/deref *el-ref)
 
                 fn-textlayer-ready
                 (fn [^js p]
-                  (js/console.debug "text layer ready" p)
                   (set-ano-state! {:loaded-pages (conj (:loaded-pages ano-state) (int (.-pageNumber p)))}))
 
                 fn-page-ready
@@ -435,8 +506,6 @@
                   res (fs/read-file repo-dir hls-file)
                   data (if res (bean/->clj (js/JSON.parse res)) [])]
 
-            (dd "[initial hls] " data)
-
             (set-hls-state! {:initial-hls data}))
 
           ;; error
@@ -452,8 +521,6 @@
     (rum/use-effect!
       (fn []
         (when-let [hls (:latest-hls hls-state)]
-          (dd "latest hls ===>" hls)
-
           (p/catch
             (p/let [hls (if hls
                           (js/JSON.stringify (bean/->js hls) nil 2)
