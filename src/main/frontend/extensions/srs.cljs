@@ -376,10 +376,13 @@
 (defn- score-and-next-card [score card *card-index *cards *phase *review-records cb]
   (operation-score! card score)
   (swap! *review-records #(update % score (fn [ov] (conj ov card))))
-  (swap! *card-index inc)
   (if (>= (inc @*card-index) (count @*cards))
-    (and cb (cb @*review-records))
-    (reset! *phase 1)))
+    (when cb
+      (swap! *card-index inc)
+      (cb @*review-records))
+    (do
+      (swap! *card-index inc)
+      (reset! *phase 1))))
 
 (defn- skip-card [card *card-index *cards *phase *review-records cb]
   (swap! *review-records #(update % "skip" (fn [ov] (conj ov card))))
