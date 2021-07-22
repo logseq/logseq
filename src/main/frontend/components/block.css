@@ -279,6 +279,11 @@
   margin: 0.4em 0 0;
 }
 
+.block-ref .ls-block :is(h1, h2),
+.block-ref .editor-inner :is(.h1, .h2) {
+  border-bottom: none;
+}
+
 .document-mode .ls-block h1,
 .document-mode .editor-inner .h1 {
   margin: 0.67em 0;

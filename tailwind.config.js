@@ -34,6 +34,11 @@ module.exports = {
       yellow: colors.amber,
       orange: colors.orange,
       rose: colors.rose
+    },
+    extend: {
+      animation: {
+        'spin-reverse': 'spin 2s linear infinite reverse',
+      }
     }
   }
 }
