@@ -1,5 +1,5 @@
 (ns frontend.extensions.zotero
-  (:require [cljs.core.async :refer [<! >! go chan] :as a]
+  (:require [cljs.core.async :refer [<! >! go chan go-loop] :as a]
             [clojure.string :as str]
             [frontend.components.svg :as svg]
             [frontend.extensions.zotero.api :as api]
@@ -13,8 +13,8 @@
             [frontend.util :as util]
             [rum.core :as rum]))
 
-(defonce term-chan (chan))
-(defonce debounce-chan  (api/debounce term-chan 200))
+(def term-chan (chan))
+(def debounce-chan-mult (a/mult (api/debounce term-chan 3000)))
 
 (rum/defc zotero-search-item [{:keys [data] :as item} handle-command-zotero]
   (let [type (:item-type data)
@@ -36,28 +36,35 @@
         [:div.text-sm abstract]]]
       nil)))
 
-(rum/defc zotero-search [handle-command-zotero]
+(rum/defc zotero-search
+  [handle-command-zotero]
 
   (let [[term set-term!]                   (rum/use-state "")
         [search-result set-search-result!] (rum/use-state [])
         [search-error set-search-error!]   (rum/use-state nil)
         [is-searching set-is-searching!]   (rum/use-state false)]
+
+    (rum/use-effect!
+     (fn []
+       (let [d-chan (chan)]
+         (a/tap debounce-chan-mult d-chan)
+         (go-loop []
+           (let [d-term (<! d-chan)]
+             (when-not (str/blank? d-term)
+               (set-is-searching! true)
+
+               (let [result (<! (api/query-items "journalArticle" d-term))]
+                 (if (false? (:success result))
+                   (set-search-error! (:body result))
+                   (set-search-result! result)))
+
+               (set-is-searching! false)))
+           (recur))))
+     [])
+
     (when-not (setting/valid?)
       (route-handler/redirect! {:to :zotero-setting})
       (notification/show! "Please setup Zotero API key and user/group id first!" :warn false))
-
-    (go
-      (let [d-term   (<! debounce-chan)]
-        (when-not (str/blank? d-term)
-          (set-is-searching! true)
-
-
-          (let [result (<! (api/query-items "journalArticle" d-term))]
-            (if (false? (:success result))
-              (set-search-error! (:body result))
-              (set-search-result! result)))
-
-          (set-is-searching! false))))
 
     [:div.zotero-search.p-4
      {:style {:width 600}}
