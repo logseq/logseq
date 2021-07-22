@@ -167,7 +167,7 @@
 
 (defn- get-embed-and-refs-blocks-pages-aux []
   (let [mem (atom {})]
-    (letfn [(f [repo page-or-block is-block? exclude-blocks exclude-pages]
+    (letfn [(f [repo page-or-block is-block? exclude-blocks exclude-pages ttl]
               (let [v (get @mem [repo page-or-block])]
                 (if v v
                     (let [[ref-blocks ref-pages]
@@ -201,13 +201,15 @@
                                (filterv :block/name)
                                (flatten))
                           [next-ref-blocks1 next-ref-pages1]
-                          (->> ref-blocks
-                               (mapv #(f repo % true (set (concat ref-block-ids exclude-blocks)) exclude-pages))
-                               (apply mapv vector))
+                          (if (<= ttl 0) [[] []]
+                              (->> ref-blocks
+                                   (mapv #(f repo % true (set (concat ref-block-ids exclude-blocks)) exclude-pages (- ttl 1)))
+                                   (apply mapv vector)))
                           [next-ref-blocks2 next-ref-pages2]
-                          (->> ref-pages
-                               (mapv #(f repo (:block/name %) false exclude-blocks (set (concat ref-page-ids exclude-pages))))
-                               (apply mapv vector))
+                          (if (<= ttl 0) [[] []]
+                              (->> ref-pages
+                                   (mapv #(f repo (:block/name %) false exclude-blocks (set (concat ref-page-ids exclude-pages)) (- ttl 1)))
+                                   (apply mapv vector)))
                           result
                           [(->> (concat ref-block-ids next-ref-blocks1 next-ref-blocks2)
                                 (flatten)
@@ -223,7 +225,7 @@
 (defn- get-page&block-refs-by-query
   [repo page-or-block get-page&block-refs-by-query-aux {:keys [is-block?] :or {is-block? false}}]
   (let [[block-ids page-ids]
-        (get-page&block-refs-by-query-aux repo page-or-block is-block? #{} #{})
+        (get-page&block-refs-by-query-aux repo page-or-block is-block? #{} #{} 3)
         blocks
         (db/pull-many repo '[*] block-ids)
         pages-name-and-content
