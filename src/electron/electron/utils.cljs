@@ -23,8 +23,12 @@
   (or
    (some #(string/starts-with? path (str dir "/" %))
          ["." "assets" "node_modules"])
-   (some #(string/ends-with? path %)
-         [".swap" ".crswap" ".tmp" ".DS_Store"])))
+   (some #(string/includes? path (str "/" % "/"))
+         ["." "assets" "node_modules"])
+   (let [path (string/lower-case path)]
+     (not
+      (some #(string/ends-with? path %)
+            [".md" ".markdown" ".org" ".edn" ".css"])))))
 
 (defn fix-win-path!
   [path]
