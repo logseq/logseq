@@ -151,5 +151,3 @@
         properties (properties item)]
     {:page-name  page-name
      :properties properties}))
-
-(extract api/rr)
