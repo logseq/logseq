@@ -1760,11 +1760,6 @@
       :org (util/format "[[%s][%s]]" link label)
       nil)))
 
-(defn handle-command-zotero
-  [id page-name format]
-  (state/set-editor-show-zotero! false)
-  (insert-command! id (str "[[" page-name "]]") format {}))
-
 (defn handle-command-input
   [command id format m pos]
   (case command

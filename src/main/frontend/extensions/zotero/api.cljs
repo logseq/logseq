@@ -64,12 +64,13 @@
 (defn item [key]
   (get* (config) (str "/items/" key)))
 
-(defn query-items [type term]
-  (js/console.log "query!!" term)
-  (get* (config) (str "/items")
-        {:qmode     "everything"
-         :q         term
-         :item-type type}))
+(defn query-top-items
+  "Query all top level items except attachments"
+  [term]
+  (get* (config) (str "/items/top")
+        {:qmode "everything"
+         :q     term
+         :item-type "-attachment"}))
 
 (defn notes [key]
   (get* (config) (str "/items/" key "/children") {:item-type "note"}))
@@ -79,10 +80,15 @@
 
 (comment
   (get* (config) "/collections")
-  (get* (config) "/items")
+  (get* (config) "/items/top")
   (get* (config) "/items" {:item-type "journalArticle"})
+  (get* (config) "/items" {:item-type "attachment"})
   (item "JZCIN4K5")
   (item "RFYNAQTN")
   (item "3V6N8ECQ")
+  (item  "J6NP6VJW")
+  (item "54QV68M6")
+  (item "U4TU25IC")
   (notes "3V6N8ECQ")
+  (query-top-items "")
   (attachments "3V6N8ECQ"))

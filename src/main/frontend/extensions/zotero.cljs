@@ -16,28 +16,17 @@
 (def term-chan (chan))
 (def debounce-chan-mult (a/mult (api/debounce term-chan 500)))
 
-(rum/defc zotero-search-item [{:keys [data] :as item} handle-command-zotero]
-  (let [type (:item-type data)
-        title (:title data)
+(rum/defc zotero-search-item [{:keys [data] :as item} id]
+  (let [title (:title data)
         abstract (str (subs (:abstract-note data) 0 200) "...")]
 
-    (if (= type "journalArticle")
-      [:div.px-2.py-4.border-b.cursor-pointer.border-solid.hover:bg-gray-100.last:border-none
-       {:on-click (fn [] (go (<! (zotero-handler/create-zotero-page item))
-                             (let [{:keys [page-name]} (extractor/extract item)]
-                               (handle-command-zotero page-name)
-
-                               (state/sidebar-add-block!
-                                (state/get-current-repo)
-                                (:db/id page-name)
-                                :page
-                                {:page page-name}))))}
-       [[:div.font-bold.mb-1 title]
-        [:div.text-sm abstract]]]
-      nil)))
+    [:div.px-2.py-4.border-b.cursor-pointer.border-solid.hover:bg-gray-100.last:border-none
+     {:on-click (fn [] (go (<! (zotero-handler/create-zotero-page item {:block-dom-id id}))))}
+     [[:div.font-bold.mb-1 title]
+      [:div.text-sm abstract]]]))
 
 (rum/defc zotero-search
-  [handle-command-zotero]
+  [id]
 
   (let [[term set-term!]                   (rum/use-state "")
         [search-result set-search-result!] (rum/use-state [])
@@ -53,7 +42,7 @@
              (when-not (str/blank? d-term)
                (set-is-searching! true)
 
-               (let [result (<! (api/query-items "journalArticle" d-term))]
+               (let [result (<! (api/query-top-items d-term))]
                  (if (false? (:success result))
                    (set-search-error! (:body result))
                    (set-search-result! result)))
@@ -85,7 +74,7 @@
 
      [:div
       (map
-       (fn [item] (rum/with-key (zotero-search-item item handle-command-zotero) (:key item)))
+       (fn [item] (rum/with-key (zotero-search-item item id) (:key item)))
        search-result)]]))
 
 

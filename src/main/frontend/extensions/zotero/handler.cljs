@@ -4,6 +4,8 @@
             [frontend.extensions.zotero.api :as zotero-api]
             [frontend.extensions.zotero.extractor :as extractor]
             [frontend.extensions.zotero.setting :as setting]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]))
 
@@ -20,34 +22,47 @@
                         :attachments (setting/setting :include-attachments?))]
       (when should-add?
         (let [items    (<! (api-fn key))
-              md-notes (->> items
+              md-items (->> items
                             (map extractor/extract)
-                            (remove str/blank?))
-              id       (:block/uuid
-                        (editor-handler/api-insert-new-block!
-                         first-block {:page page-name}))]
-          (when (and id (not-empty md-notes))
-            (doseq [note md-notes]
-              (editor-handler/api-insert-new-block!
-               note
-               {:block-uuid id
-                :sibling?   false
-                :before?    false}))))))))
+                            (remove str/blank?))]
+          (when (not-empty md-items)
+            (when-let [id (:block/uuid
+                           (editor-handler/api-insert-new-block!
+                            first-block {:page page-name}))]
+              (doseq [md-item md-items]
+                (editor-handler/api-insert-new-block!
+                 md-item
+                 {:block-uuid id
+                  :sibling?   false
+                  :before?    false})))))))))
 
-(defn create-zotero-page [item]
-  (go
-    (let [{:keys [page-name properties]} (extractor/extract item)
-          key                            (-> item :key)]
-      (page-handler/create! page-name {:redirect? false :format :markdown :create-first-block? false})
+(defn handle-command-zotero
+  [id page-name]
+  (state/set-editor-show-zotero! false)
+  (editor-handler/insert-command! id (str "[[" page-name "]]") nil {}))
 
-      (editor-handler/api-insert-new-block!
-       ""
-       {:page       page-name
-        :properties properties})
+(defn create-zotero-page
+  ([item]
+   (create-zotero-page item {}))
+  ([item {:keys [block-dom-id] :as opt}]
+   (go
+     (let [{:keys [page-name properties]} (extractor/extract item)
+           key                            (-> item :key)]
+       (page-handler/create! page-name {:redirect? false :format :markdown :create-first-block? false})
 
-      (<! (add page-name :attachments key))
+       (editor-handler/api-insert-new-block!
+        ""
+        {:page       page-name
+         :properties properties})
 
-      (<! (add page-name :notes key)))))
+       (<! (add page-name :attachments key))
+
+       (<! (add page-name :notes key))
+
+       (handle-command-zotero block-dom-id page-name)
+
+       (notification/show! (str "Successfully created page " page-name) :success)))))
+
 
 (comment
   (create-zotero-page "JAHCZRNB")
