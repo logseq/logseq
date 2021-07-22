@@ -1,15 +1,15 @@
 (ns frontend.extensions.zotero.schema
-  (:require [frontend.util :as util]
-            [shadow.resource :as rc]
-            [camel-snake-kebab.core :as csk]))
+  (:require [camel-snake-kebab.core :as csk]
+            [clojure.edn :as edn]
+            [shadow.resource :as rc]))
 
-(def schema (-> (rc/inline "zotero-schema.json")
-                (util/json->clj true)))
+(def items-with-fields
+  (-> (rc/inline "zotero-items.edn")
+      (edn/read-string)))
 
 (defn fields [type]
-  (->> (-> schema :item-types)
+  (->> items-with-fields
        (filter (fn [{:keys [item-type]}] (= item-type type)))
        (first)
        :fields
-       (map :field)
        (mapv csk/->kebab-case-keyword)))
