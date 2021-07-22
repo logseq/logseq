@@ -66,6 +66,8 @@
       (route-handler/redirect! {:to :zotero-setting})
       (notification/show! "Please setup Zotero API key and user/group id first!" :warn false))
 
+    (println search-result)
+
     [:div.zotero-search.p-4
      {:style {:width 600}}
 
@@ -75,7 +77,6 @@
          :placeholder "Search for your Zotero journal article (title, author, text, anything)"
          :value       term :on-change (fn [e]
                                         (go
-                                          (js/console.log "sending term-chan!!" (util/evalue e))
                                           (>! term-chan (util/evalue e)))
                                         (set-term! (util/evalue e)))}]
 
