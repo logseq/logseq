@@ -112,8 +112,8 @@
 }
 
 @media (min-width: 1024px) {
-    .panel-content {
-        min-width: 36rem;
+    .panel-content .ls-card {
+        min-width: 32rem;
         min-height: 24rem;
     }
 }
