@@ -451,11 +451,11 @@ a.filter svg {
     }
 }
 
-a[data-ref*="card"], .page-reference[data-ref*="card"] {
+a[data-ref="card"], .page-reference[data-ref="card"] {
     opacity: 0.3;
 }
 
-.ls-card a[data-ref*="card"], .ls-card .page-reference[data-ref*="card"] {
+.ls-card a[data-ref="card"], .ls-card .page-reference[data-ref="card"] {
     display: none;
 }
 
