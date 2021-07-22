@@ -14,7 +14,7 @@
             [rum.core :as rum]))
 
 (def term-chan (chan))
-(def debounce-chan-mult (a/mult (api/debounce term-chan 3000)))
+(def debounce-chan-mult (a/mult (api/debounce term-chan 500)))
 
 (rum/defc zotero-search-item [{:keys [data] :as item} handle-command-zotero]
   (let [type (:item-type data)
