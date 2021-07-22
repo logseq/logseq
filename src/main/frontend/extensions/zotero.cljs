@@ -55,6 +55,8 @@
       (route-handler/redirect! {:to :zotero-setting})
       (notification/show! "Please setup Zotero API key and user/group id first!" :warn false))
 
+    (println search-result)
+
     [:div.zotero-search.p-4
      {:style {:width 600}}
 
@@ -64,7 +66,6 @@
          :placeholder "Search for your Zotero journal article (title, author, text, anything)"
          :value       term :on-change (fn [e]
                                         (go
-                                          (js/console.log "sending term-chan!!" (util/evalue e))
                                           (>! term-chan (util/evalue e)))
                                         (set-term! (util/evalue e)))}]
 
@@ -81,11 +82,11 @@
 (rum/defcs settings
   < rum/reactive
   [state]
-  [:div#zotero-settings
-   [:h1.title "Zotero settings"]
+  [:div.zotero-settings
+   [:h1.mb-4.text-4xl.font-bold.mb-8 "Zotero Settings"]
 
-   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-    [:label.block.text-bg.font-medium.leading-5.opacity-70
+   [:div.row
+    [:label.title
      {:for "zotero_api_key"}
      "Zotero API key"]
     [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -95,13 +96,13 @@
         :placeholder   "Please enter your Zotero API key"
         :on-blur       (fn [e] (setting/set-api-key (util/evalue e)))}]]]]
 
-   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-    [:label.block.text-sm.font-medium.leading-5.opacity-70
+   [:div.row
+    [:label.title
      {:for "zotero_type"}
      "Zotero user or group?"]
     [:div.mt-1.sm:mt-0.sm:col-span-2
      [:div.max-w-lg.rounded-md
-      [:select.form-select.is-small
+      [:select.form-select
        {:value     (-> (setting/setting :type) name)
         :on-change (fn [e]
                      (let [type (-> (util/evalue e)
@@ -111,8 +112,8 @@
        (for [type (map name [:user :group])]
          [:option {:key type :value type} (str/capitalize type)])]]]]
 
-   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-    [:label.block.text-bg.font-medium.leading-5.opacity-70
+   [:div.row
+    [:label.title
      {:for "zotero_type_id"}
      "User or Group id"]
     [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -122,8 +123,8 @@
         :placeholder   "User/Group id"
         :on-blur       (fn [e] (setting/set-setting! :type-id (util/evalue e)))}]]]]
 
-   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-    [:label.block.text-sm.font-medium.leading-5.opacity-70
+   [:div.row
+    [:label.title
      {:for "zotero_include_attachment_links"}
      "Include attachment links?"]
     [:div
@@ -133,8 +134,8 @@
                  true)]]]
 
    (when (setting/setting :include-attachments?)
-     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-      [:label.block.text-bg.font-medium.leading-5.opacity-70
+     [:div.row
+      [:label.title
        {:for "zotero_attachments_block_text"}
        "Attachtment under block of:"]
       [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -143,8 +144,8 @@
          {:default-value (setting/setting :attachments-block-text)
           :on-blur       (fn [e] (setting/set-setting! :attachments-block-text (util/evalue e)))}]]]])
 
-   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-    [:label.block.text-sm.font-medium.leading-5.opacity-70
+   [:div.row
+    [:label.title
      {:for "zotero_include_notes"}
      "Include notes?"]
     [:div
@@ -155,8 +156,8 @@
                  true)]]]
 
    (when (setting/setting :include-notes?)
-     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-      [:label.block.text-bg.font-medium.leading-5.opacity-70
+     [:div.row
+      [:label.title
        {:for "zotero_notes_block_text"}
        "Notes under block of:"]
       [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -165,8 +166,8 @@
          {:default-value (setting/setting :notes-block-text)
           :on-blur       (fn [e] (setting/set-setting! :notes-block-text (util/evalue e)))}]]]])
 
-   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-    [:label.block.text-bg.font-medium.leading-5.opacity-70
+   [:div.row
+    [:label.title
      {:for "zotero_page_prefix"}
      "Insert page name with prefix:"]
     [:div.mt-1.sm:mt-0.sm:col-span-2
