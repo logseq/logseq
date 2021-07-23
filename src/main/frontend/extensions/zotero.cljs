@@ -18,11 +18,13 @@
 
 (rum/defc zotero-search-item [{:keys [data] :as item} id]
   (let [title (:title data)
+        type (:item-type data)
         abstract (str (subs (:abstract-note data) 0 200) "...")]
 
     [:div.px-2.py-4.border-b.cursor-pointer.border-solid.hover:bg-gray-100.last:border-none
      {:on-click (fn [] (go (<! (zotero-handler/create-zotero-page item {:block-dom-id id}))))}
-     [[:div.font-bold.mb-1 title]
+     [[:div [[:span.font-bold.mb-1.mr-1 title]
+             [:span.text-xs.p-1.bg-gray-100.rounded type]]]
       [:div.text-sm abstract]]]))
 
 (rum/defc zotero-search
