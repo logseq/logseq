@@ -441,6 +441,47 @@
   (when-let [page (db-utils/entity [:block/name page])]
     (:block/properties page)))
 
+;; FIXME: alert
+(defn- keep-only-one-file
+  [blocks]
+  (filter (fn [b] (= (:block/file b) (:block/file (first blocks)))) blocks))
+
+(defn sort-by-left
+  [blocks parent]
+  (let [blocks (keep-only-one-file blocks)]
+    (when (not= (count blocks) (count (set (map :block/left blocks))))
+      (let [duplicates (->> (map (comp :db/id :block/left) blocks)
+                            frequencies
+                            (filter (fn [[_k v]] (> v 1)))
+                            (map (fn [[k _v]]
+                                   (let [left (db-utils/pull k)]
+                                     {:left left
+                                      :duplicates (->>
+                                                   (filter (fn [block]
+                                                             (= k (:db/id (:block/left block))))
+                                                           blocks)
+                                                   (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
+        (util/pprint duplicates)))
+    (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
+    (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
+      (loop [block parent
+             result []]
+        (if-let [next (get left->blocks (:db/id block))]
+          (recur next (conj result next))
+          (vec result))))))
+
+(defn- sort-by-left-recursive
+  [form]
+  (walk/postwalk (fn [f]
+                   (if (and (map? f)
+                            (:block/_parent f))
+                     (let [children (:block/_parent f)]
+                       (-> f
+                           (dissoc :block/_parent)
+                           (assoc :block/children (sort-by-left children f))))
+                     f))
+                 form))
+
 (defn get-page-blocks
   ([page]
    (get-page-blocks (state/get-current-repo) page nil))
@@ -450,8 +491,9 @@
                    :or {use-cache? true
                         pull-keys '[*]}}]
    (let [page (string/lower-case page)
-         page-id (or (:db/id (db-utils/entity repo-url [:block/name page]))
-                     (:db/id (db-utils/entity repo-url [:block/original-name page])))
+         page-entity (or (db-utils/entity repo-url [:block/name page])
+                         (db-utils/entity repo-url [:block/original-name page]))
+         page-id (:db/id page-entity)
          db (conn/get-conn repo-url)]
      (when page-id
        (some->
@@ -463,7 +505,8 @@
                                     block-eids (mapv :e datoms)]
                                 (db-utils/pull-many repo-url pull-keys block-eids)))}
                  nil)
-        react)))))
+        react
+        (sort-by-left page-entity))))))
 
 (defn get-page-blocks-no-cache
   ([page]
@@ -568,47 +611,6 @@
             eid
             rules)
            (apply concat)))))
-
-;; FIXME: alert
-(defn- keep-only-one-file
-  [blocks]
-  (filter (fn [b] (= (:block/file b) (:block/file (first blocks)))) blocks))
-
-(defn sort-by-left
-  [blocks parent]
-  (let [blocks (keep-only-one-file blocks)]
-    (when (not= (count blocks) (count (set (map :block/left blocks))))
-      (let [duplicates (->> (map (comp :db/id :block/left) blocks)
-                            frequencies
-                            (filter (fn [[_k v]] (> v 1)))
-                            (map (fn [[k _v]]
-                                   (let [left (db-utils/pull k)]
-                                     {:left left
-                                      :duplicates (->>
-                                                   (filter (fn [block]
-                                                             (= k (:db/id (:block/left block))))
-                                                           blocks)
-                                                   (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
-        (util/pprint duplicates)))
-    (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
-    (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
-      (loop [block parent
-             result []]
-        (if-let [next (get left->blocks (:db/id block))]
-          (recur next (conj result next))
-          (vec result))))))
-
-(defn- sort-by-left-recursive
-  [form]
-  (walk/postwalk (fn [f]
-                   (if (and (map? f)
-                            (:block/_parent f))
-                     (let [children (:block/_parent f)]
-                       (-> f
-                           (dissoc :block/_parent)
-                           (assoc :block/children (sort-by-left children f))))
-                     f))
-                 form))
 
 (defn get-block-immediate-children
   "Doesn't include nested children."

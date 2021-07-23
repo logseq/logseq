@@ -192,12 +192,6 @@
              "Make a Card"))
 
           (ui/menu-link
-           {:key "Copy as JSON"
-            :on-click (fn [_e]
-                        (export-handler/copy-block-as-json! block-id))}
-           "Copy as JSON")
-
-          (ui/menu-link
            {:key "Cut"
             :on-click (fn [_e]
                         (editor-handler/cut-block! block-id))}

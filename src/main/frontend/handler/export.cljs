@@ -67,23 +67,6 @@
    (outliner-tree/blocks->vec-tree (str (:block/uuid block)))
    (outliner-file/tree->file-content {:init-level 1})))
 
-(defn copy-block-as-json!
-  [block-id]
-  (when-let [repo (state/get-current-repo)]
-    (let [block-children (db/get-block-and-children repo block-id)]
-      (util/copy-to-clipboard! (js/JSON.stringify (bean/->js block-children))))))
-
-(defn copy-page-as-json!
-  [page-name]
-  (when-let [repo (state/get-current-repo)]
-    (let [properties (db/get-page-properties page-name)
-          blocks (db/get-page-blocks repo page-name)]
-      (util/copy-to-clipboard!
-       (js/JSON.stringify
-        (bean/->js
-         {:properties properties
-          :blocks blocks}))))))
-
 (defn export-repo-as-json!
   [repo]
   (when-let [db (db/get-conn repo)]
