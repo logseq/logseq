@@ -30,10 +30,31 @@
 (rum/defc zotero-search
   [id]
 
-  (let [[term set-term!]                   (rum/use-state "")
-        [search-result set-search-result!] (rum/use-state [])
-        [search-error set-search-error!]   (rum/use-state nil)
-        [is-searching set-is-searching!]   (rum/use-state false)]
+  (let [[term set-term!]                         (rum/use-state "")
+        [search-result set-search-result!]       (rum/use-state [])
+        [prev-page set-prev-page!]               (rum/use-state "")
+        [next-page set-next-page!]               (rum/use-state "")
+        [prev-search-term set-prev-search-term!] (rum/use-state "")
+        [search-error set-search-error!]         (rum/use-state nil)
+        [is-searching set-is-searching!]         (rum/use-state false)
+
+        search-fn (fn [s-term start]
+                    (go
+                      (when-not (str/blank? s-term)
+                        (set-is-searching! true)
+
+                        (let [{:keys [success next prev result] :as response}
+                              (<! (api/query-top-items s-term start))]
+                          (if (false? success)
+                            (set-search-error! (:body response))
+
+                            (do
+                              (set-prev-search-term! s-term)
+                              (set-next-page! next)
+                              (set-prev-page! prev)
+                              (set-search-result! result))))
+
+                        (set-is-searching! false))))]
 
     (rum/use-effect!
      (fn []
@@ -41,16 +62,9 @@
          (a/tap debounce-chan-mult d-chan)
          (go-loop []
            (let [d-term (<! d-chan)]
-             (when-not (str/blank? d-term)
-               (set-is-searching! true)
-
-               (let [result (<! (api/query-top-items d-term))]
-                 (if (false? (:success result))
-                   (set-search-error! (:body result))
-                   (set-search-result! result)))
-
-               (set-is-searching! false)))
+             (<! (search-fn d-term "0")))
            (recur))
+
          (fn [] (a/untap debounce-chan-mult d-chan))))
      [])
 
@@ -79,7 +93,19 @@
      [:div
       (map
        (fn [item] (rum/with-key (zotero-search-item item id) (:key item)))
-       search-result)]]))
+       search-result)
+      (when-not (str/blank? prev-page)
+        (ui/button
+         "prev"
+         :on-click
+         (fn []
+           (go (<! (search-fn prev-search-term prev-page))))))
+      (when-not (str/blank? next-page)
+        (ui/button
+         "next"
+         :on-click
+         (fn []
+           (go (<! (search-fn prev-search-term next-page))))))]]))
 
 
 (rum/defcs settings

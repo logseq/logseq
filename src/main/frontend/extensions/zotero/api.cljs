@@ -4,6 +4,7 @@
             [cljs-http.client :as http]
             [cljs.core.async
              :refer [<! >! alt! chan close! go go-loop timeout]]
+            [clojure.string :as str]
             [frontend.extensions.zotero.setting :as setting]))
 
 (def ^:dynamic *debug* true)
@@ -34,13 +35,35 @@
           timer ([_] (do (>! out val) (recur nil))))))
     out))
 
+(defn parse-start [headers next-or-prev]
+  (let [inclue-text (case next-or-prev
+                      :next "rel=\"next\""
+                      :prev "rel=\"prev\"")
+        links
+        (str/split
+         (:link (cske/transform-keys csk/->kebab-case-keyword headers)) ",")
+        next-link   (->> links
+                       (filter (fn [l] (str/includes? l inclue-text)))
+                       first)]
+    (when next-link
+      (let [start    (str/index-of next-link "<")
+            end      (str/last-index-of next-link ">;")
+            next-url (subs next-link (inc start) end)]
+        (or
+         (->
+          next-url
+          http/parse-url
+          :query-params
+          :start)
+         "0")))))
+
 ;; "/users/475425/collections?v=3"
 (defn get*
   ([config api]
    (get* config api nil))
   ([config api query-params]
    (go (let [{:keys [api-version base type type-id api-key timeout]} config
-             {:keys [success body] :as response}
+             {:keys [success body headers] :as response}
              (<! (http/get (str base
                                 (if (= type :user)
                                   "/users/"
@@ -54,29 +77,52 @@
                             :query-params      (cske/transform-keys csk/->camelCaseString
                                                                     query-params)}))]
          (if success
-           (let [result (cske/transform-keys csk/->kebab-case-keyword body)]
-             (when *debug*
-               (def rr result)
-               (println result))
-             result)
+           (let [result     (cske/transform-keys csk/->kebab-case-keyword body)
+                 next-start (parse-start headers :next)
+                 prev-start (parse-start headers :prev)]
+             (cond-> {:result result}
+               next-start
+               (assoc :next next-start)
+               prev-start
+               (assoc :prev prev-start)))
            response)))))
 
 (defn item [key]
-  (get* (config) (str "/items/" key)))
+  (:result (get* (config) (str "/items/" key))))
 
 (defn query-top-items
   "Query all top level items except attachments"
-  [term]
-  (get* (config) (str "/items/top")
-        {:qmode "everything"
-         :q     term
-         :item-type "-attachment"}))
+  ([term]
+   (query-top-items term "0"))
+  ([term start]
+   (get* (config) (str "/items/top")
+         {:qmode     "everything"
+          :q         term
+          :limit     10
+          :item-type "-attachment"
+          :start     start})))
+
+(defn all-children-items [key type]
+  (go-loop [start "0"
+            notes-acc []]
+    (let [{:keys [success next result]}
+          (<! (get* (config) (str "/items/" key "/children")
+                    {:item-type type :start start}))]
+      (cond
+        (false? success)
+        notes-acc
+
+        next
+        (recur next (into [] (concat notes-acc result)))
+
+        :else
+        (into [] (concat notes-acc result))))))
 
 (defn notes [key]
-  (get* (config) (str "/items/" key "/children") {:item-type "note"}))
+  (all-children-items key "note"))
 
 (defn attachments [key]
-  (get* (config) (str "/items/" key "/children") {:item-type "attachment"}))
+  (all-children-items key "attachment"))
 
 (comment
   (get* (config) "/collections")
@@ -90,5 +136,5 @@
   (item "54QV68M6")
   (item "U4TU25IC")
   (notes "3V6N8ECQ")
-  (query-top-items "")
+  (query-top-items "b")
   (attachments "3V6N8ECQ"))
