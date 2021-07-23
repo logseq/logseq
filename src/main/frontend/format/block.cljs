@@ -650,9 +650,12 @@
               (cond
                 (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
                 (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                      blocks (cons (assoc (first blocks) :block/level (dec level))
+                      left (last parents')
+                      blocks (cons (assoc (first blocks)
+                                          :block/level (dec level)
+                                          :block/left [:block/uuid (:block/uuid left)])
                                    (rest blocks))]
-                  [blocks parents' (last parents') result])
+                  [blocks parents' left result])
 
                 :else
                 (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)

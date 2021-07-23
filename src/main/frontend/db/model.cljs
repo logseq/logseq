@@ -447,28 +447,32 @@
   (filter (fn [b] (= (:block/file b) (:block/file (first blocks)))) blocks))
 
 (defn sort-by-left
-  [blocks parent]
-  (let [blocks (keep-only-one-file blocks)]
-    (when (not= (count blocks) (count (set (map :block/left blocks))))
-      (let [duplicates (->> (map (comp :db/id :block/left) blocks)
-                            frequencies
-                            (filter (fn [[_k v]] (> v 1)))
-                            (map (fn [[k _v]]
-                                   (let [left (db-utils/pull k)]
-                                     {:left left
-                                      :duplicates (->>
-                                                   (filter (fn [block]
-                                                             (= k (:db/id (:block/left block))))
-                                                           blocks)
-                                                   (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
-        (util/pprint duplicates)))
-    (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node")
+  ([blocks parent]
+   (sort-by-left blocks parent true))
+  ([blocks parent check?]
+   (let [blocks (keep-only-one-file blocks)]
+     (when check?
+       (when (not= (count blocks) (count (set (map :block/left blocks))))
+         (let [duplicates (->> (map (comp :db/id :block/left) blocks)
+                               frequencies
+                               (filter (fn [[_k v]] (> v 1)))
+                               (map (fn [[k _v]]
+                                      (let [left (db-utils/pull k)]
+                                        {:left left
+                                         :duplicates (->>
+                                                      (filter (fn [block]
+                                                                (= k (:db/id (:block/left block))))
+                                                              blocks)
+                                                      (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
+           (util/pprint duplicates)))
+       (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
+
     (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
       (loop [block parent
              result []]
         (if-let [next (get left->blocks (:db/id block))]
           (recur next (conj result next))
-          (vec result))))))
+          (vec result)))))))
 
 (defn- sort-by-left-recursive
   [form]
@@ -482,6 +486,26 @@
                      f))
                  form))
 
+(defn flatten-blocks-sort-by-left
+  [blocks parent]
+  (let [ids->blocks (zipmap (map (fn [b] [(:db/id (:block/parent b))
+                                         (:db/id (:block/left b))]) blocks) blocks)
+        top-block (get ids->blocks [(:db/id parent) (:db/id parent)])]
+    (loop [node parent
+           next-siblings '()
+           result []]
+      (let [id (:db/id node)
+            child-block (get ids->blocks [id id])
+            next-sibling (get ids->blocks [(:db/id (:block/parent node)) id])
+            next-siblings (if (and next-sibling child-block)
+                            (cons next-sibling next-siblings)
+                            next-siblings)]
+        (if-let [node (or child-block next-sibling)]
+          (recur node next-siblings (conj result node))
+          (if-let [sibling (first next-siblings)]
+            (recur sibling (rest next-siblings) (conj result sibling))
+            result))))))
+
 (defn get-page-blocks
   ([page]
    (get-page-blocks (state/get-current-repo) page nil))
@@ -490,7 +514,7 @@
   ([repo-url page {:keys [use-cache? pull-keys]
                    :or {use-cache? true
                         pull-keys '[*]}}]
-   (let [page (string/lower-case page)
+   (let [page (string/lower-case (string/trim page))
          page-entity (or (db-utils/entity repo-url [:block/name page])
                          (db-utils/entity repo-url [:block/original-name page]))
          page-id (:db/id page-entity)
@@ -506,7 +530,7 @@
                                 (db-utils/pull-many repo-url pull-keys block-eids)))}
                  nil)
         react
-        (sort-by-left page-entity))))))
+        (flatten-blocks-sort-by-left page-entity))))))
 
 (defn get-page-blocks-no-cache
   ([page]
