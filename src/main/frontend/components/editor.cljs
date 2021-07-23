@@ -291,7 +291,7 @@
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left rect]}]
-  (let [max-height 300
+  (let [max-height 350
         max-width 300
         offset-top 24
         vw-height js/window.innerHeight
@@ -390,17 +390,17 @@
 (defn get-editor-heading-class [content]
   (let [content (if content (str content) "")]
     (cond
-     (string/includes? content "\n") "multiline-block"
-     (starts-with? content "# ") "h1"
-     (starts-with? content "## ") "h2"
-     (starts-with? content "### ") "h3"
-     (starts-with? content "#### ") "h4"
-     (starts-with? content "##### ") "h5"
-     (starts-with? content "###### ") "h6"
-     (starts-with? content "TODO ") "todo-block"
-     (starts-with? content "DOING ") "doing-block"
-     (starts-with? content "DONE ") "done-block"
-     :else "normal-block")))
+      (string/includes? content "\n") "multiline-block"
+      (starts-with? content "# ") "h1"
+      (starts-with? content "## ") "h2"
+      (starts-with? content "### ") "h3"
+      (starts-with? content "#### ") "h4"
+      (starts-with? content "##### ") "h5"
+      (starts-with? content "###### ") "h6"
+      (starts-with? content "TODO ") "todo-block"
+      (starts-with? content "DOING ") "doing-block"
+      (starts-with? content "DONE ") "done-block"
+      :else "normal-block")))
 
 (rum/defc mock-textarea
   < rum/reactive
