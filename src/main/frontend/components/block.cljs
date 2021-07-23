@@ -1237,7 +1237,7 @@
                  (:block/uuid child)))))]))))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id]
+  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id top?]
   (let [has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
@@ -1273,7 +1273,7 @@
                          (editor-handler/collapse-block! uuid)))))}
       [:span {:class (if control-show? "control-show" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
-     (if (and empty-content? (not edit?))
+     (if (and empty-content? (not edit?) (not top?))
        [:span.bullet-container]
 
        [:a {:on-click (fn [e]
@@ -1888,7 +1888,7 @@
    :should-update (fn [old-state new-state]
                     (not= (:block/content (second (:rum/args old-state)))
                           (:block/content (second (:rum/args new-state)))))}
-  [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type] :as block}]
+  [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type idx] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
 
@@ -1955,7 +1955,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e has-child? *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id))
+        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id top?))
 
       (block-content-or-editor config block edit-input-id block-id slide? heading-level)]
 
