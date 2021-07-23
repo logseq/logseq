@@ -1237,7 +1237,7 @@
                  (:block/uuid child)))))]))))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id top?]
+  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id]
   (let [has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
@@ -1273,7 +1273,9 @@
                          (editor-handler/collapse-block! uuid)))))}
       [:span {:class (if control-show? "control-show" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
-     (if (and empty-content? (not edit?) (not top?))
+     (if (and empty-content? (not edit?)
+              (not (:block/top? block))
+              (not (:block/bottom? block)))
        [:span.bullet-container]
 
        [:a {:on-click (fn [e]
@@ -1955,7 +1957,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e has-child? *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id top?))
+        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id))
 
       (block-content-or-editor config block edit-input-id block-id slide? heading-level)]
 
@@ -2505,7 +2507,8 @@
          (for [[idx item] (medley/indexed blocks)]
            (let [item (->
                        (dissoc item :block/meta)
-                       (assoc :block/top? (zero? idx)))
+                       (assoc :block/top? (zero? idx)
+                              :block/bottom? (= (count blocks) (inc idx))))
                  config (assoc config :block/uuid (:block/uuid item))]
              (rum/with-key
                (block-container config item)
