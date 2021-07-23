@@ -48,7 +48,8 @@
                    (set-search-result! result)))
 
                (set-is-searching! false)))
-           (recur))))
+           (recur))
+         (fn [] (a/untap debounce-chan-mult d-chan))))
      [])
 
     (when-not (setting/valid?)
