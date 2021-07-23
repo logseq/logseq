@@ -22,6 +22,7 @@
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.sci :as sci]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.block :as block-handler]
@@ -455,14 +456,23 @@
   (let [repo-path (config/get-repo-dir (state/get-current-repo))
         full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))]
     [:div
-     [:a.asset-ref {:target "_blank" :href full-path} (or title path)]
+     (if (and (= "pdf" (util/get-file-ext full-path))
+              (string/ends-with? (util/node-path.dirname full-path) config/local-assets-dir))
+       [:a.asset-ref.is-pdf
+        {:href "javascript:;"
+         :on-click (fn [e]
+                     (when-let [current (pdf-assets/inflate-asset (util/node-path.basename full-path))]
+                       (state/set-state! :pdf/current current)
+                       (.preventDefault e)))}
+        (or title path)]
+       [:a.asset-ref {:target "_blank" :href full-path} (or title path)])
 
      (case (util/get-file-ext full-path)
-       "pdf"
-       [:iframe {:src full-path
-                 :class "pdf-preview"
-                 :fullscreen true
-                 :height 800}]
+       ;;"pdf"
+       ;;[:iframe {:src full-path
+       ;;          :class "pdf-preview"
+       ;;          :fullscreen true
+       ;;          :height 800}]
        ;; https://en.wikipedia.org/wiki/HTML5_video
        ("mp4" "ogg" "webm")
        [:video {:src full-path

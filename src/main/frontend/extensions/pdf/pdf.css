@@ -305,6 +305,20 @@
   }
 }
 
+.asset-ref {
+  &.is-pdf {
+    &:before {
+      content: "[[📙";
+      opacity: .4;
+    }
+
+    &:after {
+      content: "]]";
+      opacity: .4;
+    }
+  }
+}
+
 body[data-page] {
   #main-content-container {
     margin: 0 !important;

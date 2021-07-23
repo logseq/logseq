@@ -444,7 +444,7 @@
                        #(set-state! {:viewer viewer :bus event-bus :link link-service :el el})))
 
         ;;TODO: destroy
-        #())
+        #(.destroy pdf-document))
       [])
 
     ;; interaction events

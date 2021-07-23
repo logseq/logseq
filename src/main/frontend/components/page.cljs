@@ -399,10 +399,6 @@
                                     "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-nowrap.dropdown-overflow-auto.page-drop-options")
                       :z-index     1})]))])
 
-            ;; related assets upload
-            (when (and (config/local-db? repo) (not block?))
-              (pdf-assets/uploader page-name))
-
             [:div
              (when (and block? (not sidebar?))
                (let [config {:id "block-parent"
