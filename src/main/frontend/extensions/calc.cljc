@@ -79,7 +79,8 @@
   {:pre [(string? s)]}
   (let [env (new-env)]
     (mapv (fn [line]
-            (eval env (parse line)))
+            (when-not (str/blank? line)
+              (eval env (parse line))))
           (str/split-lines s))))
 
 ;; ======================================================================
@@ -97,6 +98,7 @@
         ;; TODO: add react keys
         (for [[i line] (map-indexed vector output-lines)]
           [:div.extensions__code-calc-output-line {:key i}
-           [:span (if (or (nil? line) (failure? line))
-                    "?"
-                    line)]])])))
+           [:span (cond
+                    (nil? line)           ""
+                    (or  (failure? line)) "?"
+                    :else                 line)]])])))
