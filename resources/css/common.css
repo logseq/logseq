@@ -22,7 +22,7 @@
 
 @supports (font-variation-settings: normal) {
   :root {
-    --ls-font-family: 'Source Sans 3 VF';
+    --ls-font-family: 'Source Sans 3 VF', 'Source Han Sans VF';
   }
 }
 
@@ -693,9 +693,18 @@ mark {
   display: inline;
 }
 
+.block-ref div {
+  display: inline;
+  padding: 0 0.2em;
+}
+
 .block-ref .block-ref {
   padding: 6px 5px;
   border: none;
+}
+
+.ls-block .block-ref :is(h1, h2, h3, h4, h5) {
+  font-size: 1em;
 }
 
 /* inline code */

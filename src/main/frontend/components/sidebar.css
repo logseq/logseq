@@ -18,6 +18,7 @@
 #main-content-container {
     font-size: 1em;
     padding: 1rem;
+    margin-top: var(--ls-header-height);
 }
 
 #left-sidebar {
@@ -159,7 +160,6 @@
       top: 0;
       left: 0;
       right: 0;
-      background-color: var(--ls-secondary-background-color, #d8e1e8);
       z-index: 999;
       user-select: none;
       -webkit-app-region: drag;

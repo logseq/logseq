@@ -131,4 +131,14 @@
         src: url('../fonts/source-sans/SourceSans3VF-Italic.otf.woff2') format('woff2-variations'),
              url('../fonts/source-sans/SourceSans3VF-Italic.ttf.woff2') format('woff2-variations');
     }
+
+    /* Source Han Sans VF for CN */
+    @font-face {
+      font-family: "Source Han Sans VF";
+      font-weight: 200 900;
+      font-style: normal;
+      font-stretch: normal;
+      src: url('../fonts/source-sans/SourceHanSansSC-VF.otf.woff2') format('woff2-variations'),
+           url('../fonts/source-sans/SourceHanSansSC-VF.ttf.woff2') format('woff2-variations');
+    }
 }
