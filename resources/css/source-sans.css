@@ -1,0 +1,134 @@
+/**
+ * https://github.com/adobe-fonts/source-sans
+ *
+ * Copyright 2010-2020 Adobe (http://www.adobe.com), with Reserved Font Name 'Source'.
+ * All Rights Reserved. Source is a trademark of Adobe in the United States and/or other countries.
+ * This Font Software is licensed under the SIL Open Font License, Version 1.1.
+ */
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 200;
+    font-style: normal;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-ExtraLight.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-ExtraLight.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 200;
+    font-style: italic;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-ExtraLightIt.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-ExtraLightIt.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 300;
+    font-style: normal;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-Light.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-Light.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 300;
+    font-style: italic;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-LightIt.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-LightIt.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 400;
+    font-style: normal;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-Regular.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-Regular.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 400;
+    font-style: italic;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-It.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-It.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 600;
+    font-style: normal;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-Semibold.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-Semibold.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 600;
+    font-style: italic;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-SemiboldIt.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-SemiboldIt.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 700;
+    font-style: normal;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-Bold.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-Bold.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 700;
+    font-style: italic;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-BoldIt.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-BoldIt.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 900;
+    font-style: normal;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-Black.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-Black.otf.woff') format('woff');
+}
+
+@font-face{
+    font-family: 'Source Sans 3';
+    font-weight: 900;
+    font-style: italic;
+    font-stretch: normal;
+    src: url('../fonts/source-sans/SourceSans3-BlackIt.ttf.woff2') format('woff2'),
+         url('../fonts/source-sans/SourceSans3-BlackIt.otf.woff') format('woff');
+}
+
+
+@supports (font-variation-settings:normal) {
+    @font-face{
+        font-family: 'Source Sans 3 VF';
+        font-weight: 200 900;
+        font-style: normal;
+        font-stretch: normal;
+        src: url('../fonts/source-sans/SourceSans3VF-Roman.otf.woff2') format('woff2-variations'),
+             url('../fonts/source-sans/SourceSans3VF-Roman.ttf.woff2') format('woff2-variations');
+    }
+    @font-face{
+        font-family: 'Source Sans 3 VF';
+        font-weight: 200 900;
+        font-style: italic;
+        font-stretch: normal;
+        src: url('../fonts/source-sans/SourceSans3VF-Italic.otf.woff2') format('woff2-variations'),
+             url('../fonts/source-sans/SourceSans3VF-Italic.ttf.woff2') format('woff2-variations');
+    }
+}

@@ -3,7 +3,7 @@
   --ls-tag-text-hover-opacity: 1;
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
-  --ls-font-family: 'Inter';
+  --ls-font-family: 'Source Sans 3 VF';
   --ls-main-content-max-width: 740px;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
@@ -141,7 +141,7 @@ html[data-theme='light'] {
 
 /* region Reset top elements */
 html {
-  font-family: var(--ls-font-family), Inter, sans-serif, system-ui,
+  font-family: var(--ls-font-family), sans-serif, system-ui,
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
     Arial, 'Noto Sans', serif, Apple Color Emoji, Segoe UI Emoji,
     Segoe UI Symbol !important;
