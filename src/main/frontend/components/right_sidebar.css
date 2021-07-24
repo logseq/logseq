@@ -12,5 +12,24 @@ html[data-theme=light] {
 }
 
 .sidebar-item-list {
-     padding-bottom: 150px;
+    top: 0;
+    padding: calc(var(--ls-header-height) + 1rem) 1rem 150px 0.5rem;
+}
+
+.cp__right-sidebar-topbar {
+    height: var(--ls-header-height);
+}
+
+.sidebar-item-title-container {
+    position: sticky;
+    top: -1rem;
+    padding: 1rem;
+    margin: -1rem;
+    z-index: 10;
+}
+
+.sidebar-item-title {
+    color: var(--ls-title-text-color, #222);
+    font-weight: 600;
+    font-size: 1.2em;
 }

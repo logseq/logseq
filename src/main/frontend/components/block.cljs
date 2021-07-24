@@ -2527,7 +2527,7 @@
         (for [[page blocks] blocks]
           (let [alias? (:block/alias? page)
                 page (db/entity (:db/id page))]
-            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+            [:div.my-2.block-pane (cond-> {:key (str "page-" (:db/id page))}
                          (:ref? config)
                          (assoc :class "color-level px-7 py-2 rounded"))
              (ui/foldable

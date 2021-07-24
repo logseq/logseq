@@ -177,7 +177,7 @@
         electron-mac? (and util/mac? (util/electron?))
         electron-not-mac? (and (util/electron?) (not electron-mac?))]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.cp__header#head
+      [:div.cp__header.header-backdrop#head
        {:class (when electron-mac? "electron-mac")
         :on-double-click (fn [^js e]
                            (when-let [target (.-target e)]

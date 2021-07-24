@@ -1,5 +1,6 @@
 .block-content-wrapper {
-  width: 100%;
+  /* 38px is the width of block-control */
+  width: calc(100% - 38px);
 }
 
 .block-content {
@@ -355,6 +356,11 @@
 
 .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level .color-level {
   background-color: var(--color-level-5);
+}
+
+:not(.color-level) .color-level {
+  @apply rounded;
+  border: 2px solid var(--color-level-2);
 }
 
 .bullet-container {

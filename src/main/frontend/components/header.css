@@ -15,6 +15,7 @@
   user-select: none;
   transition: width 0.3s;
   line-height: 1;
+  height: var(--ls-header-height);
 
   .it svg {
     transform: scale(0.8);
@@ -102,14 +103,13 @@
 }
 
 #repo-name {
-  @apply md:max-w-none;
   vertical-align: middle;
   display: inline-block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 7ch;
-  color: var(--ls-icon-color, #045591);
+  @apply md:max-w-none;
 }
 
 a.button {
@@ -126,4 +126,27 @@ a.button:hover {
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
     cursor: default !important;
+}
+
+.cp__header::after,
+.cp__right-sidebar-topbar::after {
+  left: 0;
+  right: 0;
+  height: 1px;
+  z-index: 1;
+  position: absolute;
+  top: 100%;
+  background-color: rgba(0, 0, 0, 0.16);
+  display: block;
+  content: "";
+}
+
+@supports (
+  (-webkit-backdrop-filter: blur(20px)) or (backdrop-filter: blur(20px))
+) {
+  .header-backdrop {
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    background-color: transparent !important;
+  }
 }

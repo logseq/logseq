@@ -565,7 +565,7 @@
                    (when (true? (last args))
                      (reset! (get state ::collapsed?) true)))
                  state)}
-  [state header content default-collapsed?]
+  [state header content]
   (let [control? (get state ::control?)
         collapsed? (get state ::collapsed?)]
     [:div.flex.flex-col

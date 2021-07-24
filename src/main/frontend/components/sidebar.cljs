@@ -119,7 +119,7 @@
       (when (state/sub :ui/left-sidebar-open?)
         (sidebar-nav route-match nil))]
      [:div#main-content-container.w-full.flex.justify-center
-      {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
+      {:style {:margin-top (if global-graph-pages? 0 "var(--ls-header-height)")}}
       [:div.cp__sidebar-main-content
        {:data-is-global-graph-pages global-graph-pages?
         :data-is-full-width (or global-graph-pages?
@@ -341,7 +341,7 @@
                           :default-home   default-home
                           :new-block-mode new-block-mode})
 
-          [:div#main-container.scrollbar-spacing
+          [:div#main-container.scrollbar-spacing.absolute.w-full
            (main {:route-match         route-match
                   :global-graph-pages? global-graph-pages?
                   :logged?             logged?

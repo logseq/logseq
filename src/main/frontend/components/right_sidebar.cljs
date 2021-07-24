@@ -161,18 +161,17 @@
           (build-sidebar-item repo idx db-id block-type block-data t))]
     (when item
       (let [collapse? (state/sub [:ui/sidebar-collapsed-blocks db-id])]
-        [:div.sidebar-item.content.color-level.px-4.shadow-lg
+        [:div.sidebar-item.content.color-level.px-4
          (let [[title component] item]
            [:div.flex.flex-col
-            [:div.flex.flex-row.justify-between
+            [:div.flex.flex-row.justify-between.sidebar-item-title-container.header-backdrop
              [:div.flex.flex-row.justify-center
               [:a.opacity-50.hover:opacity-100.flex.items-center.pr-1
                {:on-click #(state/sidebar-block-toggle-collapse! db-id)}
                (ui/rotating-arrow collapse?)]
-              [:div.ml-1.font-medium
-               title]]
+              [:div..sidebar-item-title.ml-1 title]]
              (close #(state/sidebar-remove-block! idx))]
-            [:div {:class (if collapse? "hidden" "initial")}
+            [:div.mt-4 {:class (if collapse? "hidden" "initial")}
              component]])]))))
 
 (defn- get-page
@@ -243,8 +242,8 @@
          [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
           (sidebar-resizer)
-          [:div.cp__right-sidebar-scrollable
-           [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-2.h-12
+          [:div.cp__right-sidebar-scrollable.relative.h-full
+           [:div.cp__right-sidebar-topbar.header-backdrop.flex.flex-row.justify-between.items-center.pl-4.pr-2.h-12
            [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
@@ -278,7 +277,7 @@
                                              :margin-right 2}}
               (toggle)])]
 
-           [:.sidebar-item-list.flex-1.scrollbar-spacing {:style {:height "100vh"}}
+           [:.sidebar-item-list.flex-1.scrollbar-spacing.w-full.absolute
             (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
               (rum/with-key
                 (sidebar-item repo idx db-id block-type block-data t)
