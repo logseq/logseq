@@ -1316,3 +1316,20 @@
    (defn meta-key-name []
      (let [user-agent (.. js/navigator -userAgent)]
        (if mac? "Cmd" "Ctrl"))))
+
+;; TODO: share with electron
+(defn ignored-path?
+  [dir path]
+  (when (string? path)
+    (or
+     (some #(string/starts-with? path (str dir "/" %))
+           ["." ".recycle" "assets" "node_modules"])
+     (some #(string/includes? path (str "/" % "/"))
+           ["." ".recycle" "assets" "node_modules"])
+     ;; hidden directory or file
+     (re-find #"/\.[^.]+" path)
+     (re-find #"^\.[^.]+" path)
+     (let [path (string/lower-case path)]
+       (not
+        (some #(string/ends-with? path %)
+              [".md" ".markdown" ".org" ".edn" ".css"]))))))
