@@ -583,11 +583,22 @@
                                  (persist-var/persist-save of-matrix))})))]
            review-finished)])
 
-      ;; bad query-string
-      [:div.opacity-60.custom-query-title
-       [:div.w-full.flex-1
-        [:code.p-1 (str "Cards: " query-string)]]
-       [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"]])))
+      (if (empty? @(query (state/get-current-repo) ""))
+        [:div.ls-card
+         [:h1.title "Time to create your first card!"]
+
+         [:div
+          [:p "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."]
+          [:img.my-4 {:src "https://logseq.github.io/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
+          [:p "You can "
+           [:a {:href "https://logseq.github.io/#/page/cards" :target "_blank"}
+            "click this link"]
+           " to check the documentation."]]]
+
+        [:div.opacity-60.custom-query-title.ls-card
+         [:div.w-full.flex-1
+          [:code.p-1 (str "Cards: " query-string)]]
+         [:div.mt-2.ml-2.font-medium "No matched cards"]]))))
 
 (rum/defc global-cards
   []
