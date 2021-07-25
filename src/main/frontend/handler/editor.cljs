@@ -45,7 +45,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            ["/frontend/utils" :as utils]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -3072,8 +3073,9 @@
 
 (defn paste-text-in-one-block-at-point
   []
-  (.then
-   (js/navigator.clipboard.readText)
+  (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))))
+       (state/append-current-edit-content! clipboard-data)))
+   (fn [error]
+     (js/console.error error))))
