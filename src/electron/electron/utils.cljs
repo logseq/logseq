@@ -1,6 +1,8 @@
 (ns electron.utils
   (:require [clojure.string :as string]
-            ["fs" :as fs]))
+            ["fs" :as fs]
+            ["path" :as path]
+            [clojure.string :as string]))
 
 (defonce mac? (= (.-platform js/process) "darwin"))
 (defonce win32? (= (.-platform js/process) "win32"))
@@ -13,10 +15,6 @@
 (defonce open (js/require "open"))
 (defonce fetch (js/require "node-fetch"))
 
-(defn get-file-ext
-  [file]
-  (last (string/split file #"\.")))
-
 (defn ignored-path?
   [dir path]
   (when (string? path)
@@ -25,13 +23,16 @@
            ["." ".recycle" "assets" "node_modules"])
      (some #(string/includes? path (str "/" % "/"))
            ["." ".recycle" "assets" "node_modules"])
+     (string/ends-with? path ".DS_Store")
      ;; hidden directory or file
      (re-find #"/\.[^.]+" path)
      (re-find #"^\.[^.]+" path)
      (let [path (string/lower-case path)]
-       (not
-        (some #(string/ends-with? path %)
-              [".md" ".markdown" ".org" ".edn" ".css"]))))))
+       (and
+        (not (string/blank? (path/extname path)))
+        (not
+         (some #(string/ends-with? path %)
+               [".md" ".markdown" ".org" ".edn" ".css"])))))))
 
 (defn fix-win-path!
   [path]
