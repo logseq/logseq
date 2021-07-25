@@ -92,7 +92,13 @@
      (when-let [block-id (get-in this [:data :block/uuid])]
        block-id)
      (when-let [db-id (get-in this [:data :db/id])]
-       (:block/uuid (db/pull db-id)))))
+       (let [uuid (:block/uuid (db/pull db-id))]
+         (if uuid
+           uuid
+           (let [new-id (db/new-block-id)]
+             (db/transact! {:db/id db-id
+                            :block/uuid new-id})
+             new-id))))))
 
   (-get-parent-id [this]
     (-> (get-in this [:data :block/parent])

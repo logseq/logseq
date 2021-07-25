@@ -17,18 +17,21 @@
   [file]
   (last (string/split file #"\.")))
 
-;; TODO: ignore according to mime types
 (defn ignored-path?
   [dir path]
-  (or
-   (some #(string/starts-with? path (str dir "/" %))
-         ["." "assets" "node_modules"])
-   (some #(string/includes? path (str "/" % "/"))
-         ["." "assets" "node_modules"])
-   (let [path (string/lower-case path)]
-     (not
-      (some #(string/ends-with? path %)
-            [".md" ".markdown" ".org" ".edn" ".css"])))))
+  (when (string? path)
+    (or
+     (some #(string/starts-with? path (str dir "/" %))
+           ["." ".recycle" "assets" "node_modules"])
+     (some #(string/includes? path (str "/" % "/"))
+           ["." ".recycle" "assets" "node_modules"])
+     ;; hidden directory or file
+     (re-find #"/\.[^.]+" path)
+     (re-find #"^\.[^.]+" path)
+     (let [path (string/lower-case path)]
+       (not
+        (some #(string/ends-with? path %)
+              [".md" ".markdown" ".org" ".edn" ".css"]))))))
 
 (defn fix-win-path!
   [path]
@@ -39,4 +42,5 @@
 
 (defn read-file
   [path]
-  (.toString (fs/readFileSync path)))
+  (when (fs/existsSync path)
+    (.toString (fs/readFileSync path))))
