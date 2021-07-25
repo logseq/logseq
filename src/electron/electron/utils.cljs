@@ -42,4 +42,5 @@
 
 (defn read-file
   [path]
-  (.toString (fs/readFileSync path)))
+  (when (fs/existsSync path)
+    (.toString (fs/readFileSync path))))

@@ -736,6 +736,7 @@
           :in $ ?path
           :where
           [?file :file/path ?path]
+          [?page :block/name]
           [?page :block/file ?file]]
         conn file-path)
        db-utils/seq-flatten
