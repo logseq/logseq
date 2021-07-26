@@ -87,23 +87,29 @@
       :on-click (fn [^js/MouseEvent e]
                   (when-let [action (.. e -target -dataset -action)]
                     (case action
+                      "ref"
+                      (pdf-assets/copy-hl-ref! highlight)
+
                       "copy"
                       (do
                         (front-utils/copy-to-clipboard! (:text content))
                         (pdf-utils/clear-all-selection))
 
                       "del"
-                      (del-hl! highlight)
+                      (do
+                        (del-hl! highlight)
+                        (pdf-assets/del-ref-block! highlight))
 
                       ;; colors
                       (let [properties {:color action}]
                         (if-not id
                           ;; add highlight
-                          (do
-                            (add-hl! (merge highlight
-                                            {:id         (pdf-utils/gen-uuid)
-                                             :properties properties}))
-                            (pdf-utils/clear-all-selection))
+                          (let [highlight (merge highlight
+                                                 {:id         (pdf-utils/gen-uuid)
+                                                  :properties properties})]
+                            (add-hl! highlight)
+                            (pdf-utils/clear-all-selection)
+                            (pdf-assets/copy-hl-ref! highlight))
 
                           ;; update highlight
                           (do
@@ -114,6 +120,9 @@
      [:li.item-colors
       (for [it ["yellow", "blue", "green", "red", "purple"]]
         [:a {:key it :data-color it :data-action it} it])]
+
+
+     (and id [:li.item {:data-action "ref"} "Copy ref"])
 
      [:li.item {:data-action "copy"} "Copy text"]
 

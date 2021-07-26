@@ -3,6 +3,7 @@
             [frontend.util :as utils]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.config :as config]
@@ -47,6 +48,45 @@
           repo-dir (config/get-repo-dir repo-cur)
           data (pr-str {:highlights highlights})]
       (fs/write-file! repo-cur repo-dir hls-file data {:skip-mtime? true}))))
+
+(defn resolve-ref-page
+  [page-name]
+  (let [page-name (str "hls__" page-name)
+        page (db-model/get-page page-name)]
+    (if-not page
+      (do
+        (page-handler/create! page-name {:redirect? false :create-first-block? false})
+        ;; refresh to file
+        (editor-handler/api-insert-new-block! page-name {:page page-name})
+        (db-model/get-page page-name))
+      page)))
+
+(defn create-ref-block!
+  [{:keys [id content]}]
+  (when-let [pdf-current (:pdf/current @state/state)]
+    (when-let [ref-page (resolve-ref-page (:key pdf-current))]
+      (if-let [ref-block (db-model/get-block-by-uuid id)]
+        (do
+          (js/console.debug "[existed ref block]" ref-block)
+          ref-block)
+        (let [text (:text content)]                         ;; TODO: image
+          (editor-handler/api-insert-new-block!
+            text {:page        (:block/name ref-page)
+                  :custom-uuid id
+                  :properties  {:type "annotation"
+                                :id   (str id)              ;; force custom uuid
+                                }}))))))
+
+(defn del-ref-block!
+  [{:keys [id]}]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [block (db-model/get-block-by-uuid id)]
+      (editor-handler/delete-block-aux! block true))))
+
+(defn copy-hl-ref!
+  [highlight]
+  (when-let [ref-block (create-ref-block! highlight)]
+    (utils/copy-to-clipboard! (str "((" (:block/uuid ref-block) "))"))))
 
 (defn upload-asset!
   [page-block files refresh-file!]

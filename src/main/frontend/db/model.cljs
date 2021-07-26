@@ -719,7 +719,7 @@
   [page-name]
   (if (util/uuid-string? page-name)
     (db-utils/entity [:block/uuid (uuid page-name)])
-    (db-utils/entity [:block/name page-name])))
+    (db-utils/entity [:block/name (string/lower-case page-name)])))
 
 (defn- heading-block?
   [block]
