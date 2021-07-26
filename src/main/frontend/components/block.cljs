@@ -76,11 +76,8 @@
   (atom nil))
 (def *move-to (atom nil))
 
-;; TODO: Improve blocks grouped by pages
-(defonce max-blocks-per-page 500)
-(defonce virtual-list-scroll-step 450)
-(defonce virtual-list-previous 50)
-
+;; TODO: dynamic
+(defonce max-blocks-per-page 200)
 (defonce *blocks-container-id (atom 0))
 
 ;; TODO:
@@ -2478,6 +2475,51 @@
                      blocks)]
        sections))))
 
+(defn- block-list
+  [config blocks]
+  (for [[idx item] (medley/indexed blocks)]
+    (let [item (->
+                (dissoc item :block/meta)
+                (assoc :block/top? (zero? idx)
+                       :block/bottom? (= (count blocks) (inc idx))))
+          config (assoc config :block/uuid (:block/uuid item))]
+      (rum/with-key
+        (block-container config item)
+        (:block/uuid item)))))
+
+(defonce ignore-scroll? (atom false))
+(rum/defcs lazy-blocks <
+  (rum/local 1 ::page)
+  [state config blocks]
+  (let [*page (get state ::page)
+        segment (->> blocks
+                    (drop (* (dec @*page) max-blocks-per-page))
+                    (take max-blocks-per-page))
+        bottom-reached (fn []
+                         (when (and (= (count segment) max-blocks-per-page)
+                                    (> (count blocks) (* @*page max-blocks-per-page))
+                                    (not @ignore-scroll?))
+                           (swap! *page inc)
+                           (util/scroll-to-top))
+                         (reset! ignore-scroll? false))
+        top-reached (fn []
+                      (when (> @*page 1)
+                        (swap! *page dec)
+                        (reset! ignore-scroll? true)
+                        (js/setTimeout #(util/scroll-to
+                                         (.-scrollHeight (js/document.getElementById "lazy-blocks"))) 100)))]
+    [:div#lazy-blocks
+     (when (> @*page 1)
+       [:div.ml-4.mb-4 [:a#prev.opacity-60.opacity-100.text-sm.font-medium {:on-click top-reached}
+                        "Prev"]])
+     (ui/infinite-list
+      "main-container"
+      (block-list config segment)
+      {:on-load bottom-reached})
+     (when (> (count blocks) (* @*page max-blocks-per-page))
+       [:div.ml-4.mt-4 [:a#more.opacity-60.opacity-100.text-sm.font-medium {:on-click bottom-reached}
+                        "More"]])]))
+
 (rum/defcs blocks-container <
   {:init (fn [state]
            (assoc state ::init-blocks-container-id (atom nil)))}
@@ -2504,17 +2546,7 @@
                                0
                                :else
                                -10)}}
-       (let [first-block (first blocks)
-             first-id (:block/uuid (first blocks))]
-         (for [[idx item] (medley/indexed blocks)]
-           (let [item (->
-                       (dissoc item :block/meta)
-                       (assoc :block/top? (zero? idx)
-                              :block/bottom? (= (count blocks) (inc idx))))
-                 config (assoc config :block/uuid (:block/uuid item))]
-             (rum/with-key
-               (block-container config item)
-               (:block/uuid item)))))])))
+       (lazy-blocks config blocks)])))
 
 ;; headers to hiccup
 (defn ->hiccup

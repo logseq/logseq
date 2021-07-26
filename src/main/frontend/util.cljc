@@ -396,6 +396,15 @@
                          :behavior "smooth"}))))))
 
 #?(:cljs
+   (defn scroll-to-element-v2
+     [elem-id]
+     (when elem-id
+       (when-let [elem (gdom/getElement elem-id)]
+         (.scroll (app-scroll-container-node)
+                  #js {:top (element-top elem 0)
+                       :behavior "auto"})))))
+
+#?(:cljs
    (defn scroll-to
      ([pos]
       (scroll-to (app-scroll-container-node) pos))
@@ -408,11 +417,6 @@
                       :behavior (if animate? "smooth" "auto")})))))
 
 #?(:cljs
-   (defn scroll-to-top
-     []
-     (scroll-to (app-scroll-container-node) 0 false)))
-
-#?(:cljs
    (defn scroll-top
      "Returns the scroll top position of the `node`. If `node` is not specified,
      returns the scroll top position of the `app-scroll-container-node`."
@@ -420,6 +424,18 @@
       (scroll-top (app-scroll-container-node)))
      ([node]
       (when node (.-scrollTop node)))))
+
+#?(:cljs
+   (defn scroll-to-top
+     []
+     (scroll-to (app-scroll-container-node) 0 false)))
+
+#?(:cljs
+   (defn scroll-to-bottom
+     [node]
+     (when-let [node ^js (or node (app-scroll-container-node))]
+       (let [bottom (.-scrollHeight node)]
+         (scroll-to node bottom false)))))
 
 (defn url-encode
   [string]

@@ -347,7 +347,7 @@
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state list-element-id body {:keys [on-load has-more]}]
+  [state list-element-id body {:keys [on-load has-more on-top-reached]}]
   (rum/with-context [[t] i18n/*tongue-context*]
     (rum/fragment
      body
