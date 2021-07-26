@@ -624,8 +624,7 @@
               (let [block (assoc block
                                  :block/parent parent
                                  :block/left [:block/uuid uuid]
-                                 :block/level level
-                                 )
+                                 :block/level level)
                     parents' (conj (vec (butlast parents)) block)
                     result' (conj result block)]
                 [others parents' block result'])
@@ -647,26 +646,29 @@
                     result' (conj result block)]
                 [others parents' block result'])
 
-              ;; - a
-              ;;    - b
-              ;;  - c
-              (and (>= (count parents) 2)
-                   (< level-spaces parent-spaces)
-                   (> level-spaces (:block/level-spaces (nth parents (- (count parents) 2)))))
-              (let [block (assoc block
-                                 :block/parent parent
-                                 :block/left [:block/uuid uuid]
-                                 :block/level level
-                                 :block/level-spaces parent-spaces)
-                    parents' (conj (vec (butlast parents)) block)
-                    result' (conj result block)]
-                [others parents' block result'])
+              (< level-spaces parent-spaces)
+              (cond
+                (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
+                (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
+                      left (last parents')
+                      blocks (cons (assoc (first blocks)
+                                          :block/level (dec level)
+                                          :block/left [:block/uuid (:block/uuid left)])
+                                   (rest blocks))]
+                  [blocks parents' left result])
 
-              (< level-spaces parent-spaces)         ; outdent
-              (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                    blocks (cons (assoc (first blocks) :block/level (dec level))
-                                 (rest blocks))]
-                [blocks parents' (last parents') result]))]
+                :else
+                (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
+                      left (first r)
+                      parents' (->> (concat f [left]) vec)
+                      block (assoc block
+                                   :block/parent [:block/uuid (:block/uuid (last f))]
+                                   :block/left [:block/uuid (:block/uuid left)]
+                                   :block/level (:block/level left)
+                                   :block/level-spaces (:block/level-spaces left))
+                      parents' (->> (concat f [block]) vec)
+                      result' (conj result block)]
+                  [others parents' block result'])))]
         (recur blocks parents sibling result)))))
 
 (defn- parse-block

@@ -72,6 +72,7 @@ html[data-theme='dark'] {
   --ls-scrollbar-background-color: rgba(30, 60, 67, 0.1);
   --ls-scrollbar-thumb-hover-color: rgba(255, 255, 255, 0.2);
   --ls-head-text-color: var(--ls-link-text-color);
+  --ls-cloze-text-color: #8fbc8f;
   --ls-icon-color: var(--ls-link-text-color);
   --ls-search-icon-color: var(--ls-link-text-color);
   --ls-a-chosen-bg: var(--ls-secondary-background-color);
@@ -126,6 +127,7 @@ html[data-theme='light'] {
   --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
   --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
   --ls-head-text-color: var(--ls-link-text-color);
+  --ls-cloze-text-color: #0000cd;
   --ls-icon-color: #908e8b;
   --ls-search-icon-color: var(--ls-icon-color);
   --ls-a-chosen-bg: #f7f7f7;
@@ -722,14 +724,6 @@ li p:last-child,
 .noscroll {
   position: fixed;
   overflow-y: scroll;
-}
-
-.loader-reverse {
-    -webkit-animation: spin 2s infinite linear reverse;
-}
-
-.loader {
-    -webkit-animation: spin 2s infinite linear;
 }
 
 .canceled,

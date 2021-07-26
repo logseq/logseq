@@ -455,8 +455,7 @@
   (->> (db/get-all-pages)
        (remove (fn [p]
                  (let [name (:block/name p)]
-                   (or (util/file-page? name)
-                       (util/uuid-string? name)
+                   (or (util/uuid-string? name)
                        (db/built-in-pages-names (string/upper-case name))))))
        (common-handler/fix-pages-timestamps)))
 

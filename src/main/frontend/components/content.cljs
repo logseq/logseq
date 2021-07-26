@@ -22,7 +22,8 @@
             [frontend.components.export :as export]
             [frontend.context.i18n :as i18n]
             [frontend.text :as text]
-            [frontend.handler.page :as page-handler]))
+            [frontend.handler.page :as page-handler]
+            [frontend.extensions.srs :as srs]))
 
 (defn- set-format-js-loading!
   [format value]
@@ -126,6 +127,7 @@
                     (reset! edit? true))}
        "Make template"))))
 
+
 (rum/defc block-context-menu-content
   [target block-id]
   (rum/with-context [[t] i18n/*tongue-context*]
@@ -179,11 +181,15 @@
                         (state/set-modal! #(export/export-blocks block-id)))}
            "Export")
 
-          (ui/menu-link
-           {:key "Copy as JSON"
-            :on-click (fn [_e]
-                        (export-handler/copy-block-as-json! block-id))}
-           "Copy as JSON")
+          (if (srs/card-block? block)
+            (ui/menu-link
+             {:key "Preview Card"
+              :on-click #(srs/preview [(db/pull [:block/uuid block-id])])}
+             "Preview Card")
+            (ui/menu-link
+             {:key "Make a Card"
+              :on-click #(srs/make-block-a-card! block-id)}
+             "Make a Card"))
 
           (ui/menu-link
            {:key "Cut"
@@ -195,10 +201,10 @@
             (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
               (for [[_ {:keys [key label] :as cmd} action pid] cmds]
                 (ui/menu-link
-                  {:key      key
-                   :on-click #(commands/exec-plugin-simple-command!
-                                pid (assoc cmd :uuid block-id) action)}
-                  label))))
+                 {:key      key
+                  :on-click #(commands/exec-plugin-simple-command!
+                              pid (assoc cmd :uuid block-id) action)}
+                 label))))
 
           (when (state/sub [:ui/developer-mode?])
             (ui/menu-link

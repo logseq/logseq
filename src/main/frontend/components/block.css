@@ -279,6 +279,11 @@
   margin: 0.4em 0 0;
 }
 
+.block-ref .ls-block :is(h1, h2),
+.block-ref .editor-inner :is(.h1, .h2) {
+  border-bottom: none;
+}
+
 .document-mode .ls-block h1,
 .document-mode .editor-inner .h1 {
   margin: 0.67em 0;
@@ -434,4 +439,38 @@ a.filter svg {
 
 .query-title {
     background: var(--ls-page-properties-background-color);
+}
+
+.ls-card {
+    height: 100%;
+}
+
+@media (min-width: 1024px) {
+    .ui__modal-panel .ls-card {
+        min-height: 24rem;
+    }
+}
+
+a[data-ref="card"], .page-reference[data-ref="card"] {
+    opacity: 0.3;
+}
+
+.ls-card a[data-ref="card"], .ls-card .page-reference[data-ref="card"] {
+    display: none;
+}
+
+.cards-title {
+    background: var(--ls-page-properties-background-color);
+    border-radius: 4px;
+    padding: 2px 8px;
+}
+
+span.cloze {
+    color: var(--ls-cloze-text-color);
+}
+
+span.cloze-revealed {
+    color: var(--ls-cloze-text-color);
+    text-decoration: underline;
+    text-underline-position: under;
 }

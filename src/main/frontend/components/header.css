@@ -29,7 +29,6 @@
   }
 
   a.button {
-    padding: 0.25rem;
     margin: 0 4px;
   }
 }
@@ -114,7 +113,7 @@
 }
 
 a.button {
-    padding: 0.5rem;
+    padding: 0.25rem;
     opacity: 0.6;
     display: block;
     border-radius: 4px;
@@ -123,4 +122,8 @@ a.button {
 a.button:hover {
     opacity: 1;
     background: var(--ls-tertiary-background-color);
+}
+
+.is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
+    cursor: default !important;
 }

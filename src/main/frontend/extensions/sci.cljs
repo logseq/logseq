@@ -12,7 +12,9 @@
   [s]
   (try
     (sci/eval-string s {:bindings {'sum sum
-                                   'average average}})
+                                   'average average
+                                   'parseFloat js/parseFloat
+                                   'isNaN js/isNaN}})
     (catch js/Error e
       (println "Query: sci eval failed:")
       (js/console.error e))))

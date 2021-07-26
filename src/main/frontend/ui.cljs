@@ -111,10 +111,12 @@
    opts))
 
 (defn button
-  [text & {:keys [background href class intent on-click]
+  [text & {:keys [background href class intent on-click small?]
+           :or {small? false}
            :as   option}]
   (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700")
-        klass (if background (string/replace klass "indigo" background) klass)]
+        klass (if background (string/replace klass "indigo" background) klass)
+        klass (if small? (str klass ".px-2.py-1") klass)]
     (if href
       [:a.ui__button.is-link
        (merge
@@ -296,28 +298,26 @@
 (defn set-global-active-keystroke [val]
   (.setAttribute js/document.body "data-active-keystroke" val))
 
-(defn clear-global-active-keystroke []
-  (set-global-active-keystroke ""))
-
 (defn setup-active-keystroke! []
   (let [active-keystroke (atom #{})
-        handle-global-keystroke
-        (fn [down? e]
-          (let [handler (if down? conj disj)
-                keystroke e.key]
-            (swap! active-keystroke handler keystroke))
-          (set-global-active-keystroke (apply str (interpose "+" (vec @active-keystroke)))))
+        handle-global-keystroke (fn [down? e]
+                                  (let [handler (if down? conj disj)
+                                        keystroke e.key]
+                                    (swap! active-keystroke handler keystroke))
+                                  (set-global-active-keystroke (apply str (interpose "+" (vec @active-keystroke)))))
         keydown-handler (partial handle-global-keystroke true)
-        keyup-handler (partial handle-global-keystroke false)]
+        keyup-handler (partial handle-global-keystroke false)
+        clear-all #(do (set-global-active-keystroke "")
+                        (reset! active-keystroke #{}))]
     (.addEventListener js/window "keydown" keydown-handler)
     (.addEventListener js/window "keyup" keyup-handler)
-    (.addEventListener js/window "blur" clear-global-active-keystroke)
-    (.addEventListener js/window "visibilitychange" clear-global-active-keystroke)
+    (.addEventListener js/window "blur" clear-all)
+    (.addEventListener js/window "visibilitychange" clear-all)
     (fn []
       (.removeEventListener js/window "keydown" keydown-handler)
       (.removeEventListener js/window "keyup" keyup-handler)
-      (.removeEventListener js/window "blur" clear-global-active-keystroke)
-      (.removeEventListener js/window "visibilitychange" clear-global-active-keystroke))))
+      (.removeEventListener js/window "blur" clear-all)
+      (.removeEventListener js/window "visibilitychange" clear-all))))
 
 (defn on-scroll
   [node on-load on-top-reached]
@@ -663,7 +663,8 @@
                            (when-let [html (:html opts)]
                              (if (fn? html)
                                (html)
-                               html))
+                               [:div.pr-3.py-1
+                                html]))
                            [:div {:key "tippy"} ""])))
            child)))
 

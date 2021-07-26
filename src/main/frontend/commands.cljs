@@ -40,6 +40,11 @@
 (def zotero-steps [[:editor/input (str slash "zotero")]
                    [:editor/show-zotero]])
 
+(def *extend-slash-commands (atom []))
+
+(defn register-slash-command [cmd]
+  (swap! *extend-slash-commands conj cmd))
+
 (defn ->marker
   [marker]
   [[:editor/clear-current-slash]
@@ -270,7 +275,9 @@
      ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
                                                         :backward-pos 2}]]]]
 
+    @*extend-slash-commands
     ;; Allow user to modify or extend, should specify how to extend.
+
     (state/get-commands)
     (state/get-plugins-commands))
    (remove nil?)
@@ -428,8 +435,8 @@
 
 (defmulti handle-step first)
 
-(defmethod handle-step :editor/hook [[_ event {:keys [pid] :as payload}] format]
-  (plugin-handler/hook-plugin-editor event (merge payload {:format format :uuid (:block/uuid (state/get-edit-block))}) pid))
+(defmethod handle-step :editor/hook [[_ event {:keys [pid uuid] :as payload}] format]
+  (plugin-handler/hook-plugin-editor event (merge payload {:format format :uuid (or uuid (:block/uuid (state/get-edit-block)))}) pid))
 
 (defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]

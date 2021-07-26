@@ -8,10 +8,12 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.extensions.srs.handler :as srs]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?]]))
 
+;; TODO: how to extend this for plugins usage? An atom?
 (def default-config
   {:shortcut.handler/date-picker
    {:date-picker/complete
@@ -52,6 +54,28 @@
     {:desc    "Auto-complete: Open selected item in sidebar"
      :binding "shift+enter"
      :fn      ui-handler/auto-complete-shift-complete}}
+
+   :shortcut.handler/cards
+   {:cards/toggle-answers
+    {:desc    "Cards: show/hide answers/clozes"
+     :binding "s"
+     :fn      srs/toggle-answers}
+    :cards/next-card
+    {:desc    "Cards: next card"
+     :binding "n"
+     :fn      srs/next-card}
+    :cards/forgotten
+    {:desc    "Cards: forgotten"
+     :binding "f"
+     :fn      srs/forgotten}
+    :cards/remembered
+    {:desc    "Cards: remembered"
+     :binding "r"
+     :fn      srs/remembered}
+    :cards/recall
+    {:desc    "Cards: take a while to recall"
+     :binding "t"
+     :fn      srs/recall}}
 
    :shortcut.handler/block-editing-only
    ^{:before m/enable-when-editing-mode!}
@@ -311,7 +335,7 @@
      :fn      state/toggle-theme!}
     :ui/toggle-contents
     {:desc    "Toggle Favorites in sidebar"
-     :binding "t c"
+     :binding "t f"
      :fn      ui-handler/toggle-contents!}
     :ui/toggle-wide-mode
     {:desc    "Toggle wide mode"
@@ -321,6 +345,10 @@
     {:desc    "Toggle open blocks (collapse or expand all blocks)"
      :binding "t o"
      :fn      editor-handler/toggle-open!}
+    :ui/toggle-cards
+    {:desc    "toggle cards"
+     :binding "t c"
+     :fn      ui-handler/toggle-cards!}
     ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
     :git/commit
     {:desc    "Git commit message"
@@ -410,6 +438,7 @@
    [:ui/toggle-help
     :editor/toggle-open-blocks
     :ui/toggle-wide-mode
+    :ui/toggle-cards
     :ui/toggle-document-mode
     :ui/toggle-brackets
     :ui/toggle-theme

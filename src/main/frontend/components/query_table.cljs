@@ -34,7 +34,7 @@
 (defn get-keys
   [result page?]
   (let [keys (->> (distinct (mapcat keys (map :block/properties result)))
-                  (remove property/built-in-properties)
+                  (remove (property/built-in-properties))
                   (remove #{:template}))
         keys (if page? (cons :page keys) (cons :block keys))
         keys (concat keys [:created-at :updated-at])]

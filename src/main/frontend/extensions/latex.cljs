@@ -34,8 +34,11 @@
       (loader/load
        (config/asset-uri "/static/js/katex.min.js")
        (fn []
-         (reset! *loading? false)
-         (render! state)))))
+         (loader/load
+          (config/asset-uri "/static/js/mhchem.min.js")
+          (fn []
+            (reset! *loading? false)
+            (render! state)))))))
   state)
 
 (rum/defc latex < rum/reactive

@@ -67,23 +67,6 @@
    (outliner-tree/blocks->vec-tree (str (:block/uuid block)))
    (outliner-file/tree->file-content {:init-level 1})))
 
-(defn copy-block-as-json!
-  [block-id]
-  (when-let [repo (state/get-current-repo)]
-    (let [block-children (db/get-block-and-children repo block-id)]
-      (util/copy-to-clipboard! (js/JSON.stringify (bean/->js block-children))))))
-
-(defn copy-page-as-json!
-  [page-name]
-  (when-let [repo (state/get-current-repo)]
-    (let [properties (db/get-page-properties page-name)
-          blocks (db/get-page-blocks repo page-name)]
-      (util/copy-to-clipboard!
-       (js/JSON.stringify
-        (bean/->js
-         {:properties properties
-          :blocks blocks}))))))
-
 (defn export-repo-as-json!
   [repo]
   (when-let [db (db/get-conn repo)]
@@ -184,7 +167,7 @@
 
 (defn- get-embed-and-refs-blocks-pages-aux []
   (let [mem (atom {})]
-    (letfn [(f [repo page-or-block is-block? exclude-blocks exclude-pages]
+    (letfn [(f [repo page-or-block is-block? exclude-blocks exclude-pages ttl]
               (let [v (get @mem [repo page-or-block])]
                 (if v v
                     (let [[ref-blocks ref-pages]
@@ -218,13 +201,15 @@
                                (filterv :block/name)
                                (flatten))
                           [next-ref-blocks1 next-ref-pages1]
-                          (->> ref-blocks
-                               (mapv #(f repo % true (set (concat ref-block-ids exclude-blocks)) exclude-pages))
-                               (apply mapv vector))
+                          (if (<= ttl 0) [[] []]
+                              (->> ref-blocks
+                                   (mapv #(f repo % true (set (concat ref-block-ids exclude-blocks)) exclude-pages (- ttl 1)))
+                                   (apply mapv vector)))
                           [next-ref-blocks2 next-ref-pages2]
-                          (->> ref-pages
-                               (mapv #(f repo (:block/name %) false exclude-blocks (set (concat ref-page-ids exclude-pages))))
-                               (apply mapv vector))
+                          (if (<= ttl 0) [[] []]
+                              (->> ref-pages
+                                   (mapv #(f repo (:block/name %) false exclude-blocks (set (concat ref-page-ids exclude-pages)) (- ttl 1)))
+                                   (apply mapv vector)))
                           result
                           [(->> (concat ref-block-ids next-ref-blocks1 next-ref-blocks2)
                                 (flatten)
@@ -240,7 +225,7 @@
 (defn- get-page&block-refs-by-query
   [repo page-or-block get-page&block-refs-by-query-aux {:keys [is-block?] :or {is-block? false}}]
   (let [[block-ids page-ids]
-        (get-page&block-refs-by-query-aux repo page-or-block is-block? #{} #{})
+        (get-page&block-refs-by-query-aux repo page-or-block is-block? #{} #{} 3)
         blocks
         (db/pull-many repo '[*] block-ids)
         pages-name-and-content

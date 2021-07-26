@@ -26,6 +26,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.export :as export]
             [frontend.image :as image]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
@@ -44,7 +45,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            ["/frontend/utils" :as utils]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -182,7 +184,7 @@
                     "edit-block")))
 
 (defn clear-selection!
-  [_e]
+  []
   (util/select-unhighlight! (dom/by-class "selected"))
   (state/clear-selection!))
 
@@ -227,7 +229,7 @@
                           (subs content 0 pos))
              content (property/remove-built-in-properties (:block/format block)
                                                           content)]
-         (clear-selection! nil)
+         (clear-selection!)
          (state/set-editing! edit-input-id content block text-range move-cursor?))))))
 
 (defn edit-last-block-for-new-page!
@@ -324,7 +326,7 @@
         block (update block :block/refs remove-non-existed-refs!)
         block (attach-page-properties-if-exists! block)
         new-properties (merge
-                        (select-keys properties property/built-in-properties)
+                        (select-keys properties (property/built-in-properties))
                         (:block/properties block))]
     (-> block
         (dissoc :block/top?
@@ -1049,28 +1051,10 @@
         level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
         level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
         tree (blocks-vec->tree level-blocks)
-        contents
-        (mapv (fn [block]
-                (let [header
-                      (if (= format :markdown)
-                        (str (string/join (repeat (- (:level block) 1) "\t")) "-")
-                        (string/join (repeat (:level block) "*")))]
-                  (str header " " (:block/content block) "\n")))
-              level-blocks)
-        content-without-properties
-        (mapv
-         (fn [content]
-           (let [ast (mldoc/->edn content (mldoc/default-config format))
-                 properties-loc
-                 (->> ast
-                      (filterv (fn [[[type _] loc]] (= type "Property_Drawer")))
-                      (mapv second)
-                      first)]
-             (if properties-loc
-               (utf8/delete! content (:start_pos properties-loc) (:end_pos properties-loc))
-               content)))
-         contents)]
-    [(string/join content-without-properties) tree]))
+        top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
+        exported-md-contents (mapv #(export/export-blocks-as-markdown repo % "spaces")
+                                   top-level-block-uuids)]
+    [(string/join "\n" (mapv string/trim-newline exported-md-contents)) tree]))
 
 (defn copy-selection-blocks
   []
@@ -2068,7 +2052,7 @@
             (recur (zip/next loc))
             (let [content (:content node)
                   props (into [] (:properties node))
-                  content* (str "- "
+                  content* (str (if (= :markdown format) "- " "* ")
                                 (property/insert-properties format content props))
                   ast (mldoc/->edn content* (mldoc/default-config format))
                   blocks (block/extract-blocks ast content* true format)
@@ -2756,8 +2740,7 @@
 (defn- cut-blocks-and-clear-selections!
   [copy?]
   (cut-selection-blocks copy?)
-  (clear-selection! nil))
-
+  (clear-selection!))
 (defn shortcut-copy-selection
   [e]
   (copy-selection-blocks))
@@ -2977,7 +2960,7 @@
                       medley/uuid
                       expand-block!)))
            doall)
-      (clear-selection! nil))
+      (clear-selection!))
 
     :else
     ;; expand one level
@@ -3011,7 +2994,7 @@
                       medley/uuid
                       collapse-block!)))
            doall)
-      (clear-selection! nil))
+      (clear-selection!))
 
     :else
     ;; collapse by one level from outside
@@ -3094,8 +3077,9 @@
 
 (defn paste-text-in-one-block-at-point
   []
-  (.then
-   (js/navigator.clipboard.readText)
+  (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))))
+       (state/append-current-edit-content! clipboard-data)))
+   (fn [error]
+     (js/console.error error))))
