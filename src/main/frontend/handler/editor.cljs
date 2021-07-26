@@ -1496,14 +1496,18 @@
    "`" "`"
    "~" "~"
    "*" "*"
-   ;; "_" "_"
+   "_" "_"
+   "^" "^"
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
-   ;; "^" "^"
+
    })
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
           (keys autopair-map)))
+
+(defonce autopair-when-selected
+  #{"^" "_"})
 
 (def delete-map
   (assoc autopair-map
@@ -2474,6 +2478,9 @@
         (do
           (util/stop e)
           (cursor/move-cursor-forward input))
+
+        (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
+        nil
 
         (contains? (set (keys autopair-map)) key)
         (do
