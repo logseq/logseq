@@ -13,7 +13,7 @@
   protocol/Format
   (toEdn [this content config]
     (->edn content config))
-  (toHtml [this content config]
+  (toHtml [this content config references]
     (when (loaded?)
       (let [config {:attributes {:showTitle false
                                  :hardbreaks true

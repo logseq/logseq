@@ -252,8 +252,8 @@
   protocol/Format
   (toEdn [this content config]
     (->edn content config))
-  (toHtml [this content config]
-    (exportToHtml content config))
+  (toHtml [this content config references]
+    (exportToHtml content config references))
   (loaded? [this]
     true)
   (lazyLoad [this ok-handler]

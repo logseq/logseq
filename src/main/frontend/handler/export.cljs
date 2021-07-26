@@ -460,7 +460,18 @@
                        (f/get-default-config format {:export-md-indent-style indent-style})
                        (js/JSON.stringify (clj->js refs)))))
 
-
+(defn export-blocks-as-html
+  [repo root-block-uuid]
+  (let [get-page&block-refs-by-query-aux (get-embed-and-refs-blocks-pages-aux)
+        f #(get-page&block-refs-by-query repo % get-page&block-refs-by-query-aux {:is-block? true})
+        root-block (db/entity [:block/uuid root-block-uuid])
+        blocks (db/get-block-and-children repo root-block-uuid)
+        refs (f blocks)
+        content (get-blocks-contents repo root-block-uuid)
+        format (or (:block/format root-block) (state/get-preferred-format))]
+    (fp/toHtml f/mldoc-record content
+                       (f/get-default-config format)
+                       (js/JSON.stringify (clj->js refs)))))
 
 (defn- convert-md-files-unordered-list-or-heading
   [repo files heading-to-list?]

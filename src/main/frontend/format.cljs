@@ -46,7 +46,7 @@
      (if (string/blank? content)
        ""
        (if-let [record (get-format-record format)]
-         (protocol/toHtml record content config)
+         (protocol/toHtml record content config mldoc/default-references)
          content)))))
 
 (defn to-edn
