@@ -870,7 +870,7 @@
               (if (:block/pre-block? block)
                 (let [page (:block/page block)]
                   (page-reference html-export? (:block/name page) config label))
-                (block-reference config (:link (second url)) nil)))
+                (block-reference config (:link (second url)) label)))
 
             (= protocol "file")
             (if (show-link? config metadata href full_text)
