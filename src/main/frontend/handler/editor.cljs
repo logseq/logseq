@@ -2658,7 +2658,8 @@
     (if (and
          (:copy/content copied-blocks)
          (not (string/blank? text))
-         (= (string/trim text) (string/trim (:copy/content copied-blocks))))
+         (= (string/replace (string/trim text) "\r" "")
+            (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
       (do
         ;; copy from logseq internally
         (paste-block-vec-tree-at-target copied-block-tree [])
