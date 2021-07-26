@@ -17,6 +17,7 @@
             [frontend.context.i18n :as i18n]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.utils :as db-utils]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.db.query-dsl :as query-dsl]
@@ -993,7 +994,7 @@
         [:div.dsl-query
          (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
-                         {:title [:span.font-medium.p-1.query-title
+                         {:title [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
                                   (str "Query: " query)]
                           :query query}))]
 
@@ -1879,10 +1880,12 @@
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  ref-collpased? (boolean
-                                 (and (:ref? config)
-                                      (seq (:block/children block))
-                                      (>= (:ref/level block)
-                                          (state/get-ref-open-blocks-level))))]
+                                 (and
+                                  (seq (:block/children block))
+                                  (or (:custom-query? config)
+                                      (and (:ref? config)
+                                           (>= (:ref/level block)
+                                               (state/get-ref-open-blocks-level))))))]
              (assoc state
                     ::control-show? (atom false)
                     ::ref-collapsed? (atom ref-collpased?))))
@@ -2155,10 +2158,13 @@
            query-result (and query-atom (rum/react query-atom))
            table? (or (get-in current-block [:block/properties :query-table])
                       (and (string? query) (string/ends-with? (string/trim query) "table")))
+           transformed-query-result (when query-result
+                                      (db/custom-query-result-transform query-result remove-blocks q))
            not-grouped-by-page? (or table?
                                     (and (string? query) (string/includes? query "(by-page false)")))
-           result (when query-result
-                    (db/custom-query-result-transform query-result remove-blocks q not-grouped-by-page?))
+           result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
+                    (db-utils/group-by-page transformed-query-result)
+                    transformed-query-result)
            _ (when-let [query-result (:query-result config)]
                (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
                      (reset! query-result result)))
@@ -2178,6 +2184,9 @@
           (ui/foldable
            [:div.custom-query-title
             title
+            [:span.opacity-60.text-sm.ml-2
+             (str (count transformed-query-result) " results")]]
+           [:div
             (when current-block
               [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
                (when-not page-list?
@@ -2197,47 +2206,46 @@
                                (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
                 [:span.table-query-properties
                  [:span.text-sm.mr-1 "Set properties"]
-                 svg/settings-sm]]])]
-           (cond
-             (and (seq result) view-f)
-             (let [result (try
-                            (sci/call-fn view-f result)
-                            (catch js/Error error
-                              (log/error :custom-view-failed {:error error
-                                                              :result result})
-                              [:div "Custom view failed: "
-                               (str error)]))]
-               (util/hiccup-keywordize result))
+                 svg/settings-sm]]])
+            (cond
+              (and (seq result) view-f)
+              (let [result (try
+                             (sci/call-fn view-f result)
+                             (catch js/Error error
+                               (log/error :custom-view-failed {:error error
+                                                               :result result})
+                               [:div "Custom view failed: "
+                                (str error)]))]
+                (util/hiccup-keywordize result))
 
-             page-list?
-             (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
+              page-list?
+              (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
 
-             table?
-             (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
+              table?
+              (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
-             (and (seq result) (or only-blocks? blocks-grouped-by-page?))
-             (->hiccup result (cond-> (assoc config
-                                             :custom-query? true
-                                             ;; :breadcrumb-show? true
-                                             :group-by-page? blocks-grouped-by-page?
-                                             ;; :ref? true
-                                             )
-                                children?
-                                (assoc :ref? true))
-                       {:style {:margin-top "0.25rem"
-                                :margin-left "0.25rem"}})
+              (and (seq result) (or only-blocks? blocks-grouped-by-page?))
+              (->hiccup result (cond-> (assoc config
+                                              :custom-query? true
+                                              :breadcrumb-show? true
+                                              :group-by-page? blocks-grouped-by-page?
+                                              :ref? true)
+                                 children?
+                                 (assoc :ref? true))
+                        {:style {:margin-top "0.25rem"
+                                 :margin-left "0.25rem"}})
 
-             (seq result)
-             (let [result (->>
-                           (for [record result]
-                             (if (map? record)
-                               (str (util/pp-str record) "\n")
-                               record))
-                           (remove nil?))]
-               [:pre result])
+              (seq result)
+              (let [result (->>
+                            (for [record result]
+                              (if (map? record)
+                                (str (util/pp-str record) "\n")
+                                record))
+                            (remove nil?))]
+                [:pre result])
 
-             :else
-             [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])
+              :else
+              [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])]
            collapsed?))]))))
 
 (defn admonition

@@ -585,7 +585,8 @@
         (if (fn? header)
           (header @collapsed?)
           header)]]]
-     [:div {:class (if @collapsed? "hidden" "initial")}
+     [:div {:class (if @collapsed? "hidden" "initial")
+            :on-mouse-down (fn [e] (.stopPropagation e))}
       (if (fn? content)
         (if (not @collapsed?) (content) nil)
         content)]]))

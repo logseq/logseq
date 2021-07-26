@@ -2129,8 +2129,7 @@
   [state]
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
-      (when (and block
-                 (not (:custom-query? config)))
+      (when block
         (let [content (state/get-edit-content)
               current-node (outliner-core/block block)
               has-right? (-> (tree/-get-right current-node)
