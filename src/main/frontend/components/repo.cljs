@@ -207,7 +207,8 @@
                [:span.repo-plus svg/plus]
                (let [repo-name (get-repo-name current-repo)
                      repo-name (if (util/electron?)
-                                 (last (string/split repo-name #"/"))
+                                 (last
+                                  (string/split repo-name #"/"))
                                  repo-name)]
                  [:span#repo-name repo-name])
                [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]]])

@@ -23,7 +23,8 @@
   (when (fs/existsSync dir)
     (let [watcher (.watch watcher dir
                           (clj->js
-                           {:ignored (partial utils/ignored-path? dir)
+                           {:ignored (fn [path]
+                                       (utils/ignored-path? dir path))
                             :ignoreInitial true
                             :ignorePermissionErrors true
                             :interval polling-interval

@@ -248,6 +248,81 @@
              [:a {:href (rfe/href :page {:name name})}
               original-name]])] false)]])))
 
+(defn page-menu
+  [repo t page page-name page-original-name title journal? public? developer-mode?]
+  (let [contents? (= (string/lower-case (str page-name)) "contents")
+        links (fn [] (->>
+                     [(when-not contents?
+                        {:title   (t :page/add-to-favorites)
+                         :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+
+                      {:title "Go to presentation mode"
+                       :options {:on-click (fn []
+                                             (state/sidebar-add-block!
+                                              repo
+                                              (:db/id page)
+                                              :page-presentation
+                                              {:page page}))}}
+                      (when (and (not contents?)
+                                 (not journal?))
+                        {:title   (t :page/rename)
+                         :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
+
+                      (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
+                        [{:title   (t :page/open-in-finder)
+                          :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
+                         {:title   (t :page/open-with-default-app)
+                          :options {:on-click #(js/window.apis.openPath file-path)}}])
+
+                      (when-not contents?
+                        {:title   (t :page/delete)
+                         :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+
+                      (when (state/get-current-page)
+                        {:title   (t :export)
+                         :options {:on-click #(state/set-modal! export/export-page)}})
+
+                      (when (util/electron?)
+                        {:title   (t (if public? :page/make-private :page/make-public))
+                         :options {:on-click
+                                   (fn []
+                                     (page-handler/update-public-attribute!
+                                      page-name
+                                      (if public? false true))
+                                     (state/close-modal!))}})
+
+                      (when plugin-handler/lsp-enabled?
+                        (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
+                          {:title label
+                           :options {:on-click #(commands/exec-plugin-simple-command!
+                                                 pid (assoc cmd :page (state/get-current-page)) action)}}))
+
+                      (when developer-mode?
+                        {:title   "(Dev) Show page data"
+                         :options {:on-click (fn []
+                                               (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
+                                                 (println page-data)
+                                                 (notification/show!
+                                                  [:div
+                                                   [:pre.code page-data]
+                                                   [:br]
+                                                   (ui/button "Copy to clipboard"
+                                                     :on-click #(.writeText js/navigator.clipboard page-data))]
+                                                  :success
+                                                  false)))}})]
+                     (flatten)
+                     (remove nil?)))]
+    (ui/dropdown-with-links
+     (fn [{:keys [toggle-fn]}]
+       [:a.cp__vertical-menu-button
+        {:title    "More options"
+         :on-click toggle-fn}
+        (svg/vertical-dots nil)])
+     links
+     {:modal-class (util/hiccup->class
+                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-nowrap.dropdown-overflow-auto.page-drop-options")
+      :z-index     1})))
+
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
   [state {:keys [repo page-name preview?] :as option}]
@@ -314,89 +389,18 @@
                      page-name
                      path-page-name))]]]
                (when (not config/publishing?)
-                 (let [contents? (= (string/lower-case (str page-name)) "contents")
-                       links (fn [] (->>
-                                     [(when-not contents?
-                                        {:title   (t :page/add-to-favorites)
-                                         :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+                 [:div.flex.flex-row
+                  (when plugin-handler/lsp-enabled?
+                    (plugins/hook-ui-slot :page-head-actions-slotted nil)
+                    (plugins/hook-ui-items :pagebar))
 
-                                      {:title "Go to presentation mode"
-                                       :options {:on-click (fn []
-                                                             (state/sidebar-add-block!
-                                                              repo
-                                                              (:db/id page)
-                                                              :page-presentation
-                                                              {:page page}))}}
-                                      (when (and (not contents?)
-                                                 (not journal?))
-                                        {:title   (t :page/rename)
-                                         :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
+                  [:a.opacity-60.hover:opacity-100.page-op.mr-1
+                   {:title "Search in current page"
+                    :on-click #(route-handler/go-to-search! :page)}
+                   svg/search]
 
-                                      (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
-                                        [{:title   (t :page/open-in-finder)
-                                          :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-                                         {:title   (t :page/open-with-default-app)
-                                          :options {:on-click #(js/window.apis.openPath file-path)}}])
-
-                                      (when-not contents?
-                                        {:title   (t :page/delete)
-                                         :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
-
-                                      (when (state/get-current-page)
-                                        {:title   (t :export)
-                                         :options {:on-click #(state/set-modal! export/export-page)}})
-
-                                      (when (util/electron?)
-                                        {:title   (t (if public? :page/make-private :page/make-public))
-                                         :options {:on-click
-                                                   (fn []
-                                                     (page-handler/update-public-attribute!
-                                                      page-name
-                                                      (if public? false true))
-                                                     (state/close-modal!))}})
-
-                                      (when plugin-handler/lsp-enabled?
-                                        (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
-                                          {:title label
-                                           :options {:on-click #(commands/exec-plugin-simple-command!
-                                                                 pid (assoc cmd :page (state/get-current-page)) action)}}))
-
-                                      (when developer-mode?
-                                        {:title   "(Dev) Show page data"
-                                         :options {:on-click (fn []
-                                                               (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
-                                                                 (println page-data)
-                                                                 (notification/show!
-                                                                  [:div
-                                                                   [:pre.code page-data]
-                                                                   [:br]
-                                                                   (ui/button "Copy to clipboard"
-                                                                     :on-click #(.writeText js/navigator.clipboard page-data))]
-                                                                  :success
-                                                                  false)))}})]
-                                     (flatten)
-                                     (remove nil?)))]
-                   [:div.flex.flex-row
-
-                    (when plugin-handler/lsp-enabled?
-                      (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                      (plugins/hook-ui-items :pagebar))
-
-                    [:a.opacity-60.hover:opacity-100.page-op.mr-1
-                     {:title "Search in current page"
-                      :on-click #(route-handler/go-to-search! :page)}
-                     svg/search]
-
-                    (ui/dropdown-with-links
-                     (fn [{:keys [toggle-fn]}]
-                       [:a.cp__vertical-menu-button
-                        {:title    "More options"
-                         :on-click toggle-fn}
-                        (svg/vertical-dots nil)])
-                     links
-                     {:modal-class (util/hiccup->class
-                                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-nowrap.dropdown-overflow-auto.page-drop-options")
-                      :z-index     1})]))])
+                  (page-menu repo t page page-name page-original-name title
+                             journal? public? developer-mode?)])])
             [:div
              (when (and block? (not sidebar?))
                (let [config {:id "block-parent"
