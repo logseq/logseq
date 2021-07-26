@@ -1252,7 +1252,10 @@
         dark? (= "dark" (state/sub :ui/theme))
         ref? (:ref? config)
         collapsed? (if ref? ref-collapsed? collapsed?)
-        empty-content? (string/blank? (:block/content block))
+        empty-content? (string/blank?
+                        (property/remove-built-in-properties
+                         (:block/format block)
+                         (:block/content block)))
         edit? (state/sub [:editor/editing? edit-input-id])]
     [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
