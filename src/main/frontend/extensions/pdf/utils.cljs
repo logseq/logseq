@@ -3,6 +3,7 @@
             [cljs-bean.core :as bean]
             [frontend.util :as front-utils]
             ["/frontend/extensions/pdf/utils" :as js-utils]
+            [frontend.db :as front-db]
             [frontend.loader :refer [load]]))
 
 (defonce MAX-SCALE 5.0)
@@ -95,6 +96,9 @@
 (defn gen-id []
   (str (.toString (js/Date.now) 36)
        (.. (js/Math.random) (toString 36) (substr 2 4))))
+
+(defn gen-uuid []
+  (front-db/new-block-id))
 
 (defn js-load$
   [url]

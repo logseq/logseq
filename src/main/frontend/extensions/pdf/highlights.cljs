@@ -5,6 +5,7 @@
             [medley.core :as medley]
             [frontend.handler.notification :as notification]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.util :as front-utils]
             [frontend.state :as state]
             [frontend.config :as config]
@@ -100,7 +101,7 @@
                           ;; add highlight
                           (do
                             (add-hl! (merge highlight
-                                            {:id         (pdf-utils/gen-id)
+                                            {:id         (pdf-utils/gen-uuid)
                                              :properties properties}))
                             (pdf-utils/clear-all-selection))
 
@@ -489,7 +490,7 @@
         (rum/with-key (pdf-resizer viewer) "pdf-resizer")])]))
 
 (rum/defc pdf-loader
-  [{:keys [url hls-file]}]
+  [{:keys [url hls-file] :as pdf-current}]
   (let [*doc-ref (rum/use-ref nil)
         [state, set-state!] (rum/use-state {:error nil :pdf-document nil :status nil})
         [hls-state, set-hls-state!] (rum/use-state {:initial-hls nil :latest-hls nil})
@@ -502,11 +503,9 @@
     (rum/use-effect!
       (fn []
         (p/catch
-          (p/let [_ (fs/create-if-not-exists repo-cur repo-dir hls-file "[]")
-                  res (fs/read-file repo-dir hls-file)
-                  data (if res (bean/->clj (js/JSON.parse res)) [])]
-
-            (set-hls-state! {:initial-hls data}))
+          (p/let [data (pdf-assets/load-hls-data$ pdf-current)
+                  highlights (:highlights data)]
+            (set-hls-state! {:initial-hls highlights}))
 
           ;; error
           (fn [e]
@@ -522,10 +521,7 @@
       (fn []
         (when-let [hls (:latest-hls hls-state)]
           (p/catch
-            (p/let [hls (if hls
-                          (js/JSON.stringify (bean/->js hls) nil 2)
-                          "[]")
-                    _ (fs/write-file! repo-cur repo-dir hls-file hls {:skip-mtime? true})])
+            (pdf-assets/persist-hls-data$ pdf-current hls)
 
             ;; write hls file error
             (fn [e]

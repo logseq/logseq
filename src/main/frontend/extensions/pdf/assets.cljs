@@ -6,7 +6,9 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.config :as config]
+            [frontend.fs :as fs]
             [frontend.components.svg :as svg]
+            [cljs.reader :as reader]
             [promesa.core :as p]
             [clojure.string :as string]
             [cljs-bean.core :as bean]))
@@ -19,13 +21,32 @@
                    (string/ends-with? filename ".pdf")
                    (string/replace-first filename ".pdf" ""))]
     {:key      key
+     :identity (subs key (- (count key) 15))
      :filename filename
      :url      (utils/node-path.join
                  "file://"                                  ;; TODO: bfs
                  (config/get-repo-dir (state/get-current-repo))
                  "assets" filename)
 
-     :hls-file (str "assets/" key ".json")}))
+     :hls-file (str "assets/" key ".edn")}))
+
+(defn load-hls-data$
+  [{:keys [hls-file]}]
+  (when hls-file
+    (let [repo-cur (state/get-current-repo)
+          repo-dir (config/get-repo-dir repo-cur)]
+      (p/let [_ (fs/create-if-not-exists repo-cur repo-dir hls-file "{:highlights []}")
+              res (fs/read-file repo-dir hls-file)
+              data (if res (reader/read-string res) {})]
+        data))))
+
+(defn persist-hls-data$
+  [{:keys [hls-file]} highlights]
+  (when hls-file
+    (let [repo-cur (state/get-current-repo)
+          repo-dir (config/get-repo-dir repo-cur)
+          data (pr-str {:highlights highlights})]
+      (fs/write-file! repo-cur repo-dir hls-file data {:skip-mtime? true}))))
 
 (defn upload-asset!
   [page-block files refresh-file!]
@@ -71,7 +92,7 @@
         [:div.extensions__pdf-assets-uploader
          (for [file files]
            [:a.ui__button
-            {:key file
+            {:key      file
              :intent   "logseq"
              :on-click (fn []
                          (when-let [current (inflate-asset file)]
