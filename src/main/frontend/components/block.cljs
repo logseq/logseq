@@ -860,8 +860,9 @@
                         (and (= "File" (first url))
                              "file"))]
           (cond
-            (and (= "Complex" (first url))
-                 (= protocol "id")
+            (and (= (get-in config [:block :block/format]) :org)
+                 (= "Complex" (first url))
+                 (= (string/lower-case protocol) "id")
                  (string? (:link (second url)))
                  (util/uuid-string? (:link (second url)))) ; org mode id
             (let [id (uuid (:link (second url)))

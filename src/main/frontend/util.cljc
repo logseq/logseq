@@ -772,7 +772,7 @@
        (js/document.body.removeChild el))))
 
 (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
-(defonce exactly-uuid-pattern (re-pattern (str "^" uuid-pattern "$")))
+(defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
 (defn uuid-string?
   [s]
   (safe-re-find exactly-uuid-pattern s))
