@@ -342,7 +342,7 @@
      {:class (if has-child? "has-children")}
      [:div.inner
       [:a
-       {:href      "javascript:;"
+       {:href      "javascript:void(0);"
         :data-dest (js/JSON.stringify (bean/->js dest))
         :on-click  (fn []
                      (when-let [^js dest (and dest (bean/->js dest))]
@@ -359,7 +359,7 @@
                 (pdf-outline-item viewer (merge itm {:parent parent})) parent))) items)])]))
 
 (rum/defc pdf-outline
-  [^js viewer hide!]
+  [^js viewer visible? hide!]
   (when-let [^js pdf-doc (and viewer (.-pdfDocument viewer))]
     (let [*el-outline (rum/use-ref nil)
           [outline-data, set-outline-data!] (rum/use-state [])]
@@ -389,7 +389,8 @@
         [])
 
       [:div.extensions__pdf-outline-wrap
-       {:on-click (fn [^js/MouseEvent e]
+       {:class    (front-utils/classnames [{:visible visible?}])
+        :on-click (fn [^js/MouseEvent e]
                     (let [target (.-target e)]
                       (when-not (.contains (rum/deref *el-outline) target)
                         (hide!))))}
@@ -431,7 +432,7 @@
         "close"]]]
 
      ;; contents outline
-     (when outline-visible? (pdf-outline viewer #(set-outline-visible! false)))]))
+     (pdf-outline viewer outline-visible? #(set-outline-visible! false))]))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]

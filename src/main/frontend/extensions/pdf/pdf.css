@@ -109,6 +109,11 @@
       width: 100%;
       height: 92vh;
       background-color: rgba(0, 0, 0, 0);
+      display: none;
+
+      &.visible {
+        display: block;
+      }
     }
 
     > section {
