@@ -167,7 +167,7 @@
 
 (defn get-highlight
   [format]
-  "^^")
+  "==")
 
 (defn get-code
   [format]
