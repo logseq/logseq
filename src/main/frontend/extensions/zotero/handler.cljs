@@ -48,8 +48,18 @@
    (go
      (let [{:keys [page-name properties]} (extractor/extract item)
            key                            (-> item :key)]
-       (page-handler/create! page-name {:redirect? false :format :markdown :create-first-block? false})
+       (page-handler/create!
+        page-name
+        {:redirect? false
+         :format :markdown
+         :create-first-block? false
+         :properties properties})
 
+       #_
+       (doseq [[k v] properties]
+         (page-handler/page-add-property! page-name k v))
+
+       #_
        (editor-handler/api-insert-new-block!
         ""
         {:page       page-name
@@ -59,7 +69,7 @@
 
        (<! (add page-name :notes key))
 
-       (handle-command-zotero block-dom-id page-name)
+       (handle-command-zotero block-dom-id (:title properties))
 
        (notification/show! (str "Successfully created page " page-name) :success)))))
 

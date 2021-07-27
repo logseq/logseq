@@ -23,6 +23,9 @@
 
 (defn title [item] (-> item :data :title))
 
+(defn file-name [item]
+  (str "zotero_" (:key item)))
+
 (defn page-name [item]
   (let [page-title
         (case (item-type item)
@@ -46,8 +49,10 @@
         (into []
               (comp
                (filter (fn [m] (= "author" (:creator-type m))))
-               (map (fn [{:keys [first-name last-name]}]
-                      (util/format "[[%s %s]]" first-name last-name))))
+               (map (fn [{:keys [first-name last-name name]}]
+                      (if name
+                        (util/format "[[%s]]" name)
+                        (util/format "[[%s %s]]" first-name last-name)))))
               creators)]
     (str/join ", " authors)))
 
@@ -120,8 +125,7 @@
                                 :tags tags
                                 :date date
                                 :item-type type)
-                         (dissoc :creators)
-                         (rename-keys {:title :original-title}))]
+                         (dissoc :creators))]
     (->> data
          (remove (comp str/blank? second))
          (into {}))))
@@ -147,7 +151,7 @@
 
 (defmethod extract :default
   [item]
-  (let [page-name  (page-name item)
+  (let [page-name  (file-name item)
         properties (properties item)]
     {:page-name  page-name
      :properties properties}))

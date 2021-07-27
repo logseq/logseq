@@ -53,10 +53,11 @@
 (defn create!
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format]
+  ([title {:keys [redirect? create-first-block? format properties]
            :or {redirect? true
                 create-first-block? true
-                format false}}]
+                format false
+                properties false}}]
    (let [title (string/trim title)
          pages (util/split-namespace-pages title)
          page (string/lower-case title)
@@ -71,10 +72,12 @@
                  (when (:block/uuid page)
                    (let [page-entity [:block/uuid (:block/uuid page)]
                          create-title-property? (util/create-title-property? (:block/name page))]
-                     (if create-title-property?
-                       (let [default-properties (editor-handler/default-properties-block (:block/original-name page) format page-entity)]
-                         [page default-properties])
-                       [page]))))
+                     (if properties
+                       [page (editor-handler/page-properties-block page-entity format properties)]
+                       (if create-title-property?
+                         (let [default-properties (editor-handler/default-properties-block (:block/original-name page) format page-entity)]
+                           [page default-properties])
+                         [page])))))
                pages)
               (remove nil?))]
      (db/transact! txs)
