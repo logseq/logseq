@@ -185,9 +185,7 @@
                          (update :roam_tags (constantly roam-tags))
                          (update :filetags (constantly filetags)))
           properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
-          properties (medley/map-vals (fn [v] (if (and (string? v) (>= (count v) 2) (= (first v) (last v) "\""))
-                                               (subs v 1 (dec (count v)))
-                                               v)) properties)]
+          properties (medley/map-vals util/unquote-string-if-wrapped properties)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))

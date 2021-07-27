@@ -215,7 +215,7 @@
                                            "id"
                                            k)
                                        v (if (coll? v)
-                                           v
+                                           (remove util/wrapped-by-quotes? v)
                                            (property/parse-property k v))
                                        k (keyword k)
                                        v (if (and

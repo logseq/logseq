@@ -86,11 +86,6 @@
   [s]
   (string/split s #"(\"[^\"]*\")"))
 
-(defn- surrounded-by-quotes
-  [s]
-  (and (string? s)
-       (= (first s) (last s) \")))
-
 (def markdown-link #"\[([^\[]+)\](\(.*\))")
 (defn split-page-refs-without-brackets
   ([s]
@@ -108,15 +103,19 @@
      (let [result (->> (sep-by-quotes s)
                        (mapcat
                         (fn [s]
-                          (if (surrounded-by-quotes s)
-                            [s]
+                          (when-not (util/wrapped-by-quotes? (string/trim s))
                             (string/split s page-ref-re-2))))
-                       (mapcat (fn [s] (if (and (string/includes? (string/trimr s) "]],")
-                                               (not (surrounded-by-quotes s)))
+                       (mapcat (fn [s] (cond
+                                        (util/wrapped-by-quotes? s)
+                                        nil
+
+                                        (string/includes? (string/trimr s) "]],")
                                         (let [idx (string/index-of s "]],")]
                                           [(subs s 0 idx)
                                            "]]"
                                            (subs s (+ idx 3))])
+
+                                        :else
                                         [s])))
                        (remove #(= % ""))
                        (mapcat (fn [s] (if (string/ends-with? s "]]")
@@ -127,8 +126,8 @@
                        (remove string/blank?)
                        (mapcat (fn [s]
                                  (cond
-                                   (surrounded-by-quotes s)
-                                   [(subs s 1 (dec (count s)))]
+                                   (util/wrapped-by-quotes? s)
+                                   nil
 
                                    (page-ref? s)
                                    [(if un-brackets? (page-ref-un-brackets! s) s)]

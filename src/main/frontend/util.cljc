@@ -1356,3 +1356,17 @@
        (not
         (some #(string/ends-with? path %)
               [".md" ".markdown" ".org" ".edn" ".css"]))))))
+
+(defn wrapped-by-quotes?
+  [v]
+  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
+
+(defn unquote-string
+  [v]
+  (string/trim (subs v 1 (dec (count v)))))
+
+(defn unquote-string-if-wrapped
+  [v]
+  (if (wrapped-by-quotes? v)
+    (unquote-string v)
+    v))

@@ -371,8 +371,8 @@
       (util/safe-re-find #"^\d+$" v)
       (util/safe-parse-int v)
 
-      (and (= "\"" (first v) (last v))) ; wrapped in ""
-      (string/trim (subs v 1 (dec (count v))))
+      (util/wrapped-by-quotes? v) ; wrapped in ""
+      (util/unquote-string v)
 
       (contains? @non-parsing-properties (string/lower-case k))
       v
