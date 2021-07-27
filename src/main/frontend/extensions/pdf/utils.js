@@ -103,7 +103,7 @@ export const scrollToHighlight = (viewer, highlight) => {
     pageNumber: page,
     destArray: [
       null, { name: 'XYZ' },
-      ...viewport.convertToPdfPoint(0, scaledToViewport(bounding, viewport).top - 100),
+      ...viewport.convertToPdfPoint(0, scaledToViewport(bounding, viewport).top - 200),
       0 // scale
     ]
   })

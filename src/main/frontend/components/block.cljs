@@ -610,19 +610,20 @@
           :on-mouse-down
           (fn [e]
             (util/stop e)
-            (case block-type
-              ;; pdf annotation
-              :annotation (pdf-assets/open-block-ref! block)
-
-              ;; default open block page
-              (if (gobj/get e "shiftKey")
+            (if (gobj/get e "shiftKey")
                 (state/sidebar-add-block!
                   (state/get-current-repo)
                   (:db/id block)
                   :block-ref
                   {:block block})
-                (route-handler/redirect! {:to          :page
-                                          :path-params {:name id}}))))}
+
+                (case block-type
+                  ;; pdf annotation
+                  :annotation (pdf-assets/open-block-ref! block)
+
+                  ;; default open block page
+                  (route-handler/redirect! {:to          :page
+                                            :path-params {:name id}}))))}
          (let [title (let [title (:block/title block)]
                        [:span.block-ref
                         (block-content (assoc config :block-ref? true)
