@@ -43,7 +43,10 @@
                                     (string? title)
                                     title))
             file-name (when-let [file-name (last (string/split file #"/"))]
-                        (first (util/split-last "." file-name)))]
+                        (let [result (first (util/split-last "." file-name))]
+                          (if (config/mldoc-support? (string/lower-case (util/get-file-ext file)))
+                            (string/replace result "." "/")
+                            result)))]
         (or property-name
             (if (= (state/page-name-order) "heading")
               (or first-block-name file-name)
