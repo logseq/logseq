@@ -1513,14 +1513,18 @@
    "`" "`"
    "~" "~"
    "*" "*"
-   ;; "_" "_"
+   "_" "_"
+   "^" "^"
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
-   ;; "^" "^"
+
    })
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
           (keys autopair-map)))
+
+(defonce autopair-when-selected
+  #{"^" "_"})
 
 (def delete-map
   (assoc autopair-map
@@ -2146,8 +2150,7 @@
   [state]
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
-      (when (and block
-                 (not (:custom-query? config)))
+      (when block
         (let [content (state/get-edit-content)
               current-node (outliner-core/block block)
               has-right? (-> (tree/-get-right current-node)
@@ -2493,6 +2496,9 @@
           (util/stop e)
           (cursor/move-cursor-forward input))
 
+        (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
+        nil
+
         (contains? (set (keys autopair-map)) key)
         (do
           (util/stop e)
@@ -2676,7 +2682,8 @@
     (if (and
          (:copy/content copied-blocks)
          (not (string/blank? text))
-         (= (string/trim text) (string/trim (:copy/content copied-blocks))))
+         (= (string/replace (string/trim text) "\r" "")
+            (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
       (do
         ;; copy from logseq internally
         (paste-block-vec-tree-at-target copied-block-tree [])

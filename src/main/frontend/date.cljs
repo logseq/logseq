@@ -27,7 +27,7 @@
   []
   (conj
    #{"do MMM yyyy"
-	   "do MMMM yyyy"
+     "do MMMM yyyy"
      "MMM do, yyyy"
      "MMMM do, yyyy"
      "E, dd-MM-yyyy"
@@ -188,15 +188,10 @@
 (defn journal-title->
   [journal-title then-fn]
   (when-not (string/blank? journal-title)
-    (when-let [time (->> (map
-                          (fn [formatter]
-                            (try
-                              (tf/parse (tf/formatter formatter) (util/capitalize-all journal-title))
-                              (catch js/Error _e
-                                nil)))
-                          (journal-title-formatters))
-                         (filter some?)
-                         first)]
+    (when-let [time (try
+                      (tf/parse (tf/formatter (state/get-date-formatter)) (util/capitalize-all journal-title))
+                      (catch js/Error _e
+                        nil))]
       (then-fn time))))
 
 (defn journal-title->int

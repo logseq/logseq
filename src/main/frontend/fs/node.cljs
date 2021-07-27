@@ -41,16 +41,17 @@
             db-mtime (db/get-file-last-modified-at repo path)
             disk-content (-> (protocol/read-file this dir path nil)
                              (p/catch (fn [error] nil)))
+            disk-content (or disk-content "")
             ext (string/lower-case (util/get-file-ext path))
             file-page (db/get-file-page-id path)
             page-empty? (and file-page (db/page-empty? repo file-page))]
       (cond
-        (and (not page-empty?) (nil? disk-content))
-        (notification/show!
-         (str "The file has been renamed or deleted on your local disk! File path: " path
-              ", please save your changes and click the refresh button to reload it.")
-         :error
-         false)
+        ;; (and (not page-empty?) (nil? disk-content) )
+        ;; (notification/show!
+        ;;  (str "The file has been renamed or deleted on your local disk! File path: " path
+        ;;       ", please save your changes and click the refresh button to reload it.")
+        ;;  :error
+        ;;  false)
 
         (and
          (not= disk-mtime db-mtime)

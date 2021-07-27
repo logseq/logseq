@@ -17,6 +17,7 @@
             [frontend.context.i18n :as i18n]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.utils :as db-utils]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.db.query-dsl :as query-dsl]
@@ -76,11 +77,8 @@
   (atom nil))
 (def *move-to (atom nil))
 
-;; TODO: Improve blocks grouped by pages
-(defonce max-blocks-per-page 500)
-(defonce virtual-list-scroll-step 450)
-(defonce virtual-list-previous 50)
-
+;; TODO: dynamic
+(defonce max-blocks-per-page 200)
 (defonce *blocks-container-id (atom 0))
 
 ;; TODO:
@@ -863,8 +861,9 @@
                         (and (= "File" (first url))
                              "file"))]
           (cond
-            (and (= "Complex" (first url))
-                 (= protocol "id")
+            (and (= (get-in config [:block :block/format]) :org)
+                 (= "Complex" (first url))
+                 (= (string/lower-case protocol) "id")
                  (string? (:link (second url)))
                  (util/uuid-string? (:link (second url)))) ; org mode id
             (let [id (uuid (:link (second url)))
@@ -872,7 +871,7 @@
               (if (:block/pre-block? block)
                 (let [page (:block/page block)]
                   (page-reference html-export? (:block/name page) config label))
-                (block-reference config (:link (second url)) nil)))
+                (block-reference config (:link (second url)) label)))
 
             (= protocol "file")
             (if (show-link? config metadata href full_text)
@@ -996,7 +995,7 @@
         [:div.dsl-query
          (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
-                         {:title [:span.font-medium.p-1.query-title
+                         {:title [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
                                   (str "Query: " query)]
                           :query query}))]
 
@@ -1253,7 +1252,10 @@
         dark? (= "dark" (state/sub :ui/theme))
         ref? (:ref? config)
         collapsed? (if ref? ref-collapsed? collapsed?)
-        empty-content? (string/blank? (:block/content block))
+        empty-content? (string/blank?
+                        (property/remove-built-in-properties
+                         (:block/format block)
+                         (:block/content block)))
         edit? (state/sub [:editor/editing? edit-input-id])]
     [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
@@ -1882,10 +1884,12 @@
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  ref-collpased? (boolean
-                                 (and (:ref? config)
-                                      (seq (:block/children block))
-                                      (>= (:ref/level block)
-                                          (state/get-ref-open-blocks-level))))]
+                                 (and
+                                  (seq (:block/children block))
+                                  (or (:custom-query? config)
+                                      (and (:ref? config)
+                                           (>= (:ref/level block)
+                                               (state/get-ref-open-blocks-level))))))]
              (assoc state
                     ::control-show? (atom false)
                     ::ref-collapsed? (atom ref-collpased?))))
@@ -2158,10 +2162,13 @@
            query-result (and query-atom (rum/react query-atom))
            table? (or (get-in current-block [:block/properties :query-table])
                       (and (string? query) (string/ends-with? (string/trim query) "table")))
+           transformed-query-result (when query-result
+                                      (db/custom-query-result-transform query-result remove-blocks q))
            not-grouped-by-page? (or table?
                                     (and (string? query) (string/includes? query "(by-page false)")))
-           result (when query-result
-                    (db/custom-query-result-transform query-result remove-blocks q not-grouped-by-page?))
+           result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
+                    (db-utils/group-by-page transformed-query-result)
+                    transformed-query-result)
            _ (when-let [query-result (:query-result config)]
                (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
                      (reset! query-result result)))
@@ -2181,6 +2188,9 @@
           (ui/foldable
            [:div.custom-query-title
             title
+            [:span.opacity-60.text-sm.ml-2
+             (str (count transformed-query-result) " results")]]
+           [:div
             (when current-block
               [:div.flex.flex-row.align-items.mt-2 {:on-mouse-down (fn [e] (util/stop e))}
                (when-not page-list?
@@ -2200,47 +2210,46 @@
                                (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
                 [:span.table-query-properties
                  [:span.text-sm.mr-1 "Set properties"]
-                 svg/settings-sm]]])]
-           (cond
-             (and (seq result) view-f)
-             (let [result (try
-                            (sci/call-fn view-f result)
-                            (catch js/Error error
-                              (log/error :custom-view-failed {:error error
-                                                              :result result})
-                              [:div "Custom view failed: "
-                               (str error)]))]
-               (util/hiccup-keywordize result))
+                 svg/settings-sm]]])
+            (cond
+              (and (seq result) view-f)
+              (let [result (try
+                             (sci/call-fn view-f result)
+                             (catch js/Error error
+                               (log/error :custom-view-failed {:error error
+                                                               :result result})
+                               [:div "Custom view failed: "
+                                (str error)]))]
+                (util/hiccup-keywordize result))
 
-             page-list?
-             (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
+              page-list?
+              (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
 
-             table?
-             (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
+              table?
+              (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
-             (and (seq result) (or only-blocks? blocks-grouped-by-page?))
-             (->hiccup result (cond-> (assoc config
-                                             :custom-query? true
-                                             ;; :breadcrumb-show? true
-                                             :group-by-page? blocks-grouped-by-page?
-                                             ;; :ref? true
-                                             )
-                                children?
-                                (assoc :ref? true))
-                       {:style {:margin-top "0.25rem"
-                                :margin-left "0.25rem"}})
+              (and (seq result) (or only-blocks? blocks-grouped-by-page?))
+              (->hiccup result (cond-> (assoc config
+                                              :custom-query? true
+                                              :breadcrumb-show? true
+                                              :group-by-page? blocks-grouped-by-page?
+                                              :ref? true)
+                                 children?
+                                 (assoc :ref? true))
+                        {:style {:margin-top "0.25rem"
+                                 :margin-left "0.25rem"}})
 
-             (seq result)
-             (let [result (->>
-                           (for [record result]
-                             (if (map? record)
-                               (str (util/pp-str record) "\n")
-                               record))
-                           (remove nil?))]
-               [:pre result])
+              (seq result)
+              (let [result (->>
+                            (for [record result]
+                              (if (map? record)
+                                (str (util/pp-str record) "\n")
+                                record))
+                            (remove nil?))]
+                [:pre result])
 
-             :else
-             [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])
+              :else
+              [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])]
            collapsed?))]))))
 
 (defn admonition
@@ -2478,6 +2487,51 @@
                      blocks)]
        sections))))
 
+(defn- block-list
+  [config blocks]
+  (for [[idx item] (medley/indexed blocks)]
+    (let [item (->
+                (dissoc item :block/meta)
+                (assoc :block/top? (zero? idx)
+                       :block/bottom? (= (count blocks) (inc idx))))
+          config (assoc config :block/uuid (:block/uuid item))]
+      (rum/with-key
+        (block-container config item)
+        (:block/uuid item)))))
+
+(defonce ignore-scroll? (atom false))
+(rum/defcs lazy-blocks <
+  (rum/local 1 ::page)
+  [state config blocks]
+  (let [*page (get state ::page)
+        segment (->> blocks
+                    (drop (* (dec @*page) max-blocks-per-page))
+                    (take max-blocks-per-page))
+        bottom-reached (fn []
+                         (when (and (= (count segment) max-blocks-per-page)
+                                    (> (count blocks) (* @*page max-blocks-per-page))
+                                    (not @ignore-scroll?))
+                           (swap! *page inc)
+                           (util/scroll-to-top))
+                         (reset! ignore-scroll? false))
+        top-reached (fn []
+                      (when (> @*page 1)
+                        (swap! *page dec)
+                        (reset! ignore-scroll? true)
+                        (js/setTimeout #(util/scroll-to
+                                         (.-scrollHeight (js/document.getElementById "lazy-blocks"))) 100)))]
+    [:div#lazy-blocks
+     (when (> @*page 1)
+       [:div.ml-4.mb-4 [:a#prev.opacity-60.opacity-100.text-sm.font-medium {:on-click top-reached}
+                        "Prev"]])
+     (ui/infinite-list
+      "main-container"
+      (block-list config segment)
+      {:on-load bottom-reached})
+     (when (> (count blocks) (* @*page max-blocks-per-page))
+       [:div.ml-4.mt-4 [:a#more.opacity-60.opacity-100.text-sm.font-medium {:on-click bottom-reached}
+                        "More"]])]))
+
 (rum/defcs blocks-container <
   {:init (fn [state]
            (assoc state ::init-blocks-container-id (atom nil)))}
@@ -2504,17 +2558,7 @@
                                0
                                :else
                                -10)}}
-       (let [first-block (first blocks)
-             first-id (:block/uuid (first blocks))]
-         (for [[idx item] (medley/indexed blocks)]
-           (let [item (->
-                       (dissoc item :block/meta)
-                       (assoc :block/top? (zero? idx)
-                              :block/bottom? (= (count blocks) (inc idx))))
-                 config (assoc config :block/uuid (:block/uuid item))]
-             (rum/with-key
-               (block-container config item)
-               (:block/uuid item)))))])))
+       (lazy-blocks config blocks)])))
 
 ;; headers to hiccup
 (defn ->hiccup
