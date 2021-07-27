@@ -17,15 +17,22 @@
 (def debounce-chan-mult (a/mult (api/debounce term-chan 500)))
 
 (rum/defc zotero-search-item [{:keys [data] :as item} id]
-  (let [title (:title data)
-        type (:item-type data)
-        abstract (str (subs (:abstract-note data) 0 200) "...")]
+  (let [[is-creating-page set-is-creating-page!] (rum/use-state false)]
+    (let [title (:title data)
+          type (:item-type data)
+          abstract (str (subs (:abstract-note data) 0 200) "...")]
 
-    [:div.px-2.py-4.border-b.cursor-pointer.border-solid.hover:bg-gray-100.last:border-none
-     {:on-click (fn [] (go (<! (zotero-handler/create-zotero-page item {:block-dom-id id}))))}
-     [[:div [[:span.font-bold.mb-1.mr-1 title]
-             [:span.text-xs.p-1.bg-gray-100.rounded type]]]
-      [:div.text-sm abstract]]]))
+      [:div.px-2.py-4.border-b.cursor-pointer.border-solid.hover:bg-gray-100.last:border-none.relative
+       {:on-click (fn [] (go
+                           (set-is-creating-page! true)
+                           (<!
+                            (zotero-handler/create-zotero-page item {:block-dom-id id}))
+                           (set-is-creating-page! false)))}
+       [[:div [[:span.font-bold.mb-1.mr-1 title]
+               [:span.text-xs.p-1.bg-gray-100.rounded type]]]
+        [:div.text-sm abstract]]
+
+       (when is-creating-page [:div.zotero-search-item-loading-indicator [:span.animate-spin-reverse  svg/refresh]])])))
 
 (rum/defc zotero-search
   [id]
@@ -86,7 +93,7 @@
                                           (>! term-chan (util/evalue e)))
                                         (set-term! (util/evalue e)))}]
 
-       (when is-searching [:span.loader-reverse  svg/refresh])]]
+       (when is-searching [:span.animate-spin-reverse  svg/refresh])]]
 
      [:div.h-2.text-sm.text-red-400.mb-2 (if search-error (str "Search error: " search-error) "")]
 
