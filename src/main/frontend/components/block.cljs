@@ -602,20 +602,27 @@
          (util/uuid-string? id))
     (let [block-id (uuid id)
           block (db/pull-block block-id)
+          block-type (keyword (get-in block [:block/properties :type]))
           repo (state/get-current-repo)]
       (if block
         [:div.block-ref-wrap.inline
-         {:on-mouse-down
+         {:data-type (name (or block-type :default))
+          :on-mouse-down
           (fn [e]
             (util/stop e)
-            (if (gobj/get e "shiftKey")
-              (state/sidebar-add-block!
-               (state/get-current-repo)
-               (:db/id block)
-               :block-ref
-               {:block block})
-              (route-handler/redirect! {:to          :page
-                                        :path-params {:name id}})))}
+            (case block-type
+              ;; pdf annotation
+              :annotation (pdf-assets/open-block-ref! block)
+
+              ;; default open block page
+              (if (gobj/get e "shiftKey")
+                (state/sidebar-add-block!
+                  (state/get-current-repo)
+                  (:db/id block)
+                  :block-ref
+                  {:block block})
+                (route-handler/redirect! {:to          :page
+                                          :path-params {:name id}}))))}
          (let [title (let [title (:block/title block)]
                        [:span.block-ref
                         (block-content (assoc config :block-ref? true)
@@ -626,7 +633,7 @@
                         :span.block-ref
                         (map-inline config label))
                        title)]
-           (if (and (not (util/mobile?)) (not (:preview? config)))
+           (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
              (ui/tippy {:html        (fn []
                                        [:div.tippy-wrapper.overflow-y-auto.p-4
                                         {:style {:width      735

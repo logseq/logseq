@@ -134,6 +134,7 @@
 
       ;; pdf
       :pdf/current                  nil
+      :pdf/ref-highlight            nil
 
       ;; all notification contents as k-v pairs
       :notification/contents {}

@@ -319,6 +319,23 @@
   }
 }
 
+.block-ref {
+  &-wrap {
+    &[data-type=annotation] {
+      .block-ref {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+
+        &:before {
+          content: "📌 ";
+        }
+      }
+    }
+  }
+}
+
 body[data-page] {
   #main-content-container {
     margin: 0 !important;

@@ -21,6 +21,14 @@
   []
   (state/set-state! :pdf/current nil))
 
+(rum/defcs pdf-highlight-finder < rum/reactive
+  [state ^js viewer]
+  (when-let [ref-hl (state/sub :pdf/ref-highlight)]
+    ;; delay handle: aim to fix page blink
+    (js/setTimeout #(pdf-utils/scroll-to-highlight viewer ref-hl) 100)
+    (js/setTimeout #(state/set-state! :pdf/ref-highlight nil) 1000)
+    nil))
+
 (rum/defc pdf-resizer
   [^js viewer]
   (let [el-ref (rum/use-ref nil)
@@ -323,7 +331,8 @@
      ;;       (str "#" (:id hl) "#  ")]
      ;;      (:text (:content hl))])
      ;;   ])
-     ]))
+     ;; refs
+     (pdf-highlight-finder viewer)]))
 
 (rum/defc pdf-outline-item
   [^js viewer {:keys [title items href parent dest] :as node}]

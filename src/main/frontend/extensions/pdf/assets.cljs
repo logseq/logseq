@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.fs :as fs]
+            [medley.core :as medley]
             [frontend.components.svg :as svg]
             [cljs.reader :as reader]
             [promesa.core :as p]
@@ -48,6 +49,12 @@
           repo-dir (config/get-repo-dir repo-cur)
           data (pr-str {:highlights highlights})]
       (fs/write-file! repo-cur repo-dir hls-file data {:skip-mtime? true}))))
+
+(defn resolve-hls-data-by-key$
+  [target-key]
+  ;; TODO: fuzzy match
+  (when-let [hls-file (and target-key (str config/local-assets-dir "/" target-key ".edn"))]
+    (load-hls-data$ {:hls-file hls-file})))
 
 (defn resolve-ref-page
   [page-name]
@@ -105,6 +112,21 @@
             (fn []
               (reset! *asset-uploading? false))))
       )))
+
+(defn open-block-ref!
+  [block]
+  (let [id (:block/uuid block)
+        page (db-utils/pull (:db/id (:block/page block)))
+        page-name (:block/original-name page)]
+    (when-let [target-key (and page-name (subs page-name 5))]
+      (p/let [hls (resolve-hls-data-by-key$ target-key)
+              hls (and hls (:highlights hls))]
+        (if-let [matched (and hls (medley/find-first #(= id (:id %)) hls))]
+          (do
+            (state/set-state! :pdf/ref-highlight matched)
+            ;; open pdf viewer
+            (state/set-state! :pdf/current (inflate-asset (str target-key ".pdf"))))
+          (js/console.warn "[Unmatched highlight ref]" block))))))
 
 (rum/defc uploader
   [page-name]
