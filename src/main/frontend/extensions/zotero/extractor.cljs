@@ -23,8 +23,7 @@
 
 (defn title [item] (-> item :data :title))
 
-(defn file-name [item]
-  (str "zotero_" (:key item)))
+(defn item-key [item] (:key item))
 
 (defn page-name [item]
   (let [page-title
@@ -41,7 +40,7 @@
           (-> item :data :name-of-act)
           ;; default use title
           (title item))]
-    (str (setting/setting :page-insert-prefix) page-title)))
+    (str (setting/setting :page-insert-prefix) page-title "_" (item-key item))))
 
 (defn authors [item]
   (let [creators (-> item :data :creators)
@@ -125,7 +124,8 @@
                                 :tags tags
                                 :date date
                                 :item-type type)
-                         (dissoc :creators))]
+                         (dissoc :creators)
+                         (rename-keys {:title :original-title}))]
     (->> data
          (remove (comp str/blank? second))
          (into {}))))
@@ -151,7 +151,7 @@
 
 (defmethod extract :default
   [item]
-  (let [page-name  (file-name item)
+  (let [page-name  (page-name item)
         properties (properties item)]
     {:page-name  page-name
      :properties properties}))

@@ -56,10 +56,6 @@
          :properties properties})
 
        #_
-       (doseq [[k v] properties]
-         (page-handler/page-add-property! page-name k v))
-
-       #_
        (editor-handler/api-insert-new-block!
         ""
         {:page       page-name
@@ -69,7 +65,7 @@
 
        (<! (add page-name :notes key))
 
-       (handle-command-zotero block-dom-id (:title properties))
+       (handle-command-zotero block-dom-id page-name)
 
        (notification/show! (str "Successfully created page " page-name) :success)))))
 
