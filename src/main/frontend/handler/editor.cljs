@@ -690,6 +690,19 @@
       (when (db/page-empty? (state/get-current-repo) (:db/id page))
         (api-insert-new-block! "" {:page page-name})))))
 
+(defn properties-block
+  [properties format page]
+  (let [content (property/insert-properties format "" properties)]
+    {:block/pre-block? true
+     :block/uuid (db/new-block-id)
+     :block/properties properties
+     :block/left page
+     :block/format format
+     :block/content content
+     :block/parent page
+     :block/unordered true
+     :block/page page}))
+
 (defn default-properties-block
   ([title format page]
    (default-properties-block title format page {}))

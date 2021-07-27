@@ -67,6 +67,9 @@
         create-title-property?
         [page (editor-handler/default-properties-block (build-title page) format page-entity)]
 
+        properties
+        [page (editor-handler/properties-block properties format page-entity)]
+
         :else
         [page]))))
 
