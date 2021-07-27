@@ -111,10 +111,12 @@
    opts))
 
 (defn button
-  [text & {:keys [background href class intent on-click]
+  [text & {:keys [background href class intent on-click small?]
+           :or {small? false}
            :as   option}]
   (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700")
-        klass (if background (string/replace klass "indigo" background) klass)]
+        klass (if background (string/replace klass "indigo" background) klass)
+        klass (if small? (str klass ".px-2.py-1") klass)]
     (if href
       [:a.ui__button.is-link
        (merge
@@ -345,7 +347,7 @@
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state list-element-id body {:keys [on-load has-more]}]
+  [state list-element-id body {:keys [on-load has-more on-top-reached]}]
   (rum/with-context [[t] i18n/*tongue-context*]
     (rum/fragment
      body
@@ -583,7 +585,8 @@
         (if (fn? header)
           (header @collapsed?)
           header)]]]
-     [:div {:class (if @collapsed? "hidden" "initial")}
+     [:div {:class (if @collapsed? "hidden" "initial")
+            :on-mouse-down (fn [e] (.stopPropagation e))}
       (if (fn? content)
         (if (not @collapsed?) (content) nil)
         content)]]))
@@ -661,7 +664,8 @@
                            (when-let [html (:html opts)]
                              (if (fn? html)
                                (html)
-                               html))
+                               [:div.pr-3.py-1
+                                html]))
                            [:div {:key "tippy"} ""])))
            child)))
 

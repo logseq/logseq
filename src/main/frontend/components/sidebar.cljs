@@ -284,12 +284,12 @@
   (mixins/modal :modal/show?)
   rum/reactive
   (mixins/event-mixin
-    (fn [state]
-      (mixins/listen state js/window "click"
-                     (fn [e]
-                       ;; hide context menu
-                       (state/hide-custom-context-menu!)
-                       (editor-handler/clear-selection! e)))))
+   (fn [state]
+     (mixins/listen state js/window "click"
+                    (fn [e]
+                      ;; hide context menu
+                      (state/hide-custom-context-menu!)
+                      (editor-handler/clear-selection!)))))
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
@@ -311,17 +311,17 @@
         home? (= :home route-name)
         default-home (get-default-home-if-valid)]
     (rum/with-context [[t] i18n/*tongue-context*]
-                      (theme/container
-                        {:theme         theme
-                         :route         route-match
-                         :current-repo  current-repo
-                         :nfs-granted?  granted?
-                         :db-restoring? db-restoring?
-                         :sidebar-open? sidebar-open?
-                         :system-theme? system-theme?
-                         :on-click      #(do
-                                           (editor-handler/unhighlight-blocks!)
-                                           (util/fix-open-external-with-shift! %))}
+      (theme/container
+       {:theme         theme
+        :route         route-match
+        :current-repo  current-repo
+        :nfs-granted?  granted?
+        :db-restoring? db-restoring?
+        :sidebar-open? sidebar-open?
+        :system-theme? system-theme?
+        :on-click      (fn [e]
+                         (editor-handler/unhighlight-blocks!)
+                         (util/fix-open-external-with-shift! e))}
 
                         [:div.theme-inner
                          (sidebar-mobile-sidebar

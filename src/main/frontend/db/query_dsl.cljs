@@ -6,6 +6,7 @@
             [clojure.string :as string]
             [frontend.text :as text]
             [frontend.db.query-react :as react]
+            [frontend.db.model :as model]
             [frontend.date :as date]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
@@ -50,15 +51,15 @@
   [where blocks?]
   (when where
     (let [q (if blocks?                   ; FIXME: it doesn't need to be either blocks or pages
-             '[:find (pull ?b [*])
-               :where]
-               '[:find (pull ?p [*])
-                 :where])
-         result (if (coll? (first where))
-                  (apply conj q where)
-                  (conj q where))]
-     (prn "Datascript query: " result)
-     result)))
+              `[:find (~'pull ~'?b ~model/block-attrs)
+                :where]
+              '[:find (pull ?p [*])
+                :where])
+          result (if (coll? (first where))
+                   (apply conj q where)
+                   (conj q where))]
+      (prn "Datascript query: " result)
+      result)))
 
 ;; (between -7d +7d)
 (defn- ->journal-day-int [input]

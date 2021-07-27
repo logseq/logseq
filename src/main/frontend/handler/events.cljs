@@ -13,6 +13,7 @@
             [frontend.fs.nfs :as nfs]
             [frontend.db.conn :as conn]
             [frontend.handler.migrate :as migrate]
+            [frontend.extensions.srs :as srs]
             [frontend.db-schema :as db-schema]
             [frontend.db :as db]
             [datascript.core :as d]
@@ -140,6 +141,9 @@
                            (set all-properties))
         shown-properties (set/intersection (set all-properties) shown-properties)]
     (state/set-modal! (query-properties-settings block shown-properties all-properties))))
+
+(defmethod handle :modal/show-cards [_]
+  (state/set-modal! srs/global-cards))
 
 (defmethod handle :after-db-restore [[_ repos]]
   (mapv (fn [{url :url} repo]

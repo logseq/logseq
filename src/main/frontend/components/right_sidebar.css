@@ -10,3 +10,7 @@ html[data-theme=light] {
     }
   }
 }
+
+.sidebar-item-list {
+     padding-bottom: 150px;
+}

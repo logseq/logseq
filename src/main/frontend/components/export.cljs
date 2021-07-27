@@ -87,6 +87,7 @@
         (case type
           :text (export/export-blocks-as-markdown current-repo root-block-id text-indent-style)
           :opml (export/export-blocks-as-opml current-repo root-block-id)
+          :html (export/export-blocks-as-html current-repo root-block-id)
           (export/export-blocks-as-markdown current-repo root-block-id text-indent-style))]
     [:div.export.w-96.resize
      [:div
@@ -95,8 +96,11 @@
                  :class "mr-2 w-20"
                  :on-click #(reset! *export-block-type :text))
       (ui/button "OPML"
+                 :class "mr-2 w-20"
+                 :on-click #(reset! *export-block-type :opml))
+      (ui/button "HTML"
                  :class "w-20"
-                 :on-click #(reset! *export-block-type :opml))]
+                 :on-click #(reset! *export-block-type :html))]
      [:textarea.overflow-y-auto.h-96 {:value content}]
      (let [options (->> text-indent-style-options
                         (mapv (fn [opt]
@@ -113,8 +117,8 @@
                          (#(reset! *export-block-text-indent-style %) value)))}
          (for [{:keys [label value selected]} options]
            [:option (cond->
-                        {:key   label
-                         :value (or value label)}
+                     {:key   label
+                      :value (or value label)}
                       selected
                       (assoc :selected selected))
             label])]])

@@ -111,6 +111,13 @@
   }
 }
 
+@media (min-width: 1024px) {
+    .panel-content .ls-card {
+        min-width: 32rem;
+        min-height: 24rem;
+    }
+}
+
 .ui__button {
   @apply inline-flex items-center px-3 py-2 border border-transparent
   text-sm leading-4 font-medium rounded-md text-white

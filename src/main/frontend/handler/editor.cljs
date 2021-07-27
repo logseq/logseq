@@ -45,7 +45,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            ["/frontend/utils" :as utils]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -183,7 +184,7 @@
                     "edit-block")))
 
 (defn clear-selection!
-  [_e]
+  []
   (util/select-unhighlight! (dom/by-class "selected"))
   (state/clear-selection!))
 
@@ -228,7 +229,7 @@
                           (subs content 0 pos))
              content (property/remove-built-in-properties (:block/format block)
                                                           content)]
-         (clear-selection! nil)
+         (clear-selection!)
          (state/set-editing! edit-input-id content block text-range move-cursor?))))))
 
 (defn edit-last-block-for-new-page!
@@ -324,7 +325,7 @@
         block (update block :block/refs remove-non-existed-refs!)
         block (attach-page-properties-if-exists! block)
         new-properties (merge
-                        (select-keys properties property/built-in-properties)
+                        (select-keys properties (property/built-in-properties))
                         (:block/properties block))]
     (-> block
         (dissoc :block/top?
@@ -1495,14 +1496,18 @@
    "`" "`"
    "~" "~"
    "*" "*"
-   ;; "_" "_"
+   "_" "_"
+   "^" "^"
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
-   ;; "^" "^"
+
    })
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
           (keys autopair-map)))
+
+(defonce autopair-when-selected
+  #{"^" "_"})
 
 (def delete-map
   (assoc autopair-map
@@ -2047,7 +2052,7 @@
             (recur (zip/next loc))
             (let [content (:content node)
                   props (into [] (:properties node))
-                  content* (str "- "
+                  content* (str (if (= :markdown format) "- " "* ")
                                 (property/insert-properties format content props))
                   ast (mldoc/->edn content* (mldoc/default-config format))
                   blocks (block/extract-blocks ast content* true format)
@@ -2128,8 +2133,7 @@
   [state]
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
-      (when (and block
-                 (not (:custom-query? config)))
+      (when block
         (let [content (state/get-edit-content)
               current-node (outliner-core/block block)
               has-right? (-> (tree/-get-right current-node)
@@ -2475,6 +2479,9 @@
           (util/stop e)
           (cursor/move-cursor-forward input))
 
+        (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
+        nil
+
         (contains? (set (keys autopair-map)) key)
         (do
           (util/stop e)
@@ -2658,7 +2665,8 @@
     (if (and
          (:copy/content copied-blocks)
          (not (string/blank? text))
-         (= (string/trim text) (string/trim (:copy/content copied-blocks))))
+         (= (string/replace (string/trim text) "\r" "")
+            (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
       (do
         ;; copy from logseq internally
         (paste-block-vec-tree-at-target copied-block-tree [])
@@ -2735,8 +2743,7 @@
 (defn- cut-blocks-and-clear-selections!
   [copy?]
   (cut-selection-blocks copy?)
-  (clear-selection! nil))
-
+  (clear-selection!))
 (defn shortcut-copy-selection
   [e]
   (copy-selection-blocks))
@@ -2956,7 +2963,7 @@
                       medley/uuid
                       expand-block!)))
            doall)
-      (clear-selection! nil))
+      (clear-selection!))
 
     :else
     ;; expand one level
@@ -2990,7 +2997,7 @@
                       medley/uuid
                       collapse-block!)))
            doall)
-      (clear-selection! nil))
+      (clear-selection!))
 
     :else
     ;; collapse by one level from outside
@@ -3073,8 +3080,9 @@
 
 (defn paste-text-in-one-block-at-point
   []
-  (.then
-   (js/navigator.clipboard.readText)
+  (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))))
+       (state/append-current-edit-content! clipboard-data)))
+   (fn [error]
+     (js/console.error error))))

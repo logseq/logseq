@@ -139,61 +139,74 @@
           handle-path (string/replace handle-path "//" "/")
           basename-handle-path (str handle-path "/" basename)]
       (p/let [file-handle (idb/get-item basename-handle-path)]
-        (when file-handle
-          (add-nfs-file-handle! basename-handle-path file-handle))
-        (if file-handle
-          (p/let [local-file (.getFile file-handle)
-                  local-content (.text local-file)
-                  local-last-modified-at (gobj/get local-file "lastModified")
-                  current-time (util/time-ms)
-                  new? (> current-time local-last-modified-at)
-                  new-created? (nil? last-modified-at)
-                  not-changed? (= last-modified-at local-last-modified-at)
-                  format (-> (util/get-file-ext path)
-                             (config/get-file-format))
-                  pending-writes (state/get-write-chan-length)
-                  draw? (and path (string/ends-with? path ".excalidraw"))
-                  config? (and path (string/ends-with? path "/config.edn"))]
-            (p/let [_ (verify-permission repo file-handle true)
-                    _ (utils/writeFile file-handle content)
-                    file (.getFile file-handle)]
-              (if (and local-content new?
-                       (or
-                        draw?
-                        config?
-                        ;; Writing not finished
-                        (> pending-writes 0)
-                        ;; not changed by other editors
-                        not-changed?
-                        new-created?))
-                (p/let [_ (verify-permission repo file-handle true)
-                        _ (utils/writeFile file-handle content)
-                        file (.getFile file-handle)]
-                  (when file
-                    (nfs-saved-handler repo path file)))
-                (js/alert (str "The file has been modified on your local disk! File path: " path
-                               ", please save your changes and click the refresh button to reload it.")))))
-           ;; create file handle
-          (->
-           (p/let [handle (idb/get-item handle-path)]
-             (if handle
-               (p/let [_ (verify-permission repo handle true)
-                       file-handle (.getFileHandle ^js handle basename #js {:create true})
-                       ;; File exists if the file-handle has some content in it.
-                       file (.getFile file-handle)
-                       text (.text file)]
-                 (if (string/blank? text)
-                   (p/let [_ (idb/set-item! basename-handle-path file-handle)
+        ;; check file-handle available, remove it when got 'NotFoundError'
+        (p/let [test-get-file (when file-handle
+                                (p/catch (p/let [_ (.getFile file-handle)] true)
+                                         (fn [e]
+                                           (js/console.dir e)
+                                           (when (= "NotFoundError" (.-name e))
+                                             (idb/remove-item! basename-handle-path)
+                                             (remove-nfs-file-handle! basename-handle-path))
+                                           false)))
+                file-handle (if test-get-file file-handle nil)]
+
+          (when file-handle
+            (add-nfs-file-handle! basename-handle-path file-handle))
+          (if file-handle
+            (-> (p/let [local-file (.getFile file-handle)
+                        local-content (.text local-file)
+                        local-last-modified-at (gobj/get local-file "lastModified")
+                        current-time (util/time-ms)
+                        new? (> current-time local-last-modified-at)
+                        new-created? (nil? last-modified-at)
+                        not-changed? (= last-modified-at local-last-modified-at)
+                        format (-> (util/get-file-ext path)
+                                   (config/get-file-format))
+                        pending-writes (state/get-write-chan-length)
+                        draw? (and path (string/ends-with? path ".excalidraw"))
+                        config? (and path (string/ends-with? path "/config.edn"))]
+                  (p/let [_ (verify-permission repo file-handle true)
                           _ (utils/writeFile file-handle content)
                           file (.getFile file-handle)]
-                    (when file
-                      (nfs-saved-handler repo path file)))
-                   (notification/show! (str "The file " path " already exists, please save your changes and click the refresh button to reload it.")
-                    :warning)))
-               (println "Error: directory handle not exists: " handle-path)))
-           (p/catch (fn [error]
-                      (println "Write local file failed: " {:path path})
-                      (js/console.error error))))))))
+                    (if (and local-content new?
+                             (or
+                              draw?
+                              config?
+                             ;; Writing not finished
+                              (> pending-writes 0)
+                             ;; not changed by other editors
+                              not-changed?
+                              new-created?))
+                      (p/let [_ (verify-permission repo file-handle true)
+                              _ (utils/writeFile file-handle content)
+                              file (.getFile file-handle)]
+                        (when file
+                          (nfs-saved-handler repo path file)))
+                      (js/alert (str "The file has been modified on your local disk! File path: " path
+                                     ", please save your changes and click the refresh button to reload it.")))))
+                (p/catch (fn [e]
+                           (js/console.error e))))
+            ;; create file handle
+            (->
+             (p/let [handle (idb/get-item handle-path)]
+               (if handle
+                 (p/let [_ (verify-permission repo handle true)
+                         file-handle (.getFileHandle ^js handle basename #js {:create true})
+                         ;; File exists if the file-handle has some content in it.
+                         file (.getFile file-handle)
+                         text (.text file)]
+                   (if (string/blank? text)
+                     (p/let [_ (idb/set-item! basename-handle-path file-handle)
+                             _ (utils/writeFile file-handle content)
+                             file (.getFile file-handle)]
+                       (when file
+                         (nfs-saved-handler repo path file)))
+                     (notification/show! (str "The file " path " already exists, please save your changes and click the refresh button to reload it.")
+                                         :warning)))
+                 (println "Error: directory handle not exists: " handle-path)))
+             (p/catch (fn [error]
+                        (println "Write local file failed: " {:path path})
+                        (js/console.error error)))))))))
 
   (rename! [this repo old-path new-path]
     (p/let [[dir basename] (util/get-dir-and-basename old-path)
