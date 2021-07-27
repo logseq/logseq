@@ -93,9 +93,15 @@
                        (remove nil?))
          last-txs (build-page-tx format properties (last pages))
          txs      (concat txs last-txs)]
+
      (db/transact! txs)
+
      (when create-first-block?
        (editor-handler/insert-first-page-block-if-not-exists! page))
+
+     (when-let [page (db/entity [:block/name page])]
+       (outliner-file/sync-to-file page))
+
      (when redirect?
        (route-handler/redirect! {:to          :page
                                  :path-params {:name page}})))))
