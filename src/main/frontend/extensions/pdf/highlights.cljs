@@ -592,7 +592,7 @@
                           {:set-dirty-hls! set-dirty-hls!}) "pdf-viewer")]))]))
 
 (rum/defc pdf-container
-  [pdf-current]
+  [{:keys [identity] :as pdf-current}]
   (let [[prepared set-prepared!] (rum/use-state false)
         [ready set-ready!] (rum/use-state false)]
 
@@ -609,10 +609,10 @@
       (fn []
         (js/setTimeout #(set-ready! true) 100)
         #(set-ready! false))
-      [pdf-current])
+      [identity])
 
     [:div#pdf-layout-container.extensions__pdf-container
-     (if (and prepared pdf-current ready)
+     (if (and prepared identity ready)
        (pdf-loader pdf-current))]))
 
 (rum/defc playground-effects
