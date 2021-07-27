@@ -695,10 +695,11 @@
    (default-properties-block title format page {}))
   ([title format page properties]
    (let [p (common-handler/get-page-default-properties title)
-         content (property/build-properties-str format properties)]
+         ps (merge p properties)
+         content (property/insert-properties format "" ps)]
      {:block/pre-block? true
       :block/uuid (db/new-block-id)
-      :block/properties (merge p properties)
+      :block/properties ps
       :block/left page
       :block/format format
       :block/content content

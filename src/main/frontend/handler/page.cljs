@@ -50,16 +50,22 @@
   ([page-name] (when-let [page (db/entity [:block/name page-name])]
                  (:file/path (:block/file page)))))
 
+(defn- build-title [page]
+  (let [original-name (:block/original-name page)]
+    (if (string/includes? original-name ",")
+      (util/format "\"%s\"" original-name)
+      original-name)))
+
 (defn- build-page-tx [format properties page]
   (when (:block/uuid page)
     (let [page-entity [:block/uuid (:block/uuid page)]
           create-title-property? (util/create-title-property? (:block/name page))]
       (cond
         (and properties create-title-property?)
-        [page (editor-handler/default-properties-block (:block/original-name page) format page-entity properties)]
+        [page (editor-handler/default-properties-block (build-title page) format page-entity properties)]
 
         create-title-property?
-        [page (editor-handler/default-properties-block (:block/original-name page) format page-entity)]
+        [page (editor-handler/default-properties-block (build-title page) format page-entity)]
 
         :else
         [page]))))
