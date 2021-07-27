@@ -690,32 +690,21 @@
       (when (db/page-empty? (state/get-current-repo) (:db/id page))
         (api-insert-new-block! "" {:page page-name})))))
 
-(defn page-properties-block
-  [page format properties]
-  (let [content (property/insert-properties format "" properties)]
-    {:block/pre-block? true
-     :block/uuid (db/new-block-id)
-     :block/properties properties
-     :block/left page
-     :block/format format
-     :block/content content
-     :block/parent page
-     :block/unordered true
-     :block/page page}))
-
 (defn default-properties-block
-  [title format page]
-  (let [properties (common-handler/get-page-default-properties title)
-        content (property/build-properties-str format properties)]
-    {:block/pre-block? true
-     :block/uuid (db/new-block-id)
-     :block/properties properties
-     :block/left page
-     :block/format format
-     :block/content content
-     :block/parent page
-     :block/unordered true
-     :block/page page}))
+  ([title format page]
+   (default-properties-block title format page {}))
+  ([title format page properties]
+   (let [p (common-handler/get-page-default-properties title)
+         content (property/build-properties-str format properties)]
+     {:block/pre-block? true
+      :block/uuid (db/new-block-id)
+      :block/properties (merge p properties)
+      :block/left page
+      :block/format format
+      :block/content content
+      :block/parent page
+      :block/unordered true
+      :block/page page})))
 
 (defn add-default-title-property-if-needed!
   [page-name]
