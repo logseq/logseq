@@ -119,7 +119,7 @@
   (try
     (journal-name (tf/parse (tf/formatter "yyyy-MM-dd") s))
     (catch js/Error e
-      (log/info :parse-journal-date {:message  "Failed to parse date to journal name"
+      (log/info :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
                                      :date-str s})
       nil)))
 
