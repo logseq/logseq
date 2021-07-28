@@ -1440,6 +1440,7 @@
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
+        block-type (or (:type properties) :default)
         html-export? (:html-export? config)
         checkbox (when (and (not pre-block?)
                             (not html-export?))
@@ -1482,7 +1483,13 @@
         marker-cp
         priority]
        (if title
-         (map-inline config title)
+         (conj
+           (map-inline config title)
+           (if (not= block-type :default)
+             [:a.prefix-link
+              {:on-click #(pdf-assets/open-block-ref! t)}
+              (str "P" (or (:page properties) "?"))]))
+
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
 
@@ -1650,6 +1657,7 @@
   (let [collapsed? (get properties :collapsed)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
+        block-type (or (:type properties) :default)
         dragging? (rum/react *dragging?)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
@@ -1658,6 +1666,7 @@
                          )
         attrs (cond->
                 {:blockid       (str uuid)
+                 :data-type (name block-type)
                  :style {:width "100%"}}
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
@@ -1671,7 +1680,6 @@
       ;; .flex.relative {:style {:width "100%"}}
       [:span
        ;; .flex-1.flex-col.relative.block-content
-
        (cond
          (seq title)
          (build-block-title config block)

@@ -333,9 +333,22 @@
         -webkit-box-orient: vertical;
         overflow: hidden;
 
-        &:before {
-          content: "📌 ";
-        }
+        &:before {}
+      }
+    }
+  }
+}
+
+.block-content {
+  &[data-type=annotation] {
+    a.prefix-link {
+      display: inline-flex;
+      align-items: center;
+      padding-right: 4px;
+      cursor: alias;
+
+      &:before {
+        content: "📔📌 ";
       }
     }
   }

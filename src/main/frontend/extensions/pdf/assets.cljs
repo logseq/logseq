@@ -69,7 +69,7 @@
       page)))
 
 (defn create-ref-block!
-  [{:keys [id content]}]
+  [{:keys [id content page]}]
   (when-let [pdf-current (:pdf/current @state/state)]
     (when-let [ref-page (resolve-ref-page (:key pdf-current))]
       (if-let [ref-block (db-model/get-block-by-uuid id)]
@@ -82,6 +82,7 @@
                   :custom-uuid id
                   :properties  {:type "annotation"
                                 :id   (str id)              ;; force custom uuid
+                                :page page
                                 }}))))))
 
 (defn del-ref-block!
