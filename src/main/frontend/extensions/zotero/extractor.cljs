@@ -125,7 +125,8 @@
                                 :date date
                                 :item-type type)
                          (dissoc :creators)
-                         (rename-keys {:title :original-title}))]
+                         (rename-keys {:title :original-title})
+                         (assoc :title (page-name item)))]
     (->> data
          (remove (comp str/blank? second))
          (into {}))))
