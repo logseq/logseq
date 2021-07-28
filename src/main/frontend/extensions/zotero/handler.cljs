@@ -72,7 +72,7 @@
          (handle-command-zotero block-dom-id page-name))
 
        (when notification?
-         (notification/show! (str "Successfully created page " page-name) :success))))))
+         (notification/show! (str "Successfully added zotero item to page " page-name) :success))))))
 
 (defn add-all [progress]
   (go
