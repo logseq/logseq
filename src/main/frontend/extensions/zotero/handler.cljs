@@ -48,18 +48,18 @@
    (go
      (let [{:keys [page-name properties]} (extractor/extract item)
            key                            (-> item :key)]
-       (page-handler/create!
-        page-name
-        {:redirect? false
-         :format :markdown
-         :create-first-block? false
-         :properties properties})
 
-       #_
-       (editor-handler/api-insert-new-block!
-        ""
-        {:page       page-name
-         :properties properties})
+       (if (page-handler/page-exists? (str/lower-case page-name))
+         (editor-handler/api-insert-new-block!
+          ""
+          {:page       page-name
+           :properties properties})
+         (page-handler/create!
+          page-name
+          {:redirect? false
+           :format :markdown
+           :create-first-block? false
+           :properties properties}))
 
        (<! (add page-name :attachments key))
 
