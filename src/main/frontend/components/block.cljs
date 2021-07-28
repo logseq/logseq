@@ -1440,7 +1440,7 @@
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
-        block-type (or (:type properties) :default)
+        block-type (or (keyword (:type properties)) :default)
         html-export? (:html-export? config)
         checkbox (when (and (not pre-block?)
                             (not html-export?))
@@ -1487,7 +1487,11 @@
            (map-inline config title)
            (if (not= block-type :default)
              [:a.prefix-link
-              {:on-click #(pdf-assets/open-block-ref! t)}
+              {:on-click #(case block-type
+                            ;; pdf annotation
+                            :annotation (pdf-assets/open-block-ref! t)
+                            :default)}
+
               (str "P" (or (:page properties) "?"))]))
 
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])

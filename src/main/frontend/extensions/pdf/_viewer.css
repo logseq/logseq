@@ -467,8 +467,6 @@
   overflow: visible;
   border: 9px solid transparent;
   background-clip: content-box;
-  -o-border-image: url(images/shadow.png) 9 9 repeat;
-  border-image: url(images/shadow.png) 9 9 repeat;
   background-color: rgba(255, 255, 255, 1);
 }
 
@@ -545,7 +543,6 @@
   top: 0;
   right: 0;
   bottom: 0;
-  background: url("images/loading-icon.gif") center no-repeat;
 }
 
 .pdfPresentationMode .pdfViewer {

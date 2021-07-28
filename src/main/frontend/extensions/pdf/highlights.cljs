@@ -9,6 +9,7 @@
             [frontend.util :as front-utils]
             [frontend.state :as state]
             [frontend.config :as config]
+            [frontend.storage :as storage]
             [frontend.components.svg :as svg]
             [medley.core :as medley]
             [frontend.fs :as fs]
@@ -289,7 +290,7 @@
     ;; render hls
     (rum/use-effect!
       (fn []
-        (dd "[rebuild highlights] " (count highlights))
+        ;;(dd "=== rebuild highlights ===" (count highlights))
 
         (when-let [grouped-hls (and (sequential? highlights) (group-by :page highlights))]
           (doseq [page loaded-pages]
@@ -333,6 +334,40 @@
      ;;   ])
      ;; refs
      (pdf-highlight-finder viewer)]))
+
+(rum/defc pdf-settings
+  [^js viewer theme {:keys [hide-settings! select-theme!]}]
+
+  (let [*el-popup (rum/use-ref nil)]
+
+    (rum/use-effect!
+      (fn []
+        (let [el-popup (rum/deref *el-popup)
+              cb (fn [^js e]
+                   (and (= e.which 27) (hide-settings!)))]
+
+          (js/setTimeout #(.focus el-popup))
+          (.addEventListener el-popup "keyup" cb)
+          #(.removeEventListener el-popup "keyup" cb)))
+      [])
+
+    [:div.extensions__pdf-settings.hls-popup-wrap.visible
+     {:on-click (fn [^js/MouseEvent e]
+                  (let [target (.-target e)]
+                    (when-not (.contains (rum/deref *el-popup) target)
+                      (hide-settings!))))}
+
+     [:div.extensions__pdf-settings-inner.hls-popup-box
+      {:ref       *el-popup
+       :tab-index -1}
+
+      [:div.extensions__pdf-settings-item.theme-picker
+       (map (fn [it]
+              [:button.flex.items-center.justify-center
+               {:key it :class it :on-click #(do (select-theme! it) (hide-settings!))}
+               (if (= theme it) (svg/check))])
+            ["light", "warm", "dark"])
+       ]]]))
 
 (rum/defc pdf-outline-item
   [^js viewer {:keys [title items href parent dest] :as node}]
@@ -388,14 +423,14 @@
             #(.removeEventListener el-outline "keyup" cb)))
         [])
 
-      [:div.extensions__pdf-outline-wrap
+      [:div.extensions__pdf-outline-wrap.hls-popup-wrap
        {:class    (front-utils/classnames [{:visible visible?}])
         :on-click (fn [^js/MouseEvent e]
                     (let [target (.-target e)]
                       (when-not (.contains (rum/deref *el-outline) target)
                         (hide!))))}
 
-       [:div.extensions__pdf-outline
+       [:div.extensions__pdf-outline.hls-popup-box
         {:ref       *el-outline
          :tab-index -1}
         (if (seq outline-data)
@@ -409,10 +444,27 @@
 
 (rum/defc pdf-toolbar
   [^js viewer]
-  (let [[outline-visible?, set-outline-visible!] (rum/use-state false)]
+  (let [[outline-visible?, set-outline-visible!] (rum/use-state false)
+        [settings-visible?, set-settings-visible!] (rum/use-state false)
+        [viewer-theme, set-viewer-theme!] (rum/use-state (or (storage/get "ls-pdf-viewer-theme") "light"))]
+
+    ;; themes hooks
+    (rum/use-effect!
+      (fn []
+        (when-let [^js el (js/document.getElementById "pdf-layout-container")]
+          (set! (. (. el -dataset) -theme) viewer-theme)
+          (storage/set "ls-pdf-viewer-theme" viewer-theme)
+          #(js-delete (. el -dataset) "theme")))
+      [viewer-theme])
+
     [:div.extensions__pdf-toolbar
      [:div.inner
       [:div.r.flex
+
+       ;; appearance
+       [:a.button
+        {:on-click #(set-settings-visible! (not settings-visible?))}
+        (svg/adjustments 18)]
 
        ;; zoom
        [:a.button
@@ -432,12 +484,18 @@
         "close"]]]
 
      ;; contents outline
-     (pdf-outline viewer outline-visible? #(set-outline-visible! false))]))
+     (pdf-outline viewer outline-visible? #(set-outline-visible! false))
+     ;; settings
+     (and settings-visible? (pdf-settings
+                              viewer
+                              viewer-theme
+                              {:hide-settings! #(set-settings-visible! false)
+                               :select-theme!  #(set-viewer-theme! %)}))]))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]
 
-  (dd "==== render pdf-viewer ====")
+  ;;(dd "==== render pdf-viewer ====")
 
   (let [*el-ref (rum/create-ref)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
