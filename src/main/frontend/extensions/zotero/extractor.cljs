@@ -109,7 +109,7 @@
        (markdown-link "Web library" (web-link item))))
 
 (defn properties [item]
-  (let [type    (item-type item)
+  (let [type    (util/format "[[%s]]" (item-type item))
         fields  (schema/fields type)
         authors (authors item)
         tags    (tags item)
