@@ -119,8 +119,8 @@
   (try
     (journal-name (tf/parse (tf/formatter "yyyy-MM-dd") s))
     (catch js/Error e
-      (log/error :parse-journal-date {:message  "Failed to parse date to journal name"
-                                      :date-str s})
+      (log/info :parse-journal-date {:message  "Failed to parse date to journal name"
+                                     :date-str s})
       nil)))
 
 (defn today
