@@ -246,5 +246,5 @@
 
    (when @(::total state)
      [:div.row
-      [:div.bg-greenred-200.py-3.px-3.rounded-lg.col-span-full
+      [:div.bg-greenred-200.py-3.rounded-lg.col-span-full
        [:progress.w-full {:max (+ @(::total state) 30) :value @(::progress state)}] "Importing items from Zotero....Please wait..."]])])
