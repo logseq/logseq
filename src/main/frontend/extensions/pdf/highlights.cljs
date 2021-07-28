@@ -370,34 +370,52 @@
        ]]]))
 
 (rum/defc pdf-outline-item
-  [^js viewer {:keys [title items href parent dest] :as node}]
-  (let [has-child? (seq items)]
+  [^js viewer
+   {:keys [title items href parent dest expanded] :as node}
+   {:keys [upt-outline-node!] :as ops}]
+  (let [has-child? (seq items)
+        expanded? (boolean expanded)]
 
     [:div.extensions__pdf-outline-item
-     {:class (if has-child? "has-children")}
+     {:class (front-utils/classnames [{:has-children has-child? :is-expand expanded?}])}
      [:div.inner
       [:a
        {:href      "javascript:void(0);"
         :data-dest (js/JSON.stringify (bean/->js dest))
-        :on-click  (fn []
-                     (when-let [^js dest (and dest (bean/->js dest))]
-                       (.goToDestination (.-linkService viewer) dest)))}
+        :on-click  (fn [^js/MouseEvent e]
+                     (let [target (.-target e)]
+                       (if (.closest target "i")
+                         (let [path (map #(if (re-find #"\d+" %) (int %) (keyword %))
+                                         (string/split parent #"\-"))]
+                           (.preventDefault e)
+                           (upt-outline-node! path {:expanded (not expanded?)}))
+                         (when-let [^js dest (and dest (bean/->js dest))]
+                           (.goToDestination (.-linkService viewer) dest)))))}
+
+       [:i.arrow svg/arrow-right-v2]
        [:span title]]]
 
      ;; children
-     (when has-child?
+     (when (and has-child? expanded?)
        [:div.children
         (map-indexed
           (fn [idx itm]
-            (let [parent (str parent "-" idx)]
+            (let [parent (str parent "-items-" idx)]
               (rum/with-key
-                (pdf-outline-item viewer (merge itm {:parent parent})) parent))) items)])]))
+                (pdf-outline-item
+                  viewer
+                  (merge itm {:parent parent})
+                  ops) parent))) items)])]))
 
 (rum/defc pdf-outline
   [^js viewer visible? hide!]
   (when-let [^js pdf-doc (and viewer (.-pdfDocument viewer))]
     (let [*el-outline (rum/use-ref nil)
-          [outline-data, set-outline-data!] (rum/use-state [])]
+          [outline-data, set-outline-data!] (rum/use-state [])
+          upt-outline-node! (rum/use-callback
+                              (fn [path attrs]
+                                (set-outline-data! (update-in outline-data path merge attrs)))
+                              [outline-data])]
 
       (rum/use-effect!
         (fn []
@@ -405,6 +423,7 @@
             (p/let [^js data (.getOutline pdf-doc)]
               (when-let [data (and data (.map data (fn [^js it]
                                                      (set! (.-href it) (.. viewer -linkService (getDestinationHash (.-dest it))))
+                                                     (set! (.-expanded it) false)
                                                      it)))])
               (set-outline-data! (bean/->clj data)))
 
@@ -437,7 +456,10 @@
           [:section
            (map-indexed (fn [idx itm]
                           (rum/with-key
-                            (pdf-outline-item viewer (merge itm {:parent idx}))
+                            (pdf-outline-item
+                              viewer
+                              (merge itm {:parent idx})
+                              {:upt-outline-node! upt-outline-node!})
                             idx))
                         outline-data)]
           [:section.is-empty "No outlines"])]])))

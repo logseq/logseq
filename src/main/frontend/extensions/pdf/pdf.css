@@ -101,13 +101,26 @@
     }
 
     &-item {
+      &.has-children {
+        > .inner > a > i.arrow {
+          opacity: 1;
+        }
+      }
+
+      &.is-expand {
+        > .inner > a > i.arrow svg {
+          transform: rotate(90deg) translateX(2px);
+        }
+      }
+
       > .inner {
         > a {
           color: #565656;
           font-size: 11px;
           text-decoration: none;
           font-weight: normal;
-          display: block;
+          display: flex;
+          align-items: center;
           padding: 6px 5px;
           user-select: none;
           border-radius: 4px;
@@ -116,13 +129,33 @@
           margin-right: 10px;
           transition: none;
 
+          > i {
+            opacity: 0;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+
+            svg {
+              color: #565656;
+              transform: scale(.8);
+              transition: .3s transform;
+            }
+          }
+
           &:hover {
             color: #106ba3;
           }
 
           &:active, &:focus {
             background-color: #106ba3;
-            color: white
+            color: white;
+
+            > i {
+              svg {
+                color: #e3e3e3;
+              }
+            }
           }
         }
       }
@@ -418,15 +451,6 @@
 .block-ref {
   &-wrap {
     &[data-type=annotation] {
-      .block-ref {
-        //display: -webkit-box;
-        //-webkit-line-clamp: 3;
-        //-webkit-box-orient: vertical;
-        //overflow: hidden;
-
-        &:before {
-        }
-      }
     }
   }
 }
@@ -522,8 +546,6 @@ body.is-pdf-active {
   z-index: 2;
   opacity: .8;
   mix-blend-mode: multiply;
-
-//background-color: burlywood;
 }
 
 .annotationLayer {
