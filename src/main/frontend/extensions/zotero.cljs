@@ -3,14 +3,13 @@
             [clojure.string :as str]
             [frontend.components.svg :as svg]
             [frontend.extensions.zotero.api :as api]
-            [frontend.extensions.zotero.extractor :as extractor]
             [frontend.extensions.zotero.handler :as zotero-handler]
             [frontend.extensions.zotero.setting :as setting]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
-            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [goog.dom :as gdom]
             [rum.core :as rum]))
 
 (def term-chan (chan))
@@ -81,7 +80,7 @@
 
     (println search-result)
 
-    [:div.zotero-search.p-4
+    [:div#zotero-search.zotero-search.p-4
      {:style {:width 600}}
 
      [:div.flex.items-center.mb-2
@@ -106,12 +105,14 @@
          "prev"
          :on-click
          (fn []
+           (set! (.-scrollTop (.-parentNode (gdom/getElement "zotero-search"))) 0)
            (go (<! (search-fn prev-search-term prev-page))))))
       (when-not (str/blank? next-page)
         (ui/button
          "next"
          :on-click
          (fn []
+           (set! (.-scrollTop (.-parentNode (gdom/getElement "zotero-search"))) 0)
            (go (<! (search-fn prev-search-term next-page))))))]]))
 
 
