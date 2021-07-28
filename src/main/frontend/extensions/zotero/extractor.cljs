@@ -4,6 +4,7 @@
             [frontend.extensions.zotero.schema :as schema]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.date :as date]
+            [clojure.string :as string]
             [clojure.set :refer [rename-keys]]
             [frontend.extensions.zotero.setting :as setting]
             [frontend.extensions.zotero.api :as api]))
@@ -49,17 +50,16 @@
               (comp
                (filter (fn [m] (= "author" (:creator-type m))))
                (map (fn [{:keys [first-name last-name name]}]
-                      (if name
-                        (util/format "[[%s]]" name)
-                        (util/format "[[%s %s]]" first-name last-name)))))
+                      (string/trim (if name name (str first-name " " last-name))))))
               creators)]
-    (str/join ", " authors)))
+    (distinct authors)))
 
 (defn tags [item]
   (let [tags
         (->> (-> item :data :tags)
-             (mapv (fn [{:keys [tag]}] (util/format "[[%s]]" tag))))]
-    (str/join ", " tags)))
+             (mapv (fn [{:keys [tag]}] (string/trim tag)))
+             (mapcat #(string/split % #",\s?")))]
+    (distinct tags)))
 
 (defn date->journal [item]
   (if-let [date (-> item :meta :parsed-date

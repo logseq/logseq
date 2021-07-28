@@ -617,7 +617,7 @@
   (when error
     (js/console.error error)
     (log/error :ui/catch-error error))
-  (if (and (not config/dev?) (some? error))
+  (if (some? error)
     error-view
     view))
 

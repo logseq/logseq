@@ -692,10 +692,13 @@
 
 (defn properties-block
   [properties format page]
-  (let [content (property/insert-properties format "" properties)]
+  (let [content (property/insert-properties format "" properties)
+        refs (block/get-page-refs-from-properties properties)]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties
+     :block/properties-order (keys properties)
+     :block/refs refs
      :block/left page
      :block/format format
      :block/content content
@@ -709,10 +712,13 @@
   ([title format page properties]
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
-         content (property/insert-properties format "" ps)]
+         content (property/insert-properties format "" ps)
+         refs (block/get-page-refs-from-properties properties)]
      {:block/pre-block? true
       :block/uuid (db/new-block-id)
       :block/properties ps
+      :block/properties-order (keys ps)
+      :block/refs refs
       :block/left page
       :block/format format
       :block/content content

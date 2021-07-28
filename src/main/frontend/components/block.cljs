@@ -1517,6 +1517,9 @@
                            (assoc properties :alias aliases))
                          properties))
                      properties)
+        properties-order (if pre-block?
+                           (remove #{:title :filters} properties-order)
+                           properties-order)
         properties (if (seq properties-order)
                      (map (fn [k] [k (get properties k)]) properties-order)
                      properties)]

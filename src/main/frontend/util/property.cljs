@@ -360,7 +360,7 @@
         v (if (or (symbol? v) (keyword? v)) (name v) (str v))
         v (string/trim v)]
     (cond
-      (= k "filters")
+      (contains? #{"title" "filters"} k)
       v
 
       (= v "true")

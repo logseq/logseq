@@ -51,7 +51,6 @@
           :as opt}]
    (go
      (let [{:keys [page-name properties]} (extractor/extract item)]
-
        (if (page-handler/page-exists? (str/lower-case page-name))
          (editor-handler/api-insert-new-block!
           ""
