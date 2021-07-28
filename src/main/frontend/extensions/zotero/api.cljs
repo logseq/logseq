@@ -7,8 +7,6 @@
             [clojure.string :as str]
             [frontend.extensions.zotero.setting :as setting]))
 
-(def ^:dynamic *debug* true)
-
 (defn config []
   {:api-version 3
    :base        "https://api.zotero.org"
@@ -123,18 +121,3 @@
 
 (defn attachments [key]
   (all-children-items key "attachment"))
-
-(comment
-  (get* (config) "/collections")
-  (get* (config) "/items/top")
-  (get* (config) "/items" {:item-type "journalArticle"})
-  (get* (config) "/items" {:item-type "attachment"})
-  (item "JZCIN4K5")
-  (item "RFYNAQTN")
-  (item "3V6N8ECQ")
-  (item  "J6NP6VJW")
-  (item "54QV68M6")
-  (item "U4TU25IC")
-  (notes "3V6N8ECQ")
-  (query-top-items "b")
-  (attachments "3V6N8ECQ"))
