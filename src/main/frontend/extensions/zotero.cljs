@@ -118,7 +118,7 @@
 
 (rum/defcs settings
   <
-  (rum/local "" ::type-id)
+  (rum/local (setting/setting :type-id) ::type-id)
   rum/reactive
   [state]
   [:div.zotero-settings
