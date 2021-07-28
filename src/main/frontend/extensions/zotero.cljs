@@ -164,7 +164,9 @@
         :on-blur       (fn [e] (setting/set-setting! :type-id (util/evalue e)))
         :on-change     (fn [e] (reset! (::type-id state) (util/evalue e)))}]]]]
 
-   (when-not (re-matches #"^\d+$" (str @(::type-id state)))
+   (when
+       (and (not (str/blank? (str @(::type-id state))))
+            (not (re-matches #"^\d+$" (str @(::type-id state)))))
      [:div.row
       [:div.bg-red-200.py-3.px-3.rounded-lg.col-span-full
        [:p.text-red-500 "User ID is different from username and can be found on the https://www.zotero.org/settings/keys page, it's a number of digits"]]])
