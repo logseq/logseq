@@ -12,7 +12,6 @@
             [frontend.components.encryption :as encryption]
             [frontend.fs.nfs :as nfs]
             [frontend.db.conn :as conn]
-            [frontend.handler.migrate :as migrate]
             [frontend.extensions.srs :as srs]
             [frontend.db-schema :as db-schema]
             [frontend.db :as db]
@@ -60,21 +59,10 @@
   ;; add ast/version to db
   (let [conn (conn/get-conn repo false)
         ast-version (d/datoms @conn :aevt :ast/version)]
-    (db/set-key-value repo :ast/version db-schema/ast-version))
-
-  ;; markdown convert notification
-  (js/setTimeout
-   (fn []
-     (when (not (:markdown/version (state/get-config)))
-       (migrate/show-convert-notification! repo)))
-   5000))
+    (db/set-key-value repo :ast/version db-schema/ast-version)))
 
 (defmethod handle :graph/migrated [[_ repo]]
-  (js/setTimeout
-   (fn []
-     (when (not (:markdown/version (state/get-config)))
-       (migrate/show-migrated-notification! repo)))
-   5000))
+  (js/alert "Graph migrated."))
 
 (defn get-local-repo
   []
