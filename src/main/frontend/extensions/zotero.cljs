@@ -78,8 +78,6 @@
       (route-handler/redirect! {:to :zotero-setting})
       (notification/show! "Please setup Zotero API key and user/group id first!" :warn false))
 
-    (println search-result)
-
     [:div#zotero-search.zotero-search.p-4
      {:style {:width 600}}
 
@@ -119,6 +117,9 @@
 (rum/defcs settings
   <
   (rum/local (setting/setting :type-id) ::type-id)
+  (rum/local nil ::progress)
+  (rum/local false ::total)
+  (rum/local "Add all" ::fetching-button)
   rum/reactive
   [state]
   [:div.zotero-settings
@@ -163,7 +164,7 @@
         :on-blur       (fn [e] (setting/set-setting! :type-id (util/evalue e)))
         :on-change     (fn [e] (reset! (::type-id state) (util/evalue e)))}]]]]
 
-   (when-not (re-matches #"^\d+$" @(::type-id state))
+   (when-not (re-matches #"^\d+$" (str @(::type-id state)))
      [:div.row
       [:div.bg-red-200.py-3.px-3.rounded-lg.col-span-full
        [:p.text-red-500 "User ID is different from username and can be found on the https://www.zotero.org/settings/keys page, it's a number of digits"]]])
@@ -219,4 +220,31 @@
      [:div.max-w-lg.rounded-md
       [:input.form-input.block
        {:default-value (setting/setting :page-insert-prefix)
-        :on-blur       (fn [e] (setting/set-setting! :page-insert-prefix (util/evalue e)))}]]]]])
+        :on-blur       (fn [e] (setting/set-setting! :page-insert-prefix (util/evalue e)))}]]]]
+
+   [:div.row
+    [:label.title
+     {:for "zotero_import_all"}
+     "Add all zotero items"]
+    [:div.mt-1.sm:mt-0.sm:col-span-2
+     (ui/button
+      @(::fetching-button state)
+      :on-click
+      (fn []
+        (go
+          (let [_     (reset! (::fetching-button state) "Fetching..")
+                total (<! (api/all-top-items-count))
+                _     (reset! (::fetching-button state) "Add all")]
+            (when (.confirm
+                   js/window
+                   (str "This will import all your zotero items and add total number of " total " pages. Do you wish to continue?"))
+              (do
+                (reset! (::total state) total)
+                (<! (zotero-handler/add-all (::progress state)))
+                (reset! (::total state) false)
+                (notification/show! "Successfully added all items!" :success)))))))]]
+
+   (when @(::total state)
+     [:div.row
+      [:div.bg-greenred-200.py-3.px-3.rounded-lg.col-span-full
+       [:progress.w-full {:max (+ @(::total state) 30) :value @(::progress state)}] "Importing items from Zotero....Please wait..."]])])

@@ -5,6 +5,7 @@
             [cljs.core.async
              :refer [<! >! alt! chan close! go go-loop timeout]]
             [clojure.string :as str]
+            [frontend.util :as util]
             [frontend.extensions.zotero.setting :as setting]))
 
 (defn config []
@@ -55,6 +56,11 @@
           :start)
          "0")))))
 
+(defn results-count [headers]
+  (-> (cske/transform-keys csk/->kebab-case-keyword headers)
+      :total-results
+      util/safe-parse-int))
+
 ;; "/users/475425/collections?v=3"
 (defn get*
   ([config api]
@@ -77,16 +83,43 @@
          (if success
            (let [result     (cske/transform-keys csk/->kebab-case-keyword body)
                  next-start (parse-start headers :next)
-                 prev-start (parse-start headers :prev)]
+                 prev-start (parse-start headers :prev)
+                 results-count (results-count headers)]
              (cond-> {:result result}
                next-start
                (assoc :next next-start)
                prev-start
-               (assoc :prev prev-start)))
+               (assoc :prev prev-start)
+               results-count
+               (assoc :count results-count)))
            response)))))
 
 (defn item [key]
   (:result (get* (config) (str "/items/" key))))
+
+(defn all-top-items-count []
+  (go
+    (:count
+     (<! (get* (config) (str "/items/top")
+               {:limit     1
+                :item-type "-attachment"})))))
+
+(defn all-top-items []
+  (go-loop [start "0"
+            result-acc []]
+    (let [{:keys [success next result]}
+          (<! (get* (config) (str "/items/top")
+                    {:item-type "-attachment"
+                     :start     start}))]
+      (cond
+        (false? success)
+        result-acc
+
+        next
+        (recur next (into [] (concat result-acc result)))
+
+        :else
+        (into [] (concat result-acc result))))))
 
 (defn query-top-items
   "Query all top level items except attachments"

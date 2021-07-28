@@ -9,9 +9,11 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]))
 
-(defn add [page-name type key]
+(defn add [page-name type item]
   (go
-    (let [api-fn      (case type
+    (let [key         (:key item)
+          num-children (-> item :meta :num-children)
+          api-fn      (case type
                         :notes       zotero-api/notes
                         :attachments zotero-api/attachments)
           first-block (case type
@@ -20,7 +22,7 @@
           should-add? (case type
                         :notes       (setting/setting :include-notes?)
                         :attachments (setting/setting :include-attachments?))]
-      (when should-add?
+      (when (and should-add? (> num-children 0))
         (let [items    (<! (api-fn key))
               md-items (->> items
                             (map extractor/extract)
@@ -44,10 +46,11 @@
 (defn create-zotero-page
   ([item]
    (create-zotero-page item {}))
-  ([item {:keys [block-dom-id] :as opt}]
+  ([item {:keys [block-dom-id insert-command? notification?]
+          :or {insert-command? true notification? true}
+          :as opt}]
    (go
-     (let [{:keys [page-name properties]} (extractor/extract item)
-           key                            (-> item :key)]
+     (let [{:keys [page-name properties]} (extractor/extract item)]
 
        (if (page-handler/page-exists? (str/lower-case page-name))
          (editor-handler/api-insert-new-block!
@@ -61,10 +64,20 @@
            :create-first-block? false
            :properties properties}))
 
-       (<! (add page-name :attachments key))
+       (<! (add page-name :attachments item))
 
-       (<! (add page-name :notes key))
+       (<! (add page-name :notes item))
 
-       (handle-command-zotero block-dom-id page-name)
+       (when insert-command?
+         (handle-command-zotero block-dom-id page-name))
 
-       (notification/show! (str "Successfully created page " page-name) :success)))))
+       (when notification?
+         (notification/show! (str "Successfully created page " page-name) :success))))))
+
+(defn add-all [progress]
+  (go
+    (let [all-items (<! (zotero-api/all-top-items))]
+      (reset! progress 30)
+      (doseq [item all-items]
+        (<! (create-zotero-page item {:insert-command? false :notification? false}))
+        (swap! progress inc)))))
