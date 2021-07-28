@@ -117,7 +117,9 @@
 
 
 (rum/defcs settings
-  < rum/reactive
+  <
+  (rum/local "" ::type-id)
+  rum/reactive
   [state]
   [:div.zotero-settings
    [:h1.mb-4.text-4xl.font-bold.mb-8 "Zotero Settings"]
@@ -152,13 +154,19 @@
    [:div.row
     [:label.title
      {:for "zotero_type_id"}
-     "User or Group id"]
+     "User or Group ID"]
     [:div.mt-1.sm:mt-0.sm:col-span-2
      [:div.max-w-lg.rounded-md
       [:input.form-input.block
        {:default-value (setting/setting :type-id)
         :placeholder   "User/Group id"
-        :on-blur       (fn [e] (setting/set-setting! :type-id (util/evalue e)))}]]]]
+        :on-blur       (fn [e] (setting/set-setting! :type-id (util/evalue e)))
+        :on-change     (fn [e] (reset! (::type-id state) (util/evalue e)))}]]]]
+
+   (when-not (re-matches #"^\d+$" @(::type-id state))
+     [:div.row
+      [:div.bg-red-200.py-3.px-3.rounded-lg.col-span-full
+       [:p.text-red-500 "User ID is different from username and can be found on the https://www.zotero.org/settings/keys page, it's a number of digits"]]])
 
    [:div.row
     [:label.title
