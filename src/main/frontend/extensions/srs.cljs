@@ -629,8 +629,10 @@
 ;; handlers
 (defn make-block-a-card!
   [block-id]
-  (when-let [content (:block/content (db/entity [:block/uuid block-id]))]
-    (editor-handler/save-block!
-     (state/get-current-repo)
-     block-id
-     (str (string/trim content) " #" card-hash-tag))))
+  (when-let [block (db/entity [:block/uuid block-id])]
+    (when-let [content (:block/content block)]
+      (let [content (property/remove-built-in-properties (:block/format block) content)]
+        (editor-handler/save-block!
+         (state/get-current-repo)
+         block-id
+         (str (string/trim content) " #" card-hash-tag))))))
