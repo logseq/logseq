@@ -21,7 +21,7 @@
   text-align: center;
   font-size: 60px;
   color: black;
-  background-color: var(--ls-secondary-background-color);
+  background-color: rgba(255, 255, 255, 0.5);
   display: flex;
   justify-content: center;
   align-items: center;
