@@ -1074,7 +1074,7 @@
         level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
         tree (blocks-vec->tree level-blocks)
         top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
-        exported-md-contents (mapv #(export/export-blocks-as-markdown repo % "spaces")
+        exported-md-contents (mapv #(export/export-blocks-as-markdown repo % "spaces" [])
                                    top-level-block-uuids)]
     [(string/join "\n" (mapv string/trim-newline exported-md-contents)) tree]))
 
