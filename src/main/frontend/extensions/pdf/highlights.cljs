@@ -3,6 +3,7 @@
             [promesa.core :as p]
             [cljs-bean.core :as bean]
             [medley.core :as medley]
+            [frontend.context.i18n :as i18n]
             [frontend.handler.notification :as notification]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.pdf.assets :as pdf-assets]
@@ -91,52 +92,55 @@
         id (:id highlight)
         content (:content highlight)]
 
-    [:ul.extensions__pdf-hls-ctx-menu
-     {:style    {:top top :left left}
-      :on-click (fn [^js/MouseEvent e]
-                  (when-let [action (.. e -target -dataset -action)]
-                    (case action
-                      "ref"
-                      (pdf-assets/copy-hl-ref! highlight)
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
 
-                      "copy"
-                      (do
-                        (front-utils/copy-to-clipboard! (:text content))
-                        (pdf-utils/clear-all-selection))
+      [:ul.extensions__pdf-hls-ctx-menu
+       {:style    {:top top :left left}
+        :on-click (fn [^js/MouseEvent e]
+                    (when-let [action (.. e -target -dataset -action)]
+                      (case action
+                        "ref"
+                        (pdf-assets/copy-hl-ref! highlight)
 
-                      "del"
-                      (do
-                        (del-hl! highlight)
-                        (pdf-assets/del-ref-block! highlight))
+                        "copy"
+                        (do
+                          (front-utils/copy-to-clipboard! (:text content))
+                          (pdf-utils/clear-all-selection))
 
-                      ;; colors
-                      (let [properties {:color action}]
-                        (if-not id
-                          ;; add highlight
-                          (let [highlight (merge highlight
-                                                 {:id         (pdf-utils/gen-uuid)
-                                                  :properties properties})]
-                            (add-hl! highlight)
-                            (pdf-utils/clear-all-selection)
-                            (pdf-assets/copy-hl-ref! highlight))
+                        "del"
+                        (do
+                          (del-hl! highlight)
+                          (pdf-assets/del-ref-block! highlight))
 
-                          ;; update highlight
-                          (do
-                            (upd-hl! (assoc highlight :properties properties)))))))
+                        ;; colors
+                        (let [properties {:color action}]
+                          (if-not id
+                            ;; add highlight
+                            (let [highlight (merge highlight
+                                                   {:id         (pdf-utils/gen-uuid)
+                                                    :properties properties})]
+                              (add-hl! highlight)
+                              (pdf-utils/clear-all-selection)
+                              (pdf-assets/copy-hl-ref! highlight))
 
-                  (clear-ctx-tip!))}
+                            ;; update highlight
+                            (do
+                              (upd-hl! (assoc highlight :properties properties)))))))
 
-     [:li.item-colors
-      (for [it ["yellow", "blue", "green", "red", "purple"]]
-        [:a {:key it :data-color it :data-action it} it])]
+                    (clear-ctx-tip!))}
+
+       [:li.item-colors
+        (for [it ["yellow", "blue", "green", "red", "purple"]]
+          [:a {:key it :data-color it :data-action it} it])]
 
 
-     (and id [:li.item {:data-action "ref"} "Copy ref"])
+       (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
 
-     [:li.item {:data-action "copy"} "Copy text"]
+       [:li.item {:data-action "copy"} (t :pdf/copy-text)]
 
-     (and id [:li.item {:data-action "del"} "Delete"])
-     ]))
+       (and id [:li.item {:data-action "del"} (t :delete)])
+       ])))
 
 (rum/defc pdf-highlights-text-region
   [^js viewer vw-hl hl
@@ -479,40 +483,43 @@
           #(js-delete (. el -dataset) "theme")))
       [viewer-theme])
 
-    [:div.extensions__pdf-toolbar
-     [:div.inner
-      [:div.r.flex
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
 
-       ;; appearance
-       [:a.button
-        {:on-click #(set-settings-visible! (not settings-visible?))}
-        (svg/adjustments 18)]
+      [:div.extensions__pdf-toolbar
+       [:div.inner
+        [:div.r.flex
 
-       ;; zoom
-       [:a.button
-        {:on-click (partial pdf-utils/zoom-out-viewer viewer)}
-        (svg/zoom-out 18)]
+         ;; appearance
+         [:a.button
+          {:on-click #(set-settings-visible! (not settings-visible?))}
+          (svg/adjustments 18)]
 
-       [:a.button
-        {:on-click (partial pdf-utils/zoom-in-viewer viewer)}
-        (svg/zoom-in 18)]
+         ;; zoom
+         [:a.button
+          {:on-click (partial pdf-utils/zoom-out-viewer viewer)}
+          (svg/zoom-out 18)]
 
-       [:a.button
-        {:on-click #(set-outline-visible! (not outline-visible?))}
-        (svg/view-list 16)]
+         [:a.button
+          {:on-click (partial pdf-utils/zoom-in-viewer viewer)}
+          (svg/zoom-in 18)]
 
-       [:a.button
-        {:on-click #(state/set-state! :pdf/current nil)}
-        "close"]]]
+         [:a.button
+          {:on-click #(set-outline-visible! (not outline-visible?))}
+          (svg/view-list 16)]
 
-     ;; contents outline
-     (pdf-outline viewer outline-visible? #(set-outline-visible! false))
-     ;; settings
-     (and settings-visible? (pdf-settings
-                              viewer
-                              viewer-theme
-                              {:hide-settings! #(set-settings-visible! false)
-                               :select-theme!  #(set-viewer-theme! %)}))]))
+         [:a.button
+          {:on-click #(state/set-state! :pdf/current nil)}
+          (t :close)]]]
+
+       ;; contents outline
+       (pdf-outline viewer outline-visible? #(set-outline-visible! false))
+       ;; settings
+       (and settings-visible? (pdf-settings
+                                viewer
+                                viewer-theme
+                                {:hide-settings! #(set-settings-visible! false)
+                                 :select-theme!  #(set-viewer-theme! %)}))])))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]
