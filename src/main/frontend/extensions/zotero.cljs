@@ -21,14 +21,14 @@
           type (:item-type data)
           abstract (str (subs (:abstract-note data) 0 200) "...")]
 
-      [:div.px-2.py-4.border-b.cursor-pointer.border-solid.hover:bg-gray-100.last:border-none.relative
+      [:div.zotero-search-item.px-2.py-4.border-b.cursor-pointer.border-solid.last:border-none.relative
        {:on-click (fn [] (go
                            (set-is-creating-page! true)
                            (<!
                             (zotero-handler/create-zotero-page item {:block-dom-id id}))
                            (set-is-creating-page! false)))}
        [[:div [[:span.font-bold.mb-1.mr-1 title]
-               [:span.text-xs.p-1.bg-gray-100.rounded type]]]
+               [:span.zotero-search-item-type.text-xs.p-1.rounded type]]]
         [:div.text-sm abstract]]
 
        (when is-creating-page [:div.zotero-search-item-loading-indicator [:span.animate-spin-reverse  svg/refresh]])])))
@@ -82,7 +82,7 @@
      {:style {:width 600}}
 
      [:div.flex.items-center.mb-2
-      [[:input.p-2.border.mr-2.flex-1
+      [[:input.p-2.border.mr-2.flex-1.focus:outline-none
         {:autoFocus   true
          :placeholder "Search for your Zotero journal article (title, author, text, anything)"
          :value       term :on-change (fn [e]
@@ -90,7 +90,7 @@
                                           (>! term-chan (util/evalue e)))
                                         (set-term! (util/evalue e)))}]
 
-       (when is-searching [:span.animate-spin-reverse  svg/refresh])]]
+       [:span.animate-spin-reverse {:style {:visibility (if is-searching "visible"  "hidden")}}  svg/refresh]]]
 
      [:div.h-2.text-sm.text-red-400.mb-2 (if search-error (str "Search error: " search-error) "")]
 
@@ -165,8 +165,8 @@
         :on-change     (fn [e] (reset! (::type-id state) (util/evalue e)))}]]]]
 
    (when
-       (and (not (str/blank? (str @(::type-id state))))
-            (not (re-matches #"^\d+$" (str @(::type-id state)))))
+    (and (not (str/blank? (str @(::type-id state))))
+         (not (re-matches #"^\d+$" (str @(::type-id state)))))
      (ui/admonition
       :warning
       [:p.text-red-500

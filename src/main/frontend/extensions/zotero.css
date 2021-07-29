@@ -21,8 +21,16 @@
   text-align: center;
   font-size: 60px;
   color: black;
-  background-color: rgba(255, 255, 255, 0.5);
+  background-color: var(--ls-secondary-background-color);
   display: flex;
   justify-content: center;
   align-items: center;
+}
+
+.zotero-search-item:hover {
+  background-color: var(--ls-secondary-background-color);
+}
+
+.zotero-search-item-type {
+  background-color: var(--ls-quaternary-background-color);
 }
