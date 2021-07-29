@@ -128,7 +128,7 @@
                          (rename-keys {:title :original-title})
                          (assoc :title (page-name item)))]
     (->> data
-         (remove (comp str/blank? second))
+         (remove (comp (fn [v] (or (str/blank? v) (empty? v))) second))
          (into {}))))
 
 (defmethod extract "note"
