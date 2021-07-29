@@ -378,5 +378,8 @@
       (contains? @non-parsing-properties (string/lower-case k))
       v
 
+      (string/starts-with? v "http")
+      v
+
       :else
       (text/split-page-refs-without-brackets v))))
