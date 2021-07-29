@@ -167,13 +167,13 @@
    (when
        (and (not (str/blank? (str @(::type-id state))))
             (not (re-matches #"^\d+$" (str @(::type-id state)))))
-     [:div.row
-      [:div.bg-red-200.py-3.px-3.rounded-lg.col-span-full
-       [:p.text-red-500
-        "User ID is different from username and can be found on the "
-        [:a {:href "https://www.zotero.org/settings/keys" :target "_blank"}
-         "https://www.zotero.org/settings/keys"]
-        " page, it's a number of digits"]]])
+     (ui/admonition
+      :warning
+      [:p.text-red-500
+       "User ID is different from username and can be found on the "
+       [:a {:href "https://www.zotero.org/settings/keys" :target "_blank"}
+        "https://www.zotero.org/settings/keys"]
+       " page, it's a number of digits"]))
 
    [:div.row
     [:label.title
