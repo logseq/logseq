@@ -1477,7 +1477,7 @@
   (let [pre-block? (:block/pre-block? block)
         date (and (= k :date) (date/get-locale-string (str v)))]
     [:div
-     [:span.font-bold (name k)]
+     [:span.page-property-key.font-medium (name k)]
      [:span.mr-1 ":"]
      (cond
        (int? v)
@@ -1517,6 +1517,9 @@
                            (assoc properties :alias aliases))
                          properties))
                      properties)
+        properties-order (if pre-block?
+                           (remove #{:title :filters} properties-order)
+                           properties-order)
         properties (if (seq properties-order)
                      (map (fn [k] [k (get properties k)]) properties-order)
                      properties)]

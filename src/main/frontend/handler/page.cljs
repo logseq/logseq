@@ -50,37 +50,63 @@
   ([page-name] (when-let [page (db/entity [:block/name page-name])]
                  (:file/path (:block/file page)))))
 
+(defn- build-title [page]
+  (let [original-name (:block/original-name page)]
+    (if (string/includes? original-name ",")
+      (util/format "\"%s\"" original-name)
+      original-name)))
+
+(defn- build-page-tx [format properties page]
+  (when (:block/uuid page)
+    (let [page-entity [:block/uuid (:block/uuid page)]
+          create-title-property? (util/create-title-property? (:block/name page))]
+      (cond
+        (and properties create-title-property?)
+        [page (editor-handler/default-properties-block (build-title page) format page-entity properties)]
+
+        create-title-property?
+        [page (editor-handler/default-properties-block (build-title page) format page-entity)]
+
+        properties
+        [page (editor-handler/properties-block properties format page-entity)]
+
+        :else
+        [page]))))
+
 (defn create!
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block?]
-           :or {redirect? true
-                create-first-block? true}}]
-   (let [title (string/trim title)
-         pages (util/split-namespace-pages title)
-         page (string/lower-case title)
-         format (state/get-preferred-format)
-         pages (map (fn [page]
-                      (-> (block/page-name->map page true)
-                          (assoc :block/format format)))
-                 pages)
-         txs (->>
-              (mapcat
-               (fn [page]
-                 (when (:block/uuid page)
-                   (let [page-entity [:block/uuid (:block/uuid page)]
-                         create-title-property? (util/create-title-property? (:block/name page))]
-                     (if create-title-property?
-                       (let [default-properties (editor-handler/default-properties-block (:block/original-name page) format page-entity)]
-                         [page default-properties])
-                       [page]))))
-               pages)
-              (remove nil?))]
+  ([title {:keys [redirect? create-first-block? format properties]
+           :or   {redirect?           true
+                  create-first-block? true
+                  format              false
+                  properties          false}}]
+   (let [title    (string/trim title)
+         pages    (util/split-namespace-pages title)
+         page     (string/lower-case title)
+         format   (or format (state/get-preferred-format))
+         pages    (map (fn [page]
+                         (-> (block/page-name->map page true)
+                             (assoc :block/format format)))
+                       pages)
+         txs      (->> pages
+                       ;; for namespace pages, only last page need properties
+                       drop-last
+                       (mapcat #(build-page-tx format false %))
+                       (remove nil?))
+         last-txs (build-page-tx format properties (last pages))
+         txs      (concat txs last-txs)]
+
      (db/transact! txs)
+
      (when create-first-block?
        (editor-handler/insert-first-page-block-if-not-exists! page))
+
+     (when-let [page (db/entity [:block/name page])]
+       (outliner-file/sync-to-file page))
+
      (when redirect?
-       (route-handler/redirect! {:to :page
+       (route-handler/redirect! {:to          :page
                                  :path-params {:name page}})))))
 
 (defn page-add-property!

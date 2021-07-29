@@ -1,0 +1,285 @@
+{:journal-article-sample-1
+ {:key     "JAHCZRNB",
+  :version 37,
+  :library
+  {:type "user",
+   :id   8234867,
+   :name "weihua-lu",
+   :links
+   {:alternate {:href "https://www.zotero.org/weihua-lu", :type "text/html"}}},
+  :links
+  {:self
+   {:href "https://api.zotero.org/users/8234867/items/JAHCZRNB",
+    :type "application/json"},
+   :alternate
+   {:href "https://www.zotero.org/weihua-lu/items/JAHCZRNB", :type "text/html"},
+   :attachment
+   {:href            "https://api.zotero.org/users/8234867/items/PX7ERZ5D",
+    :type            "application/json",
+    :attachment-type "application/pdf",
+    :attachment-size 676443}},
+  :meta
+  {:creator-summary "Efroni et al.",
+   :parsed-date     "2019-02-17",
+   :num-children    2},
+  :data
+  {:tags
+   [{:tag "Computer Science - Artificial Intelligence", :type 1}
+    {:tag "Computer Science - Machine Learning", :type 1}
+    {:tag "Statistics - Machine Learning", :type 1}],
+   :creators
+   [{:creator-type "author", :first-name "Yonathan", :last-name "Efroni"}
+    {:creator-type "author", :first-name "Gal", :last-name "Dalal"}
+    {:creator-type "author", :first-name "Bruno", :last-name "Scherrer"}
+    {:creator-type "author", :first-name "Shie", :last-name "Mannor"}],
+   :date                 "2019-02-17",
+   :issn                 "",
+   :archive-location     "",
+   :series-text          "",
+   :issue                "",
+   :key                  "JAHCZRNB",
+   :series-title         "",
+   :relations            {},
+   :series               "",
+   :date-modified        "2021-07-12T08:04:52Z",
+   :extra                "arXiv: 1809.01843\nCitation Key: efroniHowCombineTreeSearch2019",
+   :doi                  "",
+   :collections          ["ILULWK4S"],
+   :title                "How to Combine Tree-Search Methods in Reinforcement Learning",
+   :pages                "",
+   :volume               "",
+   :item-type            "journalArticle",
+   :access-date          "2021-07-12T08:04:51Z",
+   :call-number          "",
+   :rights               "",
+   :language             "en",
+   :url                  "http://arxiv.org/abs/1809.01843",
+   :short-title          "",
+   :abstract-note
+   "Finite-horizon lookahead policies are abundantly used in Reinforcement Learning and demonstrate impressive empirical success. Usually, the lookahead policies are implemented with speciﬁc planning methods such as Monte Carlo Tree Search (e.g. in AlphaZero (Silver et al. 2017b)). Referring to the planning problem as tree search, a reasonable practice in these implementations is to back up the value only at the leaves while the information obtained at the root is not leveraged other than for updating the policy. Here, we question the potency of this approach. Namely, the latter procedure is non-contractive in general, and its convergence is not guaranteed. Our proposed enhancement is straightforward and simple: use the return from the optimal tree path to back up the values at the descendants of the root. This leads to a γh-contracting procedure, where γ is the discount factor and h is the tree depth. To establish our results, we ﬁrst introduce a notion called multiple-step greedy consistency. We then provide convergence rates for two algorithmic instantiations of the above enhancement in the presence of noise injected to both the tree search stage and value estimation stage.",
+   :publication-title    "arXiv:1809.01843 [cs, stat]",
+   :date-added           "2021-07-12T08:04:51Z",
+   :version              37,
+   :archive              "",
+   :journal-abbreviation "",
+   :library-catalog      "arXiv.org"}}
+
+ :journal-article-sample-2
+ {:key     "54QV68M6",
+  :version 1,
+  :library
+  {:type "user",
+   :id   475425,
+   :name "Z public library",
+   :links
+   {:alternate
+    {:href "https://www.zotero.org/z_public_library", :type "text/html"}}},
+  :links
+  {:self
+   {:href "https://api.zotero.org/users/475425/items/54QV68M6",
+    :type "application/json"},
+   :alternate
+   {:href "https://www.zotero.org/z_public_library/items/54QV68M6",
+    :type "text/html"}},
+  :meta
+  {:creator-summary "Lan Levengood et al.",
+   :parsed-date     "2010-08",
+   :num-children    0},
+  :data
+  {:tags
+   [{:tag "Animals", :type 1}
+    {:tag "Bone Morphogenetic Protein 2", :type 1}
+    {:tag "Bone and Bones", :type 1}
+    {:tag "Calcium Phosphates", :type 1}
+    {:tag "Cell Count", :type 1}
+    {:tag "Gelatin", :type 1}
+    {:tag "Humans", :type 1}
+    {:tag "Microscopy, Electron, Scanning", :type 1}
+    {:tag "Microspheres", :type 1}
+    {:tag "Organ Size", :type 1}
+    {:tag "Osseointegration", :type 1}
+    {:tag "Osteogenesis", :type 1}
+    {:tag "Porosity", :type 1}
+    {:tag "Robotics", :type 1}
+    {:tag "Sus scrofa", :type 1}
+    {:tag "Tissue Scaffolds", :type 1}
+    {:tag "Tomography, X-Ray Computed", :type 1}],
+   :creators
+   [{:creator-type "author", :first-name "Sheeny K", :last-name "Lan Levengood"}
+    {:creator-type "author", :first-name "Samantha J", :last-name "Polak"}
+    {:creator-type "author", :first-name "Michael J", :last-name "Poellmann"}
+    {:creator-type "author", :first-name "David J", :last-name "Hoelzle"}
+    {:creator-type "author", :first-name "Aaron J", :last-name "Maki"}
+    {:creator-type "author", :first-name "Sherrie G", :last-name "Clark"}
+    {:creator-type "author", :first-name "Matthew B", :last-name "Wheeler"}
+    {:creator-type "author",
+     :first-name   "Amy J",
+     :last-name    "Wagoner Johnson"}],
+   :date                 "Aug 2010",
+   :issn                 "1878-7568",
+   :archive-location     "",
+   :series-text          "",
+   :issue                "8",
+   :key                  "54QV68M6",
+   :series-title         "",
+   :relations            {:owl:same-as "http://zotero.org/groups/36222/items/H35VBPPB"},
+   :series               "",
+   :date-modified        "2011-04-11T19:28:58Z",
+   :extra                "Hey, this is the best article here!",
+   :doi                  "10.1016/j.actbio.2010.02.026",
+   :collections          ["2GUIGKC9"],
+   :title
+   "The effect of BMP-2 on micro- and macroscale osteointegration of biphasic calcium phosphate scaffolds with multiscale porosity",
+   :pages                "3283-3291",
+   :volume               "6",
+   :item-type            "journalArticle",
+   :access-date          "2011-01-13T02:46:37Z",
+   :call-number          "",
+   :rights               "",
+   :language             "",
+   :url                  "http://www.ncbi.nlm.nih.gov/pubmed/20176148",
+   :short-title          "",
+   :abstract-note
+   "It is well established that scaffolds for applications in bone tissue engineering require interconnected pores on the order of 100 microm for bone in growth and nutrient and waste transport. As a result, most studies have focused on scaffold macroporosity (>100 microm). More recently researchers have investigated the role of microporosity in calcium phosphate -based scaffolds. Osteointegration into macropores improves when scaffold rods or struts contain micropores, typically defined as pores less than approximately 50 microm. We recently demonstrated multiscale osteointegration, or growth into both macropores and intra-red micropores (<10 microm), of biphasic calcium phosphate (BCP) scaffolds. The combined effect of BMP-2, a potent osteoinductive growth factor, and multiscale porosity has yet to be investigated. In this study we implanted BCP scaffolds into porcine mandibular defects for 3, 6, 12 and 24 weeks and evaluated the effect of BMP-2 on multiscale osteointegration. The results showed that given this in vivo model BMP-2 influences osteointegration at the microscale, but not at the macroscale, but not at the macroscale. Cell density was higher in the rod micropores for scaffolds containing BMP-2 compared with controls at all time points, but BMP-2 was not required for bone formation in micropores. In contrast, there was essentially no difference in the fraction of bone in macropores for scaffolds with BMP-2 compared with controls. Additionally, bone in macropores seemed to have reached steady-state by 3 weeks. Multiscale osteointegration results in bone-scaffold composites that are fully osteointegrated, with no 'dead space'. These composites are likely to contain a continuous cell network as well as the potential for enhanced load transfer and improved mechanical properties.",
+   :publication-title    "Acta Biomaterialia",
+   :date-added           "2011-01-13T02:46:37Z",
+   :version              1,
+   :archive              "",
+   :journal-abbreviation "Acta Biomater",
+   :library-catalog      "NCBI PubMed"}}
+
+ :newspaper-article-sample-1
+ {:key     "U4TU25IC",
+  :version 1,
+  :library
+  {:type "user",
+   :id   475425,
+   :name "Z public library",
+   :links
+   {:alternate
+    {:href "https://www.zotero.org/z_public_library", :type "text/html"}}},
+  :links
+  {:self
+   {:href "https://api.zotero.org/users/475425/items/U4TU25IC",
+    :type "application/json"},
+   :alternate
+   {:href "https://www.zotero.org/z_public_library/items/U4TU25IC",
+    :type "text/html"}},
+  :meta    {:parsed-date "2011-03-28", :num-children 1},
+  :data
+  {:tags
+   [{:tag "Computers and the Internet", :type 1}
+    {:tag "New York Times", :type 1}
+    {:tag "Newspapers", :type 1}
+    {:tag "Prices (Fares, Fees and Rates)", :type 1}],
+   :creators          [],
+   :date              "March 28, 2011",
+   :issn              "0362-4331",
+   :archive-location  "",
+   :key               "U4TU25IC",
+   :place             "",
+   :relations         {},
+   :date-modified     "2011-03-29T17:48:57Z",
+   :section           "Opinion",
+   :extra             "",
+   :collections       ["3DKBJE5C"],
+   :title             "A Letter to Our Readers About Digital Subscriptions",
+   :pages             "",
+   :item-type         "newspaperArticle",
+   :access-date       "2011-03-29T17:48:57Z",
+   :call-number       "",
+   :rights            "",
+   :language          "",
+   :url               "http://www.nytimes.com/2011/03/28/opinion/l28times.html?_r=1",
+   :short-title       "",
+   :abstract-note     "",
+   :edition           "",
+   :publication-title "The New York Times",
+   :date-added        "2011-03-29T17:48:57Z",
+   :version           1,
+   :archive           "",
+   :library-catalog   "NYTimes.com"}}
+
+ :book-sample-1
+ {:key     "J6NP6VJW",
+  :version 1,
+  :library
+  {:type "user",
+   :id   475425,
+   :name "Z public library",
+   :links
+   {:alternate
+    {:href "https://www.zotero.org/z_public_library", :type "text/html"}}},
+  :links
+  {:self
+   {:href "https://api.zotero.org/users/475425/items/J6NP6VJW",
+    :type "application/json"},
+   :alternate
+   {:href "https://www.zotero.org/z_public_library/items/J6NP6VJW",
+    :type "text/html"}},
+  :meta    {:creator-summary "Orwell", :parsed-date "1984", :num-children 0},
+  :data
+  {:tags              [],
+   :creators
+   [{:creator-type "author", :first-name "George", :last-name "Orwell"}],
+   :date              "1984",
+   :archive-location  "",
+   :publisher         "Index",
+   :key               "J6NP6VJW",
+   :place             "",
+   :relations         {},
+   :series            "",
+   :date-modified     "2011-05-16T14:36:12Z",
+   :extra             "",
+   :isbn              "",
+   :collections       ["BX9965IJ"],
+   :title             "1984",
+   :volume            "",
+   :series-number     "",
+   :item-type         "book",
+   :access-date       "",
+   :call-number       "",
+   :rights            "",
+   :language          "",
+   :url               "",
+   :number-of-volumes "",
+   :short-title       "",
+   :abstract-note     "",
+   :edition           "",
+   :date-added        "2011-05-16T14:36:12Z",
+   :version           1,
+   :archive           "",
+   :library-catalog   "",
+   :num-pages         ""}}
+
+ :note-sample-1
+ {:key     "A6ADHHQQ",
+  :version 4,
+  :library
+  {:type "user",
+   :id   8234867,
+   :name "weihua-lu",
+   :links
+   {:alternate {:href "https://www.zotero.org/weihua-lu", :type "text/html"}}},
+  :links
+  {:self
+   {:href "https://api.zotero.org/users/8234867/items/A6ADHHQQ",
+    :type "application/json"},
+   :alternate
+   {:href "https://www.zotero.org/weihua-lu/items/A6ADHHQQ",
+    :type "text/html"},
+   :up
+   {:href "https://api.zotero.org/users/8234867/items/AU8RUSW7",
+    :type "application/json"}},
+  :meta    {:num-children 0},
+  :data
+  {:tags          [],
+   :key           "A6ADHHQQ",
+   :relations     {},
+   :date-modified "2021-07-01T06:04:55Z",
+   :note
+   "<div data-schema-version=\"3\"><p>This study shows how Tekster [Texter], a strategy-focused writing instruction program, improves the writing performance of students in Grade 4 to 6. This positive effect was still visible 2 months after the intervention. As the intervention was successfully implemented by teachers in a large number of classrooms, this study suggests that Tekster is a promising approach for improving students’ writing in general education.</p>\n</div>",
+   :item-type     "note",
+   :date-added    "2021-07-01T06:04:42Z",
+   :version       4,
+   :parent-item   "AU8RUSW7"}}}

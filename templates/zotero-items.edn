@@ -1,0 +1,331 @@
+[{:item-type "artwork",
+  :fields
+  #{"url" "artworkSize" "abstractNote" "libraryCatalog" "archive" "rights"
+    "accessDate" "title" "date" "extra" "shortTitle" "artworkMedium"
+    "archiveLocation" "callNumber" "language"},
+  :creator-types
+  [{:creator-type "artist", :primary true} {:creator-type "contributor"}]}
+ {:item-type "attachment",
+  :fields #{"url" "accessDate" "title"},
+  :creator-types []}
+ {:item-type "audioRecording",
+  :fields
+  #{"url" "audioRecordingFormat" "place" "abstractNote" "libraryCatalog"
+    "label" "numberOfVolumes" "archive" "rights" "accessDate" "title"
+    "seriesTitle" "volume" "date" "extra" "shortTitle" "archiveLocation" "ISBN"
+    "callNumber" "language" "runningTime"},
+  :creator-types
+  [{:creator-type "performer", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "composer"}
+   {:creator-type "wordsBy"}]}
+ {:item-type "bill",
+  :fields
+  #{"url" "legislativeBody" "abstractNote" "section" "rights" "billNumber"
+    "accessDate" "codeVolume" "title" "history" "date" "extra" "shortTitle"
+    "session" "language" "code" "codePages"},
+  :creator-types
+  [{:creator-type "sponsor", :primary true}
+   {:creator-type "cosponsor"}
+   {:creator-type "contributor"}]}
+ {:item-type "blogPost",
+  :fields
+  #{"url" "websiteType" "abstractNote" "rights" "blogTitle" "accessDate"
+    "title" "date" "extra" "shortTitle" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "commenter"}
+   {:creator-type "contributor"}]}
+ {:item-type "book",
+  :fields
+  #{"url" "place" "abstractNote" "libraryCatalog" "numberOfVolumes" "archive"
+    "rights" "accessDate" "title" "edition" "publisher" "numPages" "series"
+    "volume" "date" "extra" "shortTitle" "archiveLocation" "ISBN" "callNumber"
+    "language" "seriesNumber"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "editor"}
+   {:creator-type "translator"}
+   {:creator-type "seriesEditor"}]}
+ {:item-type "bookSection",
+  :fields
+  #{"url" "bookTitle" "pages" "place" "abstractNote" "libraryCatalog"
+    "numberOfVolumes" "archive" "rights" "accessDate" "title" "edition"
+    "publisher" "series" "volume" "date" "extra" "shortTitle" "archiveLocation"
+    "ISBN" "callNumber" "language" "seriesNumber"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "editor"}
+   {:creator-type "bookAuthor"}
+   {:creator-type "translator"}
+   {:creator-type "seriesEditor"}]}
+ {:item-type "case",
+  :fields
+  #{"reporterVolume" "reporter" "url" "court" "abstractNote" "docketNumber"
+    "rights" "accessDate" "caseName" "firstPage" "history" "extra" "shortTitle"
+    "language" "dateDecided"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "counsel"}
+   {:creator-type "contributor"}]}
+ {:item-type "computerProgram",
+  :fields
+  #{"url" "company" "place" "abstractNote" "libraryCatalog"
+    "programmingLanguage" "archive" "rights" "accessDate" "title" "seriesTitle"
+    "date" "extra" "shortTitle" "archiveLocation" "ISBN" "callNumber" "system"
+    "versionNumber"},
+  :creator-types
+  [{:creator-type "programmer", :primary true} {:creator-type "contributor"}]}
+ {:item-type "conferencePaper",
+  :fields
+  #{"url" "pages" "place" "abstractNote" "libraryCatalog" "DOI"
+    "proceedingsTitle" "conferenceName" "archive" "rights" "accessDate" "title"
+    "publisher" "series" "volume" "date" "extra" "shortTitle" "archiveLocation"
+    "ISBN" "callNumber" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "editor"}
+   {:creator-type "translator"}
+   {:creator-type "seriesEditor"}]}
+ {:item-type "dictionaryEntry",
+  :fields
+  #{"url" "pages" "place" "abstractNote" "libraryCatalog" "numberOfVolumes"
+    "dictionaryTitle" "archive" "rights" "accessDate" "title" "edition"
+    "publisher" "series" "volume" "date" "extra" "shortTitle" "archiveLocation"
+    "ISBN" "callNumber" "language" "seriesNumber"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "editor"}
+   {:creator-type "translator"}
+   {:creator-type "seriesEditor"}]}
+ {:item-type "document",
+  :fields
+  #{"url" "abstractNote" "libraryCatalog" "archive" "rights" "accessDate"
+    "title" "publisher" "date" "extra" "shortTitle" "archiveLocation"
+    "callNumber" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "editor"}
+   {:creator-type "translator"}
+   {:creator-type "reviewedAuthor"}]}
+ {:item-type "email",
+  :fields
+  #{"url" "abstractNote" "rights" "subject" "accessDate" "date" "extra"
+    "shortTitle" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "recipient"}]}
+ {:item-type "encyclopediaArticle",
+  :fields
+  #{"url" "pages" "place" "abstractNote" "libraryCatalog" "numberOfVolumes"
+    "encyclopediaTitle" "archive" "rights" "accessDate" "title" "edition"
+    "publisher" "series" "volume" "date" "extra" "shortTitle" "archiveLocation"
+    "ISBN" "callNumber" "language" "seriesNumber"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "editor"}
+   {:creator-type "translator"}
+   {:creator-type "seriesEditor"}]}
+ {:item-type "film",
+  :fields
+  #{"url" "abstractNote" "libraryCatalog" "videoRecordingFormat" "archive"
+    "rights" "genre" "accessDate" "title" "distributor" "date" "extra"
+    "shortTitle" "archiveLocation" "callNumber" "language" "runningTime"},
+  :creator-types
+  [{:creator-type "director", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "scriptwriter"}
+   {:creator-type "producer"}]}
+ {:item-type "forumPost",
+  :fields
+  #{"url" "forumTitle" "abstractNote" "rights" "postType" "accessDate" "title"
+    "date" "extra" "shortTitle" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true} {:creator-type "contributor"}]}
+ {:item-type "hearing",
+  :fields
+  #{"documentNumber" "url" "legislativeBody" "pages" "place" "abstractNote"
+    "numberOfVolumes" "rights" "accessDate" "committee" "title" "history"
+    "publisher" "date" "extra" "shortTitle" "session" "language"},
+  :creator-types [{:creator-type "contributor", :primary true}]}
+ {:item-type "instantMessage",
+  :fields
+  #{"url" "abstractNote" "rights" "accessDate" "title" "date" "extra"
+    "shortTitle" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "recipient"}]}
+ {:item-type "interview",
+  :fields
+  #{"url" "abstractNote" "libraryCatalog" "interviewMedium" "archive" "rights"
+    "accessDate" "title" "date" "extra" "shortTitle" "archiveLocation"
+    "callNumber" "language"},
+  :creator-types
+  [{:creator-type "interviewee", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "interviewer"}
+   {:creator-type "translator"}]}
+ {:item-type "journalArticle",
+  :fields
+  #{"url" "ISSN" "issue" "pages" "abstractNote" "libraryCatalog" "DOI"
+    "seriesText" "archive" "rights" "accessDate" "publicationTitle" "title"
+    "series" "seriesTitle" "volume" "date" "extra" "shortTitle"
+    "journalAbbreviation" "archiveLocation" "callNumber" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "editor"}
+   {:creator-type "translator"}
+   {:creator-type "reviewedAuthor"}]}
+ {:item-type "letter",
+  :fields
+  #{"url" "letterType" "abstractNote" "libraryCatalog" "archive" "rights"
+    "accessDate" "title" "date" "extra" "shortTitle" "archiveLocation"
+    "callNumber" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "recipient"}]}
+ {:item-type "magazineArticle",
+  :fields
+  #{"url" "ISSN" "issue" "pages" "abstractNote" "libraryCatalog" "archive"
+    "rights" "accessDate" "publicationTitle" "title" "volume" "date" "extra"
+    "shortTitle" "archiveLocation" "callNumber" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "translator"}
+   {:creator-type "reviewedAuthor"}]}
+ {:item-type "manuscript",
+  :fields
+  #{"url" "place" "abstractNote" "libraryCatalog" "archive" "rights"
+    "accessDate" "title" "manuscriptType" "numPages" "date" "extra"
+    "shortTitle" "archiveLocation" "callNumber" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "translator"}]}
+ {:item-type "map",
+  :fields
+  #{"url" "place" "scale" "abstractNote" "libraryCatalog" "mapType" "archive"
+    "rights" "accessDate" "title" "edition" "publisher" "seriesTitle" "date"
+    "extra" "shortTitle" "archiveLocation" "ISBN" "callNumber" "language"},
+  :creator-types
+  [{:creator-type "cartographer", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "seriesEditor"}]}
+ {:item-type "newspaperArticle",
+  :fields
+  #{"url" "ISSN" "pages" "place" "abstractNote" "libraryCatalog" "section"
+    "archive" "rights" "accessDate" "publicationTitle" "title" "edition" "date"
+    "extra" "shortTitle" "archiveLocation" "callNumber" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "translator"}
+   {:creator-type "reviewedAuthor"}]}
+ {:item-type "note", :fields #{}, :creator-types []}
+ {:item-type "patent",
+  :fields
+  #{"url" "country" "references" "pages" "place" "patentNumber" "abstractNote"
+    "issueDate" "filingDate" "applicationNumber" "rights" "accessDate" "title"
+    "assignee" "priorityNumbers" "extra" "legalStatus" "shortTitle" "language"
+    "issuingAuthority"},
+  :creator-types
+  [{:creator-type "inventor", :primary true}
+   {:creator-type "attorneyAgent"}
+   {:creator-type "contributor"}]}
+ {:item-type "podcast",
+  :fields
+  #{"url" "abstractNote" "audioFileType" "rights" "accessDate" "title"
+    "seriesTitle" "extra" "shortTitle" "language" "runningTime"
+    "episodeNumber"},
+  :creator-types
+  [{:creator-type "podcaster", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "guest"}]}
+ {:item-type "presentation",
+  :fields
+  #{"url" "place" "abstractNote" "rights" "accessDate" "title" "date" "extra"
+    "shortTitle" "language" "presentationType" "meetingName"},
+  :creator-types
+  [{:creator-type "presenter", :primary true} {:creator-type "contributor"}]}
+ {:item-type "radioBroadcast",
+  :fields
+  #{"url" "audioRecordingFormat" "place" "abstractNote" "libraryCatalog"
+    "programTitle" "network" "archive" "rights" "accessDate" "title" "date"
+    "extra" "shortTitle" "archiveLocation" "callNumber" "language"
+    "runningTime" "episodeNumber"},
+  :creator-types
+  [{:creator-type "director", :primary true}
+   {:creator-type "scriptwriter"}
+   {:creator-type "producer"}
+   {:creator-type "castMember"}
+   {:creator-type "contributor"}
+   {:creator-type "guest"}]}
+ {:item-type "report",
+  :fields
+  #{"reportType" "url" "reportNumber" "pages" "place" "abstractNote"
+    "libraryCatalog" "archive" "rights" "accessDate" "title" "seriesTitle"
+    "institution" "date" "extra" "shortTitle" "archiveLocation" "callNumber"
+    "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "translator"}
+   {:creator-type "seriesEditor"}]}
+ {:item-type "statute",
+  :fields
+  #{"nameOfAct" "url" "pages" "abstractNote" "dateEnacted" "codeNumber"
+    "section" "rights" "accessDate" "history" "extra" "shortTitle" "session"
+    "language" "publicLawNumber" "code"},
+  :creator-types
+  [{:creator-type "author", :primary true} {:creator-type "contributor"}]}
+ {:item-type "thesis",
+  :fields
+  #{"thesisType" "university" "url" "place" "abstractNote" "libraryCatalog"
+    "archive" "rights" "accessDate" "title" "numPages" "date" "extra"
+    "shortTitle" "archiveLocation" "callNumber" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true} {:creator-type "contributor"}]}
+ {:item-type "tvBroadcast",
+  :fields
+  #{"url" "place" "abstractNote" "libraryCatalog" "programTitle"
+    "videoRecordingFormat" "network" "archive" "rights" "accessDate" "title"
+    "date" "extra" "shortTitle" "archiveLocation" "callNumber" "language"
+    "runningTime" "episodeNumber"},
+  :creator-types
+  [{:creator-type "director", :primary true}
+   {:creator-type "scriptwriter"}
+   {:creator-type "producer"}
+   {:creator-type "castMember"}
+   {:creator-type "contributor"}
+   {:creator-type "guest"}]}
+ {:item-type "videoRecording",
+  :fields
+  #{"studio" "url" "place" "abstractNote" "libraryCatalog" "numberOfVolumes"
+    "videoRecordingFormat" "archive" "rights" "accessDate" "title"
+    "seriesTitle" "volume" "date" "extra" "shortTitle" "archiveLocation" "ISBN"
+    "callNumber" "language" "runningTime"},
+  :creator-types
+  [{:creator-type "director", :primary true}
+   {:creator-type "scriptwriter"}
+   {:creator-type "producer"}
+   {:creator-type "castMember"}
+   {:creator-type "contributor"}]}
+ {:item-type "webpage",
+  :fields
+  #{"url" "websiteTitle" "websiteType" "abstractNote" "rights" "accessDate"
+    "title" "date" "extra" "shortTitle" "language"},
+  :creator-types
+  [{:creator-type "author", :primary true}
+   {:creator-type "contributor"}
+   {:creator-type "translator"}]}]

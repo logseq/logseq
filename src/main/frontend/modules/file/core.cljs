@@ -29,9 +29,7 @@
         markdown? (= format :markdown)
         content (cond
                   (and first-block? pre-block?)
-                  (let [content (-> (string/trim content)
-                                    ;; FIXME: should only works with :filters
-                                    (string/replace "\"" "\\\""))]
+                  (let [content (string/trim content)]
                     (str content "\n"))
 
                   :else
