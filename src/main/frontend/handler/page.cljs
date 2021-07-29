@@ -20,6 +20,7 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.commands :as commands]
             [frontend.date :as date]
+            [frontend.db-schema :as db-schema]
             [clojure.walk :as walk]
             [frontend.git :as git]
             [frontend.fs :as fs]
@@ -179,7 +180,16 @@
                (p/catch (fn [err]
                           (js/console.error "error: " err))))))
 
-          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]])
+
+          ;; not removing entire entity, because :block/alias still use this entity.
+          ;; so just delete related file and make remove most page-related attrs.
+          ;; (db/transact! [[:db.fn/retractEntity [:block/name page-name]]])
+
+          (when-let [id (:db/id (db/entity [:block/name page-name]))]
+            (let [txs (mapv (fn [attribute]
+                             [:db/retract id attribute])
+                           db-schema/retract-page-attributes)]
+              (db/transact! txs)))
 
           (ok-handler))))))
 
