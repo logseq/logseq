@@ -90,9 +90,9 @@ html[data-theme='dark'] {
 .white-theme,
 html[data-theme='light'] {
   --ls-primary-background-color: #ffffff;
-  --ls-secondary-background-color: #f7f7f7;
-  --ls-tertiary-background-color: #f1eee8;
-  --ls-quaternary-background-color: #e8e5de;
+  --ls-secondary-background-color: #f8f9fa;
+  --ls-tertiary-background-color: #e9ecef;
+  --ls-quaternary-background-color: #dee2e6;
   --ls-table-tr-even-background-color: #f7f7f7;
   --ls-active-primary-color: rgb(4, 85, 145);
   --ls-active-secondary-color: #003761;
@@ -138,8 +138,8 @@ html[data-theme='light'] {
   --color-level-1: var(--ls-secondary-background-color);
   --color-level-2: var(--ls-tertiary-background-color);
   --color-level-3: var(--ls-quaternary-background-color);
-  --color-level-4: #d0e6fa;
-  --color-level-5: #bbdaf6;
+  --color-level-4: #ced4da;
+  --color-level-5: #adb5bd;
 }
 
 /* region Reset top elements */
