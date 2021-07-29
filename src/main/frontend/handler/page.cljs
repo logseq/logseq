@@ -405,6 +405,7 @@
 
                   ;; Redirect to the new page
                   (route-handler/redirect! {:to :page
+                                            :push false
                                             :path-params {:name (string/lower-case new-name)}})
 
                   (notification/show! "Page renamed successfully!" :success)
