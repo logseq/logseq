@@ -17,7 +17,8 @@
         content (get-in @state/state [:editor/content id])]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
-    (editor-handler/restore-cursor-pos! id content)
+    (when content
+      (editor-handler/restore-cursor-pos! id content))
 
     ;; Here we delay this listener, otherwise the click to edit event will trigger a outside click event,
     ;; which will hide the editor so no way for editing.
