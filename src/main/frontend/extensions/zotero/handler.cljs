@@ -51,6 +51,11 @@
           :as opt}]
    (go
      (let [{:keys [page-name properties]} (extractor/extract item)]
+
+       (when insert-command?
+         (handle-command-zotero block-dom-id page-name)
+         (editor-handler/save-current-block!))
+
        (if (page-handler/page-exists? (str/lower-case page-name))
          (editor-handler/api-insert-new-block!
           ""
@@ -66,9 +71,6 @@
        (<! (add page-name :attachments item))
 
        (<! (add page-name :notes item))
-
-       (when insert-command?
-         (handle-command-zotero block-dom-id page-name))
 
        (when notification?
          (notification/show! (str "Successfully added zotero item to page " page-name) :success))))))
