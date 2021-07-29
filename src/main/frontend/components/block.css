@@ -90,7 +90,7 @@
 
 .open-block-ref-link {
   @apply opacity-30 hover:opacity-100;
-  padding: 1px 4px;
+  padding: 0 8px;
   border-radius: 2px;
 }
 
@@ -354,7 +354,7 @@
 
 :not(.color-level) .color-level {
   @apply rounded;
-  border: 2px solid var(--color-level-2);
+  box-shadow: 0 0 0 2px var(--color-level-2);
 }
 
 .bullet-container {

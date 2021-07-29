@@ -1647,11 +1647,7 @@
        (not slide?)
        (merge attrs))
 
-     [:span
-      ;; .flex.relative {:style {:width "100%"}}
-      [:span
-       ;; .flex-1.flex-col.relative.block-content
-
+     [:<>
        (cond
          (seq title)
          (build-block-title config block)
@@ -1684,7 +1680,7 @@
             (for [[idx child] (medley/indexed body)]
               (when-let [block (markup-element-cp config child)]
                 (rum/with-key (block-child block)
-                  (str uuid "-" idx)))))])]]]))
+                  (str uuid "-" idx)))))])]]))
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid title body meta content page format repo children marker properties block-refs-count pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
@@ -1707,7 +1703,7 @@
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (block-content config block edit-input-id block-id slide?)]
-       [:div.flex.flex-row
+       [:div.flex.flex-row.text-sm
         (when (and (:embed? config)
                    (not (:page-embed? config))
                    (= (:embed-id config) uuid))
@@ -1728,23 +1724,20 @@
                             (get properties :todo))
                 finish-time (get properties :done)]
             (when (and start-time finish-time (> finish-time start-time))
-              [:div.text-sm.time-spent.ml-1 {:title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))
-                                             :style {:padding-top 3}}
+              [:div.time-spent.ml-1.inline-flex.items-center {:title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))}
                [:a.opacity-30.hover:opacity-100
                 (utils/timeConversion (- finish-time start-time))]])))
 
         (when (and block-refs-count (> block-refs-count 0))
-          [:div
-           [:a.open-block-ref-link.color-level.text-sm.ml-2
-            {:title "Open block references"
-             :style {:margin-top -1}
-             :on-click (fn []
-                         (state/sidebar-add-block!
+          [:a.open-block-ref-link.inline-flex.items-center.color-level.ml-2
+           {:title    "Open block references"
+            :on-click (fn []
+                        (state/sidebar-add-block!
                           (state/get-current-repo)
                           (:db/id block)
                           :block-ref
                           {:block block}))}
-            block-refs-count]])]])))
+           block-refs-count])]])))
 
 (defn non-dragging?
   [e]
