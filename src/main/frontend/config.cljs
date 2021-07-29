@@ -83,7 +83,7 @@
                                 (set))]
     (set/union
      config-formats
-     #{:gif :svg :jpeg :ico :png :jpg :bmp})))
+     #{:gif :svg :jpeg :ico :png :jpg :bmp :webp})))
 
 (def html-render-formats
   #{:adoc :asciidoc})
@@ -167,7 +167,7 @@
 
 (defn get-highlight
   [format]
-  "^^")
+  "==")
 
 (defn get-code
   [format]

@@ -969,7 +969,7 @@
      (let [user-agent js/navigator.userAgent
            vendor js/navigator.vendor]
        (and (safe-re-find #"Chrome" user-agent)
-            (safe-re-find #"Google Inc" user-agent)))))
+            (safe-re-find #"Google Inc" vendor)))))
 
 #?(:cljs
    (defn indexeddb-check?

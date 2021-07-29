@@ -26,7 +26,7 @@
   []
   (conj
    #{"do MMM yyyy"
-	   "do MMMM yyyy"
+     "do MMMM yyyy"
      "MMM do, yyyy"
      "MMMM do, yyyy"
      "E, dd-MM-yyyy"
@@ -53,6 +53,10 @@
      "yyyyMMdd"
      "yyyy年MM月dd日"}
    (state/get-date-formatter)))
+
+;; (tf/parse (tf/formatter "dd.MM.yyyy") "2021Q4") => 20040120T000000
+(def safe-journal-title-formatters
+  (set ["yyyy-MM-dd" "yyyy_MM_dd" (state/get-date-formatter)]))
 
 (defn get-date-time-string
   ([]
@@ -180,12 +184,12 @@
   [journal-title then-fn]
   (when-not (string/blank? journal-title)
     (when-let [time (->> (map
-                          (fn [formatter]
-                            (try
-                              (tf/parse (tf/formatter formatter) (util/capitalize-all journal-title))
-                              (catch js/Error _e
-                                nil)))
-                          (journal-title-formatters))
+                           (fn [formatter]
+                             (try
+                               (tf/parse (tf/formatter formatter) (util/capitalize-all journal-title))
+                               (catch js/Error _e
+                                 nil)))
+                           safe-journal-title-formatters)
                          (filter some?)
                          first)]
       (then-fn time))))

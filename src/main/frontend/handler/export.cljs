@@ -581,21 +581,6 @@
                   (.setAttribute anchor "download" path)
                   (.click anchor))))))))))
 
-(defn convert-repo-markdown-v2!
-  [repo]
-  (when repo
-    (when-let [files (get-md-file-contents repo)]
-      (let [zip-file-name (-> (string/replace repo config/local-db-prefix "")
-                              (string/replace #"^/+" ""))
-            zip-file-name (str zip-file-name
-                               "_markdown_"
-                               (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-          (when-let [anchor (gdom/getElement "convert-markdown-to-unordered-list-or-heading")]
-            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-            (.setAttribute anchor "download" (.-name zipfile))
-            (.click anchor)))))))
-
 (defn- dissoc-properties [m ks]
   (if (:block/properties m)
     (update m :block/properties

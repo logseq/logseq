@@ -34,11 +34,13 @@
   (set! js/window.onerror
         (fn [message, source, lineno, colno, error]
           (when-not (error/ignored? message)
-            (notification/show!
-             (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
-             :error
-             ;; Don't auto-hide
-             false)))))
+            (js/console.error error)
+            ;; (notification/show!
+            ;;  (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
+            ;;  :error
+            ;;  ;; Don't auto-hide
+            ;;  false)
+            ))))
 
 (defn- watch-for-date!
   []

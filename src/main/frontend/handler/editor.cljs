@@ -829,7 +829,7 @@
                      (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
                        (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
                          (let [original-content (util/trim-safe (:block/content block))
-                               new-value (str original-content " " (string/triml value))
+                               new-value (str (property/remove-built-in-properties format original-content) " " (string/triml value))
                                tail-len (count (string/triml value))
                                pos (max
                                     (if original-content
@@ -1498,8 +1498,8 @@
    "*" "*"
    "_" "_"
    "^" "^"
+   "=" "="
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
-
    })
 
 (def reversed-autopair-map
@@ -1507,7 +1507,7 @@
           (keys autopair-map)))
 
 (defonce autopair-when-selected
-  #{"^" "_"})
+  #{"^" "_" "="})
 
 (def delete-map
   (assoc autopair-map

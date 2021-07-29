@@ -614,11 +614,10 @@
        (js/console.dir error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
-  (when error
-    (js/console.error error)
-    (log/error :ui/catch-error error))
-  (if (and (not config/dev?) (some? error))
-    error-view
+  (if (some? error)
+    (do
+      (log/error :exception error)
+      error-view)
     view))
 
 (rum/defc select

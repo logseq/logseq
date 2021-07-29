@@ -416,17 +416,19 @@
                (page-blocks-cp repo page {:sidebar? sidebar?}))]]
 
            (when-not block?
+             (today-queries repo today? sidebar?))
+
+           (when-not block?
+             (tagged-pages repo page-name))
+
+           ;; referenced blocks
+           [:div {:key "page-references"}
+            (rum/with-key
+              (reference/references route-page-name false)
+              (str route-page-name "-refs"))]
+
+           (when-not block?
              [:div
-              (today-queries repo today? sidebar?)
-
-              (tagged-pages repo page-name)
-
-              ;; referenced blocks
-              [:div {:key "page-references"}
-               (rum/with-key
-                 (reference/references route-page-name false)
-                 (str route-page-name "-refs"))]
-
               (when (text/namespace-page? route-page-name)
                 (hierarchy/structures route-page-name))
 
