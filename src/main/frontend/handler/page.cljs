@@ -21,7 +21,7 @@
             [frontend.commands :as commands]
             [frontend.date :as date]
             [frontend.db-schema :as db-schema]
-            [frontend.db.conn :as conn]
+            [frontend.db.model :as model]
             [clojure.walk :as walk]
             [frontend.git :as git]
             [frontend.fs :as fs]
@@ -184,19 +184,13 @@
 
           ;; if other page alias this pagename,
           ;; then just remove some attrs of this entity instead of retractEntity
-          (if (empty?
-               (d/q '[:find ?a
-                      :in $ ?page-name
-                      :where
-                      [?p :block/alias ?als]
-                      [?a :block/name ?page-name]
-                      [(= ?als ?a)]] (conn/get-conn true) page-name))
-            (db/transact! [[:db.fn/retractEntity [:block/name page-name]]])
+          (if (model/get-alias-source-page (state/get-current-repo) page-name)
             (when-let [id (:db/id (db/entity [:block/name page-name]))]
               (let [txs (mapv (fn [attribute]
                                 [:db/retract id attribute])
                               db-schema/retract-page-attributes)]
-                (db/transact! txs))))
+                (db/transact! txs)))
+            (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
 
           (ok-handler))))))
 
