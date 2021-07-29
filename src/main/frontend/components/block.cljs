@@ -1477,7 +1477,7 @@
   (let [pre-block? (:block/pre-block? block)
         date (and (= k :date) (date/get-locale-string (str v)))]
     [:div
-     [:span.font-bold (name k)]
+     [:span.page-property-key.font-medium (name k)]
      [:span.mr-1 ":"]
      (cond
        (int? v)

@@ -474,3 +474,7 @@ span.cloze-revealed {
     text-decoration: underline;
     text-underline-position: under;
 }
+
+.page-property-key {
+  color: var(--ls-secondary-text-color);
+}
