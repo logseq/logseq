@@ -90,7 +90,6 @@
 
 .open-block-ref-link {
   @apply opacity-30 hover:opacity-100;
-  background-color: var(--ls-page-properties-background-color);
   padding: 1px 4px;
   border-radius: 2px;
 }
@@ -185,11 +184,8 @@
 .block-properties {
   margin: 4px 0;
   padding: 4px 8px;
-  background-color: var(--ls-block-properties-background-color, #f0f8ff);
-}
-
-.page-properties {
-  background-color: var(--ls-page-properties-background-color);
+  display: inline-block;
+  min-width: 320px;
 }
 
 .block-marker {
@@ -274,7 +270,7 @@
 
 .ls-block :is(h1, h2),
 .editor-inner :is(.h1, .h2) {
-  border-bottom: 1px solid var(--ls-quaternary-background-color);
+  border-bottom: 1px solid var(--ls-border-color);
   margin: 0.4em 0 0;
 }
 
@@ -443,10 +439,6 @@ a.filter svg {
     display: inline;
 }
 
-.query-title {
-    background: var(--ls-page-properties-background-color);
-}
-
 .ls-card {
     height: 100%;
 }
@@ -466,7 +458,6 @@ a[data-ref="card"], .page-reference[data-ref="card"] {
 }
 
 .cards-title {
-    background: var(--ls-page-properties-background-color);
     border-radius: 4px;
     padding: 2px 8px;
 }

@@ -206,8 +206,8 @@
 }
 
 .dark-theme .datepicker td.active, .dark-theme .datepicker td.active:hover {
-    background-color: var(--ls-block-properties-background-color);
-    border-color: var(--ls-block-properties-background-color);
+    background-color: var(--ls-quaternary-background-color);
+    border-color: var(--ls-quaternary-background-color);
 }
 
 .dark-theme .datepicker th.selectable {
@@ -215,7 +215,7 @@
 }
 
 .dark-theme .datepicker td.available:hover, .dark-theme .datepicker th.available:hover {
-    background: var(--ls-block-properties-background-color);
+    background: var(--ls-quaternary-background-color);
 }
 
 .datepicker tr:nth-child(odd), .datepicker tr:nth-child(even), .dark-theme .datepicker tr:nth-child(odd), .dark-theme .datepicker tr:nth-child(even) {

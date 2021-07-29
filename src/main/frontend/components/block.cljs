@@ -993,7 +993,7 @@
         [:div.dsl-query
          (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
-                         {:title [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
+                         {:title [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs.color-level
                                   (str "Query: " query)]
                           :query query}))]
 
@@ -1520,7 +1520,7 @@
                      properties)]
     (cond
       (seq properties)
-      [:div.block-properties
+      [:div.block-properties.color-level
        {:class (when pre-block? "page-properties")
         :title (if pre-block?
                  "Click to edit this page's properties"
@@ -1735,7 +1735,7 @@
 
         (when (and block-refs-count (> block-refs-count 0))
           [:div
-           [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+           [:a.open-block-ref-link.color-level.text-sm.ml-2
             {:title "Open block references"
              :style {:margin-top -1}
              :on-click (fn []

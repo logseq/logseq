@@ -526,7 +526,7 @@
             filtered-total (count result)
             modal? (:modal? config)]
         [:div.flex-1 {:style (if modal? {:height "100%"})}
-         [:div.flex.flex-row.items-center.justify-between.cards-title
+         [:div.flex.flex-row.items-center.justify-between.cards-title.color-level
           [:div
            [:span.text-sm [:span.font-bold "🗂️"]
             (str ": " query-string)]]
