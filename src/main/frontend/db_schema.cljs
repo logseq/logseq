@@ -147,3 +147,17 @@
     :block/updated-at
     }
   )
+
+
+;;; use `(map [:db.fn/retractAttribute <id> <attr>] retract-page-attributes)`
+;;; to remove attrs to make the page as it's just created and no file attached to it
+(def retract-page-attributes
+  #{:block/created-at
+    :block/updated-at
+    :block/file
+    :block/format
+    :block/content
+    :block/properties
+    :block/alias
+    :block/tags
+    :block/unordered})
