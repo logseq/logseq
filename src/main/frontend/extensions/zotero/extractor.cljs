@@ -109,7 +109,7 @@
        (markdown-link "Web library" (web-link item))))
 
 (defn properties [item]
-  (let [type    (util/format "[[%s]]" (item-type item))
+  (let [type    (item-type item)
         fields  (schema/fields type)
         authors (authors item)
         tags    (tags item)
@@ -123,7 +123,7 @@
                                 :authors authors
                                 :tags tags
                                 :date date
-                                :item-type type)
+                                :item-type (util/format "[[%s]]" type))
                          (dissoc :creators)
                          (rename-keys {:title :original-title})
                          (assoc :title (page-name item)))]
