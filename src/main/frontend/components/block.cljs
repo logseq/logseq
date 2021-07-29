@@ -528,16 +528,15 @@
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
   (let [blocks (db/get-block-and-children (state/get-current-repo) id)]
-    [:div.color-level.embed-block.bg-base-2
+    [:div.color-level.embed.embed-block.bg-base-2
      {:style {:z-index 2}
       :on-double-click #(edit-parent-block % config)
       :on-mouse-down (fn [e] (.stopPropagation e))}
-     [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
                                       :id (str id)
                                       :embed-id id
                                       :embed? true
-                                      :ref? false))]]))
+                                      :ref? false))]))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   [config page-name]

@@ -173,8 +173,6 @@
 }
 
 .embed-page {
-  @apply py-2 my-2 px-2;
-
   > section {
     margin-bottom: 5px;
   }
@@ -428,7 +426,9 @@ a:hover > .bullet-container .bullet {
 }
 
 .embed {
+  @apply py-2 my-2 px-2;
   border-radius: var(--ls-border-radius-low);
+  margin: 0.2em 0px 0.5em;
 }
 
 .embed-header {
