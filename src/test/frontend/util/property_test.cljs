@@ -50,10 +50,10 @@
 (deftest test-insert-property
   (are [x y] (= x y)
     (property/insert-property :org "hello" "a" "b")
-    "hello\n:PROPERTIES:\n:a: b\n:END:\n"
+    "hello\n:PROPERTIES:\n:a: b\n:END:"
 
     (property/insert-property :org "hello" "a" false)
-    "hello\n:PROPERTIES:\n:a: false\n:END:\n"
+    "hello\n:PROPERTIES:\n:a: false\n:END:"
 
     (property/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END:\n" "c" "d")
     "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:"
@@ -111,7 +111,7 @@
     "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:"
     "hello\nfoo:: bar\nnice:: bingo"
 
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:\n"
+    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:"
     "hello\nfoo:: bar\nnice:: bingo"
 
     "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:\nnice"
