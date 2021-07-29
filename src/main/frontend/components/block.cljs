@@ -405,7 +405,6 @@
                           [:div.tippy-wrapper.overflow-y-auto.p-4
                            {:style {:width          600
                                     :text-align     "left"
-                                    :font-weight    500
                                     :max-height     600
                                     :padding-bottom 64}}
                            (if (and (string? page-original-name) (string/includes? page-original-name "/"))
