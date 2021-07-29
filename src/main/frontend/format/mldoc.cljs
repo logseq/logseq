@@ -267,3 +267,7 @@
 (defn plain->text
   [plains]
   (string/join (map last plains)))
+
+(defn properties?
+  [ast]
+  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))
