@@ -460,7 +460,18 @@
                        (f/get-default-config format {:export-md-indent-style indent-style})
                        (js/JSON.stringify (clj->js refs)))))
 
-
+(defn export-blocks-as-html
+  [repo root-block-uuid]
+  (let [get-page&block-refs-by-query-aux (get-embed-and-refs-blocks-pages-aux)
+        f #(get-page&block-refs-by-query repo % get-page&block-refs-by-query-aux {:is-block? true})
+        root-block (db/entity [:block/uuid root-block-uuid])
+        blocks (db/get-block-and-children repo root-block-uuid)
+        refs (f blocks)
+        content (get-blocks-contents repo root-block-uuid)
+        format (or (:block/format root-block) (state/get-preferred-format))]
+    (fp/toHtml f/mldoc-record content
+                       (f/get-default-config format)
+                       (js/JSON.stringify (clj->js refs)))))
 
 (defn- convert-md-files-unordered-list-or-heading
   [repo files heading-to-list?]
@@ -569,21 +580,6 @@
                   (.setAttribute anchor "href" url)
                   (.setAttribute anchor "download" path)
                   (.click anchor))))))))))
-
-(defn convert-repo-markdown-v2!
-  [repo]
-  (when repo
-    (when-let [files (get-md-file-contents repo)]
-      (let [zip-file-name (-> (string/replace repo config/local-db-prefix "")
-                              (string/replace #"^/+" ""))
-            zip-file-name (str zip-file-name
-                               "_markdown_"
-                               (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-          (when-let [anchor (gdom/getElement "convert-markdown-to-unordered-list-or-heading")]
-            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-            (.setAttribute anchor "download" (.-name zipfile))
-            (.click anchor)))))))
 
 (defn- dissoc-properties [m ks]
   (if (:block/properties m)

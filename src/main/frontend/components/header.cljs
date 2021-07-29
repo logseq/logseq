@@ -22,8 +22,7 @@
             [frontend.handler.web.nfs :as nfs]
             [frontend.mixins :as mixins]
             [goog.dom :as gdom]
-            [goog.object :as gobj]
-            [frontend.handler.migrate :as migrate]))
+            [goog.object :as gobj]))
 
 (rum/defc logo < rum/reactive
   [{:keys [white? electron-mac?]}]
@@ -136,12 +135,6 @@
        (when current-repo
          {:title (t :import)
           :options {:href (rfe/href :import)}
-          :icon svg/import-sm})
-
-       (when (and current-repo
-                  (not (:markdown/version (state/get-config))))
-         {:title "Convert to more standard Markdown"
-          :options {:on-click (fn [] (migrate/show-convert-notification! current-repo))}
           :icon svg/import-sm})
 
        {:title [:div.flex-row.flex.justify-between.items-center

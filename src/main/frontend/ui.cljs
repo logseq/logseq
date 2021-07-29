@@ -347,7 +347,7 @@
 (rum/defcs infinite-list <
   (mixins/event-mixin attach-listeners)
   "Render an infinite list."
-  [state list-element-id body {:keys [on-load has-more]}]
+  [state list-element-id body {:keys [on-load has-more on-top-reached]}]
   (rum/with-context [[t] i18n/*tongue-context*]
     (rum/fragment
      body
@@ -585,7 +585,8 @@
         (if (fn? header)
           (header @collapsed?)
           header)]]]
-     [:div {:class (if @collapsed? "hidden" "initial")}
+     [:div {:class (if @collapsed? "hidden" "initial")
+            :on-mouse-down (fn [e] (.stopPropagation e))}
       (if (fn? content)
         (if (not @collapsed?) (content) nil)
         content)]]))
@@ -613,11 +614,10 @@
        (js/console.dir error)
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
-  (when error
-    (js/console.error error)
-    (log/error :ui/catch-error error))
-  (if (and (not config/dev?) (some? error))
-    error-view
+  (if (some? error)
+    (do
+      (log/error :exception error)
+      error-view)
     view))
 
 (rum/defc select
