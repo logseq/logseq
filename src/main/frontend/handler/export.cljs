@@ -448,7 +448,7 @@
                    (js/JSON.stringify (clj->js refs)))))
 
 (defn export-blocks-as-markdown
-  [repo root-block-uuid indent-style]
+  [repo root-block-uuid indent-style remove-options]
   (let [get-page&block-refs-by-query-aux (get-embed-and-refs-blocks-pages-aux)
         f #(get-page&block-refs-by-query repo % get-page&block-refs-by-query-aux {:is-block? true})
         root-block (db/entity [:block/uuid root-block-uuid])
@@ -457,7 +457,7 @@
         content (get-blocks-contents repo root-block-uuid)
         format (or (:block/format root-block) (state/get-preferred-format))]
     (fp/exportMarkdown f/mldoc-record content
-                       (f/get-default-config format {:export-md-indent-style indent-style})
+                       (f/get-default-config format {:export-md-indent-style indent-style :export-md-remove-options remove-options})
                        (js/JSON.stringify (clj->js refs)))))
 
 (defn export-blocks-as-html
