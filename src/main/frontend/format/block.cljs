@@ -199,7 +199,8 @@
           page-refs (->>
                      (map (fn [v]
                             (when (string? v)
-                              (let [result (text/split-page-refs-without-brackets v {:un-brackets? false})]
+                              (let [v (string/trim v)
+                                    result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)
                                   (map text/page-ref-un-brackets! result)
                                   []))))
@@ -215,7 +216,7 @@
                                            "id"
                                            k)
                                        v (if (coll? v)
-                                           v
+                                           (remove util/wrapped-by-quotes? v)
                                            (property/parse-property k v))
                                        k (keyword k)
                                        v (if (and
@@ -464,6 +465,19 @@
             (uuid custom-id))))
       (db/new-block-id)))
 
+(defn get-page-refs-from-properties
+  [properties]
+  (let [page-refs (mapcat (fn [v] (cond
+                                   (coll? v)
+                                   v
+
+                                   (text/page-ref? v)
+                                   [(text/page-ref-un-brackets! v)]
+
+                                   :else
+                                   nil)) (vals properties))]
+    (map (fn [page] (page-name->map page true)) page-refs)))
+
 (defn extract-blocks
   [blocks content with-id? format]
   (try
@@ -593,6 +607,8 @@
                                                (utf8/length encoded-content))}
                            :body @pre-block-body
                            :properties @pre-block-properties
+                           :properties-order (keys @pre-block-properties)
+                           :refs (get-page-refs-from-properties @pre-block-properties)
                            :pre-block? true
                            :unordered true}
                           (block-keywordize)))

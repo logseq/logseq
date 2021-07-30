@@ -372,7 +372,23 @@
       :on-click
       (fn []
         (state/close-settings!)
-        (route-handler/redirect! {:to :shortcut})))]]])
+        (route-handler/redirect! {:to :shortcut-setting})))]]])
+
+(defn zotero-settings-row [t]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "zotero_settings"}
+    "Zotero settings"]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div
+     (ui/button
+      "Zotero settings"
+      :class "text-sm p-1"
+      :style {:margin-top "0px"}
+      :on-click
+      (fn []
+        (state/close-settings!)
+        (route-handler/redirect! {:to :zotero-setting})))]]])
 
 (defn auto-push-row [t current-repo enable-git-auto-push?]
   (when (string/starts-with? current-repo "https://")
@@ -474,6 +490,7 @@
         (enable-all-pages-public-row t enable-all-pages-public?)
         (encryption-row t enable-encryption?)
         (keyboard-shortcuts-row t)
+        (zotero-settings-row t)
         (auto-push-row t current-repo enable-git-auto-push?)]
 
        [:hr] ;; Outside of panel wrap so that it is wider

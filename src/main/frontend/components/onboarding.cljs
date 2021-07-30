@@ -237,7 +237,7 @@
         :class "text-sm p-1 ml-3"
         :on-click
         (fn []
-          (route-handler/redirect! {:to :shortcut})))
+          (route-handler/redirect! {:to :shortcut-setting})))
        (shortcut/trigger-table)
        (shortcut/shortcut-table :shortcut.category/basics)
        (shortcut/shortcut-table :shortcut.category/block-editing)

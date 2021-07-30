@@ -1,14 +1,15 @@
 (ns frontend.date
-  (:require [cljs-time.core :as t]
+  (:require ["chrono-node" :as chrono]
+            [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [cljs-time.local :as tl]
-            [frontend.state :as state]
-            [cljs-bean.core :as bean]
-            [frontend.util :as util]
             [clojure.string :as string]
+            [frontend.state :as state]
+            [frontend.util :as util]
             [goog.object :as gobj]
-            ["chrono-node" :as chrono]))
+            [lambdaisland.glogi :as log]))
 
 (defn nld-parse
   [s]
@@ -113,6 +114,14 @@
    (journal-name (tl/local-now)))
   ([date]
    (format date)))
+
+(defn journal-name-s [s]
+  (try
+    (journal-name (tf/parse (tf/formatter "yyyy-MM-dd") s))
+    (catch js/Error e
+      (log/info :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
+                                     :date-str s})
+      nil)))
 
 (defn today
   []

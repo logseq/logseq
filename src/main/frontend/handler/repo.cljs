@@ -179,12 +179,12 @@
              item)) data)))
 
 (defn- reset-contents-and-blocks!
-  [repo-url files blocks-pages delete-files delete-blocks]
+  [repo-url files blocks-pages delete-files delete-blocks refresh?]
   (db/transact-files-db! repo-url files)
   (let [files (map #(select-keys % [:file/path :file/last-modified-at]) files)
         all-data (-> (concat delete-files delete-blocks files blocks-pages)
-                     (util/remove-nils)
-                     (remove-non-exists-refs!))]
+                     (util/remove-nils))
+        all-data (if refresh? all-data (remove-non-exists-refs! all-data))]
     (db/transact! repo-url all-data)))
 
 (defn- load-pages-metadata!
@@ -213,21 +213,22 @@
       (log/error :exception e))))
 
 (defn- parse-files-and-create-default-files-inner!
-  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata]
-  (let [parsed-files (filter
+  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
+  (let [refresh? (:refresh? opts)
+        parsed-files (filter
                       (fn [file]
                         (let [format (format/get-format (:file/path file))]
                           (contains? config/mldoc-support-formats format)))
                       files)
         blocks-pages (if (seq parsed-files)
-                       (extract-handler/extract-all-blocks-pages repo-url parsed-files metadata)
+                       (extract-handler/extract-all-blocks-pages repo-url parsed-files metadata refresh?)
                        [])]
     (let [config-file (config/get-config-path)]
       (when (contains? (set file-paths) config-file)
         (when-let [content (some #(when (= (:file/path %) config-file)
                                     (:file/content %)) files)]
           (file-handler/restore-config! repo-url content true))))
-    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks)
+    (reset-contents-and-blocks! repo-url files blocks-pages delete-files delete-blocks refresh?)
     (load-pages-metadata! repo-url file-paths files)
     (when first-clone?
       (if (and (not db-encrypted?) (state/enable-encryption? repo-url))
@@ -240,15 +241,15 @@
     (state/pub-event! [:graph/added repo-url])))
 
 (defn- parse-files-and-create-default-files!
-  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata]
+  [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
   (if db-encrypted?
     (p/let [files (p/all
                    (map (fn [file]
                           (p/let [content (encrypt/decrypt (:file/content file))]
                             (assoc file :file/content content)))
                         files))]
-      (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata))
-    (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)))
+      (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts))
+    (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)))
 
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
@@ -264,14 +265,14 @@
           db-encrypted? (:db/encrypted? metadata)
           db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
       (if db-encrypted?
-        (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)]
+        (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)]
           (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
                              db-encrypted-secret
                              close-fn]))
-        (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata)))))
+        (parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)))))
 
 (defn load-repo-to-db!
-  [repo-url {:keys [first-clone? diffs nfs-files]
+  [repo-url {:keys [first-clone? diffs nfs-files refresh?]
              :as opts}]
   (spec/validate :repos/url repo-url)
   (let [config (or (state/get-config repo-url)
@@ -288,7 +289,7 @@
                          repo-url
                          files
                          (fn [files-contents]
-                           (parse-files-and-load-to-db! repo-url files-contents option))))]
+                           (parse-files-and-load-to-db! repo-url files-contents (assoc option :refresh? refresh?)))))]
     (cond
       (and (not (seq diffs)) nfs-files)
       (parse-files-and-load-to-db! repo-url nfs-files {:first-clone? true})
@@ -328,10 +329,12 @@
               options {:first-clone? first-clone?
                        :delete-files (concat delete-files delete-pages)
                        :delete-blocks delete-blocks
-                       :re-render? true}]
+                       :re-render? true
+                       :refresh? true}]
           (if (seq nfs-files)
             (parse-files-and-load-to-db! repo-url nfs-files
-                                         (assoc options :re-render-opts {:clear-all-query-state? true}))
+                                         (assoc options
+                                                :re-render-opts {:clear-all-query-state? true}))
             (load-contents add-or-modify-files options)))))))
 
 (defn load-db-and-journals!

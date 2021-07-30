@@ -157,6 +157,9 @@
               (not (string/blank? (str value))))
      (let [ast (mldoc/->edn content (mldoc/default-config format))
            title? (mldoc/block-with-title? (ffirst (map first ast)))
+           has-properties? (or (and title?
+                                    (mldoc/properties? (second ast)))
+                               (mldoc/properties? (first ast)))
            lines (string/split-lines content)
            [title body] (if title?
                           [(first lines) (string/join "\n" (rest lines))]
@@ -165,71 +168,69 @@
            key (string/lower-case (name key))
            value (string/trim (str value))
            start-idx (.indexOf lines properties-start)
-           end-idx (.indexOf lines properties-end)]
-       (cond
-         (and org? (not (contains-properties? content)))
-         (let [properties (build-properties-str format {key value})]
-           (if title
-             (str title "\n" properties body)
-             (str properties content)))
+           end-idx (.indexOf lines properties-end)
+           result        (cond
+                           (and org? (not has-properties?))
+                           (let [properties (build-properties-str format {key value})]
+                             (if title
+                               (str title "\n" properties body)
+                               (str properties content)))
 
-         (and (>= start-idx 0) (> end-idx 0) (> end-idx start-idx))
-         (let [exists? (atom false)
-               before (subvec lines 0 start-idx)
-               middle (doall
-                       (->> (subvec lines (inc start-idx) end-idx)
-                            (mapv (fn [text]
-                                    (let [[k v] (util/split-first ":" (subs text 1))]
-                                      (if (and k v)
-                                        (let [key-exists? (= k key)
-                                              _ (when key-exists? (reset! exists? true))
-                                              v (if key-exists? value v)]
-                                          (str ":" k ": "  (string/trim v)))
-                                        text))))))
-               middle (if @exists? middle (conj middle (str ":" key ": "  value)))
-               after (subvec lines (inc end-idx))
-               lines (concat before [properties-start] middle [properties-end] after)]
-           (string/join "\n" lines))
-
-         (not org?)
-         (let [exists? (atom false)
-               sym (if front-matter? ": " ":: ")
-               new-property-s (str key sym  value)
-               property-f (if front-matter? front-matter-property? simplified-property?)
-               groups (partition-by property-f lines)
-               no-properties? (and (= 1 (count groups))
-                                   (not (property-f (ffirst groups))))
-               lines (mapcat (fn [lines]
-                               (if (property-f (first lines))
-                                 (let [lines (doall
+                           (and has-properties? (>= start-idx 0) (> end-idx 0) (> end-idx start-idx))
+                           (let [exists? (atom false)
+                                 before (subvec lines 0 start-idx)
+                                 middle (doall
+                                         (->> (subvec lines (inc start-idx) end-idx)
                                               (mapv (fn [text]
-                                                      (let [[k v] (util/split-first sym text)]
+                                                      (let [[k v] (util/split-first ":" (subs text 1))]
                                                         (if (and k v)
                                                           (let [key-exists? (= k key)
                                                                 _ (when key-exists? (reset! exists? true))
                                                                 v (if key-exists? value v)]
-                                                            (str k sym  (string/trim v)))
-                                                          text)))
-                                                    lines))
-                                       lines (if @exists? lines (conj lines new-property-s))]
-                                   lines)
-                                 lines))
-                             groups)
-               lines (if no-properties?
-                       (cond
-                         (string/blank? content)
-                         [new-property-s]
+                                                            (str ":" k ": "  (string/trim v)))
+                                                          text))))))
+                                 middle (if @exists? middle (conj middle (str ":" key ": "  value)))
+                                 after (subvec lines (inc end-idx))
+                                 lines (concat before [properties-start] middle [properties-end] after)]
+                             (string/join "\n" lines))
 
-                         title?
-                         (cons (first lines) (cons new-property-s (rest lines)))
+                           (not org?)
+                           (let [exists? (atom false)
+                                 sym (if front-matter? ": " ":: ")
+                                 new-property-s (str key sym  value)
+                                 property-f (if front-matter? front-matter-property? simplified-property?)
+                                 groups (partition-by property-f lines)
+                                 compose-lines (fn []
+                                                 (mapcat (fn [lines]
+                                                           (if (property-f (first lines))
+                                                             (let [lines (doall
+                                                                          (mapv (fn [text]
+                                                                                  (let [[k v] (util/split-first sym text)]
+                                                                                    (if (and k v)
+                                                                                      (let [key-exists? (= k key)
+                                                                                            _ (when key-exists? (reset! exists? true))
+                                                                                            v (if key-exists? value v)]
+                                                                                        (str k sym  (string/trim v)))
+                                                                                      text)))
+                                                                                lines))
+                                                                   lines (if @exists? lines (conj lines new-property-s))]
+                                                               lines)
+                                                             lines))
+                                                         groups))
+                                 lines (cond
+                                         has-properties?
+                                         (compose-lines)
 
-                         :else
-                         (cons new-property-s lines))
-                       lines)]
-           (string/join "\n" lines))
+                                         title?
+                                         (cons (first lines) (cons new-property-s (rest lines)))
 
-         :else
-         content)))))
+                                         :else
+                                         (cons new-property-s lines))]
+                             (string/join "\n" lines))
+
+                           :else
+                           content)]
+       (string/trimr result)))))
 
 (defn insert-properties
   [format content kvs]
@@ -360,7 +361,7 @@
         v (if (or (symbol? v) (keyword? v)) (name v) (str v))
         v (string/trim v)]
     (cond
-      (= k "filters")
+      (contains? #{"title" "filters"} k)
       v
 
       (= v "true")
@@ -371,10 +372,13 @@
       (util/safe-re-find #"^\d+$" v)
       (util/safe-parse-int v)
 
-      (and (= "\"" (first v) (last v))) ; wrapped in ""
-      (string/trim (subs v 1 (dec (count v))))
+      (util/wrapped-by-quotes? v) ; wrapped in ""
+      (util/unquote-string v)
 
       (contains? @non-parsing-properties (string/lower-case k))
+      v
+
+      (string/starts-with? v "http")
       v
 
       :else

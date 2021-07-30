@@ -20,6 +20,8 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.commands :as commands]
             [frontend.date :as date]
+            [frontend.db-schema :as db-schema]
+            [frontend.db.model :as model]
             [clojure.walk :as walk]
             [frontend.git :as git]
             [frontend.fs :as fs]
@@ -50,37 +52,63 @@
   ([page-name] (when-let [page (db/entity [:block/name page-name])]
                  (:file/path (:block/file page)))))
 
+(defn- build-title [page]
+  (let [original-name (:block/original-name page)]
+    (if (string/includes? original-name ",")
+      (util/format "\"%s\"" original-name)
+      original-name)))
+
+(defn- build-page-tx [format properties page]
+  (when (:block/uuid page)
+    (let [page-entity [:block/uuid (:block/uuid page)]
+          create-title-property? (util/create-title-property? (:block/name page))]
+      (cond
+        (and properties create-title-property?)
+        [page (editor-handler/default-properties-block (build-title page) format page-entity properties)]
+
+        create-title-property?
+        [page (editor-handler/default-properties-block (build-title page) format page-entity)]
+
+        properties
+        [page (editor-handler/properties-block properties format page-entity)]
+
+        :else
+        [page]))))
+
 (defn create!
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block?]
-           :or {redirect? true
-                create-first-block? true}}]
-   (let [title (string/trim title)
-         pages (util/split-namespace-pages title)
-         page (string/lower-case title)
-         format (state/get-preferred-format)
-         pages (map (fn [page]
-                      (-> (block/page-name->map page true)
-                          (assoc :block/format format)))
-                 pages)
-         txs (->>
-              (mapcat
-               (fn [page]
-                 (when (:block/uuid page)
-                   (let [page-entity [:block/uuid (:block/uuid page)]
-                         create-title-property? (util/create-title-property? (:block/name page))]
-                     (if create-title-property?
-                       (let [default-properties (editor-handler/default-properties-block (:block/original-name page) format page-entity)]
-                         [page default-properties])
-                       [page]))))
-               pages)
-              (remove nil?))]
+  ([title {:keys [redirect? create-first-block? format properties]
+           :or   {redirect?           true
+                  create-first-block? true
+                  format              false
+                  properties          false}}]
+   (let [title    (string/trim title)
+         pages    (util/split-namespace-pages title)
+         page     (string/lower-case title)
+         format   (or format (state/get-preferred-format))
+         pages    (map (fn [page]
+                         (-> (block/page-name->map page true)
+                             (assoc :block/format format)))
+                       pages)
+         txs      (->> pages
+                       ;; for namespace pages, only last page need properties
+                       drop-last
+                       (mapcat #(build-page-tx format false %))
+                       (remove nil?))
+         last-txs (build-page-tx format properties (last pages))
+         txs      (concat txs last-txs)]
+
      (db/transact! txs)
+
      (when create-first-block?
        (editor-handler/insert-first-page-block-if-not-exists! page))
+
+     (when-let [page (db/entity [:block/name page])]
+       (outliner-file/sync-to-file page))
+
      (when redirect?
-       (route-handler/redirect! {:to :page
+       (route-handler/redirect! {:to          :page
                                  :path-params {:name page}})))))
 
 (defn page-add-property!
@@ -179,7 +207,16 @@
                (p/catch (fn [err]
                           (js/console.error "error: " err))))))
 
-          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]])
+
+          ;; if other page alias this pagename,
+          ;; then just remove some attrs of this entity instead of retractEntity
+          (if (model/get-alias-source-page (state/get-current-repo) page-name)
+            (when-let [id (:db/id (db/entity [:block/name page-name]))]
+              (let [txs (mapv (fn [attribute]
+                                [:db/retract id attribute])
+                              db-schema/retract-page-attributes)]
+                (db/transact! txs)))
+            (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
 
           (ok-handler))))))
 
@@ -368,6 +405,7 @@
 
                   ;; Redirect to the new page
                   (route-handler/redirect! {:to :page
+                                            :push false
                                             :path-params {:name (string/lower-case new-name)}})
 
                   (notification/show! "Page renamed successfully!" :success)

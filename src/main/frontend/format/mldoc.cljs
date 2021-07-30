@@ -184,7 +184,8 @@
                          (update :roam_alias ->vec)
                          (update :roam_tags (constantly roam-tags))
                          (update :filetags (constantly filetags)))
-          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)]
+          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
+          properties (medley/map-vals util/unquote-string-if-wrapped properties)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))
@@ -266,3 +267,7 @@
 (defn plain->text
   [plains]
   (string/join (map last plains)))
+
+(defn properties?
+  [ast]
+  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))

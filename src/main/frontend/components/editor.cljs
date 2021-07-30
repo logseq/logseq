@@ -14,6 +14,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.extensions.zotero :as zotero]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -31,6 +32,7 @@
                (not (state/sub :editor/show-block-search?))
                (not (state/sub :editor/show-template-search?))
                (not (state/sub :editor/show-input))
+               (not (state/sub :editor/show-zotero))
                (not (state/sub :editor/show-date-picker?)))
       (let [matched (util/react *matched-commands)]
         (ui/auto-complete
@@ -98,21 +100,21 @@
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))]
           (ui/auto-complete
-            matched-pages
-            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
-             :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
-             :item-render (fn [page-name chosen?]
-                            [:div.py-2.preview-trigger-wrapper
-                             (block/page-preview-trigger
-                               {:children        [:div (search/highlight-exact-query page-name q)]
-                                :open?           chosen?
-                                :manual?         true
-                                :fixed-position? true
-                                :tippy-distance  24
-                                :tippy-position  (if sidebar? "left" "right")}
-                               page-name)])
-             :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
-             :class       "black"}))))))
+           matched-pages
+           {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
+            :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
+            :item-render (fn [page-name chosen?]
+                           [:div.py-2.preview-trigger-wrapper
+                            (block/page-preview-trigger
+                             {:children        [:div (search/highlight-exact-query page-name q)]
+                              :open?           chosen?
+                              :manual?         true
+                              :fixed-position? true
+                              :tippy-distance  24
+                              :tippy-position  (if sidebar? "left" "right")}
+                             page-name)])
+            :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
+            :class       "black"}))))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
@@ -289,7 +291,7 @@
 
 (rum/defc absolute-modal < rum/static
   [cp set-default-width? {:keys [top left rect]}]
-  (let [max-height 300
+  (let [max-height 370
         max-width 300
         offset-top 24
         vw-height js/window.innerHeight
@@ -388,17 +390,17 @@
 (defn get-editor-heading-class [content]
   (let [content (if content (str content) "")]
     (cond
-     (string/includes? content "\n") "multiline-block"
-     (starts-with? content "# ") "h1"
-     (starts-with? content "## ") "h2"
-     (starts-with? content "### ") "h3"
-     (starts-with? content "#### ") "h4"
-     (starts-with? content "##### ") "h5"
-     (starts-with? content "###### ") "h6"
-     (starts-with? content "TODO ") "todo-block"
-     (starts-with? content "DOING ") "doing-block"
-     (starts-with? content "DONE ") "done-block"
-     :else "normal-block")))
+      (string/includes? content "\n") "multiline-block"
+      (starts-with? content "# ") "h1"
+      (starts-with? content "## ") "h2"
+      (starts-with? content "### ") "h3"
+      (starts-with? content "#### ") "h4"
+      (starts-with? content "##### ") "h5"
+      (starts-with? content "###### ") "h6"
+      (starts-with? content "TODO ") "todo-block"
+      (starts-with? content "DOING ") "doing-block"
+      (starts-with? content "DONE ") "done-block"
+      :else "normal-block")))
 
 (rum/defc mock-textarea
   < rum/reactive
@@ -499,6 +501,12 @@
                (editor-handler/handle-command-input command id format m pos)))
       true
       *slash-caret-pos)
+
+     (when (state/sub :editor/show-zotero)
+       (transition-cp
+        (zotero/zotero-search id)
+        false
+        *slash-caret-pos))
 
      (when format
        (image-uploader id format))]))

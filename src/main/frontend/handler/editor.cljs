@@ -266,9 +266,10 @@
                     (util/distinct-by :block/name))
           {:keys [tags alias]} page-properties
           page-tx (let [id (:db/id (:block/page block))
-                        retract-attributes (mapv (fn [attribute]
-                                                   [:db/retract id attribute])
-                                                 [:block/properties :block/tags :block/alias])
+                        retract-attributes (when id
+                                             (mapv (fn [attribute]
+                                                     [:db/retract id attribute])
+                                                   [:block/properties :block/tags :block/alias]))
                         tx (cond-> {:db/id id
                                     :block/properties page-properties}
                              (seq tags)
@@ -539,6 +540,7 @@
 (defn clear-when-saved!
   []
   (state/set-editor-show-input! nil)
+  (state/set-editor-show-zotero! false)
   (state/set-editor-show-date-picker! false)
   (state/set-editor-show-page-search! false)
   (state/set-editor-show-block-search! false)
@@ -647,12 +649,14 @@
               new-block (-> (select-keys block [:block/page :block/file :block/journal?
                                                 :block/journal-day])
                             (assoc :block/content content
-                                   :block/format format)
+                                   :block/format format))
+              new-block (assoc new-block :block/page
+                               (if page
+                                 (:db/id block)
+                                 (:db/id (:block/page new-block))))
+              new-block (-> new-block
                             (wrap-parse-block)
-                            (assoc :block/uuid (or custom-uuid (db/new-block-id))))
-              new-block (if (:block/page new-block)
-                          (assoc new-block :block/page (:db/id (:block/page new-block)))
-                          (assoc new-block :block/page (:db/id block)))
+                            (assoc :block/uuid (db/new-block-id)))
               new-block (if-let [db-id (:db/id (:block/file block))]
                           (assoc new-block :block/file db-id)
                           new-block)]
@@ -686,19 +690,41 @@
       (when (db/page-empty? (state/get-current-repo) (:db/id page))
         (api-insert-new-block! "" {:page page-name})))))
 
-(defn default-properties-block
-  [title format page]
-  (let [properties (common-handler/get-page-default-properties title)
-        content (property/build-properties-str format properties)]
+(defn properties-block
+  [properties format page]
+  (let [content (property/insert-properties format "" properties)
+        refs (block/get-page-refs-from-properties properties)]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties
+     :block/properties-order (keys properties)
+     :block/refs refs
      :block/left page
      :block/format format
      :block/content content
      :block/parent page
      :block/unordered true
      :block/page page}))
+
+(defn default-properties-block
+  ([title format page]
+   (default-properties-block title format page {}))
+  ([title format page properties]
+   (let [p (common-handler/get-page-default-properties title)
+         ps (merge p properties)
+         content (property/insert-properties format "" ps)
+         refs (block/get-page-refs-from-properties properties)]
+     {:block/pre-block? true
+      :block/uuid (db/new-block-id)
+      :block/properties ps
+      :block/properties-order (keys ps)
+      :block/refs refs
+      :block/left page
+      :block/format format
+      :block/content content
+      :block/parent page
+      :block/unordered true
+      :block/page page})))
 
 (defn add-default-title-property-if-needed!
   [page-name]
@@ -956,7 +982,7 @@
                                                (if (string/starts-with? (string/lower-case line) key)
                                                  new-line
                                                  line))
-                                          lines)
+                                             lines)
                               new-lines (if (not= lines new-lines)
                                           new-lines
                                           (cons (first new-lines) ;; title
@@ -1038,8 +1064,8 @@
   (let [blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
         blocks* (flatten
                  (mapv (fn [b] (if (:collapsed (:block/properties b))
-                                (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
-                                [b])) blocks))
+                                 (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
+                                 [b])) blocks))
         block-ids* (mapv :block/uuid blocks*)
         unordered? (:block/unordered (first blocks*))
         format (:block/format (first blocks*))
@@ -1712,7 +1738,7 @@
         (seq blocks)
         (do
           (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                                   [:block/uuid (medley/uuid id)])) blocks)
+                                                    [:block/uuid (medley/uuid id)])) blocks)
                                  (remove nil?))
                 blocks (db/pull-many repo '[*] lookup-refs)
                 blocks (reorder-blocks blocks)
@@ -1727,12 +1753,12 @@
               (db/refresh! repo opts)
               (let [blocks (doall
                             (map
-                              (fn [block]
-                                (when-let [id (gobj/get block "id")]
-                                  (when-let [block (gdom/getElement id)]
-                                    (dom/add-class! block "selected noselect")
-                                    block)))
-                              blocks-dom-nodes))]
+                             (fn [block]
+                               (when-let [id (gobj/get block "id")]
+                                 (when-let [block (gdom/getElement id)]
+                                   (dom/add-class! block "selected noselect")
+                                   block)))
+                             blocks-dom-nodes))]
                 (state/set-selection-blocks! blocks)))))))))
 
 (defn- get-link
@@ -2093,11 +2119,11 @@
           tree (blocks-vec->tree result-blocks)]
       (insert-command! id "" format {})
       (let [last-block (paste-block-vec-tree-at-target tree [:template :template-including-parent]
-                                                  (fn [content]
-                                                    (->> content
-                                                         (property/remove-property format "template")
-                                                         (property/remove-property format "template-including-parent")
-                                                         template/resolve-dynamic-template!)))]
+                                                       (fn [content]
+                                                         (->> content
+                                                              (property/remove-property format "template")
+                                                              (property/remove-property format "template-including-parent")
+                                                              template/resolve-dynamic-template!)))]
         (clear-when-saved!)
         (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]})
         ;; FIXME:
@@ -2624,8 +2650,8 @@
   (let [min-level (apply min (mapv :block/level blocks))
         prefix-level (if (> min-level 1) (- min-level 1) 0)]
     (->> blocks
-                   (mapv #(assoc % :level (- (:block/level %) prefix-level)))
-                   (blocks-vec->tree))))
+         (mapv #(assoc % :level (- (:block/level %) prefix-level)))
+         (blocks-vec->tree))))
 
 (defn- paste-text-parseable
   [format text]
