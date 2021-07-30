@@ -656,7 +656,7 @@
                                  (:db/id (:block/page new-block))))
               new-block (-> new-block
                             (wrap-parse-block)
-                            (assoc :block/uuid (db/new-block-id)))
+                            (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               new-block (if-let [db-id (:db/id (:block/file block))]
                           (assoc new-block :block/file db-id)
                           new-block)]
