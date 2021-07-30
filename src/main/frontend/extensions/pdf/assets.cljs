@@ -80,9 +80,9 @@
           (editor-handler/api-insert-new-block!
             text {:page        (:block/name ref-page)
                   :custom-uuid id
-                  :properties  {:type "annotation"
-                                :id   (str id)              ;; force custom uuid
+                  :properties  {:ls-type "annotation"
                                 :page page
+                                :id   (str id)              ;; force custom uuid
                                 }}))))))
 
 (defn del-ref-block!

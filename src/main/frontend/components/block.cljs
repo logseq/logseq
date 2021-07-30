@@ -602,7 +602,7 @@
          (util/uuid-string? id))
     (let [block-id (uuid id)
           block (db/pull-block block-id)
-          block-type (keyword (get-in block [:block/properties :type]))
+          block-type (keyword (get-in block [:block/properties :ls-type]))
           repo (state/get-current-repo)]
       (if block
         [:div.block-ref-wrap.inline
@@ -1440,7 +1440,7 @@
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
-        block-type (or (keyword (:type properties)) :default)
+        block-type (or (keyword (:ls-type properties)) :default)
         html-export? (:html-export? config)
         checkbox (when (and (not pre-block?)
                             (not html-export?))
@@ -1664,7 +1664,7 @@
   (let [collapsed? (get properties :collapsed)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
-        block-type (or (:type properties) :default)
+        block-type (or (:ls-type properties) :default)
         dragging? (rum/react *dragging?)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
