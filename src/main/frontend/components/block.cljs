@@ -1077,6 +1077,16 @@
                     :width width
                     :height (max 500 height)}])))))
 
+
+        (contains? #{"tweet" "twitter"} name)
+        (when-let [url (first arguments)]
+          (let [id-regex #"/status/(\d+)"]
+            (when-let [id (cond
+                            (<= (count url) 15) url
+                            :else
+                            (last (util/safe-re-find id-regex url)))]
+              (ui/tweet-embed id))))
+
         (= name "embed")
         (let [a (first arguments)]
           (cond

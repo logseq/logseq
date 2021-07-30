@@ -5,6 +5,7 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-resize-context" :as Resize]
             ["react-tippy" :as react-tippy]
+            ["react-tweet-embed" :as react-tweet-embed]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
@@ -27,6 +28,7 @@
 (def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
+(def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 
 (rum/defc ls-textarea < rum/reactive
   [{:keys [on-change] :as props}]
@@ -678,3 +680,13 @@
     :style {:width "100%"}
     :on-change #(let [value (util/evalue %)]
                   (on-change value))}])
+
+(rum/defcs tweet-embed < (rum/local true :loading?)
+  [state id]
+  (let [*loading? (:loading? state)]
+    [:div [(when @*loading? [:span.flex.items-center [svg/loading " ... loading"]])
+           (ReactTweetEmbed
+             {:id                    id
+              :class                 "contents"
+              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
+              :on-tweet-load-success #(reset! *loading? false)})]]))

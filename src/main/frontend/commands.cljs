@@ -273,7 +273,10 @@
                                                             :backward-pos 2}]]]
 
      ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
-                                                        :backward-pos 2}]]]]
+                                                        :backward-pos 2}]]]
+
+     ["Embed Twitter" [[:editor/input "{{tweet }}" {:last-pattern slash
+                                                    :backward-pos 2}]]]]
 
     @*extend-slash-commands
     ;; Allow user to modify or extend, should specify how to extend.

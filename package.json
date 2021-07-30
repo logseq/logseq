@@ -94,6 +94,7 @@
         "react-textarea-autosize": "^8.0.1",
         "react-tippy": "^1.4.0",
         "react-transition-group": "^4.3.0",
+        "react-tweet-embed": "^1.2.2",
         "reakit": "^0.11.1",
         "yargs-parser": "^20.2.4"
     }
