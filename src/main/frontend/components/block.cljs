@@ -1770,16 +1770,23 @@
        (not @*dragging?)))
 
 (rum/defc breadcrumb-fragment
-  [block href label]
-  [:a {:on-mouse-down
-       (fn [e]
-         (util/stop e)
-         (state/sidebar-add-block!
-          (state/get-current-repo)
-          (:db/id block)
-          :block-ref
-          {:block block}))}
-   label])
+  [config block href label]
+  (if (= block :page)                   ; page
+    (let [page (db/entity [:block/name (string/lower-case label)])]
+      (page-cp config page))
+    [:a {:on-mouse-down
+         (fn [e]
+           (if (gobj/get e "shiftKey")
+             (do
+               (util/stop e)
+               (state/sidebar-add-block!
+                (state/get-current-repo)
+                (:db/id block)
+                :block-ref
+                {:block block}))
+             (route-handler/redirect! {:to :page
+                                       :path-params {:name (str (:block/uuid block))}})))}
+     label]))
 
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
@@ -1794,7 +1801,8 @@
          show? (or (seq parents) show-page? page-name)]
      (when show?
        (let [page-name-props (when show-page?
-                               [(rfe/href :page {:name page-name})
+                               [:page
+                                (rfe/href :page {:name page-name})
                                 (or page-original-name page-name)])
              parents-props (doall
                             (for [{:block/keys [uuid title name] :as block} parents]
@@ -1805,7 +1813,7 @@
              breadcrumb (->> (into [] parents-props)
                              (concat [page-name-props])
                              (filterv identity)
-                             (map (fn [[block href label]] (breadcrumb-fragment block href label)))
+                             (map (fn [[block href label]] (breadcrumb-fragment config block href label)))
                              (interpose (breadcrumb-separator)))]
          [:div.block-parents.flex-row.flex-1 breadcrumb])))))
 
