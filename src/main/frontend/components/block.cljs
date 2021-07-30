@@ -455,9 +455,14 @@
 (rum/defc asset-reference
   [title path]
   (let [repo-path (config/get-repo-dir (state/get-current-repo))
-        full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))]
-    [:div
-     (if (and (= "pdf" (util/get-file-ext full-path))
+        full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))
+        ext-name (util/get-file-ext full-path)
+        ext-name (and ext-name (string/lower-case ext-name))]
+
+    [:div.asset-ref-wrap
+     {:data-ext ext-name}
+
+     (if (and (= "pdf" ext-name)
               (string/ends-with? (util/node-path.dirname full-path) config/local-assets-dir))
        [:a.asset-ref.is-pdf
         {:href "javascript:;"
@@ -468,14 +473,9 @@
         (or title path)]
        [:a.asset-ref {:target "_blank" :href full-path} (or title path)])
 
-     (case (util/get-file-ext full-path)
-       ;;"pdf"
-       ;;[:iframe {:src full-path
-       ;;          :class "pdf-preview"
-       ;;          :fullscreen true
-       ;;          :height 800}]
+     (case ext-name
        ;; https://en.wikipedia.org/wiki/HTML5_video
-       ("mp4" "ogg" "webm")
+       ("mp4" "ogg" "webm" "mov")
        [:video {:src full-path
                 :controls true}]
 
@@ -847,7 +847,7 @@
 
           ;; image
           (and (show-link? config metadata s full_text)
-               (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext s))))
+               (not (contains? #{"pdf" "mp4" "ogg" "webm" "mov"} (util/get-file-ext s))))
           (image-link config url s label metadata full_text)
 
           (and (util/electron?)

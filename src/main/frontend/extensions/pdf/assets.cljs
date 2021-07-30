@@ -127,7 +127,7 @@
             (state/set-state! :pdf/ref-highlight matched)
             ;; open pdf viewer
             (state/set-state! :pdf/current (inflate-asset (str target-key ".pdf"))))
-          (js/console.warn "[Unmatched highlight ref]" block))))))
+          (js/console.debug "[Unmatched highlight ref]" block))))))
 
 (rum/defc uploader
   [page-name]
