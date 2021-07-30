@@ -329,11 +329,11 @@
               options {:first-clone? first-clone?
                        :delete-files (concat delete-files delete-pages)
                        :delete-blocks delete-blocks
-                       :re-render? true
-                       :refresh? true}]
+                       :re-render? true}]
           (if (seq nfs-files)
             (parse-files-and-load-to-db! repo-url nfs-files
                                          (assoc options
+                                                :refresh? refresh?
                                                 :re-render-opts {:clear-all-query-state? true}))
             (load-contents add-or-modify-files options)))))))
 
