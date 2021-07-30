@@ -1772,8 +1772,9 @@
 (rum/defc breadcrumb-fragment
   [config block href label]
   (if (= block :page)                   ; page
-    (let [page (db/entity [:block/name (string/lower-case label)])]
-      (page-cp config page))
+    (when label
+      (let [page (db/entity [:block/name (string/lower-case label)])]
+       (page-cp config page)))
     [:a {:on-mouse-down
          (fn [e]
            (if (gobj/get e "shiftKey")
