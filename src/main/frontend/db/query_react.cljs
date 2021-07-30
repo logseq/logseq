@@ -75,7 +75,6 @@
                                 remove-nested-children-blocks
                                 (model/sort-by-left-recursive)
                                 (db-utils/with-repo repo)
-                                (model/with-block-refs-count repo)
                                 (model/with-pages)))
                      result)]
         (if-let [result-transform (:result-transform q)]

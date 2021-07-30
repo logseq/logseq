@@ -1417,7 +1417,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority anchor meta format content pre-block? block-refs-count page properties unordered level heading-level]
+  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority anchor meta format content pre-block? page properties unordered level heading-level]
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1692,7 +1692,7 @@
                   (str uuid "-" idx)))))])]]]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid title body meta content page format repo children marker properties block-refs-count pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
+  [config {:block/keys [uuid title body meta content page format repo children marker properties pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
   (let [editor-box (get config :editor-box)
         edit? (state/sub [:editor/editing? edit-input-id])
         editor-id (str "editor-" edit-input-id)
@@ -1738,18 +1738,19 @@
                [:a.opacity-30.hover:opacity-100
                 (utils/timeConversion (- finish-time start-time))]])))
 
-        (when (and block-refs-count (> block-refs-count 0))
-          [:div
-           [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
-            {:title "Open block references"
-             :style {:margin-top -1}
-             :on-click (fn []
-                         (state/sidebar-add-block!
-                          (state/get-current-repo)
-                          (:db/id block)
-                          :block-ref
-                          {:block block}))}
-            block-refs-count]])]])))
+        (let [block-refs-count (count (:block/_refs (db/entity (:db/id block))))]
+          (when (and block-refs-count (> block-refs-count 0))
+           [:div
+            [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+             {:title "Open block references"
+              :style {:margin-top -1}
+              :on-click (fn []
+                          (state/sidebar-add-block!
+                           (state/get-current-repo)
+                           (:db/id block)
+                           :block-ref
+                           {:block block}))}
+             block-refs-count]]))]])))
 
 (defn non-dragging?
   [e]
