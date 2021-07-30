@@ -4,6 +4,8 @@
   #?(:cljs (:require
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
+            [camel-snake-kebab.core :as csk]
+            [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
@@ -89,6 +91,10 @@
      (gobj/getValueByKeys event "key")))
 
 #?(:cljs
+   (defn echecked? [event]
+     (gobj/getValueByKeys event "target" "checked")))
+
+#?(:cljs
    (defn set-change-value
      "compatible change event for React"
      [node value]
@@ -137,12 +143,17 @@
 ;;   [fmt & args]
 ;;   (apply gstring/format fmt args))
 
-(defn json->clj
-  [json-string]
-  #?(:cljs
-     (-> json-string
-         (js/JSON.parse)
-         (js->clj :keywordize-keys true))))
+#?(:cljs
+   (defn json->clj
+     ([json-string]
+      (json->clj json-string false))
+     ([json-string kebab?]
+      (let [m (-> json-string
+                  (js/JSON.parse)
+                  (js->clj :keywordize-keys true))]
+        (if kebab?
+          (cske/transform-keys csk/->kebab-case-keyword m)
+          m)))))
 
 (defn remove-nils
   "remove pairs of key-value that has nil value from a (possibly nested) map."
@@ -1349,3 +1360,17 @@
        (not
         (some #(string/ends-with? path %)
               [".md" ".markdown" ".org" ".edn" ".css"]))))))
+
+(defn wrapped-by-quotes?
+  [v]
+  (and (string? v) (>= (count v) 2) (= "\"" (first v) (last v))))
+
+(defn unquote-string
+  [v]
+  (string/trim (subs v 1 (dec (count v)))))
+
+(defn unquote-string-if-wrapped
+  [v]
+  (if (wrapped-by-quotes? v)
+    (unquote-string v)
+    v))

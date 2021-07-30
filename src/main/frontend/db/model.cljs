@@ -410,17 +410,9 @@
              (map (fn [m]
                     (or (:block/original-name m) (:block/name m)))))))))
 
-(defn with-block-refs-count
-  [repo blocks]
-  (map (fn [block]
-         (let [refs-count (count (:block/_refs (db-utils/entity (:db/id block))))]
-           (assoc block :block/block-refs-count refs-count)))
-    blocks))
-
 (defn page-blocks-transform
   [repo-url result]
-  (->> (db-utils/with-repo repo-url result)
-       (with-block-refs-count repo-url)))
+  (db-utils/with-repo repo-url result))
 
 (defn with-pages
   [blocks]
@@ -618,8 +610,7 @@
   [result repo-url block-uuid]
   (some->> result
            db-utils/seq-flatten
-           (db-utils/with-repo repo-url)
-           (with-block-refs-count repo-url)))
+           (db-utils/with-repo repo-url)))
 
 (defn get-block-children-ids
   [repo block-uuid]

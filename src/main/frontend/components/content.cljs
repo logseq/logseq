@@ -176,10 +176,10 @@
           (block-template block-id)
 
           (ui/menu-link
-           {:key "Export"
+           {:key "Copy as"
             :on-click (fn [_]
                         (state/set-modal! #(export/export-blocks block-id)))}
-           "Export")
+           "Copy as")
 
           (if (srs/card-block? block)
             (ui/menu-link
@@ -246,18 +246,6 @@
                       (let [target (gobj/get e "target")
                             block-id (d/attr target "blockid")]
                         (cond
-                          (and block-id (util/uuid-string? block-id))
-                          (do
-                            (util/stop e)
-                            (let [client-x (gobj/get e "clientX")
-                                  client-y (gobj/get e "clientY")
-                                  scroll-y (util/cur-doc-top)]
-                              (state/show-custom-context-menu! (block-context-menu-content target (cljs.core/uuid block-id)))
-                              (when-let [context-menu (d/by-id "custom-context-menu")]
-                                (d/set-style! context-menu
-                                              :left (str client-x "px")
-                                              :top (str (+ scroll-y client-y) "px")))))
-
                           (state/selection?)
                           (do
                             (util/stop e)
@@ -265,6 +253,18 @@
                                   client-y (gobj/get e "clientY")
                                   scroll-y (util/cur-doc-top)]
                               (state/show-custom-context-menu! (custom-context-menu-content))
+                              (when-let [context-menu (d/by-id "custom-context-menu")]
+                                (d/set-style! context-menu
+                                              :left (str client-x "px")
+                                              :top (str (+ scroll-y client-y) "px")))))
+
+                          (and block-id (util/uuid-string? block-id))
+                          (do
+                            (util/stop e)
+                            (let [client-x (gobj/get e "clientX")
+                                  client-y (gobj/get e "clientY")
+                                  scroll-y (util/cur-doc-top)]
+                              (state/show-custom-context-menu! (block-context-menu-content target (cljs.core/uuid block-id)))
                               (when-let [context-menu (d/by-id "custom-context-menu")]
                                 (d/set-style! context-menu
                                               :left (str client-x "px")

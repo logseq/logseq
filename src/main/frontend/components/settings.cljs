@@ -342,13 +342,13 @@
             (let [value (not enable-all-pages-public?)]
               (config-handler/set-config! :publishing/all-pages-public? value)))))
 
-(defn enable-block-timestamps-row [t enable-block-timestamps?]
-  (toggle "block timestamps"
-          (t :settings-page/enable-block-time)
-          enable-block-timestamps?
-          (fn []
-            (let [value (not enable-block-timestamps?)]
-              (config-handler/set-config! :feature/enable-block-timestamps? value)))))
+;; (defn enable-block-timestamps-row [t enable-block-timestamps?]
+;;   (toggle "block timestamps"
+;;           (t :settings-page/enable-block-time)
+;;           enable-block-timestamps?
+;;           (fn []
+;;             (let [value (not enable-block-timestamps?)]
+;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
 (defn encryption-row [t enable-encryption?]
   (toggle "enable_encryption"
@@ -372,7 +372,23 @@
       :on-click
       (fn []
         (state/close-settings!)
-        (route-handler/redirect! {:to :shortcut})))]]])
+        (route-handler/redirect! {:to :shortcut-setting})))]]])
+
+(defn zotero-settings-row [t]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "zotero_settings"}
+    "Zotero settings"]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div
+     (ui/button
+      "Zotero settings"
+      :class "text-sm p-1"
+      :style {:margin-top "0px"}
+      :on-click
+      (fn []
+        (state/close-settings!)
+        (route-handler/redirect! {:to :zotero-setting})))]]])
 
 (defn auto-push-row [t current-repo enable-git-auto-push?]
   (when (string/starts-with? current-repo "https://")
@@ -438,7 +454,7 @@
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
-        enable-block-timestamps? (state/enable-block-timestamps?)
+        ;; enable-block-timestamps? (state/enable-block-timestamps?)
         show-brackets? (state/show-brackets?)
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
@@ -465,7 +481,7 @@
         (file-format-row t preferred-format)
         (date-format-row t preferred-date-format)
         (workflow-row t preferred-workflow)
-        (enable-block-timestamps-row t enable-block-timestamps?)
+        ;; (enable-block-timestamps-row t enable-block-timestamps?)
         (show-brackets-row t show-brackets?)
         (outdenting-row t logical-outdenting?)
         (tooltip-row t enable-tooltip?)
@@ -474,6 +490,7 @@
         (enable-all-pages-public-row t enable-all-pages-public?)
         (encryption-row t enable-encryption?)
         (keyboard-shortcuts-row t)
+        (zotero-settings-row t)
         (auto-push-row t current-repo enable-git-auto-push?)]
 
        [:hr] ;; Outside of panel wrap so that it is wider

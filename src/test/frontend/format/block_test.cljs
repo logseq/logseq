@@ -25,7 +25,7 @@
 
   (are [x y] (= (vec (:page-refs (block/extract-properties x))) y)
     [["year" "1000"]] []
-    [["year" "\"1000\""]] ["1000"]
+    [["year" "\"1000\""]] []
     [["foo" "[[bar]] test"]] ["bar" "test"]
     [["foo" "[[bar]] test [[baz]]"]] ["bar" "test" "baz"]
     [["foo" "[[bar]] test [[baz]] [[nested [[baz]]]]"]] ["bar" "test" "baz" "nested [[baz]]"]

@@ -6165,10 +6165,10 @@ mkdirp@^0.5.0, mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@0.9.2:
-  version "0.9.2"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.9.2.tgz#0d88a049bb9564a1567134178b2dea9196f30148"
-  integrity sha512-e1JFKKkX6IYHFP8XwN0pqcEn2L8biVHWXGUyaUU8RHsCq2poN1fPIAZ5waosS4EffC+CQk68PycEhCobYwbndA==
+mldoc@0.9.4:
+  version "0.9.4"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.9.4.tgz#80dd027e06a297ef4bbbabd28793a40f64bcb451"
+  integrity sha512-Pt994A4XGG1rDdU5tvR8quk1WdlD0eTmo+UWo37qndLaHFxt++lTT7UK8WX3cj0HamJlx8WiYWQO3gOWIzL+dw==
   dependencies:
     yargs "^12.0.2"
 
@@ -7598,10 +7598,17 @@ react-grid-layout@^0.16.6:
     react-draggable "3.x"
     react-resizable "1.x"
 
+react-icon-base@2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/react-icon-base/-/react-icon-base-2.1.0.tgz#a196e33fdf1e7aaa1fda3aefbb68bdad9e82a79d"
+  integrity sha1-oZbjP98eeqof2jrvu2i9rZ6Cp50=
+
 react-icons@^2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
   integrity sha512-0n4lcGqzJFcIQLoQytLdJCE0DKSA9dkwEZRYoGrIDJZFvIT6Hbajx5mv9geqhqFiNjUgtxg8kPyDfjlhymbGFg==
+  dependencies:
+    react-icon-base "2.1.0"
 
 react-is@^16.3.1, react-is@^16.8.1:
   version "16.13.1"

@@ -12,7 +12,6 @@
             [clojure.string :as string]
             [dommy.core :as dom]
             [frontend.utf8 :as utf8]
-            [frontend.util.property :as property]
             ["codemirror" :as cm]
             ["codemirror/addon/edit/matchbrackets"]
             ["codemirror/addon/edit/closebrackets"]
@@ -64,7 +63,7 @@
         (:block/uuid config)
         (let [block (db/pull [:block/uuid (:block/uuid config)])
               format (:block/format block)
-              content (property/remove-properties format (:block/content block))
+              content (:block/content block)
               full-content (:full_content (last (:rum/args state)))]
           (when (and full-content (string/includes? content full-content))
             (let [lines (string/split-lines full-content)

@@ -21,10 +21,21 @@
 (defonce parseAndExportOPML (gobj/get Mldoc "parseAndExportOPML"))
 (defonce astExportMarkdown (gobj/get Mldoc "astExportMarkdown"))
 
+(defn convert-export-md-remove-options [opts]
+  (->>
+   (mapv (fn [opt]
+             (case opt
+               :page-ref ["Page_ref"]
+               :emphasis ["Emphasis"]
+               []))
+         opts)
+   (remove empty?)))
+
+
 (defn default-config
   ([format]
    (default-config format {:export-heading-to-list? false}))
-  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style]}]
+  ([format {:keys [export-heading-to-list? export-keep-properties? export-md-indent-style export-md-remove-options]}]
    (let [format (string/capitalize (name (or format :markdown)))]
      (->> {:toc false
            :heading_number false
@@ -32,7 +43,9 @@
            :format format
            :heading_to_list (or export-heading-to-list? false)
            :exporting_keep_properties export-keep-properties?
-           :export_md_indent_style export-md-indent-style}
+           :export_md_indent_style export-md-indent-style
+           :export_md_remove_options
+           (convert-export-md-remove-options export-md-remove-options)}
           (filter #(not(nil? (second %))))
           (into {})
           (bean/->js)
@@ -184,7 +197,8 @@
                          (update :roam_alias ->vec)
                          (update :roam_tags (constantly roam-tags))
                          (update :filetags (constantly filetags)))
-          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)]
+          properties (medley/filter-kv (fn [k v] (not (empty? v))) properties)
+          properties (medley/map-vals util/unquote-string-if-wrapped properties)]
       (if (seq properties)
         (cons [["Properties" properties] nil] other-ast)
         original-ast))
@@ -266,3 +280,7 @@
 (defn plain->text
   [plains]
   (string/join (map last plains)))
+
+(defn properties?
+  [ast]
+  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))

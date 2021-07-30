@@ -83,6 +83,7 @@
       :editor/show-date-picker? false
       ;; With label or other data
       :editor/show-input nil
+      :editor/show-zotero false
       :editor/last-saved-cursor nil
       :editor/editing? nil
       :editor/last-edit-block-input-id nil
@@ -539,6 +540,16 @@
 (defn get-editor-show-input
   []
   (get @state :editor/show-input))
+
+
+(defn set-editor-show-zotero!
+  [value]
+  (set-state! :editor/show-zotero value))
+
+(defn get-editor-show-zotero
+  []
+  (get @state :editor/show-zotero))
+
 
 (defn set-edit-input-id!
   [input-id]
@@ -1256,8 +1267,8 @@
   [q]
   (when-not (string/blank? q)
     (update-state! :search/graph-filters
-                  (fn [value]
-                    (vec (distinct (conj value q)))))))
+                   (fn [value]
+                     (vec (distinct (conj value q)))))))
 
 (defn remove-search-filter!
   [q]

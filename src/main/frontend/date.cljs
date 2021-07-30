@@ -1,14 +1,15 @@
 (ns frontend.date
-  (:require [cljs-time.core :as t]
+  (:require ["chrono-node" :as chrono]
+            [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [cljs-time.local :as tl]
-            [frontend.state :as state]
-            [cljs-bean.core :as bean]
-            [frontend.util :as util]
             [clojure.string :as string]
+            [frontend.state :as state]
+            [frontend.util :as util]
             [goog.object :as gobj]
-            ["chrono-node" :as chrono]))
+            [lambdaisland.glogi :as log]))
 
 (defn nld-parse
   [s]
@@ -114,6 +115,14 @@
   ([date]
    (format date)))
 
+(defn journal-name-s [s]
+  (try
+    (journal-name (tf/parse (tf/formatter "yyyy-MM-dd") s))
+    (catch js/Error e
+      (log/info :parse-journal-date {:message  "Unable to parse date to journal name, skipping."
+                                     :date-str s})
+      nil)))
+
 (defn today
   []
   (journal-name))
@@ -181,18 +190,20 @@
        (valid? (util/capitalize-all title))))
 
 (defn journal-title->
-  [journal-title then-fn]
-  (when-not (string/blank? journal-title)
-    (when-let [time (->> (map
-                           (fn [formatter]
-                             (try
-                               (tf/parse (tf/formatter formatter) (util/capitalize-all journal-title))
-                               (catch js/Error _e
-                                 nil)))
-                           safe-journal-title-formatters)
-                         (filter some?)
-                         first)]
-      (then-fn time))))
+  ([journal-title then-fn]
+   (journal-title-> journal-title then-fn (journal-title-formatters)))
+  ([journal-title then-fn formatters]
+   (when-not (string/blank? journal-title)
+     (when-let [time (->> (map
+                            (fn [formatter]
+                              (try
+                                (tf/parse (tf/formatter formatter) (util/capitalize-all journal-title))
+                                (catch js/Error _e
+                                  nil)))
+                            formatters)
+                          (filter some?)
+                          first)]
+       (then-fn time)))))
 
 (defn journal-title->int
   [journal-title]

@@ -190,20 +190,20 @@
          (with-block-uuid))))
 
 (defn extract-all-blocks-pages
-  [repo-url files metadata]
+  [repo-url files metadata refresh?]
   (when (seq files)
     (let [result (->> files
                       (map
-                       (fn [{:file/keys [path content]} contents]
-                         (println "Parsing : " path)
-                         (when content
-                           ;; TODO: remove `text/scheduled-deadline-dash->star` once migration is done
-                           (let [org? (= "org" (string/lower-case (util/get-file-ext path)))]
-                             (let [content (if org?
-                                             content
-                                             (text/scheduled-deadline-dash->star content))
-                                   utf8-content (utf8/encode content)]
-                              (extract-blocks-pages repo-url path content utf8-content))))))
+                        (fn [{:file/keys [path content]} contents]
+                          (println "Parsing : " path)
+                          (when content
+                            ;; TODO: remove `text/scheduled-deadline-dash->star` once migration is done
+                            (let [org? (= "org" (string/lower-case (util/get-file-ext path)))]
+                              (let [content (if org?
+                                              content
+                                              (text/scheduled-deadline-dash->star content))
+                                    utf8-content (utf8/encode content)]
+                                (extract-blocks-pages repo-url path content utf8-content))))))
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
@@ -212,14 +212,16 @@
                             (let [id (:block/uuid block)
                                   properties (get-in metadata [:block/properties id])]
                               (update block :block/properties merge properties)))
-                          blocks)
+                       blocks)
               ;; To prevent "unique constraint" on datascript
               pages-index (map #(select-keys % [:block/name]) pages)
               block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
               blocks (map (fn [b]
                             (update b :block/refs
                                     (fn [refs]
-                                      (set/union
-                                       (filter :block/name refs)
-                                       (set/intersection (set refs) block-ids-set))))) blocks)]
+                                      (let [block-refs (if refresh? (set refs)
+                                                           (set/intersection (set refs) block-ids-set))]
+                                        (set/union
+                                         (filter :block/name refs)
+                                         block-refs))))) blocks)]
           (apply concat [pages-index pages block-ids blocks]))))))

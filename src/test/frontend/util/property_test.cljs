@@ -42,18 +42,26 @@
       "** hello"
 
       (property/remove-properties :org "** hello\n:PROPERTIES:\n:x: y\n\na:b\n:END:\n")
-      "** hello"
+      "** hello"))
+
+  (testing "invalid-properties"
+    (are [x y] (= x y)
+      (property/remove-properties :markdown "hello\nnice\nfoo:: bar")
+      "hello\nnice\nfoo:: bar"
+
+      (property/remove-properties :markdown "hello\nnice\nfoo:: bar\ntest")
+      "hello\nnice\nfoo:: bar\ntest"
 
       (property/remove-properties :markdown "** hello\nx:: y\n\na:: b\n")
-      "** hello\n")))
+      "** hello\n\na:: b")))
 
 (deftest test-insert-property
   (are [x y] (= x y)
     (property/insert-property :org "hello" "a" "b")
-    "hello\n:PROPERTIES:\n:a: b\n:END:\n"
+    "hello\n:PROPERTIES:\n:a: b\n:END:"
 
     (property/insert-property :org "hello" "a" false)
-    "hello\n:PROPERTIES:\n:a: false\n:END:\n"
+    "hello\n:PROPERTIES:\n:a: false\n:END:"
 
     (property/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END:\n" "c" "d")
     "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:"
@@ -111,7 +119,7 @@
     "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:"
     "hello\nfoo:: bar\nnice:: bingo"
 
-    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:\n"
+    "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:"
     "hello\nfoo:: bar\nnice:: bingo"
 
     "hello\n:PROPERTIES:\n:foo: bar\n:nice: bingo\n:END:\nnice"

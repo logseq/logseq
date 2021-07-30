@@ -321,7 +321,7 @@ last-modified-at:: 1609084800002"}]]
       "(not [[page 1]])"
       {:query '([?b :block/uuid]
                 (not [?b :block/path-refs [:block/name "page 1"]]))
-       :count 31}))
+       :count 33}))
 
   (testing "Between query"
     (are [x y] (= (count-only x) y)
@@ -369,7 +369,7 @@ last-modified-at:: 1609084800002"}]]
                   (and [?b :block/path-refs [:block/name "page 1"]])
                   (and [?b :block/path-refs [:block/name "page 2"]])
                   [?b])))
-       :count 34})
+       :count 36})
 
     ;; FIXME: not working
     ;; (are [x y] (= (q-count x) y)
