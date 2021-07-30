@@ -176,10 +176,10 @@
           (block-template block-id)
 
           (ui/menu-link
-           {:key "Export"
+           {:key "Copy as"
             :on-click (fn [_]
                         (state/set-modal! #(export/export-blocks block-id)))}
-           "Export")
+           "Copy as")
 
           (if (srs/card-block? block)
             (ui/menu-link
