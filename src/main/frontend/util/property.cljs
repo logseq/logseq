@@ -89,8 +89,11 @@
 
       (not org?)
       (let [lines (string/split-lines content)
-            non-properties (get (group-by simplified-property? lines) false)]
-        (string/join "\n" non-properties))
+            lines (if (simplified-property? (first lines))
+                    (drop-while simplified-property? lines)
+                    (cons (first lines)
+                          (drop-while simplified-property? (rest lines))))]
+        (string/join "\n" lines))
 
       :else
       content)))
@@ -271,6 +274,7 @@
   [format content]
   (remove-property format "id" content false))
 
+;; FIXME: only remove from the properties area
 (defn remove-built-in-properties
   [format content]
   (let [built-in-properties* (built-in-properties)
