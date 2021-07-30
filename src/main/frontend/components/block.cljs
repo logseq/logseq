@@ -1760,8 +1760,16 @@
        (not @*dragging?)))
 
 (rum/defc breadcrumb-fragment
-  [href label]
-  [:a {:href href} label])
+  [block href label]
+  [:a {:on-mouse-down
+       (fn [e]
+         (util/stop e)
+         (state/sidebar-add-block!
+          (state/get-current-repo)
+          (:db/id block)
+          :block-ref
+          {:block block}))}
+   label])
 
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
@@ -1779,14 +1787,15 @@
                                [(rfe/href :page {:name page-name})
                                 (or page-original-name page-name)])
              parents-props (doall
-                            (for [{:block/keys [uuid title name]} parents]
+                            (for [{:block/keys [uuid title name] :as block} parents]
                               (when-not name ; not page
-                                [(rfe/href :page {:name uuid})
+                                [block
+                                 (rfe/href :page {:name uuid})
                                  (->elem :span (map-inline config title))])))
              breadcrumb (->> (into [] parents-props)
                              (concat [page-name-props])
                              (filterv identity)
-                             (map (fn [[href label]] (breadcrumb-fragment href label)))
+                             (map (fn [[block href label]] (breadcrumb-fragment block href label)))
                              (interpose (breadcrumb-separator)))]
          [:div.block-parents.flex-row.flex-1 breadcrumb])))))
 
@@ -1954,7 +1963,7 @@
 
      (when (and ref? breadcrumb-show?)
        (when-let [comp (block-parents config repo uuid format false)]
-         [:div.my-2.opacity-50.ml-4 comp]))
+         [:div.my-2.opacity-70.ml-4.hover:opacity-100 comp]))
 
      ;; only render this for the first block in each container
      (when top?
@@ -2570,7 +2579,31 @@
   [:div.content
    (cond-> option
      (:document/mode? config) (assoc :class "doc-mode"))
-   (if (and (:group-by-page? config)
+   (cond
+     (:custom-query? config)
+     [:div.flex.flex-col
+      (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
+        (for [[page blocks] blocks]
+          (let [alias? (:block/alias? page)
+                page (db/entity (:db/id page))
+                parent-blocks (group-by :block/parent blocks)]
+            [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
+                         (:ref? config)
+                         (assoc :class "color-level px-7 py-2 rounded"))
+             (ui/foldable
+              [:div
+               (page-cp config page)
+               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+              (for [[parent blocks] parent-blocks]
+                (let [block (first blocks)]
+                  [:div
+                   [:div.my-2.opacity-70.ml-4.hover:opacity-100
+                    (block-parents config (state/get-current-repo) (:block/uuid block)
+                                   (:block/format block)
+                                   false)]
+                   (blocks-container blocks (assoc config :breadcrumb-show? false))])))])))]
+
+     (and (:group-by-page? config)
             (vector? (first blocks)))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
@@ -2585,4 +2618,6 @@
                (page-cp config page)
                (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
               (blocks-container blocks config))])))]
+
+     :else
      (blocks-container blocks config))])
