@@ -716,7 +716,9 @@
     [active])
   nil)
 
-(rum/defcs playground < rum/reactive
+(rum/defcs playground
+  < rum/static
+    rum/reactive
   [state]
   (let [pdf-current (state/sub :pdf/current)]
     [:div.extensions__pdf-playground
