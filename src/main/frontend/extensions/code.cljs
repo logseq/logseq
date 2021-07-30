@@ -65,7 +65,7 @@
         (let [block (db/pull [:block/uuid (:block/uuid config)])
               format (:block/format block)
               content (property/remove-properties format (:block/content block))
-              full-content (property/remove-built-in-properties format (:full_content (last (:rum/args state))))]
+              full-content (:full_content (last (:rum/args state)))]
           (when (and full-content (string/includes? content full-content))
             (let [lines (string/split-lines full-content)
                   fl (first lines)
