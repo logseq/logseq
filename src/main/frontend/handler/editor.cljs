@@ -1076,8 +1076,8 @@
         top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
         exported-md-contents (mapv #(export/export-blocks-as-markdown
                                      repo %
-                                     @frontend.components.export/*export-block-text-indent-style
-                                     (into [] @frontend.components.export/*export-block-text-remove-options))
+                                     @(state/get-export-block-text-indent-style)
+                                     (into [] @(state/get-export-block-text-remove-options)))
                                    top-level-block-uuids)]
     [(string/join "\n" (mapv string/trim-newline exported-md-contents)) tree]))
 
