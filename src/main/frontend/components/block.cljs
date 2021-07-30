@@ -2178,7 +2178,7 @@
                      (state/remove-custom-query-component! query)
                      (db/remove-custom-query! (state/get-current-repo) query))
                    state)}
-  [state config {:keys [title query inputs view collapsed? children?] :as q}]
+  [state config {:keys [title query inputs view collapsed? children? breadcrumb-show?] :as q}]
   (ui/catch-error
    [:div.warning
     [:p "Query failed: "]
@@ -2262,7 +2262,9 @@
               (and (seq result) (or only-blocks? blocks-grouped-by-page?))
               (->hiccup result (cond-> (assoc config
                                               :custom-query? true
-                                              :breadcrumb-show? true
+                                              :breadcrumb-show? (if (some? breadcrumb-show?)
+                                                                  breadcrumb-show?
+                                                                  true)
                                               :group-by-page? blocks-grouped-by-page?
                                               :ref? true)
                                  children?
@@ -2615,10 +2617,11 @@
               (for [[parent blocks] parent-blocks]
                 (let [block (first blocks)]
                   [:div
-                   [:div.my-2.opacity-70.ml-4.hover:opacity-100
-                    (block-parents config (state/get-current-repo) (:block/uuid block)
-                                   (:block/format block)
-                                   false)]
+                   (when (:breadcrumb-show? config)
+                     [:div.my-2.opacity-70.ml-4.hover:opacity-100
+                      (block-parents config (state/get-current-repo) (:block/uuid block)
+                                     (:block/format block)
+                                     false)])
                    (blocks-container blocks (assoc config :breadcrumb-show? false))])))])))]
 
      (and (:group-by-page? config)
