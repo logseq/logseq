@@ -76,11 +76,12 @@
                 (assoc block :block/updated-at updated-at)
                 (nil? (:block/created-at block))
                 (assoc :block/created-at updated-at))
-        content (property/insert-properties (:block/format block)
-                                            (or (:block/content block) "")
-                                            {:created-at (:block/created-at block)
-                                             :updated-at (:block/updated-at block)})]
-    (assoc block :block/content content)))
+        ;; content (property/insert-properties (:block/format block)
+        ;;                                     (or (:block/content block) "")
+        ;;                                     {:created-at (:block/created-at block)
+        ;;                                      :updated-at (:block/updated-at block)})
+        ]
+    block))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref

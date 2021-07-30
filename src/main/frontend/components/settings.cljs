@@ -342,13 +342,13 @@
             (let [value (not enable-all-pages-public?)]
               (config-handler/set-config! :publishing/all-pages-public? value)))))
 
-(defn enable-block-timestamps-row [t enable-block-timestamps?]
-  (toggle "block timestamps"
-          (t :settings-page/enable-block-time)
-          enable-block-timestamps?
-          (fn []
-            (let [value (not enable-block-timestamps?)]
-              (config-handler/set-config! :feature/enable-block-timestamps? value)))))
+;; (defn enable-block-timestamps-row [t enable-block-timestamps?]
+;;   (toggle "block timestamps"
+;;           (t :settings-page/enable-block-time)
+;;           enable-block-timestamps?
+;;           (fn []
+;;             (let [value (not enable-block-timestamps?)]
+;;               (config-handler/set-config! :feature/enable-block-timestamps? value)))))
 
 (defn encryption-row [t enable-encryption?]
   (toggle "enable_encryption"
@@ -454,7 +454,7 @@
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
-        enable-block-timestamps? (state/enable-block-timestamps?)
+        ;; enable-block-timestamps? (state/enable-block-timestamps?)
         show-brackets? (state/show-brackets?)
         github-token (state/sub [:me :access-token])
         cors-proxy (state/sub [:me :cors_proxy])
@@ -481,7 +481,7 @@
         (file-format-row t preferred-format)
         (date-format-row t preferred-date-format)
         (workflow-row t preferred-workflow)
-        (enable-block-timestamps-row t enable-block-timestamps?)
+        ;; (enable-block-timestamps-row t enable-block-timestamps?)
         (show-brackets-row t show-brackets?)
         (outdenting-row t logical-outdenting?)
         (tooltip-row t enable-tooltip?)
