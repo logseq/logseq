@@ -70,17 +70,14 @@
                                 {:label "no-indent"
                                  :selected false}])
 
-(def *export-block-text-indent-style (atom "dashes"))
-(def *export-block-text-remove-options (atom #{}))
-
 (rum/defcs export-blocks
   < rum/reactive
   (rum/local false ::copied?)
   [state root-block-id]
   (let [current-repo (state/get-current-repo)
         type (rum/react *export-block-type)
-        text-indent-style (rum/react *export-block-text-indent-style)
-        text-remove-options (rum/react *export-block-text-remove-options)
+        text-indent-style (rum/react (state/get-export-block-text-indent-style))
+        text-remove-options (rum/react (state/get-export-block-text-remove-options))
         copied? (::copied? state)
         content
         (case type
@@ -115,7 +112,7 @@
                             :visibility (if (= :text type) "visible" "hidden")}
                 :on-change (fn [e]
                              (let [value (util/evalue e)]
-                               (reset! *export-block-text-indent-style value)))}
+                               (reset! (state/get-export-block-text-indent-style) value)))}
                (for [{:keys [label value selected]} options]
                  [:option (cond->
                            {:key   label
@@ -128,9 +125,9 @@
                                :visibility (if (= :text type) "visible" "hidden")}
                        :checked (contains? text-remove-options :page-ref)
                        :on-change (fn [e] (if (util/echecked? e)
-                                            (swap! *export-block-text-remove-options
+                                            (swap! (state/get-export-block-text-remove-options)
                                                    #(conj % :page-ref))
-                                            (swap! *export-block-text-remove-options
+                                            (swap! (state/get-export-block-text-remove-options)
                                                    #(disj % :page-ref))))})
 
          [:div
@@ -141,9 +138,9 @@
                                :visibility (if (= :text type) "visible" "hidden")}
                        :checked (contains? text-remove-options :emphasis)
                        :on-change (fn [e] (if (util/echecked? e)
-                                            (swap! *export-block-text-remove-options
+                                            (swap! (state/get-export-block-text-remove-options)
                                                    #(conj % :emphasis))
-                                            (swap! *export-block-text-remove-options
+                                            (swap! (state/get-export-block-text-remove-options)
                                                    #(disj % :emphasis))))})
 
          [:div
