@@ -9,6 +9,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.components.encryption :as encryption]
             [frontend.fs.nfs :as nfs]
             [frontend.db.conn :as conn]
@@ -132,6 +133,9 @@
 
 (defmethod handle :modal/show-cards [_]
   (state/set-modal! srs/global-cards))
+
+(defmethod handle :page/title-property-changed [[_ old-title new-title]]
+  (page-handler/rename! old-title new-title))
 
 (defmethod handle :after-db-restore [[_ repos]]
   (mapv (fn [{url :url} repo]

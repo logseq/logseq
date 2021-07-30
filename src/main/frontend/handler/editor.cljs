@@ -348,7 +348,15 @@
        (when refresh?
          (let [opts {:key :block/change
                      :data [block]}]
-           (db/refresh! repo opts)))))
+           (db/refresh! repo opts)))
+
+       ;; page title changed
+       (when-let [title (get-in block [:block/properties :title])]
+         (when-let [old-title (:block/name (db/entity (:db/id (:block/page block))))]
+           (when (and (:block/pre-block? block)
+                     (not (string/blank? title))
+                     (not= (string/lower-case title) old-title))
+             (state/pub-event! [:page/title-property-changed old-title title]))))))
 
     (repo-handler/push-if-auto-enabled! repo)))
 
