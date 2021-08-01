@@ -368,6 +368,9 @@
 
                     (d/transact! (db/get-conn repo false) page-txs)
 
+                    (when (not= (util/page-name-sanity new-name) new-name)
+                      (page-add-property! new-name :title new-name))
+
                     (when (and file (not journal?) name-changed?)
                       (rename-file! file new-name (fn [] nil)))
 
