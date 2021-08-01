@@ -43,6 +43,15 @@
   (state/set-editor-show-zotero! false)
   (editor-handler/insert-command! id (str "[[" page-name "]]") nil {}))
 
+(defn- create-abstract-note!
+  [page-name abstract-note]
+  (when-not (str/blank? abstract-note)
+    (let [block (editor-handler/api-insert-new-block!
+                 "[[Abstract]]" {:page page-name})]
+      (editor-handler/api-insert-new-block!
+       abstract-note {:block-uuid (:block/uuid block)
+                      :sibling? false}))))
+
 (defn create-zotero-page
   ([item]
    (create-zotero-page item {}))
@@ -50,8 +59,9 @@
           :or {insert-command? true notification? true}
           :as opt}]
    (go
-     (let [{:keys [page-name properties]} (extractor/extract item)]
-
+     (let [{:keys [page-name properties]} (extractor/extract item)
+           abstract-note (get properties :abstract-note)
+           properties (dissoc properties :abstract-note)]
        (when insert-command?
          (handle-command-zotero block-dom-id page-name)
          (editor-handler/save-current-block!))
@@ -67,6 +77,8 @@
            :format :markdown
            :create-first-block? false
            :properties properties}))
+
+       (create-abstract-note! page-name abstract-note)
 
        (<! (add page-name :attachments item))
 

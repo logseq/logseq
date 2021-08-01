@@ -7,9 +7,9 @@
 (def default-settings
   {:type                   :user
    :include-attachments?   true
-   :attachments-block-text "[[attachments]]"
+   :attachments-block-text "[[Attachments]]"
    :include-notes?         true
-   :notes-block-text       "[[notes]]"
+   :notes-block-text       "[[Notes]]"
    :page-insert-prefix     "@"})
 
 (defn api-key []
