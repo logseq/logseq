@@ -6891,10 +6891,10 @@ pinkie@^2.0.0:
   resolved "https://registry.yarnpkg.com/pinkie/-/pinkie-2.0.4.tgz"
   integrity sha1-clVrgM+g1IqXToDnckjoDtT3+HA=
 
-pixi-graph-fork@^0.1.3:
-  version "0.1.3"
-  resolved "https://registry.yarnpkg.com/pixi-graph-fork/-/pixi-graph-fork-0.1.3.tgz#fc7beee363ba3ec71b35df30fce1d5b2ddf27732"
-  integrity sha512-NHmlG0FI2/xme/p9KXOPLbfrQ0UIcCq4GK36IsSYPGJznhUoJTlNbfT4ML7I3DL84vQx0TliGPAA+EmoVz6CDg==
+pixi-graph-fork@^0.1.4:
+  version "0.1.4"
+  resolved "https://registry.yarnpkg.com/pixi-graph-fork/-/pixi-graph-fork-0.1.4.tgz#9191daa6512e7440c4a767c6d7bcef547a33a5a2"
+  integrity sha512-qR8MJ/q1TL812LuRqaGjHA6xIkZomOINZGH+7tKMA15feow1ud+tzFVb1pKsnvmSy/uWhhOUOVLrqLTf3vYr3Q==
   dependencies:
     "@pixi-essentials/cull" "^1.1.0"
     "@pixi/app" "^6.0.2"
@@ -7607,8 +7607,6 @@ react-icons@^2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
   integrity sha512-0n4lcGqzJFcIQLoQytLdJCE0DKSA9dkwEZRYoGrIDJZFvIT6Hbajx5mv9geqhqFiNjUgtxg8kPyDfjlhymbGFg==
-  dependencies:
-    react-icon-base "2.1.0"
 
 react-is@^16.3.1, react-is@^16.8.1:
   version "16.13.1"
