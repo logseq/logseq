@@ -338,28 +338,27 @@
     [:a
      {:class (if tag? "tag" "page-ref")
       :data-ref page-name
-      :href href
-      :on-click (fn [e]
-                  (util/stop e)
-                  (let [create-first-block! (fn []
-                                              (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
-                                                (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
-                    (if (gobj/get e "shiftKey")
-                      (do
-                        (js/setTimeout create-first-block! 310)
-                        (when-let [page-entity (db/entity [:block/name redirect-page-name])]
-                          (state/sidebar-add-block!
-                           (state/get-current-repo)
-                           (:db/id page-entity)
-                           :page
-                           {:page page-entity})))
-                      (do
-                        (create-first-block!)
-                        (route-handler/redirect! {:to :page
-                                                  :path-params {:name redirect-page-name}}))))
-                  (when (and contents-page?
-                             (state/get-left-sidebar-open?))
-                    (ui-handler/close-left-sidebar!)))}
+      :on-mouse-down
+      (fn [e]
+        (util/stop e)
+        (let [create-first-block! (fn []
+                                    (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
+                                      (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
+          (if (gobj/get e "shiftKey")
+            (do
+              (js/setTimeout create-first-block! 310)
+              (when-let [page-entity (db/entity [:block/name redirect-page-name])]
+                (state/sidebar-add-block!
+                 (state/get-current-repo)
+                 (:db/id page-entity)
+                 :page
+                 {:page page-entity})))
+            (do
+              (create-first-block!)
+              (route-handler/redirect! {:to :page
+                                        :path-params {:name redirect-page-name}}))))
+        (when (and contents-page? (state/get-left-sidebar-open?))
+          (ui-handler/close-left-sidebar!)))}
 
      (if (and (coll? children) (seq children))
        (for [child children]
