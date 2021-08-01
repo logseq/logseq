@@ -41,7 +41,7 @@
           (-> item :data :name-of-act)
           ;; default use title
           (title item))]
-    (str (setting/setting :page-insert-prefix) page-title "_" (item-key item))))
+    (str (setting/setting :page-insert-prefix) page-title)))
 
 (defn authors [item]
   (let [creators (-> item :data :creators)

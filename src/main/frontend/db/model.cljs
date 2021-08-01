@@ -548,7 +548,10 @@
 
 (defn page-empty?
   [repo page-id]
-  (empty? (:block/_parent (db-utils/entity repo page-id))))
+  (let [page-id (if (integer? page-id)
+                  page-id
+                  [:block/name page-id])]
+    (empty? (:block/_parent (db-utils/entity repo page-id)))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
