@@ -22,8 +22,6 @@ Use it to organize your todo list, to write your journals, or to record your uni
 
 [Logseq](https://logseq.com) is a platform for knowledge management and collaboration. It focuses on privacy, longevity, and [user control](https://www.gnu.org/philosophy/free-sw.en.html).
 
-Notice: the backend code will be open-sourced as soon as we’re sure that the backend service meets the security standards.
-
 The server will never store or analyze your private notes. Your data are plain text files and we currently support both Markdown and Emacs Org mode (more to be added soon).
 
 In the unlikely event that the website is down or cannot be maintained, your data is, and will always be yours.
