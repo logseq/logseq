@@ -226,6 +226,13 @@
 
     > .viewer-container {
     }
+
+    > .pdfViewer {
+      &.disabled-text-selection {
+        user-select: none;
+        pointer-events: none;
+      }
+    }
   }
 
   &-resizer {

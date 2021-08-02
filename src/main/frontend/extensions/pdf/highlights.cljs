@@ -174,6 +174,45 @@
        (rum/with-key (pdf-highlights-text-region viewer vw-hl hl ops) (:id hl))
        ))])
 
+(rum/defc pdf-highlight-area-selection
+  [^js viewer]
+
+  (let [^js viewer-clt (.. viewer -viewer -classList)
+        *el (rum/use-ref nil)
+        [rect-coords, set-rect-coords!] (rum/use-state {:start nil :end nil})
+        should-start (fn [^js e] (and e (.-altKey e)))
+        disable-text-selection! #(js-invoke viewer-clt (if % "add" "remove") "disabled-text-selection")]
+
+    (rum/use-effect!
+      (fn []
+        (when-let [^js/HTMLElement root (.closest (rum/deref *el) ".extensions__pdf-container")]
+          (let [fn-start (fn [^js/MouseEvent e]
+                           (when (should-start e)
+
+                             (set-rect-coords! {:start {:x 0, :y 0}})
+                             (disable-text-selection! true)))
+                fn-end (fn [^js/MouseEvent e]
+                         (dd "[selection start]" (:start rect-coords))
+                         (when-let [start (:start rect-coords)]
+                           (let [end nil]
+
+                             (dd "[selection end] :start" start ":end" end))
+                           (disable-text-selection! false)))]
+
+            (doto root
+              (.addEventListener "mousedown" fn-start)
+              (.addEventListener "mouseup" fn-end))
+
+            ;; destroy
+            #(doto root
+               (.removeEventListener "mousedown" fn-start)
+               (.removeEventListener "mouseup" fn-end)
+               ))))
+      [rect-coords])
+
+    [:div.extensions__pdf-area-selection
+     {:ref *el}]))
+
 (rum/defc pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
 
@@ -337,7 +376,10 @@
      ;;      (:text (:content hl))])
      ;;   ])
      ;; refs
-     (pdf-highlight-finder viewer)]))
+     (pdf-highlight-finder viewer)
+
+     ;; area selection container
+     (pdf-highlight-area-selection viewer)]))
 
 (rum/defc pdf-settings
   [^js viewer theme {:keys [hide-settings! select-theme!]}]
