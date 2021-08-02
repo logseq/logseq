@@ -112,7 +112,10 @@
 
     :page
     (let [page-name (or (:block/name block-data)
-                        db-id)]
+                        db-id)
+          page-name (if (integer? db-id)
+                      (:block/name (db/entity db-id))
+                      page-name)]
       [[:a.page-title {:href     (rfe/href :page {:name page-name})
             :on-click (fn [e]
                         (when (gobj/get e "shiftKey")

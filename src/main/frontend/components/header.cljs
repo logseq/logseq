@@ -18,6 +18,7 @@
             [frontend.components.export :as export]
             [frontend.components.plugins :as plugins]
             [frontend.components.right-sidebar :as sidebar]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.page :as page-handler]
             [frontend.handler.web.nfs :as nfs]
             [frontend.mixins :as mixins]
@@ -212,8 +213,7 @@
        (when (and (nfs/supported?) (empty? repos)
                   (not config/publishing?))
          [:a.text-sm.font-medium.button
-          {:on-click (fn []
-                       (page-handler/ls-dir-files!))}
+          {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
           [:div.flex.flex-row.text-center.open-button__inner.items-center
            [:span.inline-block.open-button__icon-wrapper svg/folder-add]
            (when-not config/mobile?

@@ -330,7 +330,7 @@
                         (:block/properties block))]
     (-> block
         (dissoc :block/top?
-                :block/block-refs-count)
+                :block/bottom?)
         (assoc :block/content content
                :block/properties new-properties)
         (merge (if level {:block/level level} {})))))
@@ -348,7 +348,15 @@
        (when refresh?
          (let [opts {:key :block/change
                      :data [block]}]
-           (db/refresh! repo opts)))))
+           (db/refresh! repo opts)))
+
+       ;; page title changed
+       (when-let [title (get-in block [:block/properties :title])]
+         (when-let [old-title (:block/name (db/entity (:db/id (:block/page block))))]
+           (when (and (:block/pre-block? block)
+                     (not (string/blank? title))
+                     (not= (string/lower-case title) old-title))
+             (state/pub-event! [:page/title-property-changed old-title title]))))))
 
     (repo-handler/push-if-auto-enabled! repo)))
 
@@ -1076,8 +1084,8 @@
         top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
         exported-md-contents (mapv #(export/export-blocks-as-markdown
                                      repo %
-                                     @frontend.components.export/*export-block-text-indent-style
-                                     (into [] @frontend.components.export/*export-block-text-remove-options))
+                                     @(state/get-export-block-text-indent-style)
+                                     (into [] @(state/get-export-block-text-remove-options)))
                                    top-level-block-uuids)]
     [(string/join "\n" (mapv string/trim-newline exported-md-contents)) tree]))
 
