@@ -6,6 +6,7 @@
             [frontend.handler.route :as route]
             [frontend.handler.page :as page-handler]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
             [frontend.ui :as ui]
             [frontend.state :as state]
@@ -140,7 +141,9 @@
 (rum/defc search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (let [pages (when-not all? (map (fn [page] {:type :page :data page}) pages))
+    (let [pages (when-not all? (map (fn [page] {:type :page
+                                               :data page
+                                               :alias (model/get-redirect-page-name page)}) pages))
           files (when-not all? (map (fn [file] {:type :file :data file}) files))
           blocks (map (fn [block] {:type :block :data block}) blocks)
           search-mode (state/sub :search/mode)
@@ -170,7 +173,7 @@
        (ui/auto-complete
         result
         {:class "search-results"
-         :on-chosen (fn [{:keys [type data]}]
+         :on-chosen (fn [{:keys [type data alias]}]
                       (search-handler/clear-search!)
                       (leave-focus)
                       (case type
@@ -181,8 +184,9 @@
                         (page-handler/create! search-q)
 
                         :page
-                        (route/redirect! {:to :page
-                                          :path-params {:name data}})
+                        (let [data (or alias data)]
+                          (route/redirect! {:to :page
+                                            :path-params {:name data}}))
 
                         :file
                         (route/redirect! {:to :file
@@ -199,10 +203,11 @@
                                                :path-params {:name page}
                                                :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))))
                         nil))
-         :on-shift-chosen (fn [{:keys [type data]}]
+         :on-shift-chosen (fn [{:keys [type data alias]}]
                             (case type
                               :page
-                              (let [page (db/entity [:block/name (string/lower-case data)])]
+                              (let [data (or alias data)
+                                    page (db/entity [:block/name (string/lower-case data)])]
                                 (state/sidebar-add-block!
                                  (state/get-current-repo)
                                  (:db/id page)
@@ -226,7 +231,7 @@
                                                 :path-params {:path data}})
 
                               nil))
-         :item-render (fn [{:keys [type data]}]
+         :item-render (fn [{:keys [type data alias]}]
                         (let [search-mode (state/get-search-mode)]
                           [:div {:class "py-2"} (case type
                                                   :graph-add-filter
@@ -237,7 +242,10 @@
                                                    [:span.ml-1 (str "\"" search-q "\"")]]
 
                                                   :page
-                                                  (search-result-item "Page" (highlight-exact-query data search-q))
+                                                  [:span
+                                                   (when alias
+                                                     [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " alias)])
+                                                   (search-result-item "Page" (highlight-exact-query data search-q))]
 
                                                   :file
                                                   (search-result-item "File" (highlight-exact-query data search-q))
