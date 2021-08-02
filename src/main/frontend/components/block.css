@@ -10,6 +10,7 @@
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
+  cursor: text;
 
   img {
     max-width: 100%;
@@ -157,6 +158,10 @@
   border-bottom: 0.5px solid;
   border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
+
+  .block-content {
+    cursor: inherit;
+  }
 
   &:hover {
     color: var(--ls-link-text-hover-color);
