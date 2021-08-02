@@ -402,22 +402,21 @@
         html-template (fn []
                         (when redirect-page-name
                           [:div.tippy-wrapper.overflow-y-auto.p-4
-                           {:style {:width          600
-                                    :text-align     "left"
-                                    :max-height     600
-                                    :padding-bottom 64}}
-                           (if (and (string? page-original-name) (string/includes? page-original-name "/"))
-                             [:div.my-2
+                           {:style {:width      600
+                                    :text-align "left"
+                                    :max-height 600}}
+                           [:h2.page-preview-title.text-lg.my-2
+                            (if (and (string? page-original-name) (string/includes? page-original-name "/"))
                               (->>
-                               (for [page (string/split page-original-name #"/")]
-                                 (when (and (string? page) page)
-                                   (page-reference false page {} nil)))
-                               (interpose [:span.mx-2.opacity-30 "/"]))]
-                             [:h2.font-bold.text-lg (if (= page-name redirect-page-name)
-                                                      page-original-name
-                                                      [:span
-                                                       [:span.text-sm.mr-2 "Alias:"]
-                                                       page-original-name])])
+                                (for [page (string/split page-original-name #"/")]
+                                  (when (and (string? page) page)
+                                    (page-reference false page {} nil)))
+                                (interpose [:span.mx-2.opacity-30 "/"]))
+                              (if (= page-name redirect-page-name)
+                                (page-reference false page-original-name {} nil)
+                                [:span
+                                 [:span.text-sm.mr-2 "Alias:"]
+                                 (page-reference false page-original-name {} nil)]))]
                            (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
                              (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                              (when-let [f (state/get-page-blocks-cp)]
