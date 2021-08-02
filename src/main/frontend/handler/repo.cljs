@@ -114,9 +114,8 @@
                      (config/get-file-extension format))
            file-path (str "/" path)
            page-exists? (db/entity repo-url [:block/name (string/lower-case title)])
-           empty-blocks? (empty? (db/get-page-blocks-no-cache repo-url (string/lower-case title)))]
-       (when (or empty-blocks?
-                 (not page-exists?))
+           empty-blocks? (db/page-empty? repo-url (string/lower-case title))]
+       (when (or empty-blocks? (not page-exists?))
          (p/let [_ (nfs/check-directory-permission! repo-url)
                  _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
                  file-exists? (fs/file-exists? repo-dir file-path)]
@@ -130,22 +129,6 @@
                (when-not (state/editing?)
                  (ui-handler/re-render-root!))))))))))
 
-(defn create-today-journal!
-  ([]
-   (create-today-journal! true))
-  ([write-file?]
-   (state/set-today! (date/today))
-   (when-let [repo (state/get-current-repo)]
-     (when (or (db/cloned? repo)
-               (and (or (config/local-db? repo)
-                        (= "local" repo))
-                    ;; config file exists
-                    (let [path (config/get-config-path)]
-                      (db/get-file path))))
-       (let [today-page (string/lower-case (date/today))]
-         (when (empty? (db/get-page-blocks-no-cache repo today-page))
-           (create-today-journal-if-not-exists repo {:write-file? write-file?})))))))
-
 (defn create-default-files!
   ([repo-url]
    (create-default-files! repo-url false))
@@ -153,13 +136,14 @@
    (spec/validate :repos/url repo-url)
    (let [repo-dir (config/get-repo-dir repo-url)]
      (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
-             _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))]
+             _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))
+             _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))]
        (file-handler/create-metadata-file repo-url encrypted?)
        ;; TODO: move to frontend.handler.file
        (create-config-file-if-not-exists repo-url)
-       (create-today-journal-if-not-exists repo-url {:write-file? false})
        (create-contents-file repo-url)
-       (create-custom-theme repo-url)))))
+       (create-custom-theme repo-url)
+       (state/pub-event! [:page/create-today-journal repo-url])))))
 
 (defn- remove-non-exists-refs!
   [data]
@@ -275,6 +259,8 @@
   [repo-url {:keys [first-clone? diffs nfs-files refresh?]
              :as opts}]
   (spec/validate :repos/url repo-url)
+  (when (= :repos (state/get-current-route))
+    (route-handler/redirect-to-home!))
   (let [config (or (state/get-config repo-url)
                    (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
                            :file/content
@@ -636,11 +622,11 @@
                    (prn "Delete repo failed, error: " error))))))
 
 (defn re-index!
-  [nfs-rebuild-index!]
+  [nfs-rebuild-index! ok-handler]
   (when-let [repo (state/get-current-repo)]
     (let [local? (config/local-db? repo)]
       (if local?
-        (nfs-rebuild-index! repo create-today-journal!)
+        (nfs-rebuild-index! repo ok-handler)
         (rebuild-index! repo))
       (js/setTimeout
        (fn []

@@ -13,7 +13,6 @@
             [frontend.handler.web.nfs :as web-nfs]
             [frontend.handler.notification :as notification]
             [frontend.handler.config :as config-handler]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.core :as outliner-core]
@@ -81,35 +80,36 @@
   ([title {:keys [redirect? create-first-block? format properties]
            :or   {redirect?           true
                   create-first-block? true
-                  format              false
-                  properties          false}}]
-   (let [title    (string/trim title)
-         pages    (util/split-namespace-pages title)
-         page     (string/lower-case title)
-         format   (or format (state/get-preferred-format))
-         pages    (map (fn [page]
-                         (-> (block/page-name->map page true)
-                             (assoc :block/format format)))
-                       pages)
-         txs      (->> pages
-                       ;; for namespace pages, only last page need properties
-                       drop-last
-                       (mapcat #(build-page-tx format false %))
-                       (remove nil?))
-         last-txs (build-page-tx format properties (last pages))
-         txs      (concat txs last-txs)]
+                  format              nil
+                  properties          nil}}]
+   (let [page (string/lower-case title)]
+     (when-not (db/entity [:block/name page])
+       (let [title    (string/trim title)
+             pages    (util/split-namespace-pages title)
+             format   (or format (state/get-preferred-format))
+             pages    (map (fn [page]
+                             (-> (block/page-name->map page true)
+                                 (assoc :block/format format)))
+                        pages)
+             txs      (->> pages
+                           ;; for namespace pages, only last page need properties
+                           drop-last
+                           (mapcat #(build-page-tx format false %))
+                           (remove nil?))
+             last-txs (build-page-tx format properties (last pages))
+             txs      (concat txs last-txs)]
 
-     (db/transact! txs)
+         (db/transact! txs)
 
-     (when create-first-block?
-       (editor-handler/insert-first-page-block-if-not-exists! page))
+         (when create-first-block?
+           (editor-handler/insert-first-page-block-if-not-exists! page))
 
-     (when-let [page (db/entity [:block/name page])]
-       (outliner-file/sync-to-file page))
+         (when-let [page (db/entity [:block/name page])]
+           (outliner-file/sync-to-file page))
 
-     (when redirect?
-       (route-handler/redirect! {:to          :page
-                                 :path-params {:name page}})))))
+         (when redirect?
+           (route-handler/redirect! {:to          :page
+                                     :path-params {:name page}})))))))
 
 (defn page-add-property!
   [page-name key value]
@@ -484,11 +484,11 @@
           (contains? (set templates) (string/lower-case title)))))))
 
 (defn ls-dir-files!
-  []
+  [ok-handler]
   (web-nfs/ls-dir-files-with-handler!
    (fn []
      (init-commands!)
-     (shortcut/refresh!))))
+     (when ok-handler (ok-handler)))))
 
 (defn get-all-pages
   [repo]
@@ -573,3 +573,19 @@
                                           format
                                           {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
                                            :postfix-fn   (fn [s] (util/replace-first "]]" s ""))}))))))
+
+(defn create-today-journal!
+  []
+  (state/set-today! (date/today))
+  (when-let [repo (state/get-current-repo)]
+    (when (or (db/cloned? repo)
+              (and (or (config/local-db? repo)
+                       (= "local" repo))
+                   ;; config file exists
+                   (let [path (config/get-config-path)]
+                     (db/get-file path))))
+      (let [title (date/today)
+            today-page (string/lower-case title)]
+        (when (db/page-empty? repo today-page)
+          (create! title {:redirect? false
+                          :create-first-block? true}))))))

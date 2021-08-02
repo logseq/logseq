@@ -330,7 +330,7 @@
                         (:block/properties block))]
     (-> block
         (dissoc :block/top?
-                :block/block-refs-count)
+                :block/bottom?)
         (assoc :block/content content
                :block/properties new-properties)
         (merge (if level {:block/level level} {})))))

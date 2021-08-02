@@ -137,6 +137,9 @@
 (defmethod handle :page/title-property-changed [[_ old-title new-title]]
   (page-handler/rename! old-title new-title))
 
+(defmethod handle :page/create-today-journal [[_ repo]]
+  (page-handler/create-today-journal!))
+
 (defmethod handle :after-db-restore [[_ repos]]
   (mapv (fn [{url :url} repo]
           ;; compare :ast/version
