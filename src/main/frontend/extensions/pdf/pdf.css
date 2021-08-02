@@ -60,7 +60,7 @@
     height: 42px;
     z-index: 5;
     background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, rgba(255, 255, 255, 1) 100%);
-    padding-right: 20px;
+    padding: 5px 20px;
 
     > .inner {
       display: flex;
@@ -73,6 +73,8 @@
           display: flex;
           align-items: center;
           margin-left: 8px;
+          padding: 4px 6px;
+          color: var(--ls-icon-color);
         }
       }
     }
