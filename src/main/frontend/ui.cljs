@@ -654,19 +654,23 @@
                     :trigger (if manual "manual" "mouseenter focus")
                     ;; See https://github.com/tvkhoa/react-tippy/issues/13
                     :popperOptions (if fixed-position?
-                                      {:modifiers {:flip {:enabled false}
-                                                   :hide {:enabled false}
-                                                   :preventOverflow {:enabled false}}}
-                                      {})
+                                     {:modifiers {:flip {:enabled false}
+                                                  :hide {:enabled false}
+                                                  :preventOverflow {:enabled false}}}
+                                     {})
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)
             (assoc :html (if (or open? mounted?)
-                           (when-let [html (:html opts)]
-                             (if (fn? html)
-                               (html)
-                               [:div.pr-3.py-1
-                                html]))
+                           (try
+                             (when-let [html (:html opts)]
+                              (if (fn? html)
+                                (html)
+                                [:div.pr-3.py-1
+                                 html]))
+                             (catch js/Error e
+                               (log/error :exception e)
+                               [:div]))
                            [:div {:key "tippy"} ""])))
            child)))
 
