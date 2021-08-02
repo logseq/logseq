@@ -468,6 +468,18 @@
                         outline-data)]
           [:section.is-empty "No outlines"])]])))
 
+(rum/defc docinfo-display
+  [info]
+  [:div.extensions__pdf-doc-info
+   (for [[k v] info
+         :let [k (pr-str k)]]
+     [:p {:key k} [:strong k] "  " [:i (pr-str v)]])])
+
+(defn make-docinfo-in-modal
+  [info]
+  (fn [close-fn]
+    (docinfo-display info)))
+
 (rum/defc pdf-toolbar
   [^js viewer]
   (let [[outline-visible?, set-outline-visible!] (rum/use-state false)
@@ -508,12 +520,20 @@
           {:on-click #(set-outline-visible! (not outline-visible?))}
           (svg/view-list 16)]
 
+         ;; metadata
+         [:a.button.is-info
+          {:on-click #(do
+                        (p/let [ret (pdf-utils/get-meta-data$ viewer)]
+                          (state/set-modal! (make-docinfo-in-modal ret))))}
+          (svg/info)]
+
          [:a.button
           {:on-click #(state/set-state! :pdf/current nil)}
           (t :close)]]]
 
        ;; contents outline
        (pdf-outline viewer outline-visible? #(set-outline-visible! false))
+
        ;; settings
        (and settings-visible? (pdf-settings
                                 viewer

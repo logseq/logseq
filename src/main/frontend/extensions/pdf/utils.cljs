@@ -80,6 +80,21 @@
 
         (set! (.-currentScale viewer) new-scale)))))
 
+(defn get-meta-data$
+  [^js viewer]
+  (when-let [^js doc (and viewer (.-pdfDocument viewer))]
+    (p/create
+      (fn [resolve]
+        (p/catch
+          (p/then (.getMetadata doc)
+                  (fn [^js r]
+                    (js/console.debug "[metadata] " r)
+                    (when-let [^js info (and r (.-info r))]
+                      (resolve (bean/->clj info)))))
+          (fn [e]
+            (resolve nil)
+            (js/console.error e)))))))
+
 (defn clear-all-selection
   []
   (.removeAllRanges (js/window.getSelection)))
