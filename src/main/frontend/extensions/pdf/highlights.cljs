@@ -179,39 +179,86 @@
 
   (let [^js viewer-clt (.. viewer -viewer -classList)
         *el (rum/use-ref nil)
-        [rect-coords, set-rect-coords!] (rum/use-state {:start nil :end nil})
+        *cnt-el (rum/use-ref nil)
+        *cnt-rect (rum/use-ref nil)
+
         should-start (fn [^js e] (and e (.-altKey e)))
-        disable-text-selection! #(js-invoke viewer-clt (if % "add" "remove") "disabled-text-selection")]
+
+        [start-coord, set-start-coord!] (rum/use-state nil)
+        [end-coord, set-end-coord!] (rum/use-state nil)
+
+        reset-coords #(do
+                        (set-start-coord! nil)
+                        (set-end-coord! nil))
+
+        calc-coords (fn [page-x page-y]
+                      (when-let [cnt-el (or (rum/deref *cnt-el)
+                                            (when-let [cnt-el (.querySelector (.closest (rum/deref *el) ".extensions__pdf-viewer-cnt") ".extensions__pdf-viewer")]
+                                              (rum/set-ref! *cnt-el cnt-el) cnt-el))]
+                        (let [cnt-rect (rum/deref *cnt-rect)
+                              cnt-rect (or cnt-rect (bean/->clj (.toJSON (.getBoundingClientRect cnt-el))))
+                              _ (rum/set-ref! *cnt-rect cnt-rect)]
+
+                          {:x (- page-x (:left cnt-rect) (.-scrollLeft cnt-el))
+                           :y (-> page-y
+                                  (- (:top cnt-rect))
+                                  (+ (.-scrollTop cnt-el)))})))
+
+        calc-pos (fn [start end]
+                   {:left   (min (:x start) (:x end))
+                    :top    (min (:y start) (:y end))
+                    :width  (js/Math.abs (- (:x end) (:x start)))
+                    :height (js/Math.abs (- (:y end) (:y start)))})
+
+        disable-text-selection! #(js-invoke viewer-clt (if % "add" "remove") "disabled-text-selection")
+
+        fn-move (rum/use-callback
+                  (fn [^js/MouseEvent e]
+                    (set-end-coord! (calc-coords (.-pageX e) (.-pageY e))))
+                  [])]
 
     (rum/use-effect!
       (fn []
         (when-let [^js/HTMLElement root (.closest (rum/deref *el) ".extensions__pdf-container")]
           (let [fn-start (fn [^js/MouseEvent e]
                            (when (should-start e)
+                             (set-start-coord! (calc-coords (.-pageX e) (.-pageY e)))
+                             (disable-text-selection! true)
 
-                             (set-rect-coords! {:start {:x 0, :y 0}})
-                             (disable-text-selection! true)))
+                             (.addEventListener root "mousemove" fn-move)))
+
                 fn-end (fn [^js/MouseEvent e]
-                         (dd "[selection start]" (:start rect-coords))
-                         (when-let [start (:start rect-coords)]
-                           (let [end nil]
+                         (when-let [start start-coord]
+                           (let [end (calc-coords (.-pageX e) (.-pageY e))
+                                 pos (calc-pos start end)]
 
-                             (dd "[selection end] :start" start ":end" end))
-                           (disable-text-selection! false)))]
+                             (if (and (> (:width pos) 10)
+                                      (> (:height pos) 10))
+
+                               (do
+                                 ;; export area highlight
+                                 (dd "[selection end] :start" start ":end" end ":pos" pos))
+
+                               ;; reset
+                               (reset-coords)))
+
+                           (disable-text-selection! false)
+                           (.removeEventListener root "mousemove" fn-move)))]
 
             (doto root
               (.addEventListener "mousedown" fn-start)
-              (.addEventListener "mouseup" fn-end))
+              (.addEventListener "mouseup" fn-end #js {:once true}))
 
             ;; destroy
             #(doto root
                (.removeEventListener "mousedown" fn-start)
-               (.removeEventListener "mouseup" fn-end)
-               ))))
-      [rect-coords])
+               (.removeEventListener "mouseup" fn-end)))))
+      [start-coord])
 
     [:div.extensions__pdf-area-selection
-     {:ref *el}]))
+     {:ref *el}
+     (when (and start-coord end-coord)
+       [:div.shadow-rect {:style (calc-pos start-coord end-coord)}])]))
 
 (rum/defc pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
@@ -642,20 +689,23 @@
       [(:viewer state)
        (:loaded-pages ano-state)])
 
-    [:div.extensions__pdf-viewer-cnt
-     [:div.extensions__pdf-viewer {:ref *el-ref}
-      [:div.pdfViewer "viewer pdf"]
-      [:div.pp-holder]]
+    (let [^js viewer (:viewer state)]
+      [:div.extensions__pdf-viewer-cnt
+       [:div.extensions__pdf-viewer {:ref *el-ref}
+        [:div.pdfViewer "viewer pdf"]
+        [:div.pp-holder]
 
-     (if-let [^js viewer (:viewer state)]
-       [(rum/with-key
-          (pdf-highlights
-            (:el state) viewer
-            initial-hls (:loaded-pages ano-state)
-            ops) "pdf-highlights")
 
-        (rum/with-key (pdf-toolbar viewer) "pdf-toolbar")
-        (rum/with-key (pdf-resizer viewer) "pdf-resizer")])]))
+        (when viewer
+          [(rum/with-key
+             (pdf-highlights
+               (:el state) viewer
+               initial-hls (:loaded-pages ano-state)
+               ops) "pdf-highlights")])]
+
+       (when viewer
+         [(rum/with-key (pdf-resizer viewer) "pdf-resizer")
+          (rum/with-key (pdf-toolbar viewer) "pdf-toolbar")])])))
 
 (rum/defc pdf-loader
   [{:keys [url hls-file] :as pdf-current}]

@@ -341,6 +341,15 @@
       }
     }
   }
+
+  &-area-selection {
+
+    .shadow-rect {
+      position: absolute;
+      background: rgba(252, 232, 151, 1);
+      mix-blend-mode: multiply;
+    }
+  }
 }
 
 .hls-text-region-item {
