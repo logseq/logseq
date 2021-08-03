@@ -1256,6 +1256,13 @@
                (rum/with-key (block-container config child)
                  (:block/uuid child)))))]))))
 
+(defn block-content-empty?
+  [block]
+  (and
+    (property/properties-built-in? (:block/properties block))
+    (= (:block/title block) [])
+    (every? #(= % ["Horizontal_Rule"]) (:block/body block))))
+
 (rum/defcs block-control < rum/reactive
   [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit? doc-mode?]
   (let [doc-mode? (state/sub :document/mode?)
@@ -1272,10 +1279,8 @@
         dark? (= "dark" (state/sub :ui/theme))
         ref? (:ref? config)
         collapsed? (if ref? ref-collapsed? collapsed?)
-        empty-content? (string/blank?
-                        (property/remove-built-in-properties
-                         (:block/format block)
-                         (:block/content block)))]
+        empty-content? (block-content-empty? block)]
+    (println empty-content?)
     [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
               :margin-top 0
