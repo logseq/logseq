@@ -380,25 +380,11 @@
          (let [s (get page-entity :block/original-name page-name)]
            (if tag? (str "#" s) s))))]))
 
-(defn- use-delayed-open [open? page-name]
-  "A react hook to debounce open? value.
-  If open? changed from false to open, there will be a `timeout` delay.
-  Otherwise, the value will be changed to false immediately"
-  (let [[deval set-deval!] (rum/use-state nil)]
-    (rum/use-effect!
-     (fn []
-       (if open? (let [timer (js/setTimeout #(set-deval! open?) 1000)]
-                   #(js/clearTimeout timer))
-           (set-deval! open?))) ;; immediately change
-     [open? page-name])
-    deval))
-
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
   (let [redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
                                page-name)
         page-original-name (model/get-page-original-name redirect-page-name)
-        debounced-open? (use-delayed-open open? page-name)
         html-template (fn []
                         (when redirect-page-name
                           [:div.tippy-wrapper.overflow-y-auto.p-4
@@ -420,12 +406,12 @@
                                                        [:span.text-sm.mr-2 "Alias:"]
                                                        page-original-name])])
                            (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
+                             (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                              (when-let [f (state/get-page-blocks-cp)]
                                (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]))]
     (if (or (not manual?) open?)
       (ui/tippy {:html            html-template
                  :interactive     true
-                 :open?           debounced-open?
                  :delay           [1000, 100]
                  :fixed-position? fixed-position?
                  :position        (or tippy-position "top")
