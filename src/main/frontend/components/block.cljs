@@ -1280,7 +1280,6 @@
         ref? (:ref? config)
         collapsed? (if ref? ref-collapsed? collapsed?)
         empty-content? (block-content-empty? block)]
-    (println empty-content?)
     [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
               :margin-top 0
