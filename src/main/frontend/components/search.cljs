@@ -141,9 +141,14 @@
 (rum/defc search-auto-complete
   [{:keys [pages files blocks has-more?] :as result} search-q all?]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (let [pages (when-not all? (map (fn [page] {:type :page
-                                               :data page
-                                               :alias (model/get-redirect-page-name page)}) pages))
+    (let [pages (when-not all? (map (fn [page]
+                                      (let [alias (model/get-redirect-page-name page)]
+                                        (cond->
+                                          {:type :page
+                                           :data page}
+                                          (not= (string/lower-case page)
+                                                (string/lower-case alias))
+                                          (assoc :alias alias)))) pages))
           files (when-not all? (map (fn [file] {:type :file :data file}) files))
           blocks (map (fn [block] {:type :block :data block}) blocks)
           search-mode (state/sub :search/mode)

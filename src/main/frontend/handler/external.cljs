@@ -85,8 +85,8 @@
                                         [page-block false]))
             tree (editor/blocks->tree-by-level parsed-blocks)]
         (editor/paste-block-vec-tree-at-target
-         tree [] nil
-         #(editor/get-block-tree-insert-pos-after-target
-           (:db/id target-block) sibling?)
-         page-block)
+         tree []
+         {:get-pos-fn #(editor/get-block-tree-insert-pos-after-target
+                        (:db/id target-block) sibling?)
+          :page-block page-block})
         (finished-ok-handler [page-name])))))

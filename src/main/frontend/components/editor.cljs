@@ -174,7 +174,6 @@
       (when input
         (let [current-pos (cursor/pos input)
               edit-content (state/sub [:editor/content id])
-              edit-block (state/sub :editor/block)
               q (or
                  (when (>= (count edit-content) current-pos)
                    (subs edit-content pos current-pos))
@@ -184,7 +183,7 @@
                                   (state/set-editor-show-template-search! false))]
           (ui/auto-complete
            matched-templates
-           {:on-chosen   (editor-handler/template-on-chosen-handler input id q format edit-block edit-content)
+           {:on-chosen   (editor-handler/template-on-chosen-handler id)
             :on-enter    non-exist-handler
             :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a template"]
             :item-render (fn [[template _block-db-id]]

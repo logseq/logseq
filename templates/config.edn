@@ -13,9 +13,8 @@
  ;; E.g. "/archived" "/test.md"
  :hidden []
 
- ;; When creating the new journal page, the app will use your template content here.
- ;; Example for Markdown users: "[[Work]]\n  -\n- [[Family]]\n  -\n"
- ;; Example for Org mode users: "** [[Work]]\n***\n** [[Family]]\n***\n"
+ ;; When creating the new journal page, the app will use your template if there is one.
+ ;; You only need to input your template name here.
  :default-templates
  {:journals ""}
 
