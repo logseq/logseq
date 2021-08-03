@@ -5,6 +5,7 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-resize-context" :as Resize]
             ["react-tippy" :as react-tippy]
+            ["react-tweet-embed" :as react-tweet-embed]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
@@ -27,6 +28,7 @@
 (def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
+(def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 
 (rum/defc ls-textarea < rum/reactive
   [{:keys [on-change] :as props}]
@@ -652,19 +654,23 @@
                     :trigger (if manual "manual" "mouseenter focus")
                     ;; See https://github.com/tvkhoa/react-tippy/issues/13
                     :popperOptions (if fixed-position?
-                                      {:modifiers {:flip {:enabled false}
-                                                   :hide {:enabled false}
-                                                   :preventOverflow {:enabled false}}}
-                                      {})
+                                     {:modifiers {:flip {:enabled false}
+                                                  :hide {:enabled false}
+                                                  :preventOverflow {:enabled false}}}
+                                     {})
                     :onShow #(reset! *mounted? true)
                     :onHide #(reset! *mounted? false)}
                    opts)
             (assoc :html (if (or open? mounted?)
-                           (when-let [html (:html opts)]
-                             (if (fn? html)
-                               (html)
-                               [:div.pr-3.py-1
-                                html]))
+                           (try
+                             (when-let [html (:html opts)]
+                              (if (fn? html)
+                                (html)
+                                [:div.pr-3.py-1
+                                 html]))
+                             (catch js/Error e
+                               (log/error :exception e)
+                               [:div]))
                            [:div {:key "tippy"} ""])))
            child)))
 
@@ -678,3 +684,13 @@
     :style {:width "100%"}
     :on-change #(let [value (util/evalue %)]
                   (on-change value))}])
+
+(rum/defcs tweet-embed < (rum/local true :loading?)
+  [state id]
+  (let [*loading? (:loading? state)]
+    [:div [(when @*loading? [:span.flex.items-center [svg/loading " ... loading"]])
+           (ReactTweetEmbed
+             {:id                    id
+              :class                 "contents"
+              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
+              :on-tweet-load-success #(reset! *loading? false)})]]))

@@ -29,6 +29,25 @@
                                              count-1
                                              (- count-1 count-2)))))
 
+(defn block-uuid-nil?
+  [block]
+  (->>
+   (concat
+    [(:block/parent block)
+     (:block/left block)
+     (:block/page block)
+     (:block/namespace block)]
+    (:block/tags block)
+    (:block/alias block)
+    (:block/refs block)
+    (:block/path-refs block))
+   (remove nil?)
+   (some (fn [x]
+           (and
+            (vector? x)
+            (= :block/uuid (first x))
+            (nil? (second x)))))))
+
 (comment
   (defn debug!
     []

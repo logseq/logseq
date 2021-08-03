@@ -20,7 +20,7 @@
 (defn built-in-properties
   []
   (set/union
-   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table :query-properties}
+   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table :query-properties :query-sort-by :query-sort-desc}
    (set (map keyword config/markers))
    @built-in-extended-properties))
 
@@ -89,8 +89,11 @@
 
       (not org?)
       (let [lines (string/split-lines content)
-            non-properties (get (group-by simplified-property? lines) false)]
-        (string/join "\n" non-properties))
+            lines (if (simplified-property? (first lines))
+                    (drop-while simplified-property? lines)
+                    (cons (first lines)
+                          (drop-while simplified-property? (rest lines))))]
+        (string/join "\n" lines))
 
       :else
       content)))
@@ -271,6 +274,7 @@
   [format content]
   (remove-property format "id" content false))
 
+;; FIXME: only remove from the properties area
 (defn remove-built-in-properties
   [format content]
   (let [built-in-properties* (built-in-properties)

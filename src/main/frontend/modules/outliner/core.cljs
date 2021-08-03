@@ -76,11 +76,12 @@
                 (assoc block :block/updated-at updated-at)
                 (nil? (:block/created-at block))
                 (assoc :block/created-at updated-at))
-        content (property/insert-properties (:block/format block)
-                                            (or (:block/content block) "")
-                                            {:created-at (:block/created-at block)
-                                             :updated-at (:block/updated-at block)})]
-    (assoc block :block/content content)))
+        ;; content (property/insert-properties (:block/format block)
+        ;;                                     (or (:block/content block) "")
+        ;;                                     {:created-at (:block/created-at block)
+        ;;                                      :updated-at (:block/updated-at block)})
+        ]
+    block))
 
 ;; -get-id, -get-parent-id, -get-left-id return block-id
 ;; the :block/parent, :block/left should be datascript lookup ref
@@ -96,8 +97,8 @@
          (if uuid
            uuid
            (let [new-id (db/new-block-id)]
-             (db/transact! {:db/id db-id
-                            :block/uuid new-id})
+             (db/transact! [{:db/id db-id
+                             :block/uuid new-id}])
              new-id))))))
 
   (-get-parent-id [this]
@@ -243,17 +244,18 @@
   "Insert a node as sibling."
   [txs-state new-node left-node]
   {:pre [(every? tree/satisfied-inode? [new-node left-node])]}
-  (let [node (-> (tree/-set-left-id new-node (tree/-get-id left-node))
-               (tree/-set-parent-id (tree/-get-parent-id left-node)))
-        right-node (tree/-get-right left-node)]
-    (if (tree/satisfied-inode? right-node)
-      (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
-            saved-new-node (tree/-save node txs-state)]
-        (tree/-save new-right-node txs-state)
-        [saved-new-node new-right-node])
-      (do
-        (tree/-save node txs-state)
-        [node]))))
+  (when-let [left-id (tree/-get-id left-node)]
+    (let [node (-> (tree/-set-left-id new-node left-id)
+                   (tree/-set-parent-id (tree/-get-parent-id left-node)))
+          right-node (tree/-get-right left-node)]
+      (if (tree/satisfied-inode? right-node)
+        (let [new-right-node (tree/-set-left-id right-node (tree/-get-id new-node))
+              saved-new-node (tree/-save node txs-state)]
+          (tree/-save new-right-node txs-state)
+          [saved-new-node new-right-node])
+        (do
+          (tree/-save node txs-state)
+          [node])))))
 
 
 (defn- insert-node-aux

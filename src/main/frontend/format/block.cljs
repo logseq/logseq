@@ -677,11 +677,16 @@
                 (let [[f r] (split-with (fn [p] (<= (:block/level-spaces p) level-spaces)) parents)
                       left (first r)
                       parents' (->> (concat f [left]) vec)
-                      block (assoc block
-                                   :block/parent [:block/uuid (:block/uuid (last f))]
-                                   :block/left [:block/uuid (:block/uuid left)]
-                                   :block/level (:block/level left)
-                                   :block/level-spaces (:block/level-spaces left))
+                      parent-id (if-let [block-id (:block/uuid (last f))]
+                                  [:block/uuid block-id]
+                                  page-id)
+                      block (cond->
+                              (assoc block
+                                     :block/parent parent-id
+                                     :block/left [:block/uuid (:block/uuid left)]
+                                     :block/level (:block/level left)
+                                     :block/level-spaces (:block/level-spaces left)))
+
                       parents' (->> (concat f [block]) vec)
                       result' (conj result block)]
                   [others parents' block result'])))]

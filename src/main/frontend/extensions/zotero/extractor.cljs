@@ -41,7 +41,7 @@
           (-> item :data :name-of-act)
           ;; default use title
           (title item))]
-    (str (setting/setting :page-insert-prefix) page-title "_" (item-key item))))
+    (str (setting/setting :page-insert-prefix) page-title)))
 
 (defn authors [item]
   (let [creators (-> item :data :creators)
@@ -138,16 +138,15 @@
 
 (defmethod extract "attachment"
   [item]
-  (let [{:keys [title url link-mode path]} (-> item :data)]
-    (case link-mode
-      "imported_file"
-      (markdown-link title (local-link item))
-      "imported_url"
+  (let [{:keys [title filename url link-mode path]} (-> item :data)]
+    (cond
+      (contains? #{"imported_file" "imported_url" "linked_file"} link-mode)
+      (markdown-link (or title filename) (local-link item))
+
+      (some? url)
       (markdown-link title url)
-      "linked_file"
-      (markdown-link title (str "file://" path))
-      "linked_url"
-      (markdown-link title url)
+
+      :else
       nil)))
 
 (defmethod extract :default

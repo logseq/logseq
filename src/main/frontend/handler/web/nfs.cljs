@@ -248,7 +248,7 @@
                       (repo-handler/load-repo-to-db! repo
                                                      {:diffs     diffs
                                                       :nfs-files modified-files
-                                                      :refresh? true}))))))))
+                                                      :refresh? (not re-index?)}))))))))
 
 (defn- reload-dir!
   ([repo]

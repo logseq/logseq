@@ -4,6 +4,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.history :as history]
             [frontend.handler.repo :as repo-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
@@ -303,7 +304,9 @@
     :graph/re-index
     {:desc    "Re-index the whole graph"
      :binding "mod+c mod+r"
-     :fn      #(repo-handler/re-index! nfs-handler/rebuild-index!)}}
+     :fn      #(repo-handler/re-index!
+                nfs-handler/rebuild-index!
+                page-handler/create-today-journal!)}}
 
    :shortcut.handler/misc
    ;; always overrides the copy due to "mod+c mod+s"

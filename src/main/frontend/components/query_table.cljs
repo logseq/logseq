@@ -8,23 +8,25 @@
             [frontend.state :as state]
             [clojure.string :as string]
             [frontend.components.svg :as svg]
-            [frontend.handler.common :as common-handler]))
+            [frontend.handler.common :as common-handler]
+            [frontend.handler.editor :as editor-handler]))
 
 ;; TODO: extract to table utils
 (defn- sort-result-by
   [by-item desc? result]
-  (def result result)
-  (def by-item by-item)
-  (def desc? desc?)
   (let [comp (if desc? > <)]
     (sort-by by-item comp result)))
 
 (rum/defc sortable-title
-  [title key by-item desc?]
+  [title key by-item desc? block-id]
   [:th.whitespace-nowrap
    [:a {:on-click (fn []
                     (reset! by-item key)
-                    (swap! desc? not))}
+                    (swap! desc? not)
+                    (when block-id
+                      (when key
+                        (editor-handler/set-block-property! block-id :query-sort-by (name key)))
+                      (editor-handler/set-block-property! block-id :query-sort-desc @desc?)))}
     [:div.flex.items-center
      [:span.mr-1 title]
      (when (= @by-item key)
@@ -37,18 +39,28 @@
                   (remove (property/built-in-properties))
                   (remove #{:template}))
         keys (if page? (cons :page keys) (cons :block keys))
-        keys (concat keys [:created-at :updated-at])]
+        keys (if page? (concat keys [:created-at :updated-at]) keys)]
     keys))
 
 (rum/defcs result-table < rum/reactive
-  (rum/local :updated-at ::sort-by-item)
-  (rum/local true ::desc?)
+  (rum/local nil ::sort-by-item)
+  (rum/local nil ::desc?)
   (rum/local false ::select?)
   [state config current-block result {:keys [page?]} map-inline page-cp ->elem inline-text]
   (when current-block
-    (let [select? (get state ::select?)
+    (let [p-sort-by (keyword (get-in current-block [:block/properties :query-sort-by]))
+          p-desc? (get-in current-block [:block/properties :query-sort-desc])
+          select? (get state ::select?)
           *sort-by-item (get state ::sort-by-item)
           *desc? (get state ::desc?)
+          sort-by-item (or @*sort-by-item (some-> p-sort-by keyword) :updated-at)
+          desc? (cond
+                  (some? @*desc?)
+                  @*desc?
+                  (some? p-desc?)
+                  p-desc?
+                  :else
+                  true)
           editor-box (get config :editor-box)
           ;; remove templates
           result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
@@ -63,7 +75,7 @@
                   (filter #{:created-at :updated-at} keys))
                  keys)
           sort-by-fn (fn [item]
-                       (let [key @*sort-by-item]
+                       (let [key sort-by-item]
                          (case key
                            :created-at
                            (:block/created-at item)
@@ -74,12 +86,12 @@
                            :page
                            (:block/name item)
                            (get-in item [:block/properties key]))))
-          result (sort-result-by sort-by-fn @*desc? result)]
+          result (sort-result-by sort-by-fn desc? result)]
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                              :style {:width "100%"}}
        [:table.table-auto
         (for [key keys]
-          (sortable-title (name key) key *sort-by-item *desc?))
+          (sortable-title (name key) key *sort-by-item *desc? (:block/uuid current-block)))
         (for [item result]
           (let [format (:block/format item)
                 edit-input-id (str "edit-block-" (:id config) "-" (:block/uuid item))

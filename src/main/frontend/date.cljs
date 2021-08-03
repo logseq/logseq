@@ -190,18 +190,20 @@
        (valid? (util/capitalize-all title))))
 
 (defn journal-title->
-  [journal-title then-fn]
-  (when-not (string/blank? journal-title)
-    (when-let [time (->> (map
-                           (fn [formatter]
-                             (try
-                               (tf/parse (tf/formatter formatter) (util/capitalize-all journal-title))
-                               (catch js/Error _e
-                                 nil)))
-                           safe-journal-title-formatters)
-                         (filter some?)
-                         first)]
-      (then-fn time))))
+  ([journal-title then-fn]
+   (journal-title-> journal-title then-fn (journal-title-formatters)))
+  ([journal-title then-fn formatters]
+   (when-not (string/blank? journal-title)
+     (when-let [time (->> (map
+                            (fn [formatter]
+                              (try
+                                (tf/parse (tf/formatter formatter) (util/capitalize-all journal-title))
+                                (catch js/Error _e
+                                  nil)))
+                            formatters)
+                          (filter some?)
+                          first)]
+       (then-fn time)))))
 
 (defn journal-title->int
   [journal-title]
