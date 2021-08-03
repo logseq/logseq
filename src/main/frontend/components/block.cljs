@@ -420,7 +420,6 @@
                                                        [:span.text-sm.mr-2 "Alias:"]
                                                        page-original-name])])
                            (let [page (db/entity [:block/name (string/lower-case redirect-page-name)])]
-                             (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)
                              (when-let [f (state/get-page-blocks-cp)]
                                (f (state/get-current-repo) page {:sidebar? sidebar? :preview? true})))]))]
     (if (or (not manual?) open?)
