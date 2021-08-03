@@ -1213,7 +1213,7 @@
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
-      (let [doc-mode? (:document/mode? config)]
+      (let [doc-mode? (state/sub :document/mode?)]
         [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
                                       :display (if collapsed? "none" "")}}
          (for [child children]
@@ -1229,8 +1229,9 @@
                  (:block/uuid child)))))]))))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit?]
-  (let [has-children-blocks? (and (coll? children) (seq children))
+  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit? doc-mode?]
+  (let [doc-mode? (state/sub :document/mode?)
+        has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
                     (or has-children-blocks? (seq body)))
@@ -1267,25 +1268,37 @@
                          (editor-handler/collapse-block! uuid)))))}
       [:span {:class (if control-show? "control-show" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
-     (if (and empty-content? (not edit?)
-              (not (:block/top? block))
-              (not (:block/bottom? block)))
-       [:span.bullet-container]
+     (let [bullet [:a {:on-click (fn [e]
+                                   (bullet-on-click e block config uuid))}
+                   [:span.bullet-container.cursor
+                    {:id (str "dot-" uuid)
+                     :draggable true
+                     :on-drag-start (fn [event]
+                                      (bullet-drag-start event block uuid block-id))
+                     :blockid (str uuid)
+                     :class (str (when collapsed? "bullet-closed")
+                                 " "
+                                 (when (and (:document/mode? config)
+                                            (not collapsed?))
+                                   "hide-inner-bullet"))}
+                    [:span.bullet {:blockid (str uuid)}]]]]
+       (cond
+         (and (:ui/show-empty-bullets? (state/get-config)) (not doc-mode?))
+         bullet
 
-       [:a {:on-click (fn [e]
-                        (bullet-on-click e block config uuid))}
-        [:span.bullet-container.cursor
-         {:id (str "dot-" uuid)
-          :draggable true
-          :on-drag-start (fn [event]
-                           (bullet-drag-start event block uuid block-id))
-          :blockid (str uuid)
-          :class (str (when collapsed? "bullet-closed")
-                      " "
-                      (when (and (:document/mode? config)
-                                 (not collapsed?))
-                        "hide-inner-bullet"))}
-         [:span.bullet {:blockid (str uuid)}]]])]))
+         (or
+          (and empty-content? (not edit?)
+               (not (:block/top? block))
+               (not (:block/bottom? block))
+               (not (util/react *control-show?)))
+          (and doc-mode?
+               (not collapsed?)
+               (not (util/react *control-show?))))
+         ;; hidden
+         [:span.bullet-container]
+
+         :else
+         bullet))]))
 
 (rum/defc dnd-separator
   [block move-to block-content?]
@@ -1833,8 +1846,7 @@
 (defn- block-mouse-over
   [e has-child? *control-show? block-id doc-mode?]
   (util/stop e)
-  (when has-child?
-    (reset! *control-show? true))
+  (reset! *control-show? true)
   (when-let [parent (gdom/getElement block-id)]
     (let [node (.querySelector parent ".bullet-container")]
       (when doc-mode?
@@ -1848,8 +1860,7 @@
 (defn- block-mouse-leave
   [e has-child? *control-show? block-id doc-mode?]
   (util/stop e)
-  (when has-child?
-    (reset! *control-show? false))
+  (reset! *control-show? false)
   (when doc-mode?
     (when-let [parent (gdom/getElement block-id)]
       (when-let [node (.querySelector parent ".bullet-container")]
@@ -1972,7 +1983,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e has-child? *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit?))
+        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit? doc-mode?))
 
       (block-content-or-editor config block edit-input-id block-id slide? heading-level edit?)]
 
