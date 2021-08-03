@@ -1232,7 +1232,7 @@
                  (:block/uuid child)))))]))))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id]
+  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit?]
   (let [has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
@@ -1249,8 +1249,7 @@
         empty-content? (string/blank?
                         (property/remove-built-in-properties
                          (:block/format block)
-                         (:block/content block)))
-        edit? (state/sub [:editor/editing? edit-input-id])]
+                         (:block/content block)))]
     [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
               :margin-top 0
@@ -1686,9 +1685,8 @@
                   (str uuid "-" idx)))))])]]]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid title body meta content page format repo children marker properties pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
+  [config {:block/keys [uuid title body meta content page format repo children marker properties pre-block? idx] :as block} edit-input-id block-id slide? heading-level edit?]
   (let [editor-box (get config :editor-box)
-        edit? (state/sub [:editor/editing? edit-input-id])
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)]
     (if (and edit? editor-box)
@@ -1896,7 +1894,7 @@
 ;;                                            :ref? true
 ;;                                            :ref-child? true))]))))
 
-(rum/defcs block-container < rum/static
+(rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  ref-collpased? (boolean
@@ -1910,12 +1908,14 @@
                     ::control-show? (atom false)
                     ::ref-collapsed? (atom ref-collpased?))))
    :should-update (fn [old-state new-state]
-                    (not= (:block/content (second (:rum/args old-state)))
-                          (:block/content (second (:rum/args new-state)))))}
+                    (let [compare-keys [:block/uuid :block/properties
+                                        :block/parent :block/left
+                                        :block/children :block/content]]
+                      (not= (select-keys (second (:rum/args old-state)) compare-keys)
+                            (select-keys (second (:rum/args new-state)) compare-keys))))}
   [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type idx] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
-
         ;; Each block might have multiple queries, but we store only the first query's result
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
@@ -1941,7 +1941,8 @@
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to has-child? *control-show? doc-mode?)
         data-refs (build-refs-data-value block (remove (set refs) path-refs))
         data-refs-self (build-refs-data-value block refs)
-        edit-input-id (str "edit-block-" blocks-container-id "-" uuid)]
+        edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
+        edit? (state/sub [:editor/editing? edit-input-id])]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
        {:id block-id
@@ -1979,9 +1980,9 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e has-child? *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id))
+        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit?))
 
-      (block-content-or-editor config block edit-input-id block-id slide? heading-level)]
+      (block-content-or-editor config block edit-input-id block-id slide? heading-level edit?)]
 
      (block-children config children collapsed? *ref-collapsed?)
 
@@ -2513,9 +2514,7 @@
                 (assoc :block/top? (zero? idx)
                        :block/bottom? (= (count blocks) (inc idx))))
           config (assoc config :block/uuid (:block/uuid item))]
-      (rum/with-key
-        (block-container config item)
-        (:block/uuid item)))))
+      (block-container config item))))
 
 (defonce ignore-scroll? (atom false))
 (rum/defcs lazy-blocks <

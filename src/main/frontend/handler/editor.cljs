@@ -446,7 +446,8 @@
                   (:block/uuid first-block))
         blocks-container-id (when-let [id (:id config)]
                               (and (util/uuid-string? id) (medley/uuid id)))]
-    (let [new-last-block (let [first-block-id {:db/id (:db/id first-block)}]
+    (let [new-last-block (let [first-block-uuid (:block/uuid (db/entity (:db/id first-block)))
+                               first-block-id {:db/id (:db/id first-block)}]
                            (assoc last-block
                                   :block/left first-block-id
                                   :block/parent (if child?
