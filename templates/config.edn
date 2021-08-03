@@ -95,6 +95,9 @@
  ;; Whether to show command doc on hover
  :ui/show-command-doc? true
 
+ ;; Whether to show empty bullets for non-document mode (the default mode)
+ :ui/show-empty-bullets? false
+
  ;; The app will show those queries in today's journal page,
  ;; the "NOW" query asks the tasks which need to be finished "now",
  ;; the "NEXT" query asks the future tasks.
