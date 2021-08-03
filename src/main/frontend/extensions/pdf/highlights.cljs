@@ -68,7 +68,8 @@
     [:span.extensions__pdf-resizer {:ref el-ref}]))
 
 (rum/defc pdf-highlights-ctx-menu
-  [^js viewer {:keys [highlight vw-pos point]}
+  [^js viewer
+   {:keys [highlight vw-pos point]}
    {:keys [clear-ctx-tip! add-hl! upd-hl! del-hl!]}]
 
   (let [mounted (rum/use-ref false)]
@@ -137,7 +138,7 @@
 
        (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
 
-       [:li.item {:data-action "copy"} (t :pdf/copy-text)]
+       (and (not (:image content)) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
 
        (and id [:li.item {:data-action "del"} (t :delete)])
        ])))
@@ -151,7 +152,7 @@
         {:keys [color]} (:properties hl)]
     [:div.extensions__pdf-hls-text-region
      {:on-click
-      (fn [e]
+      (fn [^js/MouseEvent e]
         (let [x (.-clientX e)
               y (.-clientY e)]
 
@@ -165,21 +166,41 @@
            :data-color color}])
        rects)]))
 
+(rum/defc pdf-highlight-area-region
+  [^js viewer vw-hl hl
+   {:keys [show-ctx-tip!]}]
+
+  (when-let [vw-bounding (get-in vw-hl [:position :bounding])]
+    (let [{:keys [color]} (:properties hl)]
+      [:div.extensions__pdf-hls-area-region
+       {:style      vw-bounding
+        :data-color color
+        :on-click   (fn [^js/MouseEvent e]
+                      (let [x (.-clientX e)
+                            y (.-clientY e)]
+
+                        (show-ctx-tip! viewer hl {:x x :y y})))}])))
+
 (rum/defc pdf-highlights-region-container
   [^js viewer page-hls ops]
 
   [:div.hls-region-container
    (for [hl page-hls]
      (let [vw-hl (update-in hl [:position] #(pdf-utils/scaled-to-vw-pos viewer %))]
-       (rum/with-key (pdf-highlights-text-region viewer vw-hl hl ops) (:id hl))
+       (rum/with-key
+         (if (get-in hl [:content :image])
+           (pdf-highlight-area-region viewer vw-hl hl ops)
+           (pdf-highlights-text-region viewer vw-hl hl ops))
+         (:id hl))
        ))])
 
 (rum/defc pdf-highlight-area-selection
-  [^js viewer]
+  [^js viewer {:keys [clear-ctx-tip! show-ctx-tip!] :as ops}]
 
   (let [^js viewer-clt (.. viewer -viewer -classList)
         *el (rum/use-ref nil)
         *cnt-el (rum/use-ref nil)
+        *sta-el (rum/use-ref nil)
         *cnt-rect (rum/use-ref nil)
 
         should-start (fn [^js e] (and e (.-altKey e)))
@@ -189,7 +210,8 @@
 
         reset-coords #(do
                         (set-start-coord! nil)
-                        (set-end-coord! nil))
+                        (set-end-coord! nil)
+                        (rum/set-ref! *sta-el nil))
 
         calc-coords (fn [page-x page-y]
                       (when-let [cnt-el (or (rum/deref *cnt-el)
@@ -221,23 +243,49 @@
       (fn []
         (when-let [^js/HTMLElement root (.closest (rum/deref *el) ".extensions__pdf-container")]
           (let [fn-start (fn [^js/MouseEvent e]
-                           (when (should-start e)
-                             (set-start-coord! (calc-coords (.-pageX e) (.-pageY e)))
-                             (disable-text-selection! true)
+                           (if (should-start e)
+                             (do
+                               (rum/set-ref! *sta-el (.-target e))
+                               (set-start-coord! (calc-coords (.-pageX e) (.-pageY e)))
+                               (disable-text-selection! true)
 
-                             (.addEventListener root "mousemove" fn-move)))
+                               (.addEventListener root "mousemove" fn-move))
+
+                             ;; reset
+                             (reset-coords)))
 
                 fn-end (fn [^js/MouseEvent e]
-                         (when-let [start start-coord]
+                         (when-let [start-el (rum/deref *sta-el)]
                            (let [end (calc-coords (.-pageX e) (.-pageY e))
-                                 pos (calc-pos start end)]
+                                 pos (calc-pos start-coord end)]
 
                              (if (and (> (:width pos) 10)
                                       (> (:height pos) 10))
 
-                               (do
-                                 ;; export area highlight
-                                 (dd "[selection end] :start" start ":end" end ":pos" pos))
+                               (when-let [^js page-el (.closest start-el ".page")]
+                                 (let [page-number (int (.-pageNumber (.-dataset page-el)))
+                                       page-pos (merge pos {:top  (- (:top pos) (.-offsetTop page-el))
+                                                            :left (- (:left pos) (.-offsetLeft page-el))})
+                                       vw-pos {:bounding page-pos :rects [] :page page-number}
+                                       sc-pos (pdf-utils/vw-to-scaled-pos viewer vw-pos)
+
+                                       point {:x (.-clientX e) :y (.-clientY e)}
+                                       hl {:id         nil
+                                           :page       page-number
+                                           :position   sc-pos
+                                           :content    {:text "[AREA IMAGE]" :image true}
+                                           :properties {}}]
+
+                                   ;; ctx tips
+                                   (show-ctx-tip! viewer hl point {:reset-fn #(reset-coords)})
+
+                                   ;; export area highlight
+                                   (dd "[selection end] :start"
+                                       start-coord ":end" end ":pos" pos
+                                       ":page" page-number
+                                       ":offset" page-pos
+                                       ":vw-pos" vw-pos
+                                       ":sc-pos" sc-pos)))
 
                                ;; reset
                                (reset-coords)))
@@ -268,11 +316,17 @@
         *mounted (rum/use-ref false)
         [sel-state, set-sel-state!] (rum/use-state {:range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
-        [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :point nil})
-        clear-ctx-tip! #(set-tip-state! {})
-        show-ctx-tip! (fn [^js viewer hl point]
+        [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :point nil :reset-fn nil})
+
+        clear-ctx-tip! (rum/use-callback
+                         #(let [reset-fn (:reset-fn tip-state)]
+                            (set-tip-state! {})
+                            (and (fn? reset-fn) (reset-fn)))
+                         [tip-state])
+
+        show-ctx-tip! (fn [^js viewer hl point & ops]
                         (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
-                          (set-tip-state! {:highlight hl :vw-pos vw-pos :point point})))
+                          (set-tip-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
 
         add-hl! (fn [hl] (when (:id hl)
                            ;; fix js object
@@ -426,7 +480,12 @@
      (pdf-highlight-finder viewer)
 
      ;; area selection container
-     (pdf-highlight-area-selection viewer)]))
+     (pdf-highlight-area-selection
+       viewer
+       {:clear-ctx-tip! clear-ctx-tip!
+        :show-ctx-tip!  show-ctx-tip!
+        :add-hl!        add-hl!
+        })]))
 
 (rum/defc pdf-settings
   [^js viewer theme {:keys [hide-settings! select-theme!]}]

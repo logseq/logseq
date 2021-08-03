@@ -253,6 +253,35 @@
     z-index: 2;
   }
 
+  &-hls-area-region {
+    cursor: pointer;
+    position: absolute;
+    opacity: .8;
+    z-index: 2;
+    background-color: #FCD713FF;
+    mix-blend-mode: multiply;
+
+    &[data-color=yellow] {
+      background-color: var(--ph-highlight-color-yellow);
+    }
+
+    &[data-color=blue] {
+      background-color: var(--ph-highlight-color-blue);
+    }
+
+    &[data-color=green] {
+      background-color: var(--ph-highlight-color-green);
+    }
+
+    &[data-color=red] {
+      background-color: var(--ph-highlight-color-red);
+    }
+
+    &[data-color=purple] {
+      background-color: var(--ph-highlight-color-purple);
+    }
+  }
+
   &-hls-ctx-menu {
     position: absolute;
     z-index: 9;
