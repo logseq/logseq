@@ -2514,7 +2514,8 @@
                 (assoc :block/top? (zero? idx)
                        :block/bottom? (= (count blocks) (inc idx))))
           config (assoc config :block/uuid (:block/uuid item))]
-      (block-container config item))))
+      (rum/with-key (block-container config item)
+        (str (:block/uuid item))))))
 
 (defonce ignore-scroll? (atom false))
 (rum/defcs lazy-blocks <
