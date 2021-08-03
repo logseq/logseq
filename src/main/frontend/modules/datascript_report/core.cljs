@@ -20,7 +20,10 @@
       (let [r (safe-pull db-before '[*] db-id)]
         (when (= keys-of-deleted-entity (count r))
           ;; TODO: What can cause this happen?
-          (log/error :outliner-pipeline/cannot-find-entity {:entity r}))
+          (js/console.error {:db-id db-id
+                             :entity r})
+          (log/error :outliner-pipeline/cannot-find-entity {:db-id db-id
+                                                            :entity r}))
         r)
       r)))
 
