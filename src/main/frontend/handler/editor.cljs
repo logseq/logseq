@@ -2119,21 +2119,21 @@
   ([element-id db-id]
    (insert-template! element-id db-id {}))
   ([element-id db-id opts]
-   (let [db-id (if (integer? db-id)
-                 db-id
-                 (:db/id (db-model/get-template-by-name (name db-id))))]
-     (when-let [repo (state/get-current-repo)
-                block (db/entity db-id)
-                format (:block/format block)
-                block-uuid (:block/uuid block)
-                template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
-                blocks (db/get-block-and-children repo block-uuid)
-                level-blocks (vals (blocks-with-level blocks))
-                [root-block & blocks-exclude-root] level-blocks
-                root-block (assoc root-block :level 1)
-                sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
-                result-blocks (if template-including-parent? sorted-blocks (drop 1 sorted-blocks))
-                tree (blocks-vec->tree result-blocks)]
+   (when-let [db-id (if (integer? db-id)
+                      db-id
+                      (:db/id (db-model/get-template-by-name (name db-id))))]
+     (let [repo (state/get-current-repo)
+           block (db/entity db-id)
+           format (:block/format block)
+           block-uuid (:block/uuid block)
+           template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
+           blocks (db/get-block-and-children repo block-uuid)
+           level-blocks (vals (blocks-with-level blocks))
+           [root-block & blocks-exclude-root] level-blocks
+           root-block (assoc root-block :level 1)
+           sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
+           result-blocks (if template-including-parent? sorted-blocks (drop 1 sorted-blocks))
+           tree (blocks-vec->tree result-blocks)]
        (when element-id
          (insert-command! element-id "" format {}))
        (let [opts (merge
