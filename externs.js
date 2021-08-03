@@ -110,6 +110,12 @@ dummy.dropNode = function() {};
 dummy.dropEdge = function() {};
 dummy.unhoverNode = function() {};
 
+dummy.bounding = function() {};
+dummy.getPageView = function() {};
+dummy.convertToPdfPoint = function() {};
+dummy.scrollPageIntoView = function() {};
+dummy.convertToViewportRectangle = function() {};
+
 /**
  * @typedef {{
  *     recursive: (undefined | boolean),
