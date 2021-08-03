@@ -105,6 +105,7 @@ export const scrollToHighlight = (viewer, highlight) => {
       null, { name: 'XYZ' },
       ...viewport.convertToPdfPoint(0, scaledToViewport(bounding, viewport).top - 200),
       0 // scale
-    ]
+    ],
+    ignoreDestinationZoom: true
   })
 }

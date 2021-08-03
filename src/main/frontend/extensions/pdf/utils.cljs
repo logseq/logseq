@@ -8,7 +8,7 @@
 
 (defonce MAX-SCALE 5.0)
 (defonce MIN-SCALE 0.25)
-(defonce DELTA_SCALE 1.1)
+(defonce DELTA_SCALE 1.05)
 
 (defn get-bounding-rect
   [rects]
