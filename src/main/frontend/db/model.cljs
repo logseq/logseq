@@ -410,17 +410,9 @@
              (map (fn [m]
                     (or (:block/original-name m) (:block/name m)))))))))
 
-(defn with-block-refs-count
-  [repo blocks]
-  (map (fn [block]
-         (let [refs-count (count (:block/_refs (db-utils/entity (:db/id block))))]
-           (assoc block :block/block-refs-count refs-count)))
-    blocks))
-
 (defn page-blocks-transform
   [repo-url result]
-  (->> (db-utils/with-repo repo-url result)
-       (with-block-refs-count repo-url)))
+  (db-utils/with-repo repo-url result))
 
 (defn with-pages
   [blocks]
@@ -556,7 +548,10 @@
 
 (defn page-empty?
   [repo page-id]
-  (empty? (:block/_parent (db-utils/entity repo page-id))))
+  (let [page-id (if (integer? page-id)
+                  page-id
+                  [:block/name page-id])]
+    (empty? (:block/_parent (db-utils/entity repo page-id)))))
 
 (defn page-empty-or-dummy?
   [repo page-id]
@@ -618,8 +613,7 @@
   [result repo-url block-uuid]
   (some->> result
            db-utils/seq-flatten
-           (db-utils/with-repo repo-url)
-           (with-block-refs-count repo-url)))
+           (db-utils/with-repo repo-url)))
 
 (defn get-block-children-ids
   [repo block-uuid]
@@ -757,23 +751,25 @@
 (defn get-redirect-page-name
   ([page-name] (get-redirect-page-name page-name false))
   ([page-name alias?]
-   (let [page-entity (db-utils/entity [:block/name page-name])]
-     (cond
-       alias?
-       page-name
+   (when page-name
+     (let [page-name (string/lower-case page-name)
+           page-entity (db-utils/entity [:block/name page-name])]
+       (cond
+         alias?
+         page-name
 
-       (page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
-       (let [source-page (get-alias-source-page (state/get-current-repo)
-                                                      (string/lower-case page-name))]
-         (or (when source-page (:block/name source-page))
-             page-name))
+         (page-empty-or-dummy? (state/get-current-repo) (:db/id page-entity))
+         (let [source-page (get-alias-source-page (state/get-current-repo)
+                                                  (string/lower-case page-name))]
+           (or (when source-page (:block/name source-page))
+               page-name))
 
-       :else
-       page-name))))
+         :else
+         page-name)))))
 
 (defn get-page-original-name
   [page-name]
-  (when page-name
+  (when (string? page-name)
     (let [page (db-utils/pull [:block/name (string/lower-case page-name)])]
       (or (:block/original-name page)
           (:block/name page)))))

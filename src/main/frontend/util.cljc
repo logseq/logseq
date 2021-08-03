@@ -91,6 +91,10 @@
      (gobj/getValueByKeys event "key")))
 
 #?(:cljs
+   (defn echecked? [event]
+     (gobj/getValueByKeys event "target" "checked")))
+
+#?(:cljs
    (defn set-change-value
      "compatible change event for React"
      [node value]

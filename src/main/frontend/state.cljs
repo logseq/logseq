@@ -144,6 +144,9 @@
       ;; copied blocks
       :copy/blocks {:copy/content nil :copy/block-tree nil}
 
+      :copy/export-block-text-indent-style  (atom "dashes")
+      :copy/export-block-text-remove-options (atom #{})
+
       :date-picker/date nil
 
       :view/components {}})))
@@ -1349,6 +1352,13 @@
 (defn set-copied-blocks
   [content ids]
   (set-state! :copy/blocks {:copy/content content :copy/block-tree ids}))
+
+(defn get-export-block-text-indent-style []
+  (:copy/export-block-text-indent-style @state))
+
+(defn get-export-block-text-remove-options []
+  (:copy/export-block-text-remove-options @state))
+
 
 (defn set-editor-args!
   [args]

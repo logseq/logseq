@@ -6165,10 +6165,10 @@ mkdirp@^0.5.0, mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@0.9.2:
-  version "0.9.2"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.9.2.tgz#0d88a049bb9564a1567134178b2dea9196f30148"
-  integrity sha512-e1JFKKkX6IYHFP8XwN0pqcEn2L8biVHWXGUyaUU8RHsCq2poN1fPIAZ5waosS4EffC+CQk68PycEhCobYwbndA==
+mldoc@0.9.4:
+  version "0.9.4"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-0.9.4.tgz#80dd027e06a297ef4bbbabd28793a40f64bcb451"
+  integrity sha512-Pt994A4XGG1rDdU5tvR8quk1WdlD0eTmo+UWo37qndLaHFxt++lTT7UK8WX3cj0HamJlx8WiYWQO3gOWIzL+dw==
   dependencies:
     yargs "^12.0.2"
 
@@ -6891,10 +6891,10 @@ pinkie@^2.0.0:
   resolved "https://registry.yarnpkg.com/pinkie/-/pinkie-2.0.4.tgz"
   integrity sha1-clVrgM+g1IqXToDnckjoDtT3+HA=
 
-pixi-graph-fork@^0.1.3:
-  version "0.1.3"
-  resolved "https://registry.yarnpkg.com/pixi-graph-fork/-/pixi-graph-fork-0.1.3.tgz#fc7beee363ba3ec71b35df30fce1d5b2ddf27732"
-  integrity sha512-NHmlG0FI2/xme/p9KXOPLbfrQ0UIcCq4GK36IsSYPGJznhUoJTlNbfT4ML7I3DL84vQx0TliGPAA+EmoVz6CDg==
+pixi-graph-fork@^0.1.4:
+  version "0.1.4"
+  resolved "https://registry.yarnpkg.com/pixi-graph-fork/-/pixi-graph-fork-0.1.4.tgz#9191daa6512e7440c4a767c6d7bcef547a33a5a2"
+  integrity sha512-qR8MJ/q1TL812LuRqaGjHA6xIkZomOINZGH+7tKMA15feow1ud+tzFVb1pKsnvmSy/uWhhOUOVLrqLTf3vYr3Q==
   dependencies:
     "@pixi-essentials/cull" "^1.1.0"
     "@pixi/app" "^6.0.2"
@@ -7607,8 +7607,6 @@ react-icons@^2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
   integrity sha512-0n4lcGqzJFcIQLoQytLdJCE0DKSA9dkwEZRYoGrIDJZFvIT6Hbajx5mv9geqhqFiNjUgtxg8kPyDfjlhymbGFg==
-  dependencies:
-    react-icon-base "2.1.0"
 
 react-is@^16.3.1, react-is@^16.8.1:
   version "16.13.1"
@@ -7663,6 +7661,11 @@ react-transition-group@^4.3.0:
     dom-helpers "^5.0.1"
     loose-envify "^1.4.0"
     prop-types "^15.6.2"
+
+react-tweet-embed@^1.2.2:
+  version "1.2.2"
+  resolved "https://registry.yarnpkg.com/react-tweet-embed/-/react-tweet-embed-1.2.2.tgz#b518510a6e6ef17609f9c9b16bc4775624730d8a"
+  integrity sha512-Y932BlSaJsDUsKDucC2opzzd+uhc0YNhrlTa/4Beb2be1od+AjLGo6Fhuo2wPT0D+fF4VTXOyoZyA8Yc88RdYA==
 
 react@^17.0.2:
   version "17.0.2"

@@ -70,22 +70,21 @@
                                 {:label "no-indent"
                                  :selected false}])
 
-(def *export-block-text-indent-style (atom "dashes"))
-
 (rum/defcs export-blocks
   < rum/reactive
   (rum/local false ::copied?)
   [state root-block-id]
   (let [current-repo (state/get-current-repo)
         type (rum/react *export-block-type)
-        text-indent-style (rum/react *export-block-text-indent-style)
+        text-indent-style (rum/react (state/get-export-block-text-indent-style))
+        text-remove-options (rum/react (state/get-export-block-text-remove-options))
         copied? (::copied? state)
         content
         (case type
-          :text (export/export-blocks-as-markdown current-repo root-block-id text-indent-style)
+          :text (export/export-blocks-as-markdown current-repo root-block-id text-indent-style (into [] text-remove-options))
           :opml (export/export-blocks-as-opml current-repo root-block-id)
           :html (export/export-blocks-as-html current-repo root-block-id)
-          (export/export-blocks-as-markdown current-repo root-block-id text-indent-style))]
+          (export/export-blocks-as-markdown current-repo root-block-id text-indent-style (into [] text-remove-options)))]
     [:div.export.w-96.resize
      [:div
       {:class "mb-2"}
@@ -104,21 +103,50 @@
                                 (if (= text-indent-style (:label opt))
                                   (assoc opt :selected true)
                                   opt))))]
-       [:div.flex.items-center
-        [:label.mr-8 "Indentation style:"]
-        [:select.block.my-2.text-lg.rounded.border
-         {:style     {:padding "0 0 0 12px"
-                      :visibility (if (= :text type) "visible" "hidden")}
-          :on-change (fn [e]
-                       (let [value (util/evalue e)]
-                         (#(reset! *export-block-text-indent-style %) value)))}
-         (for [{:keys [label value selected]} options]
-           [:option (cond->
-                     {:key   label
-                      :value (or value label)}
-                      selected
-                      (assoc :selected selected))
-            label])]])
+       [:div [:div.flex.items-center
+              [:label.mr-8
+               {:style {:visibility (if (= :text type) "visible" "hidden")}}
+               "Indentation style:"]
+              [:select.block.my-2.text-lg.rounded.border
+               {:style     {:padding "0 0 0 12px"
+                            :visibility (if (= :text type) "visible" "hidden")}
+                :on-change (fn [e]
+                             (let [value (util/evalue e)]
+                               (reset! (state/get-export-block-text-indent-style) value)))}
+               (for [{:keys [label value selected]} options]
+                 [:option (cond->
+                           {:key   label
+                            :value (or value label)}
+                            selected
+                            (assoc :selected selected))
+                  label])]]
+        [:div.flex.items-center
+         (ui/checkbox {:style {:margin-right 6
+                               :visibility (if (= :text type) "visible" "hidden")}
+                       :checked (contains? text-remove-options :page-ref)
+                       :on-change (fn [e] (if (util/echecked? e)
+                                            (swap! (state/get-export-block-text-remove-options)
+                                                   #(conj % :page-ref))
+                                            (swap! (state/get-export-block-text-remove-options)
+                                                   #(disj % :page-ref))))})
+
+         [:div
+          {:style {:visibility (if (= :text type) "visible" "hidden")}}
+          "[[text]] -> text"]
+         (ui/checkbox {:style {:margin-right 6
+                               :margin-left 10
+                               :visibility (if (= :text type) "visible" "hidden")}
+                       :checked (contains? text-remove-options :emphasis)
+                       :on-change (fn [e] (if (util/echecked? e)
+                                            (swap! (state/get-export-block-text-remove-options)
+                                                   #(conj % :emphasis))
+                                            (swap! (state/get-export-block-text-remove-options)
+                                                   #(disj % :emphasis))))})
+
+         [:div
+          {:style {:visibility (if (= :text type) "visible" "hidden")}}
+          "remove emphasis"]]])
+
      (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")
                 :on-click (fn []
                             (util/copy-to-clipboard! content)

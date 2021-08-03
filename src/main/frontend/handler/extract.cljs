@@ -130,9 +130,11 @@
                      ;; remove block references
                      (remove vector?))
           pages (util/distinct-by :block/name pages)
-          block-ids (mapv (fn [block]
-                            {:block/uuid (:block/uuid block)})
-                          (remove nil? blocks))
+          block-ids (->>
+                     (mapv (fn [block]
+                             {:block/uuid (:block/uuid block)})
+                           (remove nil? blocks))
+                     (remove nil?))
           pages (remove nil? pages)
           pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)]
       [pages
@@ -189,6 +191,18 @@
          (map (partial apply merge))
          (with-block-uuid))))
 
+(defn- remove-illegal-refs
+  [block block-ids-set refresh?]
+  (let [aux-fn (fn [refs]
+                 (let [block-refs (if refresh? (set refs)
+                                      (set/intersection (set refs) block-ids-set))]
+                   (set/union
+                    (filter :block/name refs)
+                    block-refs)))]
+    (-> block
+        (update :block/refs aux-fn)
+        (update :block/path-refs aux-fn))))
+
 (defn extract-all-blocks-pages
   [repo-url files metadata refresh?]
   (when (seq files)
@@ -207,6 +221,8 @@
                       (remove empty?))]
       (when (seq result)
         (let [[pages block-ids blocks] (apply map concat result)
+              block-ids (remove (fn [b] (or (nil? b)
+                                           (nil? (:block/uuid b)))) block-ids)
               pages (with-ref-pages pages blocks)
               blocks (map (fn [block]
                             (let [id (:block/uuid block)
@@ -216,12 +232,5 @@
               ;; To prevent "unique constraint" on datascript
               pages-index (map #(select-keys % [:block/name]) pages)
               block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
-              blocks (map (fn [b]
-                            (update b :block/refs
-                                    (fn [refs]
-                                      (let [block-refs (if refresh? (set refs)
-                                                           (set/intersection (set refs) block-ids-set))]
-                                        (set/union
-                                         (filter :block/name refs)
-                                         block-refs))))) blocks)]
+              blocks (map #(remove-illegal-refs % block-ids-set refresh?) blocks)]
           (apply concat [pages-index pages block-ids blocks]))))))
