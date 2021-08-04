@@ -587,10 +587,12 @@
     (let [block-id (uuid id)
           block (db/pull-block block-id)
           block-type (keyword (get-in block [:block/properties :ls-type]))
+          hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
       (if block
         [:div.block-ref-wrap.inline
          {:data-type (name (or block-type :default))
+          :data-hl-type hl-type
           :on-mouse-down
           (fn [e]
             (util/stop e)
@@ -1471,7 +1473,8 @@
     (->elem
      elem
      (merge
-      {:id anchor}
+      {:id anchor
+       :data-hl-type (:hl-type properties)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -1496,9 +1499,13 @@
               {:on-click #(case block-type
                             ;; pdf annotation
                             :annotation (pdf-assets/open-block-ref! t)
-                            :default)}
+                            (.preventDefault %))}
 
-              (str "P" (or (:page properties) "?"))]))
+              [:span.hl-page (str "P" (or (:hl-page properties) "?"))]
+
+              (when-let [st (and (= :area (keyword (:hl-type properties)))
+                                 (:hl-hash properties))]
+                (pdf-assets/area-display t))]))
 
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))

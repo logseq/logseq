@@ -260,6 +260,7 @@
     z-index: 2;
     background-color: #FCD713FF;
     mix-blend-mode: multiply;
+    touch-action: none;
 
     &[data-color=yellow] {
       background-color: var(--ph-highlight-color-yellow);
@@ -503,6 +504,15 @@
   &-wrap {
     &[data-type=annotation] {
     }
+
+    &[data-hl-type=area] {
+      display: block;
+
+      .block-ref {
+        display: block;
+        border: none;
+      }
+    }
   }
 }
 
@@ -516,6 +526,26 @@
 
       &:before {
         content: "📔📌 ";
+      }
+    }
+
+    [data-hl-type=area] {
+      display: flex;
+      margin-bottom: 10px;
+      flex-direction: column;
+
+      a.prefix-link {
+        display: inline;
+      }
+    }
+
+    .hl-area {
+      display: block;
+      padding: 10px 0;
+
+      img {
+        margin: 0;
+        box-shadow: none;
       }
     }
   }

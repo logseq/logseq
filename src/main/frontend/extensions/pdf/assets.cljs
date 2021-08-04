@@ -56,6 +56,51 @@
   (when-let [hls-file (and target-key (str config/local-assets-dir "/" target-key ".edn"))]
     (load-hls-data$ {:hls-file hls-file})))
 
+(defn area-highlight?
+  [hl]
+  (and hl (not (nil? (get-in hl [:content :image])))))
+
+(defn persist-hl-area-image$
+  [^js viewer current hl {:keys [top left width height] :as vw-bounding}]
+  (when-let [^js canvas (and (:key current) (.-canvas (.getPageView viewer (dec (:page hl)))))]
+    (let [^js doc (.-ownerDocument canvas)
+          ^js canvas' (.createElement doc "canvas")
+          dpr js/window.devicePixelRatio
+          repo-cur (state/get-current-repo)
+          repo-dir (config/get-repo-dir repo-cur)]
+
+      (set! (. canvas' -width) width)
+      (set! (. canvas' -height) height)
+
+      (when-let [^js ctx (.getContext canvas' "2d")]
+        (.drawImage
+          ctx canvas
+          (* left dpr) (* top dpr) (* width dpr) (* height dpr)
+          0 0 width height)
+
+        (let [callback (fn [^js png]
+                         ;; write image file
+                         (p/catch
+                           (p/let [_ (js/console.time :write-area-image)
+                                   ^js png (.arrayBuffer png)
+                                   {:keys [key]} current
+                                   ;; dir
+                                   fname (str (:page hl) "_" (:id hl))
+                                   fdir (str config/local-assets-dir "/" key)
+                                   _ (fs/mkdir-if-not-exists (str repo-dir "/" fdir))
+                                   _ (fs/write-file! repo-cur repo-dir (str fdir "/" fname ".png") png {:skip-mtime? true})]
+
+                             (js/console.timeEnd :write-area-image))
+
+                           (fn [err]
+                             (js/console.error "[write area image Error]" err))))]
+
+          (.toBlob canvas' callback))
+        ))))
+
+(defn unlink-hl-area-image$
+  [])
+
 (defn resolve-ref-page
   [page-name]
   (let [page-name (str "hls__" page-name)
@@ -76,14 +121,18 @@
         (do
           (js/console.debug "[existed ref block]" ref-block)
           ref-block)
-        (let [text (:text content)]                         ;; TODO: image
+        (let [text (:text content)
+              wrap-props #(if-let [hash (:image content)]
+                            (assoc % :hl-type "area" :hl-hash hash) %)]
+
           (editor-handler/api-insert-new-block!
             text {:page        (:block/name ref-page)
                   :custom-uuid id
-                  :properties  {:ls-type "annotation"
-                                :page page
-                                :id   (str id)              ;; force custom uuid
-                                }}))))))
+                  :properties  (wrap-props
+                                 {:ls-type "annotation"
+                                  :hl-page page
+                                  ;; force custom uuid
+                                  :id      (str id)})}))))))
 
 (defn del-ref-block!
   [{:keys [id]}]
@@ -177,3 +226,17 @@
                       (let [files (.-files (.-target e))]
                         (upload-asset! page files refresh-file!))
                       )}]]]))))
+
+(rum/defc area-display
+  [block]
+  (let [id (:block/uuid block)
+        props (:block/properties block)]
+    (when-let [page (db-utils/pull (:db/id (:block/page block)))]
+      (when-let [group-key (string/replace-first (:block/original-name page) #"^hls__" "")]
+        (when-let [hl-page (:hl-page props)]
+          ;; TODO: async?
+          (let [asset-path (editor-handler/make-asset-url
+                           (str "/" config/local-assets-dir "/" group-key "/" (str hl-page "_" id ".png")))]
+
+            [:span.hl-area
+             [:img {:src asset-path}]]))))))

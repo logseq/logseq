@@ -168,18 +168,95 @@
 
 (rum/defc pdf-highlight-area-region
   [^js viewer vw-hl hl
-   {:keys [show-ctx-tip!]}]
+   {:keys [show-ctx-tip! upd-hl!]}]
 
-  (when-let [vw-bounding (get-in vw-hl [:position :bounding])]
-    (let [{:keys [color]} (:properties hl)]
-      [:div.extensions__pdf-hls-area-region
-       {:style      vw-bounding
-        :data-color color
-        :on-click   (fn [^js/MouseEvent e]
-                      (let [x (.-clientX e)
-                            y (.-clientY e)]
+  (let [*el (rum/use-ref nil)
+        *dirty (rum/use-ref nil)]
 
-                        (show-ctx-tip! viewer hl {:x x :y y})))}])))
+    ;; resizable
+    (rum/use-effect!
+      (fn []
+        (let [^js el (rum/deref *el)
+              ^js it (-> (js/interact el)
+                         (.resizable
+                           (bean/->js
+                             {:edges     {:left true :right true :top true :bottom true}
+                              :listeners {:start (fn [^js/MouseEvent e]
+                                                   (rum/set-ref! *dirty true))
+
+                                          :end   (fn [^js/MouseEvent e]
+                                                   (let [vw-pos (:position vw-hl)
+                                                         ^js target (. e -target)
+                                                         ^js vw-rect (. e -rect)
+                                                         [dx, dy] (mapv #(let [val (.getAttribute target (str "data-" (name %)))]
+                                                                           (if-not (nil? val) (js/parseFloat val) 0)) [:x :y])
+                                                         to-top (+ (get-in vw-pos [:bounding :top]) dy)
+                                                         to-left (+ (get-in vw-pos [:bounding :left]) dx)
+                                                         to-w (. vw-rect -width)
+                                                         to-h (. vw-rect -height)
+                                                         to-vw-pos (update vw-pos :bounding assoc
+                                                                           :top to-top
+                                                                           :left to-left
+                                                                           :width to-w
+                                                                           :height to-h)
+
+                                                         to-sc-pos (pdf-utils/vw-to-scaled-pos viewer to-vw-pos)]
+
+                                                     ;; TODO: exception
+                                                     (let [hl (assoc hl :position to-sc-pos)
+                                                           hl (assoc-in hl [:content :image] (js/Date.now))]
+                                                       (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state) hl (:bounding to-vw-pos))
+                                                       (upd-hl! hl))
+
+                                                     ;; reset dom effects
+                                                     (set! (.. target -style -transform) (str "translate(0, 0)"))
+                                                     (.removeAttribute target "data-x")
+                                                     (.removeAttribute target "data-y")
+
+                                                     (js/setTimeout #(rum/set-ref! *dirty false))))
+
+                                          :move  (fn [^js/MouseEvent e]
+                                                   (let [^js/HTMLElement target (.-target e)
+                                                         x (.getAttribute target "data-x")
+                                                         y (.getAttribute target "data-y")
+                                                         bx (if-not (nil? x) (js/parseFloat x) 0)
+                                                         by (if-not (nil? y) (js/parseFloat y) 0)]
+
+                                                     ;; update element style
+                                                     (set! (.. target -style -width) (str (.. e -rect -width) "px"))
+                                                     (set! (.. target -style -height) (str (.. e -rect -height) "px"))
+
+                                                     ;; translate when resizing from top or left edges
+                                                     (let [ax (+ bx (.. e -deltaRect -left))
+                                                           ay (+ by (.. e -deltaRect -top))]
+
+                                                       (set! (.. target -style -transform) (str "translate(" ax "px, " ay "px)"))
+
+                                                       ;; cache pos
+                                                       (.setAttribute target "data-x" ax)
+                                                       (.setAttribute target "data-y" ay))
+                                                     ))}
+                              :modifiers [;; minimum
+                                          (js/interact.modifiers.restrictSize
+                                            (bean/->js {:min {:width 60 :height 25}}))]
+                              :inertia   true})
+                           ))]
+          ;; destroy
+          #(.unset it)))
+      [hl])
+
+    (when-let [vw-bounding (get-in vw-hl [:position :bounding])]
+      (let [{:keys [color]} (:properties hl)]
+        [:div.extensions__pdf-hls-area-region
+         {:ref        *el
+          :style      vw-bounding
+          :data-color color
+          :on-click   (fn [^js/MouseEvent e]
+                        (when-not (rum/deref *dirty)
+                          (let [x (.-clientX e)
+                                y (.-clientY e)]
+
+                            (show-ctx-tip! viewer hl {:x x :y y}))))}]))))
 
 (rum/defc pdf-highlights-region-container
   [^js viewer page-hls ops]
@@ -273,7 +350,7 @@
                                        hl {:id         nil
                                            :page       page-number
                                            :position   sc-pos
-                                           :content    {:text "[AREA IMAGE]" :image true}
+                                           :content    {:text "[:span]" :image (js/Date.now)}
                                            :properties {}}]
 
                                    ;; ctx tips
@@ -331,7 +408,13 @@
         add-hl! (fn [hl] (when (:id hl)
                            ;; fix js object
                            (let [highlights (pdf-utils/fix-nested-js highlights)]
-                             (set-highlights! (conj highlights hl)))))
+                             (set-highlights! (conj highlights hl)))
+
+                           (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
+                                                  (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
+                             ;; exceptions
+                             (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
+                                                                hl (:bounding vw-pos)))))
 
         upd-hl! (fn [hl]
                   (let [highlights (pdf-utils/fix-nested-js highlights)]
@@ -443,7 +526,9 @@
 
                 (rum/mount
                   ;; TODO: area & text hls
-                  (pdf-highlights-region-container viewer page-hls {:show-ctx-tip! show-ctx-tip!})
+                  (pdf-highlights-region-container
+                    viewer page-hls {:show-ctx-tip! show-ctx-tip!
+                                     :upd-hl!       upd-hl!})
 
                   hls-layer)))))
 

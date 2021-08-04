@@ -2,6 +2,7 @@
   (:require ["electron" :refer [ipcMain dialog app]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
+            ["buffer" :as buffer]
             ["fs-extra" :as fs-extra]
             ["path" :as path]
             [electron.fs-watcher :as watcher]
@@ -55,8 +56,12 @@
 
 (defmethod handle :writeFile [_window [_ path content]]
   ;; TODO: handle error
-  (fs/writeFileSync path content)
-  (fs/statSync path))
+  (let [^js Buf (.-Buffer buffer)
+        ^js content (if (instance? js/ArrayBuffer content)
+                  (.from Buf content) content)]
+
+    (fs/writeFileSync path content)
+    (fs/statSync path)))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (fs/renameSync old-path new-path))
