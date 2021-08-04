@@ -532,7 +532,8 @@
      {:class (front-utils/classnames [{:has-children has-child? :is-expand expanded?}])}
      [:div.inner
       [:a
-       {:data-dest (js/JSON.stringify (bean/->js dest))
+       {:href      "javascript:void(0);"
+        :data-dest (js/JSON.stringify (bean/->js dest))
         :on-click  (fn [^js/MouseEvent e]
                      (let [target (.-target e)]
                        (if (.closest target "i")
@@ -616,16 +617,28 @@
           [:section.is-empty "No outlines"])]])))
 
 (rum/defc docinfo-display
-  [info]
-  [:div.extensions__pdf-doc-info
-   (for [[k v] info
-         :let [k (pr-str k)]]
-     [:p {:key k} [:strong k] "  " [:i (pr-str v)]])])
+  [info close-fn!]
+  [:div#pdf-docinfo.extensions__pdf-doc-info
+   [:div.inner-text
+    (for [[k v] info
+          :let [k (str (string/replace-first (pr-str k) #"^\:" "") "::")]]
+      [:p {:key k} [:strong k] "  " [:i (pr-str v)]])]
+
+   [:div.flex.items-center.justify-center.pt-2.pb--2
+    [:a.button.p-2
+     {:on-click
+      (fn []
+        (let [text (.-innerText (js/document.querySelector "#pdf-docinfo > .inner-text"))
+              text (string/replace-all text #"[\n\t]+" "\n")]
+          (front-utils/copy-to-clipboard! text)
+          (notification/show! "Copied!" :success)
+          (close-fn!)))}
+     "Copy all properties"]]])
 
 (defn make-docinfo-in-modal
   [info]
-  (fn [close-fn]
-    (docinfo-display info)))
+  (fn [close-fn!]
+    (docinfo-display info close-fn!)))
 
 (rum/defc pdf-toolbar
   [^js viewer]
