@@ -2128,10 +2128,11 @@
            format (:block/format block)
            block-uuid (:block/uuid block)
            template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
-           blocks (db/get-block-and-children repo block-uuid)
+           blocks (if template-including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
            level-blocks (vals (blocks-with-level blocks))
-           [root-block & blocks-exclude-root] level-blocks
-           root-block (assoc root-block :level 1)
+           grouped-blocks (group-by #(= db-id (:db/id %)) level-blocks)
+           root-block (or (first (get grouped-blocks true)) (assoc (db/pull db-id) :level 1))
+           blocks-exclude-root (get grouped-blocks false)
            sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
            result-blocks (if template-including-parent? sorted-blocks (drop 1 sorted-blocks))
            tree (blocks-vec->tree result-blocks)]
