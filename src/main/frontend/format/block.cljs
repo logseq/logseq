@@ -623,7 +623,7 @@
 (defn with-parent-and-left
   [page-id blocks]
   (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
-         parents [{:page/id page-id     ; db id or lookup ref [:block/name "xxx"]
+         parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
                    :block/level 0
                    :block/level-spaces 0}]
          sibling nil
