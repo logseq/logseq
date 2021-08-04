@@ -223,6 +223,12 @@
   []
   (:custom-css-url (get-config)))
 
+(defn get-default-journal-template
+  []
+  (when-let [template (get-in (get-config) [:default-templates :journals])]
+    (when-not (string/blank? template)
+      (string/trim template))))
+
 (defn all-pages-public?
   []
   (let [value (:publishing/all-pages-public? (get-config))

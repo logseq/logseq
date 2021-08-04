@@ -585,7 +585,17 @@
                    (let [path (config/get-config-path)]
                      (db/get-file path))))
       (let [title (date/today)
-            today-page (string/lower-case title)]
+            today-page (string/lower-case title)
+            template (state/get-default-journal-template)]
         (when (db/page-empty? repo today-page)
           (create! title {:redirect? false
-                          :create-first-block? true}))))))
+                          :create-first-block? (not template)})
+          (when template
+            (let [page (db/pull [:block/name today-page])]
+             (editor-handler/insert-template!
+              nil
+              template
+              {:get-pos-fn (fn []
+                             [page false false false])
+               :page-block page})
+             (ui-handler/re-render-root!))))))))

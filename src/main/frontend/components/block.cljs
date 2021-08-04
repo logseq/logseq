@@ -381,25 +381,11 @@
          (let [s (get page-entity :block/original-name page-name)]
            (if tag? (str "#" s) s))))]))
 
-(defn- use-delayed-open [open? page-name]
-  "A react hook to debounce open? value.
-  If open? changed from false to open, there will be a `timeout` delay.
-  Otherwise, the value will be changed to false immediately"
-  (let [[deval set-deval!] (rum/use-state nil)]
-    (rum/use-effect!
-     (fn []
-       (if open? (let [timer (js/setTimeout #(set-deval! open?) 1000)]
-                   #(js/clearTimeout timer))
-           (set-deval! open?))) ;; immediately change
-     [open? page-name])
-    deval))
-
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
   (let [redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
                                page-name)
         page-original-name (model/get-page-original-name redirect-page-name)
-        debounced-open? (use-delayed-open open? page-name)
         html-template (fn []
                         (when redirect-page-name
                           [:div.tippy-wrapper.overflow-y-auto.p-4
@@ -427,7 +413,6 @@
     (if (or (not manual?) open?)
       (ui/tippy {:html            html-template
                  :interactive     true
-                 :open?           debounced-open?
                  :delay           [1000, 100]
                  :fixed-position? fixed-position?
                  :position        (or tippy-position "top")
@@ -1249,7 +1234,7 @@
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
-      (let [doc-mode? (:document/mode? config)]
+      (let [doc-mode? (state/sub :document/mode?)]
         [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
                                       :display (if collapsed? "none" "")}}
          (for [child children]
@@ -1265,8 +1250,9 @@
                  (:block/uuid child)))))]))))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id]
-  (let [has-children-blocks? (and (coll? children) (seq children))
+  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit? doc-mode?]
+  (let [doc-mode? (state/sub :document/mode?)
+        has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
                     (or has-children-blocks? (seq body)))
@@ -1282,8 +1268,7 @@
         empty-content? (string/blank?
                         (property/remove-built-in-properties
                          (:block/format block)
-                         (:block/content block)))
-        edit? (state/sub [:editor/editing? edit-input-id])]
+                         (:block/content block)))]
     [:div.mr-2.flex.flex-row.items-center
      {:style {:height 24
               :margin-top 0
@@ -1304,25 +1289,37 @@
                          (editor-handler/collapse-block! uuid)))))}
       [:span {:class (if control-show? "control-show" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
-     (if (and empty-content? (not edit?)
-              (not (:block/top? block))
-              (not (:block/bottom? block)))
-       [:span.bullet-container]
+     (let [bullet [:a {:on-click (fn [e]
+                                   (bullet-on-click e block config uuid))}
+                   [:span.bullet-container.cursor
+                    {:id (str "dot-" uuid)
+                     :draggable true
+                     :on-drag-start (fn [event]
+                                      (bullet-drag-start event block uuid block-id))
+                     :blockid (str uuid)
+                     :class (str (when collapsed? "bullet-closed")
+                                 " "
+                                 (when (and (:document/mode? config)
+                                            (not collapsed?))
+                                   "hide-inner-bullet"))}
+                    [:span.bullet {:blockid (str uuid)}]]]]
+       (cond
+         (and (:ui/show-empty-bullets? (state/get-config)) (not doc-mode?))
+         bullet
 
-       [:a {:on-click (fn [e]
-                        (bullet-on-click e block config uuid))}
-        [:span.bullet-container.cursor
-         {:id (str "dot-" uuid)
-          :draggable true
-          :on-drag-start (fn [event]
-                           (bullet-drag-start event block uuid block-id))
-          :blockid (str uuid)
-          :class (str (when collapsed? "bullet-closed")
-                      " "
-                      (when (and (:document/mode? config)
-                                 (not collapsed?))
-                        "hide-inner-bullet"))}
-         [:span.bullet {:blockid (str uuid)}]]])]))
+         (or
+          (and empty-content? (not edit?)
+               (not (:block/top? block))
+               (not (:block/bottom? block))
+               (not (util/react *control-show?)))
+          (and doc-mode?
+               (not collapsed?)
+               (not (util/react *control-show?))))
+         ;; hidden
+         [:span.bullet-container]
+
+         :else
+         bullet))]))
 
 (rum/defc dnd-separator
   [block move-to block-content?]
@@ -1731,9 +1728,8 @@
                   (str uuid "-" idx)))))])]]]))
 
 (rum/defc block-content-or-editor < rum/reactive
-  [config {:block/keys [uuid title body meta content page format repo children marker properties pre-block? idx] :as block} edit-input-id block-id slide? heading-level]
+  [config {:block/keys [uuid title body meta content page format repo children marker properties pre-block? idx] :as block} edit-input-id block-id slide? heading-level edit?]
   (let [editor-box (get config :editor-box)
-        edit? (state/sub [:editor/editing? edit-input-id])
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)]
     (if (and edit? editor-box)
@@ -1888,8 +1884,7 @@
 (defn- block-mouse-over
   [e has-child? *control-show? block-id doc-mode?]
   (util/stop e)
-  (when has-child?
-    (reset! *control-show? true))
+  (reset! *control-show? true)
   (when-let [parent (gdom/getElement block-id)]
     (let [node (.querySelector parent ".bullet-container")]
       (when doc-mode?
@@ -1903,8 +1898,7 @@
 (defn- block-mouse-leave
   [e has-child? *control-show? block-id doc-mode?]
   (util/stop e)
-  (when has-child?
-    (reset! *control-show? false))
+  (reset! *control-show? false)
   (when doc-mode?
     (when-let [parent (gdom/getElement block-id)]
       (when-let [node (.querySelector parent ".bullet-container")]
@@ -1941,7 +1935,7 @@
 ;;                                            :ref? true
 ;;                                            :ref-child? true))]))))
 
-(rum/defcs block-container < rum/static
+(rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)
                  ref-collpased? (boolean
@@ -1955,12 +1949,14 @@
                     ::control-show? (atom false)
                     ::ref-collapsed? (atom ref-collpased?))))
    :should-update (fn [old-state new-state]
-                    (not= (:block/content (second (:rum/args old-state)))
-                          (:block/content (second (:rum/args new-state)))))}
+                    (let [compare-keys [:block/uuid :block/properties
+                                        :block/parent :block/left
+                                        :block/children :block/content]]
+                      (not= (select-keys (second (:rum/args old-state)) compare-keys)
+                            (select-keys (second (:rum/args new-state)) compare-keys))))}
   [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type idx] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
-
         ;; Each block might have multiple queries, but we store only the first query's result
         config (if (nil? (:query-result config))
                  (assoc config :query-result (atom nil))
@@ -1986,7 +1982,8 @@
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to has-child? *control-show? doc-mode?)
         data-refs (build-refs-data-value block (remove (set refs) path-refs))
         data-refs-self (build-refs-data-value block refs)
-        edit-input-id (str "edit-block-" blocks-container-id "-" uuid)]
+        edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
+        edit? (state/sub [:editor/editing? edit-input-id])]
     [:div.ls-block.flex.flex-col.rounded-sm
      (cond->
        {:id block-id
@@ -2024,9 +2021,9 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e has-child? *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id))
+        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit? doc-mode?))
 
-      (block-content-or-editor config block edit-input-id block-id slide? heading-level)]
+      (block-content-or-editor config block edit-input-id block-id slide? heading-level edit?)]
 
      (block-children config children collapsed? *ref-collapsed?)
 
@@ -2558,9 +2555,8 @@
                 (assoc :block/top? (zero? idx)
                        :block/bottom? (= (count blocks) (inc idx))))
           config (assoc config :block/uuid (:block/uuid item))]
-      (rum/with-key
-        (block-container config item)
-        (:block/uuid item)))))
+      (rum/with-key (block-container config item)
+        (str (:block/uuid item))))))
 
 (defonce ignore-scroll? (atom false))
 (rum/defcs lazy-blocks <

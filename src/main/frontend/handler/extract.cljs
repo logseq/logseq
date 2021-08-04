@@ -79,9 +79,9 @@
                                      :block/path-refs block-path-ref-pages))))
                    blocks)
           page-entity (let [page-file? (= page (string/lower-case file))
-                            aliases (and (:alias properties)
-                                         (seq (remove #(= page %)
-                                                      (:alias properties))))
+                            alias (:alias properties)
+                            alias (if (string? alias) [alias] alias)
+                            aliases (and alias (seq (remove #(= page %) alias)))
                             page-list (when-let [list-content (:list properties)]
                                         (extract-page-list list-content))]
                         (cond->
@@ -113,8 +113,9 @@
                                    aliases))
 
                           (:tags properties)
-                          (assoc :block/tags (let [tags (->> (:tags properties)
-                                                             (remove string/blank?))]
+                          (assoc :block/tags (let [tags (:tags properties)
+                                                   tags (if (string? tags) [tags] tags)
+                                                   tags (remove string/blank? tags)]
                                                (swap! ref-tags set/union (set tags))
                                                (map (fn [tag] {:block/name (string/lower-case tag)
                                                               :block/original-name tag})

@@ -1183,6 +1183,20 @@
                 [(get m :template) e]))
          (into {}))))
 
+(defn get-template-by-name
+  [name]
+  (when (string? name)
+    (->> (d/q
+           '[:find (pull ?b [*])
+             :in $ ?name
+             :where
+             [?b :block/properties ?p]
+             [(get ?p :template) ?t]
+             [(= ?t ?name)]]
+           (conn/get-conn)
+           name)
+         ffirst)))
+
 (defonce blocks-count-cache (atom nil))
 
 (defn blocks-count
