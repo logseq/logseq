@@ -1501,7 +1501,7 @@
                             :annotation (pdf-assets/open-block-ref! t)
                             (.preventDefault %))}
 
-              [:span.hl-page (str "P" (or (:hl-page properties) "?") " #" (:hl-stamp properties))]
+              [:span.hl-page (str "P" (or (:hl-page properties) "?"))]
 
               (when-let [st (and (= :area (keyword (:hl-type properties)))
                                  (:hl-stamp properties))]

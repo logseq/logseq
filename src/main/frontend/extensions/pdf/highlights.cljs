@@ -23,13 +23,28 @@
   []
   (state/set-state! :pdf/current nil))
 
-(rum/defcs pdf-highlight-finder < rum/reactive
+(rum/defcs pdf-highlight-finder
+  < rum/static rum/reactive
   [state ^js viewer]
-  (when-let [ref-hl (state/sub :pdf/ref-highlight)]
-    ;; delay handle: aim to fix page blink
-    (js/setTimeout #(pdf-utils/scroll-to-highlight viewer ref-hl) 100)
-    (js/setTimeout #(state/set-state! :pdf/ref-highlight nil) 1000)
-    nil))
+  (when viewer
+    (if-let [ref-hl (state/sub :pdf/ref-highlight)]
+      (do
+        ;; delay handle: aim to fix page blink
+        (js/setTimeout #(pdf-utils/scroll-to-highlight viewer ref-hl) 100)
+        (js/setTimeout #(state/set-state! :pdf/ref-highlight nil) 1000)))))
+
+(rum/defc pdf-page-finder < rum/static
+  [^js viewer]
+  (when viewer
+    (when-let [current (:pdf/current @state/state)]
+      (let [active-hl (:pdf/ref-highlight @state/state)
+            page-key (:filename current)
+            last-page (and page-key
+                           (front-utils/safe-parse-int (storage/get (str "ls-pdf-last-page-" page-key))))]
+
+        (when (and last-page (nil? active-hl))
+          (js/setTimeout #(set! (.-currentPageNumber viewer) last-page) 200)))))
+  nil)
 
 (rum/defc pdf-resizer
   [^js viewer]
@@ -572,6 +587,7 @@
      ;;   ])
      ;; refs
      (pdf-highlight-finder viewer)
+     (pdf-page-finder viewer)
 
      ;; area selection container
      (pdf-highlight-area-selection
@@ -822,10 +838,14 @@
                (set! (. js/window -lsPdfViewer) viewer)
 
                (p/then (. viewer setDocument pdf-document)
-                       #(set-state! {:viewer viewer :bus event-bus :link link-service :el el})))
+                       #(set-state! {:viewer viewer :bus event-bus :link link-service :el el}))
 
-        ;;TODO: destroy
-        #(.destroy pdf-document))
+               ;;TODO: destroy
+               (fn []
+                 (when-let [last-page (.-currentPageNumber viewer)]
+                   (storage/set (str "ls-pdf-last-page-" (front-utils/node-path.basename url)) last-page))
+
+                 (.destroy pdf-document))))
       [])
 
     ;; interaction events
