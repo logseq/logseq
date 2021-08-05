@@ -43,7 +43,7 @@
                            (front-utils/safe-parse-int (storage/get (str "ls-pdf-last-page-" page-key))))]
 
         (when (and last-page (nil? active-hl))
-          (js/setTimeout #(set! (.-currentPageNumber viewer) last-page) 200)))))
+          (set! (.-currentPageNumber viewer) last-page)))))
   nil)
 
 (rum/defc pdf-resizer
@@ -818,7 +818,8 @@
 
   (let [*el-ref (rum/create-ref)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
-        [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})]
+        [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})
+        [page-ready?, set-page-ready!] (rum/use-state false)]
 
     ;; instant pdfjs viewer
     (rum/use-effect!
@@ -860,7 +861,8 @@
 
                 fn-page-ready
                 (fn []
-                  (set! (. viewer -currentScaleValue) "auto"))]
+                  (set! (. viewer -currentScaleValue) "auto")
+                  (set-page-ready! true))]
 
             (doto (.-eventBus viewer)
               (.on "pagesinit" fn-page-ready)
@@ -880,15 +882,14 @@
         [:div.pdfViewer "viewer pdf"]
         [:div.pp-holder]
 
-
-        (when viewer
+        (when (and page-ready? viewer)
           [(rum/with-key
              (pdf-highlights
                (:el state) viewer
                initial-hls (:loaded-pages ano-state)
                ops) "pdf-highlights")])]
 
-       (when viewer
+       (when (and page-ready? viewer)
          [(rum/with-key (pdf-resizer viewer) "pdf-resizer")
           (rum/with-key (pdf-toolbar viewer) "pdf-toolbar")])])))
 
