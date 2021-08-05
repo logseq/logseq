@@ -22,6 +22,11 @@
   [bounding ^js viewport]
   (bean/->clj (js-utils/scaledToViewport (bean/->js bounding) viewport)))
 
+(defn optimize-client-reacts
+  [rects]
+  (when (seq rects)
+    (bean/->clj (js-utils/optimizeClientRects (bean/->js rects)))))
+
 (defn vw-to-scaled-pos
   [^js viewer {:keys [page bounding rects]}]
   (when-let [^js viewport (.. viewer (getPageView (dec page)) -viewport)]
@@ -144,12 +149,13 @@
 
 (defn get-range-rects<-page-cnt
   [^js/Range r ^js page-cnt]
-  (let [rge-rects (js->clj (.getClientRects r))
+  (let [rge-rects (bean/->clj (.getClientRects r))
         ^js cnt-offset (.getBoundingClientRect page-cnt)]
 
     (if (seq rge-rects)
-      (for [rect rge-rects]
-        {:top    (- (+ (.-top rect) (.-scrollTop page-cnt)) (.-top cnt-offset))
-         :left   (- (+ (.-left rect) (.-scrollLeft page-cnt)) (.-left cnt-offset))
-         :width  (.-width rect)
-         :height (.-height rect)}))))
+      (let [rects (for [rect rge-rects]
+                    {:top    (- (+ (.-top rect) (.-scrollTop page-cnt)) (.-top cnt-offset))
+                     :left   (- (+ (.-left rect) (.-scrollLeft page-cnt)) (.-left cnt-offset))
+                     :width  (.-width rect)
+                     :height (.-height rect)})]
+        (optimize-client-reacts rects)))))
