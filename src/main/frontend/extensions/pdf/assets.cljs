@@ -61,8 +61,8 @@
   (and hl (not (nil? (get-in hl [:content :image])))))
 
 (defn persist-hl-area-image$
-  [^js viewer current hl {:keys [top left width height] :as vw-bounding}]
-  (when-let [^js canvas (and (:key current) (.-canvas (.getPageView viewer (dec (:page hl)))))]
+  [^js viewer current new-hl old-hl {:keys [top left width height] :as vw-bounding}]
+  (when-let [^js canvas (and (:key current) (.-canvas (.getPageView viewer (dec (:page new-hl)))))]
     (let [^js doc (.-ownerDocument canvas)
           ^js canvas' (.createElement doc "canvas")
           dpr js/window.devicePixelRatio
@@ -85,11 +85,15 @@
                                    ^js png (.arrayBuffer png)
                                    {:keys [key]} current
                                    ;; dir
-                                   fname (str (:page hl) "_" (:id hl))
+                                   fstamp (get-in new-hl [:content :image])
+                                   old-fstamp (and old-hl (get-in old-hl [:content :image]))
+                                   fname (str (:page new-hl) "_" (:id new-hl))
                                    fdir (str config/local-assets-dir "/" key)
-                                   fpath (str fdir "/" fname ".png")
                                    _ (fs/mkdir-if-not-exists (str repo-dir "/" fdir))
-                                   _ (fs/write-file! repo-cur repo-dir fpath png {:skip-mtime? true})]
+                                   new-fpath (str fdir "/" fname "_" fstamp ".png")
+                                   old-fpath (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
+                                   _ (and old-fpath (apply fs/rename! repo-cur (map #(utils/node-path.join repo-dir %) [old-fpath new-fpath])))
+                                   _ (fs/write-file! repo-cur repo-dir new-fpath png {:skip-mtime? true})]
 
                              (js/console.timeEnd :write-area-image))
 
@@ -99,14 +103,22 @@
           (.toBlob canvas' callback))
         ))))
 
+(defn update-hl-area-block!
+  [highlight]
+  (when-let [block (and (area-highlight? highlight)
+                        (db-model/get-block-by-uuid (:id highlight)))]
+    (editor-handler/set-block-property!
+      (:block/uuid block) :hl-stamp (get-in highlight [:content :image]))))
+
 (defn unlink-hl-area-image$
   [^js viewer current hl]
   (when-let [fkey (and (area-highlight? hl) (:key current))]
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
+          fstamp (get-in hl [:content :image])
           fname (str (:page hl) "_" (:id hl))
           fdir (str config/local-assets-dir "/" fkey)
-          fpath (utils/node-path.join repo-dir (str fdir "/" fname ".png"))]
+          fpath (utils/node-path.join repo-dir (str fdir "/" fname "_" fstamp ".png"))]
 
       (fs/unlink! repo-cur fpath {}))))
 
@@ -131,8 +143,8 @@
           (js/console.debug "[existed ref block]" ref-block)
           ref-block)
         (let [text (:text content)
-              wrap-props #(if-let [hash (:image content)]
-                            (assoc % :hl-type "area" :hl-hash hash) %)]
+              wrap-props #(if-let [stamp (:image content)]
+                            (assoc % :hl-type "area" :hl-stamp stamp) %)]
 
           (editor-handler/api-insert-new-block!
             text {:page        (:block/name ref-page)
@@ -237,15 +249,14 @@
                       )}]]]))))
 
 (rum/defc area-display
-  [block]
+  [block stamp]
   (let [id (:block/uuid block)
         props (:block/properties block)]
     (when-let [page (db-utils/pull (:db/id (:block/page block)))]
       (when-let [group-key (string/replace-first (:block/original-name page) #"^hls__" "")]
         (when-let [hl-page (:hl-page props)]
-          ;; TODO: async?
           (let [asset-path (editor-handler/make-asset-url
-                             (str "/" config/local-assets-dir "/" group-key "/" (str hl-page "_" id ".png")))]
+                             (str "/" config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
 
             [:span.hl-area
              [:img {:src asset-path}]]))))))

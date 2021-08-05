@@ -1501,11 +1501,11 @@
                             :annotation (pdf-assets/open-block-ref! t)
                             (.preventDefault %))}
 
-              [:span.hl-page (str "P" (or (:hl-page properties) "?"))]
+              [:span.hl-page (str "P" (or (:hl-page properties) "?") " #" (:hl-stamp properties))]
 
               (when-let [st (and (= :area (keyword (:hl-type properties)))
-                                 (:hl-hash properties))]
-                (pdf-assets/area-display t))]))
+                                 (:hl-stamp properties))]
+                (pdf-assets/area-display t st))]))
 
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))

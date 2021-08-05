@@ -204,15 +204,22 @@
                                                          to-sc-pos (pdf-utils/vw-to-scaled-pos viewer to-vw-pos)]
 
                                                      ;; TODO: exception
-                                                     (let [hl (assoc hl :position to-sc-pos)
-                                                           hl (assoc-in hl [:content :image] (js/Date.now))]
-                                                       (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state) hl (:bounding to-vw-pos))
-                                                       (upd-hl! hl))
+                                                     (let [hl' (assoc hl :position to-sc-pos)
+                                                           hl' (assoc-in hl' [:content :image] (js/Date.now))]
 
-                                                     ;; reset dom effects
-                                                     (set! (.. target -style -transform) (str "translate(0, 0)"))
-                                                     (.removeAttribute target "data-x")
-                                                     (.removeAttribute target "data-y")
+                                                       (p/then
+                                                         (pdf-assets/persist-hl-area-image$ viewer
+                                                                                            (:pdf/current @state/state)
+                                                                                            hl' hl (:bounding to-vw-pos))
+                                                         (fn [] (js/setTimeout
+                                                                  #(do
+                                                                     ;; reset dom effects
+                                                                     (set! (.. target -style -transform) (str "translate(0, 0)"))
+                                                                     (.removeAttribute target "data-x")
+                                                                     (.removeAttribute target "data-y")
+
+                                                                     (upd-hl! hl')) 200))))
+
 
                                                      (js/setTimeout #(rum/set-ref! *dirty false))))
 
@@ -415,14 +422,15 @@
                                                   (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
                              ;; exceptions
                              (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
-                                                                hl (:bounding vw-pos)))))
+                                                                hl nil (:bounding vw-pos)))))
 
         upd-hl! (fn [hl]
                   (let [highlights (pdf-utils/fix-nested-js highlights)]
                     (when-let [[target-idx] (medley/find-first
                                               #(= (:id (second %)) (:id hl))
                                               (medley/indexed highlights))]
-                      (set-highlights! (assoc-in highlights [target-idx] hl)))))
+                      (set-highlights! (assoc-in highlights [target-idx] hl))
+                      (pdf-assets/update-hl-area-block! hl))))
 
         del-hl! (fn [hl] (when-let [id (:id hl)] (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
 
