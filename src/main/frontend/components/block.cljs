@@ -603,13 +603,13 @@
                   :block-ref
                   {:block block})
 
-                (case block-type
+                (match [block-type (util/electron?)]
                   ;; pdf annotation
-                  :annotation (pdf-assets/open-block-ref! block)
+                  [:annotation true] (pdf-assets/open-block-ref! block)
 
                   ;; default open block page
-                  (route-handler/redirect! {:to          :page
-                                            :path-params {:name id}}))))}
+                  :else (route-handler/redirect! {:to          :page
+                                              :path-params {:name id}}))))}
          (let [title (let [title (:block/title block)]
                        [:span.block-ref
                         (block-content (assoc config :block-ref? true)
@@ -1494,7 +1494,7 @@
        (if title
          (conj
            (map-inline config title)
-           (if (not= block-type :default)
+           (if (and (util/electron?) (not= block-type :default))
              [:a.prefix-link
               {:on-click #(case block-type
                             ;; pdf annotation
