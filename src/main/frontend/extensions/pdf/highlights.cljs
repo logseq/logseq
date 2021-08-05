@@ -112,7 +112,8 @@
                         "del"
                         (do
                           (del-hl! highlight)
-                          (pdf-assets/del-ref-block! highlight))
+                          (pdf-assets/del-ref-block! highlight)
+                          (pdf-assets/unlink-hl-area-image$ viewer (:pdf/current @state/state) highlight))
 
                         ;; colors
                         (let [properties {:color action}]

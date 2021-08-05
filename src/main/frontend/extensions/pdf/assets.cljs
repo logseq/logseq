@@ -87,8 +87,9 @@
                                    ;; dir
                                    fname (str (:page hl) "_" (:id hl))
                                    fdir (str config/local-assets-dir "/" key)
+                                   fpath (str fdir "/" fname ".png")
                                    _ (fs/mkdir-if-not-exists (str repo-dir "/" fdir))
-                                   _ (fs/write-file! repo-cur repo-dir (str fdir "/" fname ".png") png {:skip-mtime? true})]
+                                   _ (fs/write-file! repo-cur repo-dir fpath png {:skip-mtime? true})]
 
                              (js/console.timeEnd :write-area-image))
 
@@ -99,7 +100,15 @@
         ))))
 
 (defn unlink-hl-area-image$
-  [])
+  [^js viewer current hl]
+  (when-let [fkey (and (area-highlight? hl) (:key current))]
+    (let [repo-cur (state/get-current-repo)
+          repo-dir (config/get-repo-dir repo-cur)
+          fname (str (:page hl) "_" (:id hl))
+          fdir (str config/local-assets-dir "/" fkey)
+          fpath (utils/node-path.join repo-dir (str fdir "/" fname ".png"))]
+
+      (fs/unlink! repo-cur fpath {}))))
 
 (defn resolve-ref-page
   [page-name]
@@ -236,7 +245,7 @@
         (when-let [hl-page (:hl-page props)]
           ;; TODO: async?
           (let [asset-path (editor-handler/make-asset-url
-                           (str "/" config/local-assets-dir "/" group-key "/" (str hl-page "_" id ".png")))]
+                             (str "/" config/local-assets-dir "/" group-key "/" (str hl-page "_" id ".png")))]
 
             [:span.hl-area
              [:img {:src asset-path}]]))))))
