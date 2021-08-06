@@ -312,7 +312,6 @@
         [_ set-area-mode!] (use-atom *area-mode?)
 
         should-start (fn [^js e]
-                       (dd (.-target e))
                        (let [^js target (.-target e)]
                          (when (and (not
                                       (.contains (.-classList target) "extensions__pdf-hls-area-region"))
@@ -393,12 +392,12 @@
                                    (show-ctx-tip! viewer hl point {:reset-fn #(reset-coords)})
 
                                    ;; export area highlight
-                                   (dd "[selection end] :start"
-                                       start-coord ":end" end ":pos" pos
-                                       ":page" page-number
-                                       ":offset" page-pos
-                                       ":vw-pos" vw-pos
-                                       ":sc-pos" sc-pos))
+                                   ;;(dd "[selection end] :start"
+                                   ;;    start-coord ":end" end ":pos" pos
+                                   ;;    ":page" page-number
+                                   ;;    ":offset" page-pos
+                                   ;;    ":vw-pos" vw-pos
+                                   ;;    ":sc-pos" sc-pos))
 
                                  (set-area-mode! false))
 
