@@ -197,14 +197,17 @@
     (let [properties (seq properties)
           properties-order (keys properties)
           page-refs (->>
+                     properties
+                     (remove (fn [[k _]]
+                               (contains? #{:background-color :background_color} (keyword k))))
+                     (map last)
                      (map (fn [v]
                             (when (string? v)
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)
                                   (map text/page-ref-un-brackets! result)
-                                  []))))
-                       (map last properties))
+                                  [])))))
                      (apply concat)
                      (remove string/blank?))
           properties (->> properties
