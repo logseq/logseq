@@ -214,7 +214,7 @@
                                  (last
                                   (string/split repo-name #"/"))
                                  repo-name)]
-                 [:span#repo-name repo-name])
+                 [:span#repo-name {:title repo-name} repo-name])
                [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]]])
            (mapv
             (fn [{:keys [id url]}]
