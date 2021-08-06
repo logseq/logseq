@@ -1257,11 +1257,15 @@
                  (:block/uuid child)))))]))))
 
 (defn block-content-empty?
-  [block]
+  [{:block/keys [properties title body]}]
   (and
-    (property/properties-built-in? (:block/properties block))
-    (= (:block/title block) [])
-    (every? #(= % ["Horizontal_Rule"]) (:block/body block))))
+   (or
+    (empty? properties)
+    (property/properties-built-in? properties))
+
+   (empty? title)
+
+   (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
   [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit-input-id edit? doc-mode?]

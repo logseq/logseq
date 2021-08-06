@@ -29,8 +29,8 @@
   [properties]
   (and (seq properties)
        (let [ks (map (comp keyword string/lower-case name) (keys properties))
-             built-in-properties* (built-in-properties)]
-         (every? #(contains? built-in-properties* %) ks))))
+             built-in-properties-set (built-in-properties)]
+         (every? built-in-properties-set ks))))
 
 (defn contains-properties?
   [content]
