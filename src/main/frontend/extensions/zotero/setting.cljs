@@ -11,6 +11,7 @@
    :attachments-block-text "[[Attachments]]"
    :include-notes?         true
    :notes-block-text       "[[Notes]]"
+   :extra-tags             ""
    :page-insert-prefix     "@"})
 
 (defn api-key []

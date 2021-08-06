@@ -241,6 +241,18 @@
 
    [:div.row
     [:label.title
+     {:for "zotero_extra_tags"
+      :title "Extra tags to add for every imported page. Separate by comma, or leave it empty."}
+     "Extra tags to add:"]
+    [:div.mt-1.sm:mt-0.sm:col-span-2
+     [:div.max-w-lg.rounded-md
+      [:input.form-input.block
+       {:default-value (setting/setting :extra-tags)
+        :placeholder   "tag1,tag2,tag3"
+        :on-blur       (fn [e] (setting/set-setting! :extra-tags (util/evalue e)))}]]]]
+
+   [:div.row
+    [:label.title
      {:for "zotero_import_all"}
      "Add all zotero items"]
     [:div.mt-1.sm:mt-0.sm:col-span-2

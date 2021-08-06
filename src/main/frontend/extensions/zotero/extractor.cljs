@@ -58,8 +58,11 @@
   (let [tags
         (->> (-> item :data :tags)
              (mapv (fn [{:keys [tag]}] (string/trim tag)))
-             (mapcat #(string/split % #",\s?")))]
-    (distinct tags)))
+             (mapcat #(string/split % #",\s?")))
+        extra-tags (->> (str/split (setting/setting :extra-tags) #",")
+                        (map str/trim)
+                        (remove str/blank?))]
+    (distinct (concat tags extra-tags))))
 
 (defn date->journal [item]
   (if-let [date (-> item :meta :parsed-date
