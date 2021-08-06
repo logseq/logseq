@@ -29,10 +29,6 @@
 (defn page-name [item]
   (let [page-title
         (case (item-type item)
-          "journalArticle"
-          (let [citation-key (citation-key item)
-                title        (title item)]
-            (or citation-key title))
           "case"
           (-> item :data :case-name)
           "email"
@@ -40,8 +36,12 @@
           "statute"
           (-> item :data :name-of-act)
           ;; default use title
-          (title item))]
-    (str (setting/setting :page-insert-prefix) page-title)))
+          (title item))
+        citekey (citation-key item)]
+    (if (and (setting/setting :prefer-citekey?)
+             (not (str/blank? citekey)))
+      (str (setting/setting :page-insert-prefix) citekey)
+      (str (setting/setting :page-insert-prefix) page-title))))
 
 (defn authors [item]
   (let [creators (-> item :data :creators)

@@ -6,6 +6,7 @@
 
 (def default-settings
   {:type                   :user
+   :prefer-citekey?        true
    :include-attachments?   true
    :attachments-block-text "[[Attachments]]"
    :include-notes?         true

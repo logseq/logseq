@@ -177,6 +177,17 @@
 
    [:div.row
     [:label.title
+     {:for "zotero_prefer_citekey"
+      :title "Make sure to install Better BibTeX and pin your item first"}
+     "Always prefer citekey as your page title?"]
+    [:div
+     [:div.rounded-md.sm:max-w-xs
+      (ui/toggle (setting/setting :prefer-citekey?)
+                 (fn [] (setting/set-setting! :prefer-citekey? (not (setting/setting :prefer-citekey?))))
+                 true)]]]
+
+   [:div.row
+    [:label.title
      {:for "zotero_include_attachment_links"}
      "Include attachment links?"]
     [:div
