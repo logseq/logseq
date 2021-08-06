@@ -312,8 +312,14 @@
         [_ set-area-mode!] (use-atom *area-mode?)
 
         should-start (fn [^js e]
-                       (when (.closest (.-target e) ".page")
-                         (and e (or (.-altKey e) @*area-mode?))))
+                       (dd (.-target e))
+                       (let [^js target (.-target e)]
+                         (when (and (not
+                                      (.contains (.-classList target) "extensions__pdf-hls-area-region"))
+                                    (.closest target ".page"))
+                           (and e (or (.-metaKey e)
+                                      (.-altKey e)
+                                      @*area-mode?)))))
 
         reset-coords #(do
                         (set-start-coord! nil)
@@ -789,8 +795,8 @@
 
          ;; selection
          [:a.button
-          {:title    "Area highlight (Alt)"
-           :class (if area-mode? "is-active")
+          {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "alt") ")")
+           :class    (if area-mode? "is-active")
            :on-click #(set-area-mode! (not area-mode?))}
           (svg/area 18)]
 
