@@ -397,7 +397,8 @@
                                    ;;    ":page" page-number
                                    ;;    ":offset" page-pos
                                    ;;    ":vw-pos" vw-pos
-                                   ;;    ":sc-pos" sc-pos))
+                                   ;;    ":sc-pos" sc-pos)
+                                   )
 
                                  (set-area-mode! false))
 
