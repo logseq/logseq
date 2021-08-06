@@ -39,6 +39,8 @@
 
     (p/let [disk-mtime (when stat (gobj/get stat "mtime"))
             db-mtime (db/get-file-last-modified-at repo path)
+            file-exists? (-> (protocol/stat this dir path)
+                             (p/catch (fn [_error] false)))
             disk-content (-> (protocol/read-file this dir path nil)
                              (p/catch (fn [error] nil)))
             disk-content (or disk-content "")
@@ -54,6 +56,7 @@
         ;;  false)
 
         (and
+         file-exists?
          (not= disk-mtime db-mtime)
          (not= (string/trim disk-content) (string/trim content))
          ;; FIXME:
@@ -99,7 +102,9 @@
     (let [path (concat-path dir path)]
       (p/let [stat (p/catch
                        (protocol/stat this dir path)
-                       (fn [_e] nil))]
+                       (fn [_e] nil))
+              sub-dir (first (util/get-dir-and-basename path))
+              _ (protocol/mkdir-recur! this sub-dir)]
         (write-file-impl! this repo dir path content opts stat))))
   (rename! [this repo old-path new-path]
     (ipc/ipc "rename" old-path new-path))
