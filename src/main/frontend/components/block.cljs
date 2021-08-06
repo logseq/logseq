@@ -437,12 +437,18 @@
         inner))))
 
 (rum/defc asset-reference
-  [title path]
+  [config title path]
   (let [repo-path (config/get-repo-dir (state/get-current-repo))
         full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))
         ext-name (util/get-file-ext full-path)
-        ext-name (and ext-name (string/lower-case ext-name))]
-
+        ext-name (and ext-name (string/lower-case ext-name))
+        title-or-path (cond
+                        (string? title)
+                        title
+                        (seq title)
+                        (->elem :span (map-inline config title))
+                        :else
+                        path)]
     [:div.asset-ref-wrap
      {:data-ext ext-name}
 
@@ -454,8 +460,9 @@
                      (when-let [current (pdf-assets/inflate-asset (util/node-path.basename full-path))]
                        (state/set-state! :pdf/current current)
                        (.preventDefault e)))}
-        (or title path)]
-       [:a.asset-ref {:target "_blank" :href full-path} (or title path)])
+        title-or-path]
+       [:a.asset-ref {:target "_blank" :href full-path}
+        title-or-path])
 
      (case ext-name
        ;; https://en.wikipedia.org/wiki/HTML5_video
@@ -843,7 +850,7 @@
 
           (and (util/electron?)
                (show-link? config metadata s full_text))
-          (asset-reference (second (first label)) s)
+          (asset-reference config label s)
 
           ;; open file externally if s is "../assets/<...>"
           (and (util/electron?)

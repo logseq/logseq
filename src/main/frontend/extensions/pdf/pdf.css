@@ -503,8 +503,9 @@
 .asset-ref {
   &.is-pdf {
     &:before {
-      content: "[[📙";
+      content: "[[📚";
       opacity: .4;
+      margin-right: 4px;
     }
 
     &:after {
@@ -654,5 +655,3 @@ body.is-pdf-active {
   mix-blend-mode: multiply;
   color: unset;
 }
-
-
