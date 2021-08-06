@@ -456,7 +456,7 @@
 }
 
 #pdf-layout-container {
-  background-color: transparent;
+  background-color: #FFFFFF;
 
   &[data-theme=dark] {
     background-color: #042f3c;
