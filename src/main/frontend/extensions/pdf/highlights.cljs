@@ -94,12 +94,10 @@
   (let [mounted (rum/use-ref false)]
     (rum/use-effect!
       (fn []
-        (let [cb #(if-not (rum/deref mounted)
-                    (rum/set-ref! mounted true)
-                    (clear-ctx-tip!))]
-          (js/document.addEventListener "click" cb)
+        (let [cb #(clear-ctx-tip!)]
+          (js/setTimeout #(js/document.addEventListener "click" cb))
           #(js/document.removeEventListener "click" cb)))
-      [clear-ctx-tip!]))
+      []))
 
   ;; TODO: precise position
   ;;(when-let [
@@ -169,14 +167,17 @@
 
   (let [id (:id hl)
         {:keys [rects]} (:position vw-hl)
-        {:keys [color]} (:properties hl)]
-    [:div.extensions__pdf-hls-text-region
-     {:on-click
-      (fn [^js/MouseEvent e]
-        (let [x (.-clientX e)
-              y (.-clientY e)]
+        {:keys [color]} (:properties hl)
+        open-tip! (fn [^js/MouseEvent e]
+                    (.preventDefault e)
+                    (let [x (.-clientX e)
+                          y (.-clientY e)]
 
-          (show-ctx-tip! viewer hl {:x x :y y})))}
+                      (show-ctx-tip! viewer hl {:x x :y y})))]
+
+    [:div.extensions__pdf-hls-text-region
+     {:on-click        open-tip!
+      :on-context-menu open-tip!}
 
      (map-indexed
        (fn [idx rect]
@@ -191,7 +192,14 @@
    {:keys [show-ctx-tip! upd-hl!]}]
 
   (let [*el (rum/use-ref nil)
-        *dirty (rum/use-ref nil)]
+        *dirty (rum/use-ref nil)
+        open-tip! (fn [^js/MouseEvent e]
+                    (.preventDefault e)
+                    (when-not (rum/deref *dirty)
+                      (let [x (.-clientX e)
+                            y (.-clientY e)]
+
+                        (show-ctx-tip! viewer hl {:x x :y y}))))]
 
     ;; resizable
     (rum/use-effect!
@@ -275,15 +283,11 @@
     (when-let [vw-bounding (get-in vw-hl [:position :bounding])]
       (let [{:keys [color]} (:properties hl)]
         [:div.extensions__pdf-hls-area-region
-         {:ref        *el
-          :style      vw-bounding
-          :data-color color
-          :on-click   (fn [^js/MouseEvent e]
-                        (when-not (rum/deref *dirty)
-                          (let [x (.-clientX e)
-                                y (.-clientY e)]
-
-                            (show-ctx-tip! viewer hl {:x x :y y}))))}]))))
+         {:ref             *el
+          :style           vw-bounding
+          :data-color      color
+          :on-click        open-tip!
+          :on-context-menu open-tip!}]))))
 
 (rum/defc pdf-highlights-region-container
   [^js viewer page-hls ops]
