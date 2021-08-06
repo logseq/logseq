@@ -73,11 +73,20 @@
           display: flex;
           align-items: center;
           margin-left: 8px;
-          padding: 4px 6px;
+          margin-right: 8px;
+          padding: 4px 2px;
           color: var(--ls-icon-color);
+          background-color: transparent;
+          transition: none;
 
           &.is-info {
             opacity: .3;
+          }
+
+          &.is-active {
+            opacity: 1;
+            border-bottom: 2px solid #969494;
+            border-radius: 0;
           }
         }
       }
@@ -175,7 +184,7 @@
   &-settings {
     &-inner.hls-popup-box {
       position: absolute;
-      right: 96px;
+      right: 206px;
       width: 178px;
       padding: 15px 10px;
     }
@@ -541,7 +550,6 @@
 
     .hl-area {
       display: block;
-      padding: 10px 0;
 
       img {
         margin: 0;

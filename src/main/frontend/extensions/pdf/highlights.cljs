@@ -12,6 +12,7 @@
             [frontend.config :as config]
             [frontend.storage :as storage]
             [frontend.components.svg :as svg]
+            [frontend.rum :refer [use-atom]]
             [medley.core :as medley]
             [frontend.fs :as fs]
             [clojure.string :as string]
@@ -19,6 +20,8 @@
 
 (defn dd [& args]
   (apply js/console.debug args))
+
+(def *area-mode? (atom false))
 
 (defn reset-current-pdf!
   []
@@ -304,10 +307,13 @@
         *sta-el (rum/use-ref nil)
         *cnt-rect (rum/use-ref nil)
 
-        should-start (fn [^js e] (and e (.-altKey e)))
-
         [start-coord, set-start-coord!] (rum/use-state nil)
         [end-coord, set-end-coord!] (rum/use-state nil)
+        [_ set-area-mode!] (use-atom *area-mode?)
+
+        should-start (fn [^js e]
+                       (when (.closest (.-target e) ".page")
+                         (and e (or (.-altKey e) @*area-mode?))))
 
         reset-coords #(do
                         (set-start-coord! nil)
@@ -386,7 +392,9 @@
                                        ":page" page-number
                                        ":offset" page-pos
                                        ":vw-pos" vw-pos
-                                       ":sc-pos" sc-pos)))
+                                       ":sc-pos" sc-pos))
+
+                                 (set-area-mode! false))
 
                                ;; reset
                                (reset-coords)))
@@ -671,7 +679,7 @@
                   ops) parent))) items)])]))
 
 (rum/defc pdf-outline
-  [^js viewer visible? hide!]
+  [^js viewer visible? set-visible!]
   (when-let [^js pdf-doc (and viewer (.-pdfDocument viewer))]
     (let [*el-outline (rum/use-ref nil)
           [outline-data, set-outline-data!] (rum/use-state [])
@@ -698,7 +706,7 @@
         (fn []
           (let [el-outline (rum/deref *el-outline)
                 cb (fn [^js e]
-                     (and (= e.which 27) (hide!)))]
+                     (and (= e.which 27) (set-visible! false)))]
 
             (js/setTimeout #(.focus el-outline))
             (.addEventListener el-outline "keyup" cb)
@@ -710,7 +718,7 @@
         :on-click (fn [^js/MouseEvent e]
                     (let [target (.-target e)]
                       (when-not (.contains (rum/deref *el-outline) target)
-                        (hide!))))}
+                        (set-visible! false))))}
 
        [:div.extensions__pdf-outline.hls-popup-box
         {:ref       *el-outline
@@ -737,13 +745,13 @@
 
    [:div.flex.items-center.justify-center.pt-2.pb--2
     (ui/button "Copy all"
-      :on-click
-      (fn []
-        (let [text (.-innerText (js/document.querySelector "#pdf-docinfo > .inner-text"))
-              text (string/replace-all text #"[\n\t]+" "\n")]
-          (front-utils/copy-to-clipboard! text)
-          (notification/show! "Copied!" :success)
-          (close-fn!))))]])
+               :on-click
+               (fn []
+                 (let [text (.-innerText (js/document.querySelector "#pdf-docinfo > .inner-text"))
+                       text (string/replace-all text #"[\n\t]+" "\n")]
+                   (front-utils/copy-to-clipboard! text)
+                   (notification/show! "Copied!" :success)
+                   (close-fn!))))]])
 
 (defn make-docinfo-in-modal
   [info]
@@ -752,7 +760,8 @@
 
 (rum/defc pdf-toolbar
   [^js viewer]
-  (let [[outline-visible?, set-outline-visible!] (rum/use-state false)
+  (let [[area-mode? set-area-mode!] (use-atom *area-mode?)
+        [outline-visible?, set-outline-visible!] (rum/use-state false)
         [settings-visible?, set-settings-visible!] (rum/use-state false)
         [viewer-theme, set-viewer-theme!] (rum/use-state (or (storage/get "ls-pdf-viewer-theme") "light"))]
 
@@ -774,25 +783,37 @@
 
          ;; appearance
          [:a.button
-          {:on-click #(set-settings-visible! (not settings-visible?))}
+          {:title    "More settings"
+           :on-click #(set-settings-visible! (not settings-visible?))}
           (svg/adjustments 18)]
+
+         ;; selection
+         [:a.button
+          {:title    "Area highlight (Alt)"
+           :class (if area-mode? "is-active")
+           :on-click #(set-area-mode! (not area-mode?))}
+          (svg/area 18)]
 
          ;; zoom
          [:a.button
-          {:on-click (partial pdf-utils/zoom-out-viewer viewer)}
+          {:title    "Zoom out"
+           :on-click (partial pdf-utils/zoom-out-viewer viewer)}
           (svg/zoom-out 18)]
 
          [:a.button
-          {:on-click (partial pdf-utils/zoom-in-viewer viewer)}
+          {:title    "Zoom in"
+           :on-click (partial pdf-utils/zoom-in-viewer viewer)}
           (svg/zoom-in 18)]
 
          [:a.button
-          {:on-click #(set-outline-visible! (not outline-visible?))}
+          {:title    "Outline"
+           :on-click #(set-outline-visible! (not outline-visible?))}
           (svg/view-list 16)]
 
          ;; metadata
          [:a.button.is-info
-          {:on-click #(do
+          {:title    "Document info"
+           :on-click #(do
                         (p/let [ret (pdf-utils/get-meta-data$ viewer)]
                           (state/set-modal! (make-docinfo-in-modal ret))))}
           (svg/info)]
@@ -802,14 +823,15 @@
           (t :close)]]]
 
        ;; contents outline
-       (pdf-outline viewer outline-visible? #(set-outline-visible! false))
+       (pdf-outline viewer outline-visible? set-outline-visible!)
 
        ;; settings
-       (and settings-visible? (pdf-settings
-                                viewer
-                                viewer-theme
-                                {:hide-settings! #(set-settings-visible! false)
-                                 :select-theme!  #(set-viewer-theme! %)}))])))
+       (and settings-visible?
+            (pdf-settings
+              viewer
+              viewer-theme
+              {:hide-settings! #(set-settings-visible! false)
+               :select-theme!  #(set-viewer-theme! %)}))])))
 
 (rum/defc pdf-viewer
   [url initial-hls ^js pdf-document ops]
