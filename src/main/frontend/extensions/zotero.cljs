@@ -239,10 +239,6 @@
        {:default-value (setting/setting :page-insert-prefix)
         :on-blur       (fn [e] (setting/set-setting! :page-insert-prefix (util/evalue e)))}]]]]
 
-   (ui/admonition
-    :warning
-    "If you have a lot of citations in Zotero, adding them all can slow down Logseq. You can type /zotero to import specific citations.")
-
    [:div.row
     [:label.title
      {:for "zotero_import_all"}
@@ -264,6 +260,10 @@
                 (<! (zotero-handler/add-all (::progress state)))
                 (reset! (::total state) false)
                 (notification/show! "Successfully added all items!" :success)))))))]]
+
+   (ui/admonition
+    :warning
+    "If you have a lot of items in Zotero, adding them all can slow down Logseq. You can type /zotero to import specific item on demand instead.")
 
    (when @(::total state)
      [:div.row
