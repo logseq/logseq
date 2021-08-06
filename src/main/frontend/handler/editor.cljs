@@ -652,7 +652,7 @@
               format (or
                       (:block/format block)
                       (db/get-page-format (:db/id block))
-                      :markdown)
+                      (state/get-preferred-format))
               content (if (seq properties)
                         (property/insert-properties format content properties)
                         content)
@@ -743,7 +743,7 @@
       (when (db/page-empty? (state/get-current-repo) (:db/id page))
         (let [title (or (:block/original-name page)
                         (:block/name page))
-              format (get page :block/format :markdown)
+              format (db/get-page-format page)
               create-title-property? (util/create-title-property? title)]
           (when create-title-property?
             (let [default-properties (default-properties-block title format (:db/id page))
