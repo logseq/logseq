@@ -771,16 +771,11 @@
 #?(:cljs (def clear-selection! selection/clearSelection))
 
 #?(:cljs
-   (defn copy-to-clipboard! [s]
-     (let [el (js/document.createElement "textarea")]
-       (set! (.-value el) s)
-       (.setAttribute el "readonly" "")
-       (set! (-> el .-style .-position) "absolute")
-       (set! (-> el .-style .-left) "-9999px")
-       (js/document.body.appendChild el)
-       (.select el)
-       (js/document.execCommand "copy")
-       (js/document.body.removeChild el))))
+   (defn copy-to-clipboard!
+     ([s]
+      (utils/writeClipboard s false))
+     ([s html?]
+      (utils/writeClipboard s html?))))
 
 (def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
 (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
