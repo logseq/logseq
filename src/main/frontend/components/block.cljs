@@ -456,10 +456,10 @@
               (string/ends-with? (util/node-path.dirname full-path) config/local-assets-dir))
        [:a.asset-ref.is-pdf
         {:href "javascript:void(0);"
-         :on-click (fn [e]
+         :on-mouse-down (fn [e]
                      (when-let [current (pdf-assets/inflate-asset (util/node-path.basename full-path))]
-                       (state/set-state! :pdf/current current)
-                       (.preventDefault e)))}
+                       (util/stop e)
+                       (state/set-state! :pdf/current current)))}
         title-or-path]
        [:a.asset-ref {:target "_blank" :href full-path}
         title-or-path])

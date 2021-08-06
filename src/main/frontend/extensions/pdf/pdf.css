@@ -504,13 +504,13 @@
   &.is-pdf {
     &:before {
       content: "[[📚";
-      opacity: .4;
+      opacity: .7;
       margin-right: 4px;
     }
 
     &:after {
       content: "]]";
-      opacity: .4;
+      opacity: .7;
     }
   }
 }
