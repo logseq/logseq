@@ -93,6 +93,9 @@
   ([s {:keys [un-brackets?]
        :or {un-brackets? true}}]
    (cond
+     (and (string? s) (util/wrapped-by-quotes? s))
+     (util/unquote-string s)
+
      (and (string? s) (re-find markdown-link s))
      s
 
