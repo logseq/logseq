@@ -789,7 +789,7 @@
 
       [:div.extensions__pdf-toolbar
        [:div.inner
-        [:div.r.flex
+        [:div.r.flex.buttons
 
          ;; appearance
          [:a.button
