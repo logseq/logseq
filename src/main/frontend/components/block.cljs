@@ -578,7 +578,7 @@
           block (db/pull-block block-id)
           repo (state/get-current-repo)]
       (if block
-        [:div.block-ref-wrap.inline
+        [:div.inline
          {:on-mouse-down
           (fn [e]
             (util/stop e)
@@ -590,11 +590,13 @@
                {:block block})
               (route-handler/redirect! {:to          :page
                                         :path-params {:name id}})))}
-         (let [title (let [title (:block/title block)]
-                       [:span.block-ref
-                        (block-content (assoc config :block-ref? true)
-                                       block nil (:block/uuid block)
-                                       (:slide? config))])
+         (let [title (let [title (:block/title block)
+                           block-content (block-content (assoc config :block-ref? true)
+                                                        block nil (:block/uuid block)
+                                                        (:slide? config))
+                           class (if (seq title) "block-ref" "block-ref-no-title")]
+                       [:span {:class class}
+                        block-content])
                inner (if label
                        (->elem
                         :span.block-ref
