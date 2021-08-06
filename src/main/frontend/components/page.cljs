@@ -22,6 +22,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.export :as export]
             [frontend.extensions.graph :as graph]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.components.hierarchy :as hierarchy]
             [frontend.ui :as ui]
             [frontend.components.content :as content]

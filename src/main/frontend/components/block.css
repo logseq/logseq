@@ -176,6 +176,15 @@
   }
 }
 
+.asset-ref {
+  &-wrap {
+    &[data-ext=pdf] {
+      display: inline-flex;
+      align-items: center;
+    }
+  }
+}
+
 .embed-page {
   @apply py-2 my-2 px-2;
 

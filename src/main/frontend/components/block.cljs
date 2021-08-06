@@ -24,6 +24,7 @@
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.sci :as sci]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.block :as block-handler]
@@ -438,18 +439,27 @@
 (rum/defc asset-reference
   [title path]
   (let [repo-path (config/get-repo-dir (state/get-current-repo))
-        full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))]
-    [:div
-     [:a.asset-ref {:target "_blank" :href full-path} (or title path)]
+        full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))
+        ext-name (util/get-file-ext full-path)
+        ext-name (and ext-name (string/lower-case ext-name))]
 
-     (case (util/get-file-ext full-path)
-       "pdf"
-       [:iframe {:src full-path
-                 :class "pdf-preview"
-                 :fullscreen true
-                 :height 800}]
+    [:div.asset-ref-wrap
+     {:data-ext ext-name}
+
+     (if (and (= "pdf" ext-name)
+              (string/ends-with? (util/node-path.dirname full-path) config/local-assets-dir))
+       [:a.asset-ref.is-pdf
+        {:href "javascript:void(0);"
+         :on-click (fn [e]
+                     (when-let [current (pdf-assets/inflate-asset (util/node-path.basename full-path))]
+                       (state/set-state! :pdf/current current)
+                       (.preventDefault e)))}
+        (or title path)]
+       [:a.asset-ref {:target "_blank" :href full-path} (or title path)])
+
+     (case ext-name
        ;; https://en.wikipedia.org/wiki/HTML5_video
-       ("mp4" "ogg" "webm")
+       ("mp4" "ogg" "webm" "mov")
        [:video {:src full-path
                 :controls true}]
 
@@ -576,20 +586,33 @@
          (util/uuid-string? id))
     (let [block-id (uuid id)
           block (db/pull-block block-id)
+          block-type (keyword (get-in block [:block/properties :ls-type]))
+          hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
       (if block
-        [:div.inline
-         {:on-mouse-down
+        [:div.block-ref-wrap.inline
+
+         {:data-type (name (or block-type :default))
+          :data-hl-type hl-type
+          :on-mouse-down
           (fn [e]
             (util/stop e)
+
             (if (gobj/get e "shiftKey")
-              (state/sidebar-add-block!
-               (state/get-current-repo)
-               (:db/id block)
-               :block-ref
-               {:block block})
-              (route-handler/redirect! {:to          :page
-                                        :path-params {:name id}})))}
+                (state/sidebar-add-block!
+                  (state/get-current-repo)
+                  (:db/id block)
+                  :block-ref
+                  {:block block})
+
+                (match [block-type (util/electron?)]
+                  ;; pdf annotation
+                  [:annotation true] (pdf-assets/open-block-ref! block)
+
+                  ;; default open block page
+                  :else (route-handler/redirect! {:to          :page
+                                                  :path-params {:name id}}))))}
+
          (let [title (let [title (:block/title block)
                            block-content (block-content (assoc config :block-ref? true)
                                                         block nil (:block/uuid block)
@@ -602,7 +625,7 @@
                         :span.block-ref
                         (map-inline config label))
                        title)]
-           (if (and (not (util/mobile?)) (not (:preview? config)))
+           (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
              (ui/tippy {:html        (fn []
                                        [:div.tippy-wrapper.overflow-y-auto.p-4
                                         {:style {:width      735
@@ -815,7 +838,7 @@
 
           ;; image
           (and (show-link? config metadata s full_text)
-               (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext s))))
+               (not (contains? #{"pdf" "mp4" "ogg" "webm" "mov"} (util/get-file-ext s))))
           (image-link config url s label metadata full_text)
 
           (and (util/electron?)
@@ -1430,6 +1453,7 @@
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
+        block-type (or (keyword (:ls-type properties)) :default)
         html-export? (:html-export? config)
         checkbox (when (and (not pre-block?)
                             (not html-export?))
@@ -1454,7 +1478,8 @@
     (->elem
      elem
      (merge
-      {:id anchor}
+      {:id anchor
+       :data-hl-type (:hl-type properties)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -1472,7 +1497,21 @@
         marker-cp
         priority]
        (if title
-         (map-inline config title)
+         (conj
+           (map-inline config title)
+           (if (and (util/electron?) (not= block-type :default))
+             [:a.prefix-link
+              {:on-click #(case block-type
+                            ;; pdf annotation
+                            :annotation (pdf-assets/open-block-ref! t)
+                            (.preventDefault %))}
+
+              [:span.hl-page (str "P" (or (:hl-page properties) "?"))]
+
+              (when-let [st (and (= :area (keyword (:hl-type properties)))
+                                 (:hl-stamp properties))]
+                (pdf-assets/area-display t st))]))
+
          [[:span.opacity-50 "Click here to start writing, type '/' to see all the commands."]])
        [tags])))))
 
@@ -1643,6 +1682,7 @@
   (let [collapsed? (get properties :collapsed)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
+        block-type (or (:ls-type properties) :default)
         dragging? (rum/react *dragging?)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
@@ -1651,6 +1691,7 @@
                          )
         attrs (cond->
                 {:blockid       (str uuid)
+                 :data-type (name block-type)
                  :style {:width "100%"}}
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
@@ -1664,7 +1705,6 @@
       ;; .flex.relative {:style {:width "100%"}}
       [:span
        ;; .flex-1.flex-col.relative.block-content
-
        (cond
          (seq title)
          (build-block-title config block)

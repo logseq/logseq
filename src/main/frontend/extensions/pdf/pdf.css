@@ -1,0 +1,658 @@
+@import "_viewer.css";
+
+:root {
+  --ph-highlight-color-blue: #55b8fe;
+  --ph-highlight-color-green: #46da48;
+  --ph-highlight-color-red: #fd709a;
+  --ph-highlight-color-purple: #ac8cf1;
+  --ph-highlight-color-yellow: #fcd713;
+
+  --ph-highlight-scroll-into-color: rgba(255, 75, 93, 0.67);
+
+  --ph-view-container-width: 42vw;
+}
+
+.extensions__pdf {
+
+  &-assets-uploader {
+    margin-top: -15px;
+    padding-bottom: 15px;
+
+    .ui__button {
+      font-size: 12px;
+      margin-right: 5px;
+      padding: 2px 8px;
+
+      &.is-link {
+        background-color: transparent;
+        padding: 2px 8px;
+        position: relative;
+        top: 2px;
+        color: var(--ls-primary-text-color);
+
+        &:hover {
+          svg {
+            opacity: 1;
+          }
+        }
+      }
+
+      svg {
+        transform: scale(.75);
+        opacity: .7;
+      }
+    }
+  }
+
+  &-container {
+    display: flex;
+  }
+
+  &-loader {
+    position: relative;
+  }
+
+  &-toolbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 42px;
+    z-index: 5;
+    background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, rgba(255, 255, 255, 1) 100%);
+    padding: 8px 20px;
+
+    > .inner {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+
+      > .r {
+        a.button {
+          user-select: none;
+          display: flex;
+          align-items: center;
+          margin-left: 8px;
+          margin-right: 8px;
+          padding: 4px 2px;
+          color: var(--ls-icon-color);
+          background-color: transparent;
+          transition: none;
+
+          &.is-active {
+            opacity: 1;
+            border-bottom: 2px solid #969494;
+            border-radius: 0;
+          }
+        }
+      }
+    }
+  }
+
+  &-outline {
+    position: absolute;
+    right: 30px;
+
+
+    &-wrap {
+    }
+
+    > section {
+      white-space: pre-wrap;
+      max-height: 80vh;
+      padding-top: 15px;
+      padding-bottom: 15px;
+      padding-left: 12px;
+      overflow: auto;
+      color: #565656;
+
+      > .extensions__pdf-outline-item > .inner > a {
+        font-weight: bold;
+      }
+    }
+
+    &-item {
+      &.has-children {
+        > .inner > a > i.arrow {
+          opacity: 1;
+        }
+      }
+
+      &.is-expand {
+        > .inner > a > i.arrow svg {
+          transform: rotate(90deg) translateX(2px);
+        }
+      }
+
+      > .inner {
+        > a {
+          color: #565656;
+          font-size: 11px;
+          text-decoration: none;
+          font-weight: normal;
+          display: flex;
+          align-items: center;
+          padding: 6px 5px;
+          user-select: none;
+          border-radius: 4px;
+          cursor: default;
+
+          margin-right: 10px;
+          transition: none;
+
+          > i {
+            opacity: 0;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+
+            svg {
+              color: #565656;
+              transform: scale(.8);
+              transition: .3s transform;
+            }
+          }
+
+          &:hover {
+            color: #106ba3;
+          }
+
+          &:active, &:focus {
+            background-color: #106ba3;
+            color: white;
+
+            > i {
+              svg {
+                color: #e3e3e3;
+              }
+            }
+          }
+        }
+      }
+
+      > .children {
+        padding-left: 12px;
+      }
+    }
+  }
+
+  &-settings {
+    &-inner.hls-popup-box {
+      position: absolute;
+      right: 206px;
+      width: 178px;
+      padding: 15px 10px;
+    }
+
+    &-item {
+      display: flex;
+
+      &.theme-picker {
+        justify-content: center;
+        align-items: center;
+
+        > button {
+          border-radius: 50%;
+          background-color: white;
+          width: 30px;
+          height: 30px;
+          overflow: hidden;
+          margin: 0 8px;
+          border: 1px solid #c7c7c7;
+          font-size: 0;
+
+          &:hover {
+            opacity: .8;
+            border-color: #a3a3a3;
+          }
+
+          &.warm {
+            background-color: #f9efdb;
+          }
+
+          &.dark {
+            background-color: #0a4251;
+
+            svg {
+              color: white;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  &-viewer {
+    position: absolute;
+    overflow: auto;
+    width: 100%;
+    height: 100%;
+
+    > .viewer-container {
+    }
+
+    > .pdfViewer {
+      &.disabled-text-selection {
+        user-select: none;
+        pointer-events: none;
+      }
+    }
+  }
+
+  &-resizer {
+    position: absolute;
+    width: 3px;
+    height: 88vh;
+    background-color: rgba(0, 0, 0, 0);
+    overflow: hidden;
+    z-index: 4;
+    top: 10vh;
+    cursor: col-resize;
+    right: 0;;
+  }
+
+  &-hls-text-region {
+    position: absolute;
+    opacity: 1;
+    z-index: 2;
+  }
+
+  &-hls-area-region {
+    cursor: pointer;
+    position: absolute;
+    opacity: .8;
+    z-index: 2;
+    background-color: #FCD713FF;
+    mix-blend-mode: multiply;
+    touch-action: none;
+
+    &[data-color=yellow] {
+      background-color: var(--ph-highlight-color-yellow);
+    }
+
+    &[data-color=blue] {
+      background-color: var(--ph-highlight-color-blue);
+    }
+
+    &[data-color=green] {
+      background-color: var(--ph-highlight-color-green);
+    }
+
+    &[data-color=red] {
+      background-color: var(--ph-highlight-color-red);
+    }
+
+    &[data-color=purple] {
+      background-color: var(--ph-highlight-color-purple);
+    }
+  }
+
+  &-hls-ctx-menu {
+    position: absolute;
+    z-index: 9;
+
+    color: #343434;
+    border-radius: 4px;
+
+    font-size: 13px;
+    padding: 8px 10px;
+    background-color: #e3e7e8;
+
+    box-shadow: 0 2px 4px 0 rgba(134, 134, 134, 0.59);
+
+    list-style: none;
+    margin: 0;
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      bottom: -50%;
+      left: -50%;
+      border: solid 1px #b2b2b2;
+      transform: scale(0.5);
+      transform-origin: center center;
+      pointer-events: none;
+      border-radius: 10px;
+    }
+
+    > li {
+      margin: 0;
+      padding: 5px 8px;
+      display: flex;
+      align-items: center;
+      user-select: none;
+      cursor: default;
+
+      &.item:hover {
+        background-color: #cecece;
+        border-radius: 4px;
+      }
+
+      &.item-colors {
+        display: flex;
+        justify-content: space-between;
+        margin: 0 -5px;
+
+        > a {
+          width: 14px;
+          height: 14px;
+          border-radius: 20px;
+          background-color: #b2b2b2;
+          overflow: hidden;
+          opacity: 1;
+          margin: 0 5px;
+          font-size: 0;
+          border: 1px inset rgba(0, 0, 0, .2);
+          cursor: default;
+
+          &:hover {
+            opacity: .8;
+            transform: scale(1.1);
+          }
+
+          &[data-color=yellow] {
+            background-color: var(--ph-highlight-color-yellow);
+          }
+
+          &[data-color=blue] {
+            background-color: var(--ph-highlight-color-blue);
+          }
+
+          &[data-color=green] {
+            background-color: var(--ph-highlight-color-green);
+          }
+
+          &[data-color=red] {
+            background-color: var(--ph-highlight-color-red);
+          }
+
+          &[data-color=purple] {
+            background-color: var(--ph-highlight-color-purple);
+          }
+        }
+      }
+    }
+  }
+
+  &-area-selection {
+
+    .shadow-rect {
+      position: absolute;
+      background: rgba(252, 232, 151, 1);
+      mix-blend-mode: multiply;
+    }
+  }
+}
+
+.hls-text-region-item {
+  cursor: pointer;
+  position: absolute;
+  transition: background 0.3s;
+
+  background-color: rgba(252, 219, 97, 0.7);
+
+  &[data-color=yellow] {
+    background-color: var(--ph-highlight-color-yellow);
+    opacity: .5;
+  }
+
+  &[data-color=blue] {
+    background-color: var(--ph-highlight-color-blue);
+  }
+
+  &[data-color=green] {
+    background-color: var(--ph-highlight-color-green);
+  }
+
+  &[data-color=red] {
+    background-color: var(--ph-highlight-color-red);
+  }
+
+  &[data-color=purple] {
+    background-color: var(--ph-highlight-color-purple);
+  }
+}
+
+.hls-popup {
+  &-wrap {
+    position: absolute;
+    top: 40px;
+    width: 100%;
+    height: 92vh;
+    background-color: rgba(0, 0, 0, 0);
+    display: none;
+
+    &.visible {
+      display: block;
+    }
+  }
+
+  &-box {
+    z-index: 3;
+    border-radius: 4px;
+    width: 320px;
+    overflow-y: auto;
+    background-color: #e9e9e9;
+    outline: none;
+    box-shadow: 0 2px 4px 0 rgba(134, 134, 134, 0.59);
+
+    &::after {
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      bottom: -50%;
+      left: -50%;
+      border: solid 1px #b2b2b2;
+      transform: scale(0.5);
+      transform-origin: center center;
+      pointer-events: none;
+      border-radius: 10px;
+    }
+  }
+}
+
+#pdf-layout-container {
+  background-color: transparent;
+
+  &[data-theme=light] {
+    background-color: #FFFFFF;
+  }
+
+  &[data-theme=dark] {
+    background-color: #042f3c;
+
+    .pdfViewer {
+      -webkit-filter: invert(100%);
+      filter: invert(100%);
+      background: transparent;
+    }
+
+    .textLayer {
+      background-color: #023d4cf7;
+      -webkit-filter: invert(100%);
+      filter: invert(100%);
+    }
+
+    .extensions__pdf-toolbar {
+      background: linear-gradient(0deg, rgba(255, 255, 255, 0) 10%, rgb(15 31 37) 100%)
+    }
+
+    .extensions__pdf-hls-area-region {
+      mix-blend-mode: revert;
+      opacity: .4;
+    }
+  }
+
+  &[data-theme=warm] {
+    background-color: #f6efdf;
+
+    .textLayer {
+      background-color: #f8eeda;
+    }
+
+    .extensions__pdf-toolbar {
+      background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, #eee8d5 100%)
+    }
+  }
+}
+
+.asset-ref {
+  &.is-pdf {
+    &:before {
+      content: "[[📙";
+      opacity: .4;
+    }
+
+    &:after {
+      content: "]]";
+      opacity: .4;
+    }
+  }
+}
+
+.block-ref {
+  &-wrap {
+    &[data-type=annotation] {
+    }
+
+    &[data-hl-type=area] {
+      display: block;
+
+      .block-ref {
+        display: block;
+        border: none;
+      }
+    }
+  }
+}
+
+.block-content {
+  &[data-type=annotation] {
+    a.prefix-link {
+      display: inline-flex;
+      align-items: center;
+      padding-right: 4px;
+      cursor: alias;
+
+      &:before {
+        content: "📔📌 ";
+      }
+    }
+
+    [data-hl-type=area] {
+      display: flex;
+      margin-bottom: 10px;
+      flex-direction: column;
+
+      a.prefix-link {
+        display: inline;
+      }
+    }
+
+    .hl-area {
+      display: block;
+
+      img {
+        margin: 0;
+        box-shadow: none;
+      }
+    }
+  }
+}
+
+body[data-page] {
+  #main-content-container {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .cp__sidebar-main-content {
+    > .pb-24 {
+      max-width: unset;
+    }
+  }
+
+  .extensions__pdf-loader {
+    width: 100%;
+  }
+
+  .extensions__pdf-container {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: var(--ph-view-container-width);
+    height: 100vh;
+    overflow-y: hidden;
+    z-index: 10;
+  }
+
+  .extensions__pdf {
+
+    &-viewer {
+      left: 0;
+      width: 100%;
+    }
+
+    &-viewer-cnt {
+      display: flex;
+    }
+
+    &-highlights {
+      height: 30vh;
+      overflow: auto;
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background-color: rgba(231, 231, 231, 0.9);
+      padding: 20px;
+      z-index: 6;
+      max-width: 400px;
+
+      pre {
+        white-space: pre-wrap;
+        font-size: 12px;
+      }
+    }
+  }
+}
+
+body.is-pdf-active {
+  #app-container {
+    padding-left: calc(var(--ph-view-container-width) + 15px);
+  }
+
+  #sidebar-nav-wrapper {
+    border: none !important;
+  }
+
+  #head {
+    padding-left: 0;
+  }
+}
+
+/* overrides for pdf_viewer.css from PDF.JS web viewer */
+
+.textLayer {
+  z-index: 2;
+  opacity: .8;
+  mix-blend-mode: multiply;
+}
+
+.annotationLayer {
+  position: absolute;
+  top: 0;
+
+  z-index: 3;
+}
+
+.textLayer ::selection {
+  background: rgb(185, 231, 255);
+  mix-blend-mode: multiply;
+  color: unset;
+}
+
+

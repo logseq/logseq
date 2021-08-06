@@ -15,5 +15,5 @@
 @import "resources/css/highlight.css";
 @import "resources/css/tooltip.css";
 @import "resources/css/common.css";
-@import-glob "src/main/frontend/**/*.css";
+@import-glob "src/main/frontend/**/[!_]*.css";
 @import "tailwindcss/utilities";

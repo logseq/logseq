@@ -100,43 +100,43 @@
   {:did-mount (fn [state]
                 (when-let [element (gdom/getElement "main-content")]
                   (dnd/subscribe!
-                   element
-                   :upload-files
-                   {:drop (fn [e files]
-                            (when-let [id (state/get-edit-input-id)]
-                              (let [format (:block/format (state/get-edit-block))]
-                                (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
+                    element
+                    :upload-files
+                    {:drop (fn [e files]
+                             (when-let [id (state/get-edit-input-id)]
+                               (let [format (:block/format (state/get-edit-block))]
+                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
                 state)}
   [{:keys [route-match global-graph-pages? logged? home? route-name indexeddb-support? white? db-restoring? main-content]}]
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div#main-content.cp__sidebar-main-layout.flex-1.flex
-     [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
-      {:style {:flex (if (state/get-left-sidebar-open?)
-                       "0 1 20%"
-                       "0 0 0px")
-               :border-right (str "1px solid "
-                                  (if white? "#f0f8ff" "#073642"))}}
-      (when (state/sub :ui/left-sidebar-open?)
-        (sidebar-nav route-match nil))]
-     [:div#main-content-container.w-full.flex.justify-center
-      {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
-      [:div.cp__sidebar-main-content
-       {:data-is-global-graph-pages global-graph-pages?
-        :data-is-full-width (or global-graph-pages?
-                                (contains? #{:all-files :all-pages :my-publishing} route-name))}
-       (cond
-         (not indexeddb-support?)
-         nil
+                    [:div#main-content.cp__sidebar-main-layout.flex-1.flex
+                     [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
+                      {:style {:flex (if (state/get-left-sidebar-open?)
+                                       "0 1 20%"
+                                       "0 0 0px")
+                               :border-right (str "1px solid "
+                                                  (if white? "#f0f8ff" "#073642"))}}
+                      (when (state/sub :ui/left-sidebar-open?)
+                        (sidebar-nav route-match nil))]
+                     [:div#main-content-container.w-full.flex.justify-center
+                      {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
+                      [:div.cp__sidebar-main-content
+                       {:data-is-global-graph-pages global-graph-pages?
+                        :data-is-full-width (or global-graph-pages?
+                                                (contains? #{:all-files :all-pages :my-publishing} route-name))}
+                       (cond
+                         (not indexeddb-support?)
+                         nil
 
-         db-restoring?
-         [:div.mt-20
-          [:div.ls-center
-           (ui/loading (t :loading))]]
+                         db-restoring?
+                         [:div.mt-20
+                          [:div.ls-center
+                           (ui/loading (t :loading))]]
 
-         :else
-         [:div.pb-24 {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
-                      :style {:margin-bottom (if global-graph-pages? 0 120)}}
-          main-content])]]]))
+                         :else
+                         [:div.pb-24 {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
+                                      :style {:margin-bottom (if global-graph-pages? 0 120)}}
+                          main-content])]]]))
 
 (rum/defc footer
   []
@@ -156,23 +156,23 @@
 ;; TODO: simplify logic
 
 (rum/defc main-content < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (when-not @sidebar-inited?
-             (let [current-repo (state/sub :git/current-repo)
-                   default-home (get-default-home-if-valid)
-                   sidebar (:sidebar default-home)
-                   sidebar (if (string? sidebar) [sidebar] sidebar)]
-               (when-let [pages (->> (seq sidebar)
-                                     (remove nil?))]
-                 (let [blocks (remove nil? pages)]
-                   (doseq [page pages]
-                     (let [page (string/lower-case page)
-                           [db-id block-type] (if (= page "contents")
-                                                ["contents" :contents]
-                                                [page :page])]
-                       (state/sidebar-add-block! current-repo db-id block-type nil))))
-                 (reset! sidebar-inited? true))))
-           state)}
+                         {:init (fn [state]
+                                  (when-not @sidebar-inited?
+                                    (let [current-repo (state/sub :git/current-repo)
+                                          default-home (get-default-home-if-valid)
+                                          sidebar (:sidebar default-home)
+                                          sidebar (if (string? sidebar) [sidebar] sidebar)]
+                                      (when-let [pages (->> (seq sidebar)
+                                                            (remove nil?))]
+                                        (let [blocks (remove nil? pages)]
+                                          (doseq [page pages]
+                                            (let [page (string/lower-case page)
+                                                  [db-id block-type] (if (= page "contents")
+                                                                       ["contents" :contents]
+                                                                       [page :page])]
+                                              (state/sidebar-add-block! current-repo db-id block-type nil))))
+                                        (reset! sidebar-inited? true))))
+                                  state)}
   []
   (let [today (state/sub :today)
         cloning? (state/sub :repo/cloning?)
@@ -186,60 +186,60 @@
         preferred-format (state/sub [:me :preferred_format])
         logged? (:name me)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div
-       (cond
-         (and default-home
-              (= :home (state/get-current-route))
-              (not (state/route-has-p?))
-              (:page default-home))
-         (route-handler/redirect! {:to :page
-                                   :path-params {:name (:page default-home)}})
+                      [:div
+                       (cond
+                         (and default-home
+                              (= :home (state/get-current-route))
+                              (not (state/route-has-p?))
+                              (:page default-home))
+                         (route-handler/redirect! {:to :page
+                                                   :path-params {:name (:page default-home)}})
 
-         (and config/publishing?
-              (not default-home)
-              (empty? latest-journals))
-         (route-handler/redirect! {:to :all-pages})
+                         (and config/publishing?
+                              (not default-home)
+                              (empty? latest-journals))
+                         (route-handler/redirect! {:to :all-pages})
 
-         importing-to-db?
-         (ui/loading (t :parsing-files))
+                         importing-to-db?
+                         (ui/loading (t :parsing-files))
 
-         loading-files?
-         (ui/loading (t :loading-files))
+                         loading-files?
+                         (ui/loading (t :loading-files))
 
-         (and (not logged?) (seq latest-journals))
-         (journal/journals latest-journals)
+                         (and (not logged?) (seq latest-journals))
+                         (journal/journals latest-journals)
 
-         (and logged? (not preferred-format))
-         (widgets/choose-preferred-format)
+                         (and logged? (not preferred-format))
+                         (widgets/choose-preferred-format)
 
-         ;; TODO: delay this
-         (and logged? (nil? (:email me)))
-         (settings/set-email)
+                         ;; TODO: delay this
+                         (and logged? (nil? (:email me)))
+                         (settings/set-email)
 
-         cloning?
-         (ui/loading (t :cloning))
+                         cloning?
+                         (ui/loading (t :cloning))
 
-         (seq latest-journals)
-         (journal/journals latest-journals)
+                         (seq latest-journals)
+                         (journal/journals latest-journals)
 
-         (and logged? (empty? (:repos me)))
-         (widgets/add-graph)
+                         (and logged? (empty? (:repos me)))
+                         (widgets/add-graph)
 
-         ;; FIXME: why will this happen?
-         :else
-         [:div])])))
+                         ;; FIXME: why will this happen?
+                         :else
+                         [:div])])))
 
 (rum/defc custom-context-menu < rum/reactive
   []
   (when (state/sub :custom-context-menu/show?)
     (when-let [links (state/sub :custom-context-menu/links)]
       (ui/css-transition
-       {:class-names "fade"
-        :timeout {:enter 500
-                  :exit 300}}
-       links
-       ;; (custom-context-menu-content)
-       ))))
+        {:class-names "fade"
+         :timeout {:enter 500
+                   :exit 300}}
+        links
+        ;; (custom-context-menu-content)
+        ))))
 
 (rum/defc new-block-mode < rum/reactive
   []
@@ -263,11 +263,11 @@
   (when-not (state/sub :ui/sidebar-open?)
     ;; TODO: remove with-context usage
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.cp__sidebar-help-btn
-       {:title (t :help-shortcut-title)
-        :on-click (fn []
-                    (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
-       "?"])))
+                      [:div.cp__sidebar-help-btn
+                       {:title (t :help-shortcut-title)
+                        :on-click (fn []
+                                    (state/sidebar-add-block! (state/get-current-repo) "help" :help nil))}
+                       "?"])))
 
 (rum/defc settings-modal < rum/reactive
   []
@@ -275,7 +275,7 @@
     (if settings-open?
       (do
         (state/set-modal!
-         (fn [] [:div.settings-modal (settings/settings)]))
+          (fn [] [:div.settings-modal (settings/settings)]))
         (util/lock-global-scroll settings-open?))
       (state/set-modal! nil))
     nil))
@@ -323,44 +323,46 @@
                          (editor-handler/unhighlight-blocks!)
                          (util/fix-open-external-with-shift! e))}
 
-       [:div.theme-inner
-        (sidebar-mobile-sidebar
-         {:open?       open?
-          :close-fn    close-fn
-          :route-match route-match})
-        [:div.#app-container.h-screen.flex
-         [:div.flex-1.h-full.flex.flex-col#left-container.relative
-          {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
-          (header/header {:open-fn        open-fn
-                          :white?         white?
-                          :current-repo   current-repo
-                          :logged?        logged?
-                          :page?          page?
-                          :route-match    route-match
-                          :me             me
-                          :default-home   default-home
-                          :new-block-mode new-block-mode})
+                        [:div.theme-inner
+                         (sidebar-mobile-sidebar
+                           {:open?       open?
+                            :close-fn    close-fn
+                            :route-match route-match})
+                         [:div.#app-container.h-screen.flex
+                          [:div.flex-1.h-full.flex.flex-col#left-container.relative
+                           {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
+                           (header/header {:open-fn        open-fn
+                                           :white?         white?
+                                           :current-repo   current-repo
+                                           :logged?        logged?
+                                           :page?          page?
+                                           :route-match    route-match
+                                           :me             me
+                                           :default-home   default-home
+                                           :new-block-mode new-block-mode})
 
-          [:div#main-container.scrollbar-spacing
-           (main {:route-match         route-match
-                  :global-graph-pages? global-graph-pages?
-                  :logged?             logged?
-                  :home?               home?
-                  :route-name          route-name
-                  :indexeddb-support?  indexeddb-support?
-                  :white?              white?
-                  :db-restoring?       db-restoring?
-                  :main-content        main-content})]
+                           [:div#main-container.scrollbar-spacing
+                            (main {:route-match         route-match
+                                   :global-graph-pages? global-graph-pages?
+                                   :logged?             logged?
+                                   :home?               home?
+                                   :route-name          route-name
+                                   :indexeddb-support?  indexeddb-support?
+                                   :white?              white?
+                                   :db-restoring?       db-restoring?
+                                   :main-content        main-content})]
 
-          (footer)]
-         (right-sidebar/sidebar)]
+                           (footer)]
+                          (right-sidebar/sidebar)
 
-        (ui/notification)
-        (ui/modal)
-        (settings-modal)
-        (custom-context-menu)
-        [:a#download.hidden]
-        (when
-         (and (not config/mobile?)
-              (not config/publishing?))
-          (help-button))]))))
+                          [:div#app-single-container]]
+
+                         (ui/notification)
+                         (ui/modal)
+                         (settings-modal)
+                         (custom-context-menu)
+                         [:a#download.hidden]
+                         (when
+                           (and (not config/mobile?)
+                                (not config/publishing?))
+                           (help-button))]))))

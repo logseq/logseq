@@ -632,7 +632,7 @@
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties]
+  [content {:keys [page block-uuid sibling? before? properties custom-uuid]
             :or {sibling? false
                  before? false}}]
   (when (or page block-uuid)
@@ -666,7 +666,7 @@
                                  (:db/id (:block/page new-block))))
               new-block (-> new-block
                             (wrap-parse-block)
-                            (assoc :block/uuid (db/new-block-id)))
+                            (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               new-block (if-let [db-id (:db/id (:block/file block))]
                           (assoc new-block :block/file db-id)
                           new-block)]

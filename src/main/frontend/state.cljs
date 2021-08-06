@@ -133,6 +133,10 @@
       :plugin/selected-unpacked-pkg nil
       :plugin/active-readme         nil
 
+      ;; pdf
+      :pdf/current                  nil
+      :pdf/ref-highlight            nil
+
       ;; all notification contents as k-v pairs
       :notification/contents {}
       :graph/syncing? false
