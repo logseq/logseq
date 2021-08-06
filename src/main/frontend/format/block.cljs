@@ -197,14 +197,17 @@
     (let [properties (seq properties)
           properties-order (keys properties)
           page-refs (->>
+                     properties
+                     (remove (fn [[k _]]
+                               (contains? #{:background-color :background_color} (keyword k))))
+                     (map last)
                      (map (fn [v]
                             (when (string? v)
                               (let [v (string/trim v)
                                     result (text/split-page-refs-without-brackets v {:un-brackets? false})]
                                 (if (coll? result)
                                   (map text/page-ref-un-brackets! result)
-                                  []))))
-                       (map last properties))
+                                  [])))))
                      (apply concat)
                      (remove string/blank?))
           properties (->> properties
@@ -623,7 +626,7 @@
 (defn with-parent-and-left
   [page-id blocks]
   (loop [blocks (map (fn [block] (assoc block :block/level-spaces (:block/level block))) blocks)
-         parents [{:page/id page-id     ; db id or lookup ref [:block/name "xxx"]
+         parents [{:page/id page-id     ; db id or a map {:block/name "xxx"}
                    :block/level 0
                    :block/level-spaces 0}]
          sibling nil

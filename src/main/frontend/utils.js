@@ -231,3 +231,22 @@ export const getClipText = function (cb, errorHandler) {
     }
   })
 }
+
+export const writeClipboard = function(text, isHtml) {
+    if (isHtml) {
+	var blob = new Blob([text], {type:["text/plain", "text/html"]})
+	var data = [new ClipboardItem({["text/plain"]: blob, ["text/html"]:blob})];
+    } else{
+	var blob = new Blob([text], {type:["text/plain"]})
+	var data = [new ClipboardItem({["text/plain"]: blob})];
+    }
+    navigator.permissions.query({ name: "clipboard-write" }).then((result) => {
+	if (result.state == "granted" || result.state == "prompt") {
+	    navigator.clipboard.write(data).then(function() {
+		/* success */
+	    }, function(e) {
+		console.log(e, "fail")
+	    })
+	}
+    })
+}

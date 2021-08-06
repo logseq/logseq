@@ -591,11 +591,13 @@
           repo (state/get-current-repo)]
       (if block
         [:div.block-ref-wrap.inline
+
          {:data-type (name (or block-type :default))
           :data-hl-type hl-type
           :on-mouse-down
           (fn [e]
             (util/stop e)
+
             (if (gobj/get e "shiftKey")
                 (state/sidebar-add-block!
                   (state/get-current-repo)
@@ -609,12 +611,15 @@
 
                   ;; default open block page
                   :else (route-handler/redirect! {:to          :page
-                                              :path-params {:name id}}))))}
-         (let [title (let [title (:block/title block)]
-                       [:span.block-ref
-                        (block-content (assoc config :block-ref? true)
-                                       block nil (:block/uuid block)
-                                       (:slide? config))])
+                                                  :path-params {:name id}}))))}
+
+         (let [title (let [title (:block/title block)
+                           block-content (block-content (assoc config :block-ref? true)
+                                                        block nil (:block/uuid block)
+                                                        (:slide? config))
+                           class (if (seq title) "block-ref" "block-ref-no-title")]
+                       [:span {:class class}
+                        block-content])
                inner (if label
                        (->elem
                         :span.block-ref

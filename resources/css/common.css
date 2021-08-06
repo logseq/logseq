@@ -924,7 +924,7 @@ a.chosen {
 }
 
 a.warning,
-span.warning {
+span.warning, div.warning:not(.admonitionblock), p.warning {
   background: #f56565;
   padding: 0.1em 0.4em;
   border-radius: var(--ls-border-radius-low);

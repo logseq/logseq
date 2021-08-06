@@ -149,5 +149,5 @@
 
      (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")
                 :on-click (fn []
-                            (util/copy-to-clipboard! content)
+                            (util/copy-to-clipboard! content (= type :html))
                             (reset! copied? true)))]))

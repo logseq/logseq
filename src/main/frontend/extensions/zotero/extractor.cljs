@@ -29,10 +29,6 @@
 (defn page-name [item]
   (let [page-title
         (case (item-type item)
-          "journalArticle"
-          (let [citation-key (citation-key item)
-                title        (title item)]
-            (or citation-key title))
           "case"
           (-> item :data :case-name)
           "email"
@@ -40,8 +36,12 @@
           "statute"
           (-> item :data :name-of-act)
           ;; default use title
-          (title item))]
-    (str (setting/setting :page-insert-prefix) page-title)))
+          (title item))
+        citekey (citation-key item)]
+    (if (and (setting/setting :prefer-citekey?)
+             (not (str/blank? citekey)))
+      (str (setting/setting :page-insert-prefix) citekey)
+      (str (setting/setting :page-insert-prefix) page-title))))
 
 (defn authors [item]
   (let [creators (-> item :data :creators)
@@ -58,8 +58,11 @@
   (let [tags
         (->> (-> item :data :tags)
              (mapv (fn [{:keys [tag]}] (string/trim tag)))
-             (mapcat #(string/split % #",\s?")))]
-    (distinct tags)))
+             (mapcat #(string/split % #",\s?")))
+        extra-tags (->> (str/split (setting/setting :extra-tags) #",")
+                        (map str/trim)
+                        (remove str/blank?))]
+    (distinct (concat tags extra-tags))))
 
 (defn date->journal [item]
   (if-let [date (-> item :meta :parsed-date

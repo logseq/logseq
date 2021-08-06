@@ -177,6 +177,17 @@
 
    [:div.row
     [:label.title
+     {:for "zotero_prefer_citekey"
+      :title "Make sure to install Better BibTeX and pin your item first"}
+     "Always prefer citekey as your page title?"]
+    [:div
+     [:div.rounded-md.sm:max-w-xs
+      (ui/toggle (setting/setting :prefer-citekey?)
+                 (fn [] (setting/set-setting! :prefer-citekey? (not (setting/setting :prefer-citekey?))))
+                 true)]]]
+
+   [:div.row
+    [:label.title
      {:for "zotero_include_attachment_links"}
      "Include attachment links?"]
     [:div
@@ -230,6 +241,18 @@
 
    [:div.row
     [:label.title
+     {:for "zotero_extra_tags"
+      :title "Extra tags to add for every imported page. Separate by comma, or leave it empty."}
+     "Extra tags to add:"]
+    [:div.mt-1.sm:mt-0.sm:col-span-2
+     [:div.max-w-lg.rounded-md
+      [:input.form-input.block
+       {:default-value (setting/setting :extra-tags)
+        :placeholder   "tag1,tag2,tag3"
+        :on-blur       (fn [e] (setting/set-setting! :extra-tags (util/evalue e)))}]]]]
+
+   [:div.row
+    [:label.title
      {:for "zotero_import_all"}
      "Add all zotero items"]
     [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -249,6 +272,10 @@
                 (<! (zotero-handler/add-all (::progress state)))
                 (reset! (::total state) false)
                 (notification/show! "Successfully added all items!" :success)))))))]]
+
+   (ui/admonition
+    :warning
+    "If you have a lot of items in Zotero, adding them all can slow down Logseq. You can type /zotero to import specific item on demand instead.")
 
    (when @(::total state)
      [:div.row

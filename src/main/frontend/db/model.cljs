@@ -352,6 +352,7 @@
       (when-let [file (:block/file page)]
         (when-let [path (:file/path (db-utils/entity (:db/id file)))]
           (format/get-format path)))))
+   (state/get-preferred-format)
    :markdown))
 
 (defn page-alias-set

@@ -165,4 +165,8 @@
 
  ;; the initial interval after the first successful review of a card (default 4)
  ;; :srs/initial-interval 4
+
+ ;; hide specific properties for blocks
+ ;; E.g. #{:created-at :updated-at}
+ ;; :block-hidden-properties #{}
  }

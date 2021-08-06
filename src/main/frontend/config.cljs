@@ -385,3 +385,7 @@
    (when repo
      (get-file-path repo
                     (str app-name "/" custom-css-file)))))
+
+(defn get-block-hidden-properties
+  []
+  (get-in @state/state [:config (state/get-current-repo) :block-hidden-properties]))

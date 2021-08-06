@@ -63,13 +63,15 @@
 
 (defn- open-first-block!
   [state]
-  (let [blocks (nth (:rum/args state) 1)
-        block (first blocks)
-        preview? (nth (:rum/args state) 4)]
-    (when (and (= (count blocks) 1)
-               (string/blank? (:block/content block))
-               (not preview?))
-      (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))
+  (let [[_ blocks _ sidebar? preview?](:rum/args state)]
+    (when (or sidebar?
+              preview?
+              (not (contains? #{:home :all-journals} (state/get-current-route))))
+      (let [block (first blocks)]
+        (when (and (= (count blocks) 1)
+                   (string/blank? (:block/content block))
+                   (not preview?))
+          (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))))
   state)
 
 (rum/defc page-blocks-inner <
