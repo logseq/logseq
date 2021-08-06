@@ -449,7 +449,7 @@
      (if (and (= "pdf" ext-name)
               (string/ends-with? (util/node-path.dirname full-path) config/local-assets-dir))
        [:a.asset-ref.is-pdf
-        {:href "javascript:;"
+        {:href "javascript:void(0);"
          :on-click (fn [e]
                      (when-let [current (pdf-assets/inflate-asset (util/node-path.basename full-path))]
                        (state/set-state! :pdf/current current)

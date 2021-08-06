@@ -79,10 +79,6 @@
           background-color: transparent;
           transition: none;
 
-          &.is-info {
-            opacity: .3;
-          }
-
           &.is-active {
             opacity: 1;
             border-bottom: 2px solid #969494;
@@ -479,6 +475,11 @@
 
     .extensions__pdf-toolbar {
       background: linear-gradient(0deg, rgba(255, 255, 255, 0) 10%, rgb(15 31 37) 100%)
+    }
+
+    .extensions__pdf-hls-area-region {
+      mix-blend-mode: revert;
+      opacity: .4;
     }
   }
 

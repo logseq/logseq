@@ -798,7 +798,7 @@
           {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "alt") ")")
            :class    (if area-mode? "is-active")
            :on-click #(set-area-mode! (not area-mode?))}
-          (svg/area 18)]
+          (svg/icon-area 18)]
 
          ;; zoom
          [:a.button
@@ -822,7 +822,7 @@
            :on-click #(do
                         (p/let [ret (pdf-utils/get-meta-data$ viewer)]
                           (state/set-modal! (make-docinfo-in-modal ret))))}
-          (svg/info)]
+          (svg/icon-info)]
 
          [:a.button
           {:on-click #(state/set-state! :pdf/current nil)}
