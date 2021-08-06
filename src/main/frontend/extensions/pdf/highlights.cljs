@@ -14,7 +14,8 @@
             [frontend.components.svg :as svg]
             [medley.core :as medley]
             [frontend.fs :as fs]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.ui :as ui]))
 
 (defn dd [& args]
   (apply js/console.debug args))
@@ -735,15 +736,14 @@
       [:p {:key k} [:strong k] "  " [:i (pr-str v)]])]
 
    [:div.flex.items-center.justify-center.pt-2.pb--2
-    [:a.button.p-2
-     {:on-click
+    (ui/button "Copy all"
+      :on-click
       (fn []
         (let [text (.-innerText (js/document.querySelector "#pdf-docinfo > .inner-text"))
               text (string/replace-all text #"[\n\t]+" "\n")]
           (front-utils/copy-to-clipboard! text)
           (notification/show! "Copied!" :success)
-          (close-fn!)))}
-     "Copy all properties"]]])
+          (close-fn!))))]])
 
 (defn make-docinfo-in-modal
   [info]
