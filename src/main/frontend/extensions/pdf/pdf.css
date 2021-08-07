@@ -14,36 +14,6 @@
 
 .extensions__pdf {
 
-  &-assets-uploader {
-    margin-top: -15px;
-    padding-bottom: 15px;
-
-    .ui__button {
-      font-size: 12px;
-      margin-right: 5px;
-      padding: 2px 8px;
-
-      &.is-link {
-        background-color: transparent;
-        padding: 2px 8px;
-        position: relative;
-        top: 2px;
-        color: var(--ls-primary-text-color);
-
-        &:hover {
-          svg {
-            opacity: 1;
-          }
-        }
-      }
-
-      svg {
-        transform: scale(.75);
-        opacity: .7;
-      }
-    }
-  }
-
   &-container {
     display: flex;
   }
@@ -548,7 +518,7 @@
       cursor: alias;
 
       &:before {
-        content: "📔📌 ";
+        content: "📌 ";
       }
     }
 

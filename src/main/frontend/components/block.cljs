@@ -439,7 +439,9 @@
 (rum/defc asset-reference
   [config title path]
   (let [repo-path (config/get-repo-dir (state/get-current-repo))
-        full-path (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path)))
+        full-path (if (= \/ (first path))
+                    path
+                    (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path))))
         ext-name (util/get-file-ext full-path)
         ext-name (and ext-name (string/lower-case ext-name))
         title-or-path (cond
@@ -452,14 +454,13 @@
     [:div.asset-ref-wrap
      {:data-ext ext-name}
 
-     (if (and (= "pdf" ext-name)
-              (string/ends-with? (util/node-path.dirname full-path) config/local-assets-dir))
+     (if (= "pdf" ext-name)
        [:a.asset-ref.is-pdf
         {:href "javascript:void(0);"
          :on-mouse-down (fn [e]
-                     (when-let [current (pdf-assets/inflate-asset (util/node-path.basename full-path))]
-                       (util/stop e)
-                       (state/set-state! :pdf/current current)))}
+                          (when-let [current (pdf-assets/inflate-asset full-path)]
+                            (util/stop e)
+                            (state/set-state! :pdf/current current)))}
         title-or-path]
        [:a.asset-ref {:target "_blank" :href full-path}
         title-or-path])
@@ -852,10 +853,16 @@
                (show-link? config metadata s full_text))
           (asset-reference config label s)
 
-          ;; open file externally if s is "../assets/<...>"
-          (and (util/electron?)
-               (config/local-asset? s))
-          (let [path (relative-assets-path->absolute-path s)]
+          (util/electron?)
+          (let [path (cond
+                       (string/starts-with? s "file://")
+                       (string/replace s "file://" "")
+
+                       (string/starts-with? s "/")
+                       s
+
+                       :else
+                       (relative-assets-path->absolute-path s))]
             (->elem
              :a
              (cond->
@@ -890,8 +897,16 @@
                 (block-reference config (:link (second url)) label)))
 
             (= protocol "file")
-            (if (show-link? config metadata href full_text)
+            (cond
+              (and (show-link? config metadata href full_text)
+                   (not (contains? #{"pdf" "mp4" "ogg" "webm" "mov"} (util/get-file-ext href))))
               (image-link config url href label metadata full_text)
+
+              (and (util/electron?)
+                   (show-link? config metadata href full_text))
+              (asset-reference config label href)
+
+              :else
               (let [label-text (get-label-text label)
                     page (if (string/blank? label-text)
                            {:block/name (db/get-file-page (string/replace href "file:" ""))}
