@@ -60,15 +60,16 @@
 (defn- build-page-tx [format properties page]
   (when (:block/uuid page)
     (let [page-entity [:block/uuid (:block/uuid page)]
-          create-title-property? (util/create-title-property? (:block/name page))]
+          create-title-property? (util/create-title-property? (:block/name page))
+          page (if (seq properties) (assoc page :block/properties properties) page)]
       (cond
-        (and properties create-title-property?)
+        (and (seq properties) create-title-property?)
         [page (editor-handler/default-properties-block (build-title page) format page-entity properties)]
 
         create-title-property?
         [page (editor-handler/default-properties-block (build-title page) format page-entity)]
 
-        properties
+        (seq properties)
         [page (editor-handler/properties-block properties format page-entity)]
 
         :else
@@ -77,15 +78,18 @@
 (defn create!
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace?]
            :or   {redirect?           true
                   create-first-block? true
                   format              nil
-                  properties          nil}}]
+                  properties          nil
+                  split-namespace?    true}}]
    (let [page (string/lower-case title)]
      (when-not (db/entity [:block/name page])
        (let [title    (string/trim title)
-             pages    (util/split-namespace-pages title)
+             pages    (if split-namespace?
+                        (util/split-namespace-pages title)
+                        [title])
              format   (or format (state/get-preferred-format))
              pages    (map (fn [page]
                              (-> (block/page-name->map page true)
