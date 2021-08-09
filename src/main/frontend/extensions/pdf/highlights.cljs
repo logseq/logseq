@@ -75,7 +75,7 @@
                             el-ratio (.toFixed (/ offset width) 6)
                             target-el (js/document.getElementById "pdf-layout-container")]
                         (when target-el
-                          (let [width (str (* el-ratio 100) "vw")]
+                          (let [width (str (min (* el-ratio 100) 80) "vw")]
                             (.setProperty (.-style target-el) "width" width)
                             (adjust-main-size! width)))))}}))
 
