@@ -60,6 +60,7 @@ html[data-theme='dark'] {
   --ls-slide-background-color: var(--ls-primary-background-color);
   --ls-block-bullet-border-color: #0f4958;
   --ls-block-bullet-color: #608e91;
+  --ls-block-bullet-active-color: var(--ls-link-text-color);
   --ls-block-highlight-color: #0a3d4b;
   --ls-selection-background-color: #338fff;
   --ls-page-checkbox-color: #6093a0;
@@ -115,6 +116,7 @@ html[data-theme='light'] {
   --ls-slide-background-color: #fff;
   --ls-block-bullet-border-color: #dedede;
   --ls-block-bullet-color: rgba(67, 63, 56, 0.25);
+  --ls-block-bullet-active-color: var(--ls-link-text-color);
   --ls-block-highlight-color: #c0e6fd;
   --ls-selection-background-color: #e4f2ff;
   --ls-page-checkbox-color: #9dbbd8;
@@ -174,7 +176,7 @@ textarea {
   border: 1px solid rgba(39, 41, 43, 0.15);
   border-radius: var(--ls-border-radius-low);
   font-size: 1em;
-  line-height: 1.5;
+  line-height: inherit;
   width: 100%;
   resize: none;
   outline: none;

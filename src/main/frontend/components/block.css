@@ -1,4 +1,5 @@
 .block-content-wrapper {
+  position: relative;
   width: 100%;
 }
 
@@ -378,6 +379,7 @@
   border-radius: 50%;
   justify-content: center;
   align-items: center;
+  transform: translateX(-0.5px);
 
   .bullet-heading {
     background-color: var(--ls-block-bullet-color, #8fbc8f);
@@ -491,4 +493,75 @@ span.cloze-revealed {
 
 .page-property-key {
   color: var(--ls-secondary-text-color);
+}
+
+/* Block bullet path should only show in a nested block */
+.ls-block.show-bullet-path {
+  .bullet {
+    background-color: var(--ls-block-bullet-active-color);
+  }
+
+  &:not(:focus-within) .bullet {
+    background-color: var(--ls-block-bullet-color);
+    box-shadow: none;
+    opacity: 0.3;
+    transform: scale(1);
+  }
+
+  .ls-block {
+    > div > .block-control-wrapper::before {
+      content: "";
+      left: 0;
+      right: 0.5rem;
+      top: -1px;
+      bottom: -1px;
+      transform: translate(-1px, -50%); /* shift left 1px for border */
+      position: absolute;
+      border-left: 1px solid transparent;
+      border-bottom: 1px solid transparent;
+      border-bottom-left-radius: 10px;
+    }
+
+    &:focus-within > div > .block-control-wrapper::before {
+      border-color: var(--ls-block-bullet-active-color);
+    }
+  }
+
+  .block-children {
+    > .ls-block::before {
+      content: "";
+      top: -1rem;
+      bottom: 0;
+      border-left: 1px solid transparent;
+      left: -1px; /* shift left 1px for border */
+      position: absolute;
+    }
+
+    &:focus-within > .ls-block:not(:focus-within)::before  {
+      border-color: var(--ls-block-bullet-active-color);
+    }
+
+    &:focus-within > .ls-block:focus-within ~ .ls-block::before {
+      border-color: transparent;
+    }
+  }
+}
+
+.ls-block.show-bullet-path[haschild="true"] {
+  > div > .block-content-wrapper::before {
+    content: "";
+    top: 12px;
+    bottom: 0;
+    left: -15px;
+    position: absolute;
+    border-left: 1px solid transparent;
+  }
+
+  > .heading > .block-content-wrapper::before {
+    top: calc(50% + 2px);
+  }
+
+  &:focus-within > div > .block-content-wrapper::before {
+    border-color: var(--ls-block-bullet-active-color);
+  }
 }

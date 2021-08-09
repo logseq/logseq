@@ -98,6 +98,9 @@
  ;; Whether to show empty bullets for non-document mode (the default mode)
  :ui/show-empty-bullets? false
 
+ ;; Whether to hide block bullet path. Default is false
+ :ui/hide-block-bullet-path? false
+
  ;; The app will show those queries in today's journal page,
  ;; the "NOW" query asks the tasks which need to be finished "now",
  ;; the "NEXT" query asks the future tasks.

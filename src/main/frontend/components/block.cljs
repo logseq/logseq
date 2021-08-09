@@ -1313,8 +1313,8 @@
         ref? (:ref? config)
         collapsed? (if ref? ref-collapsed? collapsed?)
         empty-content? (block-content-empty? block)]
-    [:div.mr-2.flex.flex-row.items-center
-     {:style {:height 24
+    [:div.block-control-wrapper.mr-2.flex.flex-row.items-center.relative
+     {:style {:height 26
               :margin-top 0
               :float "left"}}
 
@@ -2041,7 +2041,8 @@
         :style {:position "relative"}
         :class (str uuid
                     (when (and collapsed? has-child?) " collapsed")
-                    (when pre-block? " pre-block"))
+                    (when pre-block? " pre-block")
+                    (when (not (:ui/hide-block-bullet-path? (state/get-config))) " show-bullet-path"))
         :blockid (str uuid)
         :repo repo
         :haschild (str has-child?)}
@@ -2064,7 +2065,7 @@
        (dnd-separator-wrapper block block-id slide? true false))
 
      [:div.flex.flex-row.pr-2
-      {:class (if heading? "items-baseline" "")
+      {:class (if heading? "items-baseline heading" "")
        :on-mouse-over (fn [e]
                         (block-mouse-over e has-child? *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
