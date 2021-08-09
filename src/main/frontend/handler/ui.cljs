@@ -98,7 +98,7 @@
   []
   (let [wide? (state/get-wide-mode?)
         elements (array-seq (js/document.getElementsByClassName "cp__sidebar-main-content"))
-        max-width (if wide? "var(--ls-main-content-max-width)" "100%")]
+        max-width (if wide? "var(--ls-main-content-max-width)" "var(--ls-main-content-max-width-wide)")]
     (when-let [element (first elements)]
       (dom/set-style! element :max-width max-width))
     (state/toggle-wide-mode!)))
