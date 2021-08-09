@@ -1001,7 +1001,7 @@
      (try
        (js/window.apis.isAbsolutePath path)
        (catch js/Error _
-         (node-path.isAbsolute path)))))
+         (utils/win32 path)))))
 
 (defn ->system-modifier
   [keyboard-shortcut]
