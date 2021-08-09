@@ -5,6 +5,7 @@
   --ls-page-title-size: 36px;
   --ls-font-family: 'Inter';
   --ls-main-content-max-width: 740px;
+  --ls-main-content-max-width-wide: 100%;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
 }
