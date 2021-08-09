@@ -48,14 +48,7 @@ Please go to https://discuss.logseq.com/c/feature-requests/7.
 2. Start writing and have fun!
 
 ## FAQ
-### 1. Do you plan to charge for the logseq app (desktop/web/mobile)?
-All the existing local-only features (including the latest SRS cards, pdf annoations, zotero integration) will be free to use, we'll announce a monthly subscription for syncing with our own storage, real-time collaboration, and other pro features in the future.
-
-### 2. Do you commit to open source the frontend code (including the desktop/web/mobile apps) forever?
-Yes. You can build the apps with the latest code and it'll work with your local files (markdown/org). The mobile app might start with a simple API for quick capture but eventually, it'll have local files support.
-
-### 3. Are you going to open-source the future server-side backend?
-We have no plan for that. But we're considering providing a free self-host sync option for non-profit organizations or researchers in the future, the sync service for our own storage is not started yet.
+Please go to https://logseq.github.io/#/page/faq.
 
 ## Credits
 
