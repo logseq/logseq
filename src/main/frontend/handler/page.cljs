@@ -57,10 +57,11 @@
       (util/format "\"%s\"" original-name)
       original-name)))
 
-(defn- build-page-tx [format properties page]
+(defn- build-page-tx [format properties page journal?]
   (when (:block/uuid page)
     (let [page-entity [:block/uuid (:block/uuid page)]
-          create-title-property? (util/create-title-property? (:block/name page))
+          create-title-property? (and (not journal?)
+                                      (util/create-title-property? (:block/name page)))
           page (if (seq properties) (assoc page :block/properties properties) page)]
       (cond
         (and (seq properties) create-title-property?)
@@ -78,7 +79,7 @@
 (defn create!
   ([title]
    (create! title {}))
-  ([title {:keys [redirect? create-first-block? format properties split-namespace?]
+  ([title {:keys [redirect? create-first-block? format properties split-namespace? journal?]
            :or   {redirect?           true
                   create-first-block? true
                   format              nil
@@ -98,11 +99,12 @@
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
-                           (mapcat #(build-page-tx format false %))
+                           (mapcat #(build-page-tx format nil % journal?))
                            (remove nil?))
-             last-txs (build-page-tx format properties (last pages))
+             last-txs (build-page-tx format properties (last pages) journal?)
              txs      (concat txs last-txs)]
 
+         ;; (util/pprint txs)
          (db/transact! txs)
 
          (when create-first-block?
@@ -593,7 +595,9 @@
             template (state/get-default-journal-template)]
         (when (db/page-empty? repo today-page)
           (create! title {:redirect? false
-                          :create-first-block? (not template)})
+                          :split-namespace? false
+                          :create-first-block? (not template)
+                          :journal? true})
           (when template
             (let [page (db/pull [:block/name today-page])]
              (editor-handler/insert-template!

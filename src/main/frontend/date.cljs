@@ -56,8 +56,11 @@
    (state/get-date-formatter)))
 
 ;; (tf/parse (tf/formatter "dd.MM.yyyy") "2021Q4") => 20040120T000000
-(def safe-journal-title-formatters
-  (set ["yyyy-MM-dd" "yyyy_MM_dd" (state/get-date-formatter)]))
+(defn safe-journal-title-formatters
+  []
+  (->> [(state/get-date-formatter) "yyyy-MM-dd" "yyyy_MM_dd"]
+       (remove string/blank?)
+       distinct))
 
 (defn get-date-time-string
   ([]
@@ -191,7 +194,7 @@
 
 (defn journal-title->
   ([journal-title then-fn]
-   (journal-title-> journal-title then-fn (journal-title-formatters)))
+   (journal-title-> journal-title then-fn (safe-journal-title-formatters)))
   ([journal-title then-fn formatters]
    (when-not (string/blank? journal-title)
      (when-let [time (->> (map
