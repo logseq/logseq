@@ -439,7 +439,7 @@
 (rum/defc asset-reference
   [config title path]
   (let [repo-path (config/get-repo-dir (state/get-current-repo))
-        full-path (if (= \/ (first path))
+        full-path (if (util/absolute-path? path)
                     path
                     (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path))))
         ext-name (util/get-file-ext full-path)
