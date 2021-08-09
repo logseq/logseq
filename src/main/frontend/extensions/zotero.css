@@ -10,6 +10,10 @@
   .form-select {
     @apply py-2;
   }
+
+  svg {
+    display: inline;
+  }
 }
 
 .zotero-search-item-loading-indicator {
