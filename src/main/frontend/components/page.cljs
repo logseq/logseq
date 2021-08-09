@@ -431,7 +431,9 @@
 
            (when-not block?
              [:div
-              (when (text/namespace-page? route-page-name)
+              (when (and
+                     (not journal?)
+                     (text/namespace-page? route-page-name))
                 (hierarchy/structures route-page-name))
 
               ;; TODO: or we can lazy load them
