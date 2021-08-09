@@ -25,6 +25,7 @@
             [frontend.extensions.latex :as latex]
             [frontend.extensions.sci :as sci]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.zotero :as zotero]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.block :as block-handler]
@@ -936,6 +937,12 @@
             ;; image
             (show-link? config metadata href full_text)
             (image-link config url href label metadata full_text)
+
+            (and
+             (util/electron?)
+             (= protocol "zotero")
+             (= (-> label get-label-text util/get-file-ext) "pdf"))
+            (zotero/zotero-pdf-link (get-label-text label) href)
 
             :else
             (->elem

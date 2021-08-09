@@ -11,6 +11,7 @@
    :attachments-block-text "[[Attachments]]"
    :include-notes?         true
    :notes-block-text       "[[Notes]]"
+   :zotero-data-directory  ""
    :extra-tags             ""
    :page-insert-prefix     "@"})
 

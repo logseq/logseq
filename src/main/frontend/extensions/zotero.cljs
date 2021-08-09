@@ -2,11 +2,13 @@
   (:require [cljs.core.async :refer [<! >! go chan go-loop] :as a]
             [clojure.string :as str]
             [frontend.components.svg :as svg]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.zotero.api :as api]
             [frontend.extensions.zotero.handler :as zotero-handler]
             [frontend.extensions.zotero.setting :as setting]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
+            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -251,6 +253,23 @@
         :placeholder   "tag1,tag2,tag3"
         :on-blur       (fn [e] (setting/set-setting! :extra-tags (util/evalue e)))}]]]]
 
+   (when (util/electron?)
+     [:div.row
+      [:label.title
+       {:for "zotero_data_directory"}
+       "Zotero data directory"
+       [:a.ml-2
+        {:title "Set Zotero data directory to open pdf attachment in Logseq. Click to learn more."
+         :href "https://www.zotero.org/support/zotero_data"
+         :target "_blank"}
+        (svg/info)]]
+      [:div.mt-1.sm:mt-0.sm:col-span-2
+       [:div.max-w-lg.rounded-md
+        [:input.form-input.block
+         {:default-value (setting/setting :zotero-data-directory)
+          :placeholder   "/Users/<username>/Zotero"
+          :on-blur       (fn [e] (setting/set-setting! :zotero-data-directory (util/evalue e)))}]]]])
+
    [:div.row
     [:label.title
      {:for "zotero_import_all"}
@@ -281,3 +300,31 @@
      [:div.row
       [:div.bg-greenred-200.py-3.rounded-lg.col-span-full
        [:progress.w-full {:max (+ @(::total state) 30) :value @(::progress state)}] "Importing items from Zotero....Please wait..."]])])
+
+
+(rum/defc zotero-pdf-link
+  [label-text href]
+  [:div.zotero-pdf-link
+   [:a.external-link
+    {:href href
+     :target "_blank"}
+    label-text]
+   (ui/button
+    "annotate"
+    :small? true
+    :class "ml-1"
+    :on-click
+    (fn []
+      (if (str/blank? (setting/setting :zotero-data-directory))
+        (do
+          (route-handler/redirect! {:to :zotero-setting})
+          (notification/show! "Please setup Zotero data directory" :warn false))
+        (let [item-key (->> (str/split href #"/") last)
+              full-path
+              (util/node-path.join
+               (setting/setting :zotero-data-directory)
+               "storage"
+               item-key
+               label-text)
+              current (pdf-assets/inflate-asset full-path)]
+          (state/set-state! :pdf/current current)))))])
