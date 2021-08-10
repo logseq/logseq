@@ -321,7 +321,7 @@
                                       (.contains (.-classList target) "extensions__pdf-hls-area-region"))
                                     (.closest target ".page"))
                            (and e (or (.-metaKey e)
-                                      (.-altKey e)
+                                      (and front-utils/win32? (.-shiftKey e))
                                       @*area-mode?)))))
 
         reset-coords #(do
@@ -799,7 +799,7 @@
 
          ;; selection
          [:a.button
-          {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "alt") ")")
+          {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "Shift") ")")
            :class    (if area-mode? "is-active")
            :on-click #(set-area-mode! (not area-mode?))}
           (svg/icon-area 18)]
