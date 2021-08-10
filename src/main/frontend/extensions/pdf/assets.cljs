@@ -212,11 +212,8 @@
 
 (defn goto-block-ref!
   [{:keys [id]}]
-  (when-let [block (db-model/get-block-by-uuid id)]
-    (when-let [page (:block/page block)]
-      (rfe/push-state :page
-                      {:name (:block/name page)}
-                      {:anchor (str "block-content-" + id)}))))
+  (when id
+    (rfe/push-state :page {:name (str id)})))
 
 (rum/defc area-display
   [block stamp]
