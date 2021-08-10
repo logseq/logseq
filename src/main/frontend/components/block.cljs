@@ -445,7 +445,6 @@
                     path
                     (.. util/node-path (join repo-path (config/get-local-asset-absolute-path path))))
         ext-name (util/get-file-ext full-path)
-        ext-name (and ext-name (string/lower-case ext-name))
         title-or-path (cond
                         (string? title)
                         title
@@ -602,13 +601,15 @@
       (if block
         [:div.block-ref-wrap.inline
 
-         {:data-type (name (or block-type :default))
+         {:data-type    (name (or block-type :default))
           :data-hl-type hl-type
           :on-mouse-down
-          (fn [e]
-            (util/stop e)
+          (fn [^js/MouseEvent e]
+            (when (or (gobj/get e "shiftKey")
+                      (not (.. e -target (closest ".blank"))))
+              (util/stop e)
 
-            (if (gobj/get e "shiftKey")
+              (if (gobj/get e "shiftKey")
                 (state/sidebar-add-block!
                   (state/get-current-repo)
                   (:db/id block)
@@ -616,12 +617,12 @@
                   {:block block})
 
                 (match [block-type (util/electron?)]
-                  ;; pdf annotation
-                  [:annotation true] (pdf-assets/open-block-ref! block)
+                       ;; pdf annotation
+                       [:annotation true] (pdf-assets/open-block-ref! block)
 
-                  ;; default open block page
-                  :else (route-handler/redirect! {:to          :page
-                                                  :path-params {:name id}}))))}
+                       ;; default open block page
+                       :else (route-handler/redirect! {:to          :page
+                                                       :path-params {:name id}})))))}
 
          (let [title (let [title (:block/title block)
                            block-content (block-content (assoc config :block-ref? true)
@@ -1544,7 +1545,9 @@
                             :annotation (pdf-assets/open-block-ref! t)
                             (.preventDefault %))}
 
-              [:span.hl-page (str "P" (or (:hl-page properties) "?"))]
+              [:span.hl-page
+               [:strong.forbid-edit (str "P" (or (:hl-page properties) "?"))]
+               [:label.blank " "]]
 
               (when-let [st (and (= :area (keyword (:hl-type properties)))
                                  (:hl-stamp properties))]
@@ -1666,6 +1669,7 @@
         button (gobj/get e "buttons")]
     (when (contains? #{1 0} button)
       (when-not (or
+                 (d/has-class? target "forbid-edit")
                  (d/has-class? target "bullet")
                  (util/link? target)
                  (util/input? target)

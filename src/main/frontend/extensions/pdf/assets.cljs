@@ -8,14 +8,19 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.fs :as fs]
-            [medley.core :as medley]
             [frontend.components.svg :as svg]
+            [reitit.frontend.easy :as rfe]
+            [medley.core :as medley]
             [cljs.reader :as reader]
             [promesa.core :as p]
             [clojure.string :as string]
             [cljs-bean.core :as bean]))
 
 (defonce *asset-uploading? (atom false))
+
+(defn hls-file?
+  [filename]
+  (and filename (string/starts-with? filename "hls__")))
 
 (defn inflate-asset
   [full-path]
@@ -29,12 +34,13 @@
 
               :else
               (util/node-path.join
-               "file://"                                  ;; TODO: bfs
-               (config/get-repo-dir (state/get-current-repo))
-               "assets" filename))]
+                "file://"                                   ;; TODO: bfs
+                (config/get-repo-dir (state/get-current-repo))
+                "assets" filename))
+        ext-name (util/get-file-ext filename)]
     (when-let [key (and
-                    (string/ends-with? filename ".pdf")
-                    (string/replace-first filename ".pdf" ""))]
+                     (= ext-name "pdf")
+                     (subs filename 0 (- (count filename) 4)))]
       {:key      key
        :identity (subs key (- (count key) 15))
        :filename filename
@@ -83,31 +89,31 @@
 
       (when-let [^js ctx (.getContext canvas' "2d")]
         (.drawImage
-         ctx canvas
-         (* left dpr) (* top dpr) (* width dpr) (* height dpr)
-         0 0 width height)
+          ctx canvas
+          (* left dpr) (* top dpr) (* width dpr) (* height dpr)
+          0 0 width height)
 
         (let [callback (fn [^js png]
                          ;; write image file
                          (p/catch
-                             (p/let [_ (js/console.time :write-area-image)
-                                     ^js png (.arrayBuffer png)
-                                     {:keys [key]} current
-                                     ;; dir
-                                     fstamp (get-in new-hl [:content :image])
-                                     old-fstamp (and old-hl (get-in old-hl [:content :image]))
-                                     fname (str (:page new-hl) "_" (:id new-hl))
-                                     fdir (str config/local-assets-dir "/" key)
-                                     _ (fs/mkdir-if-not-exists (str repo-dir "/" fdir))
-                                     new-fpath (str fdir "/" fname "_" fstamp ".png")
-                                     old-fpath (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
-                                     _ (and old-fpath (apply fs/rename! repo-cur (map #(util/node-path.join repo-dir %) [old-fpath new-fpath])))
-                                     _ (fs/write-file! repo-cur repo-dir new-fpath png {:skip-mtime? true})]
+                           (p/let [_ (js/console.time :write-area-image)
+                                   ^js png (.arrayBuffer png)
+                                   {:keys [key]} current
+                                   ;; dir
+                                   fstamp (get-in new-hl [:content :image])
+                                   old-fstamp (and old-hl (get-in old-hl [:content :image]))
+                                   fname (str (:page new-hl) "_" (:id new-hl))
+                                   fdir (str config/local-assets-dir "/" key)
+                                   _ (fs/mkdir-if-not-exists (str repo-dir "/" fdir))
+                                   new-fpath (str fdir "/" fname "_" fstamp ".png")
+                                   old-fpath (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
+                                   _ (and old-fpath (apply fs/rename! repo-cur (map #(util/node-path.join repo-dir %) [old-fpath new-fpath])))
+                                   _ (fs/write-file! repo-cur repo-dir new-fpath png {:skip-mtime? true})]
 
-                               (js/console.timeEnd :write-area-image))
+                             (js/console.timeEnd :write-area-image))
 
-                             (fn [err]
-                               (js/console.error "[write area image Error]" err))))]
+                           (fn [err]
+                             (js/console.error "[write area image Error]" err))))]
 
           (.toBlob canvas' callback))
         ))))
@@ -117,7 +123,7 @@
   (when-let [block (and (area-highlight? highlight)
                         (db-model/get-block-by-uuid (:id highlight)))]
     (editor-handler/set-block-property!
-     (:block/uuid block) :hl-stamp (get-in highlight [:content :image]))))
+      (:block/uuid block) :hl-stamp (get-in highlight [:content :image]))))
 
 (defn unlink-hl-area-image$
   [^js viewer current hl]
@@ -140,18 +146,18 @@
         format (state/get-preferred-format)]
     (if-not page
       (do
-        (page-handler/create! page-name {:redirect? false :create-first-block? false
+        (page-handler/create! page-name {:redirect?        false :create-first-block? false
                                          :split-namespace? false
-                                         :format format
-                                         :properties {:file (case format
-                                                              :markdown
-                                                              (util/format "[%s](%s)" page-name url)
+                                         :format           format
+                                         :properties       {:file      (case format
+                                                                         :markdown
+                                                                         (util/format "[%s](%s)" page-name url)
 
-                                                              :org
-                                                              (util/format "[[%s][%s]]" url page-name)
+                                                                         :org
+                                                                         (util/format "[[%s][%s]]" url page-name)
 
-                                                              url)
-                                                      :file-path url}})
+                                                                         url)
+                                                            :file-path url}})
         (db-model/get-page page-name))
       page)))
 
@@ -168,13 +174,13 @@
                             (assoc % :hl-type "area" :hl-stamp stamp) %)]
 
           (editor-handler/api-insert-new-block!
-           text {:page        (:block/name ref-page)
-                 :custom-uuid id
-                 :properties  (wrap-props
-                               {:ls-type "annotation"
-                                :hl-page page
-                                ;; force custom uuid
-                                :id      (str id)})}))))))
+            text {:page        (:block/name ref-page)
+                  :custom-uuid id
+                  :properties  (wrap-props
+                                 {:ls-type "annotation"
+                                  :hl-page page
+                                  ;; force custom uuid
+                                  :id      (str id)})}))))))
 
 (defn del-ref-block!
   [{:keys [id]}]
@@ -204,6 +210,14 @@
               (state/set-state! :pdf/current (inflate-asset file-path)))
             (js/console.debug "[Unmatched highlight ref]" block)))))))
 
+(defn goto-block-ref!
+  [{:keys [id]}]
+  (when-let [block (db-model/get-block-by-uuid id)]
+    (when-let [page (:block/page block)]
+      (rfe/push-state :page
+                      {:name (:block/name page)}
+                      {:anchor (str "block-content-" + id)}))))
+
 (rum/defc area-display
   [block stamp]
   (let [id (:block/uuid block)
@@ -212,6 +226,15 @@
       (when-let [group-key (string/replace-first (:block/original-name page) #"^hls__" "")]
         (when-let [hl-page (:hl-page props)]
           (let [asset-path (editor-handler/make-asset-url
-                            (str "/" config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
+                             (str "/" config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
             [:span.hl-area
              [:img {:src asset-path}]]))))))
+
+(rum/defc human-hls-filename-display
+  [title]
+  (let [local-asset? (re-find #"[0-9]{13}_\d$" title)]
+    [:a.asset-ref.is-pdf
+     (-> title
+         (subs 0 (- (count title) (if local-asset? 15 0)))
+         (string/replace #"^hls__" "")
+         (string/replace "_" " "))]))

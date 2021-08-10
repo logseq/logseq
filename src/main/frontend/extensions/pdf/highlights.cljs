@@ -75,7 +75,7 @@
                             el-ratio (.toFixed (/ offset width) 6)
                             target-el (js/document.getElementById "pdf-layout-container")]
                         (when target-el
-                          (let [width (str (* el-ratio 100) "vw")]
+                          (let [width (str (min (max (* el-ratio 100) 20) 80) "vw")]
                             (.setProperty (.-style target-el) "width" width)
                             (adjust-main-size! width)))))}}))
 
@@ -126,6 +126,10 @@
                           (front-utils/copy-to-clipboard! (:text content))
                           (pdf-utils/clear-all-selection))
 
+                        "link"
+                        (do
+                          (pdf-assets/goto-block-ref! highlight))
+
                         "del"
                         (do
                           (del-hl! highlight)
@@ -157,6 +161,8 @@
        (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
 
        (and (not (:image content)) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
+
+       (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
        (and id [:li.item {:data-action "del"} (t :delete)])
        ])))
@@ -321,7 +327,7 @@
                                       (.contains (.-classList target) "extensions__pdf-hls-area-region"))
                                     (.closest target ".page"))
                            (and e (or (.-metaKey e)
-                                      (.-altKey e)
+                                      (and front-utils/win32? (.-shiftKey e))
                                       @*area-mode?)))))
 
         reset-coords #(do
@@ -799,7 +805,7 @@
 
          ;; selection
          [:a.button
-          {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "alt") ")")
+          {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "Shift") ")")
            :class    (if area-mode? "is-active")
            :on-click #(set-area-mode! (not area-mode?))}
           (svg/icon-area 18)]

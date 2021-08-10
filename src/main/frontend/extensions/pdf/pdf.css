@@ -469,11 +469,11 @@
     }
 
     .extensions__pdf-toolbar {
-        background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, #eee8d5 100%);
+      background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, #eee8d5 100%);
 
-        .buttons {
-            background-color: #f6efdf;
-        }
+      .buttons {
+        background-color: #f6efdf;
+      }
     }
   }
 }
@@ -505,6 +505,10 @@
         display: block;
         border: none;
       }
+
+      .prefix-link > .hl-area {
+        cursor: alias;
+      }
     }
   }
 }
@@ -530,10 +534,22 @@
       a.prefix-link {
         display: inline;
       }
+
+      .hl-page {
+        display: inline-flex;
+        justify-content: space-between;
+        width: 85%;
+
+        > label {
+          flex: 1;
+          cursor: text;
+        }
+      }
     }
 
     .hl-area {
       display: block;
+      cursor: text;
 
       img {
         margin: 0;
@@ -544,11 +560,6 @@
 }
 
 body[data-page] {
-  #main-content-container {
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
   .extensions__pdf-loader {
     width: 100%;
   }

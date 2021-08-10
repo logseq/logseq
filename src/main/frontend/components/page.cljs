@@ -382,15 +382,17 @@
                                                  :page
                                                  {:page page}))))}
                  [:h1.title {:style {:margin-left -2}}
-                  (if page-original-name
-                    (if (and (string/includes? page-original-name "[[")
-                             (string/includes? page-original-name "]]"))
-                      (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
-                        (block/markup-element-cp {} (ffirst ast)))
-                      page-original-name)
-                    (or
-                     page-name
-                     path-page-name))]]]
+                  (let [title (if page-original-name
+                                (if (and (string/includes? page-original-name "[[")
+                                         (string/includes? page-original-name "]]"))
+                                  (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
+                                    (block/markup-element-cp {} (ffirst ast)))
+                                  page-original-name)
+                                (or
+                                  page-name
+                                  path-page-name))]
+                    (if (pdf-assets/hls-file? title)
+                      (pdf-assets/human-hls-filename-display title) title))]]]
                (when (not config/publishing?)
                  [:div.flex.flex-row
                   (when plugin-handler/lsp-enabled?
