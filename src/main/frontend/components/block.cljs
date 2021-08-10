@@ -424,7 +424,8 @@
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page? sidebar? preview?] :as config} page]
   (when-let [page-name (:block/name page)]
-    (let [page-name (string/lower-case page-name)
+    (let [page-name (-> (string/lower-case page-name)
+                        (util/remove-boundary-slashes))
           page-entity (db/entity [:block/name page-name])
           redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
           href (if html-export?

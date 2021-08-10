@@ -278,7 +278,8 @@
 (defn page-name->map
   [original-page-name with-id?]
   (when original-page-name
-    (let [[original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
+    (let [original-page-name (util/remove-boundary-slashes original-page-name)
+          [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
           namespace? (and (string/includes? original-page-name "/")
                           (text/namespace-page? original-page-name))
           m (merge
