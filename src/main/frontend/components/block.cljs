@@ -821,7 +821,7 @@
           (if (and (= format :org)
                    (show-link? config nil page page)
                    (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
-            (image-link config url page nil nil page)
+            (image-link config url page nil metadata full_text)
             (let [label* (if (seq (mldoc/plain->text label)) label nil)]
               (if (and (string? page) (string/blank? page))
                 [:span (util/format "[[%s]]" page)]
