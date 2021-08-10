@@ -147,7 +147,9 @@
   []
   (when-let [default-home (state/get-default-home)]
     (let [page (:page default-home)
-          page (when page (db/entity [:block/name (string/lower-case page)]))]
+          page (when (and (string? page)
+                          (not (string/blank? page)))
+                 (db/entity [:block/name (string/lower-case page)]))]
       (if page
         default-home
         (dissoc default-home :page)))))
@@ -163,14 +165,13 @@
                                           sidebar (:sidebar default-home)
                                           sidebar (if (string? sidebar) [sidebar] sidebar)]
                                       (when-let [pages (->> (seq sidebar)
-                                                            (remove nil?))]
-                                        (let [blocks (remove nil? pages)]
-                                          (doseq [page pages]
-                                            (let [page (string/lower-case page)
-                                                  [db-id block-type] (if (= page "contents")
-                                                                       ["contents" :contents]
-                                                                       [page :page])]
-                                              (state/sidebar-add-block! current-repo db-id block-type nil))))
+                                                            (remove string/blank?))]
+                                        (doseq [page pages]
+                                          (let [page (string/lower-case page)
+                                                [db-id block-type] (if (= page "contents")
+                                                                     ["contents" :contents]
+                                                                     [page :page])]
+                                            (state/sidebar-add-block! current-repo db-id block-type nil)))
                                         (reset! sidebar-inited? true))))
                                   state)}
   []
