@@ -32,10 +32,11 @@
               (util/node-path.join
                 "file://"                                   ;; TODO: bfs
                 (config/get-repo-dir (state/get-current-repo))
-                "assets" filename))]
+                "assets" filename))
+        ext-name (util/get-file-ext filename)]
     (when-let [key (and
-                     (string/ends-with? filename ".pdf")
-                     (string/replace-first filename ".pdf" ""))]
+                     (= ext-name "pdf")
+                     (subs filename 0 (- (count filename) 4)))]
       {:key      key
        :identity (subs key (- (count key) 15))
        :filename filename

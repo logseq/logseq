@@ -1094,7 +1094,7 @@
   (and
    (string? file)
    (string/includes? file ".")
-   (last (string/split file #"\."))))
+   (some-> (last (string/split file #"\.")) string/lower-case)))
 
 (defn get-dir-and-basename
   [path]
