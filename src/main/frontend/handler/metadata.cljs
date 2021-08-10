@@ -47,14 +47,14 @@
                        (common-handler/fix-pages-timestamps)
                        (map #(select-keys % [:block/name :block/created-at :block/updated-at]))
                        (vec))]
-    (-> (file-handler/create-pages-metadata-file repo)
-        (p/finally (fn []
-                     (let [new-content (pr-str all-pages)]
-                       (fs/write-file! repo
-                                       (config/get-repo-dir repo)
-                                       path
-                                       new-content
-                                       {})))))))
+    (p/let [_ (-> (file-handler/create-pages-metadata-file repo)
+                  (p/catch (fn [] nil)))]
+      (let [new-content (pr-str all-pages)]
+        (fs/write-file! repo
+                        (config/get-repo-dir repo)
+                        path
+                        new-content
+                        {})))))
 
 (defn set-db-encrypted-secret!
   [encrypted-secret]

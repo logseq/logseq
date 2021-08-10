@@ -18,6 +18,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.metadata :as metadata-handler]
             [frontend.idb :as idb]
             [frontend.search :as search]
             [frontend.spec :as spec]
@@ -626,7 +627,8 @@
   (when-let [repo (state/get-current-repo)]
     (let [local? (config/local-db? repo)]
       (if local?
-        (nfs-rebuild-index! repo ok-handler)
+        (p/let [_ (metadata-handler/set-pages-metadata! repo)]
+          (nfs-rebuild-index! repo ok-handler))
         (rebuild-index! repo))
       (js/setTimeout
        (fn []
