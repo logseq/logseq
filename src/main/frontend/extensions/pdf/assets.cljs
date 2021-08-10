@@ -18,15 +18,19 @@
 
 (defonce *asset-uploading? (atom false))
 
+(defn hls-file?
+  [filename]
+  (and filename (string/starts-with? filename "hls__")))
+
 (defn inflate-asset
   [full-path]
   (let [filename (util/node-path.basename full-path)
         url (cond
-              (string/starts-with? full-path "/")
-              (str "file://" full-path)
-
               (string/starts-with? full-path "file:/")
               full-path
+
+              (util/absolute-path? full-path)
+              (str "file://" full-path)
 
               :else
               (util/node-path.join
@@ -225,3 +229,12 @@
                              (str "/" config/local-assets-dir "/" group-key "/" (str hl-page "_" id "_" stamp ".png")))]
             [:span.hl-area
              [:img {:src asset-path}]]))))))
+
+(rum/defc human-hls-filename-display
+  [title]
+  (let [local-asset? (re-find #"[0-9]{13}_\d$" title)]
+    [:a.asset-ref.is-pdf
+     (-> title
+         (subs 0 (- (count title) (if local-asset? 15 0)))
+         (string/replace #"^hls__" "")
+         (string/replace "_" " "))]))

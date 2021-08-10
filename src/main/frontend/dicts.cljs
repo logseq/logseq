@@ -304,7 +304,7 @@
 
         :pdf/copy-ref "Copy ref"
         :pdf/copy-text "Copy text"
-        :pdf/linked-ref "Linked reference"}
+        :pdf/linked-ref "Goto annotation"}
 
    :de {:help/about "Über Logseq"
         :help/bug "Fehlerbericht"
