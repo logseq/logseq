@@ -281,16 +281,21 @@
       (state/set-modal! nil))
     nil))
 
+(defn- hide-context-menu-and-clear-selection
+  []
+  (state/hide-custom-context-menu!)
+  (editor-handler/clear-selection!))
+
 (rum/defcs sidebar <
   (mixins/modal :modal/show?)
   rum/reactive
   (mixins/event-mixin
    (fn [state]
-     (mixins/listen state js/window "click"
+     (mixins/listen state js/window "click" hide-context-menu-and-clear-selection)
+     (mixins/listen state js/window "keydown"
                     (fn [e]
-                      ;; hide context menu
-                      (state/hide-custom-context-menu!)
-                      (editor-handler/clear-selection!)))))
+                      (when (= 27 (.-keyCode e))
+                        (hide-context-menu-and-clear-selection))))))
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
