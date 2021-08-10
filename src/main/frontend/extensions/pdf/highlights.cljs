@@ -126,6 +126,10 @@
                           (front-utils/copy-to-clipboard! (:text content))
                           (pdf-utils/clear-all-selection))
 
+                        "link"
+                        (do
+                          (pdf-assets/goto-block-ref! highlight))
+
                         "del"
                         (do
                           (del-hl! highlight)
@@ -155,6 +159,7 @@
 
 
        (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
+       (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
        (and (not (:image content)) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
 
