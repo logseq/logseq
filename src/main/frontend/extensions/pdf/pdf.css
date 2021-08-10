@@ -469,11 +469,11 @@
     }
 
     .extensions__pdf-toolbar {
-        background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, #eee8d5 100%);
+      background: linear-gradient(0deg, rgba(255, 255, 255, 0) 3%, #eee8d5 100%);
 
-        .buttons {
-            background-color: #f6efdf;
-        }
+      .buttons {
+        background-color: #f6efdf;
+      }
     }
   }
 }
@@ -560,11 +560,6 @@
 }
 
 body[data-page] {
-  #main-content-container {
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
   .extensions__pdf-loader {
     width: 100%;
   }
