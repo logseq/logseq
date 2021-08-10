@@ -75,7 +75,7 @@
                             el-ratio (.toFixed (/ offset width) 6)
                             target-el (js/document.getElementById "pdf-layout-container")]
                         (when target-el
-                          (let [width (str (min (* el-ratio 100) 80) "vw")]
+                          (let [width (str (min (max (* el-ratio 100) 20) 80) "vw")]
                             (.setProperty (.-style target-el) "width" width)
                             (adjust-main-size! width)))))}}))
 
@@ -159,9 +159,10 @@
 
 
        (and id [:li.item {:data-action "ref"} (t :pdf/copy-ref)])
-       (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
        (and (not (:image content)) [:li.item {:data-action "copy"} (t :pdf/copy-text)])
+
+       (and id [:li.item {:data-action "link"} (t :pdf/linked-ref)])
 
        (and id [:li.item {:data-action "del"} (t :delete)])
        ])))
