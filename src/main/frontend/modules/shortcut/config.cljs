@@ -349,7 +349,7 @@
      :binding "t o"
      :fn      editor-handler/toggle-open!}
     :ui/toggle-cards
-    {:desc    "toggle cards"
+    {:desc    "Toggle cards"
      :binding "t c"
      :fn      ui-handler/toggle-cards!}
     ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!

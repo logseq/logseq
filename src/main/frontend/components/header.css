@@ -110,6 +110,7 @@
   text-overflow: ellipsis;
   max-width: 7ch;
   color: var(--ls-icon-color, #045591);
+  height: 14px;
 }
 
 a.button {

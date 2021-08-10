@@ -1001,7 +1001,7 @@
      (try
        (js/window.apis.isAbsolutePath path)
        (catch js/Error _
-         (node-path.isAbsolute path)))))
+         (utils/win32 path)))))
 
 (defn ->system-modifier
   [keyboard-shortcut]
@@ -1039,9 +1039,20 @@
        (or (include-windows-reserved-chars? s)
            (string/includes? s "."))))
 
+(defn remove-boundary-slashes
+  [s]
+  (when (string? s)
+    (let [s (if (= \/ (first s))
+              (subs s 1)
+              s)]
+      (if (= \/ (last s))
+        (subs s 0 (dec (count s)))
+        s))))
+
 (defn page-name-sanity
   [page-name]
   (-> page-name
+      (remove-boundary-slashes)
       (string/replace #"/" ".")
       ;; Windows reserved path characters
       (string/replace windows-reserved-chars "_")))

@@ -85,7 +85,9 @@
                   format              nil
                   properties          nil
                   split-namespace?    true}}]
-   (let [page (string/lower-case title)]
+   (let [title (string/trim title)
+         title (util/remove-boundary-slashes title)
+         page (string/lower-case title)]
      (when-not (db/entity [:block/name page])
        (let [title    (string/trim title)
              pages    (if split-namespace?

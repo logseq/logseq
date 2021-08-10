@@ -26,11 +26,11 @@
   [full-path]
   (let [filename (util/node-path.basename full-path)
         url (cond
-              (string/starts-with? full-path "file:/")
-              full-path
-
               (util/absolute-path? full-path)
               (str "file://" full-path)
+
+              (string/starts-with? full-path "file:/")
+              full-path
 
               :else
               (util/node-path.join

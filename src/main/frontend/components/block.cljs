@@ -25,6 +25,7 @@
             [frontend.extensions.latex :as latex]
             [frontend.extensions.sci :as sci]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.zotero :as zotero]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.block :as block-handler]
@@ -423,7 +424,8 @@
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page? sidebar? preview?] :as config} page]
   (when-let [page-name (:block/name page)]
-    (let [page-name (string/lower-case page-name)
+    (let [page-name (-> (string/lower-case page-name)
+                        (util/remove-boundary-slashes))
           page-entity (db/entity [:block/name page-name])
           redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
           href (if html-export?
@@ -820,7 +822,7 @@
           (if (and (= format :org)
                    (show-link? config nil page page)
                    (not (contains? #{"pdf" "mp4" "ogg" "webm"} (util/get-file-ext page))))
-            (image-link config url page nil nil page)
+            (image-link config url page nil metadata full_text)
             (let [label* (if (seq (mldoc/plain->text label)) label nil)]
               (if (and (string? page) (string/blank? page))
                 [:span (util/format "[[%s]]" page)]
@@ -937,6 +939,12 @@
             ;; image
             (show-link? config metadata href full_text)
             (image-link config url href label metadata full_text)
+
+            (and
+             (util/electron?)
+             (= protocol "zotero")
+             (= (-> label get-label-text util/get-file-ext) "pdf"))
+            (zotero/zotero-pdf-link (get-label-text label) href)
 
             :else
             (->elem
