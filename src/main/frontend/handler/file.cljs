@@ -103,6 +103,22 @@
                    (log/error :nfs/load-files-error repo-url)
                    (log/error :exception error))))))
 
+(defn- remove-non-exists-refs!
+  [data]
+  (let [block-ids (->> (map :block/uuid data)
+                       (remove nil?)
+                       (set))
+        keep-block-ref-f (fn [refs]
+                           (filter (fn [ref]
+                                     (when (and (vector? ref)
+                                              (= :block/uuid (first ref)))
+                                       (let [id (second ref)]
+                                         (or (contains? block-ids id)
+                                             (db/entity [:block/uuid id]))))) refs))]
+    (map (fn [item]
+           (update item :block/refs keep-block-ref-f))
+      data)))
+
 (defn reset-file!
   [repo-url file content]
   (let [electron-local-repo? (and (util/electron?)
@@ -129,6 +145,8 @@
           tx (if (contains? config/mldoc-support-formats format)
                (let [delete-blocks (db/delete-file-blocks! repo-url file)
                      [pages block-ids blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
+                     blocks (remove-non-exists-refs! blocks)
+                     _ (util/pprint blocks)
                      pages (extract-handler/with-ref-pages pages blocks)]
                  (concat file-content delete-blocks pages block-ids blocks))
                file-content)
