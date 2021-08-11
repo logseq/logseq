@@ -23,6 +23,7 @@
                        :else
                        nil)]
      (let [repo (state/get-current-repo)]
-       (if (list? (:query query')) ; dsl query
+       (if (or (list? (:query query'))
+               (not= :find (first (:query query')))) ; dsl query
          (dsl/custom-query repo query' query-opts )
          (react/react-query repo query' query-opts))))))
