@@ -86,7 +86,7 @@
     .panel-content {
       overflow-y: auto;
       max-height: 85vh;
-      max-width: 768px;
+      max-width: 96vw;
       padding: 2rem;
     }
   }
