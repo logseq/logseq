@@ -103,7 +103,9 @@
     [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
      [:span.bullet-container.cursor
       [:span.bullet]]]
-    [:div.flex.flex-1 {:on-click #(editor-handler/insert-first-page-block-if-not-exists! page-name)}
+    [:div.flex.flex-1 {:on-click (fn []
+                                   (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name)]
+                                     (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
      [:span.opacity-50
       "Click here to edit..."]]]])
 

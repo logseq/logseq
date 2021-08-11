@@ -598,6 +598,7 @@
                                           (str "#" (when wrapped? "[[") chosen)
                                           format
                                           {:last-pattern last-pattern
+                                           :end-pattern "]]"
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
@@ -606,6 +607,7 @@
                                           page-ref-text
                                           format
                                           {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
+                                           :end-pattern "]]"
                                            :postfix-fn   (fn [s] (util/replace-first "]]" s ""))}))))))
 
 (defn create-today-journal!

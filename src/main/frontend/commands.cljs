@@ -306,12 +306,18 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos forward-pos]
+   {:keys [last-pattern postfix-fn backward-pos forward-pos
+           end-pattern]
     :or {last-pattern slash}
     :as option}]
   (when-let [input (gdom/getElement id)]
     (let [edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
+          current-pos (or
+                       (when (and end-pattern (string? end-pattern))
+                         (when-let [i (string/index-of (util/safe-subs edit-content current-pos) end-pattern)]
+                           (+ current-pos i)))
+                       current-pos)
           prefix (subs edit-content 0 current-pos)
           space? (when (and last-pattern prefix)
                    (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
@@ -330,8 +336,16 @@
                    (util/replace-last last-pattern prefix value space?))
           postfix (subs edit-content current-pos)
           postfix (if postfix-fn (postfix-fn postfix) postfix)
-          new-value (if space?
+          new-value (cond
+                      (and
+                       (string/blank? prefix)
+                       (string/blank? postfix))
+                      edit-content
+
+                      space?
                       (util/concat-without-spaces prefix postfix)
+
+                      :else
                       (str prefix postfix))
           new-pos (- (+ (count prefix)
                         (or forward-pos 0))

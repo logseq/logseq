@@ -239,7 +239,7 @@
        :on-change (fn [e]
                     (let [format (util/evalue e)]
                       (when-not (string/blank? format)
-                        (config-handler/set-config! :date-formatter format)
+                        (config-handler/set-config! :journal/page-title-format format)
                         (notification/show!
                          [:div "You need to re-index your graph to make the change works"]
                          :success)

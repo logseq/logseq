@@ -949,7 +949,8 @@
   []
   (or
    (when-let [repo (get-current-repo)]
-     (get-in @state [:config repo :date-formatter]))
+     (or (get-in @state [:config repo :date-formatter])
+         (get-in @state [:config repo :journal/page-title-format])))
    ;; TODO:
    (get-in @state [:me :settings :date-formatter])
    "MMM do, yyyy"))
