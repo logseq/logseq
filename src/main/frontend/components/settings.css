@@ -69,6 +69,10 @@
     .panel-wrap {
       padding: 12px;
 
+      @screen sm {
+        width: 600px;
+      }
+
       > .it {
         margin-bottom: 0;
         padding-bottom: 12px;
@@ -115,20 +119,11 @@
         }
       }
 
-      &.is-editor, &.is-advanced {
-        @screen sm {
-          max-width: 580px;
-        }
-      }
-
       &.is-general {
         > .it {
           margin-bottom: 8px;
         }
 
-        @screen sm {
-          min-width: 580px;
-        }
       }
 
       &.is-advanced {
