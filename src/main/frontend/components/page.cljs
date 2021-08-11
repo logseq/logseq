@@ -109,17 +109,18 @@
      [:span.opacity-50
       "Click here to edit..."]]]])
 
-(rum/defc add-button
+(rum/defc add-button < rum/reactive
   [page-name]
   [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
    [:div.flex.flex-row
     [:div {:style {:height 24
                    :margin-left 2}}
-     [:a.add-button-link
-      {:on-click (fn []
-                   (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
-                     (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
-      svg/plus-circle]]]])
+     (when-not (state/sub [:editor/block])
+       [:a.add-button-link
+        {:on-click (fn []
+                     (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
+                       (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
+        svg/plus-circle])]]])
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
@@ -151,7 +152,8 @@
               hiccup (block/->hiccup page-blocks hiccup-config {})]
           [:div
            (page-blocks-inner page-name page-blocks hiccup sidebar? preview?)
-           (when (and (not block?) (not config/publishing?))
+           (when (and (not block?)
+                      (not config/publishing?))
              (add-button page-name))])))))
 
 (defn contents-page
