@@ -24,23 +24,30 @@
 
 (defn inflate-asset
   [full-path]
-  (let [filename (util/node-path.basename full-path)
-        url (cond
-              (util/absolute-path? full-path)
-              (str "file://" full-path)
+  (let [filename  (util/node-path.basename full-path)
+        web-link? (string/starts-with? full-path "http")
+        ext-name  (util/get-file-ext filename)
+        url       (cond
+                    web-link?
+                    full-path
 
-              (string/starts-with? full-path "file:/")
-              full-path
+                    (util/absolute-path? full-path)
+                    (str "file://" full-path)
 
-              :else
-              (util/node-path.join
-                "file://"                                   ;; TODO: bfs
-                (config/get-repo-dir (state/get-current-repo))
-                "assets" filename))
-        ext-name (util/get-file-ext filename)]
-    (when-let [key (and
-                     (= ext-name "pdf")
-                     (subs filename 0 (- (count filename) 4)))]
+                    (string/starts-with? full-path "file:/")
+                    full-path
+
+                    :else
+                    (util/node-path.join
+                     "file://"                                  ;; TODO: bfs
+                     (config/get-repo-dir (state/get-current-repo))
+                     "assets" filename))]
+    (when-let [key
+               (if web-link?
+                 (str (hash url))
+                 (and
+                  (= ext-name "pdf")
+                  (subs filename 0 (- (count filename) 4))))]
       {:key      key
        :identity (subs key (- (count key) 15))
        :filename filename
