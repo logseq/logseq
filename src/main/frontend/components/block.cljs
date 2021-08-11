@@ -936,8 +936,21 @@
                      (map-inline config label))))))
 
             ;; image
-            (show-link? config metadata href full_text)
+            (and (show-link? config metadata href full_text)
+                 (not (contains? #{"pdf"} (util/get-file-ext href))))
             (image-link config url href label metadata full_text)
+
+            ;; pdf link
+            (and
+             (util/electron?)
+             (= (util/get-file-ext href) "pdf")
+             (show-link? config metadata href full_text))
+            [:a.asset-ref.is-pdf
+             {:href "javascript:void(0);"
+              :on-mouse-down (fn [e]
+                               (when-let [current (pdf-assets/inflate-asset href)]
+                                 (state/set-state! :pdf/current current)))}
+             (get-label-text label)]
 
             (and
              (util/electron?)
