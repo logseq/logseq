@@ -332,15 +332,6 @@
        (absolute-modal cp set-default-width? pos)))))
 
 (rum/defc image-uploader < rum/reactive
-  {:did-mount    (fn [state]
-                   (let [[id format] (:rum/args state)]
-                     (add-watch editor-handler/*asset-pending-file ::pending-asset
-                                (fn [_ _ _ f]
-                                  (reset! *slash-caret-pos (cursor/get-caret-pos (gdom/getElement id)))
-                                  (editor-handler/upload-asset id #js[f] format editor-handler/*asset-uploading? true))))
-                   state)
-   :will-unmount (fn [state]
-                   (remove-watch editor-handler/*asset-pending-file ::pending-asset))}
   [id format]
   [:div.image-uploader
    [:input

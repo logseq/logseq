@@ -932,6 +932,10 @@ span.warning, div.warning:not(.admonitionblock), p.warning {
   color: #fff;
 }
 
+.warning-text {
+  color: #f56565;
+}
+
 a.error,
 span.error {
     background: red;

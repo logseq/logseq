@@ -303,7 +303,8 @@
         :help/shortcut-page-title "Keyboard shortcuts"
 
         :pdf/copy-ref "Copy ref"
-        :pdf/copy-text "Copy text"}
+        :pdf/copy-text "Copy text"
+        :pdf/linked-ref "Linked references"}
 
    :de {:help/about "Über Logseq"
         :help/bug "Fehlerbericht"
@@ -965,7 +966,8 @@
            :user/delete-account-notice "你在 logseq.com 发布的页面（假如有的话）也会被删除。"
 
            :pdf/copy-ref "复制引用"
-           :pdf/copy-text "复制文本"}
+           :pdf/copy-text "复制文本"
+           :pdf/linked-ref "转到注解"}
 
 
    :zh-Hant {:on-boarding/title "你好，歡迎使用 Logseq！"
@@ -1199,7 +1201,8 @@
              :remove-background "去除背景"
 
              :pdf/copy-ref "復製引用"
-             :pdf/copy-text "復製文本"}
+             :pdf/copy-text "復製文本"
+             :pdf/linked-ref "轉到註解"}
 
    :af {:on-boarding/title "Hi, welcome to Logseq!"
         :on-boarding/sharing "meedeling"
