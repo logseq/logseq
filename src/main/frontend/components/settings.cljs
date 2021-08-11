@@ -37,10 +37,10 @@
            :on-change (fn [e]
                         (reset! email (util/evalue e)))}]]]]
       (ui/button
-       "Submit"
-       :on-click
-       (fn []
-         (user-handler/set-email! @email)))
+        "Submit"
+        :on-click
+        (fn []
+          (user-handler/set-email! @email)))
 
       [:hr]
 
@@ -61,10 +61,10 @@
            :on-change (fn [e]
                         (reset! cors (util/evalue e)))}]]]]
       (ui/button
-       "Submit"
-       :on-click
-       (fn []
-         (user-handler/set-cors! @cors)))
+        "Submit"
+        :on-click
+        (fn []
+          (user-handler/set-cors! @cors)))
 
       [:hr]
 
@@ -83,16 +83,19 @@
      detail-text]]])
 
 (rum/defcs app-updater < rum/reactive
-  [state]
+  [state version]
   (let [update-pending? (state/sub :electron/updater-pending?)
         {:keys [type payload]} (state/sub :electron/updater)]
     [:span.cp__settings-app-updater
 
-     (ui/button
-      (if update-pending? "Checking ..." "Check for updates")
-      :class "text-sm p-1 mr-3"
-      :disabled update-pending?
-      :on-click #(js/window.apis.checkForUpdates false))
+     [:div.ctls.flex.items-center
+      (ui/button
+        (if update-pending? "Checking ..." "Check for updates")
+        :class "text-sm p-1 mr-3"
+        :disabled update-pending?
+        :on-click #(js/window.apis.checkForUpdates false))
+
+      [:span version]]
 
      (when-not (or update-pending?
                    (string/blank? type))
@@ -123,21 +126,21 @@
 (rum/defc delete-account-confirm
   [close-fn]
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div
-     (ui/admonition
-      :important
-      [:p.text-gray-700 (t :user/delete-account-notice)])
-     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-      [:span.flex.w-full.rounded-md.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type     "button"
-         :on-click user-handler/delete-account!}
-        (t :user/delete-account)]]
-      [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type     "button"
-         :on-click close-fn}
-        "Cancel"]]]]))
+                    [:div
+                     (ui/admonition
+                       :important
+                       [:p.text-gray-700 (t :user/delete-account-notice)])
+                     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+                      [:span.flex.w-full.rounded-md.sm:ml-3.sm:w-auto
+                       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+                        {:type     "button"
+                         :on-click user-handler/delete-account!}
+                        (t :user/delete-account)]]
+                      [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
+                       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+                        {:type     "button"
+                         :on-click close-fn}
+                        "Cancel"]]]]))
 
 (rum/defc outdenting-hint
   []
@@ -149,16 +152,16 @@
      [:a.text-sm
       {:target "_blank" :href "https://discuss.logseq.com/t/whats-your-preferred-outdent-behavior-the-direct-one-or-the-logical-one/978"}
       "→ Learn more"]]
-    [:img {:src "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"
-           :width 500
+    [:img {:src    "https://discuss.logseq.com/uploads/default/original/1X/e8ea82f63a5e01f6d21b5da827927f538f3277b9.gif"
+           :width  500
            :height 500}]]])
 
 (defn edit-config-edn []
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div.text-sm
-     [:a {:href     (rfe/href :file {:path (config/get-config-path)})
-          :on-click #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))}
-      (t :settings-page/edit-config-edn)]]))
+                    [:div.text-sm
+                     [:a.text-xs {:href     (rfe/href :file {:path (config/get-config-path)})
+                                  :on-click #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))}
+                      (t :settings-page/edit-config-edn)]]))
 
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -173,15 +176,37 @@
    [:div {:style {:text-align "right"}}
     (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]])
 
+(rum/defcs current-graph
+  [state t]
+
+  (when-let [current-repo (state/sub :git/current-repo)]
+    (let [repo-list (state/sub [:me :repos])]
+
+      [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start.sm:grid-rows-1
+       [:label.block.text-sm.font-medium.leading-5.opacity-70.sm:col-span-1
+        {:for "input_current_graph"}
+        (t :settings-page/current-graph)]
+       [:div.mt-1.sm:mt-0.sm:col-span-4
+        [:div.max-w-lg.rounded-md
+         [:select#input_current_graph.form-select.is-small
+          {:value     current-repo
+           :disabled  true
+           :on-change #()}
+          (for [it repo-list]
+            (when-let [url (and (not= (:url it) "local") (:url it))]
+              [:option {:key url :value url} (util/node-path.basename url)]))]
+
+         [:div.inline-flex.items-center.pl-5 (edit-config-edn)]]]])))
+
 (defn language-row [t preferred-language]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "preferred_language"}
     (t :language)]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
+   [:div.mt-1.sm:mt-0.sm:col-span-4
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
-      {:value preferred-language
+      {:value     preferred-language
        :on-change (fn [e]
                     (let [lang-code (util/evalue e)]
                       (state/set-preferred-language! lang-code)
@@ -192,11 +217,11 @@
           [:option {:key lang-code :value lang-code} lang-label]))]]]])
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4
+  [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "toggle_theme"}
     (t :right-side-bar/switch-theme (string/capitalize switch-theme))]
-   [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-1
+   [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-4
     [:div.rounded-md.sm:max-w-xs
 
      [:ul.theme-modes-options
@@ -205,10 +230,10 @@
       [:li {:on-click (partial state/use-theme-mode! "dark")
             :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
       [:li {:on-click (partial state/use-theme-mode! "system")
-            :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]]
+            :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
 
-   [:div {:style {:text-align "right"}}
-    (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))]])
+    [:div.pl-16
+     (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))]]])
 
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -218,7 +243,7 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
-      {:value (name preferred-format)
+      {:value     (name preferred-format)
        :on-change (fn [e]
                     (let [format (-> (util/evalue e)
                                      (string/lower-case)
@@ -235,14 +260,14 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
-      {:value preferred-date-format
+      {:value     preferred-date-format
        :on-change (fn [e]
                     (let [format (util/evalue e)]
                       (when-not (string/blank? format)
                         (config-handler/set-config! :journal/page-title-format format)
                         (notification/show!
-                         [:div "You need to re-index your graph to make the change works"]
-                         :success)
+                          [:div "You need to re-index your graph to make the change works"]
+                          :success)
                         (state/close-modal!)
                         (route-handler/redirect! {:to :repos}))))}
       (for [format (sort (date/journal-title-formatters))]
@@ -256,7 +281,7 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md
      [:select.form-select.is-small
-      {:value (name preferred-workflow)
+      {:value     (name preferred-workflow)
        :on-change (fn [e]
                     (-> (util/evalue e)
                         string/lower-case
@@ -270,10 +295,10 @@
 (defn outdenting-row [t logical-outdenting?]
   (toggle "preferred_outdenting"
           [(t :settings-page/preferred-outdenting)
-           (ui/tippy {:html (outdenting-hint)
-                      :class "tippy-hover ml-2"
+           (ui/tippy {:html        (outdenting-hint)
+                      :class       "tippy-hover ml-2"
                       :interactive true
-                      :disabled false}
+                      :disabled    false}
                      (svg/info))]
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
@@ -329,10 +354,10 @@
        [:div.max-w-lg.rounded-md.sm:max-w-xs
         [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
          {:default-value (state/sub-default-home-page)
-          :on-blur update-home-page
-          :on-key-press (fn [e]
-                          (when (= "Enter" (util/ekey e))
-                            (update-home-page e)))}]]]])])
+          :on-blur       update-home-page
+          :on-key-press  (fn [e]
+                           (when (= "Enter" (util/ekey e))
+                             (update-home-page e)))}]]]])])
 
 (defn enable-all-pages-public-row [t enable-all-pages-public?]
   (toggle "all pages public"
@@ -358,21 +383,22 @@
             (let [value (not enable-encryption?)]
               (config-handler/set-config! :feature/enable-encryption? value)))))
 
-(defn keyboard-shortcuts-row [t]
+(rum/defc keyboard-shortcuts-row
+  [t]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "customize_shortcuts"}
     (t :settings-page/customize-shortcuts)]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div
-     (ui/button
-      (t :settings-page/shortcut-settings)
-      :class "text-sm p-1"
-      :style {:margin-top "0px"}
-      :on-click
-      (fn []
-        (state/close-settings!)
-        (route-handler/redirect! {:to :shortcut-setting})))]]])
+   (let [h (fn []
+             (state/close-settings!)
+             (route-handler/redirect! {:to :shortcut-setting}))]
+     [:div.mt-1.sm:mt-0.sm:col-span-2
+      [:div
+       (ui/button
+         (t :settings-page/shortcut-settings)
+         :class "text-sm p-1"
+         :style {:margin-top "0px"}
+         :on-click h)]])])
 
 (defn zotero-settings-row [t]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -382,13 +408,13 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-      "Zotero settings"
-      :class "text-sm p-1"
-      :style {:margin-top "0px"}
-      :on-click
-      (fn []
-        (state/close-settings!)
-        (route-handler/redirect! {:to :zotero-setting})))]]])
+       "Zotero settings"
+       :class "text-sm p-1"
+       :style {:margin-top "0px"}
+       :on-click
+       (fn []
+         (state/close-settings!)
+         (route-handler/redirect! {:to :zotero-setting})))]]])
 
 (defn auto-push-row [t current-repo enable-git-auto-push?]
   (when (string/starts-with? current-repo "https://")
@@ -404,28 +430,29 @@
           (t :settings-page/disable-sentry)
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
-                  (not instrument-disabled?)))
+                   (not instrument-disabled?)))
           [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
 
 (defn clear-cache-row [t]
-  [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "clear_cache"}
     (t :settings-page/clear-cache)]
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md.sm:max-w-xs
      (ui/button
-      (t :settings-page/clear)
-      :class "text-sm p-1"
-      :on-click handler/clear-cache!)]]])
+       (t :settings-page/clear)
+       :class "text-sm p-1"
+       :on-click handler/clear-cache!)]]])
 
 (defn version-row [t version]
-  [:div.it.app-updater.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [:div.it.app-updater.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     (t :settings-page/current-version)]
-   [:div.wrap.sm:mt-0.sm:col-span-2
-    (when (util/electron?) (app-updater))
-    [:span.ver version]]])
+   [:div.wrap.sm:mt-0.sm:col-span-4
+    (if (util/electron?)
+      (app-updater version)
+      [:span.ver version])]])
 
 (defn developer-mode-row [t developer-mode?]
   (toggle "developer_mode"
@@ -439,8 +466,11 @@
                      (js/logseq.api.relaunch)))))
           [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
 
-(rum/defcs settings < rum/reactive
-  []
+(rum/defcs settings
+  < (rum/local :general ::active)
+    rum/reactive
+  [state]
+
   (let [preferred-format (state/get-preferred-format)
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
@@ -463,81 +493,108 @@
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
         system-theme? (state/sub :ui/system-theme?)
-        switch-theme (if dark? "white" "dark")]
-    (rum/with-context [[t] i18n/*tongue-context*]
+        switch-theme (if dark? "white" "dark")
+        *active (::active state)]
+
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
+
       [:div#settings.cp__settings-main
-       [:div.panel-wrap
+       [:header
         [:h1.title (t :settings)]]
 
-       (when current-repo
-         [[:div.panel-wrap
-           (edit-config-edn)]])
+       [:div.cp__settings-inner.md:flex
 
-       [:hr]
+        [:aside.md:w-40
+         [:ul
+          (for [[label text icon] [[:general (t :settings-page/tab-general) (svg/adjustments 16)]
+                                   [:editor (t :settings-page/tab-editor) (svg/icon-editor 16)]
+                                   [:shortcuts (t :settings-page/tab-shortcuts) (svg/icon-cmd 18)]
+                                   [:advanced (t :settings-page/tab-advanced) (svg/icon-cli 16)]]]
 
-       [:div.panel-wrap
-        (theme-modes-row t switch-theme system-theme? dark?)
-        (language-row t preferred-language)
-        (file-format-row t preferred-format)
-        (date-format-row t preferred-date-format)
-        (workflow-row t preferred-workflow)
-        ;; (enable-block-timestamps-row t enable-block-timestamps?)
-        (show-brackets-row t show-brackets?)
-        (outdenting-row t logical-outdenting?)
-        (tooltip-row t enable-tooltip?)
-        (timetracking-row t enable-timetracking?)
-        (journal-row t enable-journals?)
-        (enable-all-pages-public-row t enable-all-pages-public?)
-        (encryption-row t enable-encryption?)
-        (keyboard-shortcuts-row t)
-        (zotero-settings-row t)
-        (auto-push-row t current-repo enable-git-auto-push?)]
+            [:li
+             {:class    (util/classnames [{:active (= label @*active)}])
+              :on-click #(reset! *active label)}
 
-       [:hr] ;; Outside of panel wrap so that it is wider
+             [:a.flex.items-center
+              [[:i.flex.items-center icon] [:strong text]]]])]]
 
-       [:div.panel-wrap
-        (clear-cache-row t)
-        (version-row t version)
-        (usage-diagnostics-row t instrument-disabled?)
-        (developer-mode-row t developer-mode?)
+        [:article
 
-        (when logged?
-          [:div
-           [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-            [:label.block.text-sm.font-medium.leading-5.sm:mt-px..opacity-70
-             {:for "cors"}
-             (t :settings-page/custom-cors-proxy-server)]
-            [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.sm:max-w-xs
-              [:input#pat.form-input.is-small.transition.duration-150.ease-in-out
-               {:default-value cors-proxy
-                :on-blur       (fn [event]
-                                 (when-let [server (util/evalue event)]
-                                   (user-handler/set-cors! server)
-                                   (notification/show! "Custom CORS proxy updated successfully!" :success)))
-                :on-key-press  (fn [event]
-                                 (let [k (gobj/get event "key")]
-                                   (if (= "Enter" k)
+         (case @*active
+
+           :general
+           [:div.panel-wrap.is-general
+            (version-row t version)
+            (current-graph t)
+            (language-row t preferred-language)
+            (theme-modes-row t switch-theme system-theme? dark?)]
+
+           :editor
+           [:div.panel-wrap.is-editor
+            (file-format-row t preferred-format)
+            (date-format-row t preferred-date-format)
+            (workflow-row t preferred-workflow)
+            ;; (enable-block-timestamps-row t enable-block-timestamps?)
+            (show-brackets-row t show-brackets?)
+            (outdenting-row t logical-outdenting?)
+            (tooltip-row t enable-tooltip?)
+            (timetracking-row t enable-timetracking?)
+            (journal-row t enable-journals?)
+            (enable-all-pages-public-row t enable-all-pages-public?)
+            (encryption-row t enable-encryption?)
+            (zotero-settings-row t)
+            (auto-push-row t current-repo enable-git-auto-push?)]
+
+           :shortcuts
+           [:div.panel-wrap
+            (keyboard-shortcuts-row t)]
+
+           :advanced
+           [:div.panel-wrap.is-advanced
+            (clear-cache-row t)
+            (usage-diagnostics-row t instrument-disabled?)
+            (developer-mode-row t developer-mode?)
+
+            (when logged?
+              [:div
+               [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+                [:label.block.text-sm.font-medium.leading-5.sm:mt-px..opacity-70
+                 {:for "cors"}
+                 (t :settings-page/custom-cors-proxy-server)]
+                [:div.mt-1.sm:mt-0.sm:col-span-2
+                 [:div.max-w-lg.rounded-md.sm:max-w-xs
+                  [:input#pat.form-input.is-small.transition.duration-150.ease-in-out
+                   {:default-value cors-proxy
+                    :on-blur       (fn [event]
                                      (when-let [server (util/evalue event)]
                                        (user-handler/set-cors! server)
-                                       (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
-           (ui/admonition
-            :important
-            [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
-             [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
-                  :target "_blank"}
-              "https://github.com/isomorphic-git/cors-proxy"]])])
+                                       (notification/show! "Custom CORS proxy updated successfully!" :success)))
+                    :on-key-press  (fn [event]
+                                     (let [k (gobj/get event "key")]
+                                       (if (= "Enter" k)
+                                         (when-let [server (util/evalue event)]
+                                           (user-handler/set-cors! server)
+                                           (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]
+               (ui/admonition
+                 :important
+                 [:p (t :settings-page/dont-use-other-peoples-proxy-servers)
+                  [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
+                       :target "_blank"}
+                   "https://github.com/isomorphic-git/cors-proxy"]])])
 
-        (when logged?
-          [:div
-           [:hr]
-           [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
-            [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600.dark:text-red-400
-             {:for "delete account"}
-             (t :user/delete-account)]
-            [:div.mt-1.sm:mt-0.sm:col-span-2
-             [:div.max-w-lg.rounded-md.sm:max-w-xs
-              (ui/button (t :user/delete-your-account)
-                         :on-click (fn []
-                                     (ui-handler/toggle-settings-modal!)
-                                     (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]])))
+            (when logged?
+              [:div
+               [:hr]
+               [:div.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+                [:label.block.text-sm.font-medium.leading-5.opacity-70.text-red-600.dark:text-red-400
+                 {:for "delete account"}
+                 (t :user/delete-account)]
+                [:div.mt-1.sm:mt-0.sm:col-span-2
+                 [:div.max-w-lg.rounded-md.sm:max-w-xs
+                  (ui/button (t :user/delete-your-account)
+                             :on-click (fn []
+                                         (ui-handler/toggle-settings-modal!)
+                                         (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
+
+           nil)]]])))
