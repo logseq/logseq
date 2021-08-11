@@ -2,15 +2,17 @@
   svg.add-button > .circle {
     opacity: 1;
   }
+
+  svg.add-button {
+    opacity: 1;
+  }
 }
 
 svg.add-button {
   display: block;
-  margin-left: 12px;
-  margin-top: 6.5px;
   width: 20px;
   height: 20px;
-  opacity: 0.5;
+  opacity: 0.4;
 
   > .circle {
     opacity: 0;
