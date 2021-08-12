@@ -59,9 +59,7 @@
           :or {insert-command? true notification? true}
           :as opt}]
    (go
-     (let [{:keys [page-name properties]} (extractor/extract item)
-           abstract-note (get properties :abstract-note)
-           properties (dissoc properties :abstract-note)]
+     (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
        (when insert-command?
          (handle-command-zotero block-dom-id page-name)
          (editor-handler/save-current-block!))

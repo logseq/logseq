@@ -127,7 +127,7 @@
                                 :tags tags
                                 :date date
                                 :item-type (util/format "[[%s]]" type))
-                         (dissoc :creators)
+                         (dissoc :creators :abstract-note)
                          (rename-keys {:title :original-title})
                          (assoc :title (page-name item)))]
     (->> data
@@ -155,6 +155,8 @@
 (defmethod extract :default
   [item]
   (let [page-name  (page-name item)
-        properties (properties item)]
+        properties (properties item)
+        abstract-note (-> item :data :abstract-note)]
     {:page-name  page-name
-     :properties properties}))
+     :properties properties
+     :abstract-note abstract-note}))
