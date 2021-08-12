@@ -83,8 +83,13 @@
        (remove (fn [[_ v]] (str/includes? (str v) "\n")))
        (into (array-map))))
 
-(defn markdown-link [label link]
-  (util/format "[%s](%s)" label link))
+(defn markdown-link
+  ([label link]
+   (markdown-link label link false))
+  ([label link display?]
+   (if display?
+     (util/format "![%s](%s)" label link)
+     (util/format "[%s](%s)" label link))))
 
 (defn local-link [item]
   (let [type (-> item :library :type)
@@ -141,16 +146,19 @@
 
 (defmethod extract "attachment"
   [item]
-  (let [{:keys [title filename url link-mode path]} (-> item :data)]
-    (cond
-      (contains? #{"imported_file" "imported_url" "linked_file"} link-mode)
-      (markdown-link (or title filename) (local-link item))
-
-      (some? url)
+  (let [{:keys [title url link-mode path content-type]} (-> item :data)]
+    (case link-mode
+      "imported_file"
+      (markdown-link title (local-link item))
+      "imported_url"
       (markdown-link title url)
-
-      :else
-      nil)))
+      "linked_file"
+      (let [path (str/replace path " " "%20")]
+        (if (= content-type "application/pdf")
+          (markdown-link title (str "file://" path) true)
+          (markdown-link title (str "file://" path))))
+      "linked_url"
+      (markdown-link title url))))
 
 (defmethod extract :default
   [item]
