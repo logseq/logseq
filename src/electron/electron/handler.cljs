@@ -6,6 +6,7 @@
             ["fs-extra" :as fs-extra]
             ["path" :as path]
             [electron.fs-watcher :as watcher]
+            [electron.configs :as cfgs]
             [promesa.core :as p]
             [goog.object :as gobj]
             [clojure.string :as string]
@@ -186,6 +187,13 @@
 
 (defmethod handle :quitApp []
   (.quit app))
+
+(defmethod handle :userAppCfgs [_window [_ k v]]
+  (if-not k
+    (cfgs/whole)
+    (if-not (nil? v)
+      (cfgs/set-item! (keyword k) v)
+      (cfgs/get-item (keyword k)))))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))

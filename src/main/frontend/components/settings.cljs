@@ -16,6 +16,8 @@
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [electron.ipc :as ipc]
+            [promesa.core :as p]
             [frontend.util :refer [classnames] :as util]
             [frontend.version :refer [version]]
             [goog.object :as gobj]
@@ -175,6 +177,30 @@
                 true)]]
    [:div {:style {:text-align "right"}}
     (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]])
+
+(rum/defcs switch-spell-check-row
+  < {:will-mount
+     (fn [state]
+       (state/load-app-user-cfgs)
+       state)}
+    rum/reactive
+  [state t]
+  (let [enabled? (state/sub [:electron/user-cfgs :spell-check])
+        enabled? (if (nil? enabled?) true enabled?)]
+
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      (t :settings-page/spell-checker)]
+     [:div
+      [:div.rounded-md.sm:max-w-xs
+       (ui/toggle
+         enabled?
+         (fn []
+           (state/set-state! [:electron/user-cfgs :spell-check] (not enabled?))
+           (p/then (ipc/ipc "userAppCfgs" :spell-check (not enabled?))
+                   #(if (js/confirm (t :relaunch-confirm-to-work))
+                      (js/logseq.api.relaunch))))
+         true)]]]))
 
 (rum/defcs current-graph
   [state t]
@@ -537,6 +563,7 @@
             (workflow-row t preferred-workflow)
             ;; (enable-block-timestamps-row t enable-block-timestamps?)
             (show-brackets-row t show-brackets?)
+            (when (util/electron?) (switch-spell-check-row t))
             (outdenting-row t logical-outdenting?)
             (tooltip-row t enable-tooltip?)
             (timetracking-row t enable-timetracking?)
