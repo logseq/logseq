@@ -2528,6 +2528,11 @@
         ["Custom" "pinned" options result content]
         (admonition config "pinned" options result)
 
+        ["Custom" "center" options l content]
+        (->elem
+         :div.text-center
+         (markup-elements-cp config l))
+
         ["Custom" name options l content]
         (->elem
          :div
