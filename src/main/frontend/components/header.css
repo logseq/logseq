@@ -102,7 +102,6 @@
 }
 
 #repo-name {
-  @apply md:max-w-none;
   vertical-align: middle;
   display: inline-block;
   white-space: nowrap;
@@ -111,6 +110,7 @@
   max-width: 7ch;
   color: var(--ls-icon-color, #045591);
   height: 14px;
+  @apply md:max-w-none;
 }
 
 a.button {
