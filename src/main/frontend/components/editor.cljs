@@ -312,7 +312,7 @@
                :max-height to-max-height
                :max-width 700
                ;; TODO: auto responsive fixed size
-               :min-width 300
+               :width "fit-content"
                :z-index    11}
               (if set-default-width?
                 {:width max-width})

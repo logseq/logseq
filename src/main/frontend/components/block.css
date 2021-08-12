@@ -1,5 +1,6 @@
 .block-content-wrapper {
-  width: 100%;
+  /* 38px is the width of block-control */
+  width: calc(100% - 38px);
 }
 
 .block-content {
@@ -9,6 +10,7 @@
   white-space: pre-wrap;
   overflow-wrap: break-word;
   word-break: break-word;
+  cursor: text;
 
   img {
     max-width: 100%;
@@ -165,6 +167,10 @@
 
   &:hover {
     color: var(--ls-link-text-hover-color);
+  }
+
+  .block-content {
+    cursor: inherit;
   }
 }
 
