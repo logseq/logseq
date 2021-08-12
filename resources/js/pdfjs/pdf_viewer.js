@@ -851,7 +851,7 @@
           }
         }
 
-        function scrollIntoView (element, spot, skipOverflowHiddenElements = false) {
+        function scrollIntoView (element, spot, skipOverflowHiddenElements = true) {
           let parent = element.offsetParent
 
           if (!parent) {
@@ -862,7 +862,10 @@
           let offsetY = element.offsetTop + element.clientTop
           let offsetX = element.offsetLeft + element.clientLeft
 
-          while (parent.clientHeight === parent.scrollHeight && parent.clientWidth === parent.scrollWidth || skipOverflowHiddenElements && getComputedStyle(parent).overflow === 'hidden') {
+          while (parent.clientHeight === parent.scrollHeight &&
+                 parent.clientWidth === parent.scrollWidth ||
+                 skipOverflowHiddenElements &&
+                 getComputedStyle(parent).overflow === 'hidden') {
             if (parent.dataset._scaleY) {
               offsetY /= parent.dataset._scaleY
               offsetX /= parent.dataset._scaleX

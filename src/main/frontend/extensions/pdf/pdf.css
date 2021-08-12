@@ -203,6 +203,8 @@
     }
 
     > .pdfViewer {
+      overflow: hidden;
+
       &.disabled-text-selection {
         user-select: none;
         pointer-events: none;
