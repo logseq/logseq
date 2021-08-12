@@ -73,7 +73,7 @@
 (rum/defcs export-blocks
   < rum/reactive
   (rum/local false ::copied?)
-  [state root-block-id]
+  [state root-block-ids]
   (let [current-repo (state/get-current-repo)
         type (rum/react *export-block-type)
         text-indent-style (rum/react (state/get-export-block-text-indent-style))
@@ -81,10 +81,10 @@
         copied? (::copied? state)
         content
         (case type
-          :text (export/export-blocks-as-markdown current-repo root-block-id text-indent-style (into [] text-remove-options))
-          :opml (export/export-blocks-as-opml current-repo root-block-id)
-          :html (export/export-blocks-as-html current-repo root-block-id)
-          (export/export-blocks-as-markdown current-repo root-block-id text-indent-style (into [] text-remove-options)))]
+          :text (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options))
+          :opml (export/export-blocks-as-opml current-repo root-block-ids)
+          :html (export/export-blocks-as-html current-repo root-block-ids)
+          (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options)))]
     [:div.export.w-96.resize
      [:div
       {:class "mb-2"}

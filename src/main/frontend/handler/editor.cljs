@@ -1083,12 +1083,11 @@
         level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
         tree (blocks-vec->tree level-blocks)
         top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
-        exported-md-contents (mapv #(export/export-blocks-as-markdown
-                                     repo %
+        exported-md-contents (export/export-blocks-as-markdown
+                                     repo top-level-block-uuids
                                      @(state/get-export-block-text-indent-style)
-                                     (into [] @(state/get-export-block-text-remove-options)))
-                                   top-level-block-uuids)]
-    [(string/join "\n" (mapv string/trim-newline exported-md-contents)) tree]))
+                                     (into [] @(state/get-export-block-text-remove-options)))]
+    [exported-md-contents tree]))
 
 (defn copy-selection-blocks
   []
@@ -1102,6 +1101,28 @@
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
       (state/set-copied-blocks content tree)
       (notification/show! "Copied!" :success))))
+
+(defn get-selected-toplevel-block-uuids
+  []
+  (when-let [blocks (seq (get-selected-blocks-with-children))]
+    (let [repo (state/get-current-repo)
+          block-ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                     (uuid id)) blocks))
+                   (remove nil?))
+          blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
+          blocks* (flatten
+                   (mapv (fn [b] (if (:collapsed (:block/properties b))
+                                   (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
+                                   [b])) blocks))
+          block-ids* (mapv :block/uuid blocks*)
+          unordered? (:block/unordered (first blocks*))
+          format (:block/format (first blocks*))
+          level-blocks-map (blocks-with-level blocks*)
+          level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
+          level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
+          tree (blocks-vec->tree level-blocks)
+          top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))]
+      top-level-block-uuids)))
 
 (defn cut-selection-blocks
   [copy?]
