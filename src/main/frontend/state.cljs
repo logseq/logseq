@@ -12,6 +12,8 @@
             [cljs.core.async :as async]
             [lambdaisland.glogi :as log]
             [cljs-time.core :as t]
+            [promesa.core :as p]
+            [electron.ipc :as ipc]
             [cljs-time.format :as tf]))
 
 (defonce ^:private state
@@ -121,6 +123,7 @@
       ;; electron
       :electron/updater-pending? false
       :electron/updater {}
+      :electron/user-cfgs nil
 
       ;; plugin
       :plugin/indicator-text        nil
@@ -879,6 +882,15 @@
 (defn get-root-component
   []
   (get @state :ui/root-component))
+
+(defn load-app-user-cfgs
+  ([] (load-app-user-cfgs false))
+  ([refresh?]
+   (p/let [cfgs (if (or refresh? (nil? (:electron/user-cfgs @state)))
+                  (ipc/ipc "userAppCfgs")
+                  (:electron/user-cfgs @state))
+           cfgs (if (object? cfgs) (bean/->clj cfgs) cfgs)]
+     (set-state! :electron/user-cfgs cfgs))))
 
 (defn setup-electron-updater!
   []

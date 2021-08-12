@@ -3,6 +3,7 @@
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
             [electron.utils :refer [mac? win32? linux? prod? dev? logger open]]
+            [electron.configs :as cfgs]
             [clojure.string :as string]
             [promesa.core :as p]
             ["fs-extra" :as fs]
@@ -37,7 +38,7 @@
                     :nodeIntegration         false
                     :nodeIntegrationInWorker false
                     :contextIsolation        true
-                    :spellcheck              true
+                    :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                     ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
                     ;; to use `scollbar-gutter` after the feature is implemented in browsers.
                     :enableBlinkFeatures     'OverlayScrollbars'
