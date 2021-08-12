@@ -21,7 +21,6 @@
             [goog.dom :as gdom]
             [promesa.core :as p]))
 
-
 (defn- get-page-content
   [page]
   (outliner-file/tree->file-content
@@ -433,45 +432,42 @@
                                            (clj->js (f (first names)))))]))))
          (remove nil?))))
 
-(defn export-blocks-as-opml
-  [repo root-block-uuid]
+(defn export-blocks-as-aux
+  [repo root-block-uuids auxf]
+  {:pre [(> (count root-block-uuids) 0)]}
   (let [get-page&block-refs-by-query-aux (get-embed-and-refs-blocks-pages-aux)
         f #(get-page&block-refs-by-query repo % get-page&block-refs-by-query-aux {:is-block? true})
-        root-block (db/entity [:block/uuid root-block-uuid])
-        blocks (db/get-block-and-children repo root-block-uuid)
+        root-blocks (mapv #(db/entity [:block/uuid %]) root-block-uuids)
+        blocks (mapcat #(db/get-block-and-children repo %) root-block-uuids)
         refs (f blocks)
-        content (get-blocks-contents repo root-block-uuid)
-        format (or (:block/format root-block) (state/get-preferred-format))]
-    (fp/exportOPML f/mldoc-record content
-                   (f/get-default-config format)
-                   "untitled"
-                   (js/JSON.stringify (clj->js refs)))))
+        contents (mapv #(get-blocks-contents repo %) root-block-uuids)
+        content (string/join "\n" (mapv string/trim-newline contents))
+        format (or (:block/format (first root-blocks)) (state/get-preferred-format))]
+    (auxf content format refs)))
+
+(defn export-blocks-as-opml
+  [repo root-block-uuids]
+  (export-blocks-as-aux repo root-block-uuids
+                        #(fp/exportOPML f/mldoc-record %1
+                                        (f/get-default-config %2)
+                                        "untitled"
+                                        (js/JSON.stringify (clj->js %3)))))
 
 (defn export-blocks-as-markdown
-  [repo root-block-uuid indent-style remove-options]
-  (let [get-page&block-refs-by-query-aux (get-embed-and-refs-blocks-pages-aux)
-        f #(get-page&block-refs-by-query repo % get-page&block-refs-by-query-aux {:is-block? true})
-        root-block (db/entity [:block/uuid root-block-uuid])
-        blocks (db/get-block-and-children repo root-block-uuid)
-        refs (f blocks)
-        content (get-blocks-contents repo root-block-uuid)
-        format (or (:block/format root-block) (state/get-preferred-format))]
-    (fp/exportMarkdown f/mldoc-record content
-                       (f/get-default-config format {:export-md-indent-style indent-style :export-md-remove-options remove-options})
-                       (js/JSON.stringify (clj->js refs)))))
-
+  [repo root-block-uuids indent-style remove-options]
+  (export-blocks-as-aux repo root-block-uuids
+                        #(fp/exportMarkdown f/mldoc-record %1
+                                            (f/get-default-config
+                                             %2
+                                             {:export-md-indent-style indent-style
+                                              :export-md-remove-options remove-options})
+                                            (js/JSON.stringify (clj->js %3)))))
 (defn export-blocks-as-html
-  [repo root-block-uuid]
-  (let [get-page&block-refs-by-query-aux (get-embed-and-refs-blocks-pages-aux)
-        f #(get-page&block-refs-by-query repo % get-page&block-refs-by-query-aux {:is-block? true})
-        root-block (db/entity [:block/uuid root-block-uuid])
-        blocks (db/get-block-and-children repo root-block-uuid)
-        refs (f blocks)
-        content (get-blocks-contents repo root-block-uuid)
-        format (or (:block/format root-block) (state/get-preferred-format))]
-    (fp/toHtml f/mldoc-record content
-                       (f/get-default-config format)
-                       (js/JSON.stringify (clj->js refs)))))
+  [repo root-block-uuids]
+  (export-blocks-as-aux repo root-block-uuids
+                        #(fp/toHtml f/mldoc-record %1
+                                    (f/get-default-config %2)
+                                    (js/JSON.stringify (clj->js %3)))))
 
 (defn- convert-md-files-unordered-list-or-heading
   [repo files heading-to-list?]
@@ -561,7 +557,6 @@
                   (.setAttribute anchor "href" url)
                   (.setAttribute anchor "download" opml-path)
                   (.click anchor))))))))))
-
 
 (defn convert-page-markdown-unordered-list-or-heading!
   [page-name]

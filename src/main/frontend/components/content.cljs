@@ -59,7 +59,14 @@
     (ui/menu-link
      {:key "copy"
       :on-click editor-handler/copy-selection-blocks}
-     "Copy")]])
+     "Copy")
+    (ui/menu-link
+     {:key "copy as"
+      :on-click (fn [_]
+                  (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
+                    (state/set-modal!
+                     #(export/export-blocks block-uuids))))}
+     "Copy as")]])
 
 ;; FIXME: Make it configurable
 (def block-background-colors
@@ -178,7 +185,7 @@
           (ui/menu-link
            {:key "Copy as"
             :on-click (fn [_]
-                        (state/set-modal! #(export/export-blocks block-id)))}
+                        (state/set-modal! #(export/export-blocks [block-id])))}
            "Copy as")
 
           (if (srs/card-block? block)
