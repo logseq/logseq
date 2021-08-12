@@ -188,7 +188,7 @@
      ["Export" (->block "export")]
      ["Verse" (->block "verse")]
      ["Ascii" (->block "export" "ascii")]
-     ["Center" (->block "export")]
+     ["Center" (->block "center")]
      ["Comment" (->block "comment")]]
 
     ;; Allow user to modify or extend, should specify how to extend.
