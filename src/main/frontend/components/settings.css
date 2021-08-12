@@ -10,6 +10,14 @@
         font-size: 22px;
         margin: 0;
       }
+
+      .ui__button,
+      span[role="checkbox"],
+      .form-select {
+        &:hover {
+          opacity: .8;
+        }
+      }
     }
   }
 
