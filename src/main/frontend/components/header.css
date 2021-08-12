@@ -110,7 +110,6 @@
   max-width: 7ch;
   color: var(--ls-icon-color, #045591);
   height: 14px;
-  @apply md:max-w-none;
 }
 
 a.button {
