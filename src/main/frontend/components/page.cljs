@@ -111,16 +111,15 @@
 
 (rum/defc add-button < rum/reactive
   [page-name]
-  [:div.ls-block.flex-1.flex-col.rounded-sm {:style {:width "100%"}}
-   [:div.flex.flex-row
-    [:div {:style {:height 24
-                   :margin-left 2}}
-     (when-not (state/sub [:editor/block])
-       [:a.add-button-link
-        {:on-click (fn []
-                     (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
-                       (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
-        svg/plus-circle])]]])
+  [:div.ls-block.flex-1.flex-col.rounded-sm.w-full
+   [:div.w-full {:style {:height      24
+                         :margin-left 2}}
+    (when-not (state/sub [:editor/block])
+      [:a.add-button-link.block
+       {:on-click (fn []
+                    (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
+                      (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
+       svg/plus-circle])]])
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
