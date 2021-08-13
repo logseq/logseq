@@ -1006,7 +1006,16 @@
 
     (rum/use-effect!
       (fn []
-        (dd "[ERROR loader]" (:error state)))
+        (when-let [error (:error state)]
+          (dd "[ERROR loader]" (:error state))
+          (case (.-name error)
+            "MissingPDFException"
+            (do
+              (notification/show!
+               (str (.-message error) " Is this the correct path?")
+               :error
+               false)
+              (state/set-state! :pdf/current nil)))))
       [(:error state)])
 
     [:div.extensions__pdf-loader {:ref *doc-ref}
