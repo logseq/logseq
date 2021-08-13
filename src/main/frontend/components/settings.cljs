@@ -202,6 +202,28 @@
                       (js/logseq.api.relaunch))))
          true)]]]))
 
+(rum/defcs app-auto-update-row
+  < {:will-mount
+     (fn [state]
+       (state/load-app-user-cfgs)
+       state)}
+    rum/reactive
+  [state t]
+  (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
+        enabled? (if (nil? enabled?) true enabled?)]
+
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      (t :settings-page/auto-updater)]
+     [:div
+      [:div.rounded-md.sm:max-w-xs
+       (ui/toggle
+         enabled?
+         (fn []
+           (state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
+           (ipc/ipc "userAppCfgs" :auto-update (not enabled?)))
+         true)]]]))
+
 (rum/defcs current-graph
   [state t]
 
@@ -460,7 +482,7 @@
           [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
 
 (defn clear-cache-row [t]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "clear_cache"}
     (t :settings-page/clear-cache)]
@@ -579,9 +601,10 @@
 
            :advanced
            [:div.panel-wrap.is-advanced
-            (clear-cache-row t)
+            (when (and util/mac? (util/electron?)) (app-auto-update-row t))
             (usage-diagnostics-row t instrument-disabled?)
             (developer-mode-row t developer-mode?)
+            (clear-cache-row t)
 
             (when logged?
               [:div
