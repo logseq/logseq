@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
+            [electron.configs :as cfgs]
             ["semver" :as semver]
             ["os" :as os]
             ["fs" :as fs]
@@ -128,7 +129,7 @@
 
 (defn init-updater
   [{:keys [repo logger ^js win] :as opts}]
-  (and prod? (init-auto-updater repo))
+  (and prod? (not= false (cfgs/get-item :auto-update)) (init-auto-updater repo))
   (let [check-channel "check-for-updates"
         install-channel "install-updates"
         check-listener (fn [e & args]
