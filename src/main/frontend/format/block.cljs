@@ -226,7 +226,8 @@
                                               (string? v)
                                               (contains? #{:alias :aliases :tags} k))
                                            (set [v])
-                                           v)]
+                                           v)
+                                       v (if (coll? v) (set v) v)]
                                    [k v]))))]
       {:properties (into {} properties)
        :properties-order (map first properties)
