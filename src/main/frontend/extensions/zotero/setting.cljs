@@ -12,6 +12,7 @@
    :include-notes?         true
    :notes-block-text       "[[Notes]]"
    :zotero-data-directory  ""
+   :zotero-linked-attachment-base-directory ""
    :extra-tags             ""
    :page-insert-prefix     "@"})
 

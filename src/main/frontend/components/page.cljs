@@ -109,17 +109,25 @@
      [:span.opacity-50
       "Click here to edit..."]]]])
 
-(rum/defc add-button < rum/reactive
-  [page-name]
-  [:div.ls-block.flex-1.flex-col.rounded-sm.w-full
-   [:div.w-full {:style {:height      24
-                         :margin-left 2}}
-    (when-not (state/sub [:editor/block])
-      [:a.add-button-link.block
-       {:on-click (fn []
-                    (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
-                      (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
-       svg/plus-circle])]])
+(rum/defcs add-button < rum/reactive
+  (rum/local false ::show?)
+  [state page-name]
+  (let [show? (::show? state)]
+    [:div.ls-block.flex-1.flex-col.rounded-sm.add-button
+     [:div.flex.flex-row
+      [:div.block {:style {:height      24
+                           :width       24
+                           :margin-left 2}
+                   :on-mouse-over (fn [] (reset! show? true))}
+       (if (and (not (state/sub [:editor/block])) @show?)
+         [:a.add-button-link.block
+          {:on-mouse-out (fn [] (reset! show? false))
+           :on-click (fn []
+                       (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
+                         (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
+          svg/plus-circle]
+
+         [:span])]]]))
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
