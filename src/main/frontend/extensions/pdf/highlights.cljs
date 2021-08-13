@@ -894,7 +894,7 @@
                  (when-let [last-page (.-currentPageNumber viewer)]
                    (storage/set (str "ls-pdf-last-page-" (front-utils/node-path.basename url)) last-page))
 
-                 (.destroy pdf-document))))
+                 (when pdf-document (.destroy pdf-document)))))
       [])
 
     ;; interaction events
