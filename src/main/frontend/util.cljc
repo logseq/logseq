@@ -1320,6 +1320,15 @@
              (< (get-dom-top x) (get-dom-top y)))
            elements)))
 
+#?(:cljs
+   (defn calc-delta-rect-offset
+     [^js/HTMLElement target ^js/HTMLElement container]
+     (let [target-rect (bean/->clj (.toJSON (.getBoundingClientRect target)))
+           viewport-rect {:width  (.-clientWidth container)
+                          :height (.-clientHeight container)}]
+
+       {:y (- (:height viewport-rect) (:bottom target-rect))
+        :x (- (:width viewport-rect) (:right target-rect))})))
 
 (def regex-char-esc-smap
   (let [esc-chars "{}[]()&^%$#!?*.+|\\"]

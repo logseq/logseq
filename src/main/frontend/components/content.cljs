@@ -135,15 +135,6 @@
                     (reset! edit? true))}
        "Make template"))))
 
-(defn calc-delta-rect-offset
-  [^js/HTMLElement target ^js/HTMLElement container]
-  (let [target-rect (bean/->clj (.toJSON (.getBoundingClientRect target)))
-        viewport-rect {:width (.-clientWidth container)
-                       :height (.-clientHeight container)}]
-
-    {:y (- (:height viewport-rect) (:bottom target-rect))
-     :x (- (:width viewport-rect) (:right target-rect))}))
-
 (rum/defc block-context-menu-content
   [target block-id]
 
@@ -152,7 +143,7 @@
     (rum/use-effect!
      (fn []
        (let [^js el (rum/deref *el-ref)
-             {:keys [x y]} (calc-delta-rect-offset el js/document.documentElement)]
+             {:keys [x y]} (util/calc-delta-rect-offset el js/document.documentElement)]
          (set! (.. el -style -transform)
                (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)")))
        #())

@@ -91,30 +91,40 @@
    {:keys [highlight vw-pos point]}
    {:keys [clear-ctx-tip! add-hl! upd-hl! del-hl!]}]
 
-  (let [mounted (rum/use-ref false)]
-    (rum/use-effect!
-      (fn []
-        (let [cb #(clear-ctx-tip!)]
-          (js/setTimeout #(js/document.addEventListener "click" cb))
-          #(js/document.removeEventListener "click" cb)))
-      []))
+  (rum/use-effect!
+    (fn []
+      (let [cb #(clear-ctx-tip!)]
+        (js/setTimeout #(js/document.addEventListener "click" cb))
+        #(js/document.removeEventListener "click" cb)))
+    [])
 
   ;; TODO: precise position
   ;;(when-let [
   ;;page-bounding (and highlight (pdf-utils/get-page-bounding viewer (:page highlight)))
   ;;])
 
-  (let [head-height 0                                       ;; 48 temp
+  (let [*el (rum/use-ref nil)
+        head-height 0                                       ;; 48 temp
         top (- (+ (:y point) (.. viewer -container -scrollTop)) head-height)
         left (:x point)
         id (:id highlight)
         content (:content highlight)]
 
+    (rum/use-effect!
+      (fn []
+        (let [^js el (rum/deref *el)
+              {:keys [x y]} (front-utils/calc-delta-rect-offset el (.closest el ".extensions__pdf-viewer"))]
+          (set! (.. el -style -transform)
+                (str "translate3d(" (if (neg? x) (- x 5) 0) "px," (if (neg? y) (- y 5) 0) "px" ",0)")))
+        #())
+      [])
+
     (rum/with-context
       [[t] i18n/*tongue-context*]
 
       [:ul.extensions__pdf-hls-ctx-menu
-       {:style    {:top top :left left}
+       {:ref      *el
+        :style    {:top top :left left}
         :on-click (fn [^js/MouseEvent e]
                     (when-let [action (.. e -target -dataset -action)]
                       (case action
