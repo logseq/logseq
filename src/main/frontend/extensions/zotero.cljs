@@ -209,6 +209,23 @@
          {:default-value (setting/setting :attachments-block-text)
           :on-blur       (fn [e] (setting/set-setting! :attachments-block-text (util/evalue e)))}]]]])
 
+   (when (setting/setting :include-attachments?)
+     [:div.row
+      [:label.title
+       {:for "zotero_linked_attachment_base_directory"}
+       "Zotero linked attachment base directory"
+       [:a.ml-2
+        {:title "If you store attached files in Zotero — the default — this setting does not affect you. It only applies to linked files. If you're using the ZotFile plugin to help with a linked-file workflow, you should configure it to store linked files within the base directory you've configured. Click to learn more."
+         :href "https://www.zotero.org/support/preferences/advanced#linked_attachment_base_directory"
+         :target "_blank"}
+        (svg/info)]]
+      [:div.mt-1.sm:mt-0.sm:col-span-2
+       [:div.max-w-lg.rounded-md
+        [:input.form-input.block
+         {:default-value (setting/setting :zotero-linked-attachment-base-directory)
+          :placeholder   "/Users/Sarah/Dropbox"
+          :on-blur       (fn [e] (setting/set-setting! :zotero-linked-attachment-base-directory (util/evalue e)))}]]]])
+
    [:div.row
     [:label.title
      {:for "zotero_include_notes"}

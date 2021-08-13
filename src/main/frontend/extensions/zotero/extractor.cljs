@@ -1,13 +1,13 @@
 (ns frontend.extensions.zotero.extractor
-  (:require [clojure.string :as str]
-            [frontend.util :as util]
-            [frontend.extensions.zotero.schema :as schema]
-            [frontend.extensions.html-parser :as html-parser]
-            [frontend.date :as date]
+  (:require [clojure.set :refer [rename-keys]]
+            [clojure.string :as str]
             [clojure.string :as string]
-            [clojure.set :refer [rename-keys]]
+            [frontend.date :as date]
+            [frontend.extensions.html-parser :as html-parser]
+            [frontend.extensions.zotero.schema :as schema]
             [frontend.extensions.zotero.setting :as setting]
-            [frontend.extensions.zotero.api :as api]))
+            [frontend.handler.notification :as notification]
+            [frontend.util :as util]))
 
 (defn item-type [item] (-> item :data :item-type))
 
@@ -144,6 +144,19 @@
   (let [note-html (-> item :data :note)]
     (html-parser/parse :markdown note-html)))
 
+(defn linked-attachment-check [path]
+  (if (str/starts-with? path "attachments:")
+    (let [base-directory (setting/setting :zotero-linked-attachment-base-directory)]
+      (if (str/blank? base-directory)
+        (notification/show!
+         "Linked attachment with relative path detected! Did you forget to setup Zotero linked attachment base directory in setting?"
+         :warning
+         false)
+        (util/node-path.join
+         base-directory
+         (str/replace-first path "attachments:" ""))))
+    path))
+
 (defmethod extract "attachment"
   [item]
   (let [{:keys [title url link-mode path content-type]} (-> item :data)]
@@ -153,7 +166,9 @@
       "imported_url"
       (markdown-link title url)
       "linked_file"
-      (let [path (str/replace path " " "%20")]
+      (let [path (-> path
+                     linked-attachment-check
+                     (str/replace " " "%20"))]
         (if (= content-type "application/pdf")
           (markdown-link title (str "file://" path) true)
           (markdown-link title (str "file://" path))))
