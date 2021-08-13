@@ -851,6 +851,14 @@
   []
   (= "dark" (:ui/theme @state)))
 
+(defn light?
+  []
+  (= "light" (:ui/theme @state)))
+
+(defn sepia?
+  []
+  (= "sepia" (:ui/theme @state)))
+
 (defn set-editing-block-dom-id!
   [block-dom-id]
   (set-state! :editor/block-dom-id block-dom-id))

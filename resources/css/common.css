@@ -140,6 +140,59 @@ html[data-theme='light'] {
   --color-level-5: #bbdaf6;
 }
 
+.sepia-theme,
+html[data-theme='sepia'] {
+  --ls-primary-background-color: #edebe7;
+  --ls-secondary-background-color: #e8e5de;
+  --ls-tertiary-background-color: #f1eee8;
+  --ls-quaternary-background-color: #fff;
+  --ls-table-tr-even-background-color: #f7f7f7;
+  --ls-active-primary-color: rgb(4, 85, 145);
+  --ls-active-secondary-color: #003761;
+  --ls-block-properties-background-color: #f7f7f7;
+  --ls-page-properties-background-color: #f7f7f7;
+  --ls-block-ref-link-text-color: #d8e1e8;
+  --ls-search-background-color: var(--ls-primary-background-color);
+  --ls-border-color: #ccc;
+  --ls-secondary-border-color: #e2e2e2;
+  --ls-guideline-color: rgba(46, 27, 5, 0.08);
+  --ls-menu-hover-color: var(--ls-a-chosen-bg);
+  --ls-primary-text-color: #433f38;
+  --ls-secondary-text-color: #161e2e;
+  --ls-title-text-color: var(--ls-primary-text-color);
+  --ls-link-text-color: #433f38;
+  --ls-link-text-hover-color: #1a537c;
+  --ls-link-ref-text-color: #433f38;
+  --ls-link-ref-text-hover-color: #1a537c;
+  --ls-tag-text-color: var(--ls-link-ref-text-color);
+  --ls-tag-text-hover-color: var(--ls-link-ref-text-hover-color);
+  --ls-slide-background-color: #fff;
+  --ls-block-bullet-border-color: #dedede;
+  --ls-block-bullet-color: rgba(67, 63, 56, 0.25);
+  --ls-block-highlight-color: #c0e6fd;
+  --ls-selection-background-color: #e4f2ff;
+  --ls-page-checkbox-color: #9dbbd8;
+  --ls-page-checkbox-border-color: var(--ls-page-checkbox-color);
+  --ls-page-blockquote-color: var(--ls-primary-text-color);
+  --ls-page-blockquote-bg-color: #fbfaf8;
+  --ls-page-blockquote-border-color: #799bbc;
+  --ls-page-inline-code-bg-color: #f7f7f7;
+  --ls-page-inline-code-color: var(--ls-primary-text-color);
+  --ls-scrollbar-foreground-color: rgba(0, 0, 0, 0.1);
+  --ls-scrollbar-background-color: rgba(0, 0, 0, 0.05);
+  --ls-scrollbar-thumb-hover-color: rgba(0, 0, 0, 0.2);
+  --ls-head-text-color: var(--ls-link-text-color);
+  --ls-cloze-text-color: #0000cd;
+  --ls-icon-color: #908e8b;
+  --ls-search-icon-color: var(--ls-icon-color);
+  --ls-a-chosen-bg: #f7f7f7;
+  --ls-right-sidebar-code-bg-color: var(--ls-secondary-background-color);
+  --color-level-1: var(--ls-secondary-background-color);
+  --color-level-2: var(--ls-tertiary-background-color);
+  --color-level-3: var(--ls-quaternary-background-color);
+  --color-level-4: #d0e6fa;
+}
+
 /* region Reset top elements */
 html {
   font-family: var(--ls-font-family), Inter, sans-serif, system-ui,

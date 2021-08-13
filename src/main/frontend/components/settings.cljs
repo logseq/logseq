@@ -242,7 +242,7 @@
               lang-label (:label language)]
           [:option {:key lang-code :value lang-code} lang-label]))]]]])
 
-(defn theme-modes-row [t switch-theme system-theme? dark?]
+(defn theme-modes-row [t switch-theme system-theme? dark? light? sepia?]
   [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "toggle_theme"}
@@ -252,9 +252,11 @@
 
      [:ul.theme-modes-options
       [:li {:on-click (partial state/use-theme-mode! "light")
-            :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
+            :class    (classnames [{:active (and (not system-theme?) (not dark?) (not sepia?))}])} [:i.mode-light] [:strong "light"]]
+      [:li {:on-click (partial state/use-theme-mode! "sepia")
+            :class    (classnames [{:active (and (not system-theme?) sepia? (not dark?) (not light?))}])} [:i.mode-light] [:strong "sepia"]]
       [:li {:on-click (partial state/use-theme-mode! "dark")
-            :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
+            :class    (classnames [{:active (and (not system-theme?) (not light?) (not sepia?))}])} [:i.mode-dark] [:strong "dark"]]
       [:li {:on-click (partial state/use-theme-mode! "system")
             :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
 
@@ -518,6 +520,8 @@
         developer-mode? (state/sub [:ui/developer-mode?])
         theme (state/sub :ui/theme)
         dark? (= "dark" theme)
+        sepia? (= "sepia" theme)
+        light? (= "light" theme)
         system-theme? (state/sub :ui/system-theme?)
         switch-theme (if dark? "white" "dark")
         *active (::active state)]
@@ -554,7 +558,7 @@
             (version-row t version)
             (current-graph t)
             (language-row t preferred-language)
-            (theme-modes-row t switch-theme system-theme? dark?)]
+            (theme-modes-row t switch-theme system-theme? dark? light? sepia?)]
 
            :editor
            [:div.panel-wrap.is-editor
