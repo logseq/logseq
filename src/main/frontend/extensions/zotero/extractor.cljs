@@ -144,7 +144,7 @@
   (let [note-html (-> item :data :note)]
     (html-parser/parse :markdown note-html)))
 
-(defn linked-attachment-check [path title item]
+(defn linked-attachment-check [path]
   (if (str/starts-with? path "attachments:")
     (let [base-directory (setting/setting :zotero-linked-attachment-base-directory)]
       (if (str/blank? base-directory)
@@ -167,7 +167,7 @@
       (markdown-link title url)
       "linked_file"
       (let [path (-> path
-                     (linked-attachment-check title item)
+                     linked-attachment-check
                      (str/replace " " "%20"))]
         (if (= content-type "application/pdf")
           (markdown-link title (str "file://" path) true)
