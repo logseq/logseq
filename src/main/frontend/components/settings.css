@@ -10,14 +10,6 @@
         font-size: 22px;
         margin: 0;
       }
-
-      .ui__button,
-      span[role="checkbox"],
-      .form-select {
-        &:hover {
-          opacity: .8;
-        }
-      }
     }
   }
 
@@ -120,6 +112,10 @@
         .form-select, .form-input {
           width: 55%;
           display: inline-block;
+
+          &:hover {
+            opacity: .8;
+          }
         }
 
         &:first-of-type {
@@ -139,6 +135,12 @@
           margin-bottom: 8px;
         }
       }
+
+      span[role="checkbox"] {
+        &:hover {
+          opacity: .8;
+        }
+      }
     }
 
     .admonitionblock {
@@ -148,10 +150,10 @@
     }
 
     .theme-modes-options {
-      @apply flex items-center list-none m-0;
+      @apply flex items-center m-0 list-none;
 
       > li {
-        @apply m-0 pr-2 opacity-90 hover:opacity-100;
+        @apply pr-2 m-0 opacity-90 hover:opacity-100;
 
         &:hover {
           cursor: pointer;
