@@ -127,6 +127,10 @@
     opacity: 0.5;
   }
 
+  &:hover {
+  	opacity: 0.8;
+  }
+
   &.is-link {
     @apply text-white;
   }
