@@ -768,7 +768,8 @@
       (when content
         (str (string/trimr content)
              "\n"
-             (util/format (str "*" " %s -> DONE [%s]")
+             (util/format (str (if (= :org (state/get-preferred-format)) "-" "*")
+                               " %s -> DONE [%s]")
                           marker
                           (date/get-local-date-time-string)))))
     content))
