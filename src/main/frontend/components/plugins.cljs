@@ -76,7 +76,8 @@
          [:div.p-4.rounded-md.bg-base-3
           [:strong [:a.flex.items-center {:target "_blank" :href repo} [:span.mr-1 (svg/github {:width 25 :height 25})] repo]]]))
      [:div.p-1.bg-transparent.border-none.ls-block
-      {:style                   {:min-height "60vw"}
+      {:style                   {:min-height "60vw"
+                                 :max-width  900}
        :dangerouslySetInnerHTML {:__html content}}]]))
 
 (rum/defc plugin-item-card

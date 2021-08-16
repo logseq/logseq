@@ -101,9 +101,11 @@
   (when url
     (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)
                 content (parse-user-md-content content item)]
+          (and (string/blank? (string/trim content)) (throw nil))
           (state/set-state! :plugin/active-readme [content item])
           (state/set-modal! display))
-        (p/catch #(notifications/show! "No README file." :warn)))))
+        (p/catch #(do (js/console.warn %)
+                      (notifications/show! "No README content." :warn))))))
 
 (defn load-unpacked-plugin
   []
