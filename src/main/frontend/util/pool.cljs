@@ -40,7 +40,6 @@
 (defn add-parse-job!
   [content config]
   (when-let [pool @parser-pool]
-    (js/console.dir pool)
     (.queue ^js pool
             (fn [parser]
               (try
