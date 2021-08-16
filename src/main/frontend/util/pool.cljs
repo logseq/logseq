@@ -5,6 +5,8 @@
             ["path" :as path]
             [electron.ipc :as ipc]))
 
+(defonce parser-pool (atom nil))
+
 (defn create-parser-pool!
   ([]
    (create-parser-pool! 8))
@@ -15,8 +17,6 @@
      (Pool.
       (fn []
         (spawn (Worker. (str static-path "/js/parser-worker.js")) num))))))
-
-(defonce parser-pool (atom nil))
 
 ;; (defn finish-pool!
 ;;   [{:keys [pool tasks]} ok-handler]
@@ -40,6 +40,7 @@
 (defn add-parse-job!
   [content config]
   (when-let [pool @parser-pool]
+    (js/console.dir pool)
     (.queue ^js pool
             (fn [parser]
               (try
@@ -56,8 +57,8 @@
 
 (defn init-parser-pool!
   []
-  (reset! parser-pool (create-parser-pool!))
-  )
+  (p/let [pool (create-parser-pool!)]
+    (reset! parser-pool pool)))
 
 (comment
   (add-parse-job! "- hello" (frontend.format.mldoc/default-config :markdown))
