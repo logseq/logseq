@@ -2272,7 +2272,7 @@
         :new-graph "Adicionar novo grafo"
         :graph "Grafo"
         :graph-view "Ver Grafo"
-        :cards-view "Ver Cartas"
+        :cards-view "Ver Cartões"
         :publishing "Publicar"
         :export "Exportar"
         :export-markdown "Exportar como Markdown padrão (sem propriedades de bloco)"
