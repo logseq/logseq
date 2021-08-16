@@ -199,15 +199,15 @@
 
 (defn- parse-files-and-create-default-files-inner!
   [repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts]
-  (let [refresh? (:refresh? opts)
-        parsed-files (filter
-                      (fn [file]
-                        (let [format (format/get-format (:file/path file))]
-                          (contains? config/mldoc-support-formats format)))
-                      files)
-        blocks-pages (if (seq parsed-files)
-                       (extract-handler/extract-all-blocks-pages repo-url parsed-files metadata refresh?)
-                       [])]
+  (p/let [refresh? (:refresh? opts)
+          parsed-files (filter
+                        (fn [file]
+                          (let [format (format/get-format (:file/path file))]
+                            (contains? config/mldoc-support-formats format)))
+                        files)
+          blocks-pages (if (seq parsed-files)
+                         (extract-handler/extract-all-blocks-pages repo-url parsed-files metadata refresh?)
+                         [])]
     (let [config-file (config/get-config-path)]
       (when (contains? (set file-paths) config-file)
         (when-let [content (some #(when (= (:file/path %) config-file)
