@@ -953,12 +953,6 @@
                                  (state/set-state! :pdf/current current)))}
              (get-label-text label)]
 
-            (and
-             (util/electron?)
-             (= protocol "zotero")
-             (= (-> label get-label-text util/get-file-ext) "pdf"))
-            (zotero/zotero-pdf-link (get-label-text label) href)
-
             :else
             (->elem
              :a.external-link
@@ -1090,6 +1084,15 @@
 
         (= name "tutorial-video")
         (tutorial-video)
+
+        (= name "zotero-imported-file")
+        (let [[item-key filename] arguments]
+          (when (and item-key filename)
+            [:span.ml-1 (zotero/zotero-imported-file item-key filename)]))
+
+        (= name "zotero-linked-file")
+        (when-let [path (first arguments)]
+          [:span.ml-1 (zotero/zotero-linked-file path)])
 
         (= name "vimeo")
         (when-let [url (first arguments)]
