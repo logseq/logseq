@@ -152,9 +152,9 @@
    (if (string/blank? content)
      (p/resolved [])
      (p/let [format (format/get-format file)
-             _ (println "Parsing : " file)
+             _ (println "Parsing start : " file)
              ast (mldoc/->edn-async content (mldoc/default-config format))]
-       _ (println "Parsing(done) : " file)
+       _ (println "Parsing finished : " file)
        (let [journal? (config/journal? file)
              first-block (ffirst ast)
              properties (let [properties (and (property/properties-ast? first-block)

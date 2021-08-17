@@ -3,7 +3,8 @@
             [promesa.core :as p]
             [frontend.util :as util]
             ["path" :as path]
-            [electron.ipc :as ipc]))
+            [electron.ipc :as ipc]
+            [frontend.config :as config]))
 
 (defonce parser-pool (atom nil))
 
@@ -11,7 +12,7 @@
   ([]
    (create-parser-pool! 8))
   ([num]
-   (p/let [static-path (if (util/electron?)
+   (p/let [static-path (if (and (util/electron?) (not config/dev?))
                          (ipc/ipc :getDirname)
                          "/static")]
      (Pool.

@@ -29,7 +29,6 @@
                       :output-feature-set :es-next-in
                       :source-map true
                       :source-map-include-sources-content true
-                      :source-map-detail-level :all
                       :externs ["datascript/externs.js"
                                 "externs.js"]
                       :warnings {:fn-deprecated false}}
@@ -121,7 +120,7 @@
            :after-load   nubank.workspaces.core/after-load
            :loader-mode  :eval
            :http-root    "public/workspaces"
-           :http-port    9670
+           :http-port    3002
            :watch-path   "static"
            :preloads     [devtools.preload
                           shadow.remote.runtime.cljs.browser]}

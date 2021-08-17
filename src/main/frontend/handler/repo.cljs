@@ -121,14 +121,14 @@
                  _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
                  file-exists? (fs/file-exists? repo-dir file-path)]
            (when-not file-exists?
-             (file-handler/reset-file! repo-url path content)
-             (if write-file?
-               (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
+             (p/let [_ (file-handler/reset-file! repo-url path content)]
+               (if write-file?
+                 (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
+                   (when-not (state/editing?)
+                     (ui-handler/re-render-root!))
+                   (git-handler/git-add repo-url path))
                  (when-not (state/editing?)
-                   (ui-handler/re-render-root!))
-                 (git-handler/git-add repo-url path))
-               (when-not (state/editing?)
-                 (ui-handler/re-render-root!))))))))))
+                   (ui-handler/re-render-root!)))))))))))
 
 (defn create-default-files!
   ([repo-url]
@@ -549,7 +549,8 @@
              (create-config-file-if-not-exists repo)
              (create-contents-file repo)
              (create-custom-theme repo)
-             (state/set-db-restoring! false)))
+             (state/set-db-restoring! false)
+             (ui-handler/re-render-root!)))
     (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
 (defn periodically-pull-current-repo
