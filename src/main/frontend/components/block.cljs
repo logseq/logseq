@@ -457,8 +457,7 @@
 
      (if (= "pdf" ext-name)
        [:a.asset-ref.is-pdf
-        {:href "javascript:void(0);"
-         :on-mouse-down (fn [e]
+        {:on-mouse-down (fn [e]
                           (when-let [current (pdf-assets/inflate-asset full-path)]
                             (util/stop e)
                             (state/set-state! :pdf/current current)))}
