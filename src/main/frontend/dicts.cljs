@@ -2326,7 +2326,7 @@
         :pdf/copy-text "Copiar texto"
         :pdf/linked-ref "Referências ligadas"}
 
-   :tongue/fallback :en})
+   :tongue/fallback :en}})
 
 (def languages [{:label "English" :value :en}
                 {:label "Français" :value :fr}
