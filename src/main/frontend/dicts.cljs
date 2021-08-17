@@ -2019,7 +2019,8 @@
            :pdf/copy-ref "Kopier ref"
            :pdf/copy-text "Kopier tekst"}
 
-  {:pt-PT {:on-boarding/title "Olá, bem-vindo ao Logseq!"
+   :pt-PT
+    {:on-boarding/title "Olá, bem-vindo ao Logseq!"
         :on-boarding/sharing "partilhar"
         :on-boarding/is-a " é um bloco de notas "
         :on-boarding/vision "Uma plataforma de código-aberto focada na privacidade para gestão de conhecimento e colaboração."
@@ -2326,7 +2327,7 @@
         :pdf/copy-text "Copiar texto"
         :pdf/linked-ref "Referências ligadas"}
 
-   :tongue/fallback :en}})
+   :tongue/fallback :en})
 
 (def languages [{:label "English" :value :en}
                 {:label "Français" :value :fr}
