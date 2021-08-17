@@ -244,17 +244,19 @@
 
 (defn ->edn-async
   [content config]
-  (try
-    (if (string/blank? content)
-      (p/resolved [])
-      (p/let [v (pool/add-parse-job! content config)]
-        (-> v
-            (util/json->clj)
-            (update-src-full-content content)
-            (collect-page-properties))))
-    (catch js/Error e
-      (log/error :edn/convert-failed e)
-      (p/resolved []))))
+  (if util/node-test?
+    (p/resolved (->edn content config))
+    (try
+      (if (string/blank? content)
+        (p/resolved [])
+        (p/let [v (pool/add-parse-job! content config)]
+          (-> v
+              (util/json->clj)
+              (update-src-full-content content)
+              (collect-page-properties))))
+      (catch js/Error e
+        (log/error :edn/convert-failed e)
+        (p/resolved [])))))
 
 (defn opml->edn
   [content]

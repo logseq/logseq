@@ -7,7 +7,7 @@
             [frontend.db-schema :as schema]
             [frontend.handler.repo :as repo-handler]
             [promesa.core :as p]
-            [cljs.test :refer [deftest is are testing use-fixtures run-tests]]))
+            [cljs.test :refer [deftest is are testing use-fixtures run-tests async]]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
@@ -457,8 +457,10 @@ last-modified-at:: 1609084800002"}]]
 
 (use-fixtures :once
   {:before (fn []
-             (config/start-test-db!)
-             (import-test-data!))
+             (async done
+                    (config/start-test-db!)
+                    (p/let [_ (import-test-data!)]
+                      (done))))
    :after config/destroy-test-db!})
 
 #_(run-tests)
