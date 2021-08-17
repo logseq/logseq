@@ -799,7 +799,7 @@ class LSPluginCore
       const data = Array.from(perfTable.values()).reduce((ac, it) => {
         const { options, status, disabled } = it.o
 
-        ac [it.o.id] = {
+        ac[it.o.id] = {
           name: options.name,
           entry: options.entry,
           status: status,

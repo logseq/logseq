@@ -4,6 +4,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -36,11 +37,11 @@
   [input]
   (when input
     (walk/postwalk
-     (fn [a]
-       (cond
-         (keyword? a) (csk/->camelCase (name a))
-         (uuid? a) (str a)
-         :else a)) input)))
+      (fn [a]
+        (cond
+          (keyword? a) (csk/->camelCase (name a))
+          (uuid? a) (str a)
+          :else a)) input)))
 
 (defn- parse-hiccup-ui
   [input]
@@ -54,14 +55,14 @@
 (def ^:export get_user_configs
   (fn []
     (bean/->js
-     (normalize-keyword-for-json
-      {:preferred-language   (:preferred-language @state/state)
-       :preferred-theme-mode (if (= (:ui/theme @state/state) "light") "white" "dark")
-       :preferred-format     (state/get-preferred-format)
-       :preferred-workflow   (state/get-preferred-workflow)
-       :preferred-todo       (state/get-preferred-todo)
-       :current-graph        (state/get-current-repo)
-       :me                   (state/get-me)}))))
+      (normalize-keyword-for-json
+        {:preferred-language   (:preferred-language @state/state)
+         :preferred-theme-mode (if (= (:ui/theme @state/state) "light") "white" "dark")
+         :preferred-format     (state/get-preferred-format)
+         :preferred-workflow   (state/get-preferred-workflow)
+         :preferred-todo       (state/get-preferred-todo)
+         :current-graph        (state/get-current-repo)
+         :me                   (state/get-me)}))))
 
 (def ^:export get_current_graph
   (fn []
@@ -141,29 +142,29 @@
 (def ^:export write_plugin_storage_file
   (fn [plugin-id file content]
     (write_dotdir_file!
-     file content
-     (let [plugin-id (util/node-path.basename plugin-id)]
-       (util/node-path.join "storages" plugin-id)))))
+      file content
+      (let [plugin-id (util/node-path.basename plugin-id)]
+        (util/node-path.join "storages" plugin-id)))))
 
 (def ^:export read_plugin_storage_file
   (fn [plugin-id file]
     (let [plugin-id (util/node-path.basename plugin-id)]
       (read_dotdir_file
-       file (util/node-path.join "storages" plugin-id)))))
+        file (util/node-path.join "storages" plugin-id)))))
 
 (def ^:export unlink_plugin_storage_file
   (fn [plugin-id file]
     (let [plugin-id (util/node-path.basename plugin-id)]
       (unlink_dotdir_file!
-       file (util/node-path.join "storages" plugin-id)))))
+        file (util/node-path.join "storages" plugin-id)))))
 
 (def ^:export exist_plugin_storage_file
   (fn [plugin-id file]
     (p/let [root (plugin-handler/get-ls-dotdir-root)
             plugin-id (util/node-path.basename plugin-id)
             exist? (fs/file-exists?
-                    (util/node-path.join root "storages" plugin-id)
-                    file)]
+                     (util/node-path.join root "storages" plugin-id)
+                     file)]
       exist?)))
 
 (def ^:export clear_plugin_storage_files
@@ -212,20 +213,20 @@
   (fn [pid ^js cmd-actions]
     (when-let [[cmd actions] (bean/->clj cmd-actions)]
       (plugin-handler/register-plugin-slash-command
-       pid [cmd (mapv #(into [(keyword (first %))]
-                             (rest %)) actions)]))))
+        pid [cmd (mapv #(into [(keyword (first %))]
+                              (rest %)) actions)]))))
 
 (def ^:export register_plugin_simple_command
   (fn [pid ^js cmd-action]
     (when-let [[cmd action] (bean/->clj cmd-action)]
       (plugin-handler/register-plugin-simple-command
-       pid cmd (assoc action 0 (keyword (first action)))))))
+        pid cmd (assoc action 0 (keyword (first action)))))))
 
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]
     (when-let [opts (bean/->clj opts)]
       (plugin-handler/register-plugin-ui-item
-       pid (assoc opts :type type)))))
+        pid (assoc opts :type type)))))
 
 ;; app
 (def ^:export relaunch
@@ -244,16 +245,16 @@
 (def ^:export push_state
   (fn [^js k ^js params ^js query]
     (rfe/push-state
-     (keyword k)
-     (bean/->clj params)
-     (bean/->clj query))))
+      (keyword k)
+      (bean/->clj params)
+      (bean/->clj query))))
 
 (def ^:export replace_state
   (fn [^js k ^js params ^js query]
     (rfe/replace-state
-     (keyword k)
-     (bean/->clj params)
-     (bean/->clj query))))
+      (keyword k)
+      (bean/->clj params)
+      (bean/->clj query))))
 
 ;; editor
 (def ^:export check_editing
@@ -307,6 +308,36 @@
       (if-not (contains? page :block/left)
         (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
 
+(def ^:export get_all_pages
+  (fn [repo]
+    (let [pages (page-handler/get-all-pages repo)]
+      (bean/->js (normalize-keyword-for-json pages)))))
+
+(def ^:export create_page
+  (fn [name ^js properties ^js opts]
+    (some-> (if-let [page (db-model/get-page name)]
+              page
+              (let [properties (bean/->clj properties)
+                    {:keys [redirect createFirstBlock format]} (bean/->clj opts)
+                    name (page-handler/create!
+                           name
+                           {:redirect?           (if (boolean? redirect) redirect true)
+                            :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
+                            :format              format
+                            :properties          properties})]
+                (db-model/get-page name)))
+            (:db/id)
+            (db-utils/pull)
+            (normalize-keyword-for-json)
+            (bean/->js))))
+
+(def ^:export delete_page
+  (fn [name]
+    (p/create (fn [ok] (page-handler/delete! name ok)))))
+
+(def ^:export rename_page
+  page-handler/rename!)
+
 (def ^:export edit_block
   (fn [block-uuid {:keys [pos] :or {pos :max} :as opts}]
     (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
@@ -319,12 +350,12 @@
           page-name (and isPageBlock block-uuid-or-page-name)
           block-uuid (if isPageBlock nil (medley/uuid block-uuid-or-page-name))
           new-block (editor-handler/api-insert-new-block!
-                     content
-                     {:block-uuid block-uuid
-                      :sibling?   sibling
-                      :before?    before
-                      :page       page-name
-                      :properties properties})]
+                      content
+                      {:block-uuid block-uuid
+                       :sibling?   sibling
+                       :before?    before
+                       :page       page-name
+                       :properties properties})]
       (bean/->js (normalize-keyword-for-json new-block)))))
 
 (def ^:export insert_batch_block
@@ -334,7 +365,7 @@
         (let [bb (if-not (vector? bb) (vector bb) bb)
               {:keys [sibling]} (bean/->clj opts)
               _ (editor-handler/paste-block-tree-after-target
-                 (:db/id block) sibling bb (:block/format block))]
+                  (:db/id block) sibling bb (:block/format block))]
           nil)))))
 
 (def ^:export remove_block
@@ -342,7 +373,7 @@
     (let [includeChildren true
           repo (state/get-current-repo)]
       (editor-handler/delete-block-aux!
-       {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
+        {:block/uuid (medley/uuid block-uuid) :repo repo} includeChildren))))
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]

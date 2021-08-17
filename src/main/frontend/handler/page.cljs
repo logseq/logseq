@@ -117,7 +117,8 @@
 
          (when redirect?
            (route-handler/redirect! {:to          :page
-                                     :path-params {:name page}})))))))
+                                     :path-params {:name page}}))
+         page)))))
 
 (defn page-add-property!
   [page-name key value]

@@ -73,11 +73,11 @@ export type IUserOffHook = () => void
 export type IUserHook<E = any, R = IUserOffHook> = (callback: (e: IHookEvent & E) => void) => IUserOffHook
 export type IUserSlotHook<E = any> = (callback: (e: IHookEvent & UISlotIdentity & E) => void) => void
 
-export type BlockID = number
+export type EntityID = number
 export type BlockUUID = string
 export type BlockUUIDTuple = ['uuid', BlockUUID]
 
-export type IEntityID = { id: BlockID }
+export type IEntityID = { id: EntityID }
 export type IBatchBlock = { content: string, properties?: Record<string, any>, children?: Array<IBatchBlock> }
 
 export interface AppUserInfo {
@@ -111,7 +111,7 @@ export interface AppGraphInfo {
  * Block - Logseq's fundamental data structure.
  */
 export interface BlockEntity {
-  id: BlockID // db id
+  id: EntityID // db id
   uuid: BlockUUID
   left: IEntityID
   format: 'markdown' | 'org'
@@ -137,13 +137,14 @@ export interface BlockEntity {
  * Page is just a block with some specific properties.
  */
 export interface PageEntity {
-  id: BlockID
+  id: EntityID
   uuid: BlockUUID
   name: string
   originalName: string
   'journal?': boolean
 
   file?: IEntityID
+  namespace?: IEntityID
   format?: 'markdown' | 'org'
   journalDay?: number
 }
@@ -305,14 +306,28 @@ export interface IEditorProxy extends Record<string, any> {
   ) => Promise<void>
 
   getBlock: (
-    srcBlock: BlockIdentity | BlockID,
+    srcBlock: BlockIdentity | EntityID,
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<BlockEntity | null>
 
   getPage: (
-    srcPage: PageIdentity | BlockID,
+    srcPage: PageIdentity | EntityID,
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<PageEntity | null>
+
+  createPage: (
+    pageName: BlockPageName,
+    properties?: {},
+    opts?: Partial<{ redirect: boolean, createFirstBlock: boolean, format: BlockEntity['format'] }>
+  ) => Promise<PageEntity | null>
+
+  deletePage: (
+    pageName: BlockPageName
+  ) => Promise<void>
+
+  renamePage: (oldName: string, newName: string) => Promise<void>
+
+  getAllPages: (repo?: string) => Promise<any>
 
   getPreviousSiblingBlock: (
     srcBlock: BlockIdentity
@@ -454,7 +469,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
    * key: 'open-calendar',
    * path: '#search',
    * template: `
-   *  <a data-on-click="openCalendar" onclick="alert('abc')" style="opacity: .6; display: inline-flex; padding-left: 3px;">
+   *  <a data-on-click="openCalendar" onclick="alert('abc')' style="opacity: .6; display: inline-flex; padding-left: 3px;'>
    *    <i class="iconfont icon-Calendaralt2"></i>
    *  </a>
    * `
