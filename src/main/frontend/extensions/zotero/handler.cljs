@@ -30,11 +30,13 @@
           (when (not-empty md-items)
             (when-let [id (:block/uuid
                            (editor-handler/api-insert-new-block!
-                            first-block {:page page-name}))]
+                            first-block {:page page-name
+                                         :re-render-root? false}))]
               (doseq [md-item md-items]
                 (editor-handler/api-insert-new-block!
                  md-item
                  {:block-uuid id
+                  :re-render-root? false
                   :sibling?   false
                   :before?    false})))))))))
 
@@ -47,9 +49,11 @@
   [page-name abstract-note]
   (when-not (str/blank? abstract-note)
     (let [block (editor-handler/api-insert-new-block!
-                 "[[Abstract]]" {:page page-name})]
+                 "[[Abstract]]" {:page page-name
+                                 :re-render-root? false})]
       (editor-handler/api-insert-new-block!
        abstract-note {:block-uuid (:block/uuid block)
+                      :re-render-root? false
                       :sibling? false}))))
 
 (defn create-zotero-page
@@ -60,15 +64,13 @@
           :as opt}]
    (go
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
-       (when insert-command?
-         (handle-command-zotero block-dom-id page-name)
-         (editor-handler/save-current-block!))
 
        (if (page-handler/page-exists? (str/lower-case page-name))
          (editor-handler/api-insert-new-block!
           ""
           {:page       page-name
-           :properties properties})
+           :properties properties
+           :re-render-root? false})
          (page-handler/create!
           page-name
           {:redirect? false
@@ -81,6 +83,10 @@
        (<! (add page-name :attachments item))
 
        (<! (add page-name :notes item))
+
+       (when insert-command?
+         (handle-command-zotero block-dom-id page-name)
+         (editor-handler/save-current-block!))
 
        (when notification?
          (notification/show! (str "Successfully added zotero item to page " page-name) :success))))))
