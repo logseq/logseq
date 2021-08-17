@@ -567,7 +567,11 @@ class PluginLocal
       this._loadErr = e
     } finally {
       if (!this._loadErr) {
-        this._status = PluginLocalLoadStatus.LOADED
+        if (this.disabled) {
+          this._status = PluginLocalLoadStatus.UNLOADED
+        } else {
+          this._status = PluginLocalLoadStatus.LOADED
+        }
       }
     }
   }
@@ -790,6 +794,28 @@ class LSPluginCore
       return
     }
 
+    const perfTable = new Map<string, { o: PluginLocal, s: number, e: number }>()
+    const debugPerfInfo = () => {
+      const data = Array.from(perfTable.values()).reduce((ac, it) => {
+        const { options, status, disabled } = it.o
+
+        ac [it.o.id] = {
+          name: options.name,
+          entry: options.entry,
+          status: status,
+          enabled: typeof disabled === 'boolean' ? (!disabled ? '🟢' : '⚫️') : '🔴',
+          perf: !it.e ? it.o.loadErr : `${(it.e - it.s).toFixed(2)}ms`
+        }
+
+        return ac
+      }, {})
+
+      console.table(data)
+    }
+
+    // @ts-ignore
+    window.__debugPluginsPerfInfo = debugPerfInfo
+
     try {
       this._isRegistering = true
 
@@ -810,8 +836,8 @@ class LSPluginCore
         const { url } = pluginOptions as PluginLocalOptions
         const pluginLocal = new PluginLocal(pluginOptions as PluginLocalOptions, this, this)
 
-        const timeLabel = `[LOAD Plugin] ${pluginLocal.debugTag}`
-        console.time(timeLabel)
+        const perfInfo = { o: pluginLocal, s: performance.now(), e: 0 }
+        perfTable.set(pluginLocal.id, perfInfo)
 
         await pluginLocal.load(readyIndicator)
 
@@ -830,7 +856,7 @@ class LSPluginCore
           }
         }
 
-        console.timeEnd(timeLabel)
+        perfInfo.e = performance.now()
 
         pluginLocal.settings?.on('change', (a) => {
           this.emit('settings-changed', pluginLocal.id, a)
@@ -854,6 +880,7 @@ class LSPluginCore
       console.error(e)
     } finally {
       this._isRegistering = false
+      debugPerfInfo()
     }
   }
 
