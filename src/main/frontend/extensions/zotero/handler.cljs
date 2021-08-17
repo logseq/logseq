@@ -65,31 +65,26 @@
    (go
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
 
-       (if (page-handler/page-exists? (str/lower-case page-name))
-         (editor-handler/api-insert-new-block!
-          ""
-          {:page       page-name
-           :properties properties
-           :re-render-root? false})
+       (when-not (page-handler/page-exists? (str/lower-case page-name))
          (page-handler/create!
           page-name
           {:redirect? false
            :format :markdown
            :create-first-block? false
-           :properties properties}))
+           :properties properties})
 
-       (create-abstract-note! page-name abstract-note)
+         (create-abstract-note! page-name abstract-note)
 
-       (<! (add page-name :attachments item))
+         (<! (add page-name :attachments item))
 
-       (<! (add page-name :notes item))
+         (<! (add page-name :notes item))
 
-       (when insert-command?
-         (handle-command-zotero block-dom-id page-name)
-         (editor-handler/save-current-block!))
+         (when insert-command?
+           (handle-command-zotero block-dom-id page-name)
+           (editor-handler/save-current-block!))
 
-       (when notification?
-         (notification/show! (str "Successfully added zotero item to page " page-name) :success))))))
+         (when notification?
+           (notification/show! (str "Successfully added zotero item to page " page-name) :success)))))))
 
 (defn add-all [progress]
   (go
