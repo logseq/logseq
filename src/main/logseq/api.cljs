@@ -467,7 +467,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [conn (db/get-conn repo)]
       (when-let [result (query-dsl/query repo query-string)]
-        (clj->js @result)))))
+        (bean/->js (normalize-keyword-for-json (flatten @result)))))))
 
 (defn ^:export datascript_query
   [query & inputs]
