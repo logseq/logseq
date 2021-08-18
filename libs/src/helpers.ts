@@ -15,6 +15,9 @@ declare global {
 }
 
 export const IS_DEV = process.env.NODE_ENV === 'development'
+export const PROTOCOL_FILE = 'file://'
+export const PROTOCOL_LSP = 'lsp://'
+export const URL_LSP = PROTOCOL_LSP + 'logseq.io/'
 
 let _appPathRoot
 
@@ -98,7 +101,7 @@ export function ucFirst (str: string) {
 
 export function withFileProtocol (path: string) {
   if (!path) return ''
-  const reg = /^(http|file|assets)/
+  const reg = /^(http|file|lsp)/
 
   if (!reg.test(path)) {
     path = 'file://' + path

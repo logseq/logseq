@@ -6,12 +6,19 @@
             [electron.configs :as cfgs]
             [clojure.string :as string]
             [promesa.core :as p]
+            [cljs-bean.core :as bean]
             ["fs-extra" :as fs]
             ["path" :as path]
+            ["os" :as os]
             ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem] :as electron]
             ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
             [electron.state :as state]))
+
+(defonce PLUGIN_SCHEME "lsp")
+(defonce PLUGIN_PROTOCOL (str PLUGIN_SCHEME "://"))
+(defonce PLUGIN_URL (str PLUGIN_PROTOCOL "logseq.io/"))
+(defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
 
 (def ROOT_PATH (path/join js/__dirname ".."))
 (def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "electron-dev.html" "electron.html"))))
@@ -27,22 +34,22 @@
   []
   (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
         win-opts (cond->
-                  {:width         (.-width win-state)
-                   :height        (.-height win-state)
-                   :frame         true
-                   :titleBarStyle "hiddenInset"
-                   :trafficLightPosition {:x 16 :y 16}
-                   :autoHideMenuBar (not mac?)
-                   :webPreferences
-                   {:plugins                 true ; pdf
-                    :nodeIntegration         false
-                    :nodeIntegrationInWorker false
-                    :contextIsolation        true
-                    :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
-                    ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
-                    ;; to use `scollbar-gutter` after the feature is implemented in browsers.
-                    :enableBlinkFeatures     'OverlayScrollbars'
-                    :preload                 (path/join js/__dirname "js/preload.js")}}
+                   {:width                (.-width win-state)
+                    :height               (.-height win-state)
+                    :frame                true
+                    :titleBarStyle        "hiddenInset"
+                    :trafficLightPosition {:x 16 :y 16}
+                    :autoHideMenuBar      (not mac?)
+                    :webPreferences
+                                          {:plugins                 true ; pdf
+                                           :nodeIntegration         false
+                                           :nodeIntegrationInWorker false
+                                           :contextIsolation        true
+                                           :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
+                                           ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
+                                           ;; to use `scollbar-gutter` after the feature is implemented in browsers.
+                                           :enableBlinkFeatures     'OverlayScrollbars'
+                                           :preload                 (path/join js/__dirname "js/preload.js")}}
                    linux?
                    (assoc :icon (path/join js/__dirname "icons/logseq.png")))
         url MAIN_WINDOW_ENTRY
@@ -61,13 +68,26 @@
 
 (defn setup-interceptor! []
   (.registerFileProtocol
-   protocol "assets"
-   (fn [^js request callback]
-     (let [url (.-url request)
-           path (string/replace url "assets://" "")
-           path (js/decodeURIComponent path)]
-       (callback #js {:path path}))))
-  #(.unregisterProtocol protocol "assets"))
+    protocol "assets"
+    (fn [^js request callback]
+      (let [url (.-url request)
+            path (string/replace url "assets://" "")
+            path (js/decodeURIComponent path)]
+        (callback #js {:path path}))))
+
+  (.registerFileProtocol
+    protocol PLUGIN_SCHEME
+    (fn [^js request callback]
+      (let [url (.-url request)
+            path' (string/replace url PLUGIN_URL "")
+            path' (js/decodeURIComponent path')
+            path' (.join path PLUGINS_ROOT path')]
+
+        (callback #js {:path path'}))))
+
+  #(do
+     (.unregisterProtocol protocol PLUGIN_SCHEME)
+     (.unregisterProtocol protocol "assets")))
 
 (defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames]
   (let [app-path (. app getAppPath)
@@ -81,7 +101,7 @@
             index-html-path (path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (. fs ensureDir assets-to-dir)
-                _ (p/all  (concat
+                _ (p/all (concat
                            [(. fs writeFile index-html-path html)
 
 
@@ -91,15 +111,15 @@
                              (fn [filename]
                                (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
                                    (p/catch
-                                       (fn [e]
-                                         (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
-                                         (js/console.error e)))))
+                                     (fn [e]
+                                       (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
+                                       (js/console.error e)))))
                              asset-filenames)
 
                            (map
-                            (fn [part]
-                              (. fs copy (path/join app-path part) (path/join static-dir part)))
-                            ["css" "fonts" "icons" "img" "js"])))
+                             (fn [part]
+                               (. fs copy (path/join app-path part) (path/join static-dir part)))
+                             ["css" "fonts" "icons" "img" "js"])))
                 custom-css (. fs readFile custom-css-path)
                 _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js"]
@@ -170,7 +190,7 @@
              (. menu popup))))
 
 
-    (.on web-contents  "new-window"
+    (.on web-contents "new-window"
          (fn [e url]
            (let [url (if (string/starts-with? url "file:")
                        (js/decodeURIComponent url) url)
@@ -200,18 +220,25 @@
       (search/close!)
       (.quit app))
     (do
+      (.registerSchemesAsPrivileged
+        protocol (bean/->js [{:scheme     PLUGIN_SCHEME
+                              :privileges {:standard        true
+                                           :secure          true
+                                           :supportFetchAPI true}}]))
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
              (when-let [win @*win]
                (when (.isMinimized ^object win)
                  (.restore win))
                (.focus win))))
+
       (.on app "window-all-closed" (fn []
                                      (search/close!)
                                      (.quit app)))
       (.on app "ready"
            (fn []
-             (let [^js win (create-main-window)
+             (let [t0 (setup-interceptor!)
+                   ^js win (create-main-window)
                    _ (reset! *win win)
                    *quitting? (atom false)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
@@ -225,8 +252,7 @@
 
                (vreset! *setup-fn
                         (fn []
-                          (let [t0 (setup-updater! win)
-                                t1 (setup-interceptor!)
+                          (let [t1 (setup-updater! win)
                                 t2 (setup-app-manager! win)
                                 tt (handler/set-ipc-handler! win)]
 

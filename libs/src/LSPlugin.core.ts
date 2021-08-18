@@ -7,7 +7,7 @@ import {
   setupInjectedUI,
   deferred,
   invokeHostExportedApi,
-  isObject, withFileProtocol, IS_DEV, getSDKPathRoot
+  isObject, withFileProtocol, IS_DEV, getSDKPathRoot, PROTOCOL_FILE, URL_LSP
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -287,6 +287,13 @@ function initApiProxyHandlers (pluginLocal: PluginLocal) {
   })
 }
 
+function provideLSPEntry (fullUrl: string, userPluginRoot: string) {
+  if (userPluginRoot && fullUrl.startsWith(PROTOCOL_FILE + userPluginRoot)) {
+    fullUrl = URL_LSP + fullUrl.substr(PROTOCOL_FILE.length + userPluginRoot.length)
+  }
+  return fullUrl
+}
+
 class IllegalPluginPackageError extends Error {
   constructor (message: string) {
     super(message)
@@ -406,20 +413,19 @@ class PluginLocal
     // TODO: How with local protocol
     const localRoot = this._localRoot = url
     const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
-    const makeFullUrl = (loc, useFileProtocol = false) => {
-      if (!loc) return
-      const reg = /^(http|file|assets)/
+    const makeFullUrl = (loc: string) => {
+      const reg = /^(http|file)/
       if (!reg.test(loc)) {
         const url = path.join(localRoot, loc)
-        loc = reg.test(url) ? url : ('file://' + url)
+        loc = reg.test(url) ? url : (PROTOCOL_FILE + url)
       }
-      return useFileProtocol ? loc : loc.replace('file:', 'assets:')
+      return provideLSPEntry(loc, this.userPluginRoot)
     }
     const validateMain = (main) => main && /\.(js|html)$/.test(main)
 
     // Entry from main
     if (validateMain(pkg.main)) {
-      this._options.entry = makeFullUrl(pkg.main, true)
+      this._options.entry = makeFullUrl(pkg.main)
 
       if (logseq.mode) {
         this._options.mode = logseq.mode
@@ -494,7 +500,10 @@ class PluginLocal
   </body>
 </html>`)
 
-    this._options.entry = withFileProtocol(entryPath)
+    this._options.entry = provideLSPEntry(
+      withFileProtocol(entryPath),
+      this.userPluginRoot
+    )
   }
 
   async _loadConfigThemes (themes: Array<ThemeOptions>) {
@@ -715,6 +724,10 @@ class PluginLocal
 
   get userSettingsFile (): string | undefined {
     return this._userSettingsFile
+  }
+
+  get userPluginRoot () {
+    return this._ctx.options.localUserConfigRoot + '/plugins/'
   }
 
   toJSON () {
