@@ -13,25 +13,24 @@
   <meta content="black-translucent" name="apple-mobile-web-app-status-bar-style">
   <meta content="yes" name="mobile-web-app-capable">
   <meta content="summary" name="twitter:card">
-  <meta content="A local-first knowledge base which can be synced using Git." name="twitter:description">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." name="twitter:description">
   <meta content="@logseq" name="twitter:site">
-  <meta content="A local-first knowledge base." name="twitter:title">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." name="twitter:title">
   <meta content="https://asset.logseq.com/static/img/logo.png" name="twitter:image:src">
-  <meta content="A local-first knowledge base which can be synced using Git." name="twitter:image:alt">
-  <meta content="A local-first knowledge base." property="og:title">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." name="twitter:image:alt">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." property="og:title">
   <meta content="site" property="og:type">
   <meta content="https://logseq.com" property="og:url">
   <meta content="https://asset.logseq.com/static/img/logo.png" property="og:image">
-  <meta content="A local-first knowledge base which can be synced using Git." property="og:description">
-  <title>Logseq: A local-first knowledge base</title>
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." property="og:description">
+  <title>Logseq: "A privacy-first platform for knowledge management and collaboration."</title>
   <meta content="logseq" property="og:site_name">
-  <meta description="A local-first knowledge base which can be synced using Git.">
+  <meta content="A privacy-first, open-source platform for knowledge management and collaboration." name="description">
 </head>
 <body>
 <div id="root"></div>
 <script>window.user = null</script>
 <script>window.__LSP__HOST__ = true</script>
-<script defer src="/static/js/lsplugin.core.js"></script>
 <script src="/static/js/magic_portal.js"></script>
 <script>let worker = new Worker('/static/js/worker.js')
 const portal = new MagicPortal(worker);
@@ -48,8 +47,12 @@ const portal = new MagicPortal(worker);
   window.workerThread = workerThread
 })()
 </script>
-<script src="/static/js/main.js"></script>
-<script src="/static/js/highlight.min.js"></script>
-<script src="/static/js/interact.min.js"></script>
+<script defer src="/static/js/highlight.min.js"></script>
+<script defer src="/static/js/interact.min.js"></script>
+<script defer src="/static/js/lsplugin.core.js"></script>
+<script defer src="/static/js/main.js"></script>
+<script defer src="/static/js/code-editor.js"></script>
+<script defer src="/static/js/age-encryption.js"></script>
+<script defer src="/static/js/excalidraw.js"></script>
 </body>
 </html>

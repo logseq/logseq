@@ -29,7 +29,7 @@
   hiccups/hiccups             {:mvn/version "0.3.0"}
   tongue/tongue               {:mvn/version "0.2.9"}
   org.clojure/core.async      {:mvn/version "1.3.610"}
-  thheller/shadow-cljs        {:mvn/version "2.12.5"}
+  thheller/shadow-cljs        {:mvn/version "2.15.3"}
   expound/expound             {:mvn/version "0.8.6"}
   com.lambdaisland/glogi      {:mvn/version "1.0.116"}
   binaryage/devtools          {:mvn/version "1.0.2"}
@@ -39,14 +39,14 @@
   frankiesardo/linked         {:mvn/version "1.3.0"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
-                  :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.844"}
+                  :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.879"}
                                 org.clojure/tools.namespace {:mvn/version "0.2.11"}
                                 cider/cider-nrepl           {:mvn/version "0.26.0"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
                   :main-opts ["-m" "shadow.cljs.devtools.cli"]}
            :test
            {:extra-paths ["src/test/"]
-            :extra-deps  {org.clojure/clojurescript {:mvn/version "1.10.844"}
+            :extra-deps  {org.clojure/clojurescript {:mvn/version "1.10.879"}
                           org.clojure/test.check {:mvn/version "RELEASE"}
                           org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
             :main-opts   ["-m" "shadow.cljs.devtools.cli"]}

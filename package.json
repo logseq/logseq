@@ -19,7 +19,7 @@
         "postcss-import-ext-glob": "^2.0.1",
         "postcss-nested": "5.0.5",
         "purgecss": "4.0.2",
-        "shadow-cljs": "2.12.5",
+        "shadow-cljs": "2.15.3",
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
         "tailwindcss": "2.2.4"
@@ -44,19 +44,18 @@
         "gulp:build": "cross-env NODE_ENV=production gulp build",
         "css:build": "postcss tailwind.all.css -o static/css/style.css --verbose --env production",
         "css:watch": "TAILWIND_MODE=watch postcss tailwind.all.css -o static/css/style.css --verbose --watch",
-        "cljs:watch": "clojure -M:cljs watch app electron",
-        "cljs:electron-watch": "clojure -M:cljs watch app electron",
-        "cljs:release": "clojure -M:cljs release app publishing electron",
-        "cljs:electron-release": "clojure -M:cljs release app publishing electron --config-merge '{:asset-path \"./js\"}'",
+        "cljs:watch": "clojure -M:cljs watch parser-worker app electron",
+        "cljs:electron-watch": "clojure -M:cljs watch parser-worker app electron",
+        "cljs:release": "clojure -M:cljs release parser-worker app publishing electron",
         "cljs:test": "clojure -M:test compile test",
         "cljs:run-test": "node static/tests.js",
-        "cljs:watch-app": "clojure -M:cljs watch app cards",
-        "cljs:release-app": "clojure -M:cljs release app",
-        "cljs:release-publishing": "clojure -M:cljs release publishing",
+        "cljs:watch-app": "clojure -M:cljs watch parser-worker app cards",
+        "cljs:release-app": "clojure -M:cljs release parser-worker app",
+        "cljs:release-publishing": "clojure -M:cljs release parser-worker publishing",
         "cljs:dev-release-app": "clojure -M:cljs release app --config-merge '{:closure-defines {frontend.config/DEV-RELEASE true}}'",
-        "cljs:debug": "clojure -M:cljs release app --debug",
-        "cljs:report": "clojure -M:cljs run shadow.cljs.build-report app report.html",
-        "cljs:build-electron": "clojure -A:cljs compile app electron"
+        "cljs:debug": "clojure -M:cljs release parser-worker app --debug",
+        "cljs:report": "clojure -M:cljs run shadow.cljs.build-report parser-worker app report.html",
+        "cljs:build-electron": "clojure -A:cljs compile parser-worker app electron"
     },
     "dependencies": {
         "@excalidraw/excalidraw": "^0.4.2",
@@ -82,7 +81,7 @@
         "ignore": "^5.1.8",
         "is-svg": "4.2.2",
         "jszip": "^3.5.0",
-        "mldoc": "0.9.8",
+        "mldoc": "0.9.9",
         "path": "^0.12.7",
         "pixi-graph-fork": "^0.1.4",
         "posthog-js": "^1.10.2",
@@ -96,6 +95,7 @@
         "react-transition-group": "^4.3.0",
         "react-tweet-embed": "^1.2.2",
         "reakit": "^0.11.1",
+        "threads": "^1.6.5",
         "yargs-parser": "^20.2.4"
     }
 }

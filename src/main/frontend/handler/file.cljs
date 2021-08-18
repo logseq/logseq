@@ -141,21 +141,20 @@
     (db/set-file-content! repo-url file content)
     (let [format (format/get-format file)
           utf8-content (utf8/encode content)
-          file-content [{:file/path file}]
-          tx (if (contains? config/mldoc-support-formats format)
-               (let [delete-blocks (db/delete-file-blocks! repo-url file)
-                     [pages block-ids blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
-                     blocks (remove-non-exists-refs! blocks)
-                     _ (util/pprint blocks)
-                     pages (extract-handler/with-ref-pages pages blocks)]
-                 (concat file-content delete-blocks pages block-ids blocks))
-               file-content)
-          tx (concat tx [(let [t (tc/to-long (t/now))]
-                           (cond->
-                             {:file/path file}
-                             new?
-                             (assoc :file/created-at t)))])]
-      (db/transact! repo-url tx))))
+          file-content [{:file/path file}]]
+      (p/let [tx (if (contains? config/mldoc-support-formats format)
+                   (p/let [delete-blocks (db/delete-file-blocks! repo-url file)
+                           [pages block-ids blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
+                           blocks (remove-non-exists-refs! blocks)
+                           pages (extract-handler/with-ref-pages pages blocks)]
+                     (concat file-content delete-blocks pages block-ids blocks))
+                   file-content)]
+        (let [tx (concat tx [(let [t (tc/to-long (t/now))]
+                               (cond->
+                                 {:file/path file}
+                                 new?
+                                 (assoc :file/created-at t)))])]
+          (db/transact! repo-url tx))))))
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file

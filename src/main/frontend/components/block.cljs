@@ -706,7 +706,7 @@
        [:div
         [:img.w-full.h-full.absolute
          {:src (if (util/electron?)
-                 "img/tutorial-thumb.jpg"
+                 (str (config/get-static-path) "img/tutorial-thumb.jpg")
                  "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg")}]
         [:button
          {:class "absolute bg-red-300 w-16 h-16 -m-8 top-1/2 left-1/2 rounded-full"
