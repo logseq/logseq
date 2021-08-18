@@ -65,7 +65,7 @@
 
   @screen sm {
     & {
-      @apply inset-0 flex items-center justify-center;
+      @apply inset-0 flex items-baseline justify-center top-24;
     }
   }
 
