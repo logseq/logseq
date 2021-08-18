@@ -7,7 +7,8 @@
             [frontend.handler.route :as route-handler]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.config :as config]))
 
 (rum/defc intro
   []
@@ -47,7 +48,7 @@
       [:img.shadow-2xl
        {:src
         (if (util/electron?)
-          "img/screenshot.png"
+          (str (config/get-static-path) "img/screenshot.png")
           "https://cdn.logseq.com/%2F8b9a461d-437e-4ca5-a2da-18b51077b5142020_07_25_Screenshot%202020-07-25%2013-29-49%20%2B0800.png?Expires=4749255017&Signature=Qbx6jkgAytqm6nLxVXQQW1igfcf~umV1OcG6jXUt09TOVhgXyA2Z5jHJ3AGJASNcphs31pZf4CjFQ5mRCyVKw6N8wb8Nn-MxuTJl0iI8o-jLIAIs9q1v-2cusCvuFfXH7bq6ir8Lpf0KYAprzuZ00FENin3dn6RBW35ENQwUioEr5Ghl7YOCr8bKew3jPV~OyL67MttT3wJig1j3IC8lxDDT8Ov5IMG2GWcHERSy00F3mp3tJtzGE17-OUILdeuTFz6d-NDFAmzB8BebiurYz0Bxa4tkcdLUpD5ToFHU08jKzZExoEUY8tvaZ1-t7djmo3d~BAXDtlEhC2L1YC2aVQ__&Key-Pair-Id=APKAJE5CCD6X7MP6PTEA")
         :alt "screenshot"}]
 
@@ -171,7 +172,7 @@
 
        [:img {:src
               (if (util/electron?)
-                "img/credits.png"
+                (str (config/get-static-path) "img/credits.png")
                 "https://asset.logseq.com/static/img/credits.png")
               :style {:margin "12px 0 0 0"}}]]]]))
 
