@@ -1,5 +1,6 @@
 (ns frontend.extensions.zotero
   (:require [cljs.core.async :refer [<! >! go chan go-loop] :as a]
+            [clojure.edn :refer [read-string]]
             [clojure.string :as str]
             [frontend.components.svg :as svg]
             [frontend.extensions.pdf.assets :as pdf-assets]
@@ -318,30 +319,44 @@
       [:div.bg-greenred-200.py-3.rounded-lg.col-span-full
        [:progress.w-full {:max (+ @(::total state) 30) :value @(::progress state)}] "Importing items from Zotero....Please wait..."]])])
 
+(defn open-button [full-path]
+  (if (str/ends-with? (str/lower-case full-path) "pdf")
+    (ui/button
+     "open"
+     :small? true
+     :on-click
+     (fn [e]
+       (when-let [current (pdf-assets/inflate-asset full-path)]
+         (util/stop e)
+         (state/set-state! :pdf/current current))))
+    (ui/button
+     "open"
+     :small? true
+     :target "_blank"
+     :href full-path)))
 
-(rum/defc zotero-pdf-link
-  [label-text href]
-  [:div.zotero-pdf-link
-   [:a.external-link
-    {:href href
-     :target "_blank"}
-    label-text]
-   (ui/button
-    "annotate"
-    :small? true
-    :class "ml-1"
-    :on-click
-    (fn []
-      (if (str/blank? (setting/setting :zotero-data-directory))
-        (do
-          (route-handler/redirect! {:to :zotero-setting})
-          (notification/show! "Please setup Zotero data directory" :warn false))
-        (let [item-key (->> (str/split href #"/") last)
-              full-path
-              (util/node-path.join
-               (setting/setting :zotero-data-directory)
-               "storage"
-               item-key
-               label-text)
-              current (pdf-assets/inflate-asset full-path)]
-          (state/set-state! :pdf/current current)))))])
+(rum/defc zotero-imported-file
+  [item-key filename]
+  (if (str/blank? (setting/setting :zotero-data-directory))
+    [:p.warning "This is a zotero imported file, setting Zotero data directory would allow you to open the file in Logseq"]
+    (let [filename (read-string filename)
+          full-path
+          (str "file://"
+               (util/node-path.join
+                (setting/setting :zotero-data-directory)
+                "storage"
+                item-key
+                filename))]
+      (open-button full-path))))
+
+(rum/defc zotero-linked-file
+  [path]
+  (if (str/blank? (setting/setting :zotero-linked-attachment-base-directory))
+    [:p.warning "This is a zotero linked file, setting Zotero linked attachment base directory would allow you to open the file in Logseq"]
+    (let [path (read-string path)
+          full-path
+          (str "file://"
+               (util/node-path.join
+                (setting/setting :zotero-linked-attachment-base-directory)
+                (str/replace-first path "attachments:" "")))]
+      (open-button full-path))))

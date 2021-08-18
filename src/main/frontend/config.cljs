@@ -151,7 +151,7 @@
   (let [format (or format (keyword (state/get-preferred-format)))]
     (case format
       :org
-      "/"
+      "_"
       :markdown
       "__"
       "")))
