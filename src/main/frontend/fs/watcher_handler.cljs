@@ -10,7 +10,10 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [clojure.string :as string]
-            [frontend.encrypt :as encrypt]))
+            [frontend.encrypt :as encrypt]
+            [frontend.db.model :as model]
+            [frontend.handler.editor :as editor]
+            [frontend.handler.extract :as extract]))
 
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
@@ -23,6 +26,9 @@
           (when-not (db/file-exists? repo path)
             (let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                                 :from-disk? true})]
+              (doseq [block-id (extract/extract-all-block-refs content)]
+                (if (model/get-block-by-uuid block-id)
+                  (editor/set-block-property! block-id "id" block-id)))
               (db/set-file-last-modified-at! repo path mtime)
               ;; return nil, otherwise the entire db will be transfered by ipc
               nil))
@@ -36,6 +42,9 @@
                  (> mtime last-modified-at)))
           (let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                               :from-disk? true})]
+            (doseq [block-id (extract/extract-all-block-refs content)]
+              (if (model/get-block-by-uuid block-id)
+                (editor/set-block-property! block-id "id" block-id)))
             (db/set-file-last-modified-at! repo path mtime)
             nil)
 

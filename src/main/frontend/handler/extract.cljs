@@ -235,3 +235,8 @@
               block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
               blocks (map #(remove-illegal-refs % block-ids-set refresh?) blocks)]
           (apply concat [pages-index pages block-ids blocks]))))))
+
+
+(defn extract-all-block-refs
+  [content]
+  (map second (re-seq #"\(\(([a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12})\)\)" content)))
