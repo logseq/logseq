@@ -27,7 +27,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.ui :as ui]
-            [frontend.error :as error]))
+            [frontend.error :as error]
+            [frontend.util.pool :as pool]))
 
 (defn set-global-error-notification!
   []
@@ -200,6 +201,7 @@
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
+    (pool/init-parser-pool!)
     (when (util/electron?)
       (el/listen!))))
 
