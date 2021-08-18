@@ -91,6 +91,10 @@
      (util/format "![%s](%s)" label link)
      (util/format "[%s](%s)" label link))))
 
+(defn org-link
+  [label link]
+  (util/format "[[%s][%s]]" label link))
+
 (defn local-link [item]
   (let [type (-> item :library :type)
         id   (-> item :library :id)
@@ -152,27 +156,30 @@
 
 (defmethod extract "attachment"
   [item]
-  (let [{:keys [title url link-mode path content-type filename]} (-> item :data)]
+  (let [{:keys [title url link-mode path content-type filename]} (-> item :data)
+        link-func (if (= :org (state/get-preferred-format))
+                    org-link
+                    markdown-link)]
     (case link-mode
       "imported_file"
       (str
-       (markdown-link title (local-link item))
+       (link-func title (local-link item))
        " "
        (zotero-imported-file-macro (item-key item) filename))
       "linked_file"
       (if (str/starts-with? path "attachments:")
         (str
-         (markdown-link title (local-link item))
+         (link-func title (local-link item))
          " "
          (zotero-linked-file-macro path))
         (let [path (str/replace path " " "%20")]
           (if (= content-type "application/pdf")
             (markdown-link title (str "file://" path) true)
-            (markdown-link title (str "file://" path)))))
+            (link-func title (str "file://" path)))))
       "imported_url"
-      (markdown-link title url)
+      (link-func title url)
       "linked_url"
-      (markdown-link title url))))
+      (link-func title url))))
 
 (defmethod extract :default
   [item]
