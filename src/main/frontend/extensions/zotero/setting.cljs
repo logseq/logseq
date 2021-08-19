@@ -22,7 +22,7 @@
 
 (defn all-profiles []
   (let [profiles (-> (sub-zotero-config) keys set)
-        default #{:default}]
+        default #{"default"}]
     (if (empty? profiles) default profiles)))
 
 (defn profile []
@@ -39,20 +39,17 @@
         api-key-map (storage/get :zotero/api-key-v2)]
     (storage/set :zotero/api-key-v2 (assoc api-key-map profile key))))
 
-(defn add-profile [name]
-  (let [profile (keyword name)
-        settings (assoc (sub-zotero-config) profile {})]
+(defn add-profile [profile]
+  (let [settings (assoc (sub-zotero-config) profile {})]
     (config-handler/set-config! :zotero/settings-v2 settings)))
 
-(defn set-profile [name]
-  (let [profile (keyword name)]
-    (storage/set :zotero/setting-profile profile)
-    (when-not (contains? (all-profiles) profile)
-      (add-profile name))))
+(defn set-profile [profile]
+  (storage/set :zotero/setting-profile profile)
+  (when-not (contains? (all-profiles) profile)
+    (add-profile name)))
 
-(defn remove-profile [name]
-  (let [profile (keyword name)
-        settings (dissoc (sub-zotero-config) profile)]
+(defn remove-profile [profile]
+  (let [settings (dissoc (sub-zotero-config) profile)]
     (config-handler/set-config! :zotero/settings-v2 settings)))
 
 (defn set-setting! [k v]
@@ -65,7 +62,7 @@
 (defn setting [k]
   (let [profile (profile)]
     (-> (sub-zotero-config)
-        profile
+        (get profile)
         (get k (get default-settings k)))))
 
 (defn valid? []

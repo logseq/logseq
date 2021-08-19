@@ -299,27 +299,27 @@
   [:div.zotero-profile-selector.m-2
    [:label.mr-1 {:for "profile-select"} "Choose a profile:"]
    [:select
-    {:value (name @profile*)
+    {:value @profile*
      :on-change
      (fn [e]
-       (when-let [profile (keyword (util/evalue e))]
+       (when-let [profile (util/evalue e)]
          (p/let [_ (setting/set-profile profile)]
            (reset! profile* profile))))}
     (map-indexed (fn [i x] [:option
                             {:key      i
-                             :value    (name x)}
-                            (name x)]) (setting/all-profiles))]
+                             :value    x}
+                            x]) (setting/all-profiles))]
    (ui/button
     "New profile"
     :small? true
     :on-click
     (fn []
-      (let [new-profile (js/prompt "Please enter your profile name")
-            new-profile (keyword new-profile)]
-        (when new-profile
-          (p/let [_ (setting/add-profile new-profile)
-                  _ (setting/set-profile new-profile)]
-            (reset! profile* new-profile))))))
+      (let [new-profile (js/prompt "Please enter your profile name")]
+        (when-not (str/blank?  new-profile)
+          (let [profile-name (str/trim new-profile)]
+            (p/let [_ (setting/add-profile profile-name)
+                    _ (setting/set-profile profile-name)]
+              (reset! profile* profile-name)))))))
    (ui/button
     "Delete profile!"
     :small? true
