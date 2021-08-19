@@ -124,13 +124,13 @@
        (merge
         {:type  "button"
          :class (str (util/hiccup->class klass) " " class)}
-        (dissoc option :background :class))
+        (dissoc option :background :class :small?))
        text]
       [:button.ui__button
        (merge
         {:type  "button"
          :class (str (util/hiccup->class klass) " " class)}
-        (dissoc option :background :class))
+        (dissoc option :background :class :small?))
        text])))
 
 (rum/defc notification-content

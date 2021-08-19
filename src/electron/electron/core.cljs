@@ -21,7 +21,9 @@
 (defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
 
 (def ROOT_PATH (path/join js/__dirname ".."))
-(def MAIN_WINDOW_ENTRY (str "file://" (path/join js/__dirname (if dev? "electron-dev.html" "electron.html"))))
+(def MAIN_WINDOW_ENTRY (if dev?
+                         "http://localhost:3001"
+                         (str "file://" (path/join js/__dirname "electron.html"))))
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))

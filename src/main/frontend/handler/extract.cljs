@@ -17,7 +17,8 @@
             [medley.core :as medley]
             [clojure.walk :as walk]
             [frontend.state :as state]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [promesa.core :as p]))
 
 (defn- extract-page-list
   [content]
@@ -149,30 +150,31 @@
    (extract-blocks-pages repo-url file content (utf8/encode content)))
   ([repo-url file content utf8-content]
    (if (string/blank? content)
-     []
-     (let [journal? (config/journal? file)
-           format (format/get-format file)
-           ast (mldoc/->edn content
-                            (mldoc/default-config format))
-           first-block (ffirst ast)
-           properties (let [properties (and (property/properties-ast? first-block)
-                                            (->> (last first-block)
-                                                 (map (fn [[x y]]
-                                                        [x (if (string? y)
-                                                             (property/parse-property x y)
-                                                             y)]))
-                                                 (into {})
-                                                 (walk/keywordize-keys)))]
-                        (when (and properties (seq properties))
-                          (if (:filters properties)
-                            (update properties :filters
-                                    (fn [v]
-                                      (string/replace (or v "") "\\" "")))
-                            properties)))]
-       (extract-pages-and-blocks
-        repo-url
-        format ast properties
-        file content utf8-content journal?)))))
+     (p/resolved [])
+     (p/let [format (format/get-format file)
+             _ (println "Parsing start : " file)
+             ast (mldoc/->edn-async content (mldoc/default-config format))]
+       _ (println "Parsing finished : " file)
+       (let [journal? (config/journal? file)
+             first-block (ffirst ast)
+             properties (let [properties (and (property/properties-ast? first-block)
+                                              (->> (last first-block)
+                                                   (map (fn [[x y]]
+                                                          [x (if (string? y)
+                                                               (property/parse-property x y)
+                                                               y)]))
+                                                   (into {})
+                                                   (walk/keywordize-keys)))]
+                          (when (and properties (seq properties))
+                            (if (:filters properties)
+                              (update properties :filters
+                                      (fn [v]
+                                        (string/replace (or v "") "\\" "")))
+                              properties)))]
+         (extract-pages-and-blocks
+          repo-url
+          format ast properties
+          file content utf8-content journal?))))))
 
 (defn with-block-uuid
   [pages]
@@ -207,31 +209,31 @@
 (defn extract-all-blocks-pages
   [repo-url files metadata refresh?]
   (when (seq files)
-    (let [result (->> files
-                      (map
-                        (fn [{:file/keys [path content]} contents]
-                          (println "Parsing : " path)
-                          (when content
-                            ;; TODO: remove `text/scheduled-deadline-dash->star` once migration is done
-                            (let [org? (= "org" (string/lower-case (util/get-file-ext path)))]
-                              (let [content (if org?
-                                              content
-                                              (text/scheduled-deadline-dash->star content))
-                                    utf8-content (utf8/encode content)]
-                                (extract-blocks-pages repo-url path content utf8-content))))))
-                      (remove empty?))]
-      (when (seq result)
-        (let [[pages block-ids blocks] (apply map concat result)
-              block-ids (remove (fn [b] (or (nil? b)
-                                           (nil? (:block/uuid b)))) block-ids)
-              pages (with-ref-pages pages blocks)
-              blocks (map (fn [block]
-                            (let [id (:block/uuid block)
-                                  properties (get-in metadata [:block/properties id])]
-                              (update block :block/properties merge properties)))
-                       blocks)
-              ;; To prevent "unique constraint" on datascript
-              pages-index (map #(select-keys % [:block/name]) pages)
-              block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
-              blocks (map #(remove-illegal-refs % block-ids-set refresh?) blocks)]
-          (apply concat [pages-index pages block-ids blocks]))))))
+    (-> (p/all (map
+                 (fn [{:file/keys [path content]} contents]
+                   (when content
+                     ;; TODO: remove `text/scheduled-deadline-dash->star` once migration is done
+                     (let [org? (= "org" (string/lower-case (util/get-file-ext path)))]
+                       (let [content (if org?
+                                       content
+                                       (text/scheduled-deadline-dash->star content))
+                             utf8-content (utf8/encode content)]
+                         (extract-blocks-pages repo-url path content utf8-content)))))
+                 files))
+        (p/then (fn [result]
+                  (let [result (remove empty? result)]
+                    (when (seq result)
+                      (let [[pages block-ids blocks] (apply map concat result)
+                            block-ids (remove (fn [b] (or (nil? b)
+                                                         (nil? (:block/uuid b)))) block-ids)
+                            pages (with-ref-pages pages blocks)
+                            blocks (map (fn [block]
+                                          (let [id (:block/uuid block)
+                                                properties (get-in metadata [:block/properties id])]
+                                            (update block :block/properties merge properties)))
+                                     blocks)
+                            ;; To prevent "unique constraint" on datascript
+                            pages-index (map #(select-keys % [:block/name]) pages)
+                            block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
+                            blocks (map #(remove-illegal-refs % block-ids-set refresh?) blocks)]
+                        (apply concat [pages-index pages block-ids blocks])))))))))

@@ -24,30 +24,30 @@
 
 (defn inflate-asset
   [full-path]
-  (let [filename  (util/node-path.basename full-path)
+  (let [filename (util/node-path.basename full-path)
         web-link? (string/starts-with? full-path "http")
-        ext-name  (util/get-file-ext filename)
-        url       (cond
-                    web-link?
-                    full-path
+        ext-name (util/get-file-ext filename)
+        url (cond
+              web-link?
+              full-path
 
-                    (util/absolute-path? full-path)
-                    (str "file://" full-path)
+              (util/absolute-path? full-path)
+              (str "file://" full-path)
 
-                    (string/starts-with? full-path "file:/")
-                    full-path
+              (string/starts-with? full-path "file:/")
+              full-path
 
-                    :else
-                    (util/node-path.join
-                     "file://"                                  ;; TODO: bfs
-                     (config/get-repo-dir (state/get-current-repo))
-                     "assets" filename))]
+              :else
+              (util/node-path.join
+                "file://"                                   ;; TODO: bfs
+                (config/get-repo-dir (state/get-current-repo))
+                "assets" filename))]
     (when-let [key
                (if web-link?
                  (str (hash url))
                  (and
-                  (= ext-name "pdf")
-                  (subs filename 0 (- (count filename) 4))))]
+                   (= ext-name "pdf")
+                   (subs filename 0 (- (count filename) 4))))]
       {:key      key
        :identity (subs key (- (count key) 15))
        :filename filename
@@ -152,16 +152,21 @@
         url (:url pdf-current)
         format (state/get-preferred-format)]
     (if-not page
-      (do
+      (let [repo-dir (config/get-repo-dir (state/get-current-repo))
+            asset-dir (util/node-path.join repo-dir config/local-assets-dir)
+            url (if (string/includes? url asset-dir)
+                  (str ".." (last (string/split url repo-dir)))
+                  url)
+            label (:filename pdf-current)]
         (page-handler/create! page-name {:redirect?        false :create-first-block? false
                                          :split-namespace? false
                                          :format           format
                                          :properties       {:file      (case format
                                                                          :markdown
-                                                                         (util/format "[%s](%s)" page-name url)
+                                                                         (util/format "[%s](%s)" label url)
 
                                                                          :org
-                                                                         (util/format "[[%s][%s]]" url page-name)
+                                                                         (util/format "[[%s][%s]]" url label)
 
                                                                          url)
                                                             :file-path url}})
@@ -237,7 +242,7 @@
 (rum/defc human-hls-filename-display
   [title]
   (let [local-asset? (re-find #"[0-9]{13}_\d$" title)]
-    [:a.asset-ref.is-pdf
+    [:a.asset-ref
      (-> title
          (subs 0 (- (count title) (if local-asset? 15 0)))
          (string/replace #"^hls__" "")

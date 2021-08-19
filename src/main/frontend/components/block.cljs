@@ -705,7 +705,7 @@
        [:div
         [:img.w-full.h-full.absolute
          {:src (if (util/electron?)
-                 "img/tutorial-thumb.jpg"
+                 (str (config/get-static-path) "img/tutorial-thumb.jpg")
                  "https://img.youtube.com/vi/Afmqowr0qEQ/maxresdefault.jpg")}]
         [:button
          {:class "absolute bg-red-300 w-16 h-16 -m-8 top-1/2 left-1/2 rounded-full"
@@ -840,6 +840,9 @@
                (not= \* (last s)))
           (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
+          (not (string/includes? s "."))
+          (page-reference (:html-export? config) s config label)
+
           (util/safe-re-find #"(?i)^http[s]?://" s)
           (->elem :a {:href s
                       :data-href s
@@ -951,12 +954,6 @@
                                (when-let [current (pdf-assets/inflate-asset href)]
                                  (state/set-state! :pdf/current current)))}
              (get-label-text label)]
-
-            (and
-             (util/electron?)
-             (= protocol "zotero")
-             (= (-> label get-label-text util/get-file-ext) "pdf"))
-            (zotero/zotero-pdf-link (get-label-text label) href)
 
             :else
             (->elem
@@ -1089,6 +1086,15 @@
 
         (= name "tutorial-video")
         (tutorial-video)
+
+        (= name "zotero-imported-file")
+        (let [[item-key filename] arguments]
+          (when (and item-key filename)
+            [:span.ml-1 (zotero/zotero-imported-file item-key filename)]))
+
+        (= name "zotero-linked-file")
+        (when-let [path (first arguments)]
+          [:span.ml-1 (zotero/zotero-linked-file path)])
 
         (= name "vimeo")
         (when-let [url (first arguments)]

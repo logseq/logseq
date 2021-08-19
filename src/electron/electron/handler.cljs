@@ -195,6 +195,9 @@
       (cfgs/set-item! (keyword k) v)
       (cfgs/get-item (keyword k)))))
 
+(defmethod handle :getDirname [_]
+  js/__dirname)
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 
