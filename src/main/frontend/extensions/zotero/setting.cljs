@@ -16,24 +16,54 @@
    :extra-tags             ""
    :page-insert-prefix     "@"})
 
-(defn api-key []
-  (storage/get :zotero/api-key))
-
-(defn set-api-key [key]
-  (storage/set :zotero/api-key key))
-
 (defn sub-zotero-config
   []
-  (:zotero/settings (get (state/sub-config) (state/get-current-repo))))
+  (:zotero/settings-v2 (get (state/sub-config) (state/get-current-repo))))
+
+(defn all-profiles []
+  (let [profiles (-> (sub-zotero-config) keys set)
+        default #{"default"}]
+    (if (empty? profiles) default profiles)))
+
+(defn profile []
+  (let [profile (storage/get :zotero/setting-profile)]
+    (if (and profile (contains? (all-profiles) profile))
+      profile
+      (first (all-profiles)))))
+
+(defn api-key []
+  (get (storage/get :zotero/api-key-v2) (profile)))
+
+(defn set-api-key [key]
+  (let [profile (profile)
+        api-key-map (storage/get :zotero/api-key-v2)]
+    (storage/set :zotero/api-key-v2 (assoc api-key-map profile key))))
+
+(defn add-profile [profile]
+  (let [settings (assoc (sub-zotero-config) profile {})]
+    (config-handler/set-config! :zotero/settings-v2 settings)))
+
+(defn set-profile [profile]
+  (storage/set :zotero/setting-profile profile)
+  (when-not (contains? (all-profiles) profile)
+    (add-profile name)))
+
+(defn remove-profile [profile]
+  (let [settings (dissoc (sub-zotero-config) profile)]
+    (config-handler/set-config! :zotero/settings-v2 settings)))
 
 (defn set-setting! [k v]
-  (let [new-settings (assoc (sub-zotero-config) k v)]
-    (config-handler/set-config! :zotero/settings new-settings)))
+  (let [profile (profile)
+        new-settings (update (sub-zotero-config)
+                             profile
+                             #(assoc % k v))]
+    (config-handler/set-config! :zotero/settings-v2 new-settings)))
 
 (defn setting [k]
-  (get (sub-zotero-config)
-       k
-       (get default-settings k)))
+  (let [profile (profile)]
+    (-> (sub-zotero-config)
+        (get profile)
+        (get k (get default-settings k)))))
 
 (defn valid? []
   (and

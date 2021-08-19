@@ -1,5 +1,5 @@
 (ns frontend.extensions.zotero
-  (:require [cljs.core.async :refer [<! >! go chan go-loop] :as a]
+  (:require [cljs.core.async :refer [<! >! chan go go-loop] :as a]
             [clojure.edn :refer [read-string]]
             [clojure.string :as str]
             [frontend.components.svg :as svg]
@@ -13,6 +13,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [promesa.core :as p]
             [rum.core :as rum]))
 
 (def term-chan (chan))
@@ -116,29 +117,11 @@
            (set! (.-scrollTop (.-parentNode (gdom/getElement "zotero-search"))) 0)
            (go (<! (search-fn prev-search-term next-page))))))]]))
 
-
-(rum/defcs settings
-  <
+(rum/defcs user-or-group-setting <
   (rum/local (setting/setting :type-id) ::type-id)
-  (rum/local nil ::progress)
-  (rum/local false ::total)
-  (rum/local "Add all" ::fetching-button)
   rum/reactive
   [state]
-  [:div.zotero-settings
-   [:h1.mb-4.text-4xl.font-bold.mb-8 "Zotero Settings"]
-
-   [:div.row
-    [:label.title
-     {:for "zotero_api_key"}
-     "Zotero API key"]
-    [:div.mt-1.sm:mt-0.sm:col-span-2
-     [:div.max-w-lg.rounded-md
-      [:input.form-input.block
-       {:default-value (setting/api-key)
-        :placeholder   "Please enter your Zotero API key"
-        :on-blur       (fn [e] (setting/set-api-key (util/evalue e)))}]]]]
-
+  [:div
    [:div.row
     [:label.title
      {:for "zotero_type"}
@@ -176,19 +159,12 @@
        "User ID is different from username and can be found on the "
        [:a {:href "https://www.zotero.org/settings/keys" :target "_blank"}
         "https://www.zotero.org/settings/keys"]
-       " page, it's a number of digits"]))
+       " page, it's a number of digits"]))])
 
-   [:div.row
-    [:label.title
-     {:for "zotero_prefer_citekey"
-      :title "Make sure to install Better BibTeX and pin your item first"}
-     "Always prefer citekey as your page title?"]
-    [:div
-     [:div.rounded-md.sm:max-w-xs
-      (ui/toggle (setting/setting :prefer-citekey?)
-                 (fn [] (setting/set-setting! :prefer-citekey? (not (setting/setting :prefer-citekey?))))
-                 true)]]]
-
+(rum/defc attachment-setting <
+  rum/reactive
+  []
+  [:div
    [:div.row
     [:label.title
      {:for "zotero_include_attachment_links"}
@@ -198,7 +174,6 @@
       (ui/toggle (setting/setting :include-attachments?)
                  (fn [] (setting/set-setting! :include-attachments? (not (setting/setting :include-attachments?))))
                  true)]]]
-
    (when (setting/setting :include-attachments?)
      [:div.row
       [:label.title
@@ -209,15 +184,14 @@
         [:input.form-input.block
          {:default-value (setting/setting :attachments-block-text)
           :on-blur       (fn [e] (setting/set-setting! :attachments-block-text (util/evalue e)))}]]]])
-
    (when (setting/setting :include-attachments?)
      [:div.row
       [:label.title
        {:for "zotero_linked_attachment_base_directory"}
        "Zotero linked attachment base directory"
        [:a.ml-2
-        {:title "If you store attached files in Zotero — the default — this setting does not affect you. It only applies to linked files. If you're using the ZotFile plugin to help with a linked-file workflow, you should configure it to store linked files within the base directory you've configured. Click to learn more."
-         :href "https://www.zotero.org/support/preferences/advanced#linked_attachment_base_directory"
+        {:title  "If you store attached files in Zotero — the default — this setting does not affect you. It only applies to linked files. If you're using the ZotFile plugin to help with a linked-file workflow, you should configure it to store linked files within the base directory you've configured. Click to learn more."
+         :href   "https://www.zotero.org/support/preferences/advanced#linked_attachment_base_directory"
          :target "_blank"}
         (svg/info)]]
       [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -225,8 +199,38 @@
         [:input.form-input.block
          {:default-value (setting/setting :zotero-linked-attachment-base-directory)
           :placeholder   "/Users/Sarah/Dropbox"
-          :on-blur       (fn [e] (setting/set-setting! :zotero-linked-attachment-base-directory (util/evalue e)))}]]]])
+          :on-blur       (fn [e] (setting/set-setting! :zotero-linked-attachment-base-directory (util/evalue e)))}]]]])])
 
+(rum/defc prefer-citekey-setting <
+  rum/reactive
+  []
+  [:div.row
+   [:label.title
+    {:for   "zotero_prefer_citekey"
+     :title "Make sure to install Better BibTeX and pin your item first"}
+    "Always prefer citekey as your page title?"]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/toggle (setting/setting :prefer-citekey?)
+                (fn [] (setting/set-setting! :prefer-citekey? (not (setting/setting :prefer-citekey?))))
+                true)]]])
+
+(rum/defc api-key-setting []
+  [:div.row
+   [:label.title
+    {:for "zotero_api_key"}
+    "Zotero API key"]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md
+     [:input.form-input.block
+      {:default-value (setting/api-key)
+       :placeholder   "Please enter your Zotero API key"
+       :on-blur       (fn [e] (setting/set-api-key (util/evalue e)))}]]]])
+
+(rum/defc notes-setting <
+  rum/reactive
+  []
+  [:div
    [:div.row
     [:label.title
      {:for "zotero_include_notes"}
@@ -237,7 +241,6 @@
                  (fn [] (setting/set-setting! :include-notes?
                                               (not (setting/setting :include-notes?))))
                  true)]]]
-
    (when (setting/setting :include-notes?)
      [:div.row
       [:label.title
@@ -247,47 +250,92 @@
        [:div.max-w-lg.rounded-md
         [:input.form-input.block
          {:default-value (setting/setting :notes-block-text)
-          :on-blur       (fn [e] (setting/set-setting! :notes-block-text (util/evalue e)))}]]]])
+          :on-blur       (fn [e] (setting/set-setting! :notes-block-text (util/evalue e)))}]]]])])
 
-   [:div.row
-    [:label.title
-     {:for "zotero_page_prefix"}
-     "Insert page name with prefix:"]
-    [:div.mt-1.sm:mt-0.sm:col-span-2
-     [:div.max-w-lg.rounded-md
-      [:input.form-input.block
-       {:default-value (setting/setting :page-insert-prefix)
-        :on-blur       (fn [e] (setting/set-setting! :page-insert-prefix (util/evalue e)))}]]]]
+(rum/defc page-prefix-setting []
+  [:div.row
+   [:label.title
+    {:for "zotero_page_prefix"}
+    "Insert page name with prefix:"]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md
+     [:input.form-input.block
+      {:default-value (setting/setting :page-insert-prefix)
+       :on-blur       (fn [e] (setting/set-setting! :page-insert-prefix (util/evalue e)))}]]]])
 
-   [:div.row
-    [:label.title
-     {:for "zotero_extra_tags"
-      :title "Extra tags to add for every imported page. Separate by comma, or leave it empty."}
-     "Extra tags to add:"]
-    [:div.mt-1.sm:mt-0.sm:col-span-2
-     [:div.max-w-lg.rounded-md
-      [:input.form-input.block
-       {:default-value (setting/setting :extra-tags)
-        :placeholder   "tag1,tag2,tag3"
-        :on-blur       (fn [e] (setting/set-setting! :extra-tags (util/evalue e)))}]]]]
+(rum/defc extra-tags-setting []
+  [:div.row
+   [:label.title
+    {:for "zotero_extra_tags"
+     :title "Extra tags to add for every imported page. Separate by comma, or leave it empty."}
+    "Extra tags to add:"]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md
+     [:input.form-input.block
+      {:default-value (setting/setting :extra-tags)
+       :placeholder   "tag1,tag2,tag3"
+       :on-blur       (fn [e] (setting/set-setting! :extra-tags (util/evalue e)))}]]]])
 
-   (when (util/electron?)
-     [:div.row
-      [:label.title
-       {:for "zotero_data_directory"}
-       "Zotero data directory"
-       [:a.ml-2
-        {:title "Set Zotero data directory to open pdf attachment in Logseq. Click to learn more."
-         :href "https://www.zotero.org/support/zotero_data"
-         :target "_blank"}
-        (svg/info)]]
-      [:div.mt-1.sm:mt-0.sm:col-span-2
-       [:div.max-w-lg.rounded-md
-        [:input.form-input.block
-         {:default-value (setting/setting :zotero-data-directory)
-          :placeholder   "/Users/<username>/Zotero"
-          :on-blur       (fn [e] (setting/set-setting! :zotero-data-directory (util/evalue e)))}]]]])
+(rum/defc data-directory-setting []
+  [:div.row
+   [:label.title
+    {:for "zotero_data_directory"}
+    "Zotero data directory"
+    [:a.ml-2
+     {:title "Set Zotero data directory to open pdf attachment in Logseq. Click to learn more."
+      :href "https://www.zotero.org/support/zotero_data"
+      :target "_blank"}
+     (svg/info)]]
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    [:div.max-w-lg.rounded-md
+     [:input.form-input.block
+      {:default-value (setting/setting :zotero-data-directory)
+       :placeholder   "/Users/<username>/Zotero"
+       :on-blur       (fn [e] (setting/set-setting! :zotero-data-directory (util/evalue e)))}]]]])
 
+(rum/defc zotero-profile-selector <
+  rum/reactive
+  [profile*]
+  [:div.zotero-profile-selector.m-2
+   [:label.mr-1 {:for "profile-select"} "Choose a profile:"]
+   [:select
+    {:value @profile*
+     :on-change
+     (fn [e]
+       (when-let [profile (util/evalue e)]
+         (p/let [_ (setting/set-profile profile)]
+           (reset! profile* profile))))}
+    (map-indexed (fn [i x] [:option
+                            {:key      i
+                             :value    x}
+                            x]) (setting/all-profiles))]
+   (ui/button
+    "New profile"
+    :small? true
+    :on-click
+    (fn []
+      (let [new-profile (js/prompt "Please enter your profile name")]
+        (when-not (str/blank?  new-profile)
+          (let [profile-name (str/trim new-profile)]
+            (p/let [_ (setting/add-profile profile-name)
+                    _ (setting/set-profile profile-name)]
+              (reset! profile* profile-name)))))))
+   (ui/button
+    "Delete profile!"
+    :small? true
+    :background "red"
+    :on-click
+    (fn []
+      (p/let [_ (setting/remove-profile @profile*)]
+        (reset! profile* (setting/profile)))))])
+
+(rum/defcs add-all-items <
+  (rum/local nil ::progress)
+  (rum/local false ::total)
+  (rum/local "Add all" ::fetching-button)
+  rum/reactive
+  [state]
+  [:div
    [:div.row
     [:label.title
      {:for "zotero_import_all"}
@@ -304,12 +352,11 @@
             (when (.confirm
                    js/window
                    (str "This will import all your zotero items and add total number of " total " pages. Do you wish to continue?"))
-              (do
-                (reset! (::total state) total)
-                (<! (zotero-handler/add-all (::progress state)))
-                (reset! (::total state) false)
-                (notification/show! "Successfully added all items!" :success)))))))]]
 
+              (reset! (::total state) total)
+              (<! (zotero-handler/add-all (::progress state)))
+              (reset! (::total state) false)
+              (notification/show! "Successfully added all items!" :success))))))]]
    (ui/admonition
     :warning
     "If you have a lot of items in Zotero, adding them all can slow down Logseq. You can type /zotero to import specific item on demand instead.")
@@ -318,6 +365,44 @@
      [:div.row
       [:div.bg-greenred-200.py-3.rounded-lg.col-span-full
        [:progress.w-full {:max (+ @(::total state) 30) :value @(::progress state)}] "Importing items from Zotero....Please wait..."]])])
+
+(rum/defc setting-rows
+  []
+  [:div
+   (api-key-setting)
+
+   (user-or-group-setting)
+
+   (prefer-citekey-setting)
+
+   (attachment-setting)
+
+   (notes-setting)
+
+   (page-prefix-setting)
+
+   (extra-tags-setting)
+
+   (data-directory-setting)])
+
+(rum/defcs settings
+  <
+  (rum/local (setting/all-profiles) ::all-profiles)
+  (rum/local (setting/profile) ::profile)
+  rum/reactive
+  {:should-update
+   (fn [old-state new-state]
+     (let [all-profiles (setting/all-profiles)]
+       (not= all-profiles @(::all-profiles old-state))))}
+  [state]
+  [:div.zotero-settings
+   [:h1.mb-4.text-4xl.font-bold.mb-8 "Zotero Settings"]
+
+   (zotero-profile-selector (::profile state))
+
+   (rum/with-key (setting-rows) @(::profile state))
+
+   (add-all-items)])
 
 (defn open-button [full-path]
   (if (str/ends-with? (str/lower-case full-path) "pdf")
