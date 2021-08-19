@@ -346,6 +346,7 @@
    (ui/button
     "New profile"
     :small? true
+    :class "ml-2"
     :on-click
     (fn []
       (state/set-modal!
@@ -355,6 +356,7 @@
     "Delete profile!"
     :small? true
     :background "red"
+    :class "ml-2"
     :on-click
     (fn []
       (p/let [_ (setting/remove-profile @profile*)]
