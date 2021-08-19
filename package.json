@@ -45,7 +45,7 @@
         "css:build": "postcss tailwind.all.css -o static/css/style.css --verbose --env production",
         "css:watch": "TAILWIND_MODE=watch postcss tailwind.all.css -o static/css/style.css --verbose --watch",
         "cljs:watch": "clojure -M:cljs watch parser-worker app electron",
-        "cljs:electron-watch": "clojure -M:cljs watch parser-worker app electron",
+        "cljs:electron-watch": "PWD=$(pwd) PATCH_PARSER_WORKER=$(cat \"./templates/patch.parser.woker.js\" | sed -e \"s#PWD_ROOT#${PWD}#g\") clojure -M:cljs watch parser-worker app electron",
         "cljs:release": "clojure -M:cljs release parser-worker app publishing electron",
         "cljs:test": "clojure -M:test compile test",
         "cljs:run-test": "node static/tests.js",

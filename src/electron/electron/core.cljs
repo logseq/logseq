@@ -15,14 +15,16 @@
             [clojure.core.async :as async]
             [electron.state :as state]))
 
-(defonce PLUGIN_SCHEME "lsp")
-(defonce PLUGIN_PROTOCOL (str PLUGIN_SCHEME "://"))
-(defonce PLUGIN_URL (str PLUGIN_PROTOCOL "logseq.io/"))
+(defonce LSP_SCHEME "lsp")
+(defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
+(defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
+(defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
 (defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
 
 (def ROOT_PATH (path/join js/__dirname ".."))
 (def MAIN_WINDOW_ENTRY (if dev?
-                         "http://localhost:3001"
+                         ;;"http://localhost:3001"
+                         (str "file://" (path/join js/__dirname "index.html"))
                          (str "file://" (path/join js/__dirname "electron.html"))))
 
 (defonce *setup-fn (volatile! nil))
@@ -78,17 +80,21 @@
         (callback #js {:path path}))))
 
   (.registerFileProtocol
-    protocol PLUGIN_SCHEME
+    protocol LSP_SCHEME
     (fn [^js request callback]
       (let [url (.-url request)
-            path' (string/replace url PLUGIN_URL "")
+            [URL ROOT] (if (string/starts-with? url PLUGIN_URL)
+                         [PLUGIN_URL PLUGINS_ROOT]
+                         [STATIC_URL js/__dirname])
+
+            path' (string/replace url URL "")
             path' (js/decodeURIComponent path')
-            path' (.join path PLUGINS_ROOT path')]
+            path' (.join path ROOT path')]
 
         (callback #js {:path path'}))))
 
   #(do
-     (.unregisterProtocol protocol PLUGIN_SCHEME)
+     (.unregisterProtocol protocol LSP_SCHEME)
      (.unregisterProtocol protocol "assets")))
 
 (defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames]
@@ -223,7 +229,7 @@
       (.quit app))
     (do
       (.registerSchemesAsPrivileged
-        protocol (bean/->js [{:scheme     PLUGIN_SCHEME
+        protocol (bean/->js [{:scheme     LSP_SCHEME
                               :privileges {:standard        true
                                            :secure          true
                                            :supportFetchAPI true}}]))
