@@ -612,28 +612,29 @@
 
 (defn create-today-journal!
   []
-  (state/set-today! (date/today))
   (when-let [repo (state/get-current-repo)]
-    (when (or (db/cloned? repo)
-              (and (or (config/local-db? repo)
-                       (= "local" repo))
-                   ;; config file exists
-                   (let [path (config/get-config-path)]
-                     (db/get-file path))))
-      (let [title (date/today)
-            today-page (string/lower-case title)
-            template (state/get-default-journal-template)]
-        (when (db/page-empty? repo today-page)
-          (create! title {:redirect? false
-                          :split-namespace? false
-                          :create-first-block? (not template)
-                          :journal? true})
-          (when template
-            (let [page (db/pull [:block/name today-page])]
-             (editor-handler/insert-template!
-              nil
-              template
-              {:get-pos-fn (fn []
-                             [page false false false])
-               :page-block page})
-             (ui-handler/re-render-root!))))))))
+    (when (state/enable-journals? repo)
+      (state/set-today! (date/today))
+      (when (or (db/cloned? repo)
+                (and (or (config/local-db? repo)
+                         (= "local" repo))
+                     ;; config file exists
+                     (let [path (config/get-config-path)]
+                       (db/get-file path))))
+        (let [title (date/today)
+              today-page (string/lower-case title)
+              template (state/get-default-journal-template)]
+          (when (db/page-empty? repo today-page)
+            (create! title {:redirect? false
+                            :split-namespace? false
+                            :create-first-block? (not template)
+                            :journal? true})
+            (when template
+              (let [page (db/pull [:block/name today-page])]
+                (editor-handler/insert-template!
+                 nil
+                 template
+                 {:get-pos-fn (fn []
+                                [page false false false])
+                  :page-block page})
+                (ui-handler/re-render-root!)))))))))

@@ -389,3 +389,9 @@
 (defn get-block-hidden-properties
   []
   (get-in @state/state [:config (state/get-current-repo) :block-hidden-properties]))
+
+(defn get-static-path
+  []
+  (if (and (util/electron?) dev?)
+    "static/"
+    ""))

@@ -10,7 +10,9 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             ["mldoc" :as mldoc :refer [Mldoc]]
-            [linked.core :as linked]))
+            [linked.core :as linked]
+            [promesa.core :as p]
+            [frontend.util.pool :as pool]))
 
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
@@ -230,7 +232,7 @@
   [content config]
   (try
     (if (string/blank? content)
-      {}
+      []
       (-> content
           (parse-json config)
           (util/json->clj)
@@ -239,6 +241,22 @@
     (catch js/Error e
       (log/error :edn/convert-failed e)
       [])))
+
+(defn ->edn-async
+  [content config]
+  (if util/node-test?
+    (p/resolved (->edn content config))
+    (try
+      (if (string/blank? content)
+        (p/resolved [])
+        (p/let [v (pool/add-parse-job! content config)]
+          (-> v
+              (util/json->clj)
+              (update-src-full-content content)
+              (collect-page-properties))))
+      (catch js/Error e
+        (log/error :edn/convert-failed e)
+        (p/resolved [])))))
 
 (defn opml->edn
   [content]

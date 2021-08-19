@@ -2399,7 +2399,7 @@ callsites@^2.0.0:
   resolved "https://registry.yarnpkg.com/callsites/-/callsites-2.0.0.tgz"
   integrity sha1-BuuE8A7qQT2oav/vrL/7Ngk7PFA=
 
-callsites@^3.0.0:
+callsites@^3.0.0, callsites@^3.1.0:
   version "3.1.0"
   resolved "https://registry.yarnpkg.com/callsites/-/callsites-3.1.0.tgz"
   integrity sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==
@@ -3339,7 +3339,7 @@ dayjs@^1.10.4:
   resolved "https://registry.yarnpkg.com/dayjs/-/dayjs-1.10.5.tgz#5600df4548fc2453b3f163ebb2abbe965ccfb986"
   integrity sha512-BUFis41ikLz+65iH6LHQCDm4YPMj5r1YFLdupPIyM4SGcXMmtiLQ7U37i+hGS8urIuqe7I/ou3IS1jVc4nbN4g==
 
-debug@4, debug@4.3.2:
+debug@4, debug@4.3.2, debug@^4.2.0:
   version "4.3.2"
   resolved "https://registry.yarnpkg.com/debug/-/debug-4.3.2.tgz#f0a49c18ac8779e31d4a0c6029dfb76873c7428b"
   integrity sha512-mOp8wKcvj7XxC78zLgw/ZA+6TSgkoE2C/ienthhRD298T7UNwAg9diBpLRxC0mOezLl4B0xV7M0cCO6P/O0Xhw==
@@ -3829,6 +3829,11 @@ escape-string-regexp@^4.0.0:
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/escape-string-regexp/-/escape-string-regexp-4.0.0.tgz"
   integrity sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==
+
+esm@^3.2.25:
+  version "3.2.25"
+  resolved "https://registry.yarnpkg.com/esm/-/esm-3.2.25.tgz#342c18c29d56157688ba5ce31f8431fbb795cc10"
+  integrity sha512-U1suiZ2oDVWv4zPO56S0NcR5QriEahGtdN2OR6FiOG4WJvcjBVFB0qI4+eKoWFH483PKGuLuu6V8Z4T5g63UVA==
 
 esprima@^4.0.0:
   version "4.0.1"
@@ -5303,6 +5308,11 @@ is-obj@^2.0.0:
   resolved "https://registry.yarnpkg.com/is-obj/-/is-obj-2.0.0.tgz"
   integrity sha512-drqDG3cbczxxEJRoOXcOjtdp1J/lyp1mNn0xaznRs8+muBhgQcrnbspox5X5fOw0HnMnbfDzvnEMEtqDEJEo8w==
 
+is-observable@^2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/is-observable/-/is-observable-2.1.0.tgz#5c8d733a0b201c80dff7bb7c0df58c6a255c7c69"
+  integrity sha512-DailKdLb0WU+xX8K5w7VsJhapwHLZ9jjmazqCJq4X12CTgqq73TKnbRcnSLuXYPOoLQgV5IrD7ePiX/h1vnkBw==
+
 is-path-cwd@^2.2.0:
   version "2.2.0"
   resolved "https://registry.yarnpkg.com/is-path-cwd/-/is-path-cwd-2.2.0.tgz#67d43b82664a7b5191fd9119127eb300048a9fdb"
@@ -6531,6 +6541,11 @@ obliterator@^1.6.1:
   version "1.6.1"
   resolved "https://registry.yarnpkg.com/obliterator/-/obliterator-1.6.1.tgz#dea03e8ab821f6c4d96a299e17aef6a3af994ef3"
   integrity sha512-9WXswnqINnnhOG/5SLimUlzuU1hFJUc8zkwyD59Sd+dPOMf05PmnYG/d6Q7HZ+KmgkZJa1PxRso6QdM3sTNHig==
+
+observable-fns@^0.6.1:
+  version "0.6.1"
+  resolved "https://registry.yarnpkg.com/observable-fns/-/observable-fns-0.6.1.tgz#636eae4fdd1132e88c0faf38d33658cc79d87e37"
+  integrity sha512-9gRK4+sRWzeN6AOewNBTLXir7Zl/i3GB6Yl26gK4flxz8BXVpD3kt8amREmWNb0mxYOGDotvE5a4N+PtGGKdkg==
 
 once@^1.3.0, once@^1.3.1, once@^1.3.2, once@^1.4.0:
   version "1.4.0"
@@ -8246,17 +8261,17 @@ shadow-cljs@2.10.18:
     which "^1.3.1"
     ws "^3.0.0"
 
-shadow-cljs@2.12.5:
-  version "2.12.5"
-  resolved "https://registry.yarnpkg.com/shadow-cljs/-/shadow-cljs-2.12.5.tgz#d3cf29fc1f1e02dd875939549419979e0feadbf4"
-  integrity sha512-o3xo3coRgnlkI/iI55ccHjj6AU3F1+ovk3hhK86e3P2JGGOpNTAwsGNxUpMC5JAwS9Nz0v6sSk73hWjEOnm6fQ==
+shadow-cljs@2.15.3:
+  version "2.15.3"
+  resolved "https://registry.yarnpkg.com/shadow-cljs/-/shadow-cljs-2.15.3.tgz#11a0a04f1c31d9277838a5f649457edbb06baafb"
+  integrity sha512-KK7G9kSc0dwrOkN74o5yrxhrpsJ3BJCL11nGHBakzHLodc7pdiCLDeq2ChXyKl2yu9aJIzfSz8Hum38wpLQ1DA==
   dependencies:
     node-libs-browser "^2.2.1"
     readline-sync "^1.4.7"
     shadow-cljs-jar "1.3.2"
     source-map-support "^0.4.15"
     which "^1.3.1"
-    ws "^3.0.0"
+    ws "^7.4.6"
 
 shallowequal@^1.1.0:
   version "1.1.0"
@@ -8930,6 +8945,18 @@ tailwindcss@2.2.4:
     resolve "^1.20.0"
     tmp "^0.2.1"
 
+threads@^1.6.5:
+  version "1.6.5"
+  resolved "https://registry.yarnpkg.com/threads/-/threads-1.6.5.tgz#5cee7f139e3e147c5a64f0134844ee92469932a5"
+  integrity sha512-yL1NN4qZ25crW8wDoGn7TqbENJ69w3zCEjIGXpbqmQ4I+QHrG8+DLaZVKoX74OQUXWCI2lbbrUxDxAbr1xjDGQ==
+  dependencies:
+    callsites "^3.1.0"
+    debug "^4.2.0"
+    is-observable "^2.1.0"
+    observable-fns "^0.6.1"
+  optionalDependencies:
+    tiny-worker ">= 2"
+
 throttleit@^1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/throttleit/-/throttleit-1.0.0.tgz#9e785836daf46743145a5984b6268d828528ac6c"
@@ -8991,6 +9018,13 @@ tiny-typed-emitter@^2.0.3:
   version "2.0.3"
   resolved "https://registry.yarnpkg.com/tiny-typed-emitter/-/tiny-typed-emitter-2.0.3.tgz#4335e3a75127ae7faba91b02e91615d97dc8db7d"
   integrity sha512-MaCqhHlp6EAWN25yqBlajgd4scxxI2eJr7+EgoUAOV9UkMU3us/yp2bEnc2yOvyeDF8TUWuaz3zZCPGTKFJIpA==
+
+"tiny-worker@>= 2":
+  version "2.3.0"
+  resolved "https://registry.yarnpkg.com/tiny-worker/-/tiny-worker-2.3.0.tgz#715ae34304c757a9af573ae9a8e3967177e6011e"
+  integrity sha512-pJ70wq5EAqTAEl9IkGzA+fN0836rycEuz2Cn6yeZ6FRzlVS5IDOkFHpIoEsksPRQV34GDqXm65+OlnZqUSyK2g==
+  dependencies:
+    esm "^3.2.25"
 
 tippy.js@^6.3.1:
   version "6.3.1"
@@ -9652,6 +9686,11 @@ ws@^3.0.0:
     async-limiter "~1.0.0"
     safe-buffer "~5.1.0"
     ultron "~1.1.0"
+
+ws@^7.4.6:
+  version "7.5.3"
+  resolved "https://registry.yarnpkg.com/ws/-/ws-7.5.3.tgz#160835b63c7d97bfab418fc1b8a9fced2ac01a74"
+  integrity sha512-kQ/dHIzuLrS6Je9+uv81ueZomEwH0qVYstcAQ4/Z93K8zeko9gtAbttJWzoC5ukqXY1PpoouV3+VSOqEAFt5wg==
 
 xtend@^4.0.0, xtend@^4.0.1, xtend@^4.0.2, xtend@~4.0.0, xtend@~4.0.1:
   version "4.0.2"
