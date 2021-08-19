@@ -293,6 +293,40 @@
        :placeholder   "/Users/<username>/Zotero"
        :on-blur       (fn [e] (setting/set-setting! :zotero-data-directory (util/evalue e)))}]]]])
 
+(rum/defcs profile-name-dialog-inner <
+  (rum/local "" ::input)
+  [state profile* close-fn]
+  (let [input (get state ::input)]
+    [:div.w-full.sm:max-w-lg.sm:w-96
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.text-lg.leading-6.font-medium
+        "Please enter your profile name"]]]
+
+     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+      {:auto-focus true
+       :default-value ""
+       :on-change (fn [e] (reset! input (util/evalue e)))}]
+
+     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+      [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
+       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+        {:type "button"
+         :class "ui__modal-enter"
+         :on-click (fn []
+                     (let [profile-name (str/trim @input)]
+                       (when-not (str/blank? profile-name)
+                         (p/let [_ (setting/add-profile profile-name)
+                                 _ (setting/set-profile profile-name)]
+                           (reset! profile* profile-name)))
+                       (state/close-modal!)))}
+        "Submit"]]
+      [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
+       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+        {:type "button"
+         :on-click close-fn}
+        "Cancel"]]]]))
+
 (rum/defc zotero-profile-selector <
   rum/reactive
   [profile*]
@@ -314,12 +348,9 @@
     :small? true
     :on-click
     (fn []
-      (let [new-profile (js/prompt "Please enter your profile name")]
-        (when-not (str/blank?  new-profile)
-          (let [profile-name (str/trim new-profile)]
-            (p/let [_ (setting/add-profile profile-name)
-                    _ (setting/set-profile profile-name)]
-              (reset! profile* profile-name)))))))
+      (state/set-modal!
+        (fn [close-fn]
+          (profile-name-dialog-inner profile* close-fn)))))
    (ui/button
     "Delete profile!"
     :small? true
