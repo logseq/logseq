@@ -15,6 +15,18 @@
             [frontend.handler.editor :as editor]
             [frontend.handler.extract :as extract]))
 
+(defn- set-missing-block-ids!
+  [content]
+  (when (string? content)
+    (doseq [block-id (extract/extract-all-block-refs content)]
+      (when-let [block (try
+                         (model/get-block-by-uuid block-id)
+                         (catch js/Error _e
+                           nil))]
+        (let [id-property (:id (:block/properties block))]
+          (when-not (= (str id-property) (str block-id))
+            (editor/set-block-property! block-id "id" block-id)))))))
+
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
   (when dir
@@ -26,9 +38,7 @@
           (when-not (db/file-exists? repo path)
             (let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                                 :from-disk? true})]
-              (doseq [block-id (extract/extract-all-block-refs content)]
-                (if (model/get-block-by-uuid block-id)
-                  (editor/set-block-property! block-id "id" block-id)))
+              (set-missing-block-ids! content)
               (db/set-file-last-modified-at! repo path mtime)
               ;; return nil, otherwise the entire db will be transfered by ipc
               nil))
@@ -42,9 +52,7 @@
                  (> mtime last-modified-at)))
           (let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                               :from-disk? true})]
-            (doseq [block-id (extract/extract-all-block-refs content)]
-              (if (model/get-block-by-uuid block-id)
-                (editor/set-block-property! block-id "id" block-id)))
+            (set-missing-block-ids! content)
             (db/set-file-last-modified-at! repo path mtime)
             nil)
 
