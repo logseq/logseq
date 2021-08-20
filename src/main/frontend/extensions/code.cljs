@@ -47,6 +47,7 @@
             ["codemirror/mode/xml/xml"]
             ["codemirror/mode/sparql/sparql"]
             ["codemirror/mode/turtle/turtle"]
+            ["codemirror/mode/r/r"]
             ))
 
 ;; codemirror
