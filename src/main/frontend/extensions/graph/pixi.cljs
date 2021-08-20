@@ -93,7 +93,7 @@
                 (-> (forceCollide)
                     (.radius (+ 8 18))))
         (.force "x" (-> (forceX 0) (.strength 0.02)))
-        (.force "y" (-> (forceX 0) (.strength 0.02)))
+        (.force "y" (-> (forceY 0) (.strength 0.02)))
         (.force "center" (forceCenter))
         (.tick 3)
         (.stop))))
