@@ -44,7 +44,10 @@
             ["codemirror/mode/smalltalk/smalltalk"]
             ["codemirror/mode/sql/sql"]
             ["codemirror/mode/swift/swift"]
-            ["codemirror/mode/xml/xml"]))
+            ["codemirror/mode/xml/xml"]
+            ["codemirror/mode/sparql/sparql"]
+            ["codemirror/mode/turtle/turtle"]
+            ))
 
 ;; codemirror
 
