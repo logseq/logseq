@@ -60,7 +60,7 @@
           :label  {:content  (fn [node] (.-id node))
                    :type     (.-TEXT (.-TextType Pixi-Graph))
                    :fontSize 12
-                   :color    (if dark? "#ffffff" "#333333")
+                   :color    (if dark? "rgba(255, 255, 255, 0.8)" "rgba(0, 0, 0, 0.8)")
                    ;                  :backgroundColor "rgba(255, 255, 255, 0.5)"
                    :padding  4}}
    :edge {:width 1
