@@ -195,10 +195,11 @@ export interface IAppProxy {
     action: (e: IHookEvent & { page: string }) => void
   ) => void
 
-  // events
+  // hook events
   onCurrentGraphChanged: IUserHook
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
+  onMacroRendererSlotted: IUserSlotHook<{ payload: { arguments: Array<string>, uuid: string, [key: string]: any } }>
   onPageHeadActionsSlotted: IUserSlotHook
   onRouteChanged: IUserHook<{ path: string, template: string }>
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>

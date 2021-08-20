@@ -83,11 +83,12 @@
     protocol LSP_SCHEME
     (fn [^js request callback]
       (let [url (.-url request)
-            [URL ROOT] (if (string/starts-with? url PLUGIN_URL)
+            url' ^js (js/URL. url)
+            [_ ROOT] (if (string/starts-with? url PLUGIN_URL)
                          [PLUGIN_URL PLUGINS_ROOT]
                          [STATIC_URL js/__dirname])
 
-            path' (string/replace url URL "")
+            path' (.-pathname url')
             path' (js/decodeURIComponent path')
             path' (.join path ROOT path')]
 
@@ -232,6 +233,7 @@
         protocol (bean/->js [{:scheme     LSP_SCHEME
                               :privileges {:standard        true
                                            :secure          true
+                                           :bypassCSP       true
                                            :supportFetchAPI true}}]))
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]

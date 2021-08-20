@@ -214,10 +214,12 @@ export function setupInjectedUI (
   attrs: Record<string, any>
 ) {
   const pl = this
+  let slot = ''
   let selector = ''
 
   if ('slot' in ui) {
-    selector = `#${ui.slot}`
+    slot = ui.slot
+    selector = `#${slot}`
   } else {
     selector = ui.path
   }
@@ -228,9 +230,10 @@ export function setupInjectedUI (
     return
   }
 
+  const id = `${ui.key}-${slot}-${pl.id}`
   const key = `${ui.key}-${pl.id}`
 
-  let el = document.querySelector(`div[data-injected-ui="${key}"]`) as HTMLElement
+  let el = document.querySelector(`#${id}`) as HTMLElement
 
   if (el) {
     el.innerHTML = ui.template
@@ -238,6 +241,7 @@ export function setupInjectedUI (
   }
 
   el = document.createElement('div')
+  el.id = id
   el.dataset.injectedUi = key || ''
 
   // TODO: Support more

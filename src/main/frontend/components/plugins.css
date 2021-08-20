@@ -199,10 +199,12 @@
   }
 }
 
-body {
-  &[data-page=page] {
-    .lsp-hook-ui-slot {
-      @apply flex px-1 opacity-30 hover:opacity-50;
+.block-content {
+  .lsp-hook-ui-slot {
+    display: flex;
+
+    [data-injected-ui] {
+      display: inline-flex;
     }
   }
 }

@@ -28,6 +28,8 @@
             [frontend.extensions.zotero :as zotero]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
+            [frontend.components.plugins :as plugins]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
@@ -1172,6 +1174,10 @@
 
             :else                       ;TODO: maybe collections?
             nil))
+
+        (and plugin-handler/lsp-enabled? (= name "renderer"))
+        (if-let [block-uuid (str (:block/uuid config))]
+          (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
 
         (get @macro/macros name)
         ((get @macro/macros name) config options)
