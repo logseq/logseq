@@ -12,8 +12,8 @@ module.exports = {
       'signature-flags': 'library'
     },
     osxNotarize: {
-      appleId: "my-fake-apple-id",
-      appleIdPassword: "my-fake-apple-id-password",
+      appleId: process.env['APPLE_ID'],
+      appleIdPassword: process.env['APPLE_ID_PASSWORD'],
     },
   },
   makers: [
