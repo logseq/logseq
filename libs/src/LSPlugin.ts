@@ -90,6 +90,7 @@ export interface AppUserInfo {
 export interface AppUserConfigs {
   preferredThemeMode: 'dark' | 'light'
   preferredFormat: 'markdown' | 'org'
+  preferredDateFormat: string
   preferredLanguage: string
   preferredWorkflow: string
 

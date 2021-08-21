@@ -56,13 +56,14 @@
   (fn []
     (bean/->js
       (normalize-keyword-for-json
-        {:preferred-language   (:preferred-language @state/state)
-         :preferred-theme-mode (if (= (:ui/theme @state/state) "light") "white" "dark")
-         :preferred-format     (state/get-preferred-format)
-         :preferred-workflow   (state/get-preferred-workflow)
-         :preferred-todo       (state/get-preferred-todo)
-         :current-graph        (state/get-current-repo)
-         :me                   (state/get-me)}))))
+        {:preferred-language    (:preferred-language @state/state)
+         :preferred-theme-mode  (if (= (:ui/theme @state/state) "light") "white" "dark")
+         :preferred-format      (state/get-preferred-format)
+         :preferred-workflow    (state/get-preferred-workflow)
+         :preferred-todo        (state/get-preferred-todo)
+         :preferred-date-format (state/get-date-formatter)
+         :current-graph         (state/get-current-repo)
+         :me                    (state/get-me)}))))
 
 (def ^:export get_current_graph
   (fn []
