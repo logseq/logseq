@@ -149,7 +149,7 @@
                  (util/format "\n#+END_%s" (string/upper-case type)))
          template (str
                    left
-                   (if optional (str " " optional) "")
+                   (if optional (str optional) "")
                    "\n"
                    right)
          backward-pos (if (= type "src")
