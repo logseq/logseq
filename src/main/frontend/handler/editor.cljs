@@ -3160,3 +3160,42 @@
        (state/append-current-edit-content! clipboard-data)))
    (fn [error]
      (js/console.error error))))
+
+(defn copy-current-ref
+  [block-id]
+  (when block-id
+    (util/copy-to-clipboard! (util/format "((%s))" (str block-id)))))
+
+(defn delete-current-ref!
+  [block ref-id]
+  (when (and block ref-id)
+    (let [match (re-pattern (str "\\s?" (util/format "\\(\\(%s\\)\\)" (str ref-id))))
+          content (string/replace-first (:block/content block) match "")]
+      (save-block! (state/get-current-repo)
+                   (:block/uuid block)
+                   content))))
+
+(defn replace-ref-with-text!
+  [block ref-id]
+  (when (and block ref-id)
+    (let [match (util/format "((%s))" (str ref-id))
+          ref-block (db/entity [:block/uuid ref-id])
+          block-ref-content (->> (or (:block/content ref-block)
+                                    "")
+                                 (property/remove-built-in-properties (:block/format ref-block)))
+          content (string/replace-first (:block/content block) match
+                                        block-ref-content)]
+      (save-block! (state/get-current-repo)
+                   (:block/uuid block)
+                   content))))
+
+(defn replace-ref-with-embed!
+  [block ref-id]
+  (when (and block ref-id)
+    (let [match (util/format "((%s))" (str ref-id))
+          content (string/replace-first (:block/content block) match
+                                        (util/format "{{embed ((%s))}}"
+                                                     (str ref-id)))]
+      (save-block! (state/get-current-repo)
+                   (:block/uuid block)
+                   content))))

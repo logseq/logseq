@@ -17,7 +17,8 @@
             ["ignore" :as Ignore]
             ["/frontend/utils" :as utils]
             [frontend.date :as date]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [dommy.core :as d]))
 
 (defn get-ref
   [repo-url]
@@ -213,3 +214,14 @@
                     (date/journal-day->ts journal-day)
                     (util/time-ms)))))
     pages))
+
+(defn show-custom-context-menu! [e context-menu-content]
+  (util/stop e)
+  (let [client-x (gobj/get e "clientX")
+        client-y (gobj/get e "clientY")
+        scroll-y (util/cur-doc-top)]
+    (state/show-custom-context-menu! context-menu-content)
+    (when-let [context-menu (d/by-id "custom-context-menu")]
+      (d/set-style! context-menu
+                    :left (str client-x "px")
+                    :top (str (+ scroll-y client-y) "px")))))

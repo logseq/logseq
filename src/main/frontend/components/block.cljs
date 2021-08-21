@@ -588,6 +588,7 @@
 (declare block-content)
 (declare block-container)
 (declare block-parents)
+
 (rum/defc block-reference < rum/reactive
   [config id label]
   (when (and
@@ -600,29 +601,34 @@
           repo (state/get-current-repo)]
       (if block
         [:div.block-ref-wrap.inline
-
          {:data-type    (name (or block-type :default))
           :data-hl-type hl-type
           :on-mouse-down
           (fn [^js/MouseEvent e]
-            (when (or (gobj/get e "shiftKey")
-                      (not (.. e -target (closest ".blank"))))
-              (util/stop e)
+            (if (util/right-click? e)
+              (state/set-state! :block-ref/context {:block (:block config)
+                                                    :block-ref block-id})
 
-              (if (gobj/get e "shiftKey")
-                (state/sidebar-add-block!
-                  (state/get-current-repo)
-                  (:db/id block)
-                  :block-ref
-                  {:block block})
+              (when (and
+                     (or (gobj/get e "shiftKey")
+                         (not (.. e -target (closest ".blank"))))
+                     (not (util/right-click? e)))
+                (util/stop e)
 
-                (match [block-type (util/electron?)]
-                       ;; pdf annotation
-                       [:annotation true] (pdf-assets/open-block-ref! block)
+                (if (gobj/get e "shiftKey")
+                  (state/sidebar-add-block!
+                   (state/get-current-repo)
+                   (:db/id block)
+                   :block-ref
+                   {:block block})
 
-                       ;; default open block page
-                       :else (route-handler/redirect! {:to          :page
-                                                       :path-params {:name id}})))))}
+                  (match [block-type (util/electron?)]
+                    ;; pdf annotation
+                    [:annotation true] (pdf-assets/open-block-ref! block)
+
+                    ;; default open block page
+                    :else (route-handler/redirect! {:to          :page
+                                                    :path-params {:name id}}))))))}
 
          (let [title (let [title (:block/title block)
                            block-content (block-content (assoc config :block-ref? true)
@@ -802,10 +808,6 @@
           address (str local_part "@" domain)]
       [:a {:href (str "mainto:" address)}
        address])
-
-    ;; ["Block_reference" id]
-    ;; ;; FIXME: alert when self block reference
-    ;; (block-reference (assoc config :reference? true) id nil)
 
     ["Nested_link" link]
     (nested-link config html-export? link)
