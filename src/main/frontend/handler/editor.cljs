@@ -990,9 +990,10 @@
             new-line (str (string/upper-case key) ": " value)
             new-content (let [lines (string/split-lines content)
                               new-lines (map (fn [line]
-                                               (if (string/starts-with? (string/lower-case line) key)
-                                                 new-line
-                                                 line))
+                                               (string/trim
+                                                (if (string/starts-with? (string/lower-case line) key)
+                                                  new-line
+                                                  line)))
                                              lines)
                               new-lines (if (not= lines new-lines)
                                           new-lines
