@@ -17,7 +17,7 @@
 (defonce parseJson (gobj/get Mldoc "parseJson"))
 (defonce parseInlineJson (gobj/get Mldoc "parseInlineJson"))
 (defonce parseOPML (gobj/get Mldoc "parseOPML"))
-(defonce exportToHtml (gobj/get Mldoc "exportToHtml"))
+(defonce export (gobj/get Mldoc "export"))
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
 (defonce parseAndExportMarkdown (gobj/get Mldoc "parseAndExportMarkdown"))
 (defonce parseAndExportOPML (gobj/get Mldoc "parseAndExportOPML"))
@@ -285,7 +285,7 @@
   (toEdn [this content config]
     (->edn content config))
   (toHtml [this content config references]
-    (exportToHtml content config references))
+    (export "html" content config references))
   (loaded? [this]
     true)
   (lazyLoad [this ok-handler]
