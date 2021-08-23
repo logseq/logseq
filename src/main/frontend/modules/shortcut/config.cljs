@@ -306,7 +306,13 @@
      :binding "mod+c mod+r"
      :fn      #(repo-handler/re-index!
                 nfs-handler/rebuild-index!
-                page-handler/create-today-journal!)}}
+                page-handler/create-today-journal!)}
+    :sidebar/clear
+    {:desc    "Clear all in the right sidebar"
+     :binding "mod+c mod+c"
+     :fn      #(do
+                 (state/clear-sidebar-blocks!)
+                 (state/hide-right-sidebar!))}}
 
    :shortcut.handler/misc
    ;; always overrides the copy due to "mod+c mod+s"

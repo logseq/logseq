@@ -741,6 +741,10 @@
   []
   (:sidebar/blocks @state))
 
+(defn clear-sidebar-blocks!
+  []
+  (set-state! :sidebar/blocks '()))
+
 (defn sidebar-block-toggle-collapse!
   [db-id]
   (when db-id
