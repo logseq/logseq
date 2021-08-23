@@ -38,10 +38,10 @@
               full-path
 
               :else
-              (util/node-path.join
-                "file://"                                   ;; TODO: bfs
-                (config/get-repo-dir (state/get-current-repo))
-                "assets" filename))]
+              (str "file://"                                ;; TODO: bfs
+                   (util/node-path.join
+                     (config/get-repo-dir (state/get-current-repo))
+                     "assets" filename)))]
     (when-let [key
                (if web-link?
                  (str (hash url))
