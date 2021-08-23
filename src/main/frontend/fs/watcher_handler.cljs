@@ -13,7 +13,8 @@
             [frontend.encrypt :as encrypt]
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
-            [frontend.handler.extract :as extract]))
+            [frontend.handler.extract :as extract]
+            [promesa.core :as p]))
 
 (defn- set-missing-block-ids!
   [content]
@@ -36,8 +37,8 @@
         (cond
           (= "add" type)
           (when-not (db/file-exists? repo path)
-            (let [_ (file-handler/alter-file repo path content {:re-render-root? true
-                                                                :from-disk? true})]
+            (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
+                                                                  :from-disk? true})]
               (set-missing-block-ids! content)
               (db/set-file-last-modified-at! repo path mtime)
               ;; return nil, otherwise the entire db will be transfered by ipc
@@ -50,8 +51,8 @@
           (and (= "change" type)
                (when-let [last-modified-at (db/get-file-last-modified-at repo path)]
                  (> mtime last-modified-at)))
-          (let [_ (file-handler/alter-file repo path content {:re-render-root? true
-                                                              :from-disk? true})]
+          (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
+                                                                :from-disk? true})]
             (set-missing-block-ids! content)
             (db/set-file-last-modified-at! repo path mtime)
             nil)
