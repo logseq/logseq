@@ -284,7 +284,7 @@
         content (reduce (fn [content key]
                           (remove-property format key content)) content built-in-properties*)]
     (if (= format :org)
-      (string/replace-first content ":PROPERTIES:\n:END:\n" "")
+      (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
       content)))
 
 (defn ->new-properties
