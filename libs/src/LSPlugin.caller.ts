@@ -1,8 +1,8 @@
-import Postmate from 'postmate'
+import Debug from 'debug'
+import { Postmate, Model, ParentAPI, ChildAPI } from './postmate'
 import EventEmitter from 'eventemitter3'
 import { PluginLocal } from './LSPlugin.core'
-import Debug from 'debug'
-import { deferred } from './helpers'
+import { deferred, IS_DEV } from './helpers'
 import { LSPluginShadowFrame } from './LSPlugin.shadow'
 
 const debug = Debug('LSPlugin:caller')
@@ -25,8 +25,8 @@ export const AWAIT_LSPMSGFn = (id: string) => `${FLAG_AWAIT}${id}`
 class LSPluginCaller extends EventEmitter {
   private _connected: boolean = false
 
-  private _parent?: Postmate.ParentAPI
-  private _child?: Postmate.ChildAPI
+  private _parent?: ParentAPI
+  private _child?: ChildAPI
 
   private _shadow?: LSPluginShadowFrame
 
@@ -87,7 +87,7 @@ class LSPluginCaller extends EventEmitter {
       },
 
       [LSPMSG]: async ({ ns, type, payload }: any) => {
-        debug(`${this._debugTag} [call from host]`, ns, type, payload)
+        debug(`[call from host] ${this._debugTag}`, ns, type, payload)
 
         if (ns && ns.startsWith('hook')) {
           caller.emit(`${ns}:${type}`, payload)
@@ -98,7 +98,7 @@ class LSPluginCaller extends EventEmitter {
       },
 
       [LSPMSG_SYNC]: ({ _sync, result }: any) => {
-        debug(`sync reply #${_sync}`, result)
+        debug(`[sync reply] #${_sync}`, result)
 
         if (syncActors.has(_sync)) {
           const actor = syncActors.get(_sync)
@@ -123,11 +123,12 @@ class LSPluginCaller extends EventEmitter {
       return JSON.parse(JSON.stringify(this._pluginLocal?.toJSON()))
     }
 
-    const handshake = new Postmate.Model(model)
+    const pm = new Model(model)
+    const handshake = pm.sendHandshakeReply()
 
     this._status = 'pending'
 
-    await handshake.then(refParent => {
+    await handshake.then((refParent: ChildAPI) => {
       this._child = refParent
       this._connected = true
 
@@ -150,7 +151,7 @@ class LSPluginCaller extends EventEmitter {
         try {
           model[type](payload)
         } catch (e) {
-          debug(`model method #${type} not existed`)
+          debug(`[model method] #${type} not existed`)
         }
       }
 
@@ -187,15 +188,20 @@ class LSPluginCaller extends EventEmitter {
   }
 
   async _setupIframeSandbox () {
+    const cnt = document.body
     const pl = this._pluginLocal!
+    const url = new URL(pl.options.entry!)
 
-    const handshake = new Postmate({
-      container: document.body,
-      url: pl.options.entry!,
+    url.searchParams
+      .set(`__v__`, IS_DEV ? Date.now().toString() : pl.options.version)
+
+    const pt = new Postmate({
+      container: cnt, url: url.href,
       classListArray: ['lsp-iframe-sandbox'],
       model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) }
     })
 
+    let handshake = pt.sendHandshake()
     this._status = 'pending'
 
     // timeout for handshake
@@ -206,7 +212,7 @@ class LSPluginCaller extends EventEmitter {
         reject(new Error(`handshake Timeout`))
       }, 3 * 1000) // 3secs
 
-      handshake.then(refChild => {
+      handshake.then((refChild: ParentAPI) => {
         this._parent = refChild
         this._connected = true
         this.emit('connected')
@@ -243,7 +249,7 @@ class LSPluginCaller extends EventEmitter {
         clearTimeout(timer)
       })
     }).catch(e => {
-      debug('iframe sandbox error', e)
+      debug('[iframe sandbox] error', e)
       throw e
     }).finally(() => {
       this._status = undefined
@@ -265,7 +271,6 @@ class LSPluginCaller extends EventEmitter {
       this._call = async (type, payload = {}, actor) => {
         actor && (payload.actor = actor)
 
-        // TODO: support sync call
         // @ts-ignore Call in same thread
         this._pluginLocal?.emit(type, Object.assign(payload, {
           $$pid: pl.id
@@ -289,7 +294,7 @@ class LSPluginCaller extends EventEmitter {
         }
       }
     } catch (e) {
-      debug('shadow sandbox error', e)
+      debug('[shadow sandbox] error', e)
       throw e
     } finally {
       this._status = undefined
