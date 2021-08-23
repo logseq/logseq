@@ -2447,6 +2447,10 @@
                    :markdown)]
     (try
       (match item
+        ;; ["Drawer" name lines]
+        ;; [:div.drawer {:data-drawer-name name}
+        ;;  (apply str lines)]
+
         ["Properties" m]
         [:div.properties
          (for [[k v] (dissoc m :roam_alias :roam_tags)]
