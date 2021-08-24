@@ -303,3 +303,8 @@
 (defn properties?
   [ast]
   (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))
+
+(defn typ-drawer?
+  [ast typ]
+  (and (contains? #{"Drawer"} (ffirst ast))
+       (= typ (second (first ast)))))

@@ -27,6 +27,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.export :as export]
+            [frontend.util.drawer :as drawer]
             [frontend.image :as image]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
@@ -765,14 +766,14 @@
                                    (repeated/next-timestamp-text ts)]))
                            (reduce (fn [content [old new]]
                                      (string/replace content old new))
-                                   content))]
-      (when content
-        (str (string/trimr content)
-             "\n"
-             (util/format (str (if (= :org (state/get-preferred-format)) "-" "*")
-                               " %s -> DONE [%s]")
-                          marker
-                          (date/get-local-date-time-string)))))
+                                   content))
+          content (drawer/insert-drawer
+                   block content "logbook"
+                   (util/format (str (if (= :org (state/get-preferred-format)) "-" "*")
+                      " State \"DONE\"    from \"%s\" %s")
+                                marker
+                                (date/get-local-date-time-string)))]
+      content)
     content))
 
 (defn- with-marker-time
