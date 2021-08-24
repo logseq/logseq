@@ -11,7 +11,8 @@
             ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem] :as electron]
             ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
-            [electron.state :as state]))
+            [electron.state :as state]
+            [electron.git :as git]))
 
 (def MAIN_WINDOW_ENTRY (if dev?
                          "http://localhost:3001"
@@ -223,6 +224,8 @@
                (search/ensure-search-dir!)
 
                (search/open-dbs!)
+
+               (git/auto-commit-current-graph!)
 
                (vreset! *setup-fn
                         (fn []

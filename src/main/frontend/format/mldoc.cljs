@@ -152,7 +152,7 @@
                       properties-ast
                       (map (fn [[k v]]
                              (let [k (keyword (string/lower-case k))
-                                   v (if (contains? #{:title :description :filters :roam_tags} k)
+                                   v (if (contains? #{:title :description :filters :roam_tags :macro} k)
                                        v
                                        (text/split-page-refs-without-brackets v))]
                                [k v]))))
@@ -162,10 +162,11 @@
                    (->>
                     (map
                      (fn [[_ v]]
-                       (let [[k v] (util/split-first " " v)]
-                         (mapv
-                          string/trim
-                          [k v])))
+                       (do
+                         (let [[k v] (util/split-first " " v)]
+                          (mapv
+                           string/trim
+                           [k v]))))
                      macro-properties)
                     (into {}))
                    {})

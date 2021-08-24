@@ -17,8 +17,11 @@
             [cljs-time.format :as tf]))
 
 (defonce ^:private state
-  (atom
-   (let [document-mode? (or (storage/get :document/mode?) false)]
+  (let [document-mode? (or (storage/get :document/mode?) false)
+        current-graph (let [graph (storage/get :git/current-repo)]
+                        (when graph (ipc/ipc "setCurrentGraph" graph))
+                        graph)]
+    (atom
      {:route-match nil
       :today nil
       :system/events (async/chan 100)
@@ -38,7 +41,7 @@
       :network/online? true
       :indexeddb/support? true
       :me nil
-      :git/current-repo (storage/get :git/current-repo)
+      :git/current-repo current-graph
       :git/status {}
       :format/loading {}
       :draw? false
@@ -391,7 +394,8 @@
   (swap! state assoc :git/current-repo repo)
   (if repo
     (storage/set :git/current-repo repo)
-    (storage/remove :git/current-repo)))
+    (storage/remove :git/current-repo))
+  (ipc/ipc "setCurrentGraph" repo))
 
 (defn set-preferred-format!
   [format]
