@@ -150,9 +150,10 @@
       ;; copied blocks
       :copy/blocks {:copy/content nil :copy/block-tree nil}
 
-      :copy/export-block-text-indent-style  (atom "dashes")
-      :copy/export-block-text-remove-options (atom #{})
-
+      :copy/export-block-text-indent-style  (or (storage/get :copy/export-block-text-indent-style)
+                                                "dashes")
+      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
+                                                 #{})
       :date-picker/date nil
 
       :view/components {}})))
@@ -1385,9 +1386,21 @@
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
 
+(defn set-export-block-text-indent-style!
+  [v]
+  (set-state! :copy/export-block-text-indent-style v)
+  (storage/set :copy/export-block-text-indent-style v))
+
 (defn get-export-block-text-remove-options []
   (:copy/export-block-text-remove-options @state))
 
+(defn update-export-block-text-remove-options!
+  [e k]
+  (let [f (if (util/echecked? e) conj disj)]
+    (update-state! :copy/export-block-text-remove-options
+                   #(f % k))
+    (storage/set :copy/export-block-text-remove-options
+                 (get-export-block-text-remove-options))))
 
 (defn set-editor-args!
   [args]

@@ -1088,8 +1088,8 @@
         top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
         exported-md-contents (export/export-blocks-as-markdown
                                      repo top-level-block-uuids
-                                     @(state/get-export-block-text-indent-style)
-                                     (into [] @(state/get-export-block-text-remove-options)))]
+                                     (state/get-export-block-text-indent-style)
+                                     (into [] (state/get-export-block-text-remove-options)))]
     [exported-md-contents tree]))
 
 (defn copy-selection-blocks
