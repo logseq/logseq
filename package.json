@@ -103,6 +103,8 @@
         "react-tweet-embed": "^1.2.2",
         "reakit": "^0.11.1",
         "threads": "^1.6.5",
-        "yargs-parser": "^20.2.4"
+        "y-websocket": "^1.3.16",
+        "yargs-parser": "^20.2.4",
+        "yjs": "^13.5.12"
     }
 }
