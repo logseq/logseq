@@ -13,7 +13,8 @@
             [electron.utils :as utils]
             [electron.state :as state]
             [clojure.core.async :as async]
-            [electron.search :as search]))
+            [electron.search :as search]
+            [electron.git :as git]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -197,6 +198,14 @@
 
 (defmethod handle :getDirname [_]
   js/__dirname)
+
+(defmethod handle :setCurrentGraph [_ [_ path]]
+  (let [path (when path (string/replace path "logseq_local_" ""))]
+    (swap! state/state assoc :graph/current path)))
+
+(defmethod handle :runGit [_ [_ args]]
+  (when (seq args)
+    (git/raw! args)))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))

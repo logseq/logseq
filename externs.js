@@ -115,6 +115,9 @@ dummy.getPageView = function() {};
 dummy.convertToPdfPoint = function() {};
 dummy.scrollPageIntoView = function() {};
 dummy.convertToViewportRectangle = function() {};
+dummy.init = function() {};
+dummy.commit = function() {};
+dummy.raw = function() {};
 
 /**
  * @typedef {{

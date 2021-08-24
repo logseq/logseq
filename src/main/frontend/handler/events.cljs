@@ -11,6 +11,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.components.encryption :as encryption]
+            [frontend.components.shell :as shell]
             [frontend.fs.nfs :as nfs]
             [frontend.db.conn :as conn]
             [frontend.extensions.srs :as srs]
@@ -154,6 +155,10 @@
                :warning
                false))))
         repos))
+
+(defmethod handle :command/run [_]
+  (when (util/electron?)
+    (state/set-modal! shell/shell)))
 
 (defn run!
   []
