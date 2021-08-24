@@ -414,6 +414,11 @@
         [:div.ls-card
          {:class (if (or preview? modal?)
                    (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto.px-4"))}
+         (let [repo (state/get-current-repo)]
+           [:div.my-2.opacity-70.hover:opacity-100
+            (component-block/block-parents {} repo root-block-id
+                                           (:block/format root-block)
+                                           true)])
          (component-block/blocks-container
           blocks
           (merge (show-cycle-config card @phase)
