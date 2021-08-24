@@ -8,7 +8,6 @@
 (defonce cfg-root (.getPath app "userData"))
 (defonce cfg-path (.join path cfg-root "configs.edn"))
 
-
 (defn- ensure-cfg
   []
   (try
@@ -17,7 +16,8 @@
       (let [body (.toString (.readFileSync fs cfg-path))]
         (if (seq body) (reader/read-string body) {})))
     (catch js/Error e
-      (js/console.error :cfg-error e))))
+      (js/console.error :cfg-error e)
+      {})))
 
 (defn- write-cfg!
   [cfg]
@@ -43,7 +43,6 @@
   (when-let [cfg (and k (ensure-cfg))]
     (get cfg k)))
 
-
-(defn whole
+(defn get-config
   []
   (ensure-cfg))

@@ -242,3 +242,13 @@
     }
   }
 }
+
+
+svg.git {
+    margin-left: -4px;
+    transform: scale(0.9);
+}
+
+svg.cmd {
+    margin-left: -1px;
+}
