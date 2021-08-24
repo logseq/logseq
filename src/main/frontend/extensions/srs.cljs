@@ -398,10 +398,10 @@
   (rum/local 1 ::phase)
   (rum/local 0 ::card-index)
   (rum/local {} ::review-records)
-  [state cards {preview? :preview?
+  [state blocks {preview? :preview?
                 modal? :modal?
                 cb :callback}]
-  (let [cards (mapv ->card cards)
+  (let [cards (map ->card blocks)
         review-records (::review-records state)
         card-index (::card-index state)
         card (util/nth-safe cards @card-index)]
@@ -479,12 +479,12 @@
 
 (rum/defc view-modal <
   (shortcut/mixin :shortcut.handler/cards)
-  [cards option]
-  (view cards option))
+  [blocks option]
+  (view blocks option))
 
 (defn preview
   [blocks]
-  (state/set-modal! #(view (mapv ->card blocks) {:preview? true})))
+  (state/set-modal! #(view blocks {:preview? true})))
 
 
 ;;; ================================================================
