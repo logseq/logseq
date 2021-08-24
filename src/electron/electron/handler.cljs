@@ -208,6 +208,9 @@
   (when (seq args)
     (git/raw! args)))
 
+(defmethod handle :gitCommitAll [_]
+  (git/add-all-and-commit!))
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 

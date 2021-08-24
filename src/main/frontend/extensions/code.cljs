@@ -48,7 +48,7 @@
             ["codemirror/mode/sparql/sparql"]
             ["codemirror/mode/turtle/turtle"]
             ["codemirror/mode/r/r"]
-            ))
+            ["codemirror/mode/julia/julia"]))
 
 ;; codemirror
 

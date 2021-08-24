@@ -14,7 +14,8 @@
             [frontend.db.model :as model]
             [frontend.handler.editor :as editor]
             [frontend.handler.extract :as extract]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [electron.ipc :as ipc]))
 
 (defn- set-missing-block-ids!
   [content]
@@ -51,11 +52,13 @@
           (and (= "change" type)
                (when-let [last-modified-at (db/get-file-last-modified-at repo path)]
                  (> mtime last-modified-at)))
-          (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
-                                                                :from-disk? true})]
-            (set-missing-block-ids! content)
-            (db/set-file-last-modified-at! repo path mtime)
-            nil)
+          (when-not (string/blank? content)
+            (p/let [result (ipc/ipc "gitCommitAll")
+                    _ (file-handler/alter-file repo path content {:re-render-root? true
+                                                                  :from-disk? true})]
+              (set-missing-block-ids! content)
+              (db/set-file-last-modified-at! repo path mtime)
+              nil))
 
           (contains? #{"add" "change" "unlink"} type)
           nil
