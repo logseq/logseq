@@ -190,11 +190,12 @@
   (.quit app))
 
 (defmethod handle :userAppCfgs [_window [_ k v]]
-  (if-not k
-    (cfgs/whole)
-    (if-not (nil? v)
-      (cfgs/set-item! (keyword k) v)
-      (cfgs/get-item (keyword k)))))
+  (let [config (cfgs/get-config)]
+    (if-not k
+      config
+      (if-not (nil? v)
+        (cfgs/set-item! (keyword k) v)
+        (cfgs/get-item (keyword k))))))
 
 (defmethod handle :getDirname [_]
   js/__dirname)

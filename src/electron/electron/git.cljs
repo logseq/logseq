@@ -105,9 +105,11 @@
 
 (defn auto-commit-current-graph!
   []
-  (when (installed?)
+  (when (and (installed?)
+             (not (state/git-auto-commit-disabled?)))
     (state/clear-git-commit-interval!)
     (p/let [_ (add-all-and-commit!)]
-      (let [seconds (state/get-git-commit-seconds)
-            interval (js/setInterval add-all-and-commit! (* seconds 1000))]
-        (state/set-git-commit-interval! interval)))))
+      (let [seconds (state/get-git-commit-seconds)]
+        (when (int? seconds)
+          (let [interval (js/setInterval add-all-and-commit! (* seconds 1000))]
+            (state/set-git-commit-interval! interval)))))))

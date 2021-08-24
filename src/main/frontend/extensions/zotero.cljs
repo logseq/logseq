@@ -330,8 +330,8 @@
 (rum/defc zotero-profile-selector <
   rum/reactive
   [profile*]
-  [:div.zotero-profile-selector.m-2
-   [:label.mr-1 {:for "profile-select"} "Choose a profile:"]
+  [:div.zotero-profile-selector.my-4
+   [:label.mr-32 {:for "profile-select"} "Choose a profile:"]
    [:select
     {:value @profile*
      :on-change
@@ -346,7 +346,7 @@
    (ui/button
     "New profile"
     :small? true
-    :class "ml-2"
+    :class "ml-4"
     :on-click
     (fn []
       (state/set-modal!
@@ -356,7 +356,7 @@
     "Delete profile!"
     :small? true
     :background "red"
-    :class "ml-2"
+    :class "ml-4"
     :on-click
     (fn []
       (p/let [_ (setting/remove-profile @profile*)]
