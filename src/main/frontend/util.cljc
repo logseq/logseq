@@ -370,6 +370,11 @@
    (defn stop [e]
      (when e (doto e (.preventDefault) (.stopPropagation)))))
 
+#?(:cljs
+   (defn stop-propagation [e]
+     (when e (.stopPropagation e))))
+
+
 (def speed 500)
 (def moving-frequency 15)
 

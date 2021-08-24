@@ -12,6 +12,8 @@
     (shell-handler/run-command! @command)))
 
 (defonce command (atom ""))
+
+
 (rum/defcs shell < rum/reactive
   (mixins/event-mixin
    (fn [state]
@@ -28,6 +30,7 @@
       [:div.mt-4.mb-4.relative.rounded-md.shadow-sm.max-w-xs
        [:input#run-command.form-input.block.w-full.sm:text-sm.sm:leading-5
         {:autoFocus true
+         :on-key-down util/stop-propagation
          :placeholder "git ..."
          :on-change (fn [e]
                       (reset! command (util/evalue e)))}]]]]
