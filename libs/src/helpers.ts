@@ -39,7 +39,7 @@ export async function getSDKPathRoot (): Promise<string> {
 
   const appPathRoot = await getAppPathRoot()
 
-  return path.join(appPathRoot, 'js')
+  return safetyPathJoin(appPathRoot, 'js')
 }
 
 export function isObject (item: any) {
@@ -108,6 +108,17 @@ export function withFileProtocol (path: string) {
   }
 
   return path
+}
+
+export function safetyPathJoin (basePath: string, ...parts: Array<string>) {
+  try {
+    const url = new URL(basePath)
+    if (!url.origin) throw new Error(null)
+    const fullPath = path.join(basePath.substr(url.origin.length), ...parts)
+    return url.origin + fullPath
+  } catch (e) {
+    return path.join(basePath, ...parts)
+  }
 }
 
 /**

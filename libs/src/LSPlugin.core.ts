@@ -22,7 +22,7 @@ import {
   LSPluginPkgConfig,
   StyleOptions,
   StyleString,
-  ThemeOptions,
+  ThemeOptions, UIFrameAttrs,
   UIOptions
 } from './LSPlugin'
 import { snakeCase } from 'snake-case'
@@ -185,7 +185,7 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
     }
   })
 
-  pluginLocal.on(_('attrs'), (attrs: Record<string, any>) => {
+  pluginLocal.on(_('attrs'), (attrs: Partial<UIFrameAttrs>) => {
     const el = pluginLocal.getMainUI()
     Object.entries(attrs).forEach(([k, v]) => {
       el?.setAttribute(k, v)

@@ -20,6 +20,13 @@ export type StyleOptions = {
   style: StyleString
 }
 
+export type UIFrameAttrs = {
+  draggable: boolean
+  resizable: boolean
+
+  [key: string]: any
+}
+
 export type UIBaseOptions = {
   key?: string
   replace?: boolean

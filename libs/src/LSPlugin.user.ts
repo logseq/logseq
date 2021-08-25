@@ -10,7 +10,9 @@ import {
   BlockCommandCallback,
   StyleString,
   ThemeOptions,
-  UIOptions, IHookEvent, BlockIdentity, BlockPageName
+  UIOptions, IHookEvent, BlockIdentity,
+  BlockPageName,
+  UIFrameAttrs
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -299,7 +301,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     // TODO: update associated baseInfo settings
   }
 
-  setMainUIAttrs (attrs: Record<string, any>): void {
+  setMainUIAttrs (attrs: Partial<UIFrameAttrs>): void {
     this.caller.call('main-ui:attrs', attrs)
   }
 
