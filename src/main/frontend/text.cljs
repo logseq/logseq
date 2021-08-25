@@ -222,3 +222,21 @@
         (when-let [last-part (last (string/split p #"/"))]
           ;; a file
           (string/includes? last-part ".")))))
+
+(defn add-timestamp
+  [content key value]
+  (let [new-line (str (string/upper-case key) ": " value)
+        lines (string/split-lines content)
+        new-lines (map (fn [line]
+                         (string/trim
+                          (if (string/starts-with? (string/lower-case line) key)
+                            new-line
+                            line)))
+                    lines)
+        new-lines (if (not= (map string/trim lines) new-lines)
+                    new-lines
+                    (cons (first new-lines) ;; title
+                          (cons
+                           new-line
+                           (rest new-lines))))]
+    (string/join "\n" new-lines)))

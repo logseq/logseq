@@ -987,21 +987,9 @@
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content scheduled deadline format]} block
             content (or (state/get-edit-content) content)
-            new-line (str (string/upper-case key) ": " value)
-            new-content (let [lines (string/split-lines content)
-                              new-lines (map (fn [line]
-                                               (string/trim
-                                                (if (string/starts-with? (string/lower-case line) key)
-                                                  new-line
-                                                  line)))
-                                             lines)
-                              new-lines (if (not= lines new-lines)
-                                          new-lines
-                                          (cons (first new-lines) ;; title
-                                                (cons
-                                                 new-line
-                                                 (rest new-lines))))]
-                          (string/join "\n" new-lines))]
+            new-content (text/add-timestamp content key value)]
+        (prn {:new-content new-content
+              :content content})
         (when (not= content new-content)
           (if-let [input-id (state/get-edit-input-id)]
             (state/set-edit-content! input-id new-content)
