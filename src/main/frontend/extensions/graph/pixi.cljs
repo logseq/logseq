@@ -14,7 +14,7 @@
             [promesa.core :as p]
             [clojure.set :as set]
             [cljs-bean.core :as bean]
-            ["pixi-graphsmooth-fork" :as Pixi-Graph]
+            ["pixi-graph-fork" :as Pixi-Graph]
             ["@pixi/utils" :as pixi-utils]
             ["graphology" :as graphology]
             ["d3-force"
@@ -60,7 +60,7 @@
           :label  {:content  (fn [node] (.-id node))
                    :type     (.-TEXT (.-TextType Pixi-Graph))
                    :fontSize 12
-                   :color    (if dark? "rgba(255, 255, 255, 0.8)" "rgba(0, 0, 0, 0.8)")
+                   :color (if dark? "rgba(255, 255, 255, 0.8)" "rgba(0, 0, 0, 0.8)")
                    ;                  :backgroundColor "rgba(255, 255, 255, 0.5)"
                    :padding  4}}
    :edge {:width 1
@@ -106,8 +106,21 @@
                 (fn [node]
                   (.dropNode graph node))))
 
+(defn destroy-instance!
+  []
+  (when-let [instance (:pixi @*graph-instance)]
+    (.destroy instance)
+    (reset! *graph-instance nil)))
+
+(defonce *dark? (atom nil))
+
 (defn render!
   [state]
+  (let [dark? (:dark? (first (:rum/args state)))]
+    (when (and (some? @*dark?) (not= @*dark? dark?))
+      (destroy-instance!))
+    (reset! *dark? dark?))
+
   (try
     (let [old-instance         @*graph-instance
           {:keys [graph pixi]} old-instance]
@@ -135,23 +148,21 @@
           (let [source (.-id (.-source link))
                 target (.-id (.-target link))]
             (.addEdge graph source target link)))
-        (if-let [{:keys [pixi]} @*graph-instance]
+        (if pixi
           (.resetView pixi)
           (when-let [container-ref (:ref state)]
             (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
-                               (bean/->js
-                                {:container  @container-ref
-                                 :graph      graph
-                                 :style      style
-                                 :hoverStyle hover-style
-                                 :height     height}))]
+                                  (bean/->js
+                                   {:container  @container-ref
+                                    :graph      graph
+                                    :style      style
+                                    :hoverStyle hover-style
+                                    :height     height}))]
               (reset! *graph-instance
                       {:graph graph
                        :pixi  pixi-graph})
-              (js/console.log "here log")
-              (js/console.log *graph-instance)
               (when register-handlers-fn
-                    (register-handlers-fn pixi-graph)))))))
+                (register-handlers-fn pixi-graph)))))))
     (catch js/Error e
       (js/console.error e)))
   state)
