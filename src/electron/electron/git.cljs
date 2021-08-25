@@ -34,9 +34,11 @@
           result)))))
 
 (defn init!
-  []
-  (when-let [git ^js (get-git)]
-    (.init git false)))
+  ([]
+   (init! (get-git)))
+  ([^js git]
+   (when git
+     (.init git false))))
 
 (defn add-all!
   ([]
@@ -50,7 +52,8 @@
    (add-all-and-commit! "Auto saved by Logseq"))
   ([message]
    (when-let [git ^js (get-git)]
-     (p/let [_ (add-all! git)]
+     (p/let [_ (init! git)
+             _ (add-all! git)]
        (.commit git message)))))
 
 (defonce quotes-regex #"\"[^\"]+\"")

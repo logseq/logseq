@@ -190,7 +190,11 @@
         new-file-paths (file-path-set-f new-files)
         added (set/difference new-file-paths old-file-paths)
         deleted (set/difference old-file-paths new-file-paths)
-        modified (set/difference new-file-paths added)]
+        modified (->> (set/intersection new-file-paths old-file-paths)
+                      (filter (fn [path]
+                                (not= (:file/last-modified-at (get-file-f old-files path))
+                                      (:file/last-modified-at (get-file-f new-files path)))))
+                      (set))]
     {:added    added
      :modified modified
      :deleted  deleted}))
