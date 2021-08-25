@@ -12,15 +12,8 @@
   ([]
    (create-parser-pool! 8))
   ([num]
-   (p/let [static-path (cond
-                         (and (util/electron?) (not config/dev?))
+   (p/let [static-path (if (util/electron?)
                          (ipc/ipc :getDirname)
-
-                         (and (not config/dev?)
-                              (not (util/electron?)))
-                         (str config/asset-domain "/static")
-
-                         :else
                          "/static")]
      (Pool.
       (fn []

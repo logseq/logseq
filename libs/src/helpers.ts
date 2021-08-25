@@ -1,7 +1,7 @@
 import { StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import { snakeCase } from 'snake-case'
-import * as path from 'path'
+import * as nodePath from 'path'
 
 interface IObject {
   [key: string]: any;
@@ -14,7 +14,11 @@ declare global {
   }
 }
 
+export const path = navigator.platform.toLowerCase() === 'win32' ? nodePath.win32 : nodePath.posix
 export const IS_DEV = process.env.NODE_ENV === 'development'
+export const PROTOCOL_FILE = 'file://'
+export const PROTOCOL_LSP = 'lsp://'
+export const URL_LSP = PROTOCOL_LSP + 'logseq.io/'
 
 let _appPathRoot
 
@@ -36,7 +40,7 @@ export async function getSDKPathRoot (): Promise<string> {
 
   const appPathRoot = await getAppPathRoot()
 
-  return path.join(appPathRoot, 'js')
+  return safetyPathJoin(appPathRoot, 'js')
 }
 
 export function isObject (item: any) {
@@ -98,13 +102,31 @@ export function ucFirst (str: string) {
 
 export function withFileProtocol (path: string) {
   if (!path) return ''
-  const reg = /^(http|file|assets)/
+  const reg = /^(http|file|lsp)/
 
   if (!reg.test(path)) {
-    path = 'file://' + path
+    path = PROTOCOL_FILE + path
   }
 
   return path
+}
+
+export function safetyPathJoin (basePath: string, ...parts: Array<string>) {
+  try {
+    const url = new URL(basePath)
+    if (!url.origin) throw new Error(null)
+    const fullPath = path.join(basePath.substr(url.origin.length), ...parts)
+    return url.origin + fullPath
+  } catch (e) {
+    return path.join(basePath, ...parts)
+  }
+}
+
+export function safetyPathNormalize (basePath: string) {
+  if (!basePath?.match(/^(http?|lsp|assets):/)) {
+    basePath = path.normalize(basePath)
+  }
+  return basePath
 }
 
 /**
@@ -211,10 +233,12 @@ export function setupInjectedUI (
   attrs: Record<string, any>
 ) {
   const pl = this
+  let slot = ''
   let selector = ''
 
   if ('slot' in ui) {
-    selector = `#${ui.slot}`
+    slot = ui.slot
+    selector = `#${slot}`
   } else {
     selector = ui.path
   }
@@ -225,9 +249,10 @@ export function setupInjectedUI (
     return
   }
 
+  const id = `${ui.key}-${slot}-${pl.id}`
   const key = `${ui.key}-${pl.id}`
 
-  let el = document.querySelector(`div[data-injected-ui="${key}"]`) as HTMLElement
+  let el = document.querySelector(`#${id}`) as HTMLElement
 
   if (el) {
     el.innerHTML = ui.template
@@ -235,6 +260,7 @@ export function setupInjectedUI (
   }
 
   el = document.createElement('div')
+  el.id = id
   el.dataset.injectedUi = key || ''
 
   // TODO: Support more

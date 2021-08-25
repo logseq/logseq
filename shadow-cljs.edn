@@ -64,8 +64,13 @@
   :parser-worker
   {:target :browser
    :output-dir "./static/js"
+   :asset-path "./js"
+   :compiler-options {:source-map false
+                      :source-map-include-sources-content false}
    :modules {:parser-worker {:entries [frontend.worker.parser]
-                             :web-worker true}}
+                             :web-worker true
+                             :prepend #shadow/env ["PATCH_PARSER_WORKER" :default ";;"]
+                             }}
    :release {:compiler-options {:infer-externs :auto}}}
 
   :test
