@@ -323,8 +323,8 @@
    :shortcut.handler/global-non-editing-only
    ^{:before m/enable-when-not-editing-mode!}
    {:command/run
-    {:desc    "Run git/pandoc/others commands"
-     :binding "r"
+    {:desc    "Run git/pandoc/others command"
+     :binding "mod+shift+1"
      :fn      #(state/pub-event! [:command/run])}
     :ui/toggle-document-mode
     {:desc    "Toggle document mode"

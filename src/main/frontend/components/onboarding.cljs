@@ -60,6 +60,9 @@
         [:li {} (t :on-boarding/features-block-embed)]
         [:li {} (t :on-boarding/features-page-embed)]
         [:li {} (t :on-boarding/features-graph-vis)]
+        [:li {} "PDF annotations"]
+        [:li {} "Zotero integration"]
+        [:li {} "Spaced repetition cards"]
         [:li {} (t :on-boarding/features-heading-properties)]
         [:li
          {}
