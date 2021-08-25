@@ -988,8 +988,6 @@
       (let [{:block/keys [content scheduled deadline format]} block
             content (or (state/get-edit-content) content)
             new-content (text/add-timestamp content key value)]
-        (prn {:new-content new-content
-              :content content})
         (when (not= content new-content)
           (if-let [input-id (state/get-edit-input-id)]
             (state/set-edit-content! input-id new-content)
