@@ -1,7 +1,6 @@
 ## Hi, welcome to Logseq!
 - Logseq is a _privacy-first_, _open-source_ platform for _knowledge_ management and collaboration.
 - This is a 3 minute tutorial on how to use Logseq. Let's get started!
-- [:div.warning-text "Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the top-right corner of the screen to either open a local directory or connect Logseq to Github."]
 - Here are some tips might be useful.
 #+BEGIN_TIP
 Click to edit any block.
