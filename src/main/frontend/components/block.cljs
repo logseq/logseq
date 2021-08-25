@@ -1660,7 +1660,7 @@
   (let [show? (get state ::show?)]
     [:div.flex.flex-col
      [:div.text-sm.mt-1.flex.flex-row
-      [:div.opacity-50.font-medium {:style {:width 95}}
+      [:div.opacity-50.font-medium
        (str typ ": ")]
       [:a.opacity-80.hover:opacity-100
        {:on-click (fn []
@@ -2445,15 +2445,14 @@
   [{:keys [html-export?] :as config} item]
   (let [format (or (:block/format config)
                    :markdown)]
-    (println item)
     (try
       (match item
-             ["Drawer" name lines] 
+             ["Drawer" name lines]
              [:div.flex.flex-col
               [:div.text-sm.mt-1.flex.flex-row
                [:div.drawer {:data-drawer-name name}
                 (ui/foldable
-                 [:div.opacity-50.font-medium {:style {:width 95}}
+                 [:div.opacity-50.font-medium
                   (util/format ":%s:" (string/upper-case name))]
                  [:div (apply str lines)
                   [:div.opacity-50.font-medium {:style {:width 95}}

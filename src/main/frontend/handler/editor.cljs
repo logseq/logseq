@@ -770,7 +770,7 @@
           content (drawer/insert-drawer
                    block content "logbook"
                    (util/format (str (if (= :org (state/get-preferred-format)) "-" "*")
-                      " State \"DONE\"    from \"%s\" %s")
+                      " State \"DONE\" from \"%s\" %s")
                                 marker
                                 (date/get-local-date-time-string)))]
       content)
