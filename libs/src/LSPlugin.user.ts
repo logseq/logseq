@@ -1,4 +1,4 @@
-import { deepMerge } from './helpers'
+import { deepMerge, safetyPathJoin } from './helpers'
 import { LSPluginCaller } from './LSPlugin.caller'
 import {
   IAppProxy, IDBProxy,
@@ -271,6 +271,12 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     }
   }
 
+  ensureConnected () {
+    if (!this._connected) {
+      throw new Error('not connected')
+    }
+  }
+
   beforeunload (callback: (e: any) => Promise<void>): void {
     if (typeof callback !== 'function') return
     this._beforeunloadCallback = callback
@@ -352,6 +358,13 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
   get caller (): LSPluginCaller {
     return this._caller
+  }
+
+  resolveResourceFullUrl (filePath: string) {
+    this.ensureConnected()
+    if (!filePath) return
+    filePath = filePath.replace(/^[.\\/]+/, '')
+    return safetyPathJoin(this._baseInfo.lsr, filePath)
   }
 
   /**

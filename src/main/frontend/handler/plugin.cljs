@@ -180,7 +180,7 @@
 
   (p/then
    (p/let [root (get-ls-dotdir-root)
-           _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root}))
+           _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
            _ (doto js/LSPluginCore
                (.on "registered"
                     (fn [^js pl]

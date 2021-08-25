@@ -1,7 +1,7 @@
 import { StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import { snakeCase } from 'snake-case'
-import * as path from 'path'
+import * as nodePath from 'path'
 
 interface IObject {
   [key: string]: any;
@@ -14,6 +14,7 @@ declare global {
   }
 }
 
+export const path = navigator.platform.toLowerCase() === 'win32' ? nodePath.win32 : nodePath.posix
 export const IS_DEV = process.env.NODE_ENV === 'development'
 export const PROTOCOL_FILE = 'file://'
 export const PROTOCOL_LSP = 'lsp://'
@@ -104,7 +105,7 @@ export function withFileProtocol (path: string) {
   const reg = /^(http|file|lsp)/
 
   if (!reg.test(path)) {
-    path = 'file://' + path
+    path = PROTOCOL_FILE + path
   }
 
   return path
@@ -119,6 +120,13 @@ export function safetyPathJoin (basePath: string, ...parts: Array<string>) {
   } catch (e) {
     return path.join(basePath, ...parts)
   }
+}
+
+export function safetyPathNormalize (basePath: string) {
+  if (!basePath?.match(/^(http?|lsp|assets):/)) {
+    basePath = path.normalize(basePath)
+  }
+  return basePath
 }
 
 /**

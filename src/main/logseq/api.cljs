@@ -95,7 +95,7 @@
           path (util/node-path.join path "package.json")]
       (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-mtime? true}))))
 
-(defn ^:private write_dotdir_file!
+(defn ^:private write_dotdir_file
   [file content sub-root]
   (p/let [repo ""
           path (plugin-handler/get-ls-dotdir-root)
@@ -138,11 +138,11 @@
 
 (def ^:export write_user_tmp_file
   (fn [file content]
-    (write_dotdir_file! file content "tmp")))
+    (write_dotdir_file file content "tmp")))
 
 (def ^:export write_plugin_storage_file
   (fn [plugin-id file content]
-    (write_dotdir_file!
+    (write_dotdir_file
       file content
       (let [plugin-id (util/node-path.basename plugin-id)]
         (util/node-path.join "storages" plugin-id)))))

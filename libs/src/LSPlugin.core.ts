@@ -7,7 +7,11 @@ import {
   setupInjectedUI,
   deferred,
   invokeHostExportedApi,
-  isObject, withFileProtocol, IS_DEV, getSDKPathRoot, PROTOCOL_FILE, URL_LSP
+  isObject, withFileProtocol,
+  getSDKPathRoot,
+  PROTOCOL_FILE, URL_LSP,
+  safetyPathJoin,
+  path, safetyPathNormalize
 } from './helpers'
 import * as pluginHelpers from './helpers'
 import Debug from 'debug'
@@ -27,9 +31,9 @@ import {
 } from './LSPlugin'
 import { snakeCase } from 'snake-case'
 import DOMPurify from 'dompurify'
-import * as path from 'path'
 
 const debug = Debug('LSPlugin:core')
+const DIR_PLUGINS = 'plugins'
 
 declare global {
   interface Window {
@@ -39,7 +43,7 @@ declare global {
 
 type DeferredActor = ReturnType<typeof deferred>
 type LSPluginCoreOptions = {
-  localUserConfigRoot: string
+  dotConfigRoot: string
 }
 
 /**
@@ -134,7 +138,7 @@ type UserPreferences = {
 type PluginLocalOptions = {
   key?: string // Unique from Logseq Plugin Store
   entry: string // Plugin main file
-  url: string // Plugin package fs location
+  url: string // Plugin package absolute fs location
   name: string
   version: string
   mode: 'shadow' | 'iframe'
@@ -292,9 +296,13 @@ function initApiProxyHandlers (pluginLocal: PluginLocal) {
   })
 }
 
-function provideLSPEntry (fullUrl: string, userPluginRoot: string) {
-  if (userPluginRoot && fullUrl.startsWith(PROTOCOL_FILE + userPluginRoot)) {
-    fullUrl = URL_LSP + fullUrl.substr(PROTOCOL_FILE.length + userPluginRoot.length)
+function convertToLSPResource (fullUrl: string, dotPluginRoot: string) {
+  if (
+    dotPluginRoot &&
+    fullUrl.startsWith(PROTOCOL_FILE + dotPluginRoot)
+  ) {
+    fullUrl = safetyPathJoin(
+      URL_LSP, fullUrl.substr(PROTOCOL_FILE.length + dotPluginRoot.length))
   }
   return fullUrl
 }
@@ -324,7 +332,7 @@ class PluginLocal
   private _status: PluginLocalLoadStatus = PluginLocalLoadStatus.UNLOADED
   private _loadErr?: Error
   private _localRoot?: string
-  private _userSettingsFile?: string
+  private _dotSettingsFile?: string
   private _caller?: LSPluginCaller
 
   /**
@@ -354,7 +362,7 @@ class PluginLocal
 
     try {
       const [userSettingsFilePath, userSettings] = await invokeHostExportedApi('load_plugin_user_settings', key)
-      this._userSettingsFile = userSettingsFilePath
+      this._dotSettingsFile = userSettingsFilePath
 
       const settings = _options.settings = new PluginSettings(userSettings)
 
@@ -390,6 +398,17 @@ class PluginLocal
     return this.caller?._getSandboxIframeContainer()
   }
 
+  _resolveResourceFullUrl (filePath: string, localRoot?: string) {
+    localRoot = localRoot || this._localRoot
+    const reg = /^(http|file)/
+    if (!reg.test(filePath)) {
+      const url = path.join(localRoot, filePath)
+      filePath = reg.test(url) ? url : (PROTOCOL_FILE + url)
+    }
+    return this.isInstalledInDotRoot ?
+      convertToLSPResource(filePath, this.dotPluginsRoot) : filePath
+  }
+
   async _preparePackageConfigs () {
     const { url } = this._options
     let pkg: any
@@ -415,22 +434,13 @@ class PluginLocal
       this._options[k] = pkg[k]
     })
 
-    // TODO: How with local protocol
-    const localRoot = this._localRoot = url
+    const localRoot = this._localRoot = safetyPathNormalize(url)
     const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
-    const makeFullUrl = (loc: string) => {
-      const reg = /^(http|file)/
-      if (!reg.test(loc)) {
-        const url = path.join(localRoot, loc)
-        loc = reg.test(url) ? url : (PROTOCOL_FILE + url)
-      }
-      return provideLSPEntry(loc, this.userPluginRoot)
-    }
     const validateMain = (main) => main && /\.(js|html)$/.test(main)
 
     // Entry from main
-    if (validateMain(pkg.main)) {
-      this._options.entry = makeFullUrl(pkg.main)
+    if (validateMain(pkg.main)) { // Theme has no main
+      this._options.entry = this._resolveResourceFullUrl(pkg.main, localRoot)
 
       if (logseq.mode) {
         this._options.mode = logseq.mode
@@ -440,7 +450,7 @@ class PluginLocal
     const icon = logseq.icon || pkg.icon
 
     if (icon) {
-      this._options.icon = makeFullUrl(icon)
+      this._options.icon = this._resolveResourceFullUrl(icon)
     }
 
     // TODO: strategy for Logseq plugins center
@@ -488,9 +498,16 @@ class PluginLocal
 
     if (!entry.endsWith('.js')) return
 
+    let dirPathInstalled = null
+    let tmp_file_method = 'write_user_tmp_file'
+    if (this.isInstalledInDotRoot) {
+      tmp_file_method = 'write_dotdir_file'
+      dirPathInstalled = this._localRoot.replace(this.dotPluginsRoot, '')
+      dirPathInstalled = path.join(DIR_PLUGINS, dirPathInstalled)
+    }
     let sdkPathRoot = await getSDKPathRoot()
     let entryPath = await invokeHostExportedApi(
-      'write_user_tmp_file',
+      tmp_file_method,
       `${this._id}_index.html`,
       `<!doctype html>
 <html lang="en">
@@ -503,12 +520,14 @@ class PluginLocal
   <div id="app"></div>
   <script src="${entry}"></script>
   </body>
-</html>`)
+</html>`, dirPathInstalled)
 
-    this._options.entry = provideLSPEntry(
-      withFileProtocol(entryPath),
-      this.userPluginRoot
+    entry = convertToLSPResource(
+      withFileProtocol(path.normalize(entryPath)),
+      this.dotPluginsRoot
     )
+
+    this._options.entry = entry
   }
 
   async _loadConfigThemes (themes: Array<ThemeOptions>) {
@@ -537,11 +556,10 @@ class PluginLocal
     this._loadErr = undefined
 
     try {
-      let installPackageThemes: () => Promise<void> = () => Promise.resolve()
+      // if (!this.options.entry) { // Themes package no entry field
+      // }
 
-      if (!this.options.entry) { // Themes package no entry field
-        installPackageThemes = await this._preparePackageConfigs()
-      }
+      let installPackageThemes = await this._preparePackageConfigs()
 
       if (!this.settings) {
         await this._setupUserSettings()
@@ -605,7 +623,7 @@ class PluginLocal
     if (unregister) {
       await this.unload()
 
-      if (this.isInstalledInUserRoot) {
+      if (this.isInstalledInDotRoot) {
         debug('TODO: remove plugin local files from user home root :)')
       }
 
@@ -663,10 +681,10 @@ class PluginLocal
     }
   }
 
-  get isInstalledInUserRoot () {
-    const userRoot = this._ctx.options.localUserConfigRoot
-    const plugRoot = this._localRoot
-    return userRoot && plugRoot && plugRoot.startsWith(userRoot)
+  get isInstalledInDotRoot () {
+    const dotRoot = this.dotConfigRoot
+    const plgRoot = this.localRoot
+    return dotRoot && plgRoot && plgRoot.startsWith(dotRoot)
   }
 
   get loaded () {
@@ -727,19 +745,25 @@ class PluginLocal
     return this._loadErr
   }
 
-  get userSettingsFile (): string | undefined {
-    return this._userSettingsFile
+  get dotConfigRoot () {
+    return path.normalize(this._ctx.options.dotConfigRoot)
   }
 
-  get userPluginRoot () {
-    return this._ctx.options.localUserConfigRoot + '/plugins/'
+  get dotSettingsFile (): string | undefined {
+    return this._dotSettingsFile
+  }
+
+  get dotPluginsRoot () {
+    return path.join(this.dotConfigRoot, DIR_PLUGINS)
   }
 
   toJSON () {
     const json = { ...this.options } as any
     json.id = this.id
     json.err = this.loadErr
-    json.usf = this.userSettingsFile
+    json.usf = this.dotSettingsFile
+    json.iir = this.isInstalledInDotRoot
+    json.lsr = this._resolveResourceFullUrl('')
     return json
   }
 }
@@ -837,7 +861,7 @@ class LSPluginCore
     try {
       this._isRegistering = true
 
-      const userConfigRoot = this._options.localUserConfigRoot
+      const userConfigRoot = this._options.dotConfigRoot
       const readyIndicator = this._readyIndicator = deferred()
 
       await this.loadUserPreferences()
@@ -885,7 +909,7 @@ class LSPluginCore
         this.emit('registered', pluginLocal)
 
         // external plugins
-        if (!pluginLocal.isInstalledInUserRoot) {
+        if (!pluginLocal.isInstalledInDotRoot) {
           externals.add(url)
         }
       }
@@ -925,7 +949,7 @@ class LSPluginCore
     for (const identity of plugins) {
       const p = this.ensurePlugin(identity)
 
-      if (!p.isInstalledInUserRoot) {
+      if (!p.isInstalledInDotRoot) {
         unregisteredExternals.push(p.options.url)
       }
 

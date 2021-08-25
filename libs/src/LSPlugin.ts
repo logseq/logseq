@@ -528,6 +528,8 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
 
   isMainUIVisible: boolean
 
+  resolveResourceFullUrl (filePath: string): string
+
   App: IAppProxy & Record<string, any>
   Editor: IEditorProxy & Record<string, any>
   DB: IDBProxy
