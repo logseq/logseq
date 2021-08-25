@@ -37,8 +37,7 @@
             (error-handler error)
             (log/error :write-file-failed error))))
 
-    (p/let [db-mtime (db/get-file-last-modified-at repo path)
-            disk-content (-> (protocol/read-file this dir path nil)
+    (p/let [disk-content (-> (protocol/read-file this dir path nil)
                              (p/catch (fn [error] nil)))
             disk-content (or disk-content "")
             ext (string/lower-case (util/get-file-ext path))

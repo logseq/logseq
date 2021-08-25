@@ -247,7 +247,7 @@
                                                      {:diffs     diffs
                                                       :nfs-files modified-files
                                                       :refresh? (not re-index?)}))
-                    (when-not re-index?
+                    (when (and (util/electron?) (not re-index?))
                       (db/transact! repo new-files))))))))
 
 (defn- reload-dir!
