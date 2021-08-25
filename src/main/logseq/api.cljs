@@ -5,6 +5,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.dnd :as editor-dnd-handler]
+            [frontend.handler.export :as export-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.util :as util]
@@ -458,6 +459,11 @@
           (.setAttribute anchor "href" data-str)
           (.setAttribute anchor "download" (str (string/replace repo "/" " ") ".transit"))
           (.click anchor))))))
+
+(defn ^:export download_graph_pages
+  []
+  (when-let [repo (state/get-current-repo)]
+    (export-handler/export-repo-as-zip! repo)))
 
 ;; helpers
 (defn ^:export show_msg
