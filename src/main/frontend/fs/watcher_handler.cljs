@@ -50,15 +50,16 @@
           (js/console.warn "Can't get file in the db: " path)
 
           (and (= "change" type)
-               (when-let [last-modified-at (db/get-file-last-modified-at repo path)]
-                 (> mtime last-modified-at)))
-          (when-not (string/blank? content)
-            (p/let [result (ipc/ipc "gitCommitAll")
-                    _ (file-handler/alter-file repo path content {:re-render-root? true
-                                                                  :from-disk? true})]
-              (set-missing-block-ids! content)
-              (db/set-file-last-modified-at! repo path mtime)
-              nil))
+               ;; ignore truncate
+               (not (string/blank? content))
+               (not= (string/trim content)
+                     (string/trim (or (db/get-file repo path) ""))))
+          (p/let [result (ipc/ipc "gitCommitAll")
+                  _ (file-handler/alter-file repo path content {:re-render-root? true
+                                                                :from-disk? true})]
+            (set-missing-block-ids! content)
+            (db/set-file-last-modified-at! repo path mtime)
+            nil)
 
           (contains? #{"add" "change" "unlink"} type)
           nil

@@ -37,16 +37,13 @@
             (error-handler error)
             (log/error :write-file-failed error))))
 
-    (p/let [disk-mtime (when stat (gobj/get stat "mtime"))
-            db-mtime (db/get-file-last-modified-at repo path)
-            file-exists? (-> (protocol/stat this dir path)
-                             (p/catch (fn [_error] false)))
-            disk-content (-> (protocol/read-file this dir path nil)
+    (p/let [disk-content (-> (protocol/read-file this dir path nil)
                              (p/catch (fn [error] nil)))
             disk-content (or disk-content "")
             ext (string/lower-case (util/get-file-ext path))
             file-page (db/get-file-page-id path)
-            page-empty? (and file-page (db/page-empty? repo file-page))]
+            page-empty? (and file-page (db/page-empty? repo file-page))
+            db-content (or (db/get-file repo path) "")]
       (cond
         ;; (and (not page-empty?) (nil? disk-content) )
         ;; (notification/show!
@@ -56,9 +53,8 @@
         ;;  false)
 
         (and
-         file-exists?
-         (not= disk-mtime db-mtime)
-         (not= (string/trim disk-content) (string/trim content))
+         (not= (string/trim disk-content)
+               (string/trim db-content))
          ;; FIXME:
          (not (contains? #{"excalidraw" "edn"} ext)))
         (notification/show!
@@ -72,6 +68,7 @@
          (p/let [result (ipc/ipc "writeFile" path content)
                  mtime (gobj/get result "mtime")]
            (db/set-file-last-modified-at! repo path mtime)
+           (db/set-file-content! repo path content)
            (when ok-handler
              (ok-handler repo path result))
            result)

@@ -242,10 +242,10 @@
     (parse-files-and-create-default-files-inner! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)))
 
 (defn parse-files-and-load-to-db!
-  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts] :as opts
+  [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts refresh?] :as opts
                    :or {re-render? true}}]
   (state/set-loading-files! false)
-  (state/set-importing-to-db! true)
+  (when-not refresh? (state/set-importing-to-db! true))
   (let [file-paths (map :file/path files)]
     (let [metadata-file (config/get-metadata-path)
           metadata-content (some #(when (= (:file/path %) metadata-file)
