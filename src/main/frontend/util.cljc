@@ -370,6 +370,11 @@
    (defn stop [e]
      (when e (doto e (.preventDefault) (.stopPropagation)))))
 
+#?(:cljs
+   (defn stop-propagation [e]
+     (when e (.stopPropagation e))))
+
+
 (def speed 500)
 (def moving-frequency 15)
 
@@ -1389,3 +1394,11 @@
   (if (wrapped-by-quotes? v)
     (unquote-string v)
     v))
+
+#?(:cljs
+   (defn right-click?
+     [e]
+     (let [which (gobj/get e "which")
+           button (gobj/get e "button")]
+       (or (= which 3)
+           (= button 2)))))

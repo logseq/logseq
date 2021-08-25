@@ -5,6 +5,7 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.dicts :as dicts]
             [frontend.encrypt :as encrypt]
             [frontend.format :as format]
@@ -26,7 +27,8 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [shadow.resource :as rc]))
+            [shadow.resource :as rc]
+            [clojure.set :as set]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -147,10 +149,11 @@
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
 (defn- remove-non-exists-refs!
-  [data]
-  (let [block-ids (->> (map :block/uuid data)
-                       (remove nil?)
-                       (set))
+  [data all-block-ids]
+  (let [block-ids (->> (->> (map :block/uuid data)
+                        (remove nil?)
+                        (set))
+                       (set/union (set all-block-ids)))
         keep-block-ref-f (fn [refs]
                            (filter (fn [ref]
                                      (if (and (vector? ref)
@@ -169,7 +172,9 @@
   (let [files (map #(select-keys % [:file/path :file/last-modified-at]) files)
         all-data (-> (concat delete-files delete-blocks files blocks-pages)
                      (util/remove-nils))
-        all-data (if refresh? all-data (remove-non-exists-refs! all-data))]
+        all-data (if refresh?
+                   (remove-non-exists-refs! all-data (db-model/get-all-block-uuids))
+                   (remove-non-exists-refs! all-data nil))]
     (db/transact! repo-url all-data)))
 
 (defn- load-pages-metadata!

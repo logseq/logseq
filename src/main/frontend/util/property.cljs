@@ -117,7 +117,11 @@
   (let [org? (= format :org)
         properties (filter (fn [[k v]] ((built-in-properties) k)) properties)]
     (if (seq properties)
-      (let [[title & body] (string/split-lines content)
+      (let [lines (string/split-lines content)
+            ast (mldoc/->edn content (mldoc/default-config format))
+            [title body] (if (mldoc/block-with-title? (first (ffirst ast)))
+                           [(first lines) (rest lines)]
+                           [nil lines])
             properties-in-content? (and title (= (string/upper-case title) properties-start))
             no-title? (or (simplified-property? title) properties-in-content?)
             properties-and-body (concat
@@ -146,7 +150,7 @@
                          (when org?
                            [properties-end])
                          body)]
-        (string/join "\n" body))
+        (string/triml (string/join "\n" body)))
       content)))
 
 ;; FIXME:
@@ -284,7 +288,7 @@
         content (reduce (fn [content key]
                           (remove-property format key content)) content built-in-properties*)]
     (if (= format :org)
-      (string/replace-first content ":PROPERTIES:\n:END:" "")
+      (string/replace-first content (re-pattern ":PROPERTIES:\n:END:\n*") "")
       content)))
 
 (defn ->new-properties

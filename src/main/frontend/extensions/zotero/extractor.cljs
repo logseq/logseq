@@ -170,7 +170,10 @@
             (markdown-link title (str "file://" path) true)
             (markdown-link title (str "file://" path)))))
       "imported_url"
-      (markdown-link title url)
+      (str
+       (markdown-link title url)
+       " "
+       (zotero-imported-file-macro (item-key item) filename))
       "linked_url"
       (markdown-link title url))))
 

@@ -11,22 +11,6 @@
             [frontend.handler.metadata :as metadata-handler]
             [frontend.ui :as ui]))
 
-(defn listen-to-open-dir!
-  []
-  (js/window.apis.on "open-dir-confirmed"
-                     (fn []
-                       (state/set-loading-files! true)
-                       (when-not (state/home?)
-                         (route-handler/redirect-to-home!)))))
-
-(defn run-dirs-watcher!
-  []
-  ;; TODO: move "file-watcher" to electron.ipc.channels
-  (js/window.apis.on "file-watcher"
-                     (fn [data]
-                       (let [{:keys [type payload]} (bean/->clj data)]
-                         (watcher-handler/handle-changed! type payload)))))
-
 (defn listen-persistent-dbs!
   []
   ;; TODO: move "file-watcher" to electron.ipc.channels
@@ -54,8 +38,28 @@
             100))
          (ipc/ipc "persistent-dbs-saved"))))))
 
+(defn listen-to-electron!
+  []
+  (js/window.apis.on "open-dir-confirmed"
+                     (fn []
+                       (state/set-loading-files! true)
+                       (when-not (state/home?)
+                         (route-handler/redirect-to-home!))))
+
+  ;; TODO: move "file-watcher" to electron.ipc.channels
+  (js/window.apis.on "file-watcher"
+                     (fn [data]
+                       (let [{:keys [type payload]} (bean/->clj data)]
+                         (watcher-handler/handle-changed! type payload))))
+
+  (js/window.apis.on "notification"
+                     (fn [data]
+                       (let [{:keys [type payload]} (bean/->clj data)
+                             type (keyword type)
+                             comp [:div (str payload)]]
+                         (notification/show! comp type false)))))
+
 (defn listen!
   []
-  (listen-to-open-dir!)
-  (run-dirs-watcher!)
+  (listen-to-electron!)
   (listen-persistent-dbs!))

@@ -17,8 +17,11 @@
             [cljs-time.format :as tf]))
 
 (defonce ^:private state
-  (atom
-   (let [document-mode? (or (storage/get :document/mode?) false)]
+  (let [document-mode? (or (storage/get :document/mode?) false)
+        current-graph (let [graph (storage/get :git/current-repo)]
+                        (when graph (ipc/ipc "setCurrentGraph" graph))
+                        graph)]
+    (atom
      {:route-match nil
       :today nil
       :system/events (async/chan 100)
@@ -38,7 +41,7 @@
       :network/online? true
       :indexeddb/support? true
       :me nil
-      :git/current-repo (storage/get :git/current-repo)
+      :git/current-repo current-graph
       :git/status {}
       :format/loading {}
       :draw? false
@@ -147,9 +150,10 @@
       ;; copied blocks
       :copy/blocks {:copy/content nil :copy/block-tree nil}
 
-      :copy/export-block-text-indent-style  (atom "dashes")
-      :copy/export-block-text-remove-options (atom #{})
-
+      :copy/export-block-text-indent-style  (or (storage/get :copy/export-block-text-indent-style)
+                                                "dashes")
+      :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
+                                                 #{})
       :date-picker/date nil
 
       :view/components {}})))
@@ -391,7 +395,8 @@
   (swap! state assoc :git/current-repo repo)
   (if repo
     (storage/set :git/current-repo repo)
-    (storage/remove :git/current-repo)))
+    (storage/remove :git/current-repo))
+  (ipc/ipc "setCurrentGraph" repo))
 
 (defn set-preferred-format!
   [format]
@@ -740,6 +745,10 @@
 (defn get-sidebar-blocks
   []
   (:sidebar/blocks @state))
+
+(defn clear-sidebar-blocks!
+  []
+  (set-state! :sidebar/blocks '()))
 
 (defn sidebar-block-toggle-collapse!
   [db-id]
@@ -1377,9 +1386,21 @@
 (defn get-export-block-text-indent-style []
   (:copy/export-block-text-indent-style @state))
 
+(defn set-export-block-text-indent-style!
+  [v]
+  (set-state! :copy/export-block-text-indent-style v)
+  (storage/set :copy/export-block-text-indent-style v))
+
 (defn get-export-block-text-remove-options []
   (:copy/export-block-text-remove-options @state))
 
+(defn update-export-block-text-remove-options!
+  [e k]
+  (let [f (if (util/echecked? e) conj disj)]
+    (update-state! :copy/export-block-text-remove-options
+                   #(f % k))
+    (storage/set :copy/export-block-text-remove-options
+                 (get-export-block-text-remove-options))))
 
 (defn set-editor-args!
   [args]

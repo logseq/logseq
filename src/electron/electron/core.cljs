@@ -13,7 +13,8 @@
             ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem] :as electron]
             ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
-            [electron.state :as state]))
+            [electron.state :as state]
+            [electron.git :as git]))
 
 (defonce LSP_SCHEME "lsp")
 (defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
@@ -259,6 +260,8 @@
                (search/ensure-search-dir!)
 
                (search/open-dbs!)
+
+               (git/auto-commit-current-graph!)
 
                (vreset! *setup-fn
                         (fn []

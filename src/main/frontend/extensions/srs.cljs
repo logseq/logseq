@@ -14,6 +14,7 @@
             [frontend.ui :as ui]
             [frontend.date :as date]
             [frontend.commands :as commands]
+            [frontend.components.editor :as editor]
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
             [cljs-time.coerce :as tc]
@@ -261,23 +262,21 @@
 
 (defn- query-scheduled
   "Return blocks scheduled to 'time' or before"
-  [repo {query-string :query-string query-result :query-result} time]
-  (when-let [*blocks (or query-result (and query-string (query repo query-string)))]
-    (when-let [blocks @*blocks]
-      (let [filtered-result (->>
-                             (flatten blocks)
-                             (filterv (fn [b]
-                                        (let [props (:block/properties b)
-                                              next-sched (get props card-next-schedule-property)
-                                              next-sched* (tc/from-string next-sched)
-                                              repeats (get props card-repeats-property)]
-                                          (or (nil? repeats)
-                                              (< repeats 1)
-                                              (nil? next-sched)
-                                              (nil? next-sched*)
-                                              (t/before? next-sched* time))))))]
-        {:total (count blocks)
-         :result filtered-result}))))
+  [repo blocks time]
+  (let [filtered-result (->>
+                         (flatten blocks)
+                         (filterv (fn [b]
+                                    (let [props (:block/properties b)
+                                          next-sched (get props card-next-schedule-property)
+                                          next-sched* (tc/from-string next-sched)
+                                          repeats (get props card-repeats-property)]
+                                      (or (nil? repeats)
+                                          (< repeats 1)
+                                          (nil? next-sched)
+                                          (nil? next-sched*)
+                                          (t/before? next-sched* time))))))]
+    {:total (count blocks)
+     :result filtered-result}))
 
 
 ;;; ================================================================
@@ -373,10 +372,10 @@
              :disabled false}
             (svg/info)))
 
-(defn- score-and-next-card [score card *card-index *cards *phase *review-records cb]
+(defn- score-and-next-card [score card *card-index cards *phase *review-records cb]
   (operation-score! card score)
   (swap! *review-records #(update % score (fn [ov] (conj ov card))))
-  (if (>= (inc @*card-index) (count @*cards))
+  (if (>= (inc @*card-index) (count cards))
     (when cb
       (swap! *card-index inc)
       (cb @*review-records))
@@ -384,10 +383,10 @@
       (swap! *card-index inc)
       (reset! *phase 1))))
 
-(defn- skip-card [card *card-index *cards *phase *review-records cb]
+(defn- skip-card [card *card-index cards *phase *review-records cb]
   (swap! *review-records #(update % "skip" (fn [ov] (conj ov card))))
   (swap! *card-index inc)
-  (if (>= (inc @*card-index) (count @*cards))
+  (if (>= (inc @*card-index) (count cards))
     (and cb (cb @*review-records))
     (reset! *phase 1)))
 
@@ -398,16 +397,14 @@
   < rum/reactive
   (rum/local 1 ::phase)
   (rum/local 0 ::card-index)
-  (rum/local nil ::cards)
   (rum/local {} ::review-records)
-  [state cards {preview? :preview?
+  [state blocks {preview? :preview?
                 modal? :modal?
                 cb :callback}]
-  (let [cards* (::cards state)
-        _ (when (nil? @cards*) (reset! cards* cards))
+  (let [cards (map ->card blocks)
         review-records (::review-records state)
         card-index (::card-index state)
-        card (util/nth-safe @cards* @card-index)]
+        card (util/nth-safe cards @card-index)]
     (if-not card
       review-finished
       (let [phase (::phase state)
@@ -417,10 +414,16 @@
         [:div.ls-card
          {:class (if (or preview? modal?)
                    (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto.px-4"))}
+         (let [repo (state/get-current-repo)]
+           [:div.my-2.opacity-70.hover:opacity-100
+            (component-block/block-parents {} repo root-block-id
+                                           (:block/format root-block)
+                                           true)])
          (component-block/blocks-container
           blocks
           (merge (show-cycle-config card @phase)
-                 {:id (str root-block-id)}))
+                 {:id (str root-block-id)
+                  :editor-box editor/box}))
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             [:div.flex-1
@@ -439,7 +442,7 @@
                  :id "card-next"
                  :small? true
                  :class "mr-2"
-                 :on-click #(skip-card card card-index cards* phase review-records cb)))
+                 :on-click #(skip-card card card-index cards phase review-records cb)))
 
              (when (and (not preview?) (= 1 next-phase))
                (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
@@ -450,20 +453,20 @@
                     :id "card-forgotten"
                     :small? true
                     :on-click (fn []
-                                (score-and-next-card 1 card card-index cards* phase review-records cb)
+                                (score-and-next-card 1 card card-index cards phase review-records cb)
                                 (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
                                   (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))))
 
                   (ui/button "Remembered(r)"
                     :id "card-remembered"
                     :small? true
-                    :on-click #(score-and-next-card 5 card card-index cards* phase review-records cb))
+                    :on-click #(score-and-next-card 5 card card-index cards phase review-records cb))
 
                   (ui/button "Take a while to recall(t)"
                     :id "card-recall"
                     :class (util/hiccup->class "opacity-60.hover:opacity-100")
                     :small? true
-                    :on-click #(score-and-next-card 3 card card-index cards* phase review-records cb))]))]
+                    :on-click #(score-and-next-card 3 card card-index cards phase review-records cb))]))]
 
             (when preview?
               (ui/tippy {:html [:div.text-sm
@@ -481,12 +484,12 @@
 
 (rum/defc view-modal <
   (shortcut/mixin :shortcut.handler/cards)
-  [cards option]
-  (view cards option))
+  [blocks option]
+  (view blocks option))
 
 (defn preview
   [blocks]
-  (state/set-modal! #(view (mapv ->card blocks) {:preview? true})))
+  (state/set-modal! #(view blocks {:preview? true})))
 
 
 ;;; ================================================================
@@ -519,8 +522,9 @@
   (let [repo (state/get-current-repo)
         query-string (string/join ", " (:arguments options))]
     (if-let [*query-result (query repo query-string)]
-      (let [{:keys [total result]} (query-scheduled repo {:query-result *query-result} (tl/local-now))
-            review-cards (mapv ->card result)
+      (let [blocks (rum/react *query-result)
+            {:keys [total result]} (query-scheduled repo blocks (tl/local-now))
+            review-cards result
             query-string (if (string/blank? query-string) "All" query-string)
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
             filtered-total (count result)
@@ -553,7 +557,7 @@
                {:on-click (fn [_]
                             (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
                               (when (> (count all-blocks) 0)
-                                (let [review-cards (mapv ->card all-blocks)]
+                                (let [review-cards all-blocks]
                                   (state/set-modal! #(view-modal
                                                       review-cards
                                                       {:preview? true

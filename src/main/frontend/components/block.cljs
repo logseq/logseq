@@ -589,6 +589,7 @@
 (declare block-content)
 (declare block-container)
 (declare block-parents)
+
 (rum/defc block-reference < rum/reactive
   [config id label]
   (when (and
@@ -600,43 +601,48 @@
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
       (if block
-        [:div.block-ref-wrap.inline
+        (let [title (let [title (:block/title block)
+                          block-content (block-content (assoc config :block-ref? true)
+                                                       block nil (:block/uuid block)
+                                                       (:slide? config))
+                          class (if (seq title) "block-ref" "block-ref-no-title")]
+                      [:span {:class class}
+                       block-content])
+              inner (if label
+                      (->elem
+                       :span.block-ref
+                       (map-inline config label))
+                      title)]
+          [:div.block-ref-wrap.inline
+           {:data-type    (name (or block-type :default))
+            :data-hl-type hl-type
+            :on-mouse-down
+            (fn [^js/MouseEvent e]
+              (if (util/right-click? e)
+                (state/set-state! :block-ref/context {:block (:block config)
+                                                      :block-ref block-id})
 
-         {:data-type    (name (or block-type :default))
-          :data-hl-type hl-type
-          :on-mouse-down
-          (fn [^js/MouseEvent e]
-            (when (or (gobj/get e "shiftKey")
-                      (not (.. e -target (closest ".blank"))))
-              (util/stop e)
+                (when (and
+                       (or (gobj/get e "shiftKey")
+                           (not (.. e -target (closest ".blank"))))
+                       (not (util/right-click? e)))
+                  (util/stop e)
 
-              (if (gobj/get e "shiftKey")
-                (state/sidebar-add-block!
-                  (state/get-current-repo)
-                  (:db/id block)
-                  :block-ref
-                  {:block block})
+                  (if (gobj/get e "shiftKey")
+                    (state/sidebar-add-block!
+                     (state/get-current-repo)
+                     (:db/id block)
+                     :block-ref
+                     {:block block})
 
-                (match [block-type (util/electron?)]
-                       ;; pdf annotation
-                       [:annotation true] (pdf-assets/open-block-ref! block)
+                    (match [block-type (util/electron?)]
+                      ;; pdf annotation
+                      [:annotation true] (pdf-assets/open-block-ref! block)
 
-                       ;; default open block page
-                       :else (route-handler/redirect! {:to          :page
-                                                       :path-params {:name id}})))))}
+                      ;; default open block page
+                      :else (route-handler/redirect! {:to          :page
+                                                      :path-params {:name id}}))))))}
 
-         (let [title (let [title (:block/title block)
-                           block-content (block-content (assoc config :block-ref? true)
-                                                        block nil (:block/uuid block)
-                                                        (:slide? config))
-                           class (if (seq title) "block-ref" "block-ref-no-title")]
-                       [:span {:class class}
-                        block-content])
-               inner (if label
-                       (->elem
-                        :span.block-ref
-                        (map-inline config label))
-                       title)]
            (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
              (ui/tippy {:html        (fn []
                                        [:div.tippy-wrapper.overflow-y-auto.p-4
@@ -649,7 +655,7 @@
                                           (assoc config :id (str id) :preview? true))]])
                         :interactive true
                         :delay       [1000, 100]} inner)
-             inner))]
+             inner)])
         [:span.warning.mr-1 {:title "Block ref invalid"}
          (util/format "((%s))" id)]))))
 
@@ -803,10 +809,6 @@
           address (str local_part "@" domain)]
       [:a {:href (str "mainto:" address)}
        address])
-
-    ;; ["Block_reference" id]
-    ;; ;; FIXME: alert when self block reference
-    ;; (block-reference (assoc config :reference? true) id nil)
 
     ["Nested_link" link]
     (nested-link config html-export? link)
@@ -2450,6 +2452,10 @@
                    :markdown)]
     (try
       (match item
+        ;; ["Drawer" name lines]
+        ;; [:div.drawer {:data-drawer-name name}
+        ;;  (apply str lines)]
+
         ["Properties" m]
         [:div.properties
          (for [[k v] (dissoc m :roam_alias :roam_tags)]

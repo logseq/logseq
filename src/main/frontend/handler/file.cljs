@@ -169,27 +169,27 @@
         write-file! (if from-disk?
                       #(p/resolved nil)
                       #(fs/write-file! repo (config/get-repo-dir repo) path content (when original-content {:old-content original-content})))]
-    (if reset?
-      (do
-        (when-let [page-id (db/get-file-page-id path)]
-          (db/transact! repo
-            [[:db/retract page-id :block/alias]
-             [:db/retract page-id :block/tags]]))
-        (reset-file! repo path content))
-      (db/set-file-content! repo path content))
-    (util/p-handle (write-file!)
-                   (fn [_]
-                     (when (= path (config/get-config-path repo))
-                       (restore-config! repo true))
-                     (when (= path (config/get-custom-css-path repo))
-                       (ui-handler/add-style-if-exists!))
-                     (when re-render-root? (ui-handler/re-render-root!))
-                     ;; (when (and add-history? original-content)
-                     ;;   (history/add-history! repo [[path original-content content]]))
-                     )
-                   (fn [error]
-                     (println "Write file failed, path: " path ", content: " content)
-                     (log/error :write/failed error)))))
+    (p/let [_ (if reset?
+                (do
+                  (when-let [page-id (db/get-file-page-id path)]
+                    (db/transact! repo
+                      [[:db/retract page-id :block/alias]
+                       [:db/retract page-id :block/tags]]))
+                  (reset-file! repo path content))
+                (db/set-file-content! repo path content))]
+      (util/p-handle (write-file!)
+                     (fn [_]
+                       (when (= path (config/get-config-path repo))
+                         (restore-config! repo true))
+                       (when (= path (config/get-custom-css-path repo))
+                         (ui-handler/add-style-if-exists!))
+                       (when re-render-root? (ui-handler/re-render-root!))
+                       ;; (when (and add-history? original-content)
+                       ;;   (history/add-history! repo [[path original-content content]]))
+                       )
+                     (fn [error]
+                       (println "Write file failed, path: " path ", content: " content)
+                       (log/error :write/failed error))))))
 
 (defn set-file-content!
   [repo path new-content]

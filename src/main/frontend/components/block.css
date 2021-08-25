@@ -154,10 +154,6 @@
   }
 }
 
-.block-ref-no-title {
-    cursor: alias;
-}
-
 .block-ref {
   border-bottom: 0.5px solid;
   border-bottom-color: var(--ls-block-ref-link-text-color);
@@ -172,6 +168,22 @@
   .block-content {
     cursor: inherit;
   }
+}
+
+.block-ref-no-title {
+    border-bottom: 0.5px solid;
+    border-bottom-color: var(--ls-block-ref-link-text-color);
+    cursor: alias;
+    padding: 2px 5px;
+    display: block;
+
+    &:hover {
+        color: var(--ls-link-text-hover-color);
+    }
+
+    .block-content {
+        cursor: inherit;
+    }
 }
 
 .page-ref {
@@ -302,6 +314,11 @@
 .block-ref .ls-block :is(h1, h2),
 .block-ref .editor-inner :is(.h1, .h2) {
   border-bottom: none;
+}
+
+.block-ref :is(h1, h2, h3, h4, h5, h6) {
+    border-bottom: none;
+    font-size: 1rem;
 }
 
 .document-mode .ls-block h1,

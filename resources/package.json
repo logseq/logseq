@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.3.3",
+  "version": "0.3.5",
   "main": "electron.js",
   "author": "Logseq",
   "description": "A privacy-first, open-source platform for knowledge management and collaboration.",
@@ -27,7 +27,8 @@
     "node-fetch": "^2.6.1",
     "open": "^7.3.1",
     "semver": "^7.3.5",
-    "update-electron-app": "^2.0.1"
+    "update-electron-app": "^2.0.1",
+    "simple-git": "2.44.0"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.57",
@@ -36,7 +37,7 @@
     "@electron-forge/maker-rpm": "^6.0.0-beta.57",
     "@electron-forge/maker-squirrel": "^6.0.0-beta.57",
     "@electron-forge/maker-zip": "^6.0.0-beta.57",
-    "electron": "^13.1.9",
+    "electron": "13.1.8",
     "electron-builder": "^22.11.7",
     "electron-forge-maker-appimage": "trusktr/electron-forge-maker-appimage#patch-1",
     "electron-rebuild": "^2.3.5"

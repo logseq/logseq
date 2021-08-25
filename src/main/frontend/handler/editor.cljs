@@ -990,9 +990,10 @@
             new-line (str (string/upper-case key) ": " value)
             new-content (let [lines (string/split-lines content)
                               new-lines (map (fn [line]
-                                               (if (string/starts-with? (string/lower-case line) key)
-                                                 new-line
-                                                 line))
+                                               (string/trim
+                                                (if (string/starts-with? (string/lower-case line) key)
+                                                  new-line
+                                                  line)))
                                              lines)
                               new-lines (if (not= lines new-lines)
                                           new-lines
@@ -1087,8 +1088,8 @@
         top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
         exported-md-contents (export/export-blocks-as-markdown
                                      repo top-level-block-uuids
-                                     @(state/get-export-block-text-indent-style)
-                                     (into [] @(state/get-export-block-text-remove-options)))]
+                                     (state/get-export-block-text-indent-style)
+                                     (into [] (state/get-export-block-text-remove-options)))]
     [exported-md-contents tree]))
 
 (defn copy-selection-blocks
@@ -3160,3 +3161,42 @@
        (state/append-current-edit-content! clipboard-data)))
    (fn [error]
      (js/console.error error))))
+
+(defn copy-current-ref
+  [block-id]
+  (when block-id
+    (util/copy-to-clipboard! (util/format "((%s))" (str block-id)))))
+
+(defn delete-current-ref!
+  [block ref-id]
+  (when (and block ref-id)
+    (let [match (re-pattern (str "\\s?" (util/format "\\(\\(%s\\)\\)" (str ref-id))))
+          content (string/replace-first (:block/content block) match "")]
+      (save-block! (state/get-current-repo)
+                   (:block/uuid block)
+                   content))))
+
+(defn replace-ref-with-text!
+  [block ref-id]
+  (when (and block ref-id)
+    (let [match (util/format "((%s))" (str ref-id))
+          ref-block (db/entity [:block/uuid ref-id])
+          block-ref-content (->> (or (:block/content ref-block)
+                                    "")
+                                 (property/remove-built-in-properties (:block/format ref-block)))
+          content (string/replace-first (:block/content block) match
+                                        block-ref-content)]
+      (save-block! (state/get-current-repo)
+                   (:block/uuid block)
+                   content))))
+
+(defn replace-ref-with-embed!
+  [block ref-id]
+  (when (and block ref-id)
+    (let [match (util/format "((%s))" (str ref-id))
+          content (string/replace-first (:block/content block) match
+                                        (util/format "{{embed ((%s))}}"
+                                                     (str ref-id)))]
+      (save-block! (state/get-current-repo)
+                   (:block/uuid block)
+                   content))))

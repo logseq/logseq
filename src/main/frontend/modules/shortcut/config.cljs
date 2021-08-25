@@ -306,7 +306,13 @@
      :binding "mod+c mod+r"
      :fn      #(repo-handler/re-index!
                 nfs-handler/rebuild-index!
-                page-handler/create-today-journal!)}}
+                page-handler/create-today-journal!)}
+    :sidebar/clear
+    {:desc    "Clear all in the right sidebar"
+     :binding "mod+c mod+c"
+     :fn      #(do
+                 (state/clear-sidebar-blocks!)
+                 (state/hide-right-sidebar!))}}
 
    :shortcut.handler/misc
    ;; always overrides the copy due to "mod+c mod+s"
@@ -316,7 +322,11 @@
 
    :shortcut.handler/global-non-editing-only
    ^{:before m/enable-when-not-editing-mode!}
-   {:ui/toggle-document-mode
+   {:command/run
+    {:desc    "Run git/pandoc/others commands"
+     :binding "r"
+     :fn      #(state/pub-event! [:command/run])}
+    :ui/toggle-document-mode
     {:desc    "Toggle document mode"
      :binding "t d"
      :fn      state/toggle-document-mode!}
