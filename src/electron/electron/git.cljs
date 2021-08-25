@@ -5,7 +5,8 @@
             [electron.state :as state]
             [electron.utils :as utils]
             [promesa.core :as p]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            ["fs" :as fs]))
 
 (def spawn-sync (gobj/get child-process "spawnSync"))
 
@@ -27,11 +28,12 @@
   []
   (when (installed?)
     (when-let [path (:graph/current @state/state)]
-      (if-let [result (get @gits path)]
-        result
-        (let [result (simple-git path)]
-          (swap! gits assoc path result)
-          result)))))
+      (when (fs/existsSync path)
+        (if-let [result (get @gits path)]
+          result
+          (let [result (simple-git path)]
+            (swap! gits assoc path result)
+            result))))))
 
 (defn init!
   ([]

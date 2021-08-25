@@ -63,7 +63,10 @@
      (swap! conns assoc db-name db-conn)
      (d/transact! db-conn [(cond-> {:schema/version db-schema/version}
                              db-type
-                             (assoc :db/type db-type))])
+                             (assoc :db/type db-type))
+                           {:block/name "card"
+                            :block/original-name "card"
+                            :block/uuid (d/squuid)}])
      (when me
        (d/transact! db-conn [(me-tx (d/db db-conn) me)]))
 

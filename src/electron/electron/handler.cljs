@@ -202,7 +202,8 @@
 
 (defmethod handle :setCurrentGraph [_ [_ path]]
   (let [path (when path (string/replace path "logseq_local_" ""))]
-    (swap! state/state assoc :graph/current path)))
+    (swap! state/state assoc :graph/current path)
+    nil))
 
 (defmethod handle :runGit [_ [_ args]]
   (when (seq args)
