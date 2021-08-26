@@ -5,11 +5,25 @@
             [electron.utils :as utils]
             [promesa.core :as p]
             [clojure.string :as string]
-            ["fs" :as fs]))
+            ["fs-extra" :as fs]
+            ["path" :as path]
+            ["os" :as os]))
+
+(defn get-graph-path
+  []
+  (:graph/current @state/state))
+
+(defn get-graph-git-dir
+  []
+  (when-let [graph-path (some-> (get-graph-path)
+                                (string/replace "/" "_"))]
+    (let [dir (.join path (.homedir os) ".logseq" "git" graph-path ".git")]
+      (. fs ensureDirSync dir)
+      dir)))
 
 (defn run-git!
   [commands]
-  (when-let [path (:graph/current @state/state)]
+  (when-let [path (get-graph-path)]
     (when (fs/existsSync path)
       (p/let [result (.exec GitProcess commands path)]
         (if (zero? (gobj/get result "exitCode"))
@@ -19,9 +33,25 @@
             (js/console.error error)
             (p/rejected error)))))))
 
+(defn git-dir-exists?
+  []
+  (try
+    (let [p (.join path (get-graph-path) ".git")]
+      (.isDirectory (fs/statSync p)))
+    (catch js/Error e
+      nil)))
+
 (defn init!
   []
-  (run-git! #js ["init"]))
+  (let [separate-git-dir (get-graph-git-dir)
+        args (cond
+               (git-dir-exists?)
+               ["init"]
+               separate-git-dir
+               ["init" (str "--separate-git-dir=" separate-git-dir)]
+               :else
+               ["init"])]
+    (run-git! (clj->js args))))
 
 (defn add-all!
   []
