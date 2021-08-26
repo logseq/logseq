@@ -57,7 +57,11 @@
                        (let [{:keys [type payload]} (bean/->clj data)
                              type (keyword type)
                              comp [:div (str payload)]]
-                         (notification/show! comp type false)))))
+                         (notification/show! comp type false))))
+
+  (js/window.apis.on "setGitUsernameAndEmail"
+                     (fn []
+                       (state/pub-event! [:modal/set-git-username-and-email]))))
 
 (defn listen!
   []
