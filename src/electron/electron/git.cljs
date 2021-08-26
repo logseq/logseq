@@ -1,6 +1,5 @@
 (ns electron.git
-  (:require ["child_process" :as child-process]
-            ["simple-git" :as simple-git]
+  (:require ["dugite" :refer [GitProcess]]
             [goog.object :as gobj]
             [electron.state :as state]
             [electron.utils :as utils]
@@ -8,55 +7,42 @@
             [clojure.string :as string]
             ["fs" :as fs]))
 
-(def spawn-sync (gobj/get child-process "spawnSync"))
-
-(defonce gits
-  (atom {}))
-
-(defn installed?
-  []
-  (let [command (spawn-sync "git"
-                            #js ["--version"]
-                            #js {:stdio "ignore"})]
-    (if-let [error (gobj/get command "error")]
-      (do
-        (js/console.error error)
-        false)
-      true)))
-
-(defn get-git
-  []
-  (when (installed?)
-    (when-let [path (:graph/current @state/state)]
-      (when (fs/existsSync path)
-        (if-let [result (get @gits path)]
-          result
-          (let [result (simple-git path)]
-            (swap! gits assoc path result)
-            result))))))
+(defn run-git!
+  [commands]
+  (when-let [path (:graph/current @state/state)]
+    (when (fs/existsSync path)
+      (p/let [result (.exec GitProcess commands path)]
+        (if (zero? (gobj/get result "exitCode"))
+          (let [result (gobj/get result "stdout")]
+            (p/resolved result))
+          (let [error (gobj/get result "stderr")]
+            (js/console.error error)
+            (p/rejected error)))))))
 
 (defn init!
-  ([]
-   (init! (get-git)))
-  ([^js git]
-   (when git
-     (.init git false))))
+  []
+  (run-git! #js ["init"]))
 
 (defn add-all!
-  ([]
-   (add-all! (get-git)))
-  ([^js git]
-   (when git
-     (.add git "./*" (fn [error] (js/console.error error))))))
+  []
+  (run-git! #js ["add" "./*"]))
+
+(defn commit!
+  [message]
+  (run-git! #js ["commit" "-m" message]))
 
 (defn add-all-and-commit!
   ([]
    (add-all-and-commit! "Auto saved by Logseq"))
   ([message]
-   (when-let [git ^js (get-git)]
-     (p/let [_ (init! git)
-             _ (add-all! git)]
-       (.commit git message)))))
+   (->
+    (p/let [_ (init!)
+            _ (add-all!)]
+      (commit! message))
+    (p/catch (fn [error]
+               (when-not (string/blank? error)
+                 (utils/send-to-renderer "notification" {:type "error"
+                                                         :payload error})))))))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?
@@ -85,33 +71,34 @@
 
 (defn raw!
   [args & {:keys [ok-handler error-handler]}]
-  (when-let [git ^js (get-git)]
-    (let [args (if (string? args)
-                 (split-args args)
-                 args)
-          ok-handler (if ok-handler
-                       ok-handler
-                       (fn [result]
+  (let [args (if (string? args)
+               (split-args args)
+               args)
+        ok-handler (if ok-handler
+                     ok-handler
+                     (fn [result]
+                       (let [result (if (string/blank? result)
+                                      (str (first args) " successfully!")
+                                      result)]
                          (utils/send-to-renderer "notification" {:type "success"
-                                                                 :payload result})))
-          error-handler (if error-handler
-                          error-handler
-                          (fn [error]
-                            (js/console.dir error)
+                                                                 :payload result}))))
+        error-handler (if error-handler
+                        error-handler
+                        (fn [error]
+                          (let [error (str (first args) " error: " error)]
                             (utils/send-to-renderer "notification" {:type "error"
-                                                                    :payload (.toString error)})))]
-      (p/let [_ (when (= (first args) "commit")
-                  (add-all!))]
-        (->
-         (p/let [result (.raw git (clj->js args))]
-           (when ok-handler
-             (ok-handler result)))
-         (p/catch error-handler))))))
+                                                                    :payload error}))))]
+    (p/let [_ (when (= (first args) "commit")
+                (add-all!))]
+      (->
+       (p/let [result (run-git! (clj->js args))]
+         (when ok-handler
+           (ok-handler result)))
+       (p/catch error-handler)))))
 
 (defn auto-commit-current-graph!
   []
-  (when (and (installed?)
-             (not (state/git-auto-commit-disabled?)))
+  (when (not (state/git-auto-commit-disabled?))
     (state/clear-git-commit-interval!)
     (p/let [_ (add-all-and-commit!)]
       (let [seconds (state/get-git-commit-seconds)]

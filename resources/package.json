@@ -20,6 +20,7 @@
   "dependencies": {
     "better-sqlite3": "7.4.3",
     "chokidar": "^3.5.1",
+    "dugite": "^1.103.0",
     "electron-log": "^4.3.1",
     "electron-squirrel-startup": "^1.0.0",
     "electron-window-state": "^5.0.3",

@@ -31,7 +31,7 @@
        [:input#run-command.form-input.block.w-full.sm:text-sm.sm:leading-5
         {:autoFocus true
          :on-key-down util/stop-propagation
-         :placeholder "git ..."
+         :placeholder "git commit -m ..."
          :on-change (fn [e]
                       (reset! command (util/evalue e)))}]]]]
     (ui/button "Run" :on-click #(run-command command))]])

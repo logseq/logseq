@@ -22,8 +22,8 @@
          :git
          (run-git-command! args)
 
-         :pandoc
-         (run-pandoc-command! args)
+         ;; :pandoc
+         ;; (run-pandoc-command! args)
 
          (notification/show!
           [:div (str command " is not supported yet!")]
