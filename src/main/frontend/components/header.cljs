@@ -213,13 +213,6 @@
         (repo/repos-dropdown nil)]
 
        (when show-open-folder?
-         (ui/tippy {:html            [:div.font-medium "Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the right button to open a local directory or connect Logseq to Github."]
-                    :interactive     true
-                    :delay           [1000, 100]
-                    :position        "down"}
-                   [:a.button (svg/warning)]))
-
-       (when show-open-folder?
          [:a.text-sm.font-medium.button
           {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
           [:div.flex.flex-row.text-center.open-button__inner.items-center
