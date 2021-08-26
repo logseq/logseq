@@ -307,6 +307,10 @@
      :fn      #(repo-handler/re-index!
                 nfs-handler/rebuild-index!
                 page-handler/create-today-journal!)}
+    :sidebar/open-today-page
+    {:desc    "Open today's page in the right sidebar"
+     :binding (if mac? "mod+shift+j" "alt+shift+j")
+     :fn      page-handler/open-today-in-sidebar}
     :sidebar/clear
     {:desc    "Clear all in the right sidebar"
      :binding "mod+c mod+c"
@@ -326,6 +330,10 @@
     {:desc    "Run git command"
      :binding "mod+shift+1"
      :fn      #(state/pub-event! [:command/run])}
+    :go/home
+    {:desc    "Go to home"
+     :binding "g h"
+     :fn      #(route-handler/redirect! {:to :home})}
     :ui/toggle-document-mode
     {:desc    "Toggle document mode"
      :binding "t d"

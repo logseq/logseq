@@ -639,3 +639,12 @@
                                 [page false false false])
                   :page-block page})
                 (ui-handler/re-render-root!)))))))))
+
+(defn open-today-in-sidebar
+  []
+  (when-let [page (db/entity [:block/name (string/lower-case (date/today))])]
+    (state/sidebar-add-block!
+     (state/get-current-repo)
+     (:db/id page)
+     :page
+     page)))
