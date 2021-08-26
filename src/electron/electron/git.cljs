@@ -115,9 +115,11 @@
         error-handler (if error-handler
                         error-handler
                         (fn [error]
-                          (let [error (str (first args) " error: " error)]
-                            (utils/send-to-renderer "notification" {:type "error"
-                                                                    :payload error}))))]
+                          ;; TODO: why this happen?
+                          (when-not (string/blank? error)
+                            (let [error (str (first args) " error: " error)]
+                              (utils/send-to-renderer "notification" {:type "error"
+                                                                      :payload error})))))]
     (p/let [_ (when (= (first args) "commit")
                 (add-all!))]
       (->

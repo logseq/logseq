@@ -6173,10 +6173,10 @@ mkdirp@^0.5.0, mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@1.0.2:
-  version "1.0.2"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.0.2.tgz#c0f4c23183c947a57e3892090ecc5a9145b3eb9e"
-  integrity sha512-+gqsn848//y/w5MINt3S70iLoDdfIzWxAM5JvCQ+fRyGV78GG3e7V1tzkTCsLC/1tEweGP2DHX1e/pS+XTTRZw==
+mldoc@1.0.3:
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.0.3.tgz#070fbe1757c9913dda5fda633b6cf756ad58b8be"
+  integrity sha512-CAzsCN9kxQGWgNO3oE7zHTzf/T1G9nS7+DeBpKlOE1TKDKG1fhfYLnwKePfKP6YQK95vFOyf/5CdK8ml8P1cxg==
   dependencies:
     yargs "^12.0.2"
 
