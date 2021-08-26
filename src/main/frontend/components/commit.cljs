@@ -9,15 +9,18 @@
             [frontend.handler.notification :as notification]
             [promesa.core :as p]
             [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [electron.ipc :as ipc]))
 
 (defn commit-and-push!
   []
   (let [value (gobj/get (gdom/getElement "commit-message") "value")]
     (when (and value (>= (count value) 1))
-      (-> (repo-handler/git-commit-and-push! value)
-          (p/catch (fn [error]
-                     (notification/show! error :error false))))
+      (if (util/electron?)
+        (ipc/ipc "gitCommitAll" value)
+        (-> (repo-handler/git-commit-and-push! value)
+           (p/catch (fn [error]
+                      (notification/show! error :error false)))))
       (state/close-modal!))))
 
 (rum/defcs add-commit-message <
@@ -33,32 +36,28 @@
                       :on-enter (fn []
                                   (commit-and-push!)))))
   [state close-fn]
-  (when-let [repo (state/sub :git/current-repo)]
-    [:div
-     [:div.sm:flex.sm:items-start
-      [:div.mt-3.text-center.sm:mt-0.sm:text-left.mb-2
-       [:h3#modal-headline.text-lg.leading-6.font-medium
-        "Your commit message:"]]]
+  (let [electron? (util/electron?)]
+    (when-let [repo (state/sub :git/current-repo)]
+      [:div.w-full.sm:max-w-lg.sm:w-96
+      [:div.sm:flex.sm:items-start
+       [:div.mt-3.text-center.sm:mt-0.sm:text-left.mb-2
+        [:h3#modal-headline.text-lg.leading-6.font-medium
+         "Your commit message:"]]]
 
-     [:input#commit-message.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-      {:auto-focus true
-       :default-value ""}]
+      [:input#commit-message.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+       {:auto-focus true
+        :default-value ""}]
 
-     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-      [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
-         :on-click commit-and-push!}
-        "Commit and push!"]]
-      [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
-         :on-click close-fn}
-        "Cancel"]]]]))
+      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
+       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
+        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+         {:type "button"
+          :on-click commit-and-push!}
+         (if electron? "Commit" "Commit and push!")]]]])))
 
 (defn show-commit-modal! [e]
   (when (and
-         (string/starts-with? (state/get-current-repo) "https://")
+         (or (string/starts-with? (state/get-current-repo) "https://") (util/electron?))
          (not (util/input? (gobj/get e "target")))
          (not (gobj/get e "shiftKey"))
          (not (gobj/get e "ctrlKey"))
@@ -67,4 +66,4 @@
     (when-let [repo-url (state/get-current-repo)]
       (when-not (state/get-edit-input-id)
         (util/stop e)
-        (state/set-modal! commit-and-push!)))))
+        (state/set-modal! add-commit-message)))))

@@ -1059,6 +1059,8 @@
   ([modal-panel-content]
    (set-modal! modal-panel-content false))
   ([modal-panel-content fullscreen?]
+   ;; Temporal fix: to avoid deleting selected blocks (backspace in input/textarea)
+   (clear-selection!)
    (swap! state assoc
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content

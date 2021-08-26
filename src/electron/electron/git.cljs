@@ -71,20 +71,23 @@
 
 (defn add-all-and-commit!
   ([]
-   (add-all-and-commit! "Auto saved by Logseq"))
+   (add-all-and-commit! nil))
   ([message]
-   (->
-    (p/let [_ (init!)
-            _ (add-all!)]
-      (commit! message))
-    (p/catch (fn [error]
-               (when (and (not (string/blank? error))
-                          ;; FIXME: not sure why this happened
-                          (not (string/starts-with? error "fatal: not a git repository")))
-                 (if (string/starts-with? error "Author identity unknown")
-                   (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
-                   (utils/send-to-renderer "notification" {:type "error"
-                                                           :payload error}))))))))
+   (let [message (if (string/blank? message)
+                   "Auto saved by Logseq"
+                   message)]
+     (->
+      (p/let [_ (init!)
+              _ (add-all!)]
+        (commit! message))
+      (p/catch (fn [error]
+                 (when (and (not (string/blank? error))
+                            ;; FIXME: not sure why this happened
+                            (not (string/starts-with? error "fatal: not a git repository")))
+                   (if (string/starts-with? error "Author identity unknown")
+                     (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
+                     (utils/send-to-renderer "notification" {:type "error"
+                                                             :payload error})))))))))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?

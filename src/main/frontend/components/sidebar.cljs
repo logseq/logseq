@@ -295,7 +295,8 @@
      (mixins/listen state js/window "keydown"
                     (fn [e]
                       (when (= 27 (.-keyCode e))
-                        (hide-context-menu-and-clear-selection))))))
+                        (hide-context-menu-and-clear-selection)
+                        (state/close-modal!))))))
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
