@@ -469,7 +469,10 @@
 
    :shortcut.category/others
    ^{:doc "Others"}
-   [:go/journals
+   [:go/home
+    :go/journals
+    :sidebar/clear
+    :sidebar/open-today-page
     :search/re-index
     :graph/re-index
     :auto-complete/prev
