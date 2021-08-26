@@ -135,6 +135,13 @@
 (defmethod handle :modal/show-cards [_]
   (state/set-modal! srs/global-cards))
 
+(rum/defc modal-output
+  [content]
+  content)
+
+(defmethod handle :modal/show [[_ content]]
+  (state/set-modal! #(modal-output content)))
+
 (defmethod handle :page/title-property-changed [[_ old-title new-title]]
   (page-handler/rename! old-title new-title))
 

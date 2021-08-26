@@ -177,7 +177,9 @@
                   "entered" "transition ease-out duration-300 transform translate-y-0 opacity-100 sm:translate-x-0"
                   "exiting" "transition ease-in duration-100 opacity-100"
                   "exited" "transition ease-in duration-100 opacity-0")}
-        [:div.rounded-lg.shadow-xs.overflow-hidden
+        [:div.rounded-lg.shadow-xs {:style {:max-height "calc(100vh - 200px)"
+                                            :overflow-y "scroll"
+                                            :overflow-x "hidden"}}
          [:div.p-4
           [:div.flex.items-start
            [:div.flex-shrink-0
@@ -489,7 +491,7 @@
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 10 -1)}}
+     {:style {:z-index (if show? 100 -1)}}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]

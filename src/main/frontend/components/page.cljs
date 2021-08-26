@@ -45,7 +45,8 @@
             [frontend.text :as text]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.block :as block-handler]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.handler.shell :as shell]))
 
 (defn- get-page-name
   [state]
@@ -319,6 +320,12 @@
                                       page-name
                                       (if public? false true))
                                      (state/close-modal!))}})
+
+                      (when (util/electron?)
+                        {:title   (t :page/version-history)
+                         :options {:on-click
+                                   (fn []
+                                     (shell/get-file-latest-git-log page 100))}})
 
                       (when plugin-handler/lsp-enabled?
                         (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]

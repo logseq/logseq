@@ -30,7 +30,8 @@
           (let [result (gobj/get result "stdout")]
             (p/resolved result))
           (let [error (gobj/get result "stderr")]
-            (js/console.error error)
+            (when-not (string/blank? error)
+              (js/console.error error))
             (p/rejected error)))))))
 
 (defn git-dir-exists?
@@ -56,6 +57,8 @@
 (defn add-all!
   []
   (run-git! #js ["add" "./*"]))
+
+;; git log -100 --oneline -p ~/Desktop/org/pages/contents.org
 
 (defn commit!
   [message]
@@ -100,33 +103,24 @@
          (remove string/blank?))))
 
 (defn raw!
-  [args & {:keys [ok-handler error-handler]}]
+  [args]
   (let [args (if (string? args)
                (split-args args)
                args)
-        ok-handler (if ok-handler
-                     ok-handler
-                     (fn [result]
-                       (let [result (if (string/blank? result)
-                                      (str (first args) " successfully!")
-                                      result)]
-                         (utils/send-to-renderer "notification" {:type "success"
-                                                                 :payload result}))))
-        error-handler (if error-handler
-                        error-handler
-                        (fn [error]
-                          ;; TODO: why this happen?
-                          (when-not (string/blank? error)
-                            (let [error (str (first args) " error: " error)]
-                              (utils/send-to-renderer "notification" {:type "error"
-                                                                      :payload error})))))]
-    (p/let [_ (when (= (first args) "commit")
-                (add-all!))]
-      (->
-       (p/let [result (run-git! (clj->js args))]
-         (when ok-handler
-           (ok-handler result)))
-       (p/catch error-handler)))))
+        ok-handler (fn [result]
+                     (p/resolved result))
+        error-handler (fn [error]
+                        ;; TODO: why this happen?
+                        (when-not (string/blank? error)
+                          (let [error (str (first args) " error: " error)]
+                            (utils/send-to-renderer "notification" {:type "error"
+                                                                    :payload error}))))]
+    (->
+     (p/let [_ (when (= (first args) "commit")
+                 (add-all!))
+             result (run-git! (clj->js args))]
+       (p/resolved result))
+     (p/catch error-handler))))
 
 (defn auto-commit-current-graph!
   []
