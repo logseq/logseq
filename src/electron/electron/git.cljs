@@ -58,7 +58,14 @@
                ["init" (str "--separate-git-dir=" separate-git-dir)]
                :else
                ["init"])]
-    (run-git! (clj->js args))))
+    (-> (run-git! (clj->js args))
+        (p/catch (fn [error]
+                   (when (string/starts-with? error "fatal: not a git repository")
+                     (let [p (.join path (get-graph-path) ".git")]
+                       (when (.isFile (fs/statSync p))
+                         (let [content (fs/readFileSync p)]
+                           (when (and content (string/starts-with? content "gitdir:"))
+                             (fs/unlinkSync p)))))))))))
 
 (defn add-all!
   []
@@ -88,7 +95,8 @@
                    (if (string/starts-with? error "Author identity unknown")
                      (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
                      (utils/send-to-renderer "notification" {:type "error"
-                                                             :payload error})))))))))
+                                                             :payload error}))))))
+)))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?
