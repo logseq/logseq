@@ -82,11 +82,12 @@
 
     overflow: hidden;
     background: var(--ls-secondary-background-color);
+    max-width: 96vw;
 
     .panel-content {
       overflow-y: auto;
+      max-width: 800px;
       max-height: 85vh;
-      max-width: 96vw;
       padding: 2rem;
     }
   }
@@ -128,7 +129,7 @@
   }
 
   &:hover {
-  	opacity: 0.8;
+        opacity: 0.8;
   }
 
   &.is-link {

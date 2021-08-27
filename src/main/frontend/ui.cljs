@@ -441,8 +441,13 @@
     :on-click close-fn}
    [:div.absolute.inset-0.opacity-75]])
 
+(rum/defc modal-panel-content <
+  mixins/component-editing-mode
+  [panel-content close-fn]
+  (panel-content close-fn))
+
 (rum/defc modal-panel
-  [panel-content transition-state close-fn fullscreen?]
+  [show? panel-content transition-state close-fn fullscreen?]
   [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
    {:class (case transition-state
              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
@@ -462,11 +467,11 @@
         :stroke-linejoin "round"
         :stroke-linecap  "round"}]]]]
 
-   [:div {:class (if fullscreen? "" "panel-content")}
-    (panel-content close-fn)]])
+   (when show?
+     [:div {:class (if fullscreen? "" "panel-content")}
+      (modal-panel-content panel-content close-fn)])])
 
 (rum/defc modal < rum/reactive
-  mixins/component-editing-mode
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
@@ -500,7 +505,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-panel modal-panel-content state close-fn fullscreen?)))]))
+        (modal-panel show? modal-panel-content state close-fn fullscreen?)))]))
 
 (defn make-confirm-modal
   [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm]

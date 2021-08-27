@@ -1055,6 +1055,10 @@
   [value]
   (set-state! :indexeddb/support? value))
 
+(defn modal-opened?
+  []
+  (:modal/show? @state))
+
 (defn set-modal!
   ([modal-panel-content]
    (set-modal! modal-panel-content false))
