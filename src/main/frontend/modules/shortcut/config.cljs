@@ -322,7 +322,12 @@
    ;; always overrides the copy due to "mod+c mod+s"
    {:misc/copy
     {:binding "mod+c"
-     :fn     (fn [] (js/document.execCommand "copy"))}}
+     :fn     (fn [] (js/document.execCommand "copy"))}
+
+    :command-palette/toggle
+    {:desc "Toggle command palette"
+     :binding "mod+shift+p"
+     :fn  (fn [] (state/toggle! :ui/command-palette-open?))}}
 
    :shortcut.handler/global-non-editing-only
    ^{:before m/enable-when-not-editing-mode!}

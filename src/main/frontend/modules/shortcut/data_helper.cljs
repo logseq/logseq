@@ -1,6 +1,7 @@
 (ns frontend.modules.shortcut.data-helper
   (:require [borkdude.rewrite-edn :as rewrite]
             [clojure.string :as str]
+            [clojure.set :refer [rename-keys]]
             [frontend.config :as cfg]
             [frontend.db :as db]
             [frontend.handler.file :as file]
@@ -10,6 +11,7 @@
             [lambdaisland.glogi :as log]
             [frontend.handler.common :as common-handler])
   (:import [goog.ui KeyboardShortcutHandler]))
+
 (defonce default-binding
   (->> (vals config/default-config)
        (into {})
@@ -174,3 +176,22 @@
                              (map js->clj))]
 
       (some? (some (fn [b] (some #{b} rest-bindings)) bindings)))))
+
+(defn shortcut-data-by-id [id]
+  (let [binding (shortcut-binding id)
+        data    (->> (vals config/default-config)
+                     (into  {})
+                     id)]
+    (when binding
+      (assoc
+       data
+       :binding
+       (binding-for-display id binding)))))
+
+(defn shortcuts->commands [handler-id]
+  (let [m (get config/default-config handler-id)]
+    (->> m
+         (map (fn [[id _]] (-> (shortcut-data-by-id id)
+                               (assoc :id id)
+                               (rename-keys {:binding :shortcut
+                                             :fn      :action})))))))

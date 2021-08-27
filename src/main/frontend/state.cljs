@@ -72,6 +72,7 @@
       :ui/file-component nil
       :ui/custom-query-components {}
       :ui/show-recent? false
+      :ui/command-palette-open? false
       :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
                               false)
       ;; remember scroll positions of visited paths
@@ -155,6 +156,9 @@
       :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                  #{})
       :date-picker/date nil
+
+      ;; command palette
+      :command-palette/commands []
 
       :view/components {}})))
 
