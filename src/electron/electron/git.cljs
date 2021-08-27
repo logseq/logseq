@@ -16,7 +16,8 @@
 (defn get-graph-git-dir
   []
   (when-let [graph-path (some-> (get-graph-path)
-                                (string/replace "/" "_"))]
+                                (string/replace "/" "_")
+                                (string/replace ":" "comma"))]
     (let [dir (.join path (.homedir os) ".logseq" "git" graph-path ".git")]
       (. fs ensureDirSync dir)
       dir)))
