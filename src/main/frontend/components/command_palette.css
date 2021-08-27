@@ -1,11 +1,14 @@
-cp__command-palette {
+.cp__command-palette {
+    &-main {
+    }
+
     &-input {
     }
 
     &-results {
-        @apply flex;
     }
-    .chosen {
-        background: var(--ls-a-chosen-bg);
-    }
+
+    /* .chosen { */
+    /*     background: var(--ls-a-chosen-bg); */
+    /* } */
 }

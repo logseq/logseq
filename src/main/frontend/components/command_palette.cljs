@@ -11,11 +11,13 @@
   (search/fuzzy-search commands input :limit 7 :extract-fn :desc))
 
 (defn render-command [{:keys [id desc shortcut]} chosen?]
-  [:div
+  [:div.inline-grid.grid-cols-4.gap-x-4.w-full
    {:class (when chosen? "chosen")}
-   [:span (namespace id)]
-   [:span desc]
-   [:code shortcut]])
+   [:span.col-span-3 desc]
+   [:div.col-span-1.justify-end
+    (when (and (keyword? id) (namespace id))
+      [:code.bg-blue-400 (namespace id)])
+    [:code shortcut]]])
 
 (rum/defcs command-palette <
   (shortcut/disable-all-shortcuts)
@@ -25,20 +27,22 @@
                    state)}
   [state {:keys [commands]}]
   (let [input (::input state)]
-    [:div#command-palette
-     [:input.cp__command-palette-input
+    [:div#command-palette.cp__command-palette-main
+     [:input.cp__command-palette-input.w-full
       {:type        "text"
        :placeholder "Type a command"
        :auto-focus   true
        :value       @input
        :on-change   (fn [e] (reset! input (util/evalue e)))}]
-     (ui/auto-complete
-      (get-matched-commands commands @input)
-      {:item-render render-command
-       :class       "cp__command-palette-results"
-       :on-chosen   (fn [{:keys [action]}]
-                      (state/set-state! :ui/command-palette-open? false)
-                      (action))})]))
+     [:div.w-full
+      (ui/auto-complete
+       (get-matched-commands commands @input)
+       {:item-render render-command
+        :class       "cp__command-palette-results"
+        :on-chosen   (fn [{:keys [action]}]
+                       (state/set-state! :ui/command-palette-open? false)
+                       (state/close-modal!)
+                       (action))})]]))
 
 
 (rum/defc command-palette-modal < rum/reactive

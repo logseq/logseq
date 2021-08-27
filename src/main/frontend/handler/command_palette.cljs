@@ -21,7 +21,8 @@
        (mapcat shortcut-helper/shortcuts->commands)))
 
 (defn get-commands []
-  (get @state/state :command-palette/commands))
+  (->> (get @state/state :command-palette/commands)
+       (sort-by :id)))
 
 (defn register [{:keys [id] :as command}]
   (spec/validate :command/command command)
