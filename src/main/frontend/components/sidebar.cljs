@@ -8,6 +8,7 @@
             [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.command-palette :as command-palette]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
@@ -368,6 +369,7 @@
                          (ui/notification)
                          (ui/modal)
                          (settings-modal)
+                         (command-palette/command-palette-modal)
                          (custom-context-menu)
                          [:a#download.hidden]
                          (when
