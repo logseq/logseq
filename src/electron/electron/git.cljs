@@ -135,7 +135,8 @@
                         (when-not (string/blank? error)
                           (let [error (str (first args) " error: " error)]
                             (utils/send-to-renderer "notification" {:type "error"
-                                                                    :payload error}))))]
+                                                                    :payload error}))
+                          (p/rejected error)))]
     (->
      (p/let [_ (when (= (first args) "commit")
                  (add-all!))

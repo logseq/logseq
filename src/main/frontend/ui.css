@@ -86,7 +86,7 @@
 
     .panel-content {
       overflow-y: auto;
-      max-width: 800px;
+      max-width: 1024px;
       max-height: 85vh;
       padding: 2rem;
     }
@@ -113,9 +113,14 @@
 }
 
 @media (min-width: 1024px) {
+    .panel-content {
+        min-width: 700px;
+    }
+
     .panel-content .ls-card {
-        min-width: 32rem;
-        min-height: 24rem;
+        width: 700px;
+        min-height: 60vh;
+        max-height: 700px;
     }
 }
 
