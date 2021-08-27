@@ -41,13 +41,13 @@
         :class       "cp__command-palette-results"
         :on-chosen   (fn [{:keys [action]}]
                        (state/set-state! :ui/command-palette-open? false)
-                       (state/close-modal!)
                        (action))})]]))
 
 
 (rum/defc command-palette-modal < rum/reactive
   []
   (let [open? (state/sub :ui/command-palette-open?)]
-    (when open?
-      (state/set-modal! #(command-palette {:commands (cp/get-commands)})))
+    (if open?
+      (state/set-modal! #(command-palette {:commands (cp/get-commands)}))
+      (state/close-modal!))
     nil))
