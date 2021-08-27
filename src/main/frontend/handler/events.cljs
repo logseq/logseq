@@ -12,6 +12,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.components.encryption :as encryption]
             [frontend.components.shell :as shell]
+            [frontend.components.git :as git-component]
             [frontend.fs.nfs :as nfs]
             [frontend.db.conn :as conn]
             [frontend.extensions.srs :as srs]
@@ -141,6 +142,9 @@
 
 (defmethod handle :modal/show [[_ content]]
   (state/set-modal! #(modal-output content)))
+
+(defmethod handle :modal/set-git-username-and-email [[_ content]]
+  (state/set-modal! git-component/set-git-username-and-email))
 
 (defmethod handle :page/title-property-changed [[_ old-title new-title]]
   (page-handler/rename! old-title new-title))

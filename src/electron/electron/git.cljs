@@ -21,6 +21,11 @@
       (. fs ensureDirSync dir)
       dir)))
 
+(defn dot-git-exists?
+  []
+  (let [p (.join path (get-graph-path) ".git")]
+    (fs/existsSync p)))
+
 (defn run-git!
   [commands]
   (when-let [path (get-graph-path)]
@@ -66,16 +71,23 @@
 
 (defn add-all-and-commit!
   ([]
-   (add-all-and-commit! "Auto saved by Logseq"))
+   (add-all-and-commit! nil))
   ([message]
-   (->
-    (p/let [_ (init!)
-            _ (add-all!)]
-      (commit! message))
-    (p/catch (fn [error]
-               (when-not (string/blank? error)
-                 (utils/send-to-renderer "notification" {:type "error"
-                                                         :payload error})))))))
+   (let [message (if (string/blank? message)
+                   "Auto saved by Logseq"
+                   message)]
+     (->
+      (p/let [_ (init!)
+              _ (add-all!)]
+        (commit! message))
+      (p/catch (fn [error]
+                 (when (and (not (string/blank? error))
+                            ;; FIXME: not sure why this happened
+                            (not (string/starts-with? error "fatal: not a git repository")))
+                   (if (string/starts-with? error "Author identity unknown")
+                     (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
+                     (utils/send-to-renderer "notification" {:type "error"
+                                                             :payload error})))))))))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?
@@ -126,8 +138,7 @@
   []
   (when (not (state/git-auto-commit-disabled?))
     (state/clear-git-commit-interval!)
-    (p/let [_ (add-all-and-commit!)]
-      (let [seconds (state/get-git-commit-seconds)]
-        (when (int? seconds)
-          (let [interval (js/setInterval add-all-and-commit! (* seconds 1000))]
-            (state/set-git-commit-interval! interval)))))))
+    (let [seconds (state/get-git-commit-seconds)]
+      (when (int? seconds)
+        (let [interval (js/setInterval add-all-and-commit! (* seconds 1000))]
+          (state/set-git-commit-interval! interval))))))

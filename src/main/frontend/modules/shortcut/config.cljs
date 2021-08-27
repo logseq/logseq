@@ -373,7 +373,7 @@
     ;; :ui/toggle-between-page-and-file route-handler/toggle-between-page-and-file!
     :git/commit
     {:desc    "Git commit message"
-     :binding "g c"
+     :binding "c"
      :fn      commit/show-commit-modal!}}})
 
 
@@ -469,7 +469,10 @@
 
    :shortcut.category/others
    ^{:doc "Others"}
-   [:go/journals
+   [:go/home
+    :go/journals
+    :sidebar/clear
+    :sidebar/open-today-page
     :search/re-index
     :graph/re-index
     :auto-complete/prev

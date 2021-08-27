@@ -202,7 +202,7 @@
   (let [enabled? (not (state/sub [:electron/user-cfgs :git/disable-auto-commit?]))]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      "Git auto commit"]
+      "Enable Git auto commit"]
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
