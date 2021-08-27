@@ -129,7 +129,7 @@
   ([d]
    (hero-icon d {}))
   ([d options]
-   [:svg (merge {:fill "currentColor", :view-box "0 0 24 24", :height "24", :width "24"}
+   [:svg (merge {:fill "currentColor", :viewBox "0 0 24 24", :height "24", :width "24"}
                 options)
     [:path
      {:stroke-linejoin "round"
@@ -396,7 +396,7 @@
 
 (rum/defc logo
   [dark?]
-  [:svg.svg-shadow
+  [:svg
    {:fill (if dark? "currentColor" "#002B36"), :view-box "0 0 21 21", :height "21", :width "21"}
    [:ellipse
     {:transform
@@ -658,6 +658,33 @@
   ([size]
    [:svg.icon {:fill "none" :width size :height size :viewBox "0 0 24 24" :stroke "currentColor"}
     [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M5 13l4 4L19 7"}]]))
+
+(defn cloud-down
+  ([] (cloud-down 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:path {:d "M19 18a3.5 3.5 0 0 0 0 -7h-1a5 4.5 0 0 0 -11 -2a4.6 4.4 0 0 0 -2.1 8.4"}]
+    [:line {:x1 "12" :y1 "13" :x2 "12" :y2 "22"}]
+    [:polyline {:points "9 19 12 22 15 19"}]]))
+
+(defn star
+  ([] (star 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:path {:d "M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z"}]]))
+
+(defn apps
+  ([] (apps 16))
+  ([size]
+   [:svg.icon. {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:rect {:x "4" :y "4" :width "6" :height "6" :rx "1"}]
+    [:rect {:x "4" :y "14" :width "6" :height "6" :rx "1"}]
+    [:rect {:x "14" :y "14" :width "6" :height "6" :rx "1"}]
+    [:line {:x1 "14" :y1 "7" :x2 "20" :y2 "7"}]
+    [:line {:x1 "17" :y1 "4" :x2 "17" :y2 "10"}]]))
 
 (def arrow-expand
   (hero-icon "M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"))

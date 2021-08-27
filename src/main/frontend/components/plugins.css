@@ -1,12 +1,41 @@
 .cp__plugins {
-  &-page-installed {
-    min-height: 60vh;
-    padding-top: 20px;
-
+  &-page {
     > h1 {
-      padding: 20px 0;
+      padding: 0 0 20px;
       font-size: 38px;
     }
+
+    .tabs {
+      .ui__button {
+        background-color: transparent;
+        margin: 0 8px;
+
+        > span {
+          display: flex;
+          align-items: center;
+          font-size: 16px;
+          font-weight: normal;
+
+          svg {
+            margin-right: 6px;
+          }
+        }
+
+        &.active {
+          background-color: var(--ls-tertiary-background-color);
+        }
+      }
+    }
+  }
+
+  &-installed {
+    min-height: 60vh;
+    padding-top: 20px;
+  }
+
+  &-marketplace {
+    min-height: 60vh;
+    padding-top: 20px;
   }
 
   &-item-lists {
@@ -17,27 +46,15 @@
     @apply flex py-3 px-1 rounded-md;
 
     background-color: var(--ls-secondary-background-color);
-    height: 180px;
+    height: 160px;
 
-    svg, .icon {
-      width: 70px;
-      height: 70px;
-      opacity: .8;
-
-      &:hover {
-        opacity: 1;
-      }
+    li {
+      margin: 0;
     }
 
     .head {
       max-height: 60px;
       overflow: hidden;
-
-      cursor: pointer;
-
-      &:active {
-        opacity: .8;
-      }
     }
 
     .desc {
@@ -47,13 +64,35 @@
 
     .flag {
       position: absolute;
-      bottom: 20px;
+      bottom: 24px;
       left: 0;
       width: 100%;
+
+      &.is-top {
+        width: unset;
+        top: 4px;
+        right: 6px;
+        left: unset;
+        bottom: unset;
+
+        &:hover {
+          opacity: .8;
+        }
+      }
     }
 
     > .l {
       padding: 8px;
+
+      svg, .icon {
+        width: 70px;
+        height: 70px;
+        opacity: .8;
+
+        &:hover {
+          opacity: 1;
+        }
+      }
     }
 
     > .r {
@@ -136,6 +175,13 @@
             }
           }
         }
+      }
+    }
+
+    &.market {
+      .ctl {
+        padding-left: 12px;
+        bottom: -5px;
       }
     }
   }
