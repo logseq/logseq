@@ -10,7 +10,7 @@
   []
   (when-let [current-repo (state/get-current-repo)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.export.w-96
+      [:div.export
        [:h1.title "Export"]
 
        [:ul.mr-1
@@ -48,7 +48,7 @@
   (when-let [current-repo (state/get-current-repo)]
     (when-let [page (state/get-current-page)]
       (rum/with-context [[t] i18n/*tongue-context*]
-        [:div.export.w-96
+        [:div.export
          [:h1.title "Export"]
          [:ul.mr-1
           [:li.mb-4
@@ -85,7 +85,7 @@
           :opml (export/export-blocks-as-opml current-repo root-block-ids)
           :html (export/export-blocks-as-html current-repo root-block-ids)
           (export/export-blocks-as-markdown current-repo root-block-ids text-indent-style (into [] text-remove-options)))]
-    [:div.export.w-96.resize
+    [:div.export.resize
      [:div
       {:class "mb-2"}
       (ui/button "Text"

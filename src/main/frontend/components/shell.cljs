@@ -22,7 +22,7 @@
                                   (run-command command)))))
   [state]
   [:div.flex.flex-col
-   [:div.w-full.mx-auto.sm:max-w-lg.sm:w-96
+   [:div
     [:div
      [:div
       [:h1.title

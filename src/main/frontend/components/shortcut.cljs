@@ -13,7 +13,7 @@
   [state _ action-name current-binding]
   (let [keypress (:rum/local state)
         keyboard-shortcut (if (= "" @keypress) current-binding @keypress)]
-    [:div.w-full.sm:max-w-lg.sm:w-96
+    [:div
      [:div
       [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
       [:p.mb-4.mt-4
