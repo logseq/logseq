@@ -578,7 +578,7 @@
 
        [:div.cp__settings-inner.md:flex
 
-        [:aside.md:w-40
+        [:aside.md:w-64
          [:ul
           (for [[label text icon] [[:general (t :settings-page/tab-general) (svg/adjustments 16)]
                                    [:editor (t :settings-page/tab-editor) (svg/icon-editor 16)]
@@ -627,6 +627,10 @@
 
            :git
            [:div.panel-wrap
+            [:div.text-sm.my-4
+             [:a {:href "https://git-scm.com/"
+                  :target "_blank"} "Git"]
+             " is used for pages version control, you can click the vertical three dots menu to check the page's history."]
             (switch-git-auto-commit-row t)
             (git-auto-commit-seconds t)
 

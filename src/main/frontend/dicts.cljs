@@ -238,7 +238,7 @@
         :settings-page/tab-general "General"
         :settings-page/tab-editor "Editor"
         :settings-page/tab-shortcuts "Shortcuts"
-        :settings-page/tab-version-control "Git"
+        :settings-page/tab-version-control "Version Control"
         :settings-page/tab-advanced "Advanced"
         :logseq "Logseq"
         :on "ON"

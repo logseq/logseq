@@ -504,7 +504,7 @@
 (defonce *focus-nodes (atom []))
 (defonce *graph-reset? (atom false))
 (defonce *journal? (atom nil))
-(defonce *orphan-pages? (atom nil))
+(defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 
 (rum/defc graph-filters < rum/reactive
