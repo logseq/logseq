@@ -466,6 +466,7 @@
     (panel-content close-fn)]])
 
 (rum/defc modal < rum/reactive
+  mixins/component-editing-mode
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
