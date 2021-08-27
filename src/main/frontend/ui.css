@@ -114,13 +114,13 @@
 
 @media (min-width: 1024px) {
     .panel-content {
-        min-width: 700px;
+        min-width: 740px;
     }
 
     .panel-content .ls-card {
-        width: 700px;
+        width: 740px;
         min-height: 60vh;
-        max-height: 700px;
+        max-height: 740px;
     }
 }
 
