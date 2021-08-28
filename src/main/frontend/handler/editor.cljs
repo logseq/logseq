@@ -768,7 +768,7 @@
                                      (string/replace content old new))
                                    content))
           content (drawer/insert-drawer
-                   block content "logbook"
+                   format content "logbook"
                    (util/format (str (if (= :org (state/get-preferred-format)) "-" "*")
                       " State \"DONE\" from \"%s\" %s")
                                 marker

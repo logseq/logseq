@@ -1,6 +1,5 @@
 (ns frontend.util.drawer
   (:require [clojure.string :as string]
-            [frontend.handler.block :as block-handler]
             [frontend.util :as util]
             [frontend.util.property :as property]
             [frontend.format.mldoc :as mldoc]))
@@ -19,20 +18,13 @@
      (string/join "\n" [(drawer-start typ) value drawer-end])
      (string/join "\n" [(drawer-start typ) drawer-end]))))
 
-(defn drawer-block?
-  [block]
-  (and
-   (vector? block)
-   (= "Drawer" (first block))))
-
 (defn insert-drawer
-  [{:block/keys [format] :as block} content typ value]
+  [format content typ value]
   (when (string? content)
     (try
       (let [ast (mldoc/->edn content (mldoc/default-config format))
-           has-properties? (mldoc/properties? (second ast))
-           has-typ-drawer? (mldoc/typ-drawer?
-                            (nth ast (if has-properties? 2 1)) typ)
+           has-properties? (some (fn [x] (mldoc/properties? x)) ast)
+           has-typ-drawer? (some (fn [x] (mldoc/typ-drawer? x typ)) ast)
            lines (string/split-lines content)
            title (first lines)
            body (string/join "\n" (rest lines))
