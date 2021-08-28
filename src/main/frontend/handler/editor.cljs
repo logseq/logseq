@@ -769,10 +769,10 @@
                                    content))
           content (drawer/insert-drawer
                    format content "logbook"
-                   (util/format (str (if (= :org (state/get-preferred-format)) "-" "*")
-                      " State \"DONE\" from \"%s\" %s")
+                   (util/format (str (if (= :org format) "-" "*")
+                      " State \"DONE\" from \"%s\" [%s]")
                                 marker
-                                (date/get-local-date-time-string)))]
+                                (date/get-date-time-string-3)))]
       content)
     content))
 
