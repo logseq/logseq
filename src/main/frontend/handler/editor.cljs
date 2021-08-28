@@ -18,6 +18,7 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
+            [frontend.util.clock :as clock]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.image :as image-handler]
@@ -777,10 +778,27 @@
     content))
 
 (defn- with-marker-time
-  [content format marker]
+  [content format new-marker old-marker]
   (if (state/enable-timetracking?)
-    (let [marker (string/lower-case marker)]
-      (property/insert-property format content marker (util/time-ms)))
+    (let [new-marker (string/lower-case new-marker)
+          old-marker (when old-marker (string/lower-case old-marker))]
+      (if (= :org format)
+        (when old-marker
+          (cond
+            (and (= old-marker "todo") (= new-marker "doing"))
+            (clock/clock-in format content)
+            (and (= old-marker "doing") (= new-marker "todo"))
+            (clock/clock-out format content)
+            (and (= old-marker "later") (= new-marker "now"))
+            (clock/clock-in format content)
+            (and (= old-marker "now") (= new-marker "later"))
+            (clock/clock-out format content)
+            (and (contains? #{"now" "doing"} old-marker)
+                 (= new-marker "done"))
+            (clock/clock-out format content)
+            :else
+            content))
+        (property/insert-property format content new-marker (util/time-ms))))
     content))
 
 (defn check
@@ -790,7 +808,7 @@
                      (if repeated?
                        (update-timestamps-content! block content)
                        new-content)
-                     (with-marker-time format "DONE"))]
+                     (with-marker-time format "DONE" marker))]
     (save-block-if-changed! block new-content)))
 
 (defn uncheck
@@ -799,7 +817,7 @@
                  "LATER"
                  "TODO")
         new-content (-> (string/replace-first content "DONE" marker)
-                        (with-marker-time format marker))]
+                        (with-marker-time format marker "DONE"))]
     (save-block-if-changed! block new-content)))
 
 (defn cycle-todo!
@@ -820,7 +838,7 @@
 (defn set-marker
   [{:block/keys [uuid marker content format properties] :as block} new-marker]
   (let [new-content (-> (string/replace-first content (re-pattern (str "^" marker)) new-marker)
-                        (with-marker-time format new-marker))]
+                        (with-marker-time format new-marker marker))]
     (save-block-if-changed! block new-content)))
 
 (defn set-priority
