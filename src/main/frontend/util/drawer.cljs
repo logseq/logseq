@@ -18,6 +18,13 @@
      (string/join "\n" [(drawer-start typ) value drawer-end])
      (string/join "\n" [(drawer-start typ) drawer-end]))))
 
+(defn get-drawer-ast
+  [format content typ]
+  (let [ast (mldoc/->edn content (mldoc/default-config format))
+        typ-drawer (ffirst (filter (fn [x]
+                                    (mldoc/typ-drawer? x typ)) ast))]
+    typ-drawer))
+
 (defn insert-drawer
   [format content typ value]
   (when (string? content)

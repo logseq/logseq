@@ -46,6 +46,7 @@
             [frontend.text :as text]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.clock :as clock]
             [frontend.util.property :as property]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -1856,21 +1857,28 @@
               [:div.text-sm.time-spent.ml-1 {:title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))
                                              :style {:padding-top 3}}
                [:a.opacity-30.hover:opacity-100
-                (utils/timeConversion (- finish-time start-time))]])))
+                (utils/timeConversion (- finish-time start-time))]]))
+
+          (let [summary (clock/clock-summary format content)]
+            (when summary
+              [:div.text-sm.time-spent.ml-1 {:title "org-clock-summary"
+                                             :style {:padding-top 3}}
+               [:a.opacity-30.hover:opacity-100
+                summary]])))
 
         (let [block-refs-count (count (:block/_refs (db/entity (:db/id block))))]
           (when (and block-refs-count (> block-refs-count 0))
-           [:div
-            [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
-             {:title "Open block references"
-              :style {:margin-top -1}
-              :on-click (fn []
-                          (state/sidebar-add-block!
-                           (state/get-current-repo)
-                           (:db/id block)
-                           :block-ref
-                           {:block block}))}
-             block-refs-count]]))]])))
+            [:div
+             [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+              {:title "Open block references"
+               :style {:margin-top -1}
+               :on-click (fn []
+                           (state/sidebar-add-block!
+                            (state/get-current-repo)
+                            (:db/id block)
+                            :block-ref
+                            {:block block}))}
+              block-refs-count]]))]])))
 
 (defn non-dragging?
   [e]
