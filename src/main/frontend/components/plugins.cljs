@@ -74,7 +74,8 @@
      (when-let [repo (:repository item)]
        (when-let [repo (if (string? repo) repo (:url repo))]
          [:div.p-4.rounded-md.bg-base-3
-          [:strong [:a.flex.items-center {:target "_blank" :href repo} [:span.mr-1 (svg/github {:width 25 :height 25})] repo]]]))
+          [:strong [:a.flex.items-center {:target "_blank" :href repo}
+                    [:span.mr-1 (svg/github {:width 25 :height 25})] repo]]]))
      [:div.p-1.bg-transparent.border-none.ls-block
       {:style                   {:min-height "60vw"
                                  :max-width  900}
@@ -91,7 +92,7 @@
      understand the source code."]))
 
 (rum/defc plugin-item-card
-  [{:keys [id name settings version url description author icon usf repo] :as item}]
+  [{:keys [id name settings version url description author icon usf iir repo] :as item}]
   (let [market? (and (not (nil? repo)) (nil? usf))
         disabled (:disabled settings)]
     [:div.cp__plugins-item-card
@@ -101,7 +102,10 @@
       {:on-click #(plugin-handler/open-readme! url item simple-markdown-display)}
       (if icon
         [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
-        svg/folder)]
+        svg/folder)
+
+      (when-not (or market? iir)
+        [:span.flex.justify-center.text-xs.text-red-500.pt-2 "unpacked"])]
 
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
@@ -132,13 +136,13 @@
 
          [:div.r.flex.items-center
 
-          [:a.text-sm "install"]]]
+          [:a.btn "install"]]]
 
         ;; installed ctls
         [:div.ctl
          [:div.l
           [:div.de
-           [:strong svg/settings-sm]
+           [:strong (svg/settings)]
            [:ul.menu-list
             [:li {:on-click #(if usf (js/apis.openPath usf))} "Open settings"]
             [:li {:on-click #(js/apis.openPath url)} "Open plugin package"]
@@ -152,8 +156,12 @@
                      (state/set-modal! confirm-fn))}
              "Uninstall plugin"]]]]
 
-         [:div.flex.items-center
-          [:small.de (if disabled "Disabled" "Enabled")]
+         [:div.r.flex.items-center
+          (if-not disabled
+            [:a.btn.mr-2
+             {:on-click #(js-invoke js/LSPluginCore "reload" id)}
+             "reload"])
+
           (ui/toggle (not disabled)
                      (fn []
                        (js-invoke js/LSPluginCore (if disabled "enable" "disable") id))

@@ -609,7 +609,12 @@ class PluginLocal
   }
 
   async reload () {
-    debug('TODO: reload plugin', this.id)
+    if (this.pending) {
+      return
+    }
+
+    await this.unload()
+    await this.load()
   }
 
   /**
@@ -648,6 +653,7 @@ class PluginLocal
       this.emit('unloaded')
     } catch (e) {
       debug('[plugin unload Error]', e)
+      return false
     } finally {
       this._status = PluginLocalLoadStatus.UNLOADED
     }
@@ -933,8 +939,12 @@ class LSPluginCore
     }
 
     for (const identity of plugins) {
-      const p = this.ensurePlugin(identity)
-      await p.reload()
+      try {
+        const p = this.ensurePlugin(identity)
+        await p.reload()
+      } catch (e) {
+        debug(e)
+      }
     }
   }
 

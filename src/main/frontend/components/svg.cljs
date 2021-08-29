@@ -678,13 +678,28 @@
 (defn apps
   ([] (apps 16))
   ([size]
-   [:svg.icon. {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+   [:svg.icon-apps {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
     [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
     [:rect {:x "4" :y "4" :width "6" :height "6" :rx "1"}]
     [:rect {:x "4" :y "14" :width "6" :height "6" :rx "1"}]
     [:rect {:x "14" :y "14" :width "6" :height "6" :rx "1"}]
     [:line {:x1 "14" :y1 "7" :x2 "20" :y2 "7"}]
     [:line {:x1 "17" :y1 "4" :x2 "17" :y2 "10"}]]))
+
+(defn reload
+  ([] (reload 16))
+  ([size]
+   [:svg.icon-reload {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:path {:d "M4.05 11a8 8 0 1 1 .5 4m-.5 5v-5h5"}]]))
+
+(defn settings
+  ([] (settings 16))
+  ([size]
+   [:svg.icon-settings {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:path {:d "M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"}]
+    [:circle {:cx "12" :cy "12" :r "3"}]]))
 
 (def arrow-expand
   (hero-icon "M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"))

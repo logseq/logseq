@@ -107,7 +107,7 @@
         @apply flex pl-2 items-center justify-between absolute w-full;
 
         bottom: -8px;
-        right: 8px;
+        right: 7px;
 
         .de {
           font-size: 10px;
@@ -155,24 +155,47 @@
           }
 
           svg {
-            width: 13px;
-            height: 13px;
+            width: 15px;
+            height: 15px;
+          }
+
+          &:hover {
+            opacity: .9;
+
+            .menu-list {
+              display: block;
+            }
           }
         }
 
         > .l {
           @apply flex items-center;
-
           margin-left: -80px;
+        }
+        > .r {}
 
-          .de {
-            &:hover {
-              opacity: .9;
+        a.btn {
+          display: inline-flex;
+          align-items: center;
+          line-height: 1;
+          padding: 4px 6px;
+          font-size: 13px;
+          margin-left: 5px;
+          border-radius: 2px;
+          user-select: none;
 
-              .menu-list {
-                display: block;
-              }
+          svg {
+            opacity: .3;
+          }
+
+          &:hover {
+            svg {
+              opacity: .8;
             }
+          }
+
+          &:active {
+            opacity: .6;
           }
         }
       }
