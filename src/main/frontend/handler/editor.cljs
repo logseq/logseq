@@ -2273,8 +2273,9 @@
                       (string/trim value))
             (save-block! repo uuid value)))
 
-        (let [new-id (cljs.core/uuid sibling-block-id)
-              block (db/pull repo '[*] [:block/uuid new-id])]
+        (let [new-id (string/replace (gobj/get sibling-block "id") "ls-block" "edit-block")
+              new-uuid (cljs.core/uuid sibling-block-id)
+              block (db/pull repo '[*] [:block/uuid new-uuid])]
           (edit-block! block
                        [direction line-pos]
                        format
