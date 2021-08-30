@@ -114,7 +114,7 @@
   (rum/local false ::show?)
   [state page-name]
   (let [show? (::show? state)]
-    [:div.ls-block.flex-1.flex-col.rounded-sm.add-button
+    [:div.flex-1.flex-col.rounded-sm.add-button
      [:div.flex.flex-row
       [:div.block {:style {:height      24
                            :width       24
