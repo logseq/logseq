@@ -250,12 +250,17 @@
      (if (and (config/local-asset? href)
               (config/local-db? (state/get-current-repo)))
        (asset-link config title href label metadata full_text)
-       (let [href (cond
+       (let [protocol (and (= "Complex" (first url))
+                           (:protocol (second url)))
+             href (cond
                     (util/starts-with? href "http")
                     href
 
                     config/publishing?
                     (subs href 1)
+
+                    (= protocol "data")
+                    href
 
                     :else
                     (get-file-absolute-path config href))]
