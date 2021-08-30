@@ -447,7 +447,7 @@
 
 (defn encryption-row [t enable-encryption?]
   (toggle "enable_encryption"
-          (t :settings-page/enable-encryption)
+          (str (t :settings-page/enable-encryption) "\n(experimental!)")
           enable-encryption?
           (fn []
             (let [value (not enable-encryption?)]
