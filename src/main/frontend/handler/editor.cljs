@@ -2906,8 +2906,12 @@
                               (dom/attr "blockid")
                               medley/uuid)]
     (util/stop e)
-    (let [block {:block/uuid block-id}
-          left? (= direction :left)]
+    (let [block    {:block/uuid block-id}
+          block-id (-> (state/get-selection-blocks)
+                       first
+                       (gobj/get "id")
+                       (string/replace "ls-block" "edit-block"))
+          left?    (= direction :left)]
       (edit-block! block
                    (if left? 0 :max)
                    (:block/format block)
