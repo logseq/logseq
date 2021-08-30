@@ -231,17 +231,19 @@
 
 (defn ->edn
   [content config]
-  (try
-    (if (string/blank? content)
-      []
-      (-> content
-          (parse-json config)
-          (util/json->clj)
-          (update-src-full-content content)
-          (collect-page-properties)))
-    (catch js/Error e
-      (log/error :edn/convert-failed e)
-      [])))
+  (if (string? content)
+    (try
+      (if (string/blank? content)
+        []
+        (-> content
+            (parse-json config)
+            (util/json->clj)
+            (update-src-full-content content)
+            (collect-page-properties)))
+      (catch js/Error e
+        (log/error :edn/convert-failed e)
+        []))
+    (log/error :edn/wrong-content-type content)))
 
 (defn ->edn-async
   [content config]

@@ -48,12 +48,16 @@
          (str clock-out-log "\n"))))
     content))
 
+(defn get-logbook
+  [body]
+  (-> (filter (fn [v] (and (vector? v)
+                          (= (first v) "Drawer")
+                          (= (second v) "logbook"))) body)
+      first))
+
 (defn clock-summary
   [body string?]
-  (when-let [logbook (-> (filter (fn [v] (and (vector? v)
-                                          (= (first v) "Drawer")
-                                          (= (second v) "logbook"))) body)
-                         first)]
+  (when-let [logbook (get-logbook body)]
     (when-let [clock-lines (last logbook)]
       (let [times (map #(string/trim (last (string/split % "=>"))) clock-lines)
             hours (map #(int (first (string/split % ":"))) times)

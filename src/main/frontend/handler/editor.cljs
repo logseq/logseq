@@ -578,18 +578,19 @@
          :pos pos}))))
 
 (defn- with-marker-time
-  [content format new-marker old-marker]
+  [content block format new-marker old-marker]
   (if (and (state/enable-timetracking?) new-marker)
     (try
-      (let [new-marker (string/trim (string/lower-case (name new-marker)))
+      (let [logbook-exists? (and (:block/body block) (clock/get-logbook (:block/body block)))
+            new-marker (string/trim (string/lower-case (name new-marker)))
             old-marker (when old-marker (string/trim (string/lower-case (name old-marker))))
             new-content (cond
                           (or (and (nil? old-marker) (or (= new-marker "doing")
                                                          (= new-marker "now")))
                               (and (= old-marker "todo") (= new-marker "doing"))
                               (and (= old-marker "later") (= new-marker "now"))
-                              (= old-marker new-marker "now")
-                              (= old-marker new-marker "doing"))
+                              (and (= old-marker new-marker "now") (not logbook-exists?))
+                              (and (= old-marker new-marker "doing") (not logbook-exists?)))
                           (clock/clock-in format content)
 
                           (or
@@ -610,7 +611,7 @@
   [block value]
   (if (state/enable-timetracking?)
     (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
-          new-value (with-marker-time value (:block/format block)
+          new-value (with-marker-time value block (:block/format block)
                       new-marker
                       (:block/marker block))]
       new-value)
@@ -799,7 +800,7 @@
                      (if repeated?
                        (update-timestamps-content! block content)
                        new-content)
-                     (with-marker-time format "DONE" marker))]
+                     (with-marker-time block format "DONE" marker))]
     (save-block-if-changed! block new-content)))
 
 (defn uncheck
@@ -808,7 +809,7 @@
                  "LATER"
                  "TODO")
         new-content (-> (string/replace-first content "DONE" marker)
-                        (with-marker-time format marker "DONE"))]
+                        (with-marker-time block format marker "DONE"))]
     (save-block-if-changed! block new-content)))
 
 (defn cycle-todo!
@@ -829,7 +830,7 @@
 (defn set-marker
   [{:block/keys [uuid marker content format properties] :as block} new-marker]
   (let [new-content (-> (string/replace-first content (re-pattern (str "^" marker)) new-marker)
-                        (with-marker-time format new-marker marker))]
+                        (with-marker-time block format new-marker marker))]
     (save-block-if-changed! block new-content)))
 
 (defn set-priority
