@@ -541,6 +541,10 @@
   {:will-mount
    (fn [state]
      (state/load-app-user-cfgs)
+     state)
+   :will-unmount
+   (fn [state]
+     (state/close-settings!)
      state)}
   rum/reactive
   [state]
