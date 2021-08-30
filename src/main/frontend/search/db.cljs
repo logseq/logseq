@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [empty?])
   (:require [frontend.text :as text]
             [frontend.util.property :as property]
+            [frontend.util.drawer :as drawer]
             [frontend.db :as db]
             [frontend.state :as state]
             [cljs-bean.core :as bean]
@@ -17,7 +18,7 @@
 (defn block->index
   [{:block/keys [uuid content format page] :as block}]
   (when-let [result (->> (text/remove-level-spaces content format)
-                         (property/remove-built-in-properties format))]
+                         (drawer/remove-logbook))]
     {:id (:db/id block)
      :uuid (str uuid)
      :page page

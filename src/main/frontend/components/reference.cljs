@@ -122,7 +122,8 @@
                                                 :editor-box editor/box}
                                                {})]
                 (content/content page-name
-                                 {:hiccup ref-hiccup}))]))
+                                 {:hiccup ref-hiccup}))]
+             {}))
 
           (when (or (> n-ref 0)
                     (seq filter-state))
@@ -150,7 +151,9 @@
                                                 :filters filters}
                                                {})]
                 (content/content page-name
-                                 {:hiccup ref-hiccup}))]))]]))))
+                                 {:hiccup ref-hiccup}))]
+
+             {}))]]))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
@@ -191,4 +194,4 @@
                                                   "s"))
               "Unlinked References")]
            (fn [] (unlinked-references-aux page-name n-ref))
-           true)]]))))
+           {:default-collapsed? true})]]))))

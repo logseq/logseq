@@ -228,8 +228,9 @@
 
                           :else
                           (subs content 0 pos))
-             content (property/remove-built-in-properties (:block/format block)
-                                                          content)]
+             content (-> (property/remove-built-in-properties (:block/format block)
+                                                              content)
+                         (drawer/remove-logbook))]
          (clear-selection!)
          (state/set-editing! edit-input-id content block text-range move-cursor?))))))
 
@@ -289,6 +290,47 @@
                        (= :block/uuid (first x))
                        (nil? (db/entity x)))) refs))
 
+(defn- with-marker-time
+  [content block format new-marker old-marker]
+  (if (and (state/enable-timetracking?) new-marker)
+    (try
+      (let [logbook-exists? (and (:block/body block) (drawer/get-logbook (:block/body block)))
+            new-marker (string/trim (string/lower-case (name new-marker)))
+            old-marker (when old-marker (string/trim (string/lower-case (name old-marker))))
+            new-content (cond
+                          (or (and (nil? old-marker) (or (= new-marker "doing")
+                                                         (= new-marker "now")))
+                              (and (= old-marker "todo") (= new-marker "doing"))
+                              (and (= old-marker "later") (= new-marker "now"))
+                              (and (= old-marker new-marker "now") (not logbook-exists?))
+                              (and (= old-marker new-marker "doing") (not logbook-exists?)))
+                          (clock/clock-in format content)
+
+                          (or
+                           (and (= old-marker "doing") (= new-marker "todo"))
+                           (and (= old-marker "now") (= new-marker "later"))
+                           (and (contains? #{"now" "doing"} old-marker)
+                                (= new-marker "done")))
+                          (clock/clock-out format content)
+
+                          :else
+                          content)]
+        new-content)
+      (catch js/Error _e
+        content))
+    content))
+
+(defn- with-timetracking
+  [block value]
+  (if (and (state/enable-timetracking?)
+           (not= (:block/content block) value))
+    (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
+          new-value (with-marker-time value block (:block/format block)
+                      new-marker
+                      (:block/marker block))]
+      new-value)
+    value))
+
 (defn wrap-parse-block
   [{:block/keys [content format parent left page uuid pre-block? level] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
@@ -297,6 +339,8 @@
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
                   content)
+        content (drawer/with-logbook block content)
+        content (with-timetracking block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
@@ -373,7 +417,8 @@
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
          block-id (when (map? properties) (get properties :id))
-         content (property/remove-built-in-properties format content)]
+         content (-> (property/remove-built-in-properties format content)
+                     (drawer/remove-logbook))]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
@@ -577,46 +622,6 @@
          :value value
          :pos pos}))))
 
-(defn- with-marker-time
-  [content block format new-marker old-marker]
-  (if (and (state/enable-timetracking?) new-marker)
-    (try
-      (let [logbook-exists? (and (:block/body block) (clock/get-logbook (:block/body block)))
-            new-marker (string/trim (string/lower-case (name new-marker)))
-            old-marker (when old-marker (string/trim (string/lower-case (name old-marker))))
-            new-content (cond
-                          (or (and (nil? old-marker) (or (= new-marker "doing")
-                                                         (= new-marker "now")))
-                              (and (= old-marker "todo") (= new-marker "doing"))
-                              (and (= old-marker "later") (= new-marker "now"))
-                              (and (= old-marker new-marker "now") (not logbook-exists?))
-                              (and (= old-marker new-marker "doing") (not logbook-exists?)))
-                          (clock/clock-in format content)
-
-                          (or
-                           (and (= old-marker "doing") (= new-marker "todo"))
-                           (and (= old-marker "now") (= new-marker "later"))
-                           (and (contains? #{"now" "doing"} old-marker)
-                                (= new-marker "done")))
-                          (clock/clock-out format content)
-
-                          :else
-                          content)]
-        new-content)
-      (catch js/Error _e
-        content))
-    content))
-
-(defn- with-timetracking
-  [block value]
-  (if (state/enable-timetracking?)
-    (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
-          new-value (with-marker-time value block (:block/format block)
-                      new-marker
-                      (:block/marker block))]
-      new-value)
-    value))
-
 (defn insert-new-block!
   ([state]
    (insert-new-block! state nil))
@@ -631,7 +636,6 @@
              block (or (db/pull [:block/uuid block-id])
                        block)
              repo (or (:block/repo block) (state/get-current-repo))
-             value (with-timetracking block value)
              block-self? (block-self-alone-when-insert? config block-id)
              input (gdom/getElement (state/get-edit-input-id))
              pos (cursor/pos input)
@@ -877,7 +881,9 @@
                      (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
                        (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
                          (let [original-content (util/trim-safe (:block/content block))
-                               new-value (str (property/remove-built-in-properties format original-content) " " (string/triml value))
+                               value' (-> (property/remove-built-in-properties format original-content)
+                                          (drawer/remove-logbook))
+                               new-value (str value' " " (string/triml value))
                                tail-len (count (string/triml value))
                                pos (max
                                     (if original-content
@@ -1296,8 +1302,7 @@
 
 (defn save-block-aux!
   [block value format opts]
-  (let [value (string/trim value)
-        value (with-timetracking block value)]
+  (let [value (string/trim value)]
     ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
     ;; maybe we shouldn't save the block/file in "will-unmount" event?
     (save-block-if-changed! block value
@@ -1356,6 +1361,7 @@
 (defn- clean-content!
   [format content]
   (->> (text/remove-level-spaces content format)
+       (drawer/remove-logbook)
        (property/remove-properties format)
        string/trim))
 
@@ -3146,7 +3152,8 @@
       (when-let [block (db/pull [:block/uuid (uuid block-ref-id)])]
         (let [block-content (:block/content block)
               format (or (:block/format block) :markdown)
-              block-content-without-prop (property/remove-properties format block-content)]
+              block-content-without-prop (-> (property/remove-properties format block-content)
+                                             (drawer/remove-logbook))]
           (when-let [input (state/get-input)]
             (when-let [current-block-content (gobj/get input "value")]
               (let [block-content* (str (subs current-block-content 0 start)
@@ -3185,7 +3192,8 @@
           ref-block (db/entity [:block/uuid ref-id])
           block-ref-content (->> (or (:block/content ref-block)
                                     "")
-                                 (property/remove-built-in-properties (:block/format ref-block)))
+                                 (property/remove-built-in-properties (:block/format ref-block))
+                                 (drawer/remove-logbook))
           content (string/replace-first (:block/content block) match
                                         block-ref-content)]
       (save-block! (state/get-current-repo)

@@ -276,7 +276,8 @@
           (for [[original-name name] pages]
             [:li {:key (str "tagged-page-" name)}
              [:a {:href (rfe/href :page {:name name})}
-              original-name]])] false)]])))
+              original-name]])]
+         {:default-collapsed? false})]])))
 
 (defn page-menu
   [repo t page page-name page-original-name title journal? public? developer-mode?]

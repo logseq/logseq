@@ -48,6 +48,7 @@
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.property :as property]
+            [frontend.util.drawer :as drawer]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -1713,8 +1714,9 @@
         (editor-handler/unhighlight-blocks!)
         (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
               f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
-                       content (property/remove-built-in-properties (:block/format block)
-                                                                    content)]
+                       content (-> (property/remove-built-in-properties (:block/format block)
+                                                                        content)
+                                   (drawer/remove-logbook))]
                    ;; save current editing block
                    (let [{:keys [value] :as state} (editor-handler/get-state)]
                      (editor-handler/save-block! state value))
@@ -2391,7 +2393,7 @@
 
               :else
               [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])]
-           collapsed?))]))))
+           {:default-collapsed? collapsed?}))]))))
 
 (defn admonition
   [config type options result]
@@ -2463,7 +2465,8 @@
                  [:div (apply str lines)
                   [:div.opacity-50.font-medium {:style {:width 95}}
                    ":END:"]]
-                 true)]]]
+                 {:default-collapsed? true
+                  :title-trigger? true})]]]
 
              ["Properties" m]
              [:div.properties
@@ -2746,7 +2749,8 @@
                       (block-parents config (state/get-current-repo) (:block/uuid block)
                                      (:block/format block)
                                      false)])
-                   (blocks-container blocks (assoc config :breadcrumb-show? false))])))])))]
+                   (blocks-container blocks (assoc config :breadcrumb-show? false))]))
+              {})])))]
 
      (and (:group-by-page? config)
             (vector? (first blocks)))
@@ -2762,7 +2766,8 @@
               [:div
                (page-cp config page)
                (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-              (blocks-container blocks config))])))]
+              (blocks-container blocks config)
+              {})])))]
 
      :else
      (blocks-container blocks config))])

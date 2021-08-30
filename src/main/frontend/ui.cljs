@@ -46,7 +46,7 @@
                              (state/set-editor-in-composition! true))))
         props (assoc props
                      :on-change (fn [e] (when-not (state/editor-in-composition?)
-                                          (on-change e)))
+                                         (on-change e)))
                      :on-composition-start on-composition
                      :on-composition-update on-composition
                      :on-composition-end on-composition)]
@@ -103,8 +103,8 @@
               child [:div
                      {:style {:display "flex" :flex-direction "row"}}
                      [:div {:style {:margin-right "8px"}} title]
-                      ;; [:div {:style {:position "absolute" :right "8px"}}
-                      ;;  icon]
+                     ;; [:div {:style {:position "absolute" :right "8px"}}
+                     ;;  icon]
                      ]]
           (rum/with-key
             (menu-link new-options child)
@@ -213,7 +213,7 @@
                        :key     (name k)}
                       (fn [state]
                         (notification-content state (:content v) (:status v) k)))))
-                 contents)))))
+              contents)))))
 
 (defn checkbox
   [option]
@@ -312,7 +312,7 @@
         keydown-handler (partial handle-global-keystroke true)
         keyup-handler (partial handle-global-keystroke false)
         clear-all #(do (set-global-active-keystroke "")
-                        (reset! active-keystroke #{}))]
+                       (reset! active-keystroke #{}))]
     (.addEventListener js/window "keydown" keydown-handler)
     (.addEventListener js/window "keyup" keyup-handler)
     (.addEventListener js/window "blur" clear-all)
@@ -382,15 +382,15 @@
                  [:div {:key idx}
                   (let [chosen? (= @current-idx idx)]
                     (menu-link
-                      {:id            (str "ac-" idx)
-                       :class         (when chosen? "chosen")
-                       :on-mouse-enter #(reset! current-idx idx)
-                       :on-mouse-down (fn [e]
-                                        (util/stop e)
-                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                          (on-shift-chosen item)
-                                          (on-chosen item)))}
-                      (if item-render (item-render item chosen?) item)))]]
+                     {:id            (str "ac-" idx)
+                      :class         (when chosen? "chosen")
+                      :on-mouse-enter #(reset! current-idx idx)
+                      :on-mouse-down (fn [e]
+                                       (util/stop e)
+                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                         (on-shift-chosen item)
+                                         (on-chosen item)))}
+                     (if item-render (item-render item chosen?) item)))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -421,13 +421,13 @@
 (defn keyboard-shortcut [sequence]
   [:div.keyboard-shortcut
    (map-indexed (fn [i key]
-          [:code {:key i}
-           ;; Display "cmd" rather than "meta" to the user to describe the Mac
-           ;; mod key, because that's what the Mac keyboards actually say.
-           (if (or (= :meta key) (= "meta" key))
-             (util/meta-key-name)
-             (name key))])
-        sequence)])
+                  [:code {:key i}
+                   ;; Display "cmd" rather than "meta" to the user to describe the Mac
+                   ;; mod key, because that's what the Mac keyboards actually say.
+                   (if (or (= :meta key) (= "meta" key))
+                     (util/meta-key-name)
+                     (name key))])
+                sequence)])
 
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
@@ -577,21 +577,28 @@
                    (when (true? (last args))
                      (reset! (get state ::collapsed?) true)))
                  state)}
-  [state header content default-collapsed?]
+  [state header content {:keys [default-collapsed? title-trigger?]}]
   (let [control? (get state ::control?)
-        collapsed? (get state ::collapsed?)]
+        collapsed? (get state ::collapsed?)
+        on-mouse-down (fn [e]
+                        (util/stop e)
+                        (swap! collapsed? not))]
     [:div.flex.flex-col
      [:div.content
-      [:div.flex-1.flex-row.foldable-title {:on-mouse-over #(reset! control? true)
-                                            :on-mouse-out  #(reset! control? false)}
+      [:div.flex-1.flex-row.foldable-title (cond->
+                                             {:on-mouse-over #(reset! control? true)
+                                              :on-mouse-out  #(reset! control? false)}
+                                             title-trigger?
+                                             (assoc :on-mouse-down on-mouse-down
+                                                    :class "cursor"))
        [:div.flex.flex-row.items-center
         [:a.block-control.opacity-50.hover:opacity-100.mr-2
-         {:style    {:width       14
-                     :height      16
-                     :margin-left -24}
-          :on-mouse-down (fn [e]
-                           (util/stop e)
-                           (swap! collapsed? not))}
+         (cond->
+           {:style    {:width       14
+                      :height      16
+                      :margin-left -24}}
+           (not title-trigger?)
+           (assoc :on-mouse-down on-mouse-down))
          [:span {:class (if @control? "control-show" "control-hide")}
           (rotating-arrow @collapsed?)]]
         (if (fn? header)
@@ -642,8 +649,8 @@
                    (on-change value)))}
    (for [{:keys [label value selected]} options]
      [:option (cond->
-               {:key   label
-                :value (or value label)}
+                {:key   label
+                 :value (or value label)}
                 selected
                 (assoc :selected selected))
       label])])
@@ -674,10 +681,10 @@
             (assoc :html (if (or open? mounted?)
                            (try
                              (when-let [html (:html opts)]
-                              (if (fn? html)
-                                (html)
-                                [:div.pr-3.py-1
-                                 html]))
+                               (if (fn? html)
+                                 (html)
+                                 [:div.pr-3.py-1
+                                  html]))
                              (catch js/Error e
                                (log/error :exception e)
                                [:div]))
@@ -700,7 +707,7 @@
   (let [*loading? (:loading? state)]
     [:div [(when @*loading? [:span.flex.items-center [svg/loading " ... loading"]])
            (ReactTweetEmbed
-             {:id                    id
-              :class                 "contents"
-              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
-              :on-tweet-load-success #(reset! *loading? false)})]]))
+            {:id                    id
+             :class                 "contents"
+             :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
+             :on-tweet-load-success #(reset! *loading? false)})]]))
