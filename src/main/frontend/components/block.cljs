@@ -1846,19 +1846,6 @@
 
         (when (and (= (:block/marker block) "DONE")
                    (state/enable-timetracking?))
-          (let [start-time (or
-                            (get properties :now)
-                            (get properties :doing)
-                            (get properties :in-progress)
-                            (get properties :later)
-                            (get properties :todo))
-                finish-time (get properties :done)]
-            (when (and start-time finish-time (> finish-time start-time))
-              [:div.text-sm.time-spent.ml-1 {:title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))
-                                             :style {:padding-top 3}}
-               [:a.opacity-30.hover:opacity-100
-                (utils/timeConversion (- finish-time start-time))]]))
-
           (let [summary (clock/clock-summary format content)]
             (when summary
               [:div.text-sm.time-spent.ml-1 {:title "org-clock-summary"
