@@ -23,7 +23,8 @@
         page-db-id (:db/id page-block)
         blocks (model/get-blocks-by-page page-db-id)]
     (when-not (and (= 1 (count blocks))
-                   (string/blank? (:block/content (first blocks))))
+                   (string/blank? (:block/content (first blocks)))
+                   (nil? (:block/file page-block)))
       (let [tree (tree/blocks->vec-tree blocks (:block/name page-block))]
         (file/save-tree page-block tree)))))
 
