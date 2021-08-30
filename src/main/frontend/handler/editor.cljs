@@ -782,23 +782,21 @@
   (if (state/enable-timetracking?)
     (let [new-marker (string/lower-case new-marker)
           old-marker (when old-marker (string/lower-case old-marker))]
-      (if (= :org format)
-        (when old-marker
-          (cond
-            (and (= old-marker "todo") (= new-marker "doing"))
-            (clock/clock-in format content)
-            (and (= old-marker "doing") (= new-marker "todo"))
-            (clock/clock-out format content)
-            (and (= old-marker "later") (= new-marker "now"))
-            (clock/clock-in format content)
-            (and (= old-marker "now") (= new-marker "later"))
-            (clock/clock-out format content)
-            (and (contains? #{"now" "doing"} old-marker)
-                 (= new-marker "done"))
-            (clock/clock-out format content)
-            :else
-            content))
-        (property/insert-property format content new-marker (util/time-ms))))
+      (when old-marker
+        (cond
+          (and (= old-marker "todo") (= new-marker "doing"))
+          (clock/clock-in format content)
+          (and (= old-marker "doing") (= new-marker "todo"))
+          (clock/clock-out format content)
+          (and (= old-marker "later") (= new-marker "now"))
+          (clock/clock-in format content)
+          (and (= old-marker "now") (= new-marker "later"))
+          (clock/clock-out format content)
+          (and (contains? #{"now" "doing"} old-marker)
+               (= new-marker "done"))
+          (clock/clock-out format content)
+          :else
+          content)))
     content))
 
 (defn check
