@@ -2,6 +2,12 @@
   &-main {
     margin: -1rem;
 
+    width: 80vw;
+
+    @screen sm {
+      width: 760px;
+    }
+
     .menu-link {
       background-color: transparent;
       transition: none;
