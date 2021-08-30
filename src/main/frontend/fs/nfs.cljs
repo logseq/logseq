@@ -10,6 +10,7 @@
             [frontend.config :as config]
             [frontend.state :as state]
             [frontend.handler.notification :as notification]
+            [frontend.encrypt :as encrypt]
             ["/frontend/utils" :as utils]))
 
 ;; We need to cache the file handles in the memory so that
@@ -53,6 +54,14 @@
     (p/let [handle (idb/get-item (str "handle/" repo))]
       (when handle
         (verify-permission repo handle true)))))
+
+(defn- contents-matched?
+  [disk-content db-content]
+  (when (and (string? disk-content) (string? db-content))
+    (if (encrypt/encrypted-db? (state/get-current-repo))
+      (p/let [decrypted-content (encrypt/decrypt disk-content)]
+        (= (string/trim decrypted-content) (string/trim db-content)))
+      (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
 (defrecord Nfs []
   protocol/Fs
@@ -155,35 +164,25 @@
           (if file-handle
             (-> (p/let [local-file (.getFile file-handle)
                         local-content (.text local-file)
-                        local-last-modified-at (gobj/get local-file "lastModified")
-                        current-time (util/time-ms)
-                        new? (> current-time local-last-modified-at)
-                        new-created? (nil? last-modified-at)
-                        not-changed? (= last-modified-at local-last-modified-at)
-                        format (-> (util/get-file-ext path)
-                                   (config/get-file-format))
                         pending-writes (state/get-write-chan-length)
-                        draw? (and path (string/ends-with? path ".excalidraw"))
-                        config? (and path (string/ends-with? path "/config.edn"))]
-                  (p/let [_ (verify-permission repo file-handle true)
-                          _ (utils/writeFile file-handle content)
-                          file (.getFile file-handle)]
-                    (if (and local-content new?
-                             (or
-                              draw?
-                              config?
-                             ;; Writing not finished
-                              (> pending-writes 0)
-                             ;; not changed by other editors
-                              not-changed?
-                              new-created?))
+                        ext (string/lower-case (util/get-file-ext path))
+                        db-content (db/get-file repo path)]
+                  (when local-content
+                    (if (and
+                         (not (string/blank? db-content))
+                         (not (:skip-compare? opts))
+                         (not (contents-matched? local-content (or db-content "")))
+                         (not (contains? #{"excalidraw" "edn"} ext)))
+                      (state/pub-event! [:file/not-matched-from-disk path local-content content])
                       (p/let [_ (verify-permission repo file-handle true)
                               _ (utils/writeFile file-handle content)
                               file (.getFile file-handle)]
                         (when file
-                          (nfs-saved-handler repo path file)))
-                      (js/alert (str "The file has been modified on your local disk! File path: " path
-                                     ", please save your changes and click the refresh button to reload it.")))))
+                          (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
+                                            (encrypt/decrypt content)
+                                            content)]
+                            (db/set-file-content! repo path content))
+                          (nfs-saved-handler repo path file))))))
                 (p/catch (fn [e]
                            (js/console.error e))))
             ;; create file handle

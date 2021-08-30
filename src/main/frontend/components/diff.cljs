@@ -230,3 +230,78 @@
 
        :else
        [:div "No diffs"])]))
+
+(rum/defcs local-file < rum/reactive
+  [state repo path disk-content local-content]
+  (let [content disk-content
+        edit? (util/react *edit?)]
+    [:div.cp__diff-file
+     [:div.cp__diff-file-header
+      [:span.cp__diff-file-header-content {:style {:word-break "break-word"}}
+       path]]
+     (when (not= content local-content)
+       (let [local-content (or local-content "")
+             content (or content "")
+             diff (medley/indexed (diff/diff local-content content))
+             diff? (some (fn [[_idx {:keys [added removed]}]]
+                           (or added removed))
+                         diff)
+             diff-cp [:div.overflow-y-scroll
+                      [:div {:style {:max-height "65vh"}}
+                       (diff-cp diff)]]]
+         [:div.pre-line-white-space.p-2.overflow-y-hidden
+          (if edit?
+            [:div.grid.grid-cols-2.gap-1
+             diff-cp
+             (ui/textarea
+              {:default-value local-content
+               :auto-focus true
+               :style {:border "1px solid"}
+               :on-change (fn [e]
+                            (reset! *edit-content (util/evalue e)))})]
+            diff-cp)
+
+          (cond
+            edit?
+            [:div.mt-2
+             (ui/button "Save"
+               :on-click
+               (fn []
+                 (reset! *edit? false)
+                 (let [new-content @*edit-content]
+                   (file/alter-file repo path new-content
+                                    {:re-render-root? true
+                                     :skip-compare? true})
+                   (state/close-modal!))))]
+
+            diff?
+            [:div.mt-2
+             (ui/button "Use latest changes from the disk"
+               :on-click
+               (fn []
+                 (file/alter-file repo path content
+                                  {:re-render-root? true
+                                   :skip-compare? true})
+                 (state/close-modal!))
+               :background "green")
+
+             [:span.pl-2.pr-2 "or"]
+
+             (ui/button "Keep local changes in Logseq"
+               :on-click
+               (fn []
+                 (file/alter-file repo path local-content
+                                  {:re-render-root? true
+                                   :skip-compare? true})
+                 (state/close-modal!))
+               :background "pink")
+
+             [:span.pl-2.pr-2 "or"]
+
+             (ui/button "Edit"
+               :on-click
+               (fn []
+                 (reset! *edit? true)))]
+
+            :else
+            nil)]))]))

@@ -36,8 +36,8 @@
       (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
 
 (defn- write-file-impl!
-  [this repo dir path content {:keys [ok-handler error-handler skip-mtime?] :as opts} stat]
-  (if skip-mtime?
+  [this repo dir path content {:keys [ok-handler error-handler skip-compare?] :as opts} stat]
+  (if skip-compare?
     (p/catch
         (p/let [result (ipc/ipc "writeFile" path content)]
           (when ok-handler
@@ -56,22 +56,10 @@
             db-content (or (db/get-file repo path) "")
             contents-matched? (contents-matched? disk-content db-content)]
       (cond
-        ;; (and (not page-empty?) (nil? disk-content) )
-        ;; (notification/show!
-        ;;  (str "The file has been renamed or deleted on your local disk! File path: " path
-        ;;       ", please save your changes and click the refresh button to reload it.")
-        ;;  :error
-        ;;  false)
-
         (and
          (not contents-matched?)
-         ;; FIXME:
          (not (contains? #{"excalidraw" "edn"} ext)))
-        (notification/show!
-         (str "The file has been modified on your local disk! File path: " path
-              ", please save your changes and click the refresh button to reload it.")
-         :warning
-         false)
+        (state/pub-event! [:file/not-matched-from-disk path disk-content content])
 
         :else
         (->

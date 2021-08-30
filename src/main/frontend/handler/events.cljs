@@ -13,6 +13,7 @@
             [frontend.components.encryption :as encryption]
             [frontend.components.shell :as shell]
             [frontend.components.git :as git-component]
+            [frontend.components.diff :as diff]
             [frontend.fs.nfs :as nfs]
             [frontend.db.conn :as conn]
             [frontend.extensions.srs :as srs]
@@ -151,6 +152,11 @@
 
 (defmethod handle :page/create-today-journal [[_ repo]]
   (page-handler/create-today-journal!))
+
+(defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
+  (state/clear-edit!)
+  (when-let [repo (state/get-current-repo)]
+    (state/set-modal! #(diff/local-file repo path disk-content db-content))))
 
 (defmethod handle :after-db-restore [[_ repos]]
   (mapv (fn [{url :url} repo]
