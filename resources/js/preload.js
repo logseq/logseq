@@ -30,6 +30,18 @@ contextBridge.exposeInMainWorld('apis', {
     ipcRenderer.on(channel, newCallback)
   },
 
+  off: (channel, callback) => {
+    if (!callback) {
+      ipcRenderer.removeAllListeners(channel)
+    } else {
+      ipcRenderer.removeListener(channel, callback)
+    }
+  },
+
+  once: (channel, callback) => {
+    ipcRenderer.on(channel, callback)
+  },
+
   checkForUpdates: async (...args) => {
     await ipcRenderer.invoke('check-for-updates', ...args)
   },

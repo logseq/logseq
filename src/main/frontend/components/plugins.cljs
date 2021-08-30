@@ -92,7 +92,8 @@
      understand the source code."]))
 
 (rum/defc plugin-item-card
-  [{:keys [id name settings version url description author icon usf iir repo] :as item}]
+  [{:keys [id name settings version url description author icon usf iir repo] :as item} installing?]
+
   (let [market? (and (not (nil? repo)) (nil? usf))
         disabled (:disabled settings)]
     [:div.cp__plugins-item-card
@@ -136,7 +137,10 @@
 
          [:div.r.flex.items-center
 
-          [:a.btn "install"]]]
+          [:a.btn
+           {:class (util/classnames [{:disabled installing?}])
+            :on-click #(plugin-handler/install-marketplace-plugin item)}
+           (if installing? "installing" "install")]]]
 
         ;; installed ctls
         [:div.ctl
@@ -178,7 +182,6 @@
                   s)}
   [state]
   (let [pkgs (state/sub :plugin/marketplace-pkgs)
-        installed (state/sub :plugin/installed-plugins)
         installing (state/sub :plugin/installing)
         *fetching (::fetching state)]
 
@@ -189,7 +192,9 @@
       [:div.cp__plugins-marketplace
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [item pkgs]
-          (rum/with-key (plugin-item-card item) (:id item)))]])))
+          (rum/with-key
+            (plugin-item-card item (and installing (= (:id installing) (:id item))))
+            (:id item)))]])))
 
 (rum/defcs installed-plugins
   < rum/static rum/reactive
@@ -215,7 +220,7 @@
 
      [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
       (for [[_ item] installed-plugins]
-        (rum/with-key (plugin-item-card item) (:id item)))]]))
+        (rum/with-key (plugin-item-card item false) (:id item)))]]))
 
 (defn open-select-theme!
   []

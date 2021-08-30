@@ -50,6 +50,45 @@
                     reject)))
     (p/resolved nil)))
 
+(defn installed?
+  [id]
+  (and (contains? (:plugin/installed-plugins @state/state) (keyword id))
+       (get-in @state/state [:plugin/installed-plugins (keyword id) :iir])))
+
+(defn install-marketplace-plugin
+  [{:keys [repo id] :as item}]
+  (when-not (and (:plugin/installing @state/state)
+                 (installed? id))
+    (p/create
+      (fn [resolve]
+        (state/set-state! :plugin/installing item)
+        (ipc/ipc "installMarketPlugin" item)
+        (resolve id)))))
+
+(defn- init-install-listener!
+  []
+  (js/window.apis.on "lsp-installed"
+                     (fn [^js e]
+                       (js/console.log e)
+                       (when-let [{:keys [status payload]} (bean/->clj e)]
+                         (case (keyword status)
+
+                           :completed
+                           (do                              ;; TODO register plugin
+                             (notifications/show!
+                               (str "Installed Plugin:" payload) :success))
+
+                           :error
+                           (notifications/show!
+                             "Install Error:" :error)
+
+                           :dunno))
+
+                       ;; reset
+                       (state/set-state! :plugin/installing nil)
+                       true)))
+
+
 (defn register-plugin
   [pl]
   (swap! state/state update-in [:plugin/installed-plugins] assoc (keyword (:id pl)) pl))
@@ -195,7 +234,7 @@
          {:color     "#aaa"
           :font-size "38px"}} (or text "Loading ...")]])))
 
-(defn init-plugins
+(defn init-plugins!
   [callback]
 
   (let [el (js/document.createElement "div")]
@@ -257,4 +296,6 @@
   [callback]
   (if (not lsp-enabled?)
     (callback)
-    (init-plugins callback)))
+    (do
+      (init-install-listener!)
+      (init-plugins! callback))))

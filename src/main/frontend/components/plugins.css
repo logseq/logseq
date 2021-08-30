@@ -197,6 +197,11 @@
           &:active {
             opacity: .6;
           }
+
+          &.disabled {
+            pointer-events: none;
+            cursor: default;
+          }
         }
       }
     }

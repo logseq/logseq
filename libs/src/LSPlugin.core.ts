@@ -454,14 +454,18 @@ class PluginLocal
     }
 
     // TODO: strategy for Logseq plugins center
-    if (logseq.id) {
-      this._id = logseq.id
+    if (this.isInstalledInDotRoot) {
+      this._id = path.basename(localRoot)
     } else {
-      logseq.id = this.id
-      try {
-        await invokeHostExportedApi('save_plugin_config', url, { ...pkg, logseq })
-      } catch (e) {
-        debug('[save plugin ID Error] ', e)
+      if (logseq.id) {
+        this._id = logseq.id
+      } else {
+        logseq.id = this.id
+        try {
+          await invokeHostExportedApi('save_plugin_config', url, { ...pkg, logseq })
+        } catch (e) {
+          debug('[save plugin ID Error] ', e)
+        }
       }
     }
 

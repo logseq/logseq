@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [mac? win32? linux? prod? dev? logger open]]
+            [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open]]
             [electron.configs :as cfgs]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -216,8 +216,6 @@
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
          (.removeHandler ipcMain call-app-channel))))
-
-(defonce *win (atom nil))
 
 (defn- destroy-window!
   [^js win]

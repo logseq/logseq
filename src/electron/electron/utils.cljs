@@ -6,6 +6,7 @@
             [cljs-bean.core :as bean]
             ["electron" :refer [BrowserWindow]]))
 
+(defonce *win (atom nil))
 (defonce mac? (= (.-platform js/process) "darwin"))
 (defonce win32? (= (.-platform js/process) "win32"))
 (defonce linux? (= (.-platform js/process) "linux"))

@@ -14,7 +14,8 @@
             [electron.state :as state]
             [clojure.core.async :as async]
             [electron.search :as search]
-            [electron.git :as git]))
+            [electron.git :as git]
+            [electron.plugin :as plugin]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -28,15 +29,15 @@
 (defn- readdir
   [dir]
   (->> (tree-seq
-        (fn [^js f]
-          (.isDirectory (fs/statSync f) ()))
-        (fn [d]
-          (let [files (fs/readdirSync d (clj->js {:withFileTypes true}))]
-            (->> files
-                 (remove #(.isSymbolicLink ^js %))
-                 (remove #(string/starts-with? (.-name ^js %) "."))
-                 (map #(.join path d (.-name %))))))
-        dir)
+         (fn [^js f]
+           (.isDirectory (fs/statSync f) ()))
+         (fn [d]
+           (let [files (fs/readdirSync d (clj->js {:withFileTypes true}))]
+             (->> files
+                  (remove #(.isSymbolicLink ^js %))
+                  (remove #(string/starts-with? (.-name ^js %) "."))
+                  (map #(.join path d (.-name %))))))
+         dir)
        (doall)
        (vec)))
 
@@ -60,7 +61,7 @@
   ;; TODO: handle error
   (let [^js Buf (.-Buffer buffer)
         ^js content (if (instance? js/ArrayBuffer content)
-                  (.from Buf content) content)]
+                      (.from Buf content) content)]
 
     (fs/writeFileSync path content)
     (fs/statSync path)))
@@ -72,7 +73,7 @@
   (fs/statSync path))
 
 (defonce allowed-formats
-  #{:org :markdown :md :edn :json :css :excalidraw})
+         #{:org :markdown :md :edn :json :css :excalidraw})
 
 (defn get-ext
   [p]
@@ -83,16 +84,16 @@
 (defn- get-files
   [path]
   (let [result (->>
-                (readdir path)
-                (remove (partial utils/ignored-path? path))
-                (filter #(contains? allowed-formats (get-ext %)))
-                (map (fn [path]
-                       (let [stat (fs/statSync path)]
-                         (when-not (.isDirectory stat)
-                           {:path (utils/fix-win-path! path)
-                            :content (utils/read-file path)
-                            :stat stat}))))
-                (remove nil?))]
+                 (readdir path)
+                 (remove (partial utils/ignored-path? path))
+                 (filter #(contains? allowed-formats (get-ext %)))
+                 (map (fn [path]
+                        (let [stat (fs/statSync path)]
+                          (when-not (.isDirectory stat)
+                            {:path    (utils/fix-win-path! path)
+                             :content (utils/read-file path)
+                             :stat    stat}))))
+                 (remove nil?))]
     (vec (cons {:path (utils/fix-win-path! path)} result))))
 
 (defn- get-ls-dotdir-root
@@ -116,7 +117,7 @@
 
 (defmethod handle :openDir [^js window _messages]
   (let [result (.showOpenDialogSync dialog (bean/->js
-                                            {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
+                                             {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
         path (first result)]
     (.. ^js window -webContents
         (send "open-dir-confirmed"
@@ -127,7 +128,7 @@
   (get-files path))
 
 (defmethod handle :persistent-dbs-saved [window _]
-  (async/put! state/persistent-dbs-chan true )
+  (async/put! state/persistent-dbs-chan true)
   true)
 
 (defmethod handle :search-blocks [window [_ repo q opts]]
@@ -211,6 +212,9 @@
 
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
+
+(defmethod handle :installMarketPlugin [_ [_ item]]
+  (plugin/install! item))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
