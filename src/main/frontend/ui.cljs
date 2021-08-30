@@ -574,7 +574,7 @@
   (rum/local false ::collapsed?)
   {:will-mount (fn [state]
                  (let [args (:rum/args state)]
-                   (when (true? (last args))
+                   (when (true? (:default-collapsed? (last args)))
                      (reset! (get state ::collapsed?) true)))
                  state)}
   [state header content {:keys [default-collapsed? title-trigger?]}]

@@ -339,7 +339,9 @@
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
                   content)
-        content (drawer/with-logbook block content)
+        content (->> content
+                     (drawer/remove-logbook)
+                     (drawer/with-logbook block))
         content (with-timetracking block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
@@ -800,11 +802,9 @@
 (defn check
   [{:block/keys [uuid marker content format repeated?] :as block}]
   (let [new-content (string/replace-first content marker "DONE")
-        new-content (->
-                     (if repeated?
-                       (update-timestamps-content! block content)
-                       new-content)
-                     (with-marker-time block format "DONE" marker))]
+        new-content (if repeated?
+                      (update-timestamps-content! block content)
+                      new-content)]
     (save-block-if-changed! block new-content)))
 
 (defn uncheck
@@ -812,8 +812,7 @@
   (let [marker (if (= :now (state/get-preferred-workflow))
                  "LATER"
                  "TODO")
-        new-content (-> (string/replace-first content "DONE" marker)
-                        (with-marker-time block format marker "DONE"))]
+        new-content (string/replace-first content "DONE" marker)]
     (save-block-if-changed! block new-content)))
 
 (defn cycle-todo!
