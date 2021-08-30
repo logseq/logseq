@@ -12,6 +12,16 @@
         minutes (mod minutes 60)]
     (util/format "%02d:%02d" hours minutes)))
 
+(defn minutes->days:hours:minutes
+  [minutes]
+  (let [days (quot (quot minutes 60) 24)
+        hours (quot (- minutes (* days 60 24)) 60)
+        minutes (mod minutes 60)]
+    (util/format "%s%s%s"
+                 (if (zero? days) "" (str days "d"))
+                 (if (zero? hours) "" (str hours "h"))
+                 (if (zero? minutes) "" (str minutes "m")))))
+
 (defn clock-in
   [format content]
   (drawer/insert-drawer
@@ -39,12 +49,23 @@
     content))
 
 (defn clock-summary
-  [format content]
-  (when-let [logbook-lines (last (drawer/get-drawer-ast format content "logbook"))]
-    (when-let [clock-lines (filter #(string/starts-with? % "CLOCK: ") logbook-lines)]
+  [body string?]
+  (when-let [logbook (-> (filter (fn [v] (and (vector? v)
+                                          (= (first v) "Drawer")
+                                          (= (second v) "logbook"))) body)
+                         first)]
+    (when-let [clock-lines (last logbook)]
       (let [times (map #(string/trim (last (string/split % "=>"))) clock-lines)
             hours (map #(int (first (string/split % ":"))) times)
             minutes (map #(int (second (string/split % ":"))) times)
-            minutes (+ (* 60 (reduce + hours))
-                       (reduce + minutes))]
-        (str minutes "m")))))
+            hours (reduce + hours)
+            minutes (reduce + minutes)]
+        (if string?
+          (util/format "%s%s"
+                      (if (> hours 1)
+                        (if hours (str hours "h"))
+                        "")
+                      (if (zero? minutes)
+                        ""
+                        (str minutes "m")))
+          (+ (* hours 60) minutes))))))

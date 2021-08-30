@@ -577,26 +577,44 @@
          :value value
          :pos pos}))))
 
-(defn- with-timetracking-properties
+(defn- with-marker-time
+  [content format new-marker old-marker]
+  (if (and (state/enable-timetracking?) new-marker)
+    (try
+      (let [new-marker (string/trim (string/lower-case (name new-marker)))
+            old-marker (when old-marker (string/trim (string/lower-case (name old-marker))))
+            new-content (cond
+                          (or (and (nil? old-marker) (or (= new-marker "doing")
+                                                         (= new-marker "now")))
+                              (and (= old-marker "todo") (= new-marker "doing"))
+                              (and (= old-marker "later") (= new-marker "now"))
+                              (= old-marker new-marker "now")
+                              (= old-marker new-marker "doing"))
+                          (clock/clock-in format content)
+
+                          (or
+                           (and (= old-marker "doing") (= new-marker "todo"))
+                           (and (= old-marker "now") (= new-marker "later"))
+                           (and (contains? #{"now" "doing"} old-marker)
+                                (= new-marker "done")))
+                          (clock/clock-out format content)
+
+                          :else
+                          content)]
+        new-content)
+      (catch js/Error _e
+        content))
+    content))
+
+(defn- with-timetracking
   [block value]
-  (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
-        new-marker (if new-marker (string/lower-case (string/trim new-marker)))
-        new-marker? (and
-                     new-marker
-                     (not= new-marker (string/lower-case (or (:block/marker block) "")))
-                     (state/enable-timetracking?))
-        ts (util/time-ms)
-        properties (if new-marker?
-                     (assoc (:block/properties block) new-marker ts)
-                     (:block/properties block))
-        value (or
-               (when new-marker?
-                 (property/insert-property (:block/format block)
-                                           value
-                                           new-marker
-                                           ts))
-               value)]
-    [properties value]))
+  (if (state/enable-timetracking?)
+    (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
+          new-value (with-marker-time value (:block/format block)
+                      new-marker
+                      (:block/marker block))]
+      new-value)
+    value))
 
 (defn insert-new-block!
   ([state]
@@ -612,7 +630,7 @@
              block (or (db/pull [:block/uuid block-id])
                        block)
              repo (or (:block/repo block) (state/get-current-repo))
-             [properties value] (with-timetracking-properties block value)
+             value (with-timetracking block value)
              block-self? (block-self-alone-when-insert? config block-id)
              input (gdom/getElement (state/get-edit-input-id))
              pos (cursor/pos input)
@@ -622,10 +640,7 @@
                          [true _ _] insert-new-block-aux!
                          [_ false true] insert-new-block-before-block-aux!
                          [_ _ _] insert-new-block-aux!)]
-         (insert-fn
-          config
-          (assoc block :block/properties properties)
-          value
+         (insert-fn config block value
           {:ok-handler
            (fn [last-block]
              (edit-block! last-block 0 format id)
@@ -775,28 +790,6 @@
                                 marker
                                 (date/get-date-time-string-3)))]
       content)
-    content))
-
-(defn- with-marker-time
-  [content format new-marker old-marker]
-  (if (state/enable-timetracking?)
-    (let [new-marker (string/lower-case new-marker)
-          old-marker (when old-marker (string/lower-case old-marker))]
-      (when old-marker
-        (cond
-          (and (= old-marker "todo") (= new-marker "doing"))
-          (clock/clock-in format content)
-          (and (= old-marker "doing") (= new-marker "todo"))
-          (clock/clock-out format content)
-          (and (= old-marker "later") (= new-marker "now"))
-          (clock/clock-in format content)
-          (and (= old-marker "now") (= new-marker "later"))
-          (clock/clock-out format content)
-          (and (contains? #{"now" "doing"} old-marker)
-               (= new-marker "done"))
-          (clock/clock-out format content)
-          :else
-          content)))
     content))
 
 (defn check
@@ -1303,12 +1296,12 @@
 (defn save-block-aux!
   [block value format opts]
   (let [value (string/trim value)
-        [properties value] (with-timetracking-properties block value)]
+        value (with-timetracking block value)]
     ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
     ;; maybe we shouldn't save the block/file in "will-unmount" event?
     (save-block-if-changed! block value
                             (merge
-                             {:init-properties properties}
+                             {:init-properties (:block/properties block)}
                              opts))))
 
 (defn save-block!

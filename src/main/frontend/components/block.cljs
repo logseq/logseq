@@ -1846,10 +1846,11 @@
 
         (when (and (= (:block/marker block) "DONE")
                    (state/enable-timetracking?))
-          (let [summary (clock/clock-summary format content)]
-            (when summary
-              [:div.text-sm.time-spent.ml-1 {:title "org-clock-summary"
-                                             :style {:padding-top 3}}
+          (let [summary (clock/clock-summary body true)]
+            (when (and summary
+                       (not= summary "0m")
+                       (not (string/blank? summary)))
+              [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
                [:a.opacity-30.hover:opacity-100
                 summary]])))
 
