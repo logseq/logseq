@@ -1,14 +1,25 @@
 .cp__command-palette {
-    &-main {
+  &-main {
+    margin: -1rem;
+
+    .menu-link {
+      background-color: transparent;
+      transition: none;
+      border: none;
     }
 
-    &-input {
+    .chosen {
+      background-color: var(--ls-quaternary-background-color);
     }
+  }
 
-    &-results {
-    }
+  &-input {
+    padding: 16px;
+    font-size: 20px;
+    outline: none;
+    margin-bottom: 5px;
+  }
 
-    /* .chosen { */
-    /*     background: var(--ls-a-chosen-bg); */
-    /* } */
+  &-results {
+  }
 }

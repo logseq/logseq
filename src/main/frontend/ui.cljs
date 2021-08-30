@@ -447,7 +447,7 @@
   (panel-content close-fn))
 
 (rum/defc modal-panel
-  [show? panel-content transition-state close-fn fullscreen?]
+  [show? panel-content transition-state close-fn fullscreen? close-btn?]
   [:div.ui__modal-panel.transform.transition-all.sm:min-w-lg.sm
    {:class (case transition-state
              "entering" "ease-out duration-300 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
@@ -455,17 +455,18 @@
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
    [:div.absolute.top-0.right-0.pt-2.pr-2
-    [:a.ui__modal-close.opacity-60.hover:opacity-100
-     {:aria-label "Close"
-      :type       "button"
-      :on-click   close-fn}
-     [:svg.h-6.w-6
-      {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-      [:path
-       {:d               "M6 18L18 6M6 6l12 12"
-        :stroke-width    "2"
-        :stroke-linejoin "round"
-        :stroke-linecap  "round"}]]]]
+    (if close-btn?
+      [:a.ui__modal-close.opacity-60.hover:opacity-100
+       {:aria-label "Close"
+        :type       "button"
+        :on-click   close-fn}
+       [:svg.h-6.w-6
+        {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
+        [:path
+         {:d               "M6 18L18 6M6 6l12 12"
+          :stroke-width    "2"
+          :stroke-linejoin "round"
+          :stroke-linecap  "round"}]]])]
 
    (when show?
      [:div {:class (if fullscreen? "" "panel-content")}
@@ -491,6 +492,7 @@
   []
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
+        close-btn? (state/sub :modal/close-btn?)
         show? (boolean modal-panel-content)
         close-fn (fn []
                    (state/close-modal!)
@@ -505,7 +507,7 @@
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
-        (modal-panel show? modal-panel-content state close-fn fullscreen?)))]))
+        (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn?)))]))
 
 (defn make-confirm-modal
   [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm]

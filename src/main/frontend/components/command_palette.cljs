@@ -14,10 +14,10 @@
   [:div.inline-grid.grid-cols-4.gap-x-4.w-full
    {:class (when chosen? "chosen")}
    [:span.col-span-3 desc]
-   [:div.col-span-1.justify-end
+   [:div.col-span-1.justify-end.tip.flex
     (when (and (keyword? id) (namespace id))
-      [:code.bg-blue-400 (namespace id)])
-    [:code shortcut]]])
+      [:code.opacity-20.bg-transparent (namespace id)])
+    [:code.ml-1 shortcut]]])
 
 (rum/defcs command-palette <
   (shortcut/disable-all-shortcuts)
@@ -48,6 +48,6 @@
   []
   (let [open? (state/sub :ui/command-palette-open?)]
     (if open?
-      (state/set-modal! #(command-palette {:commands (cp/get-commands)}))
+      (state/set-modal! #(command-palette {:commands (cp/get-commands)}) false false)
       (state/close-modal!))
     nil))
