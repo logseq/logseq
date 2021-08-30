@@ -166,12 +166,13 @@
                         local-content (.text local-file)
                         pending-writes (state/get-write-chan-length)
                         ext (string/lower-case (util/get-file-ext path))
-                        db-content (db/get-file repo path)]
+                        db-content (db/get-file repo path)
+                        contents-matched? (contents-matched? local-content (or db-content ""))]
                   (when local-content
                     (if (and
                          (not (string/blank? db-content))
                          (not (:skip-compare? opts))
-                         (not (contents-matched? local-content (or db-content "")))
+                         (not contents-matched?)
                          (not (contains? #{"excalidraw" "edn"} ext)))
                       (state/pub-event! [:file/not-matched-from-disk path local-content content])
                       (p/let [_ (verify-permission repo file-handle true)
