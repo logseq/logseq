@@ -3,7 +3,8 @@
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.spec :as spec]
             [frontend.state :as state]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.storage :as storage]))
 
 (s/def :command/id keyword?)
 (s/def :command/desc string?)
@@ -29,6 +30,34 @@
 (defn get-commands []
   (->> (get @state/state :command-palette/commands)
        (sort-by :id)))
+
+(defn history []
+  (or (storage/get "commands-history") []))
+
+(defn- assoc-invokes [cmds]
+  (let [invokes (->> (history)
+                     (map :id)
+                     (frequencies))]
+    (mapv (fn [{:keys [id] :as cmd}]
+            (if (contains? invokes id)
+              (assoc cmd :invokes-count (get invokes id))
+              cmd))
+          cmds)))
+
+(defn add-history [{:keys [id]}]
+  (storage/set "commands-history" (conj (history) {:id id :timestamp (.getTime (js/Date.))})))
+
+(defn invoke-command [{:keys [action] :as cmd}]
+  (add-history cmd)
+  (state/set-state! :ui/command-palette-open? false)
+  (js/setTimeout (fn [] (action)) 200))
+
+(defn top-commands [limit]
+  (->> (get-commands)
+       (assoc-invokes)
+       (sort-by :invokes-count)
+       (reverse)
+       (take limit)))
 
 (defn register [{:keys [id] :as command}]
   (spec/validate :command/command command)
