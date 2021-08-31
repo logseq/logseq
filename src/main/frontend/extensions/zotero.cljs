@@ -161,6 +161,25 @@
         "https://www.zotero.org/settings/keys"]
        " page, it's a number of digits"]))])
 
+(rum/defc overwrite-mode-setting <
+  rum/reactive
+  []
+  [:div
+   [:div.row
+    [:label.title
+     {:for "zotero_overwrite_mode"}
+     "Overwrite existing item page?"]
+    [:div
+     [:div.rounded-md.sm:max-w-xs
+      (ui/toggle (setting/setting :overwirte-mode?)
+                 (fn [] (setting/set-setting! :overwirte-mode? (not (setting/setting :overwirte-mode?))))
+                 true)]]]
+   (when (setting/setting :overwirte-mode?)
+     (ui/admonition
+      :warning
+      [:p.text-red-500
+       "Dangerous! This will delete and recreate Zotero existing page! Make sure to backup your notes first in case something goes wrong. Make sure you don't put any personal item in previous Zotero page and it's OK to overwrite the page!"]))])
+
 (rum/defc attachment-setting <
   rum/reactive
   []
@@ -416,7 +435,9 @@
 
    (extra-tags-setting)
 
-   (data-directory-setting)])
+   (data-directory-setting)
+
+   (overwrite-mode-setting)])
 
 (rum/defcs settings
   <
