@@ -1859,7 +1859,7 @@
                                             [:div.p-4
                                              [:div.font-bold.mb-2 "LOGBOOK:"]
                                              [:ul
-                                              (for [clock clocks]
+                                              (for [clock (take 10 (reverse clocks))]
                                                 [:li clock])]])))
                          :interactive true
                          :delay       [1000, 100]}
