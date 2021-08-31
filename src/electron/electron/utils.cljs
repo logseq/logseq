@@ -1,10 +1,10 @@
 (ns electron.utils
   (:require [clojure.string :as string]
-            ["fs" :as fs]
+            ["fs-extra" :as fs]
             ["path" :as path]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
-            ["electron" :refer [BrowserWindow]]))
+            ["electron" :refer [app BrowserWindow]]))
 
 (defonce *win (atom nil))
 (defonce mac? (= (.-platform js/process) "darwin"))
@@ -17,6 +17,26 @@
 
 (defonce open (js/require "open"))
 (defonce fetch (js/require "node-fetch"))
+(defonce extract-zip (js/require "extract-zip"))
+
+(defn get-ls-dotdir-root
+  []
+  (let [lg-dir (str (.getPath app "home") "/.logseq")]
+    (if-not (fs/existsSync lg-dir)
+      (and (fs/mkdirSync lg-dir) lg-dir)
+      lg-dir)))
+
+(defn get-ls-default-plugins
+  []
+  (let [plugins-root (path/join (get-ls-dotdir-root) "plugins")
+        _ (if-not (fs/existsSync plugins-root)
+            (fs/mkdirSync plugins-root))
+        dirs (js->clj (fs/readdirSync plugins-root #js{"withFileTypes" true}))
+        dirs (->> dirs
+                  (filter #(.isDirectory %))
+                  (filter #(not (string/starts-with? (.-name %) "_")))
+                  (map #(path/join plugins-root (.-name %))))]
+    dirs))
 
 (defn ignored-path?
   [dir path]

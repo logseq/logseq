@@ -96,25 +96,6 @@
                  (remove nil?))]
     (vec (cons {:path (utils/fix-win-path! path)} result))))
 
-(defn- get-ls-dotdir-root
-  []
-  (let [lg-dir (str (.getPath app "home") "/.logseq")]
-    (if-not (fs/existsSync lg-dir)
-      (and (fs/mkdirSync lg-dir) lg-dir)
-      lg-dir)))
-
-(defn- get-ls-default-plugins
-  []
-  (let [plugins-root (path/join (get-ls-dotdir-root) "plugins")
-        _ (if-not (fs/existsSync plugins-root)
-            (fs/mkdirSync plugins-root))
-        dirs (js->clj (fs/readdirSync plugins-root #js{"withFileTypes" true}))
-        dirs (->> dirs
-                  (filter #(.isDirectory %))
-                  (filter #(not (string/starts-with? (.-name %) "_")))
-                  (map #(path/join plugins-root (.-name %))))]
-    dirs))
-
 (defmethod handle :openDir [^js window _messages]
   (let [result (.showOpenDialogSync dialog (bean/->js
                                              {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
@@ -179,10 +160,10 @@
     path))
 
 (defmethod handle :getLogseqDotDirRoot []
-  (get-ls-dotdir-root))
+  (utils/get-ls-dotdir-root))
 
 (defmethod handle :getUserDefaultPlugins []
-  (get-ls-default-plugins))
+  (utils/get-ls-default-plugins))
 
 (defmethod handle :relaunchApp []
   (.relaunch app) (.quit app))
@@ -215,6 +196,9 @@
 
 (defmethod handle :installMarketPlugin [_ [_ item]]
   (plugin/install! item))
+
+(defmethod handle :uninstallMarketPlugin [_ [_ id]]
+  (plugin/uninstall! id))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))

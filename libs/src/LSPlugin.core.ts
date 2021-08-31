@@ -357,11 +357,10 @@ class PluginLocal
 
   async _setupUserSettings () {
     const { _options } = this
-    const key = _options.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_' + this.id
     const logger = _options.logger = new PluginLogger('Loader')
 
     try {
-      const [userSettingsFilePath, userSettings] = await invokeHostExportedApi('load_plugin_user_settings', key)
+      const [userSettingsFilePath, userSettings] = await invokeHostExportedApi('load_plugin_user_settings', this.id)
       this._dotSettingsFile = userSettingsFilePath
 
       const settings = _options.settings = new PluginSettings(userSettings)
@@ -381,7 +380,7 @@ class PluginLocal
         }
 
         if (a) {
-          invokeHostExportedApi(`save_plugin_user_settings`, key, a)
+          invokeHostExportedApi(`save_plugin_user_settings`, this.id, a)
         }
       })
     } catch (e) {
@@ -633,7 +632,7 @@ class PluginLocal
       await this.unload()
 
       if (this.isInstalledInDotRoot) {
-        debug('TODO: remove plugin local files from user home root :)')
+        this._ctx.emit('unlink-plugin', this.id)
       }
 
       return
@@ -783,7 +782,7 @@ class PluginLocal
  */
 class LSPluginCore
   extends EventEmitter<'beforeenable' | 'enabled' | 'beforedisable' | 'disabled' | 'registered' | 'error' | 'unregistered' |
-    'theme-changed' | 'theme-selected' | 'settings-changed'>
+    'theme-changed' | 'theme-selected' | 'settings-changed' | 'unlink-plugin'>
   implements ILSPluginThemeManager {
 
   private _isRegistering = false

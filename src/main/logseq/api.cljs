@@ -211,6 +211,13 @@
             path (util/node-path.join path "settings" (str key ".json"))]
       (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
+(def ^:export unlink_plugin_user_settings
+  (fn [key]
+    (p/let [repo ""
+            path (plugin-handler/get-ls-dotdir-root)
+            path (util/node-path.join path "settings" (str key ".json"))]
+      (fs/unlink! repo path nil))))
+
 (def ^:export register_plugin_slash_command
   (fn [pid ^js cmd-actions]
     (when-let [[cmd actions] (bean/->clj cmd-actions)]

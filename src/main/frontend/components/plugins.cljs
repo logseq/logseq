@@ -91,8 +91,9 @@
      Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and
      understand the source code."]))
 
-(rum/defc plugin-item-card
-  [{:keys [id name settings version url description author icon usf iir repo] :as item} installing?]
+(rum/defc plugin-item-card < rum/static
+  [{:keys [id name settings version url description author icon usf iir repo] :as item}
+   installing? installed? stat]
 
   (let [market? (and (not (nil? repo)) (nil? usf))
         disabled (:disabled settings)]
@@ -126,21 +127,27 @@
 
       [:div.flag.is-top.opacity-50
        (if repo
-         [:a.flex {:target "_blank" :href (plugin-handler/gh-repo-url repo)} (svg/github {:width 16 :height 16})])]
+         [:a.flex {:target "_blank"
+                   :href   (plugin-handler/gh-repo-url repo)}
+          (svg/github {:width 16 :height 16})])]
 
       (if market?
         ;; market ctls
         [:div.ctl
          [:ul.l.flex.items-center
-          [:li.flex.text-sm.items-center (svg/cloud-down 16) [:span.pl-1 "128"]]
-          [:li.flex.text-sm.items-center.pl-3 (svg/star 16) [:span.pl-1 "128"]]]
+          (when-let [downloads (and stat (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))]
+            [(if (and downloads (> downloads 0)) [:li.flex.text-sm.items-center.pr-3 (svg/cloud-down 16) [:span.pl-1 downloads]])
+             [:li.flex.text-sm.items-center (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]])]
 
          [:div.r.flex.items-center
 
           [:a.btn
-           {:class (util/classnames [{:disabled installing?}])
+           {:class    (util/classnames [{:disabled   (or installed? installing?)
+                                         :installing installing?}])
             :on-click #(plugin-handler/install-marketplace-plugin item)}
-           (if installing? "installing" "install")]]]
+           (if installed?
+             "installed"
+             (if installing? [:span.flex.items-center [:small svg/loading] "installing"] "install"))]]]
 
         ;; installed ctls
         [:div.ctl
@@ -177,11 +184,14 @@
     {:did-mount (fn [s]
                   (reset! (::fetching s) true)
                   (-> (plugin-handler/load-marketplace-plugins false)
-                      (p/catch #(js/console.error))
+                      (p/catch (js/console.error))
+                      (#(plugin-handler/load-marketplace-stats false))
                       (p/finally #(reset! (::fetching s) false)))
                   s)}
   [state]
   (let [pkgs (state/sub :plugin/marketplace-pkgs)
+        stats (state/sub :plugin/marketplace-stats)
+        installed-plugins (state/sub :plugin/installed-plugins)
         installing (state/sub :plugin/installing)
         *fetching (::fetching state)]
 
@@ -190,10 +200,15 @@
        svg/loading]
 
       [:div.cp__plugins-marketplace
+       {:class (util/classnames [{:has-installing (boolean installing)}])}
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [item pkgs]
           (rum/with-key
-            (plugin-item-card item (and installing (= (:id installing) (:id item))))
+            (let [pid (keyword (:id item))]
+              (plugin-item-card
+                item (and installing (= (keyword (:id installing)) pid))
+                (contains? installed-plugins pid)
+                (get stats pid)))
             (:id item)))]])))
 
 (rum/defcs installed-plugins
@@ -220,7 +235,7 @@
 
      [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
       (for [[_ item] installed-plugins]
-        (rum/with-key (plugin-item-card item false) (:id item)))]]))
+        (rum/with-key (plugin-item-card item false true nil) (:id item)))]]))
 
 (defn open-select-theme!
   []

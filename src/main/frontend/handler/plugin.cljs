@@ -50,6 +50,18 @@
                     reject)))
     (p/resolved nil)))
 
+(defn load-marketplace-stats
+  [refresh?]
+  (if (or refresh? (nil? (:plugin/marketplace-stats @state/state)))
+    (p/create
+      (fn [resolve reject]
+        (util/fetch stats-url
+                    (fn [res]
+                      (state/set-state! :plugin/marketplace-stats res)
+                      (resolve nil))
+                    reject)))
+    (p/resolved nil)))
+
 (defn installed?
   [id]
   (and (contains? (:plugin/installed-plugins @state/state) (keyword id))
@@ -74,13 +86,16 @@
                          (case (keyword status)
 
                            :completed
-                           (do                              ;; TODO register plugin
+                           (let [{:keys [id dst name]} payload]
+                             (js/LSPluginCore.register (bean/->js {:key id :url dst}))
                              (notifications/show!
-                               (str "Installed Plugin:" payload) :success))
+                               (str "Installed Plugin: " name) :success))
 
                            :error
-                           (notifications/show!
-                             "Install Error:" :error)
+                           (do
+                             (notifications/show!
+                               (str "[Install Error] " payload) :error)
+                             (js/console.error payload))
 
                            :dunno))
 
@@ -256,11 +271,16 @@
                 (.on "unregistered" (fn [pid]
                                       (let [pid (keyword pid)]
                                         ;; plugins
-                                        (swap! state/state md/dissoc-in [:plugin/installed-plugins (keyword pid)])
+                                        (swap! state/state md/dissoc-in [:plugin/installed-plugins pid])
                                         ;; commands
                                         (unregister-plugin-slash-command pid)
                                         (unregister-plugin-simple-command pid)
-                                        (unregister-plugin-ui-items pid))))
+                                        (unregister-plugin-ui-items pid)
+                                        )))
+
+                (.on "unlink-plugin" (fn [pid]
+                                       (let [pid (keyword pid)]
+                                         (ipc/ipc "uninstallMarketPlugin" (name pid)))))
 
                 (.on "disabled" (fn [pid]
                                   (unregister-plugin-slash-command pid)
