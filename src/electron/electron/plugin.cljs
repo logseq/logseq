@@ -70,8 +70,6 @@
             ;; sync extract
             zip-extracted-path (string/replace frm-zip ".zip" "")
 
-            _ (js/console.log "ZIP->" frm-zip "===>" zip-extracted-path)
-
             _ (extract-zip frm-zip (bean/->js
                                      {:dir zip-extracted-path}))
 
