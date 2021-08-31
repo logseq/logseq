@@ -117,7 +117,7 @@
   (let [body (:block/body block)
         logbook (get-logbook body)]
     (if logbook
-      (let [clocks (last logbook)
+      (let [clocks (map string/trim (last logbook))
             logbook (->> (concat [":LOGBOOK:"] clocks [":END:"])
                          (remove string/blank?)
                          (string/join "\n"))

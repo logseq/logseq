@@ -515,3 +515,12 @@ span.cloze-revealed {
 .page-property-key {
   color: var(--ls-secondary-text-color);
 }
+
+.block-parents a {
+  color: var(--ls-primary-text-color);
+  opacity: 0.8;
+}
+
+.block-parents a:hover {
+  opacity: 1;
+}
