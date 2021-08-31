@@ -48,6 +48,9 @@
   []
   (let [open? (state/sub :ui/command-palette-open?)]
     (if open?
-      (state/set-modal! #(command-palette {:commands (cp/get-commands)}) false false)
+      (state/set-modal!
+       #(command-palette {:commands (cp/get-commands)})
+       {:fullscreen? false
+        :close-btn?  false})
       (state/close-modal!))
     nil))
