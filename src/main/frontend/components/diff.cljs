@@ -171,7 +171,7 @@
               (fn [{:keys [repo-url path ref content]}]
                 (p/let [content (encrypt/decrypt content)]
                   (swap! state/state
-                        assoc-in [:github/contents repo-url remote-latest-commit path] content)))
+                         assoc-in [:github/contents repo-url remote-latest-commit path] content)))
               (fn [response]
                 (when (= (gobj/get response "status") 401)
                   (notification/show!
@@ -180,8 +180,8 @@
                      "Please make sure that you've installed the logseq app for the repo %s on GitHub. "
                      repo)
                     (ui/button
-                     "Install Logseq on GitHub"
-                     :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]
+                      "Install Logseq on GitHub"
+                      :href (str "https://github.com/apps/" config/github-app-name "/installations/new"))]
                    :error
                    false))))))))
      state)
@@ -220,88 +220,79 @@
          (if pushing?
            [:span (ui/loading "Pushing")]
            (ui/button "Commit and push"
-                      :on-click
-                      (fn []
-                        (let [commit-message (if (string/blank? @commit-message)
-                                               "Merge"
-                                               @commit-message)]
-                          (reset! *pushing? true)
-                          (git-handler/commit-and-force-push! commit-message *pushing?)))))]]
+             :on-click
+             (fn []
+               (let [commit-message (if (string/blank? @commit-message)
+                                      "Merge"
+                                      @commit-message)]
+                 (reset! *pushing? true)
+                 (git-handler/commit-and-force-push! commit-message *pushing?)))))]]
 
        :else
        [:div "No diffs"])]))
 
+(defonce disk-value (atom nil))
+(defonce db-value (atom nil))
 (rum/defcs local-file < rum/reactive
-  [state repo path disk-content local-content]
-  (let [content disk-content
-        edit? (util/react *edit?)]
-    [:div.cp__diff-file
-     [:div.cp__diff-file-header
-      [:span.cp__diff-file-header-content {:style {:word-break "break-word"}}
-       path]]
-     (when (not= content local-content)
-       (let [local-content (or local-content "")
-             content (or content "")
-             diff (medley/indexed (diff/diff local-content content))
-             diff? (some (fn [[_idx {:keys [added removed]}]]
-                           (or added removed))
-                         diff)
-             diff-cp [:div.overflow-y-scroll
-                      [:div {:style {:max-height "65vh"}}
-                       (diff-cp diff)]]]
-         [:div.pre-line-white-space.p-2.overflow-y-hidden
-          (if edit?
-            [:div.grid.grid-cols-2.gap-1
-             diff-cp
-             (ui/textarea
-              {:default-value local-content
-               :auto-focus true
-               :style {:border "1px solid"}
-               :on-change (fn [e]
-                            (reset! *edit-content (util/evalue e)))})]
-            diff-cp)
+  {:will-unmount (fn [state]
+                   (reset! disk-value nil)
+                   (reset! db-value nil)
+                   state)}
+  [state repo path disk-content db-content]
+  (when (nil? disk-value)
+    (reset! disk-value disk-content)
+    (reset! db-value db-content))
+  [:div.cp__diff-file {:style {:width 980}}
+   [:div.cp__diff-file-header
+    [:span.cp__diff-file-header-content.pl-1.font-medium {:style {:word-break "break-word"}}
+     (str "File " path " has been modified on the disk.")]]
+   [:div.p-4
+    (when (not= disk-content db-content)
+      (ui/foldable
+       [:span.text-sm.font-medium.ml-1 "Check diff"]
+       (fn []
+         (let [local-content (or db-content "")
+               content (or disk-content "")
+               diff (medley/indexed (diff/diff local-content content))
+               diff? (some (fn [[_idx {:keys [added removed]}]]
+                             (or added removed))
+                           diff)]
+           (when diff?
+             [:div.overflow-y-scroll.flex.flex-col
+              [:div {:style {:max-height "65vh"}}
+               (diff-cp diff)]])))
+       {:default-collapsed? true
+        :title-trigger? true}))
 
-          (cond
-            edit?
-            [:div.mt-2
-             (ui/button "Save"
-               :on-click
-               (fn []
-                 (reset! *edit? false)
-                 (let [new-content @*edit-content]
-                   (file/alter-file repo path new-content
-                                    {:re-render-root? true
-                                     :skip-compare? true})
-                   (state/close-modal!))))]
+    [:hr]
 
-            diff?
-            [:div.mt-2
-             (ui/button "Use latest changes from the disk"
-               :on-click
-               (fn []
-                 (file/alter-file repo path content
-                                  {:re-render-root? true
-                                   :skip-compare? true})
-                 (state/close-modal!))
-               :background "green")
+    [:div.flex.flex-row.mt-4
+     [:div.flex-1
+      [:div.mb-2 "On disk:"]
+      [:textarea.overflow-auto
+       {:value (rum/react disk-value)
+        :on-change (fn [e] (reset! disk-value (util/evalue e)))
+        :style {:min-height "50vh"}}
+       disk-content]
+      (ui/button "Select this"
+        :on-click
+        (fn []
+          (file/alter-file repo path @disk-value
+                           {:re-render-root? true
+                            :skip-compare? true})
+          (state/close-modal!)))]
 
-             [:span.pl-2.pr-2 "or"]
-
-             (ui/button "Keep local changes in Logseq"
-               :on-click
-               (fn []
-                 (file/alter-file repo path local-content
-                                  {:re-render-root? true
-                                   :skip-compare? true})
-                 (state/close-modal!))
-               :background "pink")
-
-             [:span.pl-2.pr-2 "or"]
-
-             (ui/button "Edit"
-               :on-click
-               (fn []
-                 (reset! *edit? true)))]
-
-            :else
-            nil)]))]))
+     [:div.ml-4.flex-1
+      [:div.mb-2 "In Logseq:"]
+      [:textarea.overflow-auto
+       {:value (rum/react db-value)
+        :on-change (fn [e] (reset! db-value (util/evalue e)))
+        :style {:min-height "50vh"}}
+       db-content]
+      (ui/button "Select this"
+        :on-click
+        (fn []
+          (file/alter-file repo path @db-value
+                           {:re-render-root? true
+                            :skip-compare? true})
+          (state/close-modal!)))]]]])
