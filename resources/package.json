@@ -30,7 +30,6 @@
     "semver": "^7.3.5",
     "update-electron-app": "^2.0.1",
     "simple-git": "2.44.0",
-    "adm-zip": "0.5.5",
     "extract-zip": "2.0.1"
   },
   "devDependencies": {
