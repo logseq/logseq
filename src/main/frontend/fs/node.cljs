@@ -47,18 +47,25 @@
             (error-handler error)
             (log/error :write-file-failed error))))
 
-    (p/let [disk-content (-> (protocol/read-file this dir path nil)
-                             (p/catch (fn [error] nil)))
+    (p/let [disk-content (when (not= stat :not-found)
+                           (-> (protocol/read-file this dir path nil)
+                               (p/catch (fn [error]
+                                          (js/console.error error)
+                                          nil))))
             disk-content (or disk-content "")
             ext (string/lower-case (util/get-file-ext path))
             file-page (db/get-file-page-id path)
             page-empty? (and file-page (db/page-empty? repo file-page))
             db-content (or (db/get-file repo path) "")
-            contents-matched? (contents-matched? disk-content db-content)]
+            contents-matched? (contents-matched? disk-content db-content)
+            pending-writes (state/get-write-chan-length)]
       (cond
         (and
+         (not= stat :not-found)         ; file on the disk was deleted
          (not contents-matched?)
-         (not (contains? #{"excalidraw" "edn"} ext)))
+         (not (contains? #{"excalidraw" "edn"} ext))
+         (not (string/includes? path "/.recycle/"))
+         (zero? pending-writes))
         (state/pub-event! [:file/not-matched-from-disk path disk-content content])
 
         :else
@@ -100,7 +107,7 @@
     (let [path (concat-path dir path)]
       (p/let [stat (p/catch
                        (protocol/stat this dir path)
-                       (fn [_e] nil))
+                       (fn [_e] :not-found))
               sub-dir (first (util/get-dir-and-basename path))
               _ (protocol/mkdir-recur! this sub-dir)]
         (write-file-impl! this repo dir path content opts stat))))

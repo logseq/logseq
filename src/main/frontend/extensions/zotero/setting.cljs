@@ -10,7 +10,7 @@
    :include-attachments?                    true
    :attachments-block-text                  "[[Attachments]]"
    :include-notes?                          true
-   :overwirte-mode?                         false
+   :overwrite-mode?                         false
    :notes-block-text                        "[[Notes]]"
    :zotero-data-directory                   ""
    :zotero-linked-attachment-base-directory ""

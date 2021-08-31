@@ -171,10 +171,10 @@
      "Overwrite existing item page?"]
     [:div
      [:div.rounded-md.sm:max-w-xs
-      (ui/toggle (setting/setting :overwirte-mode?)
-                 (fn [] (setting/set-setting! :overwirte-mode? (not (setting/setting :overwirte-mode?))))
+      (ui/toggle (setting/setting :overwrite-mode?)
+                 (fn [] (setting/set-setting! :overwrite-mode? (not (setting/setting :overwrite-mode?))))
                  true)]]]
-   (when (setting/setting :overwirte-mode?)
+   (when (setting/setting :overwrite-mode?)
      (ui/admonition
       :warning
       [:p.text-red-500

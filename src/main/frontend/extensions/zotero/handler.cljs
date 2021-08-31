@@ -74,7 +74,7 @@
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
 
        (if (page-handler/page-exists? (str/lower-case page-name))
-         (if (setting/setting :overwirte-mode?)
+         (if (setting/setting :overwrite-mode?)
            (page-handler/delete!
             page-name
             (fn [] (create-page page-name properties)))
