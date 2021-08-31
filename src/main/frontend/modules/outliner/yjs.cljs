@@ -5,6 +5,7 @@
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
+            [frontend.handler.editor :as editor]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.db.model :as db-model]))
@@ -78,9 +79,8 @@
   (let [content-map (contentmap)
         new-content (.get content-map uuid)
         block (db-model/query-block-by-uuid uuid)
-        updated-block (update block :block/content (fn [_] new-content))]
+        updated-block (editor/wrap-parse-block (update block :block/content (fn [_] new-content)))]
     (outliner-core/save-node (outliner-core/Block updated-block))))
-
 
 (defn- get-item-left&parent [item id]
   (let [item-content id
@@ -175,15 +175,7 @@
   )
 
 
-(defn init-page-doc [page-name]
+(defn start-sync-page [page-name]
   (let [page-blocks (db/get-page-blocks page-name)]
     (page-blocks->doc page-blocks page-name)
     (observe-page-struct page-name doc-local)))
-
-(defn page-doc->nodes [doc]
-
-  )
-
-(defn save-node [node]
-
-  )
