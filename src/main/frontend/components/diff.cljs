@@ -239,7 +239,7 @@
                    (reset! db-value nil)
                    state)}
   [state repo path disk-content db-content]
-  (when (nil? disk-value)
+  (when (nil? @disk-value)
     (reset! disk-value disk-content)
     (reset! db-value db-content))
   [:div.cp__diff-file {:style {:width 980}}
@@ -271,28 +271,33 @@
       [:div.mb-2 "On disk:"]
       [:textarea.overflow-auto
        {:value (rum/react disk-value)
-        :on-change (fn [e] (reset! disk-value (util/evalue e)))
+        :on-change (fn [e]
+                     (reset! disk-value (util/evalue e)))
         :style {:min-height "50vh"}}
        disk-content]
       (ui/button "Select this"
         :on-click
         (fn []
-          (file/alter-file repo path @disk-value
-                           {:re-render-root? true
-                            :skip-compare? true})
+          (when-let [value @disk-value]
+            (file/alter-file repo path @disk-value
+                            {:re-render-root? true
+                             :skip-compare? true}))
           (state/close-modal!)))]
 
      [:div.ml-4.flex-1
       [:div.mb-2 "In Logseq:"]
       [:textarea.overflow-auto
        {:value (rum/react db-value)
-        :on-change (fn [e] (reset! db-value (util/evalue e)))
+        :on-change (fn [e]
+                     (prn "new-value: " (util/evalue e))
+                     (reset! db-value (util/evalue e)))
         :style {:min-height "50vh"}}
        db-content]
       (ui/button "Select this"
         :on-click
         (fn []
-          (file/alter-file repo path @db-value
-                           {:re-render-root? true
-                            :skip-compare? true})
+          (when-let [value @db-value]
+            (file/alter-file repo path value
+                            {:re-render-root? true
+                             :skip-compare? true}))
           (state/close-modal!)))]]]])
