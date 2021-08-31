@@ -46,7 +46,9 @@
             [frontend.text :as text]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.clock :as clock]
             [frontend.util.property :as property]
+            [frontend.util.drawer :as drawer]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -250,12 +252,17 @@
      (if (and (config/local-asset? href)
               (config/local-db? (state/get-current-repo)))
        (asset-link config title href label metadata full_text)
-       (let [href (cond
+       (let [protocol (and (= "Complex" (first url))
+                           (:protocol (second url)))
+             href (cond
                     (util/starts-with? href "http")
                     href
 
                     config/publishing?
                     (subs href 1)
+
+                    (= protocol "data")
+                    href
 
                     :else
                     (get-file-absolute-path config href))]
@@ -1707,8 +1714,9 @@
         (editor-handler/unhighlight-blocks!)
         (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
               f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
-                       content (property/remove-built-in-properties (:block/format block)
-                                                                    content)]
+                       content (-> (property/remove-built-in-properties (:block/format block)
+                                                                        content)
+                                   (drawer/remove-logbook))]
                    ;; save current editing block
                    (let [{:keys [value] :as state} (editor-handler/get-state)]
                      (editor-handler/save-block! state value))
@@ -1840,32 +1848,27 @@
 
         (when (and (= (:block/marker block) "DONE")
                    (state/enable-timetracking?))
-          (let [start-time (or
-                            (get properties :now)
-                            (get properties :doing)
-                            (get properties :in-progress)
-                            (get properties :later)
-                            (get properties :todo))
-                finish-time (get properties :done)]
-            (when (and start-time finish-time (> finish-time start-time))
-              [:div.text-sm.time-spent.ml-1 {:title (str (date/int->local-time start-time) " ~ " (date/int->local-time finish-time))
-                                             :style {:padding-top 3}}
+          (let [summary (clock/clock-summary body true)]
+            (when (and summary
+                       (not= summary "0m")
+                       (not (string/blank? summary)))
+              [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
                [:a.opacity-30.hover:opacity-100
-                (utils/timeConversion (- finish-time start-time))]])))
+                summary]])))
 
         (let [block-refs-count (count (:block/_refs (db/entity (:db/id block))))]
           (when (and block-refs-count (> block-refs-count 0))
-           [:div
-            [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
-             {:title "Open block references"
-              :style {:margin-top -1}
-              :on-click (fn []
-                          (state/sidebar-add-block!
-                           (state/get-current-repo)
-                           (:db/id block)
-                           :block-ref
-                           {:block block}))}
-             block-refs-count]]))]])))
+            [:div
+             [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+              {:title "Open block references"
+               :style {:margin-top -1}
+               :on-click (fn []
+                           (state/sidebar-add-block!
+                            (state/get-current-repo)
+                            (:db/id block)
+                            :block-ref
+                            {:block block}))}
+              block-refs-count]]))]])))
 
 (defn non-dragging?
   [e]
@@ -2390,7 +2393,7 @@
 
               :else
               [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])]
-           collapsed?))]))))
+           {:default-collapsed? collapsed?}))]))))
 
 (defn admonition
   [config type options result]
@@ -2462,7 +2465,8 @@
                  [:div (apply str lines)
                   [:div.opacity-50.font-medium {:style {:width 95}}
                    ":END:"]]
-                 true)]]]
+                 {:default-collapsed? true
+                  :title-trigger? true})]]]
 
              ["Properties" m]
              [:div.properties
@@ -2745,7 +2749,8 @@
                       (block-parents config (state/get-current-repo) (:block/uuid block)
                                      (:block/format block)
                                      false)])
-                   (blocks-container blocks (assoc config :breadcrumb-show? false))])))])))]
+                   (blocks-container blocks (assoc config :breadcrumb-show? false))]))
+              {})])))]
 
      (and (:group-by-page? config)
             (vector? (first blocks)))
@@ -2761,7 +2766,8 @@
               [:div
                (page-cp config page)
                (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-              (blocks-container blocks config))])))]
+              (blocks-container blocks config)
+              {})])))]
 
      :else
      (blocks-container blocks config))])

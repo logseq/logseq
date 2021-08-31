@@ -72,6 +72,7 @@
       :ui/file-component nil
       :ui/custom-query-components {}
       :ui/show-recent? false
+      :ui/command-palette-open? false
       :ui/developer-mode? (or (= (storage/get "developer-mode") "true")
                               false)
       ;; remember scroll positions of visited paths
@@ -157,6 +158,9 @@
       :copy/export-block-text-remove-options (or (storage/get :copy/export-block-text-remove-options)
                                                  #{})
       :date-picker/date nil
+
+      ;; command palette
+      :command-palette/commands []
 
       :view/components {}})))
 
@@ -1057,16 +1061,19 @@
   [value]
   (set-state! :indexeddb/support? value))
 
+(defn modal-opened?
+  []
+  (:modal/show? @state))
+
 (defn set-modal!
   ([modal-panel-content]
-   (set-modal! modal-panel-content false))
-  ([modal-panel-content fullscreen?]
-   ;; Temporal fix: to avoid deleting selected blocks (backspace in input/textarea)
-   (clear-selection!)
+   (set-modal! modal-panel-content false true))
+  ([modal-panel-content fullscreen? close-btn?]
    (swap! state assoc
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content
-          :modal/fullscreen? fullscreen?)))
+          :modal/fullscreen? fullscreen?
+          :modal/close-btn? close-btn?)))
 
 (defn close-modal!
   []

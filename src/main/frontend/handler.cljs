@@ -14,6 +14,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.command-palette :as command-palette]
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
@@ -173,7 +174,8 @@
 (defn- register-components-fns!
   []
   (state/set-page-blocks-cp! page/page-blocks-cp)
-  (state/set-editor-cp! editor/box))
+  (state/set-editor-cp! editor/box)
+  (command-palette/register-global-shortcut-commands))
 
 (defn start!
   [render]

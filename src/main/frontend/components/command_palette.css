@@ -1,0 +1,31 @@
+.cp__command-palette {
+  &-main {
+    margin: -1rem;
+
+    width: 80vw;
+
+    @screen sm {
+      width: 760px;
+    }
+
+    .menu-link {
+      background-color: transparent;
+      transition: none;
+      border: none;
+    }
+
+    .chosen {
+      background-color: var(--ls-quaternary-background-color);
+    }
+  }
+
+  &-input {
+    padding: 16px;
+    font-size: 20px;
+    outline: none;
+    margin-bottom: 5px;
+  }
+
+  &-results {
+  }
+}

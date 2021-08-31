@@ -82,11 +82,12 @@
 
     overflow: hidden;
     background: var(--ls-secondary-background-color);
+    max-width: 96vw;
 
     .panel-content {
       overflow-y: auto;
+      max-width: 1024px;
       max-height: 85vh;
-      max-width: 96vw;
       padding: 2rem;
     }
   }
@@ -112,9 +113,14 @@
 }
 
 @media (min-width: 1024px) {
+    .panel-content {
+        min-width: 740px;
+    }
+
     .panel-content .ls-card {
-        min-width: 32rem;
-        min-height: 24rem;
+        width: 740px;
+        min-height: 60vh;
+        max-height: 740px;
     }
 }
 
@@ -128,7 +134,7 @@
   }
 
   &:hover {
-  	opacity: 0.8;
+        opacity: 0.8;
   }
 
   &.is-link {

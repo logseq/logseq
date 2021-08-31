@@ -70,7 +70,7 @@
     (let [repo-cur (state/get-current-repo)
           repo-dir (config/get-repo-dir repo-cur)
           data (pr-str {:highlights highlights})]
-      (fs/write-file! repo-cur repo-dir hls-file data {:skip-mtime? true}))))
+      (fs/write-file! repo-cur repo-dir hls-file data {:skip-compare? true}))))
 
 (defn resolve-hls-data-by-key$
   [target-key]
@@ -115,7 +115,7 @@
                                    new-fpath (str fdir "/" fname "_" fstamp ".png")
                                    old-fpath (and old-fstamp (str fdir "/" fname "_" old-fstamp ".png"))
                                    _ (and old-fpath (apply fs/rename! repo-cur (map #(util/node-path.join repo-dir %) [old-fpath new-fpath])))
-                                   _ (fs/write-file! repo-cur repo-dir new-fpath png {:skip-mtime? true})]
+                                   _ (fs/write-file! repo-cur repo-dir new-fpath png {:skip-compare? true})]
 
                              (js/console.timeEnd :write-area-image))
 

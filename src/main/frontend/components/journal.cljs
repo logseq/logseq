@@ -74,7 +74,9 @@
        [:h1.title
         (util/capitalize-all title)]]
 
-      (blocks-cp repo page format))
+      (blocks-cp repo page format)
+
+      {})
 
      (when intro? (widgets/add-graph))
 

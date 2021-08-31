@@ -22,7 +22,8 @@
                               (and src
                                    (not (or (util/starts-with? src "http://")
                                             (util/starts-with? src "https://")
-                                            (util/starts-with? src "blob:"))))))
+                                            (util/starts-with? src "blob:")
+                                            (util/starts-with? src "data:"))))))
                           images)]
         (doseq [img local-images]
           (gobj/set img

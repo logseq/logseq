@@ -9,7 +9,9 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [frontend.config :as config]
-            [frontend.handler.notification :as notification]))
+            [frontend.encrypt :as encrypt]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]))
 
 (defn concat-path
   [dir path]
@@ -25,9 +27,17 @@
          (when path
            (str "/" (string/replace path #"^/" ""))))))
 
+(defn- contents-matched?
+  [disk-content db-content]
+  (when (and (string? disk-content) (string? db-content))
+    (if (encrypt/encrypted-db? (state/get-current-repo))
+      (p/let [decrypted-content (encrypt/decrypt disk-content)]
+        (= (string/trim decrypted-content) (string/trim db-content)))
+      (p/resolved (= (string/trim disk-content) (string/trim db-content))))))
+
 (defn- write-file-impl!
-  [this repo dir path content {:keys [ok-handler error-handler skip-mtime?] :as opts} stat]
-  (if skip-mtime?
+  [this repo dir path content {:keys [ok-handler error-handler skip-compare?] :as opts} stat]
+  (if skip-compare?
     (p/catch
         (p/let [result (ipc/ipc "writeFile" path content)]
           (when ok-handler
@@ -43,32 +53,23 @@
             ext (string/lower-case (util/get-file-ext path))
             file-page (db/get-file-page-id path)
             page-empty? (and file-page (db/page-empty? repo file-page))
-            db-content (or (db/get-file repo path) "")]
+            db-content (or (db/get-file repo path) "")
+            contents-matched? (contents-matched? disk-content db-content)]
       (cond
-        ;; (and (not page-empty?) (nil? disk-content) )
-        ;; (notification/show!
-        ;;  (str "The file has been renamed or deleted on your local disk! File path: " path
-        ;;       ", please save your changes and click the refresh button to reload it.")
-        ;;  :error
-        ;;  false)
-
         (and
-         (not= (string/trim disk-content)
-               (string/trim db-content))
-         ;; FIXME:
+         (not contents-matched?)
          (not (contains? #{"excalidraw" "edn"} ext)))
-        (notification/show!
-         (str "The file has been modified on your local disk! File path: " path
-              ", please save your changes and click the refresh button to reload it.")
-         :warning
-         false)
+        (state/pub-event! [:file/not-matched-from-disk path disk-content content])
 
         :else
         (->
          (p/let [result (ipc/ipc "writeFile" path content)
                  mtime (gobj/get result "mtime")]
            (db/set-file-last-modified-at! repo path mtime)
-           (db/set-file-content! repo path content)
+           (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
+                             (encrypt/decrypt content)
+                             content)]
+             (db/set-file-content! repo path content))
            (when ok-handler
              (ok-handler repo path result))
            result)

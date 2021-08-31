@@ -8,6 +8,7 @@
             [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.command-palette :as command-palette]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
@@ -295,8 +296,9 @@
      (mixins/listen state js/window "keydown"
                     (fn [e]
                       (when (= 27 (.-keyCode e))
-                        (hide-context-menu-and-clear-selection)
-                        (state/close-modal!))))))
+                        (if (state/modal-opened?)
+                          (state/close-modal!)
+                          (hide-context-menu-and-clear-selection)))))))
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
@@ -367,6 +369,7 @@
                          (ui/notification)
                          (ui/modal)
                          (settings-modal)
+                         (command-palette/command-palette-modal)
                          (custom-context-menu)
                          [:a#download.hidden]
                          (when

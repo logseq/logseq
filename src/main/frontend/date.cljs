@@ -90,6 +90,11 @@
 (defn get-date-time-string-2 []
   (tf/unparse custom-formatter-2 (tl/local-now)))
 
+(def custom-formatter-3 (tf/formatter "yyyy-MM-dd E HH:mm"))
+
+(defn get-date-time-string-3 []
+  (tf/unparse custom-formatter-3 (tl/local-now)))
+
 (defn get-weekday
   [date]
   (.toLocaleString date "en-us" (clj->js {:weekday "long"})))

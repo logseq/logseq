@@ -114,7 +114,7 @@
   (rum/local false ::show?)
   [state page-name]
   (let [show? (::show? state)]
-    [:div.ls-block.flex-1.flex-col.rounded-sm.add-button
+    [:div.flex-1.flex-col.rounded-sm.add-button
      [:div.flex.flex-row
       [:div.block {:style {:height      24
                            :width       24
@@ -230,7 +230,7 @@
   [state title page-name close-fn]
   (let [input (get state ::input)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.w-full.sm:max-w-lg.sm:w-96
+      [:div
        [:div.sm:flex.sm:items-start
         [:div.mt-3.text-center.sm:mt-0.sm:text-left
          [:h3#modal-headline.text-lg.leading-6.font-medium
@@ -276,7 +276,8 @@
           (for [[original-name name] pages]
             [:li {:key (str "tagged-page-" name)}
              [:a {:href (rfe/href :page {:name name})}
-              original-name]])] false)]])))
+              original-name]])]
+         {:default-collapsed? false})]])))
 
 (defn page-menu
   [repo t page page-name page-original-name title journal? public? developer-mode?]
@@ -504,7 +505,7 @@
 (defonce *focus-nodes (atom []))
 (defonce *graph-reset? (atom false))
 (defonce *journal? (atom nil))
-(defonce *orphan-pages? (atom nil))
+(defonce *orphan-pages? (atom true))
 (defonce *builtin-pages? (atom nil))
 
 (rum/defc graph-filters < rum/reactive

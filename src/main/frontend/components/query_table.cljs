@@ -9,7 +9,9 @@
             [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.editor :as editor-handler]))
+            [frontend.handler.editor :as editor-handler]
+            [frontend.util.clock :as clock]
+            [medley.core :as medley]))
 
 ;; TODO: extract to table utils
 (defn- sort-result-by
@@ -42,6 +44,16 @@
         keys (if page? (concat keys [:created-at :updated-at]) keys)]
     keys))
 
+(defn attach-clock-property
+  [result]
+  (let [ks [:block/properties :clock-time]
+        result (map (fn [b]
+                      (assoc-in b ks (or (clock/clock-summary (:block/body b) false) 0)))
+                 result)]
+    (if (every? #(zero? (get-in % ks)) result)
+      (map #(medley/dissoc-in % ks) result)
+      result)))
+
 (rum/defcs result-table < rum/reactive
   (rum/local nil ::sort-by-item)
   (rum/local nil ::desc?)
@@ -64,15 +76,20 @@
           editor-box (get config :editor-box)
           ;; remove templates
           result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)
+          result (if page? result (attach-clock-property result))
+          clock-time-total (when-not page?
+                             (->> (map #(get-in % [:block/properties :clock-time] 0) result)
+                                  (apply +)))
           query-properties (some-> (get-in current-block [:block/properties :query-properties] "")
                                    (common-handler/safe-read-string "Parsing query properties failed"))
           keys (if (seq query-properties)
                  query-properties
                  (get-keys result page?))
-          keys (if (some #{:created-at :updated-at} keys)
-                 (concat
-                  (remove #{:created-at :updated-at} keys)
-                  (filter #{:created-at :updated-at} keys))
+          included-keys #{:created-at :updated-at}
+          keys (if (some included-keys keys)
+                 (concat included-keys
+                         (remove included-keys keys)
+                         (filter included-keys keys))
                  keys)
           sort-by-fn (fn [item]
                        (let [key sort-by-item]
@@ -91,7 +108,11 @@
                              :style {:width "100%"}}
        [:table.table-auto
         (for [key keys]
-          (sortable-title (name key) key *sort-by-item *desc? (:block/uuid current-block)))
+          (let [key-name (if (and (= key :clock-time) (integer? clock-time-total))
+                           (util/format "clock-time(total: %s)" (clock/minutes->days:hours:minutes
+                                                                  clock-time-total))
+                           (name key))]
+            (sortable-title key-name key *sort-by-item *desc? (:block/uuid current-block))))
         (for [item result]
           (let [format (:block/format item)
                 edit-input-id (str "edit-block-" (:id config) "-" (:block/uuid item))

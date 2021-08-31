@@ -38,22 +38,22 @@
   [state close-fn]
   (let [electron? (util/electron?)]
     (when-let [repo (state/sub :git/current-repo)]
-      [:div.w-full.sm:max-w-lg.sm:w-96
-      [:div.sm:flex.sm:items-start
-       [:div.mt-3.text-center.sm:mt-0.sm:text-left.mb-2
-        [:h3#modal-headline.text-lg.leading-6.font-medium
-         "Your commit message:"]]]
+      [:div.w-full.mx-auto.sm:max-w-lg.sm:w-96 {:style {:padding "48px 0"}}
+       [:div.sm:flex.sm:items-start
+        [:div.mt-3.text-center.sm:mt-0.sm:text-left.mb-2
+         [:h3#modal-headline.text-lg.leading-6.font-medium
+          "Your commit message:"]]]
 
-      [:input#commit-message.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-       {:auto-focus true
-        :default-value ""}]
+       [:input#commit-message.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+        {:auto-focus true
+         :default-value ""}]
 
-      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-        [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-         {:type "button"
-          :on-click commit-and-push!}
-         (if electron? "Commit" "Commit and push!")]]]])))
+       [:div.mt-5.sm:mt-4.flex
+        [:span.flex.w-full.rounded-md.shadow-sm
+         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+          {:type "button"
+           :on-click commit-and-push!}
+          (if electron? "Commit" "Commit and push!")]]]])))
 
 (defn show-commit-modal! [e]
   (when (and

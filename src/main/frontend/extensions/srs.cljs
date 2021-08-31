@@ -4,6 +4,7 @@
             [frontend.db.query-react :as react]
             [frontend.util :as util]
             [frontend.util.property :as property]
+            [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
             [frontend.db :as db]
             [frontend.state :as state]
@@ -635,7 +636,8 @@
   [block-id]
   (when-let [block (db/entity [:block/uuid block-id])]
     (when-let [content (:block/content block)]
-      (let [content (property/remove-built-in-properties (:block/format block) content)]
+      (let [content (-> (property/remove-built-in-properties (:block/format block) content)
+                        (drawer/remove-logbook))]
         (editor-handler/save-block!
          (state/get-current-repo)
          block-id

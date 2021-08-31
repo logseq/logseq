@@ -99,8 +99,9 @@
                 state)}
   [repo]
   (when repo
-    (let [nfs-repo? (config/local-db? repo)]
-      (when-not (= repo config/local-repo)
+    (when-not (or (util/electron?)
+                  (= repo config/local-repo))
+      (let [nfs-repo? (config/local-db? repo)]
         (if (and nfs-repo? (nfs-handler/supported?))
           (let [syncing? (state/sub :graph/syncing?)]
             [:div.opacity-60.refresh.hover:opacity-100

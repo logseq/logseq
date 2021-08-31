@@ -94,7 +94,7 @@
   (fn [path ^js data]
     (let [repo ""
           path (util/node-path.join path "package.json")]
-      (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-mtime? true}))))
+      (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
 (defn ^:private write_dotdir_file
   [file content sub-root]
@@ -109,7 +109,7 @@
           user-path-root (util/node-path.dirname user-path)
           exist? (fs/file-exists? user-path-root "")
           _ (when-not exist? (fs/mkdir-recur! user-path-root))
-          _ (fs/write-file! repo "" user-path content {:skip-mtime? true})]
+          _ (fs/write-file! repo "" user-path content {:skip-compare? true})]
     user-path))
 
 (defn ^:private read_dotdir_file
@@ -191,7 +191,7 @@
       (p/let [repo ""
               path (plugin-handler/get-ls-dotdir-root)
               path (util/node-path.join path "preferences.json")]
-        (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-mtime? true})))))
+        (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true})))))
 
 (def ^:export load_plugin_user_settings
   (fn [key]
@@ -209,7 +209,7 @@
     (p/let [repo ""
             path (plugin-handler/get-ls-dotdir-root)
             path (util/node-path.join path "settings" (str key ".json"))]
-      (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-mtime? true}))))
+      (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
 
 (def ^:export register_plugin_slash_command
   (fn [pid ^js cmd-actions]

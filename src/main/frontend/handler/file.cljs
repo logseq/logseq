@@ -158,17 +158,20 @@
 
 ;; TODO: Remove this function in favor of `alter-files`
 (defn alter-file
-  [repo path content {:keys [reset? re-render-root? add-history? update-status? from-disk?]
+  [repo path content {:keys [reset? re-render-root? add-history? update-status? from-disk? skip-compare?]
                       :or {reset? true
                            re-render-root? false
                            add-history? true
                            update-status? false
-                           from-disk? false}}]
+                           from-disk? false
+                           skip-compare? false}}]
   (let [edit-block (state/get-edit-block)
         original-content (db/get-file-no-sub repo path)
         write-file! (if from-disk?
                       #(p/resolved nil)
-                      #(fs/write-file! repo (config/get-repo-dir repo) path content (when original-content {:old-content original-content})))]
+                      #(fs/write-file! repo (config/get-repo-dir repo) path content
+                                       (assoc (when original-content {:old-content original-content})
+                                              :skip-compare? skip-compare?)))]
     (p/let [_ (if reset?
                 (do
                   (when-let [page-id (db/get-file-page-id path)]
