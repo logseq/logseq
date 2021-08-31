@@ -312,8 +312,9 @@
        (when-let [page (get-page-reference form)]
          (swap! refs conj page))
        (when-let [tag (get-tag form)]
-         (when (util/tag-valid? tag)
-           (swap! refs conj tag)))
+         (let [tag (text/page-ref-un-brackets! tag)]
+           (when (util/tag-valid? tag)
+            (swap! refs conj tag))))
        form)
      (concat title body))
     (let [refs (remove string/blank? @refs)
@@ -413,7 +414,8 @@
   [{:keys [tags] :as block}]
   (if (seq tags)
     (assoc block :tags (map (fn [tag]
-                              [:block/name (string/lower-case tag)]) tags))
+                              (let [tag (text/page-ref-un-brackets! tag)]
+                                [:block/name (string/lower-case tag)])) tags))
     block))
 
 (defn src-block?
