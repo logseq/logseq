@@ -132,21 +132,24 @@
 (defn- observe-struct-fn [events]
   (mapv (fn [event]
           (let [added-items (into [] (.-added (.-changes event)))
-                deleted-items (into [] (.-deleted (.-changes event)))]
+                ;; deleted-items (into [] (.-deleted (.-changes event)))
+                ]
             (mapv (fn [item]
                     (mapv (fn [id]
                             (let [[left-content parent-content] (get-item-left&parent item id)]
                               (insert-node left-content parent-content id (contentmap))))
                           (.-arr (.-content item)))) added-items)
-            (mapv (fn [item]
-                    (mapv #(delete-node %) (.-arr (.-content item)))) deleted-items)))
+            ;; (mapv (fn [item]
+            ;;         (mapv #(delete-node %) (.-arr (.-content item)))) deleted-items)
+            ))
         events))
 
 (defn- observe-content-fn [event]
   (let [keys (js->clj (into [] (.-keys event)))]
     (mapv (fn [[k v]]
-            (when (= "update" (get "action" v))
-              (update-block-content k))) keys)))
+            (case (get "action" v)
+              "update" (update-block-content k)
+              "delete" (delete-node k))) keys)))
 
 (defn observe-page-struct [page-name doc]
   (let [struct (.getArray doc (str page-name "-struct"))
