@@ -14,6 +14,7 @@
             [frontend.components.shell :as shell]
             [frontend.components.git :as git-component]
             [frontend.components.diff :as diff]
+            [frontend.components.plugins :as plugin]
             [frontend.fs.nfs :as nfs]
             [frontend.db.conn :as conn]
             [frontend.extensions.srs :as srs]
@@ -136,6 +137,9 @@
 
 (defmethod handle :modal/show-cards [_]
   (state/set-modal! srs/global-cards))
+
+(defmethod handle :modal/show-themes-modal [_]
+  (plugin/open-select-theme!))
 
 (rum/defc modal-output
   [content]

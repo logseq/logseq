@@ -22,9 +22,10 @@
   [{:keys [repo theme]}]
   (p/catch
     (p/let [api #(str "https://api.github.com/repos/" repo "/" %)
-            endpoint (api "/releases/latest")
+            endpoint (api "releases/latest")
             ^js res (fetch endpoint)
             res (.json res)
+            _   (js/console.debug "[Release Latest]" endpoint ": " res)
             res (bean/->clj res)
             asset (first (filter #(= "application/zip" (:content_type %)) (:assets res)))]
       (if (and (nil? asset) theme)

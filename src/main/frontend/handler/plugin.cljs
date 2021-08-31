@@ -10,6 +10,7 @@
             [frontend.state :as state]
             [medley.core :as md]
             [electron.ipc :as ipc]
+            [reitit.frontend.easy :as rfe]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
@@ -221,6 +222,14 @@
 (defn get-ls-dotdir-root
   []
   (ipc/ipc "getLogseqDotDirRoot"))
+
+(defn show-themes-modal!
+  []
+  (state/pub-event! [:modal/show-themes-modal]))
+
+(defn goto-plugins-dashboard!
+  []
+  (rfe/push-state :plugins))
 
 (defn- get-user-default-plugins
   []

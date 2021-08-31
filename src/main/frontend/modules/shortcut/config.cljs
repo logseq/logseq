@@ -9,6 +9,7 @@
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.extensions.srs.handler :as srs]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -367,6 +368,14 @@
     {:desc    "Toggle wide mode"
      :binding "t w"
      :fn      ui-handler/toggle-wide-mode!}
+    :ui/select-theme-color
+    {:desc    "Select available theme colors"
+     :binding    "t i"
+     :fn      plugin-handler/show-themes-modal!}
+    :ui/goto-plugins
+    {:desc    "Go to plugins dashboard"
+     :binding    "t p"
+     :fn      plugin-handler/goto-plugins-dashboard!}
     :editor/toggle-open-blocks
     {:desc    "Toggle open blocks (collapse or expand all blocks)"
      :binding "t o"
