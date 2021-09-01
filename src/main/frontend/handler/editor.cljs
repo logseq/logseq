@@ -912,9 +912,13 @@
   (if (<= (count blocks) 1)
     blocks
     (let [[f s & others] blocks]
-      (if (= (or (:block/left s)
-                 (:block/parent s))
-             {:db/id (:db/id f)})
+      (if (or
+           (= (:block/left s) {:db/id (:db/id f)})
+           (let [parents (db/get-block-parents (state/get-current-repo)
+                                               (:block/uuid f)
+                                               100)]
+             (some #(= (:block/left s) {:db/id (:db/id %)})
+                   parents)))
         blocks
         (reverse blocks)))))
 
