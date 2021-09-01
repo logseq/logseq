@@ -14,6 +14,7 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
+            [frontend.components.svg :as svg]
             [frontend.format :as format]))
 
 (defonce lsp-enabled?
@@ -244,19 +245,11 @@
 (rum/defc lsp-indicator < rum/reactive
   []
   (let [text (state/sub :plugin/indicator-text)]
-    (if (= text "END")
-      [:span]
-      [:div
-       {:style
-        {:width           "100%"
-         :height          "100vh"
-         :display         "flex"
-         :align-items     "center"
-         :justify-content "center"}}
-       [:span
-        {:style
-         {:color     "#aaa"
-          :font-size "38px"}} (or text "Loading ...")]])))
+    (if-not (= text "END")
+      [:div.flex.align-items.justify-center.h-screen.w-full
+       [:span.flex.items-center.justify-center.w-60.flex-col
+        [[:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo false)]
+         [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px"}} text]]]])))
 
 (defn init-plugins!
   [callback]
@@ -266,7 +259,7 @@
     (rum/mount
       (lsp-indicator) el))
 
-  (state/set-state! :plugin/indicator-text "Loading...")
+  (state/set-state! :plugin/indicator-text "LOADING")
 
   (p/then
     (p/let [root (get-ls-dotdir-root)
