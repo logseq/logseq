@@ -47,7 +47,6 @@
                     :autoHideMenuBar      (not mac?)
                     :webPreferences
                                           {:plugins                 true ; pdf
-                                           :webSecurity             false
                                            :nodeIntegration         false
                                            :nodeIntegrationInWorker false
                                            :contextIsolation        true
