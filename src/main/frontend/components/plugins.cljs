@@ -4,7 +4,6 @@
             [cljs-bean.core :as bean]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
             [frontend.handler.notification :as notification]

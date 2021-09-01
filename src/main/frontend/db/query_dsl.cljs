@@ -1,7 +1,6 @@
 (ns frontend.db.query-dsl
   (:require [cljs.reader :as reader]
             [frontend.db.utils :as db-utils]
-            [datascript.core :as d]
             [lambdaisland.glogi :as log]
             [clojure.string :as string]
             [frontend.text :as text]
@@ -11,7 +10,6 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.util :as util]
-            [medley.core :as medley]
             [clojure.walk :as walk]
             [clojure.core]
             [clojure.set :as set]

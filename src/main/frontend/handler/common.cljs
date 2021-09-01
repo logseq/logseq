@@ -7,7 +7,6 @@
             [frontend.util.property :as property]
             [frontend.git :as git]
             [frontend.db :as db]
-            [frontend.encrypt :as e]
             [lambdaisland.glogi :as log]
             [cljs.reader :as reader]
             [frontend.spec :as spec]
@@ -15,7 +14,6 @@
             [cljs-time.format :as tf]
             [frontend.config :as config]
             ["ignore" :as Ignore]
-            ["/frontend/utils" :as utils]
             [frontend.date :as date]
             [clojure.string :as string]
             [dommy.core :as d]))

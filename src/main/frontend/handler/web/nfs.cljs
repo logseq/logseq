@@ -2,7 +2,6 @@
   "The File System Access API, https://web.dev/file-system-access/."
   (:require [cljs-bean.core :as bean]
             [promesa.core :as p]
-            [medley.core :as medley]
             [goog.object :as gobj]
             [frontend.util :as util]
             [frontend.handler.common :as common-handler]
@@ -16,7 +15,6 @@
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]
             [frontend.config :as config]
             [lambdaisland.glogi :as log]
             [frontend.encrypt :as encrypt]

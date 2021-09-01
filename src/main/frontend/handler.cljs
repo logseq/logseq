@@ -23,11 +23,9 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
-            [frontend.version :as version]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.ui :as ui]
             [frontend.error :as error]
             [frontend.util.pool :as pool]))
 

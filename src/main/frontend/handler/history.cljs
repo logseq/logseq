@@ -3,13 +3,8 @@
             [frontend.db :as db]
             [frontend.handler.editor :as editor]
             [frontend.handler.ui :as ui-handler]
-            [promesa.core :as p]
-            [clojure.core.async :as async]
             [goog.dom :as gdom]
-            [goog.object :as gobj]
-            [dommy.core :as d]
             [frontend.util :as util]
-            [medley.core :as medley]
             [frontend.modules.editor.undo-redo :as undo-redo]))
 
 (defn- default-undo

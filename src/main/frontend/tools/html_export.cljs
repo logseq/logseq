@@ -3,7 +3,6 @@
   (:require [frontend.db :as db]
             [frontend.components.block :as block]
             [frontend.extensions.slide :as slide]
-            [hiccups.runtime :as hiccupsrt]
             [clojure.walk :as walk]
             [clojure.set :as set]
             [medley.core :as medley]))

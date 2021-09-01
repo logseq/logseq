@@ -1,14 +1,11 @@
 (ns frontend.ui.date-picker
   (:require
    [rum.core :as rum]
-   [cljs-time.core       :refer [now today minus plus months days weeks year month day day-of-week first-day-of-the-month before? after?]]
-   [cljs-time.predicates :refer [sunday?]]
+   [cljs-time.core       :refer [minus plus months days weeks year month day day-of-week first-day-of-the-month before? after?]]
    [cljs-time.format     :refer [parse unparse formatters formatter]]
-   [frontend.util          :refer [deref-or-value now->utc]]
+   [frontend.util :as util  :refer [deref-or-value now->utc]]
    [frontend.modules.shortcut.core :as shortcut]
-   [frontend.util :as util]
-   [frontend.state :as state]
-   [goog.object :as gobj]))
+   [frontend.state :as state]))
 
 ;; Adapted from re-com date-picker
 

@@ -1,6 +1,5 @@
 (ns frontend.components.query-table
-  (:require [frontend.ui :as ui]
-            [frontend.util :as util]
+  (:require [frontend.util :as util]
             [rum.core :as rum]
             [frontend.util.property :as property]
             [frontend.db :as db]

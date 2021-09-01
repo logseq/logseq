@@ -1,10 +1,8 @@
 (ns frontend.idb
-  (:require [cljs-bean.core :as bean]
-            [goog.object :as gobj]
+  (:require [goog.object :as gobj]
             [promesa.core :as p]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.util :as util]
             [frontend.storage :as storage]
             ["/frontend/idbkv" :as idb-keyval :refer [Store]]))
 

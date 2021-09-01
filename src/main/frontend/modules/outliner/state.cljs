@@ -2,8 +2,7 @@
   (:require [frontend.modules.outliner.utils :as u-outliner]
             [frontend.db.react :as react]
             [frontend.db.outliner :as db-outliner]
-            [frontend.util :as util]
-            [frontend.modules.outliner.tree :as tree]))
+            [frontend.util :as util]))
 
 (defn get-by-parent-id
   [repo id]

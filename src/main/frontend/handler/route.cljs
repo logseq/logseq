@@ -1,7 +1,6 @@
 (ns frontend.handler.route
   (:require [frontend.util :as util]
             [reitit.frontend.easy :as rfe]
-            [reitit.frontend.history :as rfh]
             [frontend.state :as state]
             [frontend.handler.plugin :as plugin-handler]
             [goog.dom :as gdom]

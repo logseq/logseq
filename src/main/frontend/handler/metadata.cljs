@@ -8,8 +8,6 @@
             [datascript.db :as ddb]
             [clojure.string :as string]
             [promesa.core :as p]
-            [frontend.util :as util]
-            [frontend.date :as date]
             [frontend.handler.common :as common-handler]))
 
 (def default-metadata-str "{}")

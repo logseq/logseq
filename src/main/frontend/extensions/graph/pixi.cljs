@@ -1,21 +1,7 @@
 (ns frontend.extensions.graph.pixi
-  (:require [rum.core :as rum]
-            [frontend.rum :as r]
-            [frontend.ui :as ui]
-            [shadow.lazy :as lazy]
-            [frontend.handler.route :as route-handler]
-            [frontend.util :as util
-             :refer            [profile]]
-            [clojure.string :as string]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [goog.object :as gobj]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [promesa.core :as p]
-            [clojure.set :as set]
-            [cljs-bean.core :as bean]
             ["pixi-graph-fork" :as Pixi-Graph]
-            ["@pixi/utils" :as pixi-utils]
             ["graphology" :as graphology]
             ["d3-force"
              :refer [forceSimulation

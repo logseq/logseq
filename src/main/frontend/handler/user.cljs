@@ -1,12 +1,10 @@
 (ns frontend.handler.user
-  (:require [frontend.util :as util :refer [profile]]
+  (:require [frontend.util :as util]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.idb :as idb]
             [frontend.config :as config]
-            [frontend.storage :as storage]
             [promesa.core :as p]
-            [goog.object :as gobj]
             [frontend.handler.notification :as notification]
             [frontend.handler.config :as config-handler]
             [lambdaisland.glogi :as log])

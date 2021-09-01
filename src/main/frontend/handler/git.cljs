@@ -1,5 +1,5 @@
 (ns frontend.handler.git
-  (:require [frontend.util :as util :refer [profile]]
+  (:require [frontend.util :as util]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [frontend.state :as state]

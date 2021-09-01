@@ -1,20 +1,10 @@
 (ns frontend.extensions.graph
   (:require [rum.core :as rum]
-            [frontend.rum :as r]
-            [frontend.ui :as ui]
-            [shadow.lazy :as lazy]
             [frontend.handler.route :as route-handler]
             [clojure.string :as string]
             [cljs-bean.core :as bean]
             [goog.object :as gobj]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [promesa.core :as p]
-            [clojure.set :as set]
-            [cljs-bean.core :as bean]
-            [frontend.extensions.graph.pixi :as pixi]
-            [frontend.util :as util :refer [profile]]
-            [cljs-bean.core :as bean]))
+            [frontend.extensions.graph.pixi :as pixi]))
 
 (defn- highlight-node!
   [^js graph node]

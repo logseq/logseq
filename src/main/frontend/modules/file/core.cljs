@@ -1,19 +1,12 @@
 (ns frontend.modules.file.core
-  (:require [frontend.debug :as debug]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.state :as state]
             [cljs.core.async :as async]
-            [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
-            [frontend.db.model :as model]
             [frontend.db :as db]
             [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.fs :as fs]
-            [frontend.handler.notification :as notification]
-            [frontend.util :as util]
-            [frontend.modules.outliner.tree :as tree]
-            [promesa.core :as p]))
+            [frontend.util :as util]))
 
 (defn- indented-block-content
   [content spaces-tabs]

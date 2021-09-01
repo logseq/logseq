@@ -8,7 +8,6 @@
             [frontend.handler.common :as common-handler]
             [frontend.state :as state]
             [clojure.string :as string]
-            [frontend.db :as db]
             [frontend.components.svg :as svg]
             [frontend.ui :as ui]
             [frontend.git :as git]

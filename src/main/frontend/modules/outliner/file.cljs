@@ -5,7 +5,7 @@
             [frontend.modules.file.core :as file]
             [lambdaisland.glogi :as log]
             [clojure.core.async :as async]
-            [frontend.util :as util :refer [profile]]
+            [frontend.util :as util]
             [frontend.handler.notification :as notification]
             [goog.object :as gobj]
             [frontend.state :as state]

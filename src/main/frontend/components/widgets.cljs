@@ -10,7 +10,6 @@
             [clojure.string :as string]
             [frontend.ui :as ui]
             [frontend.context.i18n :as i18n]
-            [frontend.handler.web.nfs :as nfs]
             [frontend.modules.shortcut.core :as shortcut]))
 
 (rum/defc choose-preferred-format

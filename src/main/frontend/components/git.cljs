@@ -1,6 +1,5 @@
 (ns frontend.components.git
   (:require [rum.core :as rum]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [clojure.string :as string]
             [frontend.handler.shell :as shell]))

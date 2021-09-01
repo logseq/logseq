@@ -1,7 +1,6 @@
 (ns frontend.image
   (:require [goog.object :as gobj]
             ["/frontend/exif" :as exif]
-            [frontend.util :as util]
             [frontend.date :as date]
             [clojure.string :as string]))
 

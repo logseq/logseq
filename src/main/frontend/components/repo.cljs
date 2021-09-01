@@ -11,7 +11,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
             [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.handler.page :as page-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.util :as util]
             [frontend.config :as config]
@@ -21,14 +20,12 @@
             [frontend.components.svg :as svg]
             [frontend.components.encryption :as encryption]
             [frontend.context.i18n :as i18n]
-            [clojure.string :as string]
-            [clojure.string :as str]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [clojure.string :as string]))
 
 (rum/defc add-repo
   [args]
   (if-let [graph-types (get-in args [:query-params :graph-types])]
-    (let [graph-types-s (->> (str/split graph-types #",")
+    (let [graph-types-s (->> (string/split graph-types #",")
                              (mapv keyword))]
       (when (seq graph-types-s)
         (widgets/add-graph :graph-types graph-types-s)))

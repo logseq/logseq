@@ -1,6 +1,5 @@
 (ns frontend.components.hierarchy
-  (:require [frontend.search :as search]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.components.block :as block]
             [rum.core :as rum]
             [frontend.ui :as ui]

@@ -4,11 +4,7 @@
             [frontend.components.svg :as svg]
             [frontend.components.page :as page]
             [frontend.components.block :as block]
-            [frontend.extensions.graph :as graph]
             [frontend.components.onboarding :as onboarding]
-            [frontend.handler.route :as route-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.graph :as graph-handler]
             [frontend.state :as state]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -21,8 +17,7 @@
             [goog.object :as gobj]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
-            [frontend.db-mixins :as db-mixins]
-            [frontend.config :as config]))
+            [frontend.db-mixins :as db-mixins]))
 
 (rum/defc toggle
   []

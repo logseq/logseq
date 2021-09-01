@@ -1,6 +1,5 @@
 (ns frontend.handler.export
-  (:require [cljs-bean.core :as bean]
-            [cljs.pprint :as pprint]
+  (:require [cljs.pprint :as pprint]
             [clojure.set :as s]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -11,7 +10,6 @@
             [frontend.external.roam-export :as roam-export]
             [frontend.format :as f]
             [frontend.format.protocol :as fp]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.file :as file-handler]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]

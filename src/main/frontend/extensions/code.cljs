@@ -11,7 +11,6 @@
             [frontend.handler.file :as file-handler]
             [clojure.string :as string]
             [dommy.core :as dom]
-            [frontend.utf8 :as utf8]
             ["codemirror" :as cm]
             ["codemirror/addon/edit/matchbrackets"]
             ["codemirror/addon/edit/closebrackets"]

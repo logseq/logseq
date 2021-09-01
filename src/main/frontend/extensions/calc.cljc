@@ -5,7 +5,6 @@
             #?(:cljs [rum.core :as rum])
             [clojure.string :as str]
             [clojure.edn :as edn]
-            [clojure.test :as test :refer [deftest testing is are]]
             [frontend.util :as util]
             #?(:clj [instaparse.core :as insta]
                :cljs [instaparse.core :as insta :refer-macros [defparser]])))

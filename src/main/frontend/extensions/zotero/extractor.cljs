@@ -1,12 +1,10 @@
 (ns frontend.extensions.zotero.extractor
   (:require [clojure.set :refer [rename-keys]]
-            [clojure.string :as str]
             [clojure.string :as string]
             [frontend.date :as date]
             [frontend.extensions.html-parser :as html-parser]
             [frontend.extensions.zotero.schema :as schema]
             [frontend.extensions.zotero.setting :as setting]
-            [frontend.handler.notification :as notification]
             [frontend.util :as util]))
 
 (defn item-type [item] (-> item :data :item-type))
@@ -16,11 +14,11 @@
 (defn citation-key [item]
   (let [extra (-> item :data :extra)
         citation (->> extra
-                      (str/split-lines)
-                      (filterv (fn [s] (str/includes? s "Citation Key: ")))
+                      (string/split-lines)
+                      (filterv (fn [s] (string/includes? s "Citation Key: ")))
                       first)]
     (when citation
-      (str/trim (str/replace citation "Citation Key: " "")))))
+      (string/trim (string/replace citation "Citation Key: " "")))))
 
 (defn title [item] (-> item :data :title))
 
@@ -39,7 +37,7 @@
           (title item))
         citekey (citation-key item)]
     (if (and (setting/setting :prefer-citekey?)
-             (not (str/blank? citekey)))
+             (not (string/blank? citekey)))
       (str (setting/setting :page-insert-prefix) citekey)
       (str (setting/setting :page-insert-prefix) page-title))))
 
@@ -59,9 +57,9 @@
         (->> (-> item :data :tags)
              (mapv (fn [{:keys [tag]}] (string/trim tag)))
              (mapcat #(string/split % #",\s?")))
-        extra-tags (->> (str/split (setting/setting :extra-tags) #",")
-                        (map str/trim)
-                        (remove str/blank?))]
+        extra-tags (->> (string/split (setting/setting :extra-tags) #",")
+                        (map string/trim)
+                        (remove string/blank?))]
     (distinct (concat tags extra-tags))))
 
 (defn date->journal [item]
@@ -73,14 +71,14 @@
 (defn wrap-in-doublequotes [m]
   (->> m
        (map (fn [[k v]]
-              (if (str/includes? (str v) ",")
+              (if (string/includes? (str v) ",")
                 [k (pr-str v)]
                 [k v])))
        (into (array-map))))
 
 (defn skip-newline-properties [m]
   (->> m
-       (remove (fn [[_ v]] (str/includes? (str v) "\n")))
+       (remove (fn [[_ v]] (string/includes? (str v) "\n")))
        (into (array-map))))
 
 (defn markdown-link
@@ -136,7 +134,7 @@
                          (rename-keys {:title :original-title})
                          (assoc :title (page-name item)))]
     (->> data
-         (remove (comp (fn [v] (or (str/blank? v) (empty? v))) second))
+         (remove (comp (fn [v] (or (string/blank? v) (empty? v))) second))
          (into {}))))
 
 (defmethod extract "note"
@@ -160,12 +158,12 @@
        " "
        (zotero-imported-file-macro (item-key item) filename))
       "linked_file"
-      (if (str/starts-with? path "attachments:")
+      (if (string/starts-with? path "attachments:")
         (str
          (markdown-link title (local-link item))
          " "
          (zotero-linked-file-macro path))
-        (let [path (str/replace path " " "%20")]
+        (let [path (string/replace path " " "%20")]
           (if (= content-type "application/pdf")
             (markdown-link title (str "file://" path) true)
             (markdown-link title (str "file://" path)))))

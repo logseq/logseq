@@ -1,7 +1,6 @@
 (ns frontend.search.db
   (:refer-clojure :exclude [empty?])
   (:require [frontend.text :as text]
-            [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
             [frontend.db :as db]
             [frontend.state :as state]

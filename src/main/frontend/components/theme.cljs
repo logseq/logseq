@@ -5,8 +5,7 @@
             [frontend.ui :as ui]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.components.svg :as svg]))
+            [frontend.handler.plugin :as plugin-handler]))
 
 (rum/defc container
   [{:keys [route theme on-click current-repo nfs-granted? db-restoring? sidebar-open? system-theme?] :as props} child]

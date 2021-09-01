@@ -1,7 +1,7 @@
 (ns frontend.handler.image
   (:require [goog.object :as gobj]
             [frontend.handler.notification :as notification]
-            [frontend.util :as util :refer [profile]]
+            [frontend.util :as util]
             [frontend.config :as config]
             [frontend.image :as image]
             [frontend.state :as state]

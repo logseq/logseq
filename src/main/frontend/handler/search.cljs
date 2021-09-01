@@ -4,7 +4,6 @@
             [frontend.db :as db]
             [goog.dom :as gdom]
             [frontend.search :as search]
-            [frontend.search.db :as search-db]
             [frontend.handler.notification :as notification-handler]
             [promesa.core :as p]
             [clojure.string :as string]))

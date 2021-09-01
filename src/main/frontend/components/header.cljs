@@ -1,15 +1,11 @@
 (ns frontend.components.header
   (:require [rum.core :as rum]
             [reitit.frontend.easy :as rfe]
-            [clojure.string :as string]
-            [frontend.db :as db]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.state :as state]
-            [frontend.storage :as storage]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
-            [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.components.svg :as svg]
@@ -20,10 +16,7 @@
             [frontend.components.right-sidebar :as sidebar]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.web.nfs :as nfs]
-            [frontend.mixins :as mixins]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [frontend.handler.web.nfs :as nfs]))
 
 (rum/defc logo < rum/reactive
   [{:keys [white? electron-mac?]}]

@@ -10,8 +10,6 @@
             [frontend.date :as date]
             [frontend.components.editor :as editor]
             [frontend.db-mixins :as db-mixins]
-            [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.components.svg :as svg]
             [frontend.handler.page :as page-handler]
             [frontend.handler.block :as block-handler]

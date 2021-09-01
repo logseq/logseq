@@ -8,13 +8,11 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.fs :as fs]
-            [frontend.components.svg :as svg]
             [reitit.frontend.easy :as rfe]
             [medley.core :as medley]
             [cljs.reader :as reader]
             [promesa.core :as p]
-            [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [clojure.string :as string]))
 
 (defonce *asset-uploading? (atom false))
 

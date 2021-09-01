@@ -13,8 +13,6 @@
             [frontend.storage :as storage]
             [frontend.components.svg :as svg]
             [frontend.rum :refer [use-atom]]
-            [medley.core :as medley]
-            [frontend.fs :as fs]
             [clojure.string :as string]
             [frontend.ui :as ui]))
 

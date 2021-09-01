@@ -1,13 +1,10 @@
 (ns frontend.handler.graph
   (:require [frontend.db :as db]
             [clojure.string :as string]
-            [frontend.util :as util :refer [profile]]
-            [frontend.date :as date]
+            [frontend.util :as util]
             [frontend.state :as state]
             [clojure.set :as set]
-            [medley.core :as medley]
-            [frontend.db.default :as default-db]
-            [frontend.text :as text]))
+            [frontend.db.default :as default-db]))
 
 (defn- build-links
   [links]

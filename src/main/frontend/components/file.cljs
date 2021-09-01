@@ -9,12 +9,10 @@
             [frontend.format :as format]
             [frontend.components.content :as content]
             [frontend.components.lazy-editor :as lazy-editor]
-            [frontend.config :as config]
             [goog.object :as gobj]
             [frontend.date :as date]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [frontend.ui :as ui]
             [frontend.context.i18n :as i18n]
             [reitit.frontend.easy :as rfe]
             [frontend.components.svg :as svg]))

@@ -3,7 +3,7 @@
             [frontend.db :as db]
             [datascript.core :as d]
             [frontend.state :as state]
-            [frontend.util :as util :refer [profile]]
+            [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.config :as config]
             [frontend.handler.common :as common-handler]
@@ -12,7 +12,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.web.nfs :as web-nfs]
             [frontend.handler.notification :as notification]
-            [frontend.handler.config :as config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.core :as outliner-core]
@@ -29,8 +28,7 @@
             [lambdaisland.glogi :as log]
             [frontend.format.block :as block]
             [cljs.reader :as reader]
-            [goog.object :as gobj]
-            [clojure.data :as data]))
+            [goog.object :as gobj]))
 
 (defn- get-directory
   [journal?]

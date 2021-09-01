@@ -9,7 +9,6 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.handler.notification :as notification-handler]
-            [frontend.handler.ui :as ui-handler]
             [frontend.state :as state]
             [frontend.components.svg :as svg]
             [clojure.string :as string]
@@ -19,8 +18,7 @@
             [frontend.ui.date-picker]
             [frontend.context.i18n :as i18n]
             [frontend.modules.shortcut.core :as shortcut]
-            [lambdaisland.glogi :as log]
-            [frontend.config :as config]))
+            [lambdaisland.glogi :as log]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))

@@ -1,6 +1,5 @@
 (ns frontend.util.thingatpt
   (:require [clojure.string :as string]
-            [frontend.util :as util]
             [frontend.state :as state]
             [goog.object :as gobj]
             [frontend.util.cursor :as cursor]

@@ -10,8 +10,7 @@
             [clojure.set :as set]
             [clojure.zip :as zip]
             [frontend.modules.outliner.datascript :as ds]
-            [frontend.util :as util]
-            [frontend.util.property :as property]))
+            [frontend.util :as util]))
 
 (defrecord Block [data])
 

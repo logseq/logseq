@@ -1,9 +1,7 @@
 (ns frontend.text
   (:require [frontend.config :as config]
             [frontend.util :as util]
-            [clojure.string :as string]
-            [clojure.set :as set]
-            [medley.core :as medley]))
+            [clojure.string :as string]))
 
 (defn page-ref?
   [s]

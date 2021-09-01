@@ -3,8 +3,6 @@
             [frontend.db :as db]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
-            [lambdaisland.glogi :as log]
-            [frontend.debug :as debug]
             [frontend.handler.editor :as editor-handler]
             [frontend.util :as util]))
 

@@ -1,14 +1,11 @@
 (ns frontend.db.query-react
   "Custom queries."
-  (:require [datascript.core :as d]
-            [frontend.db.utils :as db-utils :refer [date->int]]
+  (:require [frontend.db.utils :as db-utils :refer [date->int]]
             [frontend.db.model :as model]
             [frontend.debug :as debug]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
             [frontend.state :as state]
             [clojure.string :as string]
-            [cljs.reader :as reader]
             [frontend.extensions.sci :as sci]
             [lambdaisland.glogi :as log]
             [frontend.util :as util]

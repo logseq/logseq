@@ -12,8 +12,6 @@
             [clojure.string :as string]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [frontend.format :as format]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]

@@ -1,13 +1,9 @@
 (ns frontend.search.browser
   (:require [frontend.search.protocol :as protocol]
-            [frontend.util :as util]
             [cljs-bean.core :as bean]
             [frontend.search.db :as search-db :refer [indices]]
-            [clojure.string :as string]
             [promesa.core :as p]
-            [goog.object :as gobj]
-            [frontend.db :as db]
-            [medley.core :as medley]))
+            [goog.object :as gobj]))
 
 ;; fuse.js
 

@@ -5,12 +5,10 @@
             [clojure.string :as string]
             [promesa.core :as p]
             [electron.ipc :as ipc]
-            [cljs-bean.core :as bean]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [frontend.config :as config]
             [frontend.encrypt :as encrypt]
-            [frontend.handler.notification :as notification]
             [frontend.state :as state]))
 
 (defn concat-path
