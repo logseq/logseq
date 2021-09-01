@@ -9,7 +9,8 @@
             [electron.configs :as cfgs]
             [electron.utils :refer [*win fetch extract-zip] :as utils]))
 
-(def *installing (atom nil))
+;; update & install
+(def *installing-or-updating (atom nil))
 (def emit (fn [type payload]
             (.. ^js @*win -webContents
                 (send (name type) (bean/->js payload)))))
@@ -25,12 +26,17 @@
             endpoint (api "releases/latest")
             ^js res (fetch endpoint)
             res (.json res)
-            _   (js/console.debug "[Release Latest]" endpoint ": " res)
+            _ (js/console.debug "[Release Latest]" endpoint ": " res)
             res (bean/->clj res)
+            version (:tag_name res)
             asset (first (filter #(= "application/zip" (:content_type %)) (:assets res)))]
-      (if (and (nil? asset) theme)
-        (if-let [zipball (:zipball_url res)] zipball (api "zipball"))
-        asset))
+
+      [(if (and (nil? asset) theme)
+         (if-let [zipball (:zipball_url res)]
+           zipball
+           (api "zipball"))
+         asset)
+       version])
 
     (fn [^js e]
       (emit :lsp-installed {:status :error :payload e})
@@ -101,35 +107,53 @@
       (emit :lsp-installed {:status :error :payload e})
       (throw e))))
 
-(defn install!
-  [item]
-  (when-let [repo (and (not @*installing) (:repo item))]
-    (js/console.debug "Installing:" repo)
-    (-> (p/create
-          (fn [resolve reject]
-            (reset! *installing item)
-            ;; get releases
-            (-> (p/let [asset (fetch-latest-release-asset item)
-                        _ (js/console.debug "[Asset] " asset)
-                        dl-url (if-not (string? asset)
-                                 (:browser_download_url asset) asset)
-                        _ (when-not dl-url
-                            (throw (js/Error. :release-asset-not-found)))
-                        dest (.join path cfgs/dot-root "plugins" (:id item))
-                        _ (download-asset-zip item dl-url dest)]
+(defn install-or-update!
+  [{:keys [version repo] :as item}]
+  (when (and (not @*installing-or-updating) repo)
+    (let [updating? (and version (. semver valid version))]
 
-                  (emit :lsp-installed
-                        {:status  :completed
-                         :payload (assoc item :zip dl-url :dst dest)})
+      (js/console.debug (if updating? "Updating:" "Installing:") repo)
 
-                  (resolve))
-                (p/catch
-                  (fn [^js e]
+      (-> (p/create
+            (fn [resolve reject]
+              (reset! *installing-or-updating item)
+              ;; get releases
+              (-> (p/let [[asset latest-version] (fetch-latest-release-asset item)
+
+                          _ (js/console.debug "[Release Asset] #" latest-version "#" asset)
+
+                          ;; compare latest version
+                          _ (when (and updating? latest-version
+                                       (. semver valid latest-version))
+
+                              (js/console.debug "[Updating Latest?] " version " > " latest-version)
+
+                              (if (. semver lt version latest-version)
+                                (js/console.debug "[Updating Latest] " latest-version)
+                                (throw (js/Error. :no-new-version))))
+
+                          dl-url (if-not (string? asset)
+                                   (:browser_download_url asset) asset)
+
+                          _ (when-not dl-url
+                              (throw (js/Error. :release-asset-not-found)))
+
+                          dest (.join path cfgs/dot-root "plugins" (:id item))
+                          _ (download-asset-zip item dl-url dest)]
+
                     (emit :lsp-installed
-                          {:status  :error
-                           :payload (.toString e)}))
-                  (resolve nil)))))
-        (p/finally #(reset! *installing nil)))))
+                          {:status  :completed
+                           :payload (assoc item :zip dl-url :dst dest)})
+
+                    (resolve))
+                  (p/catch
+                    (fn [^js e]
+                      (emit :lsp-installed
+                            {:status  :error
+                             :payload (.-message e)}))
+                    (resolve nil)))))
+
+          (p/finally #(reset! *installing-or-updating nil))))))
 
 (defn uninstall!
   [id]

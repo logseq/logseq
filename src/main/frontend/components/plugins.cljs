@@ -21,14 +21,15 @@
     [:div.cp__themes-installed
      [:h2.mb-4.text-xl "Installed Themes"]
      (for [opt themes]
-       (let [current-selected (= selected (:url opt))]
+       (let [current-selected (= selected (:url opt))
+             plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
          [:div.it.flex.px-3.py-2.mb-2.rounded-sm.justify-between
           {:key      (:url opt)
            :class    [(if current-selected "is-selected")]
            :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
                           (state/set-modal! nil))}
           [:section
-           [:strong.block (:name opt)]
+           [:strong.block (when plg (str (:name plg) " / ")) (:name opt)]
            [:small.opacity-30 (:description opt)]]
           [:small.flex-shrink-0.flex.items-center.opacity-10
            (if current-selected "current")]]))]))
@@ -93,7 +94,7 @@
 
 (rum/defc plugin-item-card < rum/static
   [{:keys [id name settings version url description author icon usf iir repo] :as item}
-   installing? installed? stat]
+   installing-or-updating? installed? stat]
 
   (let [market? (and (not (nil? repo)) (nil? usf))
         disabled (:disabled settings)]
@@ -136,18 +137,19 @@
         [:div.ctl
          [:ul.l.flex.items-center
           (when-let [downloads (and stat (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))]
-            [(if (and downloads (> downloads 0)) [:li.flex.text-sm.items-center.pr-3 (svg/cloud-down 16) [:span.pl-1 downloads]])
-             [:li.flex.text-sm.items-center (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]])]
+            (if (and downloads (> downloads 0))
+              [:li.flex.text-sm.items-center.pr-3 (svg/cloud-down 16) [:span.pl-1 downloads]])
+            [:li.flex.text-sm.items-center (svg/star 16) [:span.pl-1 (:stargazers_count stat)]])]
 
          [:div.r.flex.items-center
 
           [:a.btn
-           {:class    (util/classnames [{:disabled   (or installed? installing?)
-                                         :installing installing?}])
+           {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
+                                         :installing installing-or-updating?}])
             :on-click #(plugin-handler/install-marketplace-plugin item)}
            (if installed?
              "installed"
-             (if installing? [:span.flex.items-center [:small svg/loading] "installing"] "install"))]]]
+             (if installing-or-updating? [:span.flex.items-center [:small svg/loading] "installing"] "install"))]]]
 
         ;; installed ctls
         [:div.ctl
@@ -168,10 +170,18 @@
              "Uninstall plugin"]]]]
 
          [:div.r.flex.items-center
-          (if-not disabled
-            [:a.btn.mr-2
+          (if (not disabled)
+            [:a.btn
              {:on-click #(js-invoke js/LSPluginCore "reload" id)}
              "reload"])
+
+          (if iir
+            [:a.btn
+             {:class    (util/classnames [{:disabled (or installing-or-updating?)
+                                           :updating installing-or-updating?}])
+              :on-click #(plugin-handler/update-marketplace-plugin item)}
+
+             (if installing-or-updating? "updating" "update")])
 
           (ui/toggle (not disabled)
                      (fn []
@@ -215,6 +225,7 @@
   < rum/static rum/reactive
   [state]
   (let [installed-plugins (state/sub :plugin/installed-plugins)
+        updating (state/sub :plugin/installing)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)]
     [:div.cp__plugins-installed
      [:div.mb-6.flex.items-center.justify-between
@@ -235,7 +246,11 @@
 
      [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
       (for [[_ item] installed-plugins]
-        (rum/with-key (plugin-item-card item false true nil) (:id item)))]]))
+        (rum/with-key
+          (let [pid (keyword (:id item))]
+            (plugin-item-card
+              item (and updating (= (keyword (:id updating)) pid))
+              true nil)) (:id item)))]]))
 
 (defn open-select-theme!
   []
@@ -289,7 +304,7 @@
 (rum/defc plugins-page
   []
 
-  (let [[active set-active!] (rum/use-state :marketplace)
+  (let [[active set-active!] (rum/use-state :installed)
         market? (= active :marketplace)]
 
     [:div.cp__plugins-page

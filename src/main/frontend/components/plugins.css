@@ -181,19 +181,16 @@
           margin-left: -80px;
         }
 
-        > .r {
-        }
-
         a.btn {
           display: inline-flex;
           align-items: center;
           line-height: 1;
-          padding: 4px 6px;
+          padding: 4px;
           font-size: 13px;
-          margin-left: 5px;
           border-radius: 2px;
           user-select: none;
           position: relative;
+          margin-left: 4px;
 
           svg {
             opacity: .3;
@@ -221,6 +218,10 @@
               margin-right: 2px;
             }
           }
+        }
+
+        .ui__toggle {
+          margin-left: 5px;
         }
       }
     }

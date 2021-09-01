@@ -47,6 +47,7 @@
                     :autoHideMenuBar      (not mac?)
                     :webPreferences
                                           {:plugins                 true ; pdf
+                                           :webSecurity             false
                                            :nodeIntegration         false
                                            :nodeIntegrationInWorker false
                                            :contextIsolation        true
@@ -206,7 +207,11 @@
                        (js/decodeURIComponent url) url)
                  url (if-not win32? (string/replace url "file://" "") url)]
              (.. logger (info "new-window" url))
-             (open url))
+             (if (string/includes?
+                   (.normalize path url)
+                   (.join path (. app getAppPath) "index.html"))
+               (.info logger "pass-window" url)
+               (open url)))
            (.preventDefault e)))
 
     (doto win

@@ -194,8 +194,11 @@
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
 
-(defmethod handle :installMarketPlugin [_ [_ item]]
-  (plugin/install! item))
+(defmethod handle :installMarketPlugin [_ [_ mft]]
+  (plugin/install-or-update! mft))
+
+(defmethod handle :updateMarketPlugin [_ [_ pkg]]
+  (plugin/install-or-update! pkg))
 
 (defmethod handle :uninstallMarketPlugin [_ [_ id]]
   (plugin/uninstall! id))

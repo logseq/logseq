@@ -618,6 +618,7 @@ class PluginLocal
 
     await this.unload()
     await this.load()
+    this._ctx.emit('reloaded', this)
   }
 
   /**
@@ -782,7 +783,7 @@ class PluginLocal
  */
 class LSPluginCore
   extends EventEmitter<'beforeenable' | 'enabled' | 'beforedisable' | 'disabled' | 'registered' | 'error' | 'unregistered' |
-    'theme-changed' | 'theme-selected' | 'settings-changed' | 'unlink-plugin'>
+    'theme-changed' | 'theme-selected' | 'settings-changed' | 'unlink-plugin' | 'reloaded'>
   implements ILSPluginThemeManager {
 
   private _isRegistering = false

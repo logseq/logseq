@@ -50,7 +50,7 @@
                         (state/set-state! :plugin/marketplace-pkgs pkgs)
                         (resolve pkgs)))
                     reject)))
-    (p/resolved nil)))
+    (p/resolved (:plugin/marketplace-pkgs @state/state))))
 
 (defn load-marketplace-stats
   [refresh?]
@@ -70,33 +70,78 @@
        (get-in @state/state [:plugin/installed-plugins (keyword id) :iir])))
 
 (defn install-marketplace-plugin
-  [{:keys [repo id] :as item}]
+  [{:keys [repo id] :as mft}]
   (when-not (and (:plugin/installing @state/state)
                  (installed? id))
     (p/create
       (fn [resolve]
-        (state/set-state! :plugin/installing item)
-        (ipc/ipc "installMarketPlugin" item)
+        (state/set-state! :plugin/installing mft)
+        (ipc/ipc "installMarketPlugin" mft)
         (resolve id)))))
+
+(defn update-marketplace-plugin
+  [{:keys [id] :as pkg}]
+  (when-not (and (:plugin/installing @state/state)
+                 (not (installed? id)))
+    (p/catch
+      (p/then
+        (do (state/set-state! :plugin/installing pkg)
+            (load-marketplace-plugins false))
+        (fn [mfts]
+          (if-let [mft (some #(if (= (:id %) id) %) mfts)]
+            (do
+              (ipc/ipc "updateMarketPlugin" (merge (dissoc pkg :logger) mft)))
+            (throw (js/Error. (str ":central-not-matched " id))))
+          true))
+
+      (fn [^js e]
+        (notifications/show! "Update Error: remote error" :error)
+        (state/set-state! :plugin/installing nil)
+        (js/console.error e)))))
+
+(defn get-plugin-inst
+  [id]
+  (try
+    (js/LSPluginCore.ensurePlugin id)
+    (catch js/Error e
+      nil)))
 
 (defn- init-install-listener!
   []
   (js/window.apis.on "lsp-installed"
                      (fn [^js e]
-                       (js/console.log e)
+                       (js/console.debug :lsp-installed e)
+
                        (when-let [{:keys [status payload]} (bean/->clj e)]
                          (case (keyword status)
 
                            :completed
-                           (let [{:keys [id dst name]} payload]
-                             (js/LSPluginCore.register (bean/->js {:key id :url dst}))
-                             (notifications/show!
-                               (str "Installed Plugin: " name) :success))
+                           (let [{:keys [id dst name version]} payload]
+                             (if (installed? id)
+                               (when-let [^js pl (get-plugin-inst id)] ;; update
+                                 (p/then
+                                   (.reload pl)
+                                   #(notifications/show!
+                                      (str "Updated Plugin: " name " [" (.-version (.-options pl)) "]") :success)))
+
+                               (do                          ;; register new
+                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                                 (notifications/show!
+                                   (str "Installed Plugin: " name) :success))))
 
                            :error
-                           (do
+                           (let [[msg type] (case (keyword (string/replace payload #"^[\s\:]+" ""))
+
+                                              :no-new-version
+                                              ["It's up to date :)" :success]
+
+                                              [payload :error])]
+
                              (notifications/show!
-                               (str "[Install Error] " payload) :error)
+                               (str
+                                 (if (= :error type) "[Install Error]" "")
+                                 msg) type)
+
                              (js/console.error payload))
 
                            :dunno))
@@ -104,7 +149,6 @@
                        ;; reset
                        (state/set-state! :plugin/installing nil)
                        true)))
-
 
 (defn register-plugin
   [pl]
@@ -248,8 +292,8 @@
     (if-not (= text "END")
       [:div.flex.align-items.justify-center.h-screen.w-full
        [:span.flex.items-center.justify-center.w-60.flex-col
-        [[:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo false)]
-         [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px"}} text]]]])))
+        [:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo false)]
+        [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px"}} text]]])))
 
 (defn init-plugins!
   [callback]
@@ -266,6 +310,11 @@
             _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
             _ (doto js/LSPluginCore
                 (.on "registered"
+                     (fn [^js pl]
+                       (register-plugin
+                         (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
+
+                (.on "reloaded"
                      (fn [^js pl]
                        (register-plugin
                          (bean/->clj (.parse js/JSON (.stringify js/JSON pl))))))
@@ -291,7 +340,7 @@
 
                 (.on "theme-changed" (fn [^js themes]
                                        (swap! state/state assoc :plugin/installed-themes
-                                              (vec (mapcat (fn [[_ vs]] (bean/->clj vs)) (bean/->clj themes))))))
+                                              (vec (mapcat (fn [[pid vs]] (mapv #(assoc % :pid pid) (bean/->clj vs))) (bean/->clj themes))))))
 
                 (.on "theme-selected" (fn [^js opts]
                                         (let [opts (bean/->clj opts)
