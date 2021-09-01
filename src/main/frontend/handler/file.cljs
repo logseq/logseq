@@ -110,11 +110,13 @@
                        (set))
         keep-block-ref-f (fn [refs]
                            (filter (fn [ref]
-                                     (when (and (vector? ref)
-                                              (= :block/uuid (first ref)))
+                                     (cond
+                                       (and (vector? ref) (= :block/uuid (first ref)))
                                        (let [id (second ref)]
                                          (or (contains? block-ids id)
-                                             (db/entity [:block/uuid id]))))) refs))]
+                                             (db/entity [:block/uuid id])))
+                                       (and (map? ref) (contains? ref :block/journal?))
+                                       (db/entity [:block/name (ref :block/name)]))) refs))]
     (map (fn [item]
            (update item :block/refs keep-block-ref-f))
       data)))
