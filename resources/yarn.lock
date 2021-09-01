@@ -315,6 +315,18 @@
     dir-compare "^2.4.0"
     fs-extra "^9.0.1"
 
+"@kwsites/file-exists@^1.1.1":
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/@kwsites/file-exists/-/file-exists-1.1.1.tgz#ad1efcac13e1987d8dbaf235ef3be5b0d96faa99"
+  integrity sha512-m9/5YGR18lIwxSFDwfE3oA7bWuq9kdau6ugN4H2rJeyhFQZcG9AgSHkQtSD15a8WvTgfz9aikZMrKPHvbpqFiw==
+  dependencies:
+    debug "^4.1.1"
+
+"@kwsites/promise-deferred@^1.1.1":
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/@kwsites/promise-deferred/-/promise-deferred-1.1.1.tgz#8ace5259254426ccef57f3175bc64ed7095ed919"
+  integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
+
 "@malept/cross-spawn-promise@^1.0.0", "@malept/cross-spawn-promise@^1.1.0", "@malept/cross-spawn-promise@^1.1.1":
   version "1.1.1"
   resolved "https://registry.yarnpkg.com/@malept/cross-spawn-promise/-/cross-spawn-promise-1.1.1.tgz#504af200af6b98e198bce768bc1730c6936ae01d"
@@ -1048,6 +1060,13 @@ chardet@^0.7.0:
   resolved "https://registry.yarnpkg.com/chardet/-/chardet-0.7.0.tgz#90094849f0937f2eedc2425d0d28a9e5f0cbad9e"
   integrity sha512-mT8iDcrh03qDGRRmoA2hmBJnxpllMR+0/0qlzjqZES6NdiWDcZkCNAk4rPFZ9Q85r27unkiNNg8ZOiwZXBHwcA==
 
+checksum@^0.1.1:
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/checksum/-/checksum-0.1.1.tgz#dc6527d4c90be8560dbd1ed4cecf3297d528e9e9"
+  integrity sha1-3GUn1MkL6FYNvR7Uzs8yl9Uo6ek=
+  dependencies:
+    optimist "~0.3.5"
+
 chokidar@^3.5.1:
   version "3.5.2"
   resolved "https://registry.yarnpkg.com/chokidar/-/chokidar-3.5.2.tgz#dba3976fcadb016f66fd365021d91600d01c1e75"
@@ -1512,6 +1531,18 @@ ds-store@^0.1.5:
     macos-alias "~0.2.5"
     tn1150 "^0.1.0"
 
+dugite@^1.103.0:
+  version "1.103.0"
+  resolved "https://registry.yarnpkg.com/dugite/-/dugite-1.103.0.tgz#2229c83790782116f96b87763d9ea1a0f2a55842"
+  integrity sha512-8rKO/jQX2HKfSd5wNG/l3HnUfQPKqyC3+D+3CR5Go4+BJOyCPScQwiAVW+eeKLqHFOvjq/w67+ymMyPGxUqhIA==
+  dependencies:
+    checksum "^0.1.1"
+    got "^9.6.0"
+    mkdirp "^0.5.1"
+    progress "^2.0.3"
+    rimraf "^2.5.4"
+    tar "^4.4.7"
+
 duplexer3@^0.1.4:
   version "0.1.4"
   resolved "https://registry.yarnpkg.com/duplexer3/-/duplexer3-0.1.4.tgz#ee01dd1cac0ed3cbc7fdbea37dc0a8f1ce002ce2"
@@ -1742,10 +1773,10 @@ electron-winstaller@^5.0.0:
     lodash.template "^4.2.2"
     temp "^0.9.0"
 
-electron@^13.1.9:
-  version "13.1.9"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-13.1.9.tgz#668e2632b81e9fa21edfd32876282d3e2ff7fd76"
-  integrity sha512-By4Zb72XNQLrPb70BXdIW3NtEHFwybP5DIQjohnCxOYONq5vojuHjNcTuWnBgMvwQ2qwykk6Tw5EwF2Pt0CWjA==
+electron@13.1.8:
+  version "13.1.8"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-13.1.8.tgz#a6def6eca7cafc7b068a8f71a069e521ba803182"
+  integrity sha512-ei2ZyyG81zUOlvm5Zxri668TdH5GNLY0wF+XrC2FRCqa8AABAPjJIWTRkhFEr/H6PDVPNZjMPvSs3XhHyVVk2g==
   dependencies:
     "@electron/get" "^1.0.1"
     "@types/node" "^14.6.2"
@@ -3396,6 +3427,13 @@ open@^8.1.0:
     is-docker "^2.1.1"
     is-wsl "^2.2.0"
 
+optimist@~0.3.5:
+  version "0.3.7"
+  resolved "https://registry.yarnpkg.com/optimist/-/optimist-0.3.7.tgz#c90941ad59e4273328923074d2cf2e7cbc6ec0d9"
+  integrity sha1-yQlBrVnkJzMokjB00s8ufLxuwNk=
+  dependencies:
+    wordwrap "~0.0.2"
+
 ora@^5.0.0, ora@^5.1.0, ora@^5.3.0:
   version "5.4.1"
   resolved "https://registry.yarnpkg.com/ora/-/ora-5.4.1.tgz#1b2678426af4ac4a509008e5e4ac9e9959db9e18"
@@ -4001,7 +4039,7 @@ reusify@^1.0.4:
   resolved "https://registry.yarnpkg.com/reusify/-/reusify-1.0.4.tgz#90da382b1e126efc02146e90845a88db12925d76"
   integrity sha512-U9nH88a3fc/ekCF1l0/UP1IosiuIjyTh7hBvXVMHYgVcfGvt897Xguj2UOLDeI5BG2m7/uwyaLVT6fbtCwTyzw==
 
-rimraf@^2.6.1, rimraf@^2.6.3, rimraf@^2.7.1:
+rimraf@^2.5.4, rimraf@^2.6.1, rimraf@^2.6.3, rimraf@^2.7.1:
   version "2.7.1"
   resolved "https://registry.yarnpkg.com/rimraf/-/rimraf-2.7.1.tgz#35797f13a7fdadc566142c29d4f07ccad483e3ec"
   integrity sha512-uWjbaKIK3T1OSVptzX7Nl6PvQ3qAGtKEtVRjRuazjfL3Bx5eI409VZSqgND+4UNnmzLVdPj9FqFJNPqBZFve4w==
@@ -4163,6 +4201,15 @@ simple-get@^3.0.3:
     decompress-response "^4.2.0"
     once "^1.3.1"
     simple-concat "^1.0.0"
+
+simple-git@2.44.0:
+  version "2.44.0"
+  resolved "https://registry.yarnpkg.com/simple-git/-/simple-git-2.44.0.tgz#94eca4162b7e21707b5a1a40b22e6f29b007d3a8"
+  integrity sha512-wIjcAmymhzgdaM0Y/a+XxmNGlivvHQTPZDYXVmyHMShVDwdeVqu3+OOyDbYu0DnfVzqLs2EOxRTgMNbC3YquwQ==
+  dependencies:
+    "@kwsites/file-exists" "^1.1.1"
+    "@kwsites/promise-deferred" "^1.1.1"
+    debug "^4.3.1"
 
 single-line-log@^1.1.2:
   version "1.1.2"
@@ -4432,10 +4479,10 @@ tar-stream@^2.1.4:
     inherits "^2.0.3"
     readable-stream "^3.1.1"
 
-tar@^4:
-  version "4.4.17"
-  resolved "https://registry.yarnpkg.com/tar/-/tar-4.4.17.tgz#44be5e3fa8353ee1d11db3b1401561223a5c3985"
-  integrity sha512-q7OwXq6NTdcYIa+k58nEMV3j1euhDhGCs/VRw9ymx/PbH0jtIM2+VTgDE/BW3rbLkrBUXs5fzEKgic5oUciu7g==
+tar@^4, tar@^4.4.7:
+  version "4.4.19"
+  resolved "https://registry.yarnpkg.com/tar/-/tar-4.4.19.tgz#2e4d7263df26f2b914dee10c825ab132123742f3"
+  integrity sha512-a20gEsvHnWe0ygBY8JbxoM4w3SJdhc7ZAuxkLqh+nvNQN2IOt0B5lLgM490X5Hl8FF0dl0tOf2ewFYAlIFgzVA==
   dependencies:
     chownr "^1.1.4"
     fs-minipass "^1.2.7"
@@ -4782,6 +4829,11 @@ word-wrap@^1.2.3:
   version "1.2.3"
   resolved "https://registry.yarnpkg.com/word-wrap/-/word-wrap-1.2.3.tgz#610636f6b1f703891bd34771ccb17fb93b47079c"
   integrity sha512-Hz/mrNwitNRh/HUAtM/VT/5VH+ygD6DV7mYKZAtHOrbs8U7lvPS6xf7EJKMF0uW1KJCl0H701g3ZGus+muE5vQ==
+
+wordwrap@~0.0.2:
+  version "0.0.3"
+  resolved "https://registry.yarnpkg.com/wordwrap/-/wordwrap-0.0.3.tgz#a3d5da6cd5c0bc0008d37234bbaf1bed63059107"
+  integrity sha1-o9XabNXAvAAI03I0u68b7WMFkQc=
 
 wrap-ansi@^6.2.0:
   version "6.2.0"
