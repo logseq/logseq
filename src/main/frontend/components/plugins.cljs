@@ -171,10 +171,13 @@
         ;; market ctls
         [:div.ctl
          [:ul.l.flex.items-center
+          ;; downloads
+          [:li.flex.text-sm.items-center.pr-3 (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
+
+          ;; stars
           (when-let [downloads (and stat (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))]
             (if (and downloads (> downloads 0))
-              [:li.flex.text-sm.items-center.pr-3 (svg/cloud-down 16) [:span.pl-1 downloads]])
-            [:li.flex.text-sm.items-center (svg/star 16) [:span.pl-1 (:stargazers_count stat)]])]
+              [:li.flex.text-sm.items-center.pr-3 (svg/cloud-down 16) [:span.pl-1 downloads]]))]
 
          [:div.r.flex.items-center
 
