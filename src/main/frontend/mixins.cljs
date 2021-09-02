@@ -104,9 +104,9 @@
 (defn on-key-down
   ([state keycode-map]
    (on-key-down state keycode-map {}))
-  ([state keycode-map {:keys [not-matched-handler all-handler]}]
+  ([state keycode-map {:keys [not-matched-handler all-handler target]}]
    (let [node (rum/dom-node state)]
-     (listen state js/window "keydown"
+     (listen state (or target js/window) "keydown"
              (fn [e]
                (let [key-code (.-keyCode e)]
                  (if-let [f (get keycode-map key-code)]

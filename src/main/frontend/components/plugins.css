@@ -240,17 +240,31 @@
 
 .cp__themes {
   &-installed {
-    min-width: 480px;
+    margin: -2rem;
+    outline: none;
+    padding: 1rem;
 
     > .it {
       user-select: none;
-      cursor: pointer;
       background-color: var(--ls-secondary-background-color);
       border: 1px solid transparent;
-      transition: background-color .3s;
+      margin-bottom: 4px;
 
-      &:hover, &.is-selected {
-        background-color: var(--ls-quaternary-background-color);
+      > section {
+        line-height: 1.1em;
+
+        > strong {
+          font-size: 14px;
+        }
+
+        > small {
+          font-size: 11px;
+        }
+      }
+
+      &:hover, &.is-active {
+        background-color: var(--ls-tertiary-background-color);
+        border:1px solid var(--ls-quaternary-background-color);
       }
     }
   }

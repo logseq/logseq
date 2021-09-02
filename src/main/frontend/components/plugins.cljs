@@ -4,6 +4,7 @@
             [cljs-bean.core :as bean]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.mixins :as mixins]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
@@ -11,28 +12,62 @@
             [frontend.handler.plugin :as plugin-handler]
             [clojure.string :as string]))
 
-(rum/defc installed-themes
+(rum/defcs installed-themes
   < rum/reactive
-  []
-  (let [themes (state/sub :plugin/installed-themes)
+    (rum/local 0 ::cursor)
+    (rum/local 0 ::total)
+    (mixins/event-mixin
+      (fn [state]
+        (let [*cursor (::cursor state)
+              *total (::total state)
+              ^js target (rum/dom-node state)]
+          (.focus target)
+          (mixins/on-key-down
+            state {38                                       ;; up
+                   (fn [^js e]
+                     (reset! *cursor
+                             (if (zero? @*cursor)
+                               (dec @*total) (dec @*cursor))))
+                   40                                       ;; down
+                   (fn [^js e]
+                     (reset! *cursor
+                             (if (= @*cursor (dec @*total))
+                               0 (inc @*cursor))))
+
+                   13                                       ;; enter
+                   #(when-let [^js active (.querySelector target ".is-active")]
+                      (.click active))
+                   }))))
+  [state]
+  (let [*cursor (::cursor state)
+        *total (::total state)
+        themes (state/sub :plugin/installed-themes)
         selected (state/sub :plugin/selected-theme)
-        themes (cons {:name "Default Theme" :url nil :description "Logseq default light/dark theme."} themes)]
+        themes (cons {:name "Default Theme" :url nil :description "Logseq default light/dark theme."} themes)
+        themes (sort #(:selected %) (map #(assoc % :selected (= (:url %) selected)) themes))
+        _ (reset! *total (count themes))]
 
     [:div.cp__themes-installed
-     [:h2.mb-4.text-xl "Installed Themes"]
-     (for [opt themes]
-       (let [current-selected (= selected (:url opt))
-             plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
-         [:div.it.flex.px-3.py-2.mb-2.rounded-sm.justify-between
-          {:key      (:url opt)
-           :class    [(if current-selected "is-selected")]
-           :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
-                          (state/set-modal! nil))}
-          [:section
-           [:strong.block (when plg (str (:name plg) " / ")) (:name opt)]
-           [:small.opacity-30 (:description opt)]]
-          [:small.flex-shrink-0.flex.items-center.opacity-10
-           (if current-selected "current")]]))]))
+     {:tab-index -1}
+     [:h1.mb-4.text-2xl.p-2 "Installed Themes"]
+     (map-indexed
+       (fn [idx opt]
+         (let [current-selected (:selected opt)
+               plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
+           [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
+            {:key      (:url opt)
+             :title    (if current-selected "Cancel selected theme")
+             :class    (util/classnames
+                         [{:is-selected current-selected
+                           :is-active   (= idx @*cursor)}])
+             :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
+                            (state/set-modal! nil))}
+            [:section
+             [:strong.block (when plg (str (:name plg) " / ")) (:name opt)]
+             [:small.opacity-30.italic (:description opt)]]
+            [:small.flex-shrink-0.flex.items-center.opacity-10
+             (if current-selected (svg/check 28))]]))
+       themes)]))
 
 (rum/defc unpacked-plugin-loader
   [unpacked-pkg-path]
@@ -88,9 +123,9 @@
     :warning
     [:div {:style {:max-width 700}}
      "Plugins can access your graph and your local files, issue network requests.
-     They can also cause data corruption or loss. We're working on proper access rules for your graphs.
-     Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and
-     understand the source code."]))
+      They can also cause data corruption or loss. We're working on proper access rules for your graphs.
+      Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and
+      understand the source code."]))
 
 (rum/defc plugin-item-card < rum/static
   [{:keys [id name settings version url description author icon usf iir repo] :as item}
@@ -289,9 +324,9 @@
 
 (rum/defcs hook-ui-items < rum/reactive
                            "type
-                               - :toolbar
-                               - :pagebar
-                            "
+                                                        - :toolbar
+                                                        - :pagebar
+                                                     "
   [state type]
   (when (state/sub [:plugin/installed-ui-items])
     (let [items (state/get-plugins-ui-items-with-type type)]
