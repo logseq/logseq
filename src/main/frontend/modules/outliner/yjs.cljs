@@ -17,8 +17,11 @@
 ;; (def wsProvider1 (y-ws/WebsocketProvider. "ws://192.168.1.149:1234", "test-user", doc-remote))
 
 (defn- contentmap [] (.getMap doc-local "content"))
-(defn- struct [page-name] (.getArray doc-local (str page-name "-struct")))
+(defn- structarray [page-name] (.getArray doc-local (str page-name "-struct")))
 
+
+(defn- assoc-contents [contents contentmap]
+  (mapv (fn [[k v]] (.set contentmap k v)) contents))
 
 (defn- distinct-struct [struct id-set]
   (loop [i 0]
@@ -59,8 +62,7 @@
   (let [arr (or arr (y/Array.))]
     (mapv (fn [block-or-children]
             (when (map? block-or-children)
-              (println arr)
-              (.push arr (clj->js [(or (:block/content block-or-children) "")]))
+              (.push arr (clj->js [(or (str (:block/uuid block-or-children)) "")]))
               (when-let [children (:block/children block-or-children)]
                 (let [child (->struct-array children nil)]
                   (when (and child (> (.-length child) 0))
@@ -71,7 +73,7 @@
 (defn page-blocks->doc [page-blocks page-name]
   (let [t (tree/blocks->vec-tree page-blocks page-name)
         content (contentmap)
-        struct (struct page-name)]
+        struct (structarray page-name)]
     (->content-map t content)
     (->struct-array t struct)))
 
@@ -80,7 +82,7 @@
         new-content (.get content-map uuid)
         block (db-model/query-block-by-uuid uuid)
         updated-block (editor/wrap-parse-block (update block :block/content (fn [_] new-content)))]
-    (outliner-core/save-node (outliner-core/Block updated-block))))
+    (outliner-core/save-node (outliner-core/block updated-block))))
 
 (defn- get-item-left&parent [item id]
   (let [item-content id
@@ -114,12 +116,11 @@
   {:pre [(seq parent-id)]}
   (let [left-id (or left-id parent-id)
         content (str "- " (.get contentmap id))
-        target-node (outliner-core/block (db/query-block-by-uuid left-id))
+        target-node (outliner-core/block (db-model/query-block-by-uuid left-id))
         format (:block/format target-node)
         new-node (outliner-core/block
                   (or (db-model/query-block-by-uuid id)
-                      (first (block/extract-blocks (mldoc/->edn content)
-                                                   (mldoc/default-config format)
+                      (first (block/extract-blocks (mldoc/->edn content (mldoc/default-config format))
                                                    content true format))))
 
         sibling? (not= parent-id left-id)]
@@ -151,7 +152,7 @@
               "update" (update-block-content k)
               "delete" (delete-node k))) keys)))
 
-(defn observe-page-struct [page-name doc]
+(defn observe-page-doc [page-name doc]
   (let [struct (.getArray doc (str page-name "-struct"))
         content(.getMap doc (str page-name "-content"))]
     (.unobserveDeep struct observe-struct-fn)
@@ -178,4 +179,130 @@
 (defn start-sync-page [page-name]
   (let [page-blocks (db/get-page-blocks page-name)]
     (page-blocks->doc page-blocks page-name)
-    (observe-page-struct page-name doc-local)))
+    (observe-page-doc page-name doc-local)
+    (sync-doc doc-local doc-remote)
+    (merge-doc doc-remote doc-local)))
+
+(defn stop-sync-page [page-name]
+  ;; TODO
+  )
+
+
+(defn find-pos [struct id]
+  (let [toplevel (js->clj (.toArray struct))
+        index (.indexOf toplevel id)]
+    (if (not= -1 index)
+      [index]
+      (loop [i 0]
+        (if (>= i (count toplevel))
+          nil
+          (let [sublevel (get toplevel i)]
+            (if (instance? y/Array sublevel)
+              (if-let [index (find-pos sublevel id)]
+                (vec (flatten [i index]))
+                (recur (+ i 1)))
+              (recur (+ i 1)))))))))
+
+(defn inc-pos [pos]
+  (conj (vec (butlast pos)) (inc (last pos))))
+
+(defn inc-level-pos [pos]
+  (conj (inc-pos pos) 0))
+
+;;; outliner op + yjs op
+
+;; (defn move-subtree [root target-node sibling?]
+;;   (outliner-core/move-subtree root target-node sibling?))
+
+
+;; (defn indent-outdent-nodes [nodes indent?]
+;;   )
+
+
+;; (defn delete-nodes [start-node end-node block-ids]
+
+;;   )
+
+(defn- nodes-tree->struct&content [nodes-tree]
+  (let [contents (atom {})
+        struct (clojure.walk/postwalk
+                (fn [node]
+                  (if (instance? outliner-core/Block node)
+                    (let [block (:data node)
+                          block-uuid (:block/uuid block)
+                          block-content (:block/content block)]
+                      (when block-uuid
+                        (swap! contents (fn [o] (assoc o (str block-uuid) block-content))))
+                      (str block-uuid))
+                    node)) nodes-tree)]
+    [struct @contents]))
+
+(defn- goto-innermost-struct-array [pos struct]
+  (loop [i 0 s struct]
+    (if (> i (- (count pos) 2))
+      s
+      (recur (inc i) (.get s (get pos i))))))
+
+(defn- insert-nodes-aux [insert-structs pos struct]
+  "insert INSERT-STRUCTS at POS"
+  (loop [i 0 pos pos]
+    (when (< i (count insert-structs))
+      (let [s (nth insert-structs i)
+            struct* (goto-innermost-struct-array pos struct)]
+        (cond
+          (vector? s)
+          (let [pos* (conj pos 0)]
+            (.insert struct* (last pos) (clj->js [(y/Array.)]))
+            (insert-nodes-aux s pos* struct)
+            (recur (inc i) (inc-pos pos)))
+
+          :else
+          (do
+            (.insert struct* (last pos) (clj->js [s]))
+            (recur (inc i) (inc-pos pos))))))))
+
+
+(defn- next-sibling-pos [pos struct]
+  (let [inner-struct (goto-innermost-struct-array pos struct)
+        next-item (.get inner-struct (inc (last pos)))]
+    (if (instance? y/Array next-item)
+      (conj (vec (butlast pos)) (+ 2 (last pos)))
+      (conj (vec (butlast pos)) (+ 1 (last pos))))))
+
+(defn- next-non-sibling-pos! [pos struct]
+  "create a y/Array when no child follows item at POS"
+  (let [inner-struct (goto-innermost-struct-array pos struct)
+        next-item (.get inner-struct (inc (last pos)))]
+    (when-not (instance? y/Array next-item)
+      (.insert inner-struct (inc (last pos)) (clj->js [(y/Array.)])))
+    (inc-level-pos pos)))
+
+
+(defn insert-nodes [page-name new-nodes-tree target-uuid sibling?]
+  (let [[structs contents] (nodes-tree->struct&content new-nodes-tree)
+        struct (structarray page-name)]
+    (when-let [target-pos (find-pos (structarray page-name) (str target-uuid))]
+      (let [pos (if sibling?
+                  (next-sibling-pos target-pos struct)
+                  (next-non-sibling-pos! target-pos struct))]
+        (insert-nodes-aux structs pos (structarray page-name))
+        (assoc-contents contents (contentmap))))))
+
+(comment
+  (def page-blocks (db-model/get-page-blocks "page-name"))
+  (page-blocks->doc page-blocks "page-name")
+
+  (def test-struct (.getArray doc-local "page-name-struct"))
+  (.delete test-struct 0 (.-length test-struct))
+  (.insert test-struct 0 (clj->js ["1"]))
+  (.insert test-struct 1 (clj->js ["2"]))
+  (.insert test-struct 2 (clj->js [(y/Array.)]))
+  (def pos2 (find-pos test-struct "2"))
+  (assert (= [1] pos2))
+  (.insert (.get test-struct 2) 0 (clj->js ["3"]))
+  (assert (= [2 1] (next-sibling-pos [2 0] test-struct)))
+  (assert (= [2 1 0] (next-non-sibling-pos! [2 0] test-struct)))
+
+  ;; insert-nodes
+  (insert-nodes "page-name" (first xxxx) "61309f20-836c-4e47-894e-cc126050f039" true)
+  )
