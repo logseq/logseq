@@ -59,7 +59,22 @@
        (reverse)
        (take limit)))
 
-(defn register [{:keys [id] :as command}]
+(defn register
+  "Register a global command searchable by command palette.
+  `id` is defined as a global unique namespaced key :scope/command-name
+  `action` must be a zero arity function
+
+  Example:
+  ```clojure
+  (register
+   {:id :document/open-logseq-doc
+    :desc \"Document: open Logseq documents\"
+    :action (fn [] (js/window.open \"https://logseq.github.io/\"))})
+  ```
+
+  To add i18n support, prefix `id` with command and put that item in dict.
+  Example: {:zh-CN {:command.document/open-logseq-doc \"打开文档\"}}"
+  [{:keys [id] :as command}]
   (spec/validate :command/command command)
   (let [cmds (get-commands)]
     (if (some (fn [existing-cmd] (= (:id existing-cmd) id)) cmds)
