@@ -93,7 +93,7 @@
        [:td.text-left (t :help/block-reference)]
        [:td.text-right "(())"]]
       [:tr
-       [:td.text-left (t :shortcut.editor/open-link-in-sidebar)]
+       [:td.text-left (t :command.editor/open-link-in-sidebar)]
        [:td.text-right "shift-click"]]
       [:tr
        [:td.text-left (t :help/context-menu)]
