@@ -792,6 +792,7 @@ class LSPluginCore
   private _userPreferences: Partial<UserPreferences> = {}
   private _registeredThemes = new Map<PluginLocalIdentity, Array<ThemeOptions>>()
   private _registeredPlugins = new Map<PluginLocalIdentity, PluginLocal>()
+  private _currentTheme: { dis: () => void, pid: PluginLocalIdentity, opt: ThemeOptions }
 
   /**
    * @param _options
@@ -1079,9 +1080,22 @@ class LSPluginCore
   }
 
   async selectTheme (opt?: ThemeOptions, effect = true): Promise<void> {
-    setupInjectedTheme(opt?.url)
+    // clear current
+    if (this._currentTheme) {
+      this._currentTheme.dis?.()
+    }
+
+    const disInjectedTheme = setupInjectedTheme(opt?.url)
     this.emit('theme-selected', opt)
-    effect && this.saveUserPreferences({ theme: opt })
+    effect && await this.saveUserPreferences({ theme: opt?.url ? opt : null })
+    if (opt?.url) {
+      this._currentTheme = {
+        dis: () => {
+          disInjectedTheme()
+          effect && this.saveUserPreferences({ theme: null })
+        }, opt, pid: opt.pid
+      }
+    }
   }
 
   async unregisterTheme (id: PluginLocalIdentity): Promise<void> {
@@ -1090,6 +1104,12 @@ class LSPluginCore
     if (!this._registeredThemes.has(id)) return
     this._registeredThemes.delete(id)
     this.emit('theme-changed', this.themes, { id })
+    if (this._currentTheme?.pid == id) {
+      this._currentTheme.dis?.()
+      this._currentTheme = null
+      // reset current theme
+      this.emit('theme-selected', null)
+    }
   }
 }
 

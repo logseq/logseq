@@ -31,6 +31,7 @@
 (defonce central-endpoint "https://raw.githubusercontent.com/xyhp915/lsp/main/")
 (defonce plugins-url (str central-endpoint "plugins.json"))
 (defonce stats-url (str central-endpoint "stats.json"))
+(declare select-a-plugin-theme)
 
 (defn gh-repo-url [repo]
   (str "https://github.com/" repo))
@@ -116,16 +117,20 @@
                          (case (keyword status)
 
                            :completed
-                           (let [{:keys [id dst name version]} payload]
+                           (let [{:keys [id dst name version theme]} payload]
                              (if (installed? id)
                                (when-let [^js pl (get-plugin-inst id)] ;; update
                                  (p/then
                                    (.reload pl)
-                                   #(notifications/show!
-                                      (str "Updated Plugin: " name " [" (.-version (.-options pl)) "]") :success)))
+                                   #(do
+                                      (if theme (select-a-plugin-theme id))
+                                      (notifications/show!
+                                        (str "Updated Plugin: " name " [" (.-version (.-options pl)) "]") :success))))
 
                                (do                          ;; register new
-                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                                 (p/then
+                                   (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                                   (fn [] (if theme (js/setTimeout #(select-a-plugin-theme id) 300))))
                                  (notifications/show!
                                    (str "Installed Plugin: " name) :success))))
 
@@ -198,6 +203,18 @@
 (defn unregister-plugin-ui-items
   [pid]
   (swap! state/state assoc-in [:plugin/installed-ui-items (keyword pid)] []))
+
+(defn unregister-plugin-themes
+  [pid]
+  (js/LSPluginCore.unregisterTheme pid))
+
+(defn select-a-plugin-theme
+  [pid]
+  (when-let [themes (get (group-by :pid (:plugin/installed-themes @state/state)) pid)]
+    (when-let [theme (first themes)]
+      (let [theme-mode (:mode theme)]
+        (and theme-mode (state/set-theme! (if (= theme-mode "light") "white" theme-mode)))
+        (js/LSPluginCore.selectTheme (bean/->js theme))))))
 
 (defn update-plugin-settings
   [id settings]
@@ -321,19 +338,23 @@
 
                 (.on "unregistered" (fn [pid]
                                       (let [pid (keyword pid)]
+                                        ;; effects
+                                        (unregister-plugin-themes (name pid))
                                         ;; plugins
                                         (swap! state/state md/dissoc-in [:plugin/installed-plugins pid])
                                         ;; commands
                                         (unregister-plugin-slash-command pid)
                                         (unregister-plugin-simple-command pid)
-                                        (unregister-plugin-ui-items pid)
-                                        )))
+                                        (unregister-plugin-ui-items pid))))
 
                 (.on "unlink-plugin" (fn [pid]
                                        (let [pid (keyword pid)]
                                          (ipc/ipc "uninstallMarketPlugin" (name pid)))))
 
                 (.on "disabled" (fn [pid]
+                                  ;; effects
+                                  (unregister-plugin-themes pid)
+                                  ;; commands
                                   (unregister-plugin-slash-command pid)
                                   (unregister-plugin-simple-command pid)
                                   (unregister-plugin-ui-items pid)))

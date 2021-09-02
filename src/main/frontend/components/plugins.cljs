@@ -269,15 +269,34 @@
         :intent "logseq"
         :on-click plugin-handler/load-unpacked-plugin)
       (unpacked-plugin-loader selected-unpacked-pkg)
+
       (when (util/electron?)
-        (ui/button
-          [:span.flex.items-center
-           ;;svg/settings-sm
-           "Open plugin preferences file"]
-          :intent "logseq"
-          :on-click (fn []
-                      (p/let [root (plugin-handler/get-ls-dotdir-root)]
-                        (js/apis.openPath (str root "/preferences.json"))))))]
+        [:div.flex.align-items
+         (ui/button
+           "Open plugin preferences file"
+           :intent "logseq"
+           :on-click (fn []
+                       (p/let [root (plugin-handler/get-ls-dotdir-root)]
+                         (js/apis.openPath (str root "/preferences.json")))))
+
+         (ui/button
+           [:span.flex.items-center
+            [:span.pr-1
+             (ui/Tippy
+               {:html     [:small.inline-flex.py-2.pr-2
+                           {:style {:max-width "180px" :text-align "left" :justify-content "flex-start"}}
+                           "If the plugin you installed from marketplace for the first time not work properly,
+                           you could try to restart the application."]
+                :arrow    true
+                :distance 18
+                :offset   -25
+                :theme    "transparent"}
+               (svg/info))]
+
+            "Restart"]
+           :class "ml-2"
+           :intent "logseq"
+           :on-click #(plugin-handler/invoke-exported-api "relaunch"))])]
 
      [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
       (for [[_ item] installed-plugins]

@@ -335,7 +335,11 @@ export function setupInjectedTheme (url?: string) {
   document.head.appendChild(link)
 
   return (injectedThemeEffect = () => {
-    document.head.removeChild(link)
+    try {
+      document.head.removeChild(link)
+    } catch (e) {
+      console.error(e)
+    }
     injectedThemeEffect = null
   })
 }
