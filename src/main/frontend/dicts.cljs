@@ -2167,6 +2167,7 @@
     :page/open-with-default-app "Abrir com a aplicação por omissão"
     :page/action-publish "Publicar"
     :page/make-public "Tornar pública para publicação"
+    :page/version-history "Ver histórico da página"
     :page/make-private "Tornar privada"
     :page/delete "Apagar página"
     :page/publish "Publicar esta página em Logseq"
@@ -2256,6 +2257,7 @@
     :settings-page/tab-editor "Editor"
     :settings-page/tab-shortcuts "Atalhos"
     :settings-page/tab-advanced "Avançado"
+    :settings-page/tab-version-control "Controlo de Versões"
     :logseq "Logseq"
     :on "ON"
     :more-options "Mais opções"
@@ -2330,7 +2332,8 @@
 
     :pdf/copy-ref "Copiar referência"
     :pdf/copy-text "Copiar texto"
-    :pdf/linked-ref "Referências ligadas"}
+    :pdf/linked-ref "Referências ligadas"
+    :command-palette/prompt "Introduza um comando"}
 
    :tongue/fallback :en})
 
