@@ -28,7 +28,7 @@
     (catch js/Error e (js/console.error e))))
 
 ;; state handlers
-(defonce central-endpoint "https://raw.githubusercontent.com/xyhp915/lsp/main/")
+(defonce central-endpoint "https://raw.githubusercontent.com/logseq/marketplace/master/")
 (defonce plugins-url (str central-endpoint "plugins.json"))
 (defonce stats-url (str central-endpoint "stats.json"))
 (declare select-a-plugin-theme)
