@@ -132,7 +132,8 @@
    installing-or-updating? installed? stat]
 
   (let [market? (and (not (nil? repo)) (nil? usf))
-        disabled (:disabled settings)]
+        disabled (:disabled settings)
+        name (or title name "Untitled")]
     [:div.cp__plugins-item-card
      {:class (util/classnames [{:market market?}])}
 
@@ -148,7 +149,7 @@
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
 
-       [:span (or title name "Untitled")]
+       [:span name]
        (if (not market?) [:sup.inline-block.px-1.text-xs.opacity-30 version])]
 
       [:div.desc.text-xs.opacity-60

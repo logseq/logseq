@@ -117,7 +117,8 @@
                          (case (keyword status)
 
                            :completed
-                           (let [{:keys [id dst name version theme]} payload]
+                           (let [{:keys [id dst name title version theme]} payload
+                                 name (or title name "Untitled")]
                              (if (installed? id)
                                (when-let [^js pl (get-plugin-inst id)] ;; update
                                  (p/then
