@@ -128,7 +128,7 @@
       understand the source code."]))
 
 (rum/defc plugin-item-card < rum/static
-  [{:keys [id name settings version url description author icon usf iir repo] :as item}
+  [{:keys [id name title settings version url description author icon usf iir repo] :as item}
    installing-or-updating? installed? stat]
 
   (let [market? (and (not (nil? repo)) (nil? usf))
@@ -148,7 +148,7 @@
      [:div.r
       [:h3.head.text-xl.font-bold.pt-1.5
 
-       [:span name]
+       [:span (or title name "Untitled")]
        (if (not market?) [:sup.inline-block.px-1.text-xs.opacity-30 version])]
 
       [:div.desc.text-xs.opacity-60
@@ -371,12 +371,13 @@
 
      [:div.tabs.flex.items-center.justify-center
       [:div.tabs-inner.flex.items-center
+       (ui/button [:span.it (svg/adjustments 16) "Installed"]
+                  :on-click #(set-active! :installed)
+                  :intent "logseq" :class (if-not market? "active" ""))
+
        (ui/button [:span.mk (svg/apps 16) "Marketplace"]
                   :on-click #(set-active! :marketplace)
-                  :intent "logseq" :class (if market? "active" ""))
-       (ui/button [:span.it "Installed"]
-                  :on-click #(set-active! :installed)
-                  :intent "logseq" :class (if-not market? "active" ""))]]
+                  :intent "logseq" :class (if market? "active" ""))]]
 
      [:div.panels
       (if market?

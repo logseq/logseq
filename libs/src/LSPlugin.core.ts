@@ -446,11 +446,12 @@ class PluginLocal
       }
     }
 
+    const title = logseq.title || pkg.title
     const icon = logseq.icon || pkg.icon
 
-    if (icon) {
-      this._options.icon = this._resolveResourceFullUrl(icon)
-    }
+    this._options.title = title
+    this._options.icon = icon &&
+      this._resolveResourceFullUrl(icon)
 
     // TODO: strategy for Logseq plugins center
     if (this.isInstalledInDotRoot) {
