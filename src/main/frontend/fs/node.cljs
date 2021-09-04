@@ -39,13 +39,13 @@
   [this repo dir path content {:keys [ok-handler error-handler skip-compare?] :as opts} stat]
   (if skip-compare?
     (p/catch
-      (p/let [result (ipc/ipc "writeFile" path content)]
-        (when ok-handler
-          (ok-handler repo path result)))
-      (fn [error]
-        (if error-handler
-          (error-handler error)
-          (log/error :write-file-failed error))))
+        (p/let [result (ipc/ipc "writeFile" path content)]
+          (when ok-handler
+            (ok-handler repo path result)))
+        (fn [error]
+          (if error-handler
+            (error-handler error)
+            (log/error :write-file-failed error))))
 
     (p/let [disk-content (when (not= stat :not-found)
                            (-> (protocol/read-file this dir path nil)
@@ -61,29 +61,29 @@
             pending-writes (state/get-write-chan-length)]
       (cond
         (and
-          (not= stat :not-found)         ; file on the disk was deleted
-          (not contents-matched?)
-          (not (contains? #{"excalidraw" "edn"} ext))
-          (not (string/includes? path "/.recycle/"))
-          (zero? pending-writes))
+         (not= stat :not-found)         ; file on the disk was deleted
+         (not contents-matched?)
+         (not (contains? #{"excalidraw" "edn"} ext))
+         (not (string/includes? path "/.recycle/"))
+         (zero? pending-writes))
         (state/pub-event! [:file/not-matched-from-disk path disk-content content])
 
         :else
         (->
-          (p/let [result (ipc/ipc "writeFile" path content)
-                  mtime (gobj/get result "mtime")]
-            (db/set-file-last-modified-at! repo path mtime)
-            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
-                              (encrypt/decrypt content)
-                              content)]
-              (db/set-file-content! repo path content))
-            (when ok-handler
-              (ok-handler repo path result))
-            result)
-          (p/catch (fn [error]
-                     (if error-handler
-                       (error-handler error)
-                       (log/error :write-file-failed error)))))))))
+         (p/let [result (ipc/ipc "writeFile" path content)
+                 mtime (gobj/get result "mtime")]
+           (db/set-file-last-modified-at! repo path mtime)
+           (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
+                             (encrypt/decrypt content)
+                             content)]
+             (db/set-file-content! repo path content))
+           (when ok-handler
+             (ok-handler repo path result))
+           result)
+         (p/catch (fn [error]
+                    (if error-handler
+                      (error-handler error)
+                      (log/error :write-file-failed error)))))))))
 
 (defrecord Node []
   protocol/Fs
@@ -106,8 +106,8 @@
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
     (let [path (concat-path dir path)]
       (p/let [stat (p/catch
-                     (protocol/stat this dir path)
-                     (fn [_e] :not-found))
+                       (protocol/stat this dir path)
+                       (fn [_e] :not-found))
               sub-dir (first (util/get-dir-and-basename path))
               _ (protocol/mkdir-recur! this sub-dir)]
         (write-file-impl! this repo dir path content opts stat))))

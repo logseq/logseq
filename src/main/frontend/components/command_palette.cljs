@@ -23,14 +23,14 @@
 (rum/defc render-command
   [{:keys [id shortcut] :as cmd} chosen?]
   (rum/with-context [[t] i18n/*tongue-context*]
-                    (let [desc (translate t cmd)]
-                      [:div.inline-grid.grid-cols-4.gap-x-4.w-full
-                       {:class (when chosen? "chosen")}
-                       [:span.col-span-3 desc]
-                       [:div.col-span-1.justify-end.tip.flex
-                        (when (and (keyword? id) (namespace id))
-                          [:code.opacity-20.bg-transparent (namespace id)])
-                        [:code.ml-1 shortcut]]])))
+    (let [desc (translate t cmd)]
+      [:div.inline-grid.grid-cols-4.gap-x-4.w-full
+       {:class (when chosen? "chosen")}
+       [:span.col-span-3 desc]
+       [:div.col-span-1.justify-end.tip.flex
+        (when (and (keyword? id) (namespace id))
+          [:code.opacity-20.bg-transparent (namespace id)])
+        [:code.ml-1 shortcut]]])))
 
 
 (rum/defcs command-palette <
@@ -42,30 +42,30 @@
   [state {:keys [commands limit]
           :or {limit 10}}]
   (rum/with-context [[t] i18n/*tongue-context*]
-                    (let [input (::input state)]
-                      [:div#command-palette.cp__command-palette-main
-                       [:input.cp__command-palette-input.w-full
-                        {:type        "text"
-                         :placeholder  (t :command-palette/prompt)
-                         :auto-focus   true
-                         :value       @input
-                         :on-change   (fn [e] (reset! input (util/evalue e)))}]
-                       [:div.w-full
-                        (ui/auto-complete
-                          (if (str/blank? @input)
-                            (cp/top-commands limit)
-                            (get-matched-commands commands @input limit t))
-                          {:item-render render-command
-                           :class       "cp__command-palette-results"
-                           :on-chosen   (fn [cmd] (cp/invoke-command cmd))})]])))
+    (let [input (::input state)]
+      [:div#command-palette.cp__command-palette-main
+       [:input.cp__command-palette-input.w-full
+        {:type        "text"
+         :placeholder  (t :command-palette/prompt)
+         :auto-focus   true
+         :value       @input
+         :on-change   (fn [e] (reset! input (util/evalue e)))}]
+       [:div.w-full
+        (ui/auto-complete
+         (if (str/blank? @input)
+           (cp/top-commands limit)
+           (get-matched-commands commands @input limit t))
+         {:item-render render-command
+          :class       "cp__command-palette-results"
+          :on-chosen   (fn [cmd] (cp/invoke-command cmd))})]])))
 
 (rum/defc command-palette-modal < rum/reactive
   []
   (let [open? (state/sub :ui/command-palette-open?)]
     (if open?
       (state/set-modal!
-        #(command-palette {:commands (cp/get-commands)})
-        {:fullscreen? false
-         :close-btn?  false})
+       #(command-palette {:commands (cp/get-commands)})
+       {:fullscreen? false
+        :close-btn?  false})
       (state/close-modal!))
     nil))

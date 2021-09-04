@@ -89,6 +89,6 @@
 (comment
   ;; register custom command example
   (register
-    {:id :document/open-logseq-doc
-     :desc "Document: open Logseq documents"
-     :action (fn [] (js/window.open "https://logseq.github.io/"))}))
+   {:id :document/open-logseq-doc
+    :desc "Document: open Logseq documents"
+    :action (fn [] (js/window.open "https://logseq.github.io/"))}))

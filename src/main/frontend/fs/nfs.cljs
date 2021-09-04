@@ -43,10 +43,10 @@
   [repo handle read-write?]
   (let [repo (or repo (state/get-current-repo))]
     (p/then
-      (utils/verifyPermission handle read-write?)
-      (fn []
-        (state/set-state! [:nfs/user-granted? repo] true)
-        true))))
+     (utils/verifyPermission handle read-write?)
+     (fn []
+       (state/set-state! [:nfs/user-granted? repo] true)
+       true))))
 
 (defn check-directory-permission!
   [repo]
@@ -73,53 +73,53 @@
           new-dir (last parts)
           root-handle (str "handle/" root)]
       (->
-        (p/let [handle (idb/get-item root-handle)
-                _ (when handle (verify-permission nil handle true))]
-          (when (and handle new-dir
-                     (not (string/blank? new-dir)))
-            (p/let [handle (.getDirectoryHandle ^js handle new-dir
-                                                #js {:create true})
-                    handle-path (str root-handle "/" new-dir)
-                    _ (idb/set-item! handle-path handle)]
-              (add-nfs-file-handle! handle-path handle)
-              (println "Stored handle: " (str root-handle "/" new-dir)))))
-        (p/catch (fn [error]
-                   (js/console.debug "mkdir error: " error ", dir: " dir)
-                   (throw error))))))
+       (p/let [handle (idb/get-item root-handle)
+               _ (when handle (verify-permission nil handle true))]
+         (when (and handle new-dir
+                    (not (string/blank? new-dir)))
+           (p/let [handle (.getDirectoryHandle ^js handle new-dir
+                                               #js {:create true})
+                   handle-path (str root-handle "/" new-dir)
+                   _ (idb/set-item! handle-path handle)]
+             (add-nfs-file-handle! handle-path handle)
+             (println "Stored handle: " (str root-handle "/" new-dir)))))
+       (p/catch (fn [error]
+                  (js/console.debug "mkdir error: " error ", dir: " dir)
+                  (throw error))))))
 
   (readdir [this dir]
     (let [prefix (str "handle/" dir)
           cached-files (keys @nfs-file-handles-cache)]
       (p/resolved
-        (->> (filter #(string/starts-with? % (str prefix "/")) cached-files)
-             (map (fn [path]
-                    (string/replace path prefix "")))))))
+       (->> (filter #(string/starts-with? % (str prefix "/")) cached-files)
+            (map (fn [path]
+                   (string/replace path prefix "")))))))
 
   (unlink! [this repo path opts]
     (let [[dir basename] (util/get-dir-and-basename path)
           handle-path (str "handle" path)]
       (->
-        (p/let [recycle-dir (str "/" repo (util/format "/%s/%s" config/app-name config/recycle-dir))
-                _ (protocol/mkdir! this recycle-dir)
-                handle (idb/get-item handle-path)
-                file (.getFile handle)
-                content (.text file)
-                handle (idb/get-item (str "handle" dir))
-                _ (idb/remove-item! handle-path)
-                file-name (-> (string/replace path (str "/" repo "/") "")
-                              (string/replace "/" "_")
-                              (string/replace "\\" "_"))
-                new-path (str recycle-dir "/" file-name)
-                _ (protocol/write-file! this repo
-                                        "/"
-                                        new-path
-                                        content nil)]
-          (when handle
-            (.removeEntry ^js handle basename))
-          (remove-nfs-file-handle! handle-path))
-        (p/catch (fn [error]
-                   (log/error :unlink/path {:path path
-                                            :error error}))))))
+       (p/let [recycle-dir (str "/" repo (util/format "/%s/%s" config/app-name config/recycle-dir))
+               _ (protocol/mkdir! this recycle-dir)
+               handle (idb/get-item handle-path)
+               file (.getFile handle)
+               content (.text file)
+               handle (idb/get-item (str "handle" dir))
+               _ (idb/remove-item! handle-path)
+               file-name (-> (string/replace path (str "/" repo "/") "")
+                             (string/replace "/" "_")
+                             (string/replace "\\" "_"))
+               new-path (str recycle-dir "/" file-name)
+               _ (protocol/write-file! this repo
+                                       "/"
+                                       new-path
+                                       content nil)]
+         (when handle
+           (.removeEntry ^js handle basename))
+         (remove-nfs-file-handle! handle-path))
+       (p/catch (fn [error]
+                  (log/error :unlink/path {:path path
+                                           :error error}))))))
 
   (rmdir! [this dir]
     ;; TOO dangerious, we should never implement this
@@ -170,12 +170,12 @@
                         contents-matched? (contents-matched? local-content (or db-content ""))]
                   (when local-content
                     (if (and
-                          (not (string/blank? db-content))
-                          (not (:skip-compare? opts))
-                          (not contents-matched?)
-                          (not (contains? #{"excalidraw" "edn"} ext))
-                          (not (string/includes? path "/.recycle/"))
-                          (zero? pending-writes))
+                         (not (string/blank? db-content))
+                         (not (:skip-compare? opts))
+                         (not contents-matched?)
+                         (not (contains? #{"excalidraw" "edn"} ext))
+                         (not (string/includes? path "/.recycle/"))
+                         (zero? pending-writes))
                       (state/pub-event! [:file/not-matched-from-disk path local-content content])
                       (p/let [_ (verify-permission repo file-handle true)
                               _ (utils/writeFile file-handle content)
@@ -190,25 +190,25 @@
                            (js/console.error e))))
             ;; create file handle
             (->
-              (p/let [handle (idb/get-item handle-path)]
-                (if handle
-                  (p/let [_ (verify-permission repo handle true)
-                          file-handle (.getFileHandle ^js handle basename #js {:create true})
-                          ;; File exists if the file-handle has some content in it.
-                          file (.getFile file-handle)
-                          text (.text file)]
-                    (if (string/blank? text)
-                      (p/let [_ (idb/set-item! basename-handle-path file-handle)
-                              _ (utils/writeFile file-handle content)
-                              file (.getFile file-handle)]
-                        (when file
-                          (nfs-saved-handler repo path file)))
-                      (notification/show! (str "The file " path " already exists, please save your changes and click the refresh button to reload it.")
-                                          :warning)))
-                  (println "Error: directory handle not exists: " handle-path)))
-              (p/catch (fn [error]
-                         (println "Write local file failed: " {:path path})
-                         (js/console.error error)))))))))
+             (p/let [handle (idb/get-item handle-path)]
+               (if handle
+                 (p/let [_ (verify-permission repo handle true)
+                         file-handle (.getFileHandle ^js handle basename #js {:create true})
+                         ;; File exists if the file-handle has some content in it.
+                         file (.getFile file-handle)
+                         text (.text file)]
+                   (if (string/blank? text)
+                     (p/let [_ (idb/set-item! basename-handle-path file-handle)
+                             _ (utils/writeFile file-handle content)
+                             file (.getFile file-handle)]
+                       (when file
+                         (nfs-saved-handler repo path file)))
+                     (notification/show! (str "The file " path " already exists, please save your changes and click the refresh button to reload it.")
+                                         :warning)))
+                 (println "Error: directory handle not exists: " handle-path)))
+             (p/catch (fn [error]
+                        (println "Write local file failed: " {:path path})
+                        (js/console.error error)))))))))
 
   (rename! [this repo old-path new-path]
     (p/let [[dir basename] (util/get-dir-and-basename old-path)

@@ -63,8 +63,8 @@
                            (>= start-idx 0) (> end-idx 0) (> end-idx start-idx))
                       (let [before (subvec lines 0 start-idx)
                             middle (conj
-                                     (subvec lines (inc start-idx) end-idx)
-                                     value)
+                                    (subvec lines (inc start-idx) end-idx)
+                                    value)
                             after (subvec lines (inc end-idx))
                             lines (concat before [(drawer-start typ)] middle [drawer-end] after)]
                         (string/join "\n" lines))
@@ -91,8 +91,8 @@
           body (drop-while (fn [l]
                              (let [l' (string/lower-case (string/trim l))]
                                (or
-                                 (not (string/starts-with? l' ":end:"))
-                                 (string/blank? l))))
+                                (not (string/starts-with? l' ":end:"))
+                                (string/blank? l))))
                            body)
           body (if (and (seq body)
                         (string/starts-with? (string/lower-case (string/triml (first body))) ":end:"))
@@ -108,8 +108,8 @@
 (defn get-logbook
   [body]
   (-> (filter (fn [v] (and (vector? v)
-                           (= (first v) "Drawer")
-                           (= (second v) "logbook"))) body)
+                          (= (first v) "Drawer")
+                          (= (second v) "logbook"))) body)
       first))
 
 (defn with-logbook
