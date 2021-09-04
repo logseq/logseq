@@ -339,8 +339,8 @@
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
                   content)
-        content (drawer/with-logbook block content)
         content (with-timetracking block content)
+        content (drawer/with-logbook block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
@@ -831,8 +831,7 @@
 
 (defn set-marker
   [{:block/keys [uuid marker content format properties] :as block} new-marker]
-  (let [new-content (-> (string/replace-first content (re-pattern (str "^" marker)) new-marker)
-                        (with-marker-time block format new-marker marker))]
+  (let [new-content (string/replace-first content (re-pattern (str "^" marker)) new-marker)]
     (save-block-if-changed! block new-content)))
 
 (defn set-priority
