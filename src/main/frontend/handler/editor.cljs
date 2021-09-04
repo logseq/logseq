@@ -792,7 +792,7 @@
           content (drawer/insert-drawer
                    format content "logbook"
                    (util/format (str (if (= :org format) "-" "*")
-                      " State \"DONE\" from \"%s\" [%s]")
+                                     " State \"DONE\" from \"%s\" [%s]")
                                 marker
                                 (date/get-date-time-string-3)))]
       content)
@@ -952,6 +952,7 @@
               content (if (nil? value)
                         (property/remove-property format key content)
                         (property/insert-property format content key value))
+              content (property/remove-empty-properties content)
               block (outliner-core/block {:block/uuid block-id
                                           :block/properties properties
                                           :block/content content})
