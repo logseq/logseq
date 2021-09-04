@@ -1006,7 +1006,8 @@
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content scheduled deadline format]} block
             content (or (state/get-edit-content) content)
-            new-content (text/add-timestamp content key value)]
+            new-content (-> (text/remove-timestamp content key)
+                            (text/add-timestamp key value))]
         (when (not= content new-content)
           (if-let [input-id (state/get-edit-input-id)]
             (state/set-edit-content! input-id new-content)
