@@ -17,11 +17,12 @@ tan = <#'\s*'> <'tan('> expr <')'> <#'\s*'>
 atan = <#'\s*'> <'atan('> expr <')'> <#'\s*'>
 acos = <#'\s*'> <'acos('> expr <')'> <#'\s*'>
 asin = <#'\s*'> <'asin('> expr <')'> <#'\s*'>
-<posterm> = log | ln | trig | scientific | number | variable | <#'\s*'> <'('> expr <')'> <#'\s*'>
+<posterm> = log | ln | trig | percent | scientific | number | variable | <#'\s*'> <'('> expr <')'> <#'\s*'>
 negterm = <#'\s*'> <'-'> posterm
 <term> = negterm | posterm
 scientific = #'\s*[0-9]+\.?[0-9]*(e|E)-?[0-9]+()\s*'
 number = #'\s*\d+(,\d+)*(\.\d*)?\s*'
+percent = number <'%'> <#'\s*'>
 variable = #'\s*[a-zA-Z]+(\_+[a-zA-Z]+)*\s*'
 toassign = #'\s*[a-zA-Z]+(\_+[a-zA-Z]+)*\s*'
 assignment = toassign <#'\s*'> <'='> <#'\s*'> expr

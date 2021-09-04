@@ -28,6 +28,7 @@
 (defn eval* [env ast]
   (insta/transform
    {:number     (comp edn/read-string #(str/replace % "," ""))
+    :percent    (fn percent [a] (/ a 100.00))
     :scientific edn/read-string
     :negterm    (fn neg [a] (- a))
     :expr       identity
