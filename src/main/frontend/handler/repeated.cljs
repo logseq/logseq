@@ -96,12 +96,13 @@
         now (tl/local-now)
         start-time' (case kind
                       "Dotted"
-                      (if (t/after? start-time now)
-                        start-time
-                        (t/plus now delta))
+                      (repeat-until-future-timestamp start-time now delta week?)
 
                       "DoublePlus"
-                      (repeat-until-future-timestamp start-time now delta week?)
+                      (if (t/after? start-time now)
+                        start-time
+                        (t/plus start-time delta))
+
 
                       ;; "Plus"
                       (t/plus start-time delta))]
