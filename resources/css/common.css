@@ -1015,6 +1015,7 @@ hr {
 .fade-link {
   opacity: 0.6;
   transition: 0.3s;
+  color: var(--ls-primary-text-color);
 }
 
 a.fade-link:hover {

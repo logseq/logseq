@@ -57,14 +57,14 @@
                                   before (subvec lines 0 (inc properties-count))
                                   after (rest lines)]
                               (string/join "\n" (concat before [drawer] after))))
-                          (str title "\n" drawer body)))
+                          (str title "\n" drawer "\n" body)))
 
                       (and has-typ-drawer?
                            (>= start-idx 0) (> end-idx 0) (> end-idx start-idx))
                       (let [before (subvec lines 0 start-idx)
                             middle (conj
-                                    (subvec lines (inc start-idx) end-idx)
-                                    value)
+                                     (subvec lines (inc start-idx) end-idx)
+                                     value)
                             after (subvec lines (inc end-idx))
                             lines (concat before [(drawer-start typ)] middle [drawer-end] after)]
                         (string/join "\n" lines))
@@ -91,8 +91,8 @@
           body (drop-while (fn [l]
                              (let [l' (string/lower-case (string/trim l))]
                                (or
-                                (not (string/starts-with? l' ":end:"))
-                                (string/blank? l))))
+                                 (not (string/starts-with? l' ":end:"))
+                                 (string/blank? l))))
                            body)
           body (if (and (seq body)
                         (string/starts-with? (string/lower-case (string/triml (first body))) ":end:"))
@@ -108,18 +108,22 @@
 (defn get-logbook
   [body]
   (-> (filter (fn [v] (and (vector? v)
-                          (= (first v) "Drawer")
-                          (= (second v) "logbook"))) body)
+                           (= (first v) "Drawer")
+                           (= (second v) "logbook"))) body)
       first))
 
 (defn with-logbook
   [block content]
-  (let [body (:block/body block)
+  (let [new-clocks (last (get-drawer-ast (:block/format block) content "logbook"))
+        body (:block/body block)
         logbook (get-logbook body)]
     (if logbook
-      (let [clocks (last logbook)
+      (let [content (remove-logbook content)
+            clocks (->> (concat new-clocks (last logbook))
+                        (distinct))
+            clocks (->> (map string/trim clocks)
+                        (remove string/blank?))
             logbook (->> (concat [":LOGBOOK:"] clocks [":END:"])
-                         (remove string/blank?)
                          (string/join "\n"))
             lines (string/split-lines content)]
         (if (:block/title block)

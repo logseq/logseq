@@ -3,7 +3,8 @@
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.spec :as spec]
             [frontend.state :as state]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.storage :as storage]))
 
 (s/def :command/id keyword?)
 (s/def :command/desc string?)
@@ -30,7 +31,50 @@
   (->> (get @state/state :command-palette/commands)
        (sort-by :id)))
 
-(defn register [{:keys [id] :as command}]
+(defn history []
+  (or (storage/get "commands-history") []))
+
+(defn- assoc-invokes [cmds]
+  (let [invokes (->> (history)
+                     (map :id)
+                     (frequencies))]
+    (mapv (fn [{:keys [id] :as cmd}]
+            (if (contains? invokes id)
+              (assoc cmd :invokes-count (get invokes id))
+              cmd))
+          cmds)))
+
+(defn add-history [{:keys [id]}]
+  (storage/set "commands-history" (conj (history) {:id id :timestamp (.getTime (js/Date.))})))
+
+(defn invoke-command [{:keys [action] :as cmd}]
+  (add-history cmd)
+  (state/set-state! :ui/command-palette-open? false)
+  (js/setTimeout (fn [] (action)) 200))
+
+(defn top-commands [limit]
+  (->> (get-commands)
+       (assoc-invokes)
+       (sort-by :invokes-count)
+       (reverse)
+       (take limit)))
+
+(defn register
+  "Register a global command searchable by command palette.
+  `id` is defined as a global unique namespaced key :scope/command-name
+  `action` must be a zero arity function
+
+  Example:
+  ```clojure
+  (register
+   {:id :document/open-logseq-doc
+    :desc \"Document: open Logseq documents\"
+    :action (fn [] (js/window.open \"https://logseq.github.io/\"))})
+  ```
+
+  To add i18n support, prefix `id` with command and put that item in dict.
+  Example: {:zh-CN {:command.document/open-logseq-doc \"打开文档\"}}"
+  [{:keys [id] :as command}]
   (spec/validate :command/command command)
   (let [cmds (get-commands)]
     (if (some (fn [existing-cmd] (= (:id existing-cmd) id)) cmds)
@@ -45,6 +89,6 @@
 (comment
   ;; register custom command example
   (register
-   {:id :document/open-logseq-doc
-    :desc "Document: open Logseq documents"
-    :action (fn [] (js/window.open "https://logseq.github.io/"))}))
+    {:id :document/open-logseq-doc
+     :desc "Document: open Logseq documents"
+     :action (fn [] (js/window.open "https://logseq.github.io/"))}))

@@ -15,10 +15,14 @@
    (p/let [static-path (if (and (util/electron?)
                                 (= "file:" (.-protocol js/location)))
                          (ipc/ipc :getDirname)
-                         "/static")]
+                         "/static")
+           path (str static-path "/js/parser-worker.js")
+           path (if (util/electron?)
+                  path
+                  (config/asset-uri path))]
      (Pool.
       (fn []
-        (spawn (Worker. (str static-path "/js/parser-worker.js")) num))))))
+        (spawn (Worker. path) num))))))
 
 ;; (defn finish-pool!
 ;;   [{:keys [pool tasks]} ok-handler]

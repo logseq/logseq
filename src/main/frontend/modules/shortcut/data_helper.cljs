@@ -74,7 +74,7 @@
 (defn decorate-namespace [k]
   (let [n (name k)
         ns (namespace k)]
-    (keyword (str "shortcut." ns) n)))
+    (keyword (str "command." ns) n)))
 
 (defn desc-helper []
   (->> (vals config/default-config)
@@ -127,7 +127,7 @@
 
     ;; Display "cmd" rather than "meta" to the user to describe the Mac
     ;; mod key, because that's what the Mac keyboards actually say.
-    (clojure.string/replace tmp "meta" "cmd")))
+    (str/replace tmp "meta" "cmd")))
 
 
 (defn remove-shortcut [k]

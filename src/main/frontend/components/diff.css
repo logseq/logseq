@@ -6,15 +6,11 @@
 
 .cp__diff-file {
   @apply mb-3;
-  border: 1px solid #ddd;
-  border-radius: 3px;
-}
+ }
 
 .cp__diff-file-header {
   background-color: var(--ls-secondary-background-color);
   padding: 5px 10px;
-  border-bottom: 1px solid #e1e4e8;
-  border-radius: 3px 3px 0 0;
   display: flex;
   align-items: center;
 }

@@ -1068,8 +1068,10 @@
 
 (defn set-modal!
   ([modal-panel-content]
-   (set-modal! modal-panel-content false true))
-  ([modal-panel-content fullscreen? close-btn?]
+   (set-modal! modal-panel-content
+               {:fullscreen? false
+                :close-btn?  true}))
+  ([modal-panel-content {:keys [fullscreen? close-btn?]}]
    (swap! state assoc
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content

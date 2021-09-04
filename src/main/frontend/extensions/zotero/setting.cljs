@@ -5,16 +5,17 @@
             [frontend.storage :as storage]))
 
 (def default-settings
-  {:type                   :user
-   :prefer-citekey?        true
-   :include-attachments?   true
-   :attachments-block-text "[[Attachments]]"
-   :include-notes?         true
-   :notes-block-text       "[[Notes]]"
-   :zotero-data-directory  ""
+  {:type                                    :user
+   :prefer-citekey?                         true
+   :include-attachments?                    true
+   :attachments-block-text                  "[[Attachments]]"
+   :include-notes?                          true
+   :overwrite-mode?                         false
+   :notes-block-text                        "[[Notes]]"
+   :zotero-data-directory                   ""
    :zotero-linked-attachment-base-directory ""
-   :extra-tags             ""
-   :page-insert-prefix     "@"})
+   :extra-tags                              ""
+   :page-insert-prefix                      "@"})
 
 (defn sub-zotero-config
   []

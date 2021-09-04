@@ -339,9 +339,7 @@
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
                   content)
-        content (->> content
-                     (drawer/remove-logbook)
-                     (drawer/with-logbook block))
+        content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
@@ -790,6 +788,7 @@
                            (reduce (fn [content [old new]]
                                      (string/replace content old new))
                                    content))
+          content (clock/clock-out format content)
           content (drawer/insert-drawer
                    format content "logbook"
                    (util/format (str (if (= :org format) "-" "*")
@@ -913,9 +912,13 @@
   (if (<= (count blocks) 1)
     blocks
     (let [[f s & others] blocks]
-      (if (= (or (:block/left s)
-                 (:block/parent s))
-             {:db/id (:db/id f)})
+      (if (or
+           (= (:block/left s) {:db/id (:db/id f)})
+           (let [parents (db/get-block-parents (state/get-current-repo)
+                                               (:block/uuid f)
+                                               100)]
+             (some #(= (:block/left s) {:db/id (:db/id %)})
+                   parents)))
         blocks
         (reverse blocks)))))
 

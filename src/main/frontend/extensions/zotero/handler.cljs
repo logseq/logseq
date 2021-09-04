@@ -56,6 +56,14 @@
                       :re-render-root? false
                       :sibling? false}))))
 
+(defn- create-page [page-name properties]
+  (page-handler/create!
+   page-name
+   {:redirect? false
+    :format :markdown
+    :create-first-block? false
+    :properties properties}))
+
 (defn create-zotero-page
   ([item]
    (create-zotero-page item {}))
@@ -66,17 +74,16 @@
      (let [{:keys [page-name properties abstract-note]} (extractor/extract item)]
 
        (if (page-handler/page-exists? (str/lower-case page-name))
-         (editor-handler/api-insert-new-block!
-          ""
-          {:page       page-name
-           :properties properties
-           :re-render-root? false})
-         (page-handler/create!
-          page-name
-          {:redirect? false
-           :format :markdown
-           :create-first-block? false
-           :properties properties}))
+         (if (setting/setting :overwrite-mode?)
+           (page-handler/delete!
+            page-name
+            (fn [] (create-page page-name properties)))
+           (editor-handler/api-insert-new-block!
+            ""
+            {:page       page-name
+             :properties properties
+             :re-render-root? false}))
+         (create-page page-name properties))
 
        (create-abstract-note! page-name abstract-note)
 
