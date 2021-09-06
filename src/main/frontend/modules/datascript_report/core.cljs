@@ -1,7 +1,8 @@
 (ns frontend.modules.datascript-report.core
   (:require [lambdaisland.glogi :as log]
             [datascript.core :as d]
-            [datascript.db :as db]))
+            [datascript.db :as db]
+            [clojure.set :as set]))
 
 (def keys-of-deleted-entity 1)
 
@@ -22,7 +23,7 @@
       r)))
 
 (defn get-blocks-and-pages
-  [{:keys [db-before db-after tx-data] :as _tx-report}]
+  [{:keys [db-before db-after tx-data tx-meta] :as tx-report}]
   (let [updated-db-ids (-> (mapv first tx-data) (set))
         result (reduce
                 (fn [acc x]
@@ -39,8 +40,14 @@
                       (update :pages conj page-entity))))
                 {:blocks #{}
                  :pages #{}}
-                updated-db-ids)]
-    result))
+                updated-db-ids)
+        tx-meta-pages (->> [(:from-page tx-meta) (:target-page tx-meta)]
+                           (remove nil?)
+                           (map #(get-entity-from-db-after-or-before db-before db-after %))
+                           (set))]
+    (if (seq tx-meta-pages)
+      (update result :pages set/union tx-meta-pages)
+      result)))
 
 (defn get-blocks
   [{:keys [db-before db-after tx-data] :as _tx-report}]
