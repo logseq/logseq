@@ -205,7 +205,7 @@
                         [:editor/search-page]] "Create a backlink to a page"]
      ["Page Embed" (embed-page) "Embed a page here"]
      ["Block Reference" [[:editor/input "(())" {:backward-pos 2}]
-                         [:editor/search-block :reference]] "Create a backlink to a blcok"]
+                         [:editor/search-block :reference]] "Create a backlink to a block"]
      ["Block Embed" (embed-block) "Embed a block here" "Embed a block here"]
      ["Link" link-steps "Create a HTTP link"]
      ["Image Link" link-steps "Create a HTTP link to a image"]
