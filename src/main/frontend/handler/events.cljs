@@ -158,6 +158,9 @@
   (when-let [repo (state/get-current-repo)]
     (state/set-modal! #(diff/local-file repo path disk-content db-content))))
 
+(defmethod handle :modal/display-file-version [[_ path content hash]]
+  (state/set-modal! #(git-component/file-specific-version path hash content)))
+
 (defmethod handle :after-db-restore [[_ repos]]
   (mapv (fn [{url :url} repo]
           ;; compare :ast/version
