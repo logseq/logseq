@@ -291,10 +291,10 @@
 
 .ui-items-container {
   &[data-type=toolbar] {
-    @apply flex items-center mt-1 pl-2;
+    @apply flex items-center mt-1;
 
     > .injected-ui-item-toolbar {
-      @apply px-2 opacity-50 hover:opacity-100 transition-opacity;
+      @apply opacity-70 hover:opacity-100 transition-opacity;
     }
   }
 
