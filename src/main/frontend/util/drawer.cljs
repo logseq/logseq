@@ -75,16 +75,6 @@
         (js/console.error e)
         content))))
 
-(defn empty-drawer-typ?
-  [format content typ]
-  (when-let [drawer-ast (get-drawer-ast format content typ)]
-    (empty? (last drawer-ast))))
-
-(defn remove-empty-drawer
-  [format content typ]
-  (if (empty-drawer-typ? format content typ)
-    (string/replace content (build-drawer-str typ) "")))
-
 (defn contains-logbook?
   [content]
   (and (util/safe-re-find (re-pattern (str "(?i)" logbook-start)) content)

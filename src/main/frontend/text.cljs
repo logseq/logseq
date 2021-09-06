@@ -247,6 +247,4 @@
         new-lines (filter (fn [line]
                             (not (string/starts-with? (string/lower-case line) key)))
                           lines)]
-    (println "new-lines" new-lines)
     (string/join "\n" new-lines)))
-
