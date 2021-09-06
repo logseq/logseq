@@ -301,12 +301,6 @@
     {:desc    "Rebuild search index"
      :binding "mod+c mod+s"
      :fn      search-handler/rebuild-indices!}
-    :graph/re-index
-    {:desc    "Re-index the whole graph"
-     :binding "mod+c mod+r"
-     :fn      #(repo-handler/re-index!
-                nfs-handler/rebuild-index!
-                page-handler/create-today-journal!)}
     :sidebar/open-today-page
     {:desc    "Open today's page in the right sidebar"
      :binding (if mac? "mod+shift+j" "alt+shift+j")

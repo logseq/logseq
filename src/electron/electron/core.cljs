@@ -244,7 +244,10 @@
                (.focus win))))
 
       (.on app "window-all-closed" (fn []
-                                     (search/close!)
+                                     (try
+                                       (search/close!)
+                                       (catch js/Error _e
+                                         nil))
                                      (.quit app)))
       (.on app "ready"
            (fn []

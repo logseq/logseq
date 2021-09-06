@@ -73,7 +73,7 @@
   []
   (-> (run-git! #js ["add" "./*"])
       (p/catch (fn [error]
-                 (if (string/includes? "permission denied error: unable to index file")
+                 (if (string/includes? error "permission denied error: unable to index file")
                    (js/console.error error)
                    (p/rejected error))))))
 

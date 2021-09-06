@@ -75,14 +75,6 @@
                                :on-click (fn []
                                            (state/set-modal! (encryption/encryption-dialog url)))}
                    "🔐"])
-                [:a.control.ml-4 {:title (if local?
-                                           "Sync with the local directory"
-                                           "Clone again and re-index the db")
-                                  :on-click (fn []
-                                              (repo-handler/re-index!
-                                               nfs-handler/rebuild-index!
-                                               page-handler/create-today-journal!))}
-                 "Re-index"]
                 [:a.text-gray-400.ml-4 {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
                                         :on-click (fn []
                                                     (repo-handler/remove-repo! repo))}
