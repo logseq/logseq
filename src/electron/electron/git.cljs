@@ -58,7 +58,9 @@
                ["init" (str "--separate-git-dir=" separate-git-dir)]
                :else
                ["init"])]
-    (-> (run-git! (clj->js args))
+    (-> (p/let [_ (run-git! (clj->js args))]
+          (when utils/win32?
+            (run-git! ["config" "core.safecrlf" "false"])))
         (p/catch (fn [error]
                    (when (string/starts-with? error "fatal: not a git repository")
                      (let [p (.join path (get-graph-path) ".git")]
@@ -148,6 +150,7 @@
   []
   (when (not (state/git-auto-commit-disabled?))
     (state/clear-git-commit-interval!)
+    (js/setTimeout add-all-and-commit! 3000)
     (let [seconds (state/get-git-commit-seconds)]
       (when (int? seconds)
         (let [interval (js/setInterval add-all-and-commit! (* seconds 1000))]

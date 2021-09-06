@@ -53,12 +53,14 @@
                ;; ignore truncate
                (not (string/blank? content))
                (not= (string/trim content)
-                     (string/trim (or (db/get-file repo path) ""))))
+                     (string/trim (or (db/get-file repo path) "")))
+               (not (string/includes? path "logseq/pages-metadata.edn")))
           (p/let [db-content (or (db/get-file repo path) "")
                   ;; save the previous content in Logseq first and commit it to avoid
                   ;; any data-loss.
                   _ (file-handler/alter-file repo path db-content {:re-render-root? false
-                                                                   :reset? false})
+                                                                   :reset? false
+                                                                   :skip-compare? true})
                   result (ipc/ipc "gitCommitAll" "")
                   _ (file-handler/alter-file repo path content {:re-render-root? true
                                                                 :from-disk? true})]
