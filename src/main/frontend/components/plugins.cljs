@@ -125,7 +125,7 @@
   []
   (ui/admonition
     :warning
-    [:div {:style {:max-width 700}}
+    [:div.max-w-4xl
      "Plugins can access your graph and your local files, issue network requests.
       They can also cause data corruption or loss. We're working on proper access rules for your graphs.
       Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and
@@ -243,11 +243,13 @@
 (rum/defcs marketplace-plugins
   < rum/static rum/reactive
     (rum/local false ::fetching)
+    (rum/local nil ::error)
     {:did-mount (fn [s]
                   (reset! (::fetching s) true)
+                  (reset! (::error s) nil)
                   (-> (plugin-handler/load-marketplace-plugins false)
-                      (p/catch (js/console.error))
-                      (#(plugin-handler/load-marketplace-stats false))
+                      (p/then #(plugin-handler/load-marketplace-stats false))
+                      (p/catch #(do (js/console.error %) (reset! (::error s) %)))
                       (p/finally #(reset! (::fetching s) false)))
                   s)}
   [state]
@@ -255,12 +257,24 @@
         stats (state/sub :plugin/marketplace-stats)
         installed-plugins (state/sub :plugin/installed-plugins)
         installing (state/sub :plugin/installing)
-        *fetching (::fetching state)]
+        online? (state/sub :network/online?)
+        *fetching (::fetching state)
+        *error (::error state)]
 
-    (if @*fetching
+    (cond
+      (not online?)
+      [:p.flex.justify-center.pt-20.opacity-50
+       (svg/offline 30)]
+
+      @*fetching
       [:p.flex.justify-center.pt-20
        svg/loading]
 
+      @*error
+      [:p.flex.justify-center.pt-20.opacity-50
+       "Remote error: " (.-message @*error)]
+
+      :else
       [:div.cp__plugins-marketplace
        {:class (util/classnames [{:has-installing (boolean installing)}])}
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
@@ -390,7 +404,7 @@
 
        [:div.tabs.flex.items-center.justify-center
         [:div.tabs-inner.flex.items-center
-         (ui/button [:span.it (svg/adjustments 16) (t :plugin/installed)]
+         (ui/button [:span.it (t :plugin/installed)]
                     :on-click #(set-active! :installed)
                     :intent "logseq" :class (if-not market? "active" ""))
 

@@ -45,12 +45,13 @@
   (if (or refresh? (nil? (:plugin/marketplace-pkgs @state/state)))
     (p/create
       (fn [resolve reject]
-        (util/fetch plugins-url
-                    (fn [res]
-                      (let [pkgs (:packages res)]
-                        (state/set-state! :plugin/marketplace-pkgs pkgs)
-                        (resolve pkgs)))
-                    reject)))
+        (-> (util/fetch plugins-url
+                        (fn [res]
+                          (let [pkgs (:packages res)]
+                            (state/set-state! :plugin/marketplace-pkgs pkgs)
+                            (resolve pkgs)))
+                        reject)
+            (p/catch reject))))
     (p/resolved (:plugin/marketplace-pkgs @state/state))))
 
 (defn load-marketplace-stats
