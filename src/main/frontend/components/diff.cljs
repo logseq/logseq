@@ -247,7 +247,7 @@
     [:span.cp__diff-file-header-content.pl-1.font-medium {:style {:word-break "break-word"}}
      (str "File " path " has been modified on the disk.")]]
    [:div.p-4
-    (when (not= disk-content db-content)
+    (when (not= (string/trim disk-content) (string/trim db-content))
       (ui/foldable
        [:span.text-sm.font-medium.ml-1 "Check diff"]
        (fn []
