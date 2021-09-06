@@ -250,7 +250,8 @@
         :cancel "Cancel"
         :close "Close"
         :delete "Delete"
-        :re-index "Re-index"
+        :re-index "Re-index (rebuild the graph)"
+        :sync-from-local-files "Sync from local files"
         :unlink "unlink"
         :search (if config/publishing?
                   "Search"
