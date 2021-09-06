@@ -2,6 +2,7 @@
   (:require [rum.core :as rum]
             [frontend.state :as state]
             [cljs-bean.core :as bean]
+            [frontend.context.i18n :as i18n]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
@@ -47,27 +48,30 @@
         themes (sort #(:selected %) (map #(assoc % :selected (= (:url %) selected)) themes))
         _ (reset! *total (count themes))]
 
-    [:div.cp__themes-installed
-     {:tab-index -1}
-     [:h1.mb-4.text-2xl.p-2 "Installed Themes"]
-     (map-indexed
-       (fn [idx opt]
-         (let [current-selected (:selected opt)
-               plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
-           [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
-            {:key      (:url opt)
-             :title    (if current-selected "Cancel selected theme")
-             :class    (util/classnames
-                         [{:is-selected current-selected
-                           :is-active   (= idx @*cursor)}])
-             :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
-                            (state/set-modal! nil))}
-            [:section
-             [:strong.block (when plg (str (:name plg) " / ")) (:name opt)]
-             [:small.opacity-30.italic (:description opt)]]
-            [:small.flex-shrink-0.flex.items-center.opacity-10
-             (if current-selected (svg/check 28))]]))
-       themes)]))
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
+
+      [:div.cp__themes-installed
+       {:tab-index -1}
+       [:h1.mb-4.text-2xl.p-2 (t :themes)]
+       (map-indexed
+         (fn [idx opt]
+           (let [current-selected (:selected opt)
+                 plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
+             [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
+              {:key      (:url opt)
+               :title    (if current-selected "Cancel selected theme")
+               :class    (util/classnames
+                           [{:is-selected current-selected
+                             :is-active   (= idx @*cursor)}])
+               :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
+                              (state/set-modal! nil))}
+              [:section
+               [:strong.block (when plg (str (:name plg) " / ")) (:name opt)]
+               [:small.opacity-30.italic (:description opt)]]
+              [:small.flex-shrink-0.flex.items-center.opacity-10
+               (if current-selected (svg/check 28))]]))
+         themes)])))
 
 (rum/defc unpacked-plugin-loader
   [unpacked-pkg-path]
@@ -134,98 +138,107 @@
   (let [market? (and (not (nil? repo)) (nil? usf))
         disabled (:disabled settings)
         name (or title name "Untitled")]
-    [:div.cp__plugins-item-card
-     {:class (util/classnames [{:market market?}])}
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
 
-     [:div.l.link-block
-      {:on-click #(plugin-handler/open-readme! url item simple-markdown-display)}
-      (if icon
-        [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
-        svg/folder)
+      [:div.cp__plugins-item-card
+       {:class (util/classnames [{:market market?}])}
 
-      (when-not (or market? iir)
-        [:span.flex.justify-center.text-xs.text-red-500.pt-2 "unpacked"])]
+       [:div.l.link-block
+        {:on-click #(plugin-handler/open-readme! url item simple-markdown-display)}
+        (if icon
+          [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
+          svg/folder)
 
-     [:div.r
-      [:h3.head.text-xl.font-bold.pt-1.5
+        (when-not (or market? iir)
+          [:span.flex.justify-center.text-xs.text-red-500.pt-2 "unpacked"])]
 
-       [:span name]
-       (if (not market?) [:sup.inline-block.px-1.text-xs.opacity-30 version])]
+       [:div.r
+        [:h3.head.text-xl.font-bold.pt-1.5
 
-      [:div.desc.text-xs.opacity-60
-       [:p description]
-       ;;[:small (js/JSON.stringify (bean/->js settings))]
-       ]
+         [:span name]
+         (if (not market?) [:sup.inline-block.px-1.text-xs.opacity-30 version])]
 
-      [:div.flag
-       [:p.text-xs.text-gray-300.pr-2.flex.justify-between.dark:opacity-40
-        [:small author]
-        [:small (str "ID: " id)]]]
+        [:div.desc.text-xs.opacity-60
+         [:p description]
+         ;;[:small (js/JSON.stringify (bean/->js settings))]
+         ]
 
-      [:div.flag.is-top.opacity-50
-       (if repo
-         [:a.flex {:target "_blank"
-                   :href   (plugin-handler/gh-repo-url repo)}
-          (svg/github {:width 16 :height 16})])]
+        [:div.flag
+         [:p.text-xs.text-gray-300.pr-2.flex.justify-between.dark:opacity-40
+          [:small author]
+          [:small (str "ID: " id)]]]
 
-      (if market?
-        ;; market ctls
-        [:div.ctl
-         [:ul.l.flex.items-center
-          ;; downloads
-          [:li.flex.text-sm.items-center.pr-3 (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
+        [:div.flag.is-top.opacity-50
+         (if repo
+           [:a.flex {:target "_blank"
+                     :href   (plugin-handler/gh-repo-url repo)}
+            (svg/github {:width 16 :height 16})])]
 
-          ;; stars
-          (when-let [downloads (and stat (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))]
-            (if (and downloads (> downloads 0))
-              [:li.flex.text-sm.items-center.pr-3 (svg/cloud-down 16) [:span.pl-1 downloads]]))]
+        (if market?
+          ;; market ctls
+          [:div.ctl
+           [:ul.l.flex.items-center
+            ;; downloads
+            [:li.flex.text-sm.items-center.pr-3 (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
 
-         [:div.r.flex.items-center
+            ;; stars
+            (when-let [downloads (and stat (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))]
+              (if (and downloads (> downloads 0))
+                [:li.flex.text-sm.items-center.pr-3 (svg/cloud-down 16) [:span.pl-1 downloads]]))]
 
-          [:a.btn
-           {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
-                                         :installing installing-or-updating?}])
-            :on-click #(plugin-handler/install-marketplace-plugin item)}
-           (if installed?
-             "installed"
-             (if installing-or-updating? [:span.flex.items-center [:small svg/loading] "installing"] "install"))]]]
+           [:div.r.flex.items-center
 
-        ;; installed ctls
-        [:div.ctl
-         [:div.l
-          [:div.de
-           [:strong (svg/settings)]
-           [:ul.menu-list
-            [:li {:on-click #(if usf (js/apis.openPath usf))} "Open settings"]
-            [:li {:on-click #(js/apis.openPath url)} "Open plugin package"]
-            [:li {:on-click
-                  #(let [confirm-fn
-                         (ui/make-confirm-modal
-                           {:title      (str "Are you sure uninstall plugin [" name "] ?")
-                            :on-confirm (fn [_ {:keys [close-fn]}]
-                                          (close-fn)
-                                          (plugin-handler/unregister-plugin id))})]
-                     (state/set-modal! confirm-fn))}
-             "Uninstall plugin"]]]]
-
-         [:div.r.flex.items-center
-          (if (not disabled)
             [:a.btn
-             {:on-click #(js-invoke js/LSPluginCore "reload" id)}
-             "reload"])
+             {:class    (util/classnames [{:disabled   (or installed? installing-or-updating?)
+                                           :installing installing-or-updating?}])
+              :on-click #(plugin-handler/install-marketplace-plugin item)}
+             (if installed?
+               (t :plugin/installed)
+               (if installing-or-updating?
+                 [:span.flex.items-center [:small svg/loading]
+                  (t :plugin/installing)]
+                 (t :plugin/install)))]]]
 
-          (if iir
-            [:a.btn
-             {:class    (util/classnames [{:disabled (or installing-or-updating?)
-                                           :updating installing-or-updating?}])
-              :on-click #(plugin-handler/update-marketplace-plugin item)}
+          ;; installed ctls
+          [:div.ctl
+           [:div.l
+            [:div.de
+             [:strong (svg/settings)]
+             [:ul.menu-list
+              [:li {:on-click #(if usf (js/apis.openPath usf))} (t :plugin/open-settings)]
+              [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
+              [:li {:on-click
+                    #(let [confirm-fn
+                           (ui/make-confirm-modal
+                             {:title      (str "Are you sure uninstall plugin [" name "] ?")
+                              :on-confirm (fn [_ {:keys [close-fn]}]
+                                            (close-fn)
+                                            (plugin-handler/unregister-plugin id))})]
+                       (state/set-modal! confirm-fn))}
+               (t :plugin/uninstall)]]]]
 
-             (if installing-or-updating? "updating" "update")])
+           [:div.r.flex.items-center
+            (if (not disabled)
+              [:a.btn
+               {:on-click #(js-invoke js/LSPluginCore "reload" id)}
+               (t :plugin/reload)])
 
-          (ui/toggle (not disabled)
-                     (fn []
-                       (js-invoke js/LSPluginCore (if disabled "enable" "disable") id))
-                     true)]])]]))
+            (if iir
+              [:a.btn
+               {:class    (util/classnames [{:disabled (or installing-or-updating?)
+                                             :updating installing-or-updating?}])
+                :on-click #(plugin-handler/update-marketplace-plugin
+                             item (fn [e] (notification/show! e :error)))}
+
+               (if installing-or-updating?
+                 (t :plugin/updating)
+                 (t :plugin/update))])
+
+            (ui/toggle (not disabled)
+                       (fn []
+                         (js-invoke js/LSPluginCore (if disabled "enable" "disable") id))
+                       true)]])]])))
 
 (rum/defcs marketplace-plugins
   < rum/static rum/reactive
@@ -266,49 +279,51 @@
   (let [installed-plugins (state/sub :plugin/installed-plugins)
         updating (state/sub :plugin/installing)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)]
-    [:div.cp__plugins-installed
-     [:div.mb-6.flex.items-center.justify-between
-      (ui/button
-        "Load unpacked plugin"
-        :intent "logseq"
-        :on-click plugin-handler/load-unpacked-plugin)
-      (unpacked-plugin-loader selected-unpacked-pkg)
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
 
-      (when (util/electron?)
-        [:div.flex.align-items
-         (ui/button
-           "Open plugin preferences file"
-           :intent "logseq"
-           :on-click (fn []
-                       (p/let [root (plugin-handler/get-ls-dotdir-root)]
-                         (js/apis.openPath (str root "/preferences.json")))))
+      [:div.cp__plugins-installed
+       [:div.mb-4.flex.items-center.justify-between
+        (ui/button
+          (t :plugin/load-unpacked)
+          :intent "logseq"
+          :on-click plugin-handler/load-unpacked-plugin)
+        (unpacked-plugin-loader selected-unpacked-pkg)
 
-         (ui/button
-           [:span.flex.items-center
-            [:span.pr-1
-             (ui/Tippy
-               {:html     [:small.inline-flex.py-2.pr-2
-                           {:style {:max-width "180px" :text-align "left" :justify-content "flex-start"}}
-                           "If the plugin you installed from marketplace for the first time not work properly,
-                           you could try to restart the application."]
-                :arrow    true
-                :distance 18
-                :offset   -25
-                :theme    "transparent"}
-               (svg/info))]
+        (when (util/electron?)
+          [:div.flex.align-items
+           (ui/button
+             (t :plugin/open-preferences)
+             :intent "logseq"
+             :on-click (fn []
+                         (p/let [root (plugin-handler/get-ls-dotdir-root)]
+                           (js/apis.openPath (str root "/preferences.json")))))
 
-            "Restart"]
-           :class "ml-2"
-           :intent "logseq"
-           :on-click #(plugin-handler/invoke-exported-api "relaunch"))])]
+           (ui/button
+             [:span.flex.items-center
+              [:span.pr-1
+               (ui/Tippy
+                 {:html     [:small.inline-flex.py-2.pr-2
+                             {:style {:max-width "180px" :text-align "left" :justify-content "flex-start"}}
+                             (t :plugin/marketplace-tips)]
+                  :arrow    true
+                  :distance 18
+                  :offset   -25
+                  :theme    "transparent"}
+                 (svg/info))]
 
-     [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
-      (for [[_ item] installed-plugins]
-        (rum/with-key
-          (let [pid (keyword (:id item))]
-            (plugin-item-card
-              item (and updating (= (keyword (:id updating)) pid))
-              true nil)) (:id item)))]]))
+              (t :plugin/restart)]
+             :class "ml-2"
+             :intent "logseq"
+             :on-click #(plugin-handler/invoke-exported-api "relaunch"))])]
+
+       [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
+        (for [[_ item] installed-plugins]
+          (rum/with-key
+            (let [pid (keyword (:id item))]
+              (plugin-item-card
+                item (and updating (= (keyword (:id updating)) pid))
+                true nil)) (:id item)))]])))
 
 (defn open-select-theme!
   []
@@ -365,22 +380,25 @@
   (let [[active set-active!] (rum/use-state :installed)
         market? (= active :marketplace)]
 
-    [:div.cp__plugins-page
-     [:h1 "Plugins"]
-     (security-warning)
-     [:hr]
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
 
-     [:div.tabs.flex.items-center.justify-center
-      [:div.tabs-inner.flex.items-center
-       (ui/button [:span.it (svg/adjustments 16) "Installed"]
-                  :on-click #(set-active! :installed)
-                  :intent "logseq" :class (if-not market? "active" ""))
+      [:div.cp__plugins-page
+       [:h1 (t :plugins)]
+       (security-warning)
+       [:hr]
 
-       (ui/button [:span.mk (svg/apps 16) "Marketplace"]
-                  :on-click #(set-active! :marketplace)
-                  :intent "logseq" :class (if market? "active" ""))]]
+       [:div.tabs.flex.items-center.justify-center
+        [:div.tabs-inner.flex.items-center
+         (ui/button [:span.it (svg/adjustments 16) (t :plugin/installed)]
+                    :on-click #(set-active! :installed)
+                    :intent "logseq" :class (if-not market? "active" ""))
 
-     [:div.panels
-      (if market?
-        (marketplace-plugins)
-        (installed-plugins))]]))
+         (ui/button [:span.mk (svg/apps 16) (t :plugin/marketplace)]
+                    :on-click #(set-active! :marketplace)
+                    :intent "logseq" :class (if market? "active" ""))]]
+
+       [:div.panels
+        (if market?
+          (marketplace-plugins)
+          (installed-plugins))]])))

@@ -319,7 +319,8 @@
         default-home (get-default-home-if-valid)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (theme/container
-       {:theme         theme
+       {:t             t
+        :theme         theme
         :route         route-match
         :current-repo  current-repo
         :nfs-granted?  granted?

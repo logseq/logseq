@@ -81,7 +81,7 @@
         (resolve id)))))
 
 (defn update-marketplace-plugin
-  [{:keys [id] :as pkg}]
+  [{:keys [id] :as pkg} error-handler]
   (when-not (and (:plugin/installing @state/state)
                  (not (installed? id)))
     (p/catch
@@ -96,7 +96,7 @@
           true))
 
       (fn [^js e]
-        (notifications/show! "Update Error: remote error" :error)
+        (error-handler "Update Error: remote error")
         (state/set-state! :plugin/installing nil)
         (js/console.error e)))))
 
@@ -107,54 +107,60 @@
     (catch js/Error e
       nil)))
 
-(defn- init-install-listener!
-  []
-  (js/window.apis.on "lsp-installed"
-                     (fn [^js e]
-                       (js/console.debug :lsp-installed e)
+(defn setup-install-listener!
+  [t]
+  (let [channel (name :lsp-installed)
+        listener (fn [^js _ ^js e]
+                   (js/console.debug :lsp-installed e)
 
-                       (when-let [{:keys [status payload]} (bean/->clj e)]
-                         (case (keyword status)
+                   (when-let [{:keys [status payload]} (bean/->clj e)]
+                     (case (keyword status)
 
-                           :completed
-                           (let [{:keys [id dst name title version theme]} payload
-                                 name (or title name "Untitled")]
-                             (if (installed? id)
-                               (when-let [^js pl (get-plugin-inst id)] ;; update
-                                 (p/then
-                                   (.reload pl)
-                                   #(do
-                                      (if theme (select-a-plugin-theme id))
-                                      (notifications/show!
-                                        (str "Updated Plugin: " name " [" (.-version (.-options pl)) "]") :success))))
+                       :completed
+                       (let [{:keys [id dst name title version theme]} payload
+                             name (or title name "Untitled")]
+                         (if (installed? id)
+                           (when-let [^js pl (get-plugin-inst id)] ;; update
+                             (p/then
+                               (.reload pl)
+                               #(do
+                                  (if theme (select-a-plugin-theme id))
+                                  (notifications/show!
+                                    (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success))))
 
-                               (do                          ;; register new
-                                 (p/then
-                                   (js/LSPluginCore.register (bean/->js {:key id :url dst}))
-                                   (fn [] (if theme (js/setTimeout #(select-a-plugin-theme id) 300))))
-                                 (notifications/show!
-                                   (str "Installed Plugin: " name) :success))))
-
-                           :error
-                           (let [[msg type] (case (keyword (string/replace payload #"^[\s\:]+" ""))
-
-                                              :no-new-version
-                                              ["It's up to date :)" :success]
-
-                                              [payload :error])]
-
+                           (do                              ;; register new
+                             (p/then
+                               (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                               (fn [] (if theme (js/setTimeout #(select-a-plugin-theme id) 300))))
                              (notifications/show!
-                               (str
-                                 (if (= :error type) "[Install Error]" "")
-                                 msg) type)
+                               (str (t :plugin/installed) (t :plugins) ": " name) :success))))
 
-                             (js/console.error payload))
+                       :error
+                       (let [[msg type] (case (keyword (string/replace payload #"^[\s\:]+" ""))
 
-                           :dunno))
+                                          :no-new-version
+                                          [(str (t :plugin/up-to-date) " :)") :success]
 
-                       ;; reset
-                       (state/set-state! :plugin/installing nil)
-                       true)))
+                                          [payload :error])]
+
+                         (notifications/show!
+                           (str
+                             (if (= :error type) "[Install Error]" "")
+                             msg) type)
+
+                         (js/console.error payload))
+
+                       :dunno))
+
+                   ;; reset
+                   (state/set-state! :plugin/installing nil)
+                   true)]
+
+    (js/window.apis.addListener channel listener)
+
+    ;; clear
+    (fn []
+      (js/window.apis.removeAllListeners channel))))
 
 (defn register-plugin
   [pl]
@@ -389,6 +395,4 @@
   [callback]
   (if (not lsp-enabled?)
     (callback)
-    (do
-      (init-install-listener!)
-      (init-plugins! callback))))
+    (init-plugins! callback)))
