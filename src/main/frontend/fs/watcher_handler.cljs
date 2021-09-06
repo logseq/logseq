@@ -42,9 +42,7 @@
             (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                                   :from-disk? true})]
               (set-missing-block-ids! content)
-              (db/set-file-last-modified-at! repo path mtime)
-              ;; return nil, otherwise the entire db will be transfered by ipc
-              nil))
+              (db/set-file-last-modified-at! repo path mtime)))
 
           (and (= "change" type)
                (not (db/file-exists? repo path)))
@@ -58,12 +56,14 @@
           (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                                 :from-disk? true})]
             (set-missing-block-ids! content)
-            (db/set-file-last-modified-at! repo path mtime)
-            nil)
+            (db/set-file-last-modified-at! repo path mtime))
 
           (contains? #{"add" "change" "unlink"} type)
           nil
 
           :else
           (log/error :fs/watcher-no-handler {:type type
-                                             :payload payload}))))))
+                                             :payload payload})))
+
+      ;; return nil, otherwise the entire db will be transfered by ipc
+      nil)))
