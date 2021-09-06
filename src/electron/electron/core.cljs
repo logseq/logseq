@@ -246,8 +246,8 @@
       (.on app "window-all-closed" (fn []
                                      (try
                                        (search/close!)
-                                       (catch js/Error _e
-                                         nil))
+                                       (catch js/Error e
+                                         (js/console.error e)))
                                      (.quit app)))
       (.on app "ready"
            (fn []
@@ -285,7 +285,6 @@
                                   (let [web-contents (. win -webContents)]
                                     (.send web-contents "persistent-dbs"))
                                   (async/go
-                                    ;; FIXME: What if persistence failed?
                                     (let [_ (async/<! state/persistent-dbs-chan)]
                                       (if (or @*quitting? (not mac?))
                                         (when-let [win @*win]
