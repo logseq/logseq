@@ -2467,8 +2467,10 @@
     (try
       (match item
         ["Drawer" name lines]
-
-        (when (not= name "logbook")
+        (when (or (not= name "logbook")
+                  (and
+                   (= name "logbook")
+                   (:block/scheduled (:block config))))
           [:div.flex.flex-col
            [:div.text-sm.mt-1.flex.flex-row
             [:div.drawer {:data-drawer-name name}
