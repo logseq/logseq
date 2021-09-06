@@ -183,10 +183,10 @@
                        (assoc :macros macros))
           alias (->> (->vec-concat (:roam_alias properties) (:alias properties))
                      (remove string/blank?))
-          filetags (if-let [org-file-tags (:filetags properties)]
+          filetags (when-let [org-file-tags (:filetags properties)]
                      (->> (string/split org-file-tags ":")
                           (remove string/blank?)))
-          roam-tags (if-let [org-roam-tags (:roam_tags properties)]
+          roam-tags (when-let [org-roam-tags (:roam_tags properties)]
                       (let [pat #"\"(.*?)\"" ;; note: lazy, capturing group
                             quoted (map second (re-seq pat org-roam-tags))
                             rest   (string/replace org-roam-tags pat "")

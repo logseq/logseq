@@ -66,7 +66,7 @@
          (if string?
            (util/format "%s%s"
                         (if (>= hours 1)
-                          (if hours (str hours "h"))
+                          (when hours (str hours "h"))
                           "")
                         (if (zero? minutes)
                           ""

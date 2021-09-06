@@ -101,7 +101,7 @@
            file-name (date/journal-title->default title)
            default-content (util/default-content-with-title format)
            template (state/get-journal-template)
-           template (if (and template
+           template (when (and template
                              (not (string/blank? template)))
                       template)
            content (cond
@@ -304,7 +304,7 @@
               remove-files (filter-diffs "remove")
               modify-files (filter-diffs "modify")
               add-files (filter-diffs "add")
-              delete-files (if (seq remove-files)
+              delete-files (when (seq remove-files)
                              (db/delete-files remove-files))
               delete-blocks (db/delete-blocks repo-url remove-files true)
               delete-blocks (->>

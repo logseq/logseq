@@ -45,7 +45,7 @@
                    (remove nil?)
                    (remove #(= (string/lower-case %) "contents")))]
     [:div.recent-pages.text-sm.flex-col.flex.ml-3.mt-2
-     (if (seq pages)
+     (when (seq pages)
        (for [page pages]
          [:a.page-ref.mb-1 {:key      (str "recent-page-" page)
                    :href     (rfe/href :page {:name page})
@@ -184,7 +184,7 @@
                (get-in match [:path-params :path])
 
                (date/journal-name))]
-    (if page
+    (when page
       (string/lower-case page))))
 
 (defn get-current-page
@@ -237,7 +237,7 @@
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#right-sidebar.cp__right-sidebar.h-screen
        {:class (if sidebar-open? "open" "closed")}
-       (if sidebar-open?
+       (when sidebar-open?
          [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
 
           (sidebar-resizer)

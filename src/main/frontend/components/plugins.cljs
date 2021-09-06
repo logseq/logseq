@@ -23,14 +23,14 @@
        (let [current-selected (= selected (:url opt))]
          [:div.it.flex.px-3.py-2.mb-2.rounded-sm.justify-between
           {:key      (:url opt)
-           :class    [(if current-selected "is-selected")]
+           :class    [(when current-selected "is-selected")]
            :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
                           (state/set-modal! nil))}
           [:section
            [:strong.block (:name opt)]
            [:small.opacity-30 (:description opt)]]
           [:small.flex-shrink-0.flex.items-center.opacity-10
-           (if current-selected "current")]]))]))
+           (when current-selected "current")]]))]))
 
 (rum/defc unpacked-plugin-loader
   [unpacked-pkg-path]
@@ -107,7 +107,7 @@
         [:div.de
          [:strong svg/settings-sm]
          [:ul.menu-list
-          [:li {:on-click #(if usf (js/apis.openPath usf))} "Open settings"]
+          [:li {:on-click #(when usf (js/apis.openPath usf))} "Open settings"]
           [:li {:on-click #(js/apis.openPath url)} "Open plugin package"]
           [:li {:on-click
                 #(let [confirm-fn

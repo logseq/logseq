@@ -153,7 +153,7 @@
               [:div.flex.flex-row.justify-between.align-items.mt-2
                (ui/button (t :git/push)
                  :on-click (fn [] (state/set-modal! commit/add-commit-message)))
-               (if pushing? svg/loading)]]
+               (when pushing? svg/loading)]]
              [:hr]
              [:div
               (when-not (string/blank? last-pulled-at)
@@ -162,7 +162,7 @@
               [:div.flex.flex-row.justify-between.align-items
                (ui/button (t :git/pull)
                  :on-click (fn [] (repo-handler/pull-current-repo)))
-               (if pulling? svg/loading)]
+               (when pulling? svg/loading)]
               [:a.mt-5.text-sm.opacity-50.block
                {:on-click (fn []
                             (export-handler/export-repo-as-zip! repo))}

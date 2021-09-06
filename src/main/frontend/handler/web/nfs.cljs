@@ -83,7 +83,7 @@
 
 (defn- set-files-aux!
   [handles]
-  (if (seq handles)
+  (when (seq handles)
     (let [[h t] (split-at 50 handles)]
       (p/let [_ (p/promise (fn [_]
                              (js/setTimeout (fn []

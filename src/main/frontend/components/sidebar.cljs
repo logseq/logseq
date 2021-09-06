@@ -79,7 +79,7 @@
               "translate-x-0"
               "-translate-x-full")
      :style {:max-width "86vw"}}
-    (if @open?
+    (when @open?
       [:div.absolute.top-0.right-0.p-1
        [:button#close-left-bar.close-panel-btn.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
         {:on-click close-fn}

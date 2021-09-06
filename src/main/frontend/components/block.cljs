@@ -284,8 +284,8 @@
         repetition (if repetition
                      (str " " (repetition-to-string repetition))
                      "")
-        hour (if hour (util/zero-pad hour))
-        min  (if min (util/zero-pad min))
+        hour (when hour (util/zero-pad hour))
+        min  (when min (util/zero-pad min))
         time (cond
                (and hour min)
                (util/format " %s:%s" hour min)
@@ -323,7 +323,7 @@
                  "Stop"
                  "To: "
                  nil)]
-    (let [class (if (= kind "Closed")
+    (let [class (when (= kind "Closed")
                   "line-through")]
       [:span.timestamp (cond-> {:active (str active)}
                          class
@@ -490,7 +490,7 @@
            state)}
   [file]
   (let [loaded? (rum/react excalidraw-loaded?)
-        draw-component (if loaded?
+        draw-component (when loaded?
                          (resolve 'frontend.extensions.excalidraw/draw))]
     (when draw-component
       (draw-component {:file file}))))
@@ -556,7 +556,7 @@
   (let [page-name (string/trim (string/lower-case page-name))
         current-page (state/get-current-page)]
     [:div.color-level.embed.embed-page.bg-base-2
-     {:class (if (:sidebar? config) "in-sidebar")
+     {:class (when (:sidebar? config) "in-sidebar")
       :on-double-click #(edit-parent-block % config)
       :on-mouse-down #(.stopPropagation %)}
      [:section.flex.items-center.p-1.embed-header
@@ -1185,7 +1185,7 @@
             nil))
 
         (and plugin-handler/lsp-enabled? (= name "renderer"))
-        (if-let [block-uuid (str (:block/uuid config))]
+        (when-let [block-uuid (str (:block/uuid config))]
           (plugins/hook-ui-slot :macro-renderer-slotted (assoc options :uuid block-uuid)))
 
         (get @macro/macros name)
@@ -1210,7 +1210,7 @@
                                   1
                                   (util/format "[:img {:src \"%s\"}]" (first arguments))
                                   4
-                                  (if (and (util/safe-parse-int (nth arguments 1))
+                                  (when (and (util/safe-parse-int (nth arguments 1))
                                            (util/safe-parse-int (nth arguments 2)))
                                     (util/format "[:img.%s {:src \"%s\" :style {:width %s :height %s}}]"
                                                  (nth arguments 3)
@@ -1218,7 +1218,7 @@
                                                  (util/safe-parse-int (nth arguments 1))
                                                  (util/safe-parse-int (nth arguments 2))))
                                   3
-                                  (if (and (util/safe-parse-int (nth arguments 1))
+                                  (when (and (util/safe-parse-int (nth arguments 1))
                                            (util/safe-parse-int (nth arguments 2)))
                                     (util/format "[:img {:src \"%s\" :style {:width %s :height %s}}]"
                                                  (first arguments)
@@ -1471,7 +1471,7 @@
 (defn marker-cp
   [{:block/keys [pre-block? marker] :as block}]
   (when-not pre-block?
-    (if (contains? #{"IN-PROGRESS" "WAIT" "WAITING"} marker)
+    (when (contains? #{"IN-PROGRESS" "WAIT" "WAITING"} marker)
       [:span {:class (str "task-status block-marker " (string/lower-case marker))
               :style {:margin-right 3.5}}
        (string/upper-case marker)])))
@@ -1571,7 +1571,7 @@
        (if title
          (conj
            (map-inline config title)
-           (if (and (util/electron?) (not= block-type :default))
+           (when (and (util/electron?) (not= block-type :default))
              [:a.prefix-link
               {:on-click #(case block-type
                             ;; pdf annotation
@@ -2172,7 +2172,7 @@
                     :else
                     (markup-elements-cp config content)))
         checked? (some? checkbox)
-        items (if (seq items)
+        items (when (seq items)
                 (->elem
                  (list-element items)
                  (for [item items]
@@ -2228,7 +2228,7 @@
                               col_groups)
                         (catch js/Error e
                           []))
-        head (if header
+        head (when header
                [:thead (tr :th header)])
         groups (mapv (fn [group]
                        (->elem
@@ -2446,7 +2446,7 @@
   [config options html-export?]
   (when options
     (let [{:keys [language lines pos_meta]} options
-          attr (if language
+          attr (when language
                  {:data-lang language})
           code (join-lines lines)]
       (cond
@@ -2497,7 +2497,7 @@
               (if (coll? v)
                 (let [vals (for [item v]
                              (if (coll? v)
-                               (let [config (if (= k :alias)
+                               (let [config (when (= k :alias)
                                               (assoc config :block/alias? true))]
                                  (page-cp config {:block/name item}))
                                (inline-text format item)))]

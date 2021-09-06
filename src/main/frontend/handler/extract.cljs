@@ -100,7 +100,7 @@
                                                     (conj
                                                      (remove #{alias} aliases)
                                                      page))
-                                           aliases (if (seq aliases)
+                                           aliases (when (seq aliases)
                                                      (map
                                                        (fn [alias]
                                                          {:block/name (string/lower-case alias)})

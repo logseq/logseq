@@ -129,7 +129,7 @@
              [:div.flex.flex-row.flex-1.justify-between
               [:h2.font-bold.opacity-50 (let []
                                           (str n-ref " Linked Reference"
-                                               (if (> n-ref 1) "s")))]
+                                               (when (> n-ref 1) "s")))]
               [:a.opacity-50.hover:opacity-100.filter
                {:title "Filter"
                 :on-click #(state/set-modal! (filter-dialog filters-atom references page-name))}
@@ -188,7 +188,7 @@
           (ui/foldable
            [:h2.font-bold {:style {:opacity "0.3"}}
             (if @n-ref
-              (str @n-ref " Unlinked Reference" (if (> @n-ref 1)
+              (str @n-ref " Unlinked Reference" (when (> @n-ref 1)
                                                   "s"))
               "Unlinked References")]
            (fn [] (unlinked-references-aux page-name n-ref))

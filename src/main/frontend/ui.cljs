@@ -114,7 +114,7 @@
   [text & {:keys [background href class intent on-click small?]
            :or {small? false}
            :as   option}]
-  (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700")
+  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700")
         klass (if background (string/replace klass "indigo" background) klass)
         klass (if small? (str klass ".px-2.py-1") klass)]
     (if href
@@ -242,12 +242,12 @@
 (defn inject-document-devices-envs!
   []
   (let [cl (.-classList js/document.documentElement)]
-    (if util/mac? (.add cl "is-mac"))
-    (if util/win32? (.add cl "is-win32"))
-    (if (util/electron?) (.add cl "is-electron"))
-    (if (util/ios?) (.add cl "is-ios"))
-    (if (util/mobile?) (.add cl "is-mobile"))
-    (if (util/safari?) (.add cl "is-safari"))
+    (when util/mac? (.add cl "is-mac"))
+    (when util/win32? (.add cl "is-win32"))
+    (when (util/electron?) (.add cl "is-electron"))
+    (when (util/ios?) (.add cl "is-ios"))
+    (when (util/mobile?) (.add cl "is-mobile"))
+    (when (util/safari?) (.add cl "is-safari"))
     (when (util/electron?)
       (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")))))
 
@@ -264,7 +264,7 @@
   "fix a common issue about ios webpage viewport
    when soft keyboard setup"
   []
-  (if (and
+  (when (and
        (util/ios?)
        (not (nil? js/window.visualViewport)))
     (let [viewport js/visualViewport
@@ -274,7 +274,7 @@
           set-raf-pending! #(reset! raf-pending? %)
           handler
           (fn []
-            (if-not @raf-pending?
+            (when-not @raf-pending?
               (let [f (fn []
                         (set-raf-pending! false)
                         (let [vh (+ (.-offsetTop viewport) (.-height viewport))
@@ -453,7 +453,7 @@
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
    [:div.absolute.top-0.right-0.pt-2.pr-2
-    (if close-btn?
+    (when close-btn?
       [:a.ui__modal-close.opacity-60.hover:opacity-100
        {:aria-label "Close"
         :type       "button"

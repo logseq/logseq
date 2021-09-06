@@ -301,7 +301,7 @@
                             (- (max (* 2 offset-top) delta-height) 16)
                             max-height))
                         max-height)
-        x-overflow? (if (and (seq rect) (> vw-width max-width))
+        x-overflow? (when (and (seq rect) (> vw-width max-width))
                       (let [delta-width (- vw-width (+ (:left rect) left))]
                         (< delta-width (* max-width 0.5))))] ;; FIXME: for translateY layer
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
@@ -314,7 +314,7 @@
                ;; TODO: auto responsive fixed size
                :width "fit-content"
                :z-index    11}
-              (if set-default-width?
+              (when set-default-width?
                 {:width max-width})
               (if config/mobile?
                 {:left 0}

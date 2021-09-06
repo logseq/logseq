@@ -82,7 +82,7 @@
 (defn parse-user-md-content
   [content {:keys [url]}]
   (try
-    (if-not (string/blank? content)
+    (when-not (string/blank? content)
       (let [content (if-not (string/blank? url)
                       (string/replace
                        content #"!\[[^\]]*\]\((.*?)\s*(\"(?:.*[^\"])\")?\s*\)"
@@ -109,7 +109,7 @@
 
 (defn load-unpacked-plugin
   []
-  (if util/electron?
+  (when util/electron?
     (p/let [path (ipc/ipc "openDialogSync")]
       (when-not (:plugin/selected-unpacked-pkg @state/state)
         (state/set-state! :plugin/selected-unpacked-pkg path)))))

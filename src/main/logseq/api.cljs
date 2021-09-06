@@ -104,7 +104,7 @@
           _ (when-not exist? (fs/mkdir-recur! path))
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
-          _ (if-not sub-dir? (do (log/info :debug user-path) (throw "write file denied")))
+          _ (when-not sub-dir? (do (log/info :debug user-path) (throw "write file denied")))
           user-path-root (util/node-path.dirname user-path)
           exist? (fs/file-exists? user-path-root "")
           _ (when-not exist? (fs/mkdir-recur! user-path-root))
@@ -118,9 +118,9 @@
           path (util/node-path.join path sub-root)
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
-          _ (if-not sub-dir? (do (log/info :debug user-path) (throw "read file denied")))
+          _ (when-not sub-dir? (log/info :debug user-path) (throw "read file denied"))
           exist? (fs/file-exists? "" user-path)
-          _ (when-not exist? (do (log/info :debug user-path) (throw "file not existed")))
+          _ (when-not exist? (log/info :debug user-path) (throw "file not existed"))
           content (fs/read-file "" user-path)]
     content))
 
@@ -131,9 +131,9 @@
           path (util/node-path.join path sub-root)
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
-          _ (if-not sub-dir? (do (log/info :debug user-path) (throw "access file denied")))
+          _ (when-not sub-dir? (log/info :debug user-path) (throw "access file denied"))
           exist? (fs/file-exists? "" user-path)
-          _ (when-not exist? (do (log/info :debug user-path) (throw "file not existed")))
+          _ (when-not exist?(log/info :debug user-path) (throw "file not existed"))
           _ (fs/unlink! repo user-path {})]))
 
 (def ^:export write_user_tmp_file
@@ -306,7 +306,7 @@
     (when-let [page (cond
                       (number? id-or-page-name) (db-utils/pull id-or-page-name)
                       (string? id-or-page-name) (db-model/get-page id-or-page-name))]
-      (if-not (contains? page :block/left)
+      (when-not (contains? page :block/left)
         (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
 
 (def ^:export get_all_pages
@@ -408,7 +408,7 @@
     (when-let [block (cond
                        (number? id-or-uuid) (db-utils/pull id-or-uuid)
                        (string? id-or-uuid) (db-model/query-block-by-uuid id-or-uuid))]
-      (if-not (contains? block :block/name)
+      (when-not (contains? block :block/name)
         (when-let [uuid (:block/uuid block)]
           (let [{:keys [includeChildren]} (bean/->clj opts)
                 block (if (not includeChildren) block (first (outliner-tree/blocks->vec-tree [block] uuid)))]
@@ -418,7 +418,7 @@
   (fn [uuid]
     (when-let [block (db-model/query-block-by-uuid uuid)]
       (let [{:block/keys [parent left]} block
-            block (if-not (= parent left) (db-utils/pull (:db/id left)))]
+            block (when-not (= parent left) (db-utils/pull (:db/id left)))]
         (and block (bean/->js (normalize-keyword-for-json block)))))))
 
 (def ^:export get_next_sibling_block

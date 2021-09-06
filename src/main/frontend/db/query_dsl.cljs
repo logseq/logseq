@@ -469,7 +469,7 @@
                               {:query query})
                              (merge
                               query-opts
-                              (if sort-by
+                              (when sort-by
                                 {:transform-fn sort-by}))))))))
 
 (comment

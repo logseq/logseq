@@ -76,14 +76,14 @@
      (let [content (get contents path)]
        (if (or (and delete? (nil? content))
                content)
-         (if (not= content local-content)
+         (when (not= content local-content)
            (let [local-content (or local-content "")
                  content (or content "")
                  diff (medley/indexed (diff/diff local-content content))
                  diff? (some (fn [[_idx {:keys [added removed]}]]
                                (or added removed))
                              diff)]
-             [:div.pre-line-white-space.p-2 {:class (if collapse? "hidden")
+             [:div.pre-line-white-space.p-2 {:class (when collapse? "hidden")
                                              :style {:overflow "auto"}}
               (if edit?
                 [:div.grid.grid-cols-2.gap-1
@@ -198,7 +198,7 @@
   (let [diffs (util/react state/diffs)
         remote-oid (util/react remote-hash-id)
         repo (state/get-current-repo)
-        contents (if remote-oid (state/sub [:github/contents repo remote-oid]))
+        contents (when remote-oid (state/sub [:github/contents repo remote-oid]))
         pushing? (util/react *pushing?)]
     [:div#diffs {:style {:margin-bottom 200}}
      [:h1.title "Diff"]

@@ -214,7 +214,7 @@
              [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
               (t :open)])]])
 
-       (if config/publishing?
+       (when config/publishing?
          [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
           (t :graph)])
 

@@ -2808,7 +2808,7 @@
                                                  existed-file-path)
                              has-file-path? (not (string/blank? existed-file-path))
                              has-image? (js/window.apis.isClipboardHasImage)]
-                         (if (or has-image? has-file-path?)
+                         (when (or has-image? has-file-path?)
                            [:asset (js/File. #js[] (if has-file-path? existed-file-path "image.png"))]))
 
                        (when (and items (.-length items))

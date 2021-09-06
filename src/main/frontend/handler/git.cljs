@@ -24,7 +24,7 @@
 
 (defn- set-git-error!
   [repo-url value]
-  (db/set-key-value repo-url :git/error (if value (str value))))
+  (db/set-key-value repo-url :git/error (when value (str value))))
 
 (defn git-add
   ([repo-url file]

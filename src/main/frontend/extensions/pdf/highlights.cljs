@@ -29,11 +29,10 @@
   < rum/static rum/reactive
   [state ^js viewer]
   (when viewer
-    (if-let [ref-hl (state/sub :pdf/ref-highlight)]
-      (do
-        ;; delay handle: aim to fix page blink
-        (js/setTimeout #(pdf-utils/scroll-to-highlight viewer ref-hl) 100)
-        (js/setTimeout #(state/set-state! :pdf/ref-highlight nil) 1000)))))
+    (when-let [ref-hl (state/sub :pdf/ref-highlight)]
+      ;; delay handle: aim to fix page blink
+      (js/setTimeout #(pdf-utils/scroll-to-highlight viewer ref-hl) 100)
+      (js/setTimeout #(state/set-state! :pdf/ref-highlight nil) 1000))))
 
 (rum/defc pdf-page-finder < rum/static
   [^js viewer]
@@ -596,7 +595,7 @@
     [:div.extensions__pdf-highlights-cnt
 
      ;; hl context tip menu
-     (if (:highlight tip-state)
+     (when (:highlight tip-state)
        (js/ReactDOM.createPortal
          (pdf-highlights-ctx-menu
            viewer tip-state
@@ -660,7 +659,7 @@
        (map (fn [it]
               [:button.flex.items-center.justify-center
                {:key it :class it :on-click #(do (select-theme! it) (hide-settings!))}
-               (if (= theme it) (svg/check))])
+               (when (= theme it) (svg/check))])
             ["light", "warm", "dark"])
        ]]]))
 
@@ -814,7 +813,7 @@
          ;; selection
          [:a.button
           {:title    (str "Area highlight (" (if front-utils/mac? "⌘" "Shift") ")")
-           :class    (if area-mode? "is-active")
+           :class    (when area-mode? "is-active")
            :on-click #(set-area-mode! (not area-mode?))}
           (svg/icon-area 18)]
 
@@ -1052,7 +1051,7 @@
       [identity])
 
     [:div#pdf-layout-container.extensions__pdf-container
-     (if (and prepared identity ready)
+     (when (and prepared identity ready)
        (pdf-loader pdf-current))]))
 
 (rum/defc playground-effects
