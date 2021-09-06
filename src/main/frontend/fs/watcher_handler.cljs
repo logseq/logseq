@@ -49,9 +49,17 @@
           (js/console.warn "Can't get file in the db: " path)
 
           (and (= "change" type)
-               (not= (string/trim content) (string/trim db-content)))
-          (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
-                                                                :from-disk? true})]
+               (not= (string/trim content) (string/trim db-content))
+               (not (string/includes? path "logseq/pages-metadata.edn")))
+          (p/let [
+                  ;; save the previous content in Logseq first and commit it to avoid
+                  ;; any data-loss.
+                  _ (file-handler/alter-file repo path db-content {:re-render-root? false
+                                                                   :reset? false
+                                                                   :skip-compare? true})
+                  _ (ipc/ipc "gitCommitAll" "Save the file from Logseq's database")
+                  _ (file-handler/alter-file repo path content {:re-render-root? true
+                                                                :skip-compare? true})]
             (set-missing-block-ids! content)
             (db/set-file-last-modified-at! repo path mtime))
 
