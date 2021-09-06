@@ -2064,6 +2064,7 @@
         breadcrumb-show? (:breadcrumb-show? config)
         sidebar? (boolean (:sidebar? config))
         slide? (boolean (:slide? config))
+        custom-query? (boolean (:custom-query? config))
         doc-mode? (:document/mode? config)
         embed? (:embed? config)
         reference? (:reference? config)
@@ -2098,7 +2099,10 @@
        (merge attrs)
 
        (or reference? embed?)
-       (assoc :data-transclude true))
+       (assoc :data-transclude true)
+
+       custom-query?
+       (assoc :data-query true))
 
      (when (and ref? breadcrumb-show?)
        (when-let [comp (block-parents config repo uuid format false)]
