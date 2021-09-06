@@ -71,7 +71,11 @@
 
 (defn add-all!
   []
-  (run-git! #js ["add" "./*"]))
+  (-> (run-git! #js ["add" "./*"])
+      (p/catch (fn [error]
+                 (if (string/includes? "permission denied error: unable to index file")
+                   (js/console.error error)
+                   (p/rejected error))))))
 
 ;; git log -100 --oneline -p ~/Desktop/org/pages/contents.org
 
