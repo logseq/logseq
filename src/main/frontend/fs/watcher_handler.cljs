@@ -29,11 +29,14 @@
           (when-not (= (str id-property) (str block-id))
             (editor/set-block-property! block-id "id" block-id)))))))
 
+(def ignore-files (atom {}))
+
 (defn handle-changed!
   [type {:keys [dir path content stat] :as payload}]
   (when dir
     (let [repo (config/get-local-repo dir)
-          {:keys [mtime]} stat]
+          {:keys [mtime]} stat
+          db-content (or (db/get-file repo path) "")]
       (when (and content (not (encrypt/content-encrypted? content)))
         (cond
           (= "add" type)
@@ -54,10 +57,12 @@
                (not (string/blank? content))
                (not= (string/trim content)
                      (string/trim (or (db/get-file repo path) "")))
-               (not (string/includes? path "logseq/pages-metadata.edn")))
-          (p/let [db-content (or (db/get-file repo path) "")
+               (not (string/includes? path "logseq/pages-metadata.edn"))
+               (not= (get @ignore-files path) db-content))
+          (p/let [
                   ;; save the previous content in Logseq first and commit it to avoid
                   ;; any data-loss.
+                  _ (swap! ignore-files assoc path db-content)
                   _ (file-handler/alter-file repo path db-content {:re-render-root? false
                                                                    :reset? false
                                                                    :skip-compare? true})
@@ -66,6 +71,9 @@
                                                                 :from-disk? true})]
             (set-missing-block-ids! content)
             (db/set-file-last-modified-at! repo path mtime)
+            (js/setTimeout (fn []
+                             (when (= db-content (get @ignore-files path))
+                               (swap! ignore-files dissoc path))) 2000)
             nil)
 
           (contains? #{"add" "change" "unlink"} type)
