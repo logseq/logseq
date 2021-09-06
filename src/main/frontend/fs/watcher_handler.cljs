@@ -49,10 +49,7 @@
           (js/console.warn "Can't get file in the db: " path)
 
           (and (= "change" type)
-               ;; ignore truncate
-               (not (string/blank? content))
-               (not= (string/trim content)
-                     (string/trim (or (db/get-file repo path) ""))))
+               (not= (string/trim content) (string/trim db-content)))
           (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                                 :from-disk? true})]
             (set-missing-block-ids! content)

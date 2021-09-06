@@ -7,6 +7,7 @@
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
+            [electron.fs-watcher :as fs-watcher]
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]
@@ -245,6 +246,7 @@
 
       (.on app "window-all-closed" (fn []
                                      (try
+                                       (fs-watcher/close-watcher!)
                                        (search/close!)
                                        (catch js/Error e
                                          (js/console.error e)))
