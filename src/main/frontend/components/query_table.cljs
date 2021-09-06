@@ -1,17 +1,16 @@
 (ns frontend.components.query-table
-  (:require [frontend.ui :as ui]
-            [frontend.util :as util]
-            [rum.core :as rum]
-            [frontend.util.property :as property]
-            [frontend.db :as db]
-            [frontend.date :as date]
-            [frontend.state :as state]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
+            [frontend.date :as date]
+            [frontend.db :as db]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
+            [frontend.state :as state]
+            [frontend.util :as util]
             [frontend.util.clock :as clock]
-            [medley.core :as medley]))
+            [frontend.util.property :as property]
+            [medley.core :as medley]
+            [rum.core :as rum]))
 
 ;; TODO: extract to table utils
 (defn- sort-result-by

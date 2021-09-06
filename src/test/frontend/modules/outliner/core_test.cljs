@@ -1,15 +1,13 @@
 (ns frontend.modules.outliner.core-test
-  (:require [cljs.test :refer [deftest is are testing use-fixtures run-tests] :as test]
-            [frontend.modules.outliner.tree :as tree]
+  (:require [cljs-run-test :refer [run-test]]
+            [cljs.test :refer [deftest is run-tests use-fixtures] :as test]
             [datascript.core :as d]
-            [frontend.react :as r]
-            [frontend.modules.outliner.utils :as outliner-u]
+            [frontend.core-test :as core-test]
+            [frontend.fixtures :as fixtures]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.datascript :as outliner-ds]
-            [frontend.fixtures :as fixtures]
-            [cljs-run-test :refer [run-test]]
-            [frontend.core-test :as core-test]
-            [frontend.handler.block :as block]))
+            [frontend.modules.outliner.tree :as tree]
+            [frontend.modules.outliner.utils :as outliner-u]))
 
 (use-fixtures :each
   fixtures/load-test-env

@@ -1,17 +1,16 @@
 (ns frontend.modules.outliner.core
-  (:require [frontend.modules.outliner.tree :as tree]
+  (:require [clojure.set :as set]
+            [clojure.zip :as zip]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
-            [frontend.db.outliner :as db-outliner]
             [frontend.db.conn :as conn]
-            [frontend.modules.outliner.utils :as outliner-u]
-            [frontend.modules.outliner.state :as outliner-state]
-            [frontend.state :as state]
-            [clojure.set :as set]
-            [clojure.zip :as zip]
+            [frontend.db.outliner :as db-outliner]
             [frontend.modules.outliner.datascript :as ds]
-            [frontend.util :as util]
-            [frontend.util.property :as property]))
+            [frontend.modules.outliner.state :as outliner-state]
+            [frontend.modules.outliner.tree :as tree]
+            [frontend.modules.outliner.utils :as outliner-u]
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defrecord Block [data])
 

@@ -1,13 +1,12 @@
 (ns frontend.handler.search
-  (:require [goog.object :as gobj]
-            [frontend.state :as state]
+  (:require [clojure.string :as string]
             [frontend.db :as db]
-            [goog.dom :as gdom]
-            [frontend.search :as search]
-            [frontend.search.db :as search-db]
             [frontend.handler.notification :as notification-handler]
-            [promesa.core :as p]
-            [clojure.string :as string]))
+            [frontend.search :as search]
+            [frontend.state :as state]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]
+            [promesa.core :as p]))
 
 (defn search
   ([repo q]

@@ -1,17 +1,15 @@
 (ns frontend.fs.node
-  (:require [frontend.fs.protocol :as protocol]
-            [frontend.util :as util]
-            [frontend.db :as db]
-            [clojure.string :as string]
-            [promesa.core :as p]
+  (:require [clojure.string :as string]
             [electron.ipc :as ipc]
-            [cljs-bean.core :as bean]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.encrypt :as encrypt]
+            [frontend.fs.protocol :as protocol]
+            [frontend.state :as state]
+            [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [frontend.config :as config]
-            [frontend.encrypt :as encrypt]
-            [frontend.handler.notification :as notification]
-            [frontend.state :as state]))
+            [promesa.core :as p]))
 
 (defn concat-path
   [dir path]

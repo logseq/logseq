@@ -1,5 +1,5 @@
 (ns frontend.util.property-test
-  (:require [cljs.test :refer [deftest is are testing]]
+  (:require [cljs.test :refer [are deftest testing]]
             [frontend.util.property :as property]))
 
 (deftest remove-id-property

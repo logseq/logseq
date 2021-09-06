@@ -1,21 +1,18 @@
 (ns frontend.db.query-react
   "Custom queries."
-  (:require [datascript.core :as d]
-            [frontend.db.utils :as db-utils :refer [date->int]]
-            [frontend.db.model :as model]
-            [frontend.debug :as debug]
-            [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
-            [frontend.state :as state]
+  (:require [cljs-time.core :as t]
             [clojure.string :as string]
-            [cljs.reader :as reader]
-            [frontend.extensions.sci :as sci]
-            [lambdaisland.glogi :as log]
-            [frontend.util :as util]
-            [frontend.db.react :as react]
-            [frontend.text :as text]
+            [clojure.walk :as walk]
             [frontend.config :as config]
-            [clojure.walk :as walk]))
+            [frontend.db.model :as model]
+            [frontend.db.react :as react]
+            [frontend.db.utils :as db-utils :refer [date->int]]
+            [frontend.debug :as debug]
+            [frontend.extensions.sci :as sci]
+            [frontend.state :as state]
+            [frontend.text :as text]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]))
 
 (defn- resolve-input
   [input]

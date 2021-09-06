@@ -1,27 +1,17 @@
 (ns frontend.extensions.excalidraw
-  (:require [rum.core :as rum]
-            [goog.object :as gobj]
-            [frontend.rum :as r]
-            [frontend.util :as util :refer [profile]]
-            [frontend.mixins :as mixins]
-            [frontend.storage :as storage]
-            [frontend.components.svg :as svg]
+  (:require ["@excalidraw/excalidraw" :as Excalidraw]
             [cljs-bean.core :as bean]
-            [dommy.core :as d]
             [clojure.string :as string]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.draw :as draw]
-            [frontend.handler.file :as file]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.ui :as ui]
-            [frontend.loader :as loader]
             [frontend.config :as config]
+            [frontend.handler.draw :as draw]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.rum :as r]
             [frontend.state :as state]
-            [frontend.search :as search]
-            [frontend.components.repo :as repo]
-            [promesa.core :as p]
-            [reitit.frontend.easy :as rfe]
-            ["@excalidraw/excalidraw" :as Excalidraw]))
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [goog.object :as gobj]
+            [rum.core :as rum]))
 
 (def excalidraw (r/adapt-class (gobj/get Excalidraw "default")))
 

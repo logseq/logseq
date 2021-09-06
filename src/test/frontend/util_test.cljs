@@ -1,7 +1,6 @@
 (ns frontend.util-test
-  (:require [cljs.test :refer [deftest is testing run-tests]]
-            [frontend.util :refer [find-first]]
-            ))
+  (:require [cljs.test :refer [deftest is testing]]
+            [frontend.util :refer [find-first]]))
 
 (deftest test-find-first
   (testing "find-first"

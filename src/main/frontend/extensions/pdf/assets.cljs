@@ -1,20 +1,18 @@
 (ns frontend.extensions.pdf.assets
-  (:require [rum.core :as rum]
-            [frontend.util :as util]
+  (:require [cljs.reader :as reader]
+            [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.state :as state]
-            [frontend.config :as config]
             [frontend.fs :as fs]
-            [frontend.components.svg :as svg]
-            [reitit.frontend.easy :as rfe]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
+            [frontend.state :as state]
+            [frontend.util :as util]
             [medley.core :as medley]
-            [cljs.reader :as reader]
             [promesa.core :as p]
-            [clojure.string :as string]
-            [cljs-bean.core :as bean]))
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (defonce *asset-uploading? (atom false))
 

@@ -1,16 +1,11 @@
 (ns frontend.handler.history
-  (:require [frontend.state :as state]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
             [frontend.handler.editor :as editor]
             [frontend.handler.ui :as ui-handler]
-            [promesa.core :as p]
-            [clojure.core.async :as async]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]
-            [dommy.core :as d]
+            [frontend.modules.editor.undo-redo :as undo-redo]
+            [frontend.state :as state]
             [frontend.util :as util]
-            [medley.core :as medley]
-            [frontend.modules.editor.undo-redo :as undo-redo]))
+            [goog.dom :as gdom]))
 
 (defn- default-undo
   []

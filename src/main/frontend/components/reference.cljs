@@ -1,21 +1,19 @@
 (ns frontend.components.reference
-  (:require [rum.core :as rum]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [clojure.string :as string]
-            [frontend.db :as db]
+  (:require [clojure.string :as string]
             [frontend.components.block :as block]
-            [frontend.ui :as ui]
             [frontend.components.content :as content]
-            [frontend.date :as date]
             [frontend.components.editor :as editor]
-            [frontend.db-mixins :as db-mixins]
-            [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.components.svg :as svg]
-            [frontend.handler.page :as page-handler]
+            [frontend.date :as date]
+            [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.handler.block :as block-handler]
-            [medley.core :as medley]))
+            [frontend.handler.page :as page-handler]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [medley.core :as medley]
+            [rum.core :as rum]))
 
 (rum/defc filter-dialog-inner < rum/reactive
   [filters-atom close-fn references page-name]

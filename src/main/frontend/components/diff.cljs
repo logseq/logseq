@@ -1,23 +1,22 @@
 (ns frontend.components.diff
-  (:require [rum.core :as rum]
-            [frontend.util :as util]
-            [frontend.config :as config]
-            [frontend.handler.git :as git-handler]
-            [frontend.handler.file :as file]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.common :as common-handler]
-            [frontend.state :as state]
-            [clojure.string :as string]
-            [frontend.db :as db]
+  (:require [clojure.string :as string]
             [frontend.components.svg :as svg]
-            [frontend.ui :as ui]
-            [frontend.git :as git]
-            [goog.object :as gobj]
-            [promesa.core :as p]
-            [frontend.github :as github]
+            [frontend.config :as config]
             [frontend.diff :as diff]
+            [frontend.encrypt :as encrypt]
+            [frontend.git :as git]
+            [frontend.github :as github]
+            [frontend.handler.common :as common-handler]
+            [frontend.handler.file :as file]
+            [frontend.handler.git :as git-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [goog.object :as gobj]
             [medley.core :as medley]
-            [frontend.encrypt :as encrypt]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce remote-hash-id (atom nil))
 (defonce diff-state (atom {}))

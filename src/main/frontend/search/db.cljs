@@ -1,13 +1,12 @@
 (ns frontend.search.db
   (:refer-clojure :exclude [empty?])
-  (:require [frontend.text :as text]
-            [frontend.util.property :as property]
-            [frontend.util.drawer :as drawer]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.db :as db]
             [frontend.state :as state]
-            [cljs-bean.core :as bean]
-            ["fuse.js" :as fuse]
-            [clojure.string :as string]))
+            [frontend.text :as text]
+            [frontend.util.drawer :as drawer]
+            ["fuse.js" :as fuse]))
 
 (defonce indices (atom nil))
 

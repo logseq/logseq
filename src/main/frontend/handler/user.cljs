@@ -1,15 +1,13 @@
 (ns frontend.handler.user
-  (:require [frontend.util :as util :refer [profile]]
-            [frontend.state :as state]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.idb :as idb]
-            [frontend.config :as config]
-            [frontend.storage :as storage]
-            [promesa.core :as p]
-            [goog.object :as gobj]
-            [frontend.handler.notification :as notification]
             [frontend.handler.config :as config-handler]
-            [lambdaisland.glogi :as log])
+            [frontend.handler.notification :as notification]
+            [frontend.idb :as idb]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p])
   (:import [goog.format EmailAddress]))
 
 (defn email? [v]

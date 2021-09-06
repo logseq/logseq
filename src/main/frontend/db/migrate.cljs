@@ -1,6 +1,5 @@
 (ns frontend.db.migrate
-  (:require [clojure.walk :as walk]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.db-schema :as db-schema]
             [frontend.state :as state]))
 

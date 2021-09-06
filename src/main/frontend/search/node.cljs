@@ -1,10 +1,8 @@
 (ns frontend.search.node
-  (:require [frontend.search.protocol :as protocol]
-            [frontend.util :as util]
+  (:require [cljs-bean.core :as bean]
             [electron.ipc :as ipc]
-            [cljs-bean.core :as bean]
             [frontend.search.db :as search-db]
-            [frontend.db :as db]
+            [frontend.search.protocol :as protocol]
             [promesa.core :as p]))
 
 (defrecord Node [repo]

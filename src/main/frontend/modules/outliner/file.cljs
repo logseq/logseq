@@ -1,16 +1,16 @@
 (ns frontend.modules.outliner.file
-  (:require [frontend.db.model :as model]
-            [frontend.db :as db]
-            [frontend.modules.outliner.tree :as tree]
-            [frontend.modules.file.core :as file]
-            [lambdaisland.glogi :as log]
-            [clojure.core.async :as async]
-            [frontend.util :as util :refer [profile]]
-            [frontend.handler.notification :as notification]
-            [goog.object :as gobj]
-            [frontend.state :as state]
+  (:require [clojure.core.async :as async]
             [clojure.string :as string]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.model :as model]
+            [frontend.handler.notification :as notification]
+            [frontend.modules.file.core :as file]
+            [frontend.modules.outliner.tree :as tree]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]))
 
 (def write-chan (async/chan))
 

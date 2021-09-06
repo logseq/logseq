@@ -1,15 +1,14 @@
 (ns frontend.components.plugins
-  (:require [rum.core :as rum]
-            [frontend.state :as state]
-            [cljs-bean.core :as bean]
-            [frontend.ui :as ui]
-            [frontend.util :as util]
-            [electron.ipc :as ipc]
-            [promesa.core :as p]
+  (:require [cljs-bean.core :as bean]
+            [clojure.string :as string]
             [frontend.components.svg :as svg]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
-            [clojure.string :as string]))
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (rum/defc installed-themes
   < rum/reactive

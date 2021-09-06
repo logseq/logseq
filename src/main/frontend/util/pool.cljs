@@ -1,10 +1,9 @@
 (ns frontend.util.pool
-  (:require ["threads" :refer [spawn Pool Worker]]
-            [promesa.core :as p]
+  (:require [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.util :as util]
-            ["path" :as path]
-            [electron.ipc :as ipc]
-            [frontend.config :as config]))
+            [promesa.core :as p]
+            ["threads" :refer [Pool Worker spawn]]))
 
 (defonce parser-pool (atom nil))
 

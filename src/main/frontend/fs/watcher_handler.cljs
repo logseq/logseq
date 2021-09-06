@@ -1,21 +1,14 @@
 (ns frontend.fs.watcher-handler
-  (:require [clojure.core.async :as async]
-            [lambdaisland.glogi :as log]
-            [frontend.handler.file :as file-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.notification :as notification]
-            [frontend.handler.route :as route-handler]
-            [cljs-time.coerce :as tc]
+  (:require [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.state :as state]
-            [clojure.string :as string]
-            [frontend.encrypt :as encrypt]
             [frontend.db.model :as model]
+            [frontend.encrypt :as encrypt]
             [frontend.handler.editor :as editor]
             [frontend.handler.extract :as extract]
-            [promesa.core :as p]
-            [electron.ipc :as ipc]))
+            [frontend.handler.file :as file-handler]
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]))
 
 (defn- set-missing-block-ids!
   [content]

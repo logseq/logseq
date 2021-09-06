@@ -1,8 +1,7 @@
 (ns frontend.handler.extract-test
-  (:require [cljs.test :refer [deftest is are testing use-fixtures run-tests async]]
-            [cljs-run-test :refer [run-test]]
-            [frontend.util :as util]
+  (:require [cljs.test :refer [async deftest is]]
             [frontend.handler.extract :as extract]
+            [frontend.util :as util]
             [promesa.core :as p]))
 
 (defn- extract

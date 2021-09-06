@@ -1,5 +1,5 @@
 (ns frontend.util.priority-test
-  (:require [cljs.test :refer [deftest is are testing]]
+  (:require [cljs.test :refer [are deftest]]
             [frontend.util.priority :as priority]))
 
 (deftest add-or-update-priority-markdown
