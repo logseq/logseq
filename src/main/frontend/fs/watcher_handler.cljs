@@ -58,7 +58,7 @@
                (not= (string/trim content)
                      (string/trim (or (db/get-file repo path) "")))
                (not (string/includes? path "logseq/pages-metadata.edn"))
-               (not= (get @ignore-files path) db-content))
+               (not= (get @ignore-files path) content))
           (p/let [
                   ;; save the previous content in Logseq first and commit it to avoid
                   ;; any data-loss.
