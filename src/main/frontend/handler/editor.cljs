@@ -1850,10 +1850,14 @@
     (when-let [q (get-search-q)]
       (let [value (gobj/get input "value")
             pos (:editor/last-saved-cursor @state/state)
-            current-pos (cursor/pos input)]
-        (when (or (< current-pos pos)
-                  (string/includes? q "]")
-                  (string/includes? q ")"))
+            current-pos (cursor/pos input)
+            between (util/safe-subs value (min pos current-pos) (max pos current-pos))]
+        (when (and between
+                   (or
+                    (string/includes? between "[")
+                    (string/includes? between "]")
+                    (string/includes? between "(")
+                    (string/includes? between ")")))
           (state/set-editor-show-block-search! false)
           (state/set-editor-show-page-search! false)
           (state/set-editor-show-page-search-hashtag! false))))))
