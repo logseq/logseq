@@ -54,7 +54,12 @@
                (not (string/blank? content))
                (not= (string/trim content)
                      (string/trim (or (db/get-file repo path) ""))))
-          (p/let [result (ipc/ipc "gitCommitAll" "")
+          (p/let [db-content (or (db/get-file repo path) "")
+                  ;; save the previous content in Logseq first and commit it to avoid
+                  ;; any data-loss.
+                  _ (file-handler/alter-file repo path db-content {:re-render-root? false
+                                                                   :reset? false})
+                  result (ipc/ipc "gitCommitAll" "")
                   _ (file-handler/alter-file repo path content {:re-render-root? true
                                                                 :from-disk? true})]
             (set-missing-block-ids! content)

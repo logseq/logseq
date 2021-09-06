@@ -17,21 +17,13 @@
   [db-before db-after db-id]
   (let [r (safe-pull db-after '[*] db-id)]
     (if (= keys-of-deleted-entity (count r))
-      (let [r (safe-pull db-before '[*] db-id)]
-        (when (= keys-of-deleted-entity (count r))
-          ;; TODO: What can cause this happen?
-          (js/console.error {:db-id db-id
-                             :entity r})
-          (log/error :outliner-pipeline/cannot-find-entity {:db-id db-id
-                                                            :entity r}))
-        r)
+      ;; block has been deleted
+      (safe-pull db-before '[*] db-id)
       r)))
 
 (defn get-blocks-and-pages
   [{:keys [db-before db-after tx-data] :as _tx-report}]
-  (let [properties (filter (fn [datom]
-                             (= :block/properties (:a datom))) tx-data)
-        updated-db-ids (-> (mapv first tx-data) (set))
+  (let [updated-db-ids (-> (mapv first tx-data) (set))
         result (reduce
                 (fn [acc x]
                   (let [block-entity
@@ -48,7 +40,7 @@
                 {:blocks #{}
                  :pages #{}}
                 updated-db-ids)]
-    (assoc result :properties properties)))
+    result))
 
 (defn get-blocks
   [{:keys [db-before db-after tx-data] :as _tx-report}]
