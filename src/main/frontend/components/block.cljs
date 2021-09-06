@@ -1846,8 +1846,10 @@
                                (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
            svg/edit])
 
-        (when (and (= (:block/marker block) "DONE")
-                   (state/enable-timetracking?))
+        (when (and (state/enable-timetracking?)
+                   (or (= (:block/marker block) "DONE")
+                       (and (:block/repeated? block)
+                            (= (:block/marker block) "TODO"))))
           (let [summary (clock/clock-summary body true)]
             (when (and summary
                        (not= summary "0m")
@@ -1855,6 +1857,7 @@
               (ui/tippy {:html        (fn []
                                         (when-let [logbook (drawer/get-logbook body)]
                                           (let [clocks (->> (last logbook)
+                                                            (filter #(string/starts-with? % "CLOCK:"))
                                                             (remove string/blank?))]
                                             [:div.p-4
                                              [:div.font-bold.mb-2 "LOGBOOK:"]
@@ -1863,9 +1866,9 @@
                                                 [:li clock])]])))
                          :interactive true
                          :delay       [1000, 100]}
-               [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
-                [:a.fade-link
-                 summary]]))))
+                        [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
+                         [:a.fade-link
+                          summary]]))))
 
         (let [block-refs-count (count (:block/_refs (db/entity (:db/id block))))]
           (when (and block-refs-count (> block-refs-count 0))
