@@ -2017,6 +2017,17 @@
                    (remove nil?)))]
     (text/build-data-value refs)))
 
+(defn- get-children-refs
+  [children]
+  (let [refs (atom [])]
+    (walk/postwalk
+     (fn [m]
+       (when (and (map? m) (:block/refs m))
+         (swap! refs concat (:block/refs m)))
+       m)
+     children)
+    (distinct @refs)))
+
 ;; (rum/defc block-immediate-children < rum/reactive
 ;;   [repo config uuid ref? collapsed?]
 ;;   (when (and ref? (not collapsed?))
@@ -2075,7 +2086,8 @@
                      (or (and (coll? children) (seq children))
                          (seq body))))
         attrs (on-drag-and-mouse-attrs block uuid top? block-id *move-to has-child? *control-show? doc-mode?)
-        data-refs (build-refs-data-value block (remove (set refs) path-refs))
+        children-refs (get-children-refs children)
+        data-refs (build-refs-data-value block children-refs)
         data-refs-self (build-refs-data-value block refs)
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])]
