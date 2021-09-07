@@ -11,6 +11,7 @@
 ;; 1. https://github.com/Axosoft/nsfw
 
 (defonce polling-interval 5000)
+(defonce file-watcher (atom nil))
 
 (defonce file-watcher-chan "file-watcher")
 (defn send-file-watcher! [^js win type payload]
@@ -31,8 +32,9 @@
                             :binaryInterval polling-interval
                             :persistent true
                             :disableGlobbing true
-
+                            :usePolling false
                             :awaitWriteFinish true}))]
+      (reset! file-watcher watcher)
       ;; TODO: batch sender
       (.on watcher "add"
            (fn [path]
@@ -61,3 +63,8 @@
       (.on app "quit" #(.close watcher))
 
       true)))
+
+(defn close-watcher!
+  []
+  (when-let [watcher @file-watcher]
+    (.close watcher)))

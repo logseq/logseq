@@ -11,32 +11,38 @@
             [frontend.handler.metadata :as metadata-handler]
             [frontend.ui :as ui]))
 
+(defn persist-dbs!
+  []
+  (->
+   (p/let [repos (idb/get-nfs-dbs)
+           repos (-> repos
+                     (conj (state/get-current-repo))
+                     (distinct))]
+     (if (seq repos)
+       (do
+         (notification/show!
+          (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
+          :warning)
+         (doseq [repo repos]
+           (metadata-handler/set-pages-metadata! repo))
+         (js/setTimeout
+          (fn []
+            (-> (p/all (map db/persist! repos))
+                (p/then (fn []
+                          (ipc/ipc "persistent-dbs-saved")))))
+          100))
+       (ipc/ipc "persistent-dbs-saved")))
+   (p/catch (fn [error]
+              (js/console.error error)
+              (ipc/ipc "persistent-dbs-error")))))
+
 (defn listen-persistent-dbs!
   []
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (js/window.apis.on
    "persistent-dbs"
-   (fn [req]
-     (p/let [repos (idb/get-nfs-dbs)
-             repos (-> repos
-                       (conj (state/get-current-repo))
-                       (distinct))]
-       (if (seq repos)
-         (do
-           (notification/show!
-            (ui/loading "Logseq is saving the graphs to your local file system, please wait for several seconds.")
-            :warning)
-           (doseq [repo repos]
-             (metadata-handler/set-pages-metadata! repo))
-           (js/setTimeout
-            (fn []
-              (-> (p/all (map db/persist! repos))
-                 (p/then (fn []
-                           (ipc/ipc "persistent-dbs-saved")))
-                 (p/catch (fn [error]
-                            (js/console.dir error)))))
-            100))
-         (ipc/ipc "persistent-dbs-saved"))))))
+   (fn [_req]
+     (persist-dbs!))))
 
 (defn listen-to-electron!
   []

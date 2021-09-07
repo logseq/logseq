@@ -119,7 +119,7 @@
         logbook (get-logbook body)]
     (if logbook
       (let [content (remove-logbook content)
-            clocks (->> (concat new-clocks (last logbook))
+            clocks (->> (concat new-clocks (when-not new-clocks (last logbook)))
                         (distinct))
             clocks (->> (map string/trim clocks)
                         (remove string/blank?))

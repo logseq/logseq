@@ -339,8 +339,8 @@
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
                   content)
-        content (drawer/with-logbook block content)
         content (with-timetracking block content)
+        content (drawer/with-logbook block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
@@ -792,7 +792,7 @@
           content (drawer/insert-drawer
                    format content "logbook"
                    (util/format (str (if (= :org format) "-" "*")
-                      " State \"DONE\" from \"%s\" [%s]")
+                                     " State \"DONE\" from \"%s\" [%s]")
                                 marker
                                 (date/get-date-time-string-3)))]
       content)
@@ -831,8 +831,7 @@
 
 (defn set-marker
   [{:block/keys [uuid marker content format properties] :as block} new-marker]
-  (let [new-content (-> (string/replace-first content (re-pattern (str "^" marker)) new-marker)
-                        (with-marker-time block format new-marker marker))]
+  (let [new-content (string/replace-first content (re-pattern (str "^" marker)) new-marker)]
     (save-block-if-changed! block new-content)))
 
 (defn set-priority
@@ -953,6 +952,7 @@
               content (if (nil? value)
                         (property/remove-property format key content)
                         (property/insert-property format content key value))
+              content (property/remove-empty-properties content)
               block (outliner-core/block {:block/uuid block-id
                                           :block/properties properties
                                           :block/content content})
@@ -1006,7 +1006,8 @@
     (when-let [block (db/pull [:block/uuid block-id])]
       (let [{:block/keys [content scheduled deadline format]} block
             content (or (state/get-edit-content) content)
-            new-content (text/add-timestamp content key value)]
+            new-content (-> (text/remove-timestamp content key)
+                            (text/add-timestamp key value))]
         (when (not= content new-content)
           (if-let [input-id (state/get-edit-input-id)]
             (state/set-edit-content! input-id new-content)
@@ -1136,8 +1137,10 @@
   [copy?]
   (when copy? (copy-selection-blocks))
   (when-let [blocks (seq (get-selected-blocks-with-children))]
-    ;; remove embeds and references
-    (let [blocks (remove (fn [block] (= "true" (dom/attr block "data-transclude"))) blocks)]
+    ;; remove embeds, references and queries
+    (let [blocks (remove (fn [block]
+                           (or (= "true" (dom/attr block "data-transclude"))
+                               (= "true" (dom/attr block "data-query")))) blocks)]
       (when (seq blocks)
         (let [repo (state/get-current-repo)
               ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
@@ -1849,10 +1852,14 @@
     (when-let [q (get-search-q)]
       (let [value (gobj/get input "value")
             pos (:editor/last-saved-cursor @state/state)
-            current-pos (cursor/pos input)]
-        (when (or (< current-pos pos)
-                  (string/includes? q "]")
-                  (string/includes? q ")"))
+            current-pos (cursor/pos input)
+            between (util/safe-subs value (min pos current-pos) (max pos current-pos))]
+        (when (and between
+                   (or
+                    (string/includes? between "[")
+                    (string/includes? between "]")
+                    (string/includes? between "(")
+                    (string/includes? between ")")))
           (state/set-editor-show-block-search! false)
           (state/set-editor-show-page-search! false)
           (state/set-editor-show-page-search-hashtag! false))))))
@@ -2825,6 +2832,7 @@
   [copy?]
   (cut-selection-blocks copy?)
   (clear-selection!))
+
 (defn shortcut-copy-selection
   [e]
   (copy-selection-blocks))

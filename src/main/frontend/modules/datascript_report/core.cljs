@@ -1,7 +1,8 @@
 (ns frontend.modules.datascript-report.core
   (:require [lambdaisland.glogi :as log]
             [datascript.core :as d]
-            [datascript.db :as db]))
+            [datascript.db :as db]
+            [clojure.set :as set]))
 
 (def keys-of-deleted-entity 1)
 
@@ -17,21 +18,13 @@
   [db-before db-after db-id]
   (let [r (safe-pull db-after '[*] db-id)]
     (if (= keys-of-deleted-entity (count r))
-      (let [r (safe-pull db-before '[*] db-id)]
-        (when (= keys-of-deleted-entity (count r))
-          ;; TODO: What can cause this happen?
-          (js/console.error {:db-id db-id
-                             :entity r})
-          (log/error :outliner-pipeline/cannot-find-entity {:db-id db-id
-                                                            :entity r}))
-        r)
+      ;; block has been deleted
+      (safe-pull db-before '[*] db-id)
       r)))
 
 (defn get-blocks-and-pages
-  [{:keys [db-before db-after tx-data] :as _tx-report}]
-  (let [properties (filter (fn [datom]
-                             (= :block/properties (:a datom))) tx-data)
-        updated-db-ids (-> (mapv first tx-data) (set))
+  [{:keys [db-before db-after tx-data tx-meta] :as tx-report}]
+  (let [updated-db-ids (-> (mapv first tx-data) (set))
         result (reduce
                 (fn [acc x]
                   (let [block-entity
@@ -47,8 +40,14 @@
                       (update :pages conj page-entity))))
                 {:blocks #{}
                  :pages #{}}
-                updated-db-ids)]
-    (assoc result :properties properties)))
+                updated-db-ids)
+        tx-meta-pages (->> [(:from-page tx-meta) (:target-page tx-meta)]
+                           (remove nil?)
+                           (map #(get-entity-from-db-after-or-before db-before db-after %))
+                           (set))]
+    (if (seq tx-meta-pages)
+      (update result :pages set/union tx-meta-pages)
+      result)))
 
 (defn get-blocks
   [{:keys [db-before db-after tx-data] :as _tx-report}]

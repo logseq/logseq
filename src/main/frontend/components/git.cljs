@@ -3,7 +3,9 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [clojure.string :as string]
-            [frontend.handler.shell :as shell]))
+            [frontend.handler.shell :as shell]
+            [frontend.handler.file :as file]
+            [frontend.state :as state]))
 
 (rum/defcs set-git-username-and-email <
   (rum/local "" ::username)
@@ -43,3 +45,16 @@
                                   (not (string/blank? email)))
                          (shell/set-git-username-and-email username email))))}
         "Submit"]]]]))
+
+(rum/defc file-specific-version
+  [path hash content]
+  [:div.w-full.sm:max-w-lg {:style {:width 700}}
+   [:div.font-bold.mb-4 (str path (util/format " (%s)" hash)) ]
+   [:pre content]
+   (ui/button "Revert"
+     :on-click (fn []
+                 (file/alter-file (state/get-current-repo)
+                                  path
+                                  content
+                                  {:re-render-root? true
+                                   :skip-compare? true})))])

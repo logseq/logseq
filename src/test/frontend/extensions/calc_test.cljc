@@ -27,7 +27,12 @@
       (are [value expr] (= value (run expr))
         -98123      "-98123"
         -1123.0     " -112,3.0 "
-        -22.1124131 "-2,2.1124131")))
+        -22.1124131 "-2,2.1124131"))
+    (testing "even as percentages"
+      (are [value expr] (= value (run expr))
+        0.01          "1%"
+        1.0           " 100.00% "
+        0.00169781231 "0.169781231%")))
   (testing "basic operations work"
     (are [value expr] (= value (run expr))
       1             "1 + 0"
@@ -48,15 +53,19 @@
       -1            " 2 * 3 / 3 / -2"
       #?(:clj 1/2
          :cljs 0.5) " 1 / 2"
-      0.5           " 1/ 2.0"))
+      0.5           " 1/ 2.0"
+      2.0           "2*100%"
+      0.01          "2%/2"
+      500e3         "50% * 1e6"))
   (testing "power"
     (are [value expr] (= value (run expr))
-      1.0   "1 ^ 0"
-      4.0   "2^2 "
-      27.0  " 3^ 3"
-      0.125 " 2^ -3"
-      16.0  "2 ^ 2 ^ 2"
-      256.0 "4.000 ^ 4.0"))
+      1.0    "1 ^ 0"
+      4.0    "2^2 "
+      27.0   " 3^ 3"
+      0.125  " 2^ -3"
+      16.0   "2 ^ 2 ^ 2"
+      256.0  "4.000 ^ 4.0"
+      4096.0 "200% ^ 12"))
   (testing "operator precedence"
     (are [value expr] (= value (run expr))
       1     "1 + 0 * 2"

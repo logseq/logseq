@@ -630,6 +630,7 @@
 
 (defn re-index!
   [nfs-rebuild-index! ok-handler]
+  (route-handler/redirect-to-home!)
   (when-let [repo (state/get-current-repo)]
     (let [local? (config/local-db? repo)]
       (if local?

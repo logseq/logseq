@@ -75,14 +75,6 @@
                                :on-click (fn []
                                            (state/set-modal! (encryption/encryption-dialog url)))}
                    "🔐"])
-                [:a.control.ml-4 {:title (if local?
-                                           "Sync with the local directory"
-                                           "Clone again and re-index the db")
-                                  :on-click (fn []
-                                              (repo-handler/re-index!
-                                               nfs-handler/rebuild-index!
-                                               page-handler/create-today-journal!))}
-                 "Re-index"]
                 [:a.text-gray-400.ml-4 {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
                                         :on-click (fn []
                                                     (repo-handler/remove-repo! repo))}
@@ -98,98 +90,88 @@
                 (js/setTimeout common-handler/check-changed-files-status 1000)
                 state)}
   [repo]
-  (when repo
-    (when-not (or (util/electron?)
-                  (= repo config/local-repo))
-      (let [nfs-repo? (config/local-db? repo)]
-        (if (and nfs-repo? (nfs-handler/supported?))
-          (let [syncing? (state/sub :graph/syncing?)]
-            [:div.opacity-60.refresh.hover:opacity-100
-             [:a.button
-              {:on-click #(nfs-handler/refresh! repo refresh-cb)
-               :title (str "Import files from the local directory: " (config/get-local-dir repo) ".\nVersion: "
-                           version/version)}
-              [:div {:class (if syncing? "animate-spin-reverse" "initial")} svg/refresh]]])
-          (let [changed-files (state/sub [:repo/changed-files repo])
-                should-push? (seq changed-files)
-                git-status (state/sub [:git/status repo])
-                pushing? (= :pushing git-status)
-                pulling? (= :pulling git-status)
-                git-failed? (contains?
-                             #{:push-failed
-                               :clone-failed
-                               :checkout-failed
-                               :fetch-failed
-                               :merge-failed}
-                             git-status)
-                push-failed? (= :push-failed git-status)
-                last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
-                ;; db-persisted? (state/sub [:db/persisted? repo])
-                editing? (seq (state/sub :editor/editing?))]
-            [:div.flex-row.flex.items-center.cp__repo-indicator
-             (when pushing? svg/loading)
-             (ui/dropdown
-              (fn [{:keys [toggle-fn]}]
-                [:div.cursor.w-2.h-2.sync-status.mr-2
-                 {:class (cond
-                           git-failed?
-                           "bg-red-500"
-                           (or
-                            ;; (not db-persisted?)
-                            editing?
-                            should-push? pushing?)
-                           "bg-orange-400"
-                           :else
-                           "bg-green-600")
-                  :style {:border-radius "50%"
-                          :margin-top 2}
-                  :on-mouse-over
-                  (fn [e]
-                    (toggle-fn)
-                    (js/setTimeout common-handler/check-changed-files-status 0))}])
-              (fn [{:keys [toggle-fn]}]
-                (rum/with-context [[t] i18n/*tongue-context*]
-                  [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
-                   {:on-mouse-leave toggle-fn}
-                   [:div
-                    [:div
-                     (cond
-                       push-failed?
-                       [:p (t :git/push-failed)]
-                       (and should-push? (seq changed-files))
-                       [:div.changes
-                        [:ul.overflow-y-auto {:style {:max-height 250}}
-                         (for [file changed-files]
-                           [:li {:key (str "sync-" file)}
-                            [:div.flex.flex-row.justify-between.align-items
-                             [:a {:href (rfe/href :file {:path file})}
-                              file]
-                             [:a.ml-4.text-sm.mt-1
-                              {:on-click (fn [e]
-                                           (export-handler/download-file! file))}
-                              [:span (t :download)]]]])]]
-                       :else
-                       [:p (t :git/local-changes-synced)])]
-                    ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
-                    [:div.flex.flex-row.justify-between.align-items.mt-2
-                     (ui/button (t :git/push)
-                       :on-click (fn [] (state/set-modal! commit/add-commit-message)))
-                     (if pushing? svg/loading)]]
-                   [:hr]
-                   [:div
-                    (when-not (string/blank? last-pulled-at)
-                      [:p {:style {:font-size 12}} (t :git/last-pull)
-                       (str ": " last-pulled-at)])
-                    [:div.flex.flex-row.justify-between.align-items
-                     (ui/button (t :git/pull)
-                       :on-click (fn [] (repo-handler/pull-current-repo)))
-                     (if pulling? svg/loading)]
-                    [:a.mt-5.text-sm.opacity-50.block
-                     {:on-click (fn []
-                                  (export-handler/export-repo-as-zip! repo))}
-                     (t :repo/download-zip)]
-                    [:p.pt-2.text-sm.opacity-50
-                     (t :git/version) (str " " version/version)]]])))]))))))
+  (when (and repo
+             (string/starts-with? repo "https://"))
+    (let [changed-files (state/sub [:repo/changed-files repo])
+          should-push? (seq changed-files)
+          git-status (state/sub [:git/status repo])
+          pushing? (= :pushing git-status)
+          pulling? (= :pulling git-status)
+          git-failed? (contains?
+                       #{:push-failed
+                         :clone-failed
+                         :checkout-failed
+                         :fetch-failed
+                         :merge-failed}
+                       git-status)
+          push-failed? (= :push-failed git-status)
+          last-pulled-at (db/sub-key-value repo :git/last-pulled-at)
+          ;; db-persisted? (state/sub [:db/persisted? repo])
+          editing? (seq (state/sub :editor/editing?))]
+      [:div.flex-row.flex.items-center.cp__repo-indicator
+       (when pushing? svg/loading)
+       (ui/dropdown
+        (fn [{:keys [toggle-fn]}]
+          [:div.cursor.w-2.h-2.sync-status.mr-2
+           {:class (cond
+                     git-failed?
+                     "bg-red-500"
+                     (or
+                      ;; (not db-persisted?)
+                      editing?
+                      should-push? pushing?)
+                     "bg-orange-400"
+                     :else
+                     "bg-green-600")
+            :style {:border-radius "50%"
+                    :margin-top 2}
+            :on-mouse-over
+            (fn [e]
+              (toggle-fn)
+              (js/setTimeout common-handler/check-changed-files-status 0))}])
+        (fn [{:keys [toggle-fn]}]
+          (rum/with-context [[t] i18n/*tongue-context*]
+            [:div.p-2.rounded-md.shadow-xs.bg-base-3.flex.flex-col.sync-content
+             {:on-mouse-leave toggle-fn}
+             [:div
+              [:div
+               (cond
+                 push-failed?
+                 [:p (t :git/push-failed)]
+                 (and should-push? (seq changed-files))
+                 [:div.changes
+                  [:ul.overflow-y-auto {:style {:max-height 250}}
+                   (for [file changed-files]
+                     [:li {:key (str "sync-" file)}
+                      [:div.flex.flex-row.justify-between.align-items
+                       [:a {:href (rfe/href :file {:path file})}
+                        file]
+                       [:a.ml-4.text-sm.mt-1
+                        {:on-click (fn [e]
+                                     (export-handler/download-file! file))}
+                        [:span (t :download)]]]])]]
+                 :else
+                 [:p (t :git/local-changes-synced)])]
+              ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
+              [:div.flex.flex-row.justify-between.align-items.mt-2
+               (ui/button (t :git/push)
+                 :on-click (fn [] (state/set-modal! commit/add-commit-message)))
+               (if pushing? svg/loading)]]
+             [:hr]
+             [:div
+              (when-not (string/blank? last-pulled-at)
+                [:p {:style {:font-size 12}} (t :git/last-pull)
+                 (str ": " last-pulled-at)])
+              [:div.flex.flex-row.justify-between.align-items
+               (ui/button (t :git/pull)
+                 :on-click (fn [] (repo-handler/pull-current-repo)))
+               (if pulling? svg/loading)]
+              [:a.mt-5.text-sm.opacity-50.block
+               {:on-click (fn []
+                            (export-handler/export-repo-as-zip! repo))}
+               (t :repo/download-zip)]
+              [:p.pt-2.text-sm.opacity-50
+               (t :git/version) (str " " version/version)]]])))])))
 
 (rum/defc repos-dropdown < rum/reactive
   [on-click]
@@ -243,6 +225,13 @@
                              [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                   :href (rfe/href :repos)}
                               (t :all-graphs)]
+                             (let [nfs-repo? (config/local-db? current-repo)]
+                               (when (and nfs-repo?
+                                          (not= current-repo config/local-repo)
+                                          (nfs-handler/supported?))
+                                 [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
+                                      :on-click #(nfs-handler/refresh! (state/get-current-repo) refresh-cb)}
+                                  (t :sync-from-local-files)]))
                              [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                   :on-click (fn []
                                               (repo-handler/re-index!

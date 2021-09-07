@@ -23,7 +23,8 @@
             [datascript.core :as d]
             ["semver" :as semver]
             [clojure.set :as set]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.string :as string]))
 
 ;; TODO: should we move all events here?
 
@@ -160,7 +161,11 @@
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (state/clear-edit!)
   (when-let [repo (state/get-current-repo)]
-    (state/set-modal! #(diff/local-file repo path disk-content db-content))))
+    (when (not= (string/trim disk-content) (string/trim db-content))
+      (state/set-modal! #(diff/local-file repo path disk-content db-content)))))
+
+(defmethod handle :modal/display-file-version [[_ path content hash]]
+  (state/set-modal! #(git-component/file-specific-version path hash content)))
 
 (defmethod handle :after-db-restore [[_ repos]]
   (mapv (fn [{url :url} repo]

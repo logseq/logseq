@@ -7,6 +7,7 @@
             [clojure.string :as string]
             [promesa.core :as p]
             [cljs-bean.core :as bean]
+            [electron.fs-watcher :as fs-watcher]
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]
@@ -246,7 +247,11 @@
                (.focus win))))
 
       (.on app "window-all-closed" (fn []
-                                     (search/close!)
+                                     (try
+                                       (fs-watcher/close-watcher!)
+                                       (search/close!)
+                                       (catch js/Error e
+                                         (js/console.error e)))
                                      (.quit app)))
       (.on app "ready"
            (fn []
@@ -284,7 +289,6 @@
                                   (let [web-contents (. win -webContents)]
                                     (.send web-contents "persistent-dbs"))
                                   (async/go
-                                    ;; FIXME: What if persistence failed?
                                     (let [_ (async/<! state/persistent-dbs-chan)]
                                       (if (or @*quitting? (not mac?))
                                         (when-let [win @*win]

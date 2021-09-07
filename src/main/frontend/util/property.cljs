@@ -38,6 +38,14 @@
   (and (string/includes? content properties-start)
        (util/safe-re-find properties-end-pattern content)))
 
+(defn remove-empty-properties
+  [content]
+  (if (contains-properties? content)
+    (string/replace content
+                    (re-pattern ":PROPERTIES:\n:END:\n*")
+                    "")
+    content))
+
 (defn simplified-property?
   [line]
   (boolean

@@ -29,7 +29,8 @@
             [promesa.core :as p]
             [frontend.ui :as ui]
             [frontend.error :as error]
-            [frontend.util.pool :as pool]))
+            [frontend.util.pool :as pool]
+            [electron.listener :as electron-listener]))
 
 (defn set-global-error-notification!
   []
@@ -209,3 +210,21 @@
 
 (defn stop! []
   (prn "stop!"))
+
+(defonce triggered? (atom false))
+(when (util/electron?)
+  (.addEventListener js/window "beforeunload"
+                     (fn [e]
+                       (when-not @triggered?
+                         (.preventDefault e)
+                         (state/pub-event! [:modal/show
+                                            [:div
+                                             [:h1.title "Reload Logseq?"]
+                                             (ui/button "YES"
+                                               :on-click (fn []
+                                                           (pool/terminate-parser-pool!)
+                                                           (p/let [_ (electron-listener/persist-dbs!)]
+                                                             (reset! triggered? true)
+                                                             (js/window.location.reload))))]])
+                         (reset! triggered? false)
+                         (set! (.-returnValue e) "")))))

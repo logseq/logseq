@@ -191,43 +191,46 @@
      (map :block/body blocks))
     @plugins))
 
+(defn delete-file!
+  [repo page-name]
+  (let [file (db/get-page-file page-name)
+        file-path (:file/path file)]
+    ;; delete file
+    (when-not (string/blank? file-path)
+      (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
+      (->
+       (p/let [_ (or (config/local-db? repo) (git/remove-file repo file-path))
+               _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)]
+         (common-handler/check-changed-files-status)
+         (repo-handler/push-if-auto-enabled! repo))
+       (p/catch (fn [err]
+                  (js/console.error "error: " err)))))))
+
 (defn delete!
   [page-name ok-handler]
   (when page-name
     (when-let [repo (state/get-current-repo)]
-      (let [page-name (string/lower-case page-name)]
-        (let [file (db/get-page-file page-name)
-              file-path (:file/path file)]
-          ;; delete file
-          (when-not (string/blank? file-path)
-            (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
-            (let [blocks (db/get-page-blocks page-name)
-                  tx-data (mapv
-                           (fn [block]
-                             [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                           blocks)]
-              (db/transact! tx-data)
-              ;; remove file
-              (->
-               (p/let [_ (or (config/local-db? repo) (git/remove-file repo file-path))
-                       _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)]
-                 (common-handler/check-changed-files-status)
-                 (repo-handler/push-if-auto-enabled! repo))
-               (p/catch (fn [err]
-                          (js/console.error "error: " err))))))
+      (let [page-name (string/lower-case page-name)
+            blocks (db/get-page-blocks page-name)
+            tx-data (mapv
+                     (fn [block]
+                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                     blocks)]
+        (db/transact! tx-data)
 
+        (delete-file! repo page-name)
 
-          ;; if other page alias this pagename,
-          ;; then just remove some attrs of this entity instead of retractEntity
-          (if (model/get-alias-source-page (state/get-current-repo) page-name)
-            (when-let [id (:db/id (db/entity [:block/name page-name]))]
-              (let [txs (mapv (fn [attribute]
-                                [:db/retract id attribute])
-                              db-schema/retract-page-attributes)]
-                (db/transact! txs)))
-            (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
+        ;; if other page alias this pagename,
+        ;; then just remove some attrs of this entity instead of retractEntity
+        (if (model/get-alias-source-page (state/get-current-repo) page-name)
+          (when-let [id (:db/id (db/entity [:block/name page-name]))]
+            (let [txs (mapv (fn [attribute]
+                              [:db/retract id attribute])
+                            db-schema/retract-page-attributes)]
+              (db/transact! txs)))
+          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
 
-          (ok-handler))))))
+        (ok-handler)))))
 
 (defn- compute-new-file-path
   [old-path new-page-name]

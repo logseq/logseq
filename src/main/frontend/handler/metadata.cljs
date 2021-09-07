@@ -42,7 +42,7 @@
 
 (defn set-pages-metadata!
   [repo]
-  (let [path (config/get-pages-metadata-path)
+  (let [path (config/get-pages-metadata-path repo)
         all-pages (->> (db/get-all-pages repo)
                        (common-handler/fix-pages-timestamps)
                        (map #(select-keys % [:block/name :block/created-at :block/updated-at]))

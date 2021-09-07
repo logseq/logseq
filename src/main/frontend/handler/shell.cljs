@@ -53,10 +53,7 @@
           local-dir (config/get-local-dir repo)
           path (string/replace path (str local-dir "/") "")]
       (p/let [content (run-git-command! ["show" (str hash ":" path)])]
-        (state/pub-event! [:modal/show
-                           [:div.w-full.sm:max-w-lg {:style {:width 700}}
-                            [:div.font-bold.mb-4 (str path (util/format " (%s)" hash)) ]
-                            [:pre content]]])))))
+        (state/pub-event! [:modal/display-file-version path content hash])))))
 
 (defn get-file-latest-git-log
   [page n]

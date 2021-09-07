@@ -240,3 +240,11 @@
                            new-line
                            (rest new-lines))))]
     (string/join "\n" new-lines)))
+
+(defn remove-timestamp
+  [content key]
+  (let [lines (string/split-lines content)
+        new-lines (filter (fn [line]
+                            (not (string/starts-with? (string/lower-case line) key)))
+                          lines)]
+    (string/join "\n" new-lines)))
