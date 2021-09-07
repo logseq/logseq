@@ -10,6 +10,7 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.db.model :as model]
             [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
@@ -347,3 +348,14 @@
             new-result (rewrite/assoc-in result ks v)]
         (let [new-content (str new-result)]
           (set-file-content! repo path new-content))))))
+
+;; TODO:
+;; (defn compare-latest-pages
+;;   []
+;;   (when-let [repo (state/get-current-repo)]
+;;     (doseq [{:block/keys [file name]} (db/get-latest-changed-pages repo)]
+;;       (when-let [path (:file/path (db/pull (:db/id file)))]
+;;         (p/let [content (load-file repo path)]
+;;           (when (not= (string/trim content) (string/trim (or (db/get-file repo path) "")))
+;;             ;; notify
+;;             ))))))

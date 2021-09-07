@@ -230,13 +230,30 @@
                                           (not= current-repo config/local-repo)
                                           (nfs-handler/supported?))
                                  [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
-                                      :on-click #(nfs-handler/refresh! (state/get-current-repo) refresh-cb)}
+                                      :on-click (fn []
+                                                  (state/pub-event!
+                                                   [:modal/show
+                                                    [:div {:style {:max-width 700}}
+                                                     [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
+                                                     (ui/button
+                                                       "Yes"
+                                                       :on-click (fn []
+                                                                   (state/close-modal!)
+                                                                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}
                                   (t :sync-from-local-files)]))
                              [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                   :on-click (fn []
-                                              (repo-handler/re-index!
-                                               nfs-handler/rebuild-index!
-                                               page-handler/create-today-journal!))}
+                                              (state/pub-event!
+                                               [:modal/show
+                                                [:div {:style {:max-width 700}}
+                                                 [:p "Re-index will discard the current graph, and then processes all the files again as they are currently stored on disk. You will lose unsaved changes and it might take a while. Continue?"]
+                                                 (ui/button
+                                                   "Yes"
+                                                   :on-click (fn []
+                                                               (state/close-modal!)
+                                                               (repo-handler/re-index!
+                                                                nfs-handler/rebuild-index!
+                                                                page-handler/create-today-journal!)))]]))}
                               (t :re-index)]]}
              (seq switch-repos)
              (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.py-2
