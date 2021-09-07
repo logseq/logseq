@@ -249,6 +249,8 @@
       background-color: var(--ls-secondary-background-color);
       border: 1px solid transparent;
       margin-bottom: 4px;
+      cursor: pointer;
+      opacity: .8;
 
       > section {
         line-height: 1.1em;
@@ -262,9 +264,14 @@
         }
       }
 
-      &:hover, &.is-active {
+      &.is-active {
         background-color: var(--ls-tertiary-background-color);
         border:1px solid var(--ls-quaternary-background-color);
+        opacity: 1;
+      }
+
+      &:hover {
+        opacity: 1;
       }
     }
   }

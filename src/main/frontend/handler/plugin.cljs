@@ -37,8 +37,9 @@
   (str "https://github.com/" repo))
 
 (defn pkg-asset [id asset]
-  (if-let [asset (and asset (string/replace asset #"^[./]+" ""))]
-    (str central-endpoint "packages/" id "/" asset)))
+  (if (and asset (string/starts-with? asset "http"))
+    asset (if-let [asset (and asset (string/replace asset #"^[./]+" ""))]
+            (str central-endpoint "packages/" id "/" asset))))
 
 (defn load-marketplace-plugins
   [refresh?]

@@ -46,7 +46,7 @@
   [repo tag])
 
 (defn download-asset-zip
-  [{:keys [id]} url dot-extract-to]
+  [{:keys [id repo title]} url dot-extract-to]
   (p/catch
     (p/let [^js res (fetch url)
             _ (if-not (.-ok res) (throw (js/Error. :download-network-issue)))
@@ -98,6 +98,12 @@
                    (fs/removeSync dot-extract-to))
 
             _ (fs/moveSync tmp-extracted-root dot-extract-to)
+
+            _ (let [src (.join path dot-extract-to "package.json")
+                    ^js pkg (fs/readJsonSync src)]
+                (set! (.-repo pkg) repo)
+                (set! (.-title pkg) title)
+                (fs/writeJsonSync src pkg))
 
             _ (do
                 (fs/removeSync zip-extracted-path)

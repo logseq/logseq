@@ -429,7 +429,7 @@ class PluginLocal
     }
 
     // Pick legal attrs
-    ['name', 'author', 'repository', 'version', 'description'].forEach(k => {
+    ['name', 'author', 'repository', 'version', 'description', 'repo', 'title'].forEach(k => {
       this._options[k] = pkg[k]
     })
 
