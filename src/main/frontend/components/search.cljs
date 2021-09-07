@@ -172,6 +172,7 @@
                  :left 32
                  :height 400
                  :width 700
+                 :min-width 250
                  :max-width "100%"
                  :overflow "auto"})
         :class (if all? "search-all" "absolute")}
