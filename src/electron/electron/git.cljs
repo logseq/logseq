@@ -48,32 +48,30 @@
     (catch js/Error e
       nil)))
 
+(defn delete-existing-separate-dot-git!
+  []
+  (when-let [graph-path (get-graph-path)]
+    (let [p (.join path graph-path ".git")]
+     (when (.isFile (fs/statSync p))
+       (let [content (fs/readFileSync p)]
+         (when (and content
+                    (string/starts-with? content "gitdir:")
+                    (string/includes? content ".logseq/"))
+           (fs/unlinkSync p)))))))
+
 (defn init!
   []
-  (let [separate-git-dir (get-graph-git-dir)
-        args (cond
-               (git-dir-exists?)
-               ["init"]
-               separate-git-dir
-               ["init" (str "--separate-git-dir=" separate-git-dir)]
-               :else
-               ["init"])]
-    (-> (p/let [_ (run-git! (clj->js args))]
-          (when utils/win32?
-            (run-git! ["config" "core.safecrlf" "false"])))
-        (p/catch (fn [error]
-                   (when (string/starts-with? error "fatal: not a git repository")
-                     (let [p (.join path (get-graph-path) ".git")]
-                       (when (.isFile (fs/statSync p))
-                         (let [content (fs/readFileSync p)]
-                           (when (and content (string/starts-with? content "gitdir:"))
-                             (fs/unlinkSync p)))))))))))
+  (delete-existing-separate-dot-git!)
+  (let [args ["init"]]
+    (p/let [_ (run-git! (clj->js args))]
+      (when utils/win32?
+        (run-git! ["config" "core.safecrlf" "false"])))))
 
 (defn add-all!
   []
-  (-> (run-git! #js ["add" "./*"])
+  (-> (run-git! #js ["add" "--ignore-errors" "./*"])
       (p/catch (fn [error]
-                 (if (string/includes? error "permission denied error: unable to index file")
+                 (if (string/includes? (string/lower-case error) "permission denied")
                    (js/console.error error)
                    (p/rejected error))))))
 
