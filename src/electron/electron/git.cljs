@@ -53,16 +53,18 @@
 (defn remove-dot-git-file!
   []
   (try
-   (let [graph-path (get-graph-path)
-         p (.join path graph-path ".git")]
-     (when (.isFile (fs/statSync p))
-       (let [content (fs/readFileSync p)]
-         (when (and content
-                    (string/starts-with? content "gitdir:")
-                    (string/includes? content ".logseq/"))
-           (fs/unlinkSync p)))))
-   (catch js/Error e
-     nil)))
+    (let [graph-path (get-graph-path)
+          p (.join path graph-path ".git")]
+      (when (.isFile (fs/statSync p))
+        (let [content (.toString (fs/readFileSync p))
+              dir-path (string/replace content "gitdir: " "")]
+          (when (and content
+                     (string/starts-with? content "gitdir:")
+                     (string/includes? content ".logseq/")
+                     (not (fs/existsSync dir-path)))
+            (fs/unlinkSync p)))))
+    (catch js/Error e
+      (log-error e))))
 
 (defn init!
   []
@@ -109,14 +111,12 @@
       (p/catch (fn [error]
                  (when (and
                         (string? error)
-                        (not (string/blank? error))
-                        ;; FIXME: not sure why this happened
-                        (not (string/starts-with? error "fatal: not a git repository")))
+                        (not (string/blank? error)))
                    (if (string/starts-with? error "Author identity unknown")
                      (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
                      (utils/send-to-renderer "notification" {:type "error"
                                                              :payload error}))))))
-)))
+     )))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?
