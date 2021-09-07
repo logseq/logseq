@@ -307,6 +307,12 @@
   }
 }
 
+.lsp-frame-readme {
+  margin: -2rem;
+  min-height: 75vh;
+  min-width: 900px;
+}
+
 .block-content {
   .lsp-hook-ui-slot {
     display: flex;

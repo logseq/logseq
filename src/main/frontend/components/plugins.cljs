@@ -100,7 +100,7 @@
   (when unpacked-pkg-path
     [:strong.inline-flex.px-3 "Loading ..."]))
 
-(rum/defc simple-markdown-display
+(rum/defc local-markdown-display
   < rum/reactive
   []
   (let [[content item] (state/sub :plugin/active-readme)]
@@ -120,6 +120,12 @@
       {:style                   {:min-height "60vw"
                                  :max-width  900}
        :dangerouslySetInnerHTML {:__html content}}]]))
+
+(rum/defc remote-readme-display
+  [repo content]
+
+  (let [src (str "lsp://logseq.com/marketplace.html?repo=" repo)]
+    [:iframe.lsp-frame-readme {:src src}]))
 
 (defn security-warning
   []
@@ -145,7 +151,8 @@
        {:class (util/classnames [{:market market?}])}
 
        [:div.l.link-block
-        {:on-click #(plugin-handler/open-readme! url item simple-markdown-display)}
+        {:on-click #(plugin-handler/open-readme!
+                      url item (if url local-markdown-display remote-readme-display))}
         (if icon
           [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
           svg/folder)
