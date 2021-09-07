@@ -8,6 +8,7 @@
             [frontend.handler.extract :as extract]
             [frontend.handler.file :as file-handler]
             [lambdaisland.glogi :as log]
+            [electron.ipc :as ipc]
             [promesa.core :as p]))
 
 (defn- set-missing-block-ids!

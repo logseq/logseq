@@ -22,7 +22,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
-            ["semver" :as semver]))
+            ["semver" :as semver]
+            [clojure.string :as string]))
 
 ;; TODO: should we move all events here?
 
