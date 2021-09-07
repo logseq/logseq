@@ -48,21 +48,31 @@
     (catch js/Error e
       nil)))
 
-(defn delete-existing-separate-dot-git!
+(defn remove-dot-git-file!
   []
-  (when-let [graph-path (get-graph-path)]
-    (let [p (.join path graph-path ".git")]
+  (try
+   (let [graph-path (get-graph-path)
+         p (.join path graph-path ".git")]
      (when (.isFile (fs/statSync p))
        (let [content (fs/readFileSync p)]
          (when (and content
                     (string/starts-with? content "gitdir:")
                     (string/includes? content ".logseq/"))
-           (fs/unlinkSync p)))))))
+           (fs/unlinkSync p)))))
+   (catch js/Error e
+     nil)))
 
 (defn init!
   []
-  (delete-existing-separate-dot-git!)
-  (let [args ["init"]]
+  (let [_ (remove-dot-git-file!)
+        separate-git-dir (get-graph-git-dir)
+        args (cond
+               (git-dir-exists?)
+               ["init"]
+               separate-git-dir
+               ["init" (str "--separate-git-dir=" separate-git-dir)]
+               :else
+               ["init"])]
     (p/let [_ (run-git! (clj->js args))]
       (when utils/win32?
         (run-git! ["config" "core.safecrlf" "false"])))))
@@ -71,9 +81,11 @@
   []
   (-> (run-git! #js ["add" "--ignore-errors" "./*"])
       (p/catch (fn [error]
-                 (if (string/includes? (string/lower-case error) "permission denied")
-                   (js/console.error error)
-                   (p/rejected error))))))
+                 (let [error (string/lower-case (str error))]
+                   (if (or (string/includes? error "permission denied")
+                           (string/includes? error "index.lock': File exists"))
+                     (js/console.error error)
+                     (p/rejected error)))))))
 
 ;; git log -100 --oneline -p ~/Desktop/org/pages/contents.org
 
@@ -93,9 +105,11 @@
               _ (add-all!)]
         (commit! message))
       (p/catch (fn [error]
-                 (when (and (not (string/blank? error))
-                            ;; FIXME: not sure why this happened
-                            (not (string/starts-with? error "fatal: not a git repository")))
+                 (when (and
+                        (string? error)
+                        (not (string/blank? error))
+                        ;; FIXME: not sure why this happened
+                        (not (string/starts-with? error "fatal: not a git repository")))
                    (if (string/starts-with? error "Author identity unknown")
                      (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
                      (utils/send-to-renderer "notification" {:type "error"
@@ -129,6 +143,7 @@
 
 (defn raw!
   [args]
+  (init!)
   (let [args (if (string? args)
                (split-args args)
                args)
