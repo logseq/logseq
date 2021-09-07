@@ -194,6 +194,10 @@
          (search/search)
          [:div.flex-1])
 
+       [:a (when refreshing?
+             [:div {:class "animate-spin-reverse"}
+              svg/refresh])]
+
        (when electron-mac?
          (logo {:white? white?
                 :electron-mac? true}))
@@ -201,10 +205,6 @@
        (when electron-mac? (back-and-forward true))
 
        (new-block-mode)
-
-       (when refreshing?
-         [:div {:class "animate-spin-reverse"}
-          svg/refresh])
 
        (when-not (util/electron?)
          (login logged?))

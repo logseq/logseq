@@ -37,12 +37,13 @@
           db-content (or (db/get-file repo path) "")]
       (when (and content (not (encrypt/content-encrypted? content)))
         (cond
-          (= "add" type)
-          (when-not (db/file-exists? repo path)
-            (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
-                                                                  :from-disk? true})]
-              (set-missing-block-ids! content)
-              (db/set-file-last-modified-at! repo path mtime)))
+          (and (= "add" type)
+               (not= (string/trim content) (string/trim db-content))
+               (not (string/includes? path "logseq/pages-metadata.edn")))
+          (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
+                                                                :from-disk? true})]
+            (set-missing-block-ids! content)
+            (db/set-file-last-modified-at! repo path mtime))
 
           (and (= "change" type)
                (not (db/file-exists? repo path)))

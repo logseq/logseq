@@ -26,7 +26,7 @@
                           (clj->js
                            {:ignored (fn [path]
                                        (utils/ignored-path? dir path))
-                            :ignoreInitial true
+                            :ignoreInitial false
                             :ignorePermissionErrors true
                             :interval polling-interval
                             :binaryInterval polling-interval
