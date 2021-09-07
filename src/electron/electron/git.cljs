@@ -2,12 +2,14 @@
   (:require ["dugite" :refer [GitProcess]]
             [goog.object :as gobj]
             [electron.state :as state]
-            [electron.utils :as utils]
+            [electron.utils :refer [logger] :as utils]
             [promesa.core :as p]
             [clojure.string :as string]
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]))
+
+(def log-error (partial (.-error logger) "[Git]"))
 
 (defn get-graph-path
   []
@@ -37,7 +39,7 @@
             (p/resolved result))
           (let [error (gobj/get result "stderr")]
             (when-not (string/blank? error)
-              (js/console.error error))
+              (log-error error))
             (p/rejected error)))))))
 
 (defn git-dir-exists?
@@ -84,7 +86,7 @@
                  (let [error (string/lower-case (str error))]
                    (if (or (string/includes? error "permission denied")
                            (string/includes? error "index.lock': File exists"))
-                     (js/console.error error)
+                     (log-error error)
                      (p/rejected error)))))))
 
 ;; git log -100 --oneline -p ~/Desktop/org/pages/contents.org
