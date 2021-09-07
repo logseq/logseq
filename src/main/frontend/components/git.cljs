@@ -14,7 +14,7 @@
   (let [username (get state ::username)
         email (get state ::email)]
     [:div.container
-     [:div.text-lg.mb-4 "Git requires to setup your username and email address."]
+     [:div.text-lg.mb-4 "Git requires to setup your username and email address to commit, both of them will be stored locally."]
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
