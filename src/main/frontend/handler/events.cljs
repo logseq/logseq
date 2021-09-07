@@ -156,7 +156,8 @@
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (state/clear-edit!)
   (when-let [repo (state/get-current-repo)]
-    (state/set-modal! #(diff/local-file repo path disk-content db-content))))
+    (when (not= (string/trim disk-content) (string/trim db-content))
+      (state/set-modal! #(diff/local-file repo path disk-content db-content)))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
   (state/set-modal! #(git-component/file-specific-version path hash content)))

@@ -1138,8 +1138,10 @@
   [copy?]
   (when copy? (copy-selection-blocks))
   (when-let [blocks (seq (get-selected-blocks-with-children))]
-    ;; remove embeds and references
-    (let [blocks (remove (fn [block] (= "true" (dom/attr block "data-transclude"))) blocks)]
+    ;; remove embeds, references and queries
+    (let [blocks (remove (fn [block]
+                           (or (= "true" (dom/attr block "data-transclude"))
+                               (= "true" (dom/attr block "data-query")))) blocks)]
       (when (seq blocks)
         (let [repo (state/get-current-repo)
               ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
@@ -2831,6 +2833,7 @@
   [copy?]
   (cut-selection-blocks copy?)
   (clear-selection!))
+
 (defn shortcut-copy-selection
   [e]
   (copy-selection-blocks))

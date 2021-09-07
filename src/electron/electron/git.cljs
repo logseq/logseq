@@ -2,12 +2,14 @@
   (:require ["dugite" :refer [GitProcess]]
             [goog.object :as gobj]
             [electron.state :as state]
-            [electron.utils :as utils]
+            [electron.utils :refer [logger] :as utils]
             [promesa.core :as p]
             [clojure.string :as string]
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]))
+
+(def log-error (partial (.-error logger) "[Git]"))
 
 (defn get-graph-path
   []
@@ -37,7 +39,7 @@
             (p/resolved result))
           (let [error (gobj/get result "stderr")]
             (when-not (string/blank? error)
-              (js/console.error error))
+              (log-error error))
             (p/rejected error)))))))
 
 (defn git-dir-exists?
@@ -48,9 +50,26 @@
     (catch js/Error e
       nil)))
 
+(defn remove-dot-git-file!
+  []
+  (try
+    (let [graph-path (get-graph-path)
+          p (.join path graph-path ".git")]
+      (when (.isFile (fs/statSync p))
+        (let [content (.toString (fs/readFileSync p))
+              dir-path (string/replace content "gitdir: " "")]
+          (when (and content
+                     (string/starts-with? content "gitdir:")
+                     (string/includes? content ".logseq/")
+                     (not (fs/existsSync dir-path)))
+            (fs/unlinkSync p)))))
+    (catch js/Error e
+      (log-error e))))
+
 (defn init!
   []
-  (let [separate-git-dir (get-graph-git-dir)
+  (let [_ (remove-dot-git-file!)
+        separate-git-dir (get-graph-git-dir)
         args (cond
                (git-dir-exists?)
                ["init"]
@@ -58,24 +77,19 @@
                ["init" (str "--separate-git-dir=" separate-git-dir)]
                :else
                ["init"])]
-    (-> (p/let [_ (run-git! (clj->js args))]
-          (when utils/win32?
-            (run-git! ["config" "core.safecrlf" "false"])))
-        (p/catch (fn [error]
-                   (when (string/starts-with? error "fatal: not a git repository")
-                     (let [p (.join path (get-graph-path) ".git")]
-                       (when (.isFile (fs/statSync p))
-                         (let [content (fs/readFileSync p)]
-                           (when (and content (string/starts-with? content "gitdir:"))
-                             (fs/unlinkSync p)))))))))))
+    (p/let [_ (run-git! (clj->js args))]
+      (when utils/win32?
+        (run-git! ["config" "core.safecrlf" "false"])))))
 
 (defn add-all!
   []
-  (-> (run-git! #js ["add" "./*"])
+  (-> (run-git! #js ["add" "--ignore-errors" "./*"])
       (p/catch (fn [error]
-                 (if (string/includes? error "permission denied error: unable to index file")
-                   (js/console.error error)
-                   (p/rejected error))))))
+                 (let [error (string/lower-case (str error))]
+                   (if (or (string/includes? error "permission denied")
+                           (string/includes? error "index.lock': File exists"))
+                     (log-error error)
+                     (p/rejected error)))))))
 
 ;; git log -100 --oneline -p ~/Desktop/org/pages/contents.org
 
@@ -95,14 +109,14 @@
               _ (add-all!)]
         (commit! message))
       (p/catch (fn [error]
-                 (when (and (not (string/blank? error))
-                            ;; FIXME: not sure why this happened
-                            (not (string/starts-with? error "fatal: not a git repository")))
+                 (when (and
+                        (string? error)
+                        (not (string/blank? error)))
                    (if (string/starts-with? error "Author identity unknown")
                      (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
                      (utils/send-to-renderer "notification" {:type "error"
                                                              :payload error}))))))
-)))
+     )))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?
@@ -131,6 +145,7 @@
 
 (defn raw!
   [args]
+  (init!)
   (let [args (if (string? args)
                (split-args args)
                args)
