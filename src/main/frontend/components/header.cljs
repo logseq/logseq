@@ -171,7 +171,8 @@
         electron-mac? (and util/mac? (util/electron?))
         electron-not-mac? (and (util/electron?) (not electron-mac?))
         show-open-folder? (and (nfs/supported?) (empty? repos)
-                               (not config/publishing?))]
+                               (not config/publishing?))
+        refreshing? (state/sub :nfs/refreshing?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
        {:class (when electron-mac? "electron-mac")
@@ -200,6 +201,10 @@
        (when electron-mac? (back-and-forward true))
 
        (new-block-mode)
+
+       (when refreshing?
+         [:div {:class "animate-spin-reverse"}
+          svg/refresh])
 
        (when-not (util/electron?)
          (login logged?))
