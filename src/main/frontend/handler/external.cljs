@@ -61,7 +61,6 @@
                       (common-handler/check-changed-files-status)
                       (finished-ok-handler))))))
 
-
 ;;; import OPML files
 (defn import-from-opml!
   [data finished-ok-handler]
@@ -69,7 +68,7 @@
     (let [[headers parsed-blocks] (mldoc/opml->edn data)
           parsed-blocks (->>
                           (block/extract-blocks parsed-blocks "" true :markdown)
-                          (mapv editor/wrap-parse-block))
+                          (mapv common-handler/wrap-parse-block))
           page-name (:title headers)]
       (when (not (page/page-exists? page-name))
         (page/create! page-name {:redirect? false}))

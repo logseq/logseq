@@ -18,7 +18,6 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
-            [frontend.util.clock :as clock]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.image :as image-handler]
@@ -32,6 +31,7 @@
             [frontend.image :as image]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
+            [frontend.modules.outliner.yjs :as outliner-yjs]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -256,134 +256,6 @@
        (not= current-id (cljs.core/uuid block-id))
        (db/entity [:block/uuid (cljs.core/uuid block-id)])))
 
-(defn- attach-page-properties-if-exists!
-  [block]
-  (if (and (:block/pre-block? block)
-           (seq (:block/properties block)))
-    (let [page-properties (:block/properties block)
-          str->page (fn [n] (block/page-name->map n true))
-          refs (->> page-properties
-                    (filter (fn [[_ v]] (coll? v)))
-                    (vals)
-                    (apply concat)
-                    (set)
-                    (map str->page)
-                    (concat (:block/refs block))
-                    (util/distinct-by :block/name))
-          {:keys [tags alias]} page-properties
-          page-tx (let [id (:db/id (:block/page block))
-                        retract-attributes (when id
-                                             (mapv (fn [attribute]
-                                                     [:db/retract id attribute])
-                                                   [:block/properties :block/tags :block/alias]))
-                        tx (cond-> {:db/id id
-                                    :block/properties page-properties}
-                             (seq tags)
-                             (assoc :block/tags (map str->page tags))
-                             (seq alias)
-                             (assoc :block/alias (map str->page alias)))]
-                    (conj retract-attributes tx))]
-      (assoc block
-             :block/refs refs
-             :db/other-tx page-tx))
-    block))
-
-(defn- remove-non-existed-refs!
-  [refs]
-  (remove (fn [x] (and (vector? x)
-                       (= :block/uuid (first x))
-                       (nil? (db/entity x)))) refs))
-
-(defn- with-marker-time
-  [content block format new-marker old-marker]
-  (if (and (state/enable-timetracking?) new-marker)
-    (try
-      (let [logbook-exists? (and (:block/body block) (drawer/get-logbook (:block/body block)))
-            new-marker (string/trim (string/lower-case (name new-marker)))
-            old-marker (when old-marker (string/trim (string/lower-case (name old-marker))))
-            new-content (cond
-                          (or (and (nil? old-marker) (or (= new-marker "doing")
-                                                         (= new-marker "now")))
-                              (and (= old-marker "todo") (= new-marker "doing"))
-                              (and (= old-marker "later") (= new-marker "now"))
-                              (and (= old-marker new-marker "now") (not logbook-exists?))
-                              (and (= old-marker new-marker "doing") (not logbook-exists?)))
-                          (clock/clock-in format content)
-
-                          (or
-                           (and (= old-marker "doing") (= new-marker "todo"))
-                           (and (= old-marker "now") (= new-marker "later"))
-                           (and (contains? #{"now" "doing"} old-marker)
-                                (= new-marker "done")))
-                          (clock/clock-out format content)
-
-                          :else
-                          content)]
-        new-content)
-      (catch js/Error _e
-        content))
-    content))
-
-(defn- with-timetracking
-  [block value]
-  (if (and (state/enable-timetracking?)
-           (not= (:block/content block) value))
-    (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
-          new-value (with-marker-time value block (:block/format block)
-                      new-marker
-                      (:block/marker block))]
-      new-value)
-    value))
-
-(defn wrap-parse-block
-  [{:block/keys [content format parent left page uuid pre-block? level] :as block}]
-  (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
-        properties (:block/properties block)
-        real-content (:block/content block)
-        content (if (and (seq properties) real-content (not= real-content content))
-                  (property/with-built-in-properties properties content format)
-                  content)
-        content (with-timetracking block content)
-        first-block? (= left page)
-        ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
-        first-elem-type (first (ffirst ast))
-        first-elem-meta (second (ffirst ast))
-        properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
-        markdown-heading? (and (= format :markdown)
-                               (= "Heading" first-elem-type)
-                               (nil? (:size first-elem-meta)))
-        block-with-title? (mldoc/block-with-title? first-elem-type)
-        content (string/triml content)
-        content (string/replace content (util/format "((%s))" (str uuid)) "")
-        [content content'] (cond
-                             (and first-block? properties?)
-                             [content content]
-
-                             markdown-heading?
-                             [content content]
-
-                             :else
-                             (let [content' (str (config/get-block-pattern format) (if block-with-title? " " "\n") content)]
-                               [content content']))
-        block (assoc block
-                     :block/content content'
-                     :block/format format)
-        block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
-        block (block/parse-block block)
-        block (if (and first-block? (:block/pre-block? block))
-                block
-                (dissoc block :block/pre-block?))
-        block (update block :block/refs remove-non-existed-refs!)
-        block (attach-page-properties-if-exists! block)
-        new-properties (merge
-                        (select-keys properties (property/built-in-properties))
-                        (:block/properties block))]
-    (-> block
-        (dissoc :block/top?
-                :block/bottom?)
-        (assoc :block/content content
-               :block/properties new-properties)
-        (merge (if level {:block/level level} {})))))
 
 (defn- save-block-inner!
   [repo block value {:keys [refresh?]
@@ -392,9 +264,9 @@
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (let [block (wrap-parse-block block)]
+     (let [block (common-handler/wrap-parse-block block)]
        (-> (outliner-core/block block)
-           (outliner-core/save-node))
+           (outliner-yjs/save-node-op))
        (when refresh?
          (let [opts {:key :block/change
                      :data [block]}]
@@ -469,8 +341,8 @@
                    (not has-children?))]
     (let [*blocks (atom [current-node])]
       (when-not skip-save-current-block?
-        (outliner-core/save-node current-node))
-      (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
+        (outliner-yjs/save-node-op current-node))
+      (outliner-yjs/insert-node-op new-node current-node sibling? {:blocks-atom *blocks
                                                                  :skip-transact? false})
       {:blocks @*blocks
        :sibling? sibling?})))
@@ -538,14 +410,14 @@
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
         current-block (assoc block :block/content snd-block-text)
         current-block (apply dissoc current-block db-schema/retract-attributes)
-        current-block (wrap-parse-block current-block)
+        current-block (common-handler/wrap-parse-block current-block)
         new-m {:block/uuid (db/new-block-id)
                :block/content fst-block-text}
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/file :block/journal?]) new-m)
-                       (wrap-parse-block))
+                       (common-handler/wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))
-        _ (outliner-core/save-node (outliner-core/block current-block))
+        _ (outliner-yjs/save-node-op (outliner-core/block current-block))
         sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
@@ -569,14 +441,14 @@
         [fst-block-text snd-block-text] (compute-fst-snd-block-text value pos)
         current-block (assoc block :block/content fst-block-text)
         current-block (apply dissoc current-block db-schema/retract-attributes)
-        current-block (wrap-parse-block current-block)
+        current-block (common-handler/wrap-parse-block current-block)
         zooming? (when-let [id (:id config)]
                    (and (string? id) (util/uuid-string? id)))
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
                                                   :block/page :block/file :block/journal?]) new-m)
-                       (wrap-parse-block))
+                       (common-handler/wrap-parse-block))
         sibling? (when block-self? false)
         {:keys [sibling? blocks]} (profile
                                    "outliner insert block"
@@ -692,7 +564,7 @@
                                  (:db/id block)
                                  (:db/id (:block/page new-block))))
               new-block (-> new-block
-                            (wrap-parse-block)
+                            (common-handler/wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               new-block (if-let [db-id (:db/id (:block/file block))]
                           (assoc new-block :block/file db-id)
@@ -973,7 +845,7 @@
             sibling-block (when block-parent (util/get-prev-block-non-collapsed block-parent))]
         (if (= start-node end-node)
           (delete-block-aux! (first blocks) true)
-          (when (outliner-core/delete-nodes start-node end-node lookup-refs)
+          (when (outliner-yjs/delete-nodes-op start-node end-node lookup-refs)
             (let [opts {:key :block/change
                         :data blocks}]
               (db/refresh! repo opts)
@@ -1004,7 +876,7 @@
                                           :block/properties properties
                                           :block/content content})
               input-pos (or (state/get-edit-pos) :max)]
-          (outliner-core/save-node block)
+          (outliner-yjs/save-node-op block)
 
           (db/refresh! (state/get-current-repo)
                        {:key :block/change
@@ -2170,8 +2042,8 @@
                                         uuid file page exclude-properties format content-update-fn)))))))))
             _ (when editing-block
                 (let [editing-block (outliner-core/block editing-block)]
-                  (outliner-core/save-node editing-block)))
-            _ (outliner-core/insert-nodes metadata-replaced-blocks target-block sibling?)
+                  (outliner-yjs/save-node-op editing-block)))
+            _ (outliner-yjs/insert-nodes-op metadata-replaced-blocks target-block sibling?)
             _ (when (and delete-editing-block? editing-block)
                 (when-let [id (:db/id editing-block)]
                   (outliner-core/delete-node (outliner-core/block (db/pull id)) true)))

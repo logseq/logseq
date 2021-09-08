@@ -1,5 +1,13 @@
 (ns frontend.handler.common
-  (:require [cljs-bean.core :as bean]
+  (:require [goog.object :as gobj]
+            [cljs-bean.core :as bean]
+            [frontend.db-schema :as db-schema]
+            [frontend.format.mldoc :as mldoc]
+            [frontend.util.marker :as marker]
+            [frontend.util.clock :as clock]
+            [frontend.encrypt :as e]
+            [frontend.util.drawer :as drawer]
+            [frontend.format.block :as block]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [cljs.reader :as reader]
@@ -17,6 +25,7 @@
             ["ignore" :as Ignore]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
+
 
 (defn get-ref
   [repo-url]
@@ -223,3 +232,138 @@
       (d/set-style! context-menu
                     :left (str client-x "px")
                     :top (str (+ scroll-y client-y) "px")))))
+
+
+
+(defn with-marker-time
+  [content block format new-marker old-marker]
+  (if (and (state/enable-timetracking?) new-marker)
+    (try
+      (let [logbook-exists? (and (:block/body block) (drawer/get-logbook (:block/body block)))
+            new-marker (string/trim (string/lower-case (name new-marker)))
+            old-marker (when old-marker (string/trim (string/lower-case (name old-marker))))
+            new-content (cond
+                          (or (and (nil? old-marker) (or (= new-marker "doing")
+                                                         (= new-marker "now")))
+                              (and (= old-marker "todo") (= new-marker "doing"))
+                              (and (= old-marker "later") (= new-marker "now"))
+                              (and (= old-marker new-marker "now") (not logbook-exists?))
+                              (and (= old-marker new-marker "doing") (not logbook-exists?)))
+                          (clock/clock-in format content)
+
+                          (or
+                           (and (= old-marker "doing") (= new-marker "todo"))
+                           (and (= old-marker "now") (= new-marker "later"))
+                           (and (contains? #{"now" "doing"} old-marker)
+                                (= new-marker "done")))
+                          (clock/clock-out format content)
+
+                          :else
+                          content)]
+        new-content)
+      (catch js/Error _e
+        content))
+    content))
+
+
+(defn- with-timetracking
+  [block value]
+  (if (and (state/enable-timetracking?)
+           (not= (:block/content block) value))
+    (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
+          new-value (with-marker-time value block (:block/format block)
+                      new-marker
+                      (:block/marker block))]
+      new-value)
+    value))
+
+(defn- attach-page-properties-if-exists!
+  [block]
+  (if (and (:block/pre-block? block)
+           (seq (:block/properties block)))
+    (let [page-properties (:block/properties block)
+          str->page (fn [n] (block/page-name->map n true))
+          refs (->> page-properties
+                    (filter (fn [[_ v]] (coll? v)))
+                    (vals)
+                    (apply concat)
+                    (set)
+                    (map str->page)
+                    (concat (:block/refs block))
+                    (util/distinct-by :block/name))
+          {:keys [tags alias]} page-properties
+          page-tx (let [id (:db/id (:block/page block))
+                        retract-attributes (when id
+                                             (mapv (fn [attribute]
+                                                     [:db/retract id attribute])
+                                                   [:block/properties :block/tags :block/alias]))
+                        tx (cond-> {:db/id id
+                                    :block/properties page-properties}
+                             (seq tags)
+                             (assoc :block/tags (map str->page tags))
+                             (seq alias)
+                             (assoc :block/alias (map str->page alias)))]
+                    (conj retract-attributes tx))]
+      (assoc block
+             :block/refs refs
+             :db/other-tx page-tx))
+    block))
+
+(defn- remove-non-existed-refs!
+  [refs]
+  (remove (fn [x] (and (vector? x)
+                       (= :block/uuid (first x))
+                       (nil? (db/entity x)))) refs))
+
+(defn wrap-parse-block
+  [{:block/keys [content format parent left page uuid pre-block? level] :as block}]
+  (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
+        properties (:block/properties block)
+        real-content (:block/content block)
+        content (if (and (seq properties) real-content (not= real-content content))
+                  (property/with-built-in-properties properties content format)
+                  content)
+        content (->> content
+                     (drawer/remove-logbook)
+                     (drawer/with-logbook block))
+        content (with-timetracking block content)
+        first-block? (= left page)
+        ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
+        first-elem-type (first (ffirst ast))
+        first-elem-meta (second (ffirst ast))
+        properties? (contains? #{"Property_Drawer" "Properties"} first-elem-type)
+        markdown-heading? (and (= format :markdown)
+                               (= "Heading" first-elem-type)
+                               (nil? (:size first-elem-meta)))
+        block-with-title? (mldoc/block-with-title? first-elem-type)
+        content (string/triml content)
+        content (string/replace content (util/format "((%s))" (str uuid)) "")
+        [content content'] (cond
+                             (and first-block? properties?)
+                             [content content]
+
+                             markdown-heading?
+                             [content content]
+
+                             :else
+                             (let [content' (str (config/get-block-pattern format) (if block-with-title? " " "\n") content)]
+                               [content content']))
+        block (assoc block
+                     :block/content content'
+                     :block/format format)
+        block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
+        block (block/parse-block block)
+        block (if (and first-block? (:block/pre-block? block))
+                block
+                (dissoc block :block/pre-block?))
+        block (update block :block/refs remove-non-existed-refs!)
+        block (attach-page-properties-if-exists! block)
+        new-properties (merge
+                        (select-keys properties (property/built-in-properties))
+                        (:block/properties block))]
+    (-> block
+        (dissoc :block/top?
+                :block/bottom?)
+        (assoc :block/content content
+               :block/properties new-properties)
+        (merge (if level {:block/level level} {})))))
