@@ -144,6 +144,7 @@ type PluginLocalOptions = {
   mode: 'shadow' | 'iframe'
   settings?: PluginSettings
   logger?: PluginLogger
+  effect?: boolean
 
   [key: string]: any
 }
@@ -404,7 +405,7 @@ class PluginLocal
       const url = path.join(localRoot, filePath)
       filePath = reg.test(url) ? url : (PROTOCOL_FILE + url)
     }
-    return this.isInstalledInDotRoot ?
+    return (!this.options.effect && this.isInstalledInDotRoot) ?
       convertToLSPResource(filePath, this.dotPluginsRoot) : filePath
   }
 
@@ -429,7 +430,9 @@ class PluginLocal
     }
 
     // Pick legal attrs
-    ['name', 'author', 'repository', 'version', 'description', 'repo', 'title'].forEach(k => {
+    ['name', 'author', 'repository', 'version',
+      'description', 'repo', 'title', 'effect'
+    ].forEach(k => {
       this._options[k] = pkg[k]
     })
 

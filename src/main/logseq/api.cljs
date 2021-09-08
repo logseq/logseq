@@ -470,6 +470,14 @@
             blocks (normalize-keyword-for-json blocks)]
         (bean/->js blocks)))))
 
+;; plugins
+(def ^:export install_plugin
+  (fn [^js manifest]
+    (when-let [{:keys [repo id] :as mft} (bean/->clj manifest)]
+      (if-not (and repo id)
+        (throw (js/Error. "[required] :repo :id"))
+        (plugin-handler/install-marketplace-plugin mft)))))
+
 ;; db
 (defn ^:export q
   [query-string]

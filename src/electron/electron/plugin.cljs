@@ -46,7 +46,7 @@
   [repo tag])
 
 (defn download-asset-zip
-  [{:keys [id repo title]} url dot-extract-to]
+  [{:keys [id repo title effect]} url dot-extract-to]
   (p/catch
     (p/let [^js res (fetch url)
             _ (if-not (.-ok res) (throw (js/Error. :download-network-issue)))
@@ -103,6 +103,7 @@
                     ^js pkg (fs/readJsonSync src)]
                 (set! (.-repo pkg) repo)
                 (set! (.-title pkg) title)
+                (set! (.-effect pkg) (boolean effect))
                 (fs/writeJsonSync src pkg))
 
             _ (do
@@ -126,7 +127,7 @@
               ;; get releases
               (-> (p/let [[asset latest-version] (fetch-latest-release-asset item)
 
-                          _ (js/console.debug "[Release Asset] #" latest-version "#" asset)
+                          _ (js/console.debug "[Release Asset] #" latest-version " =>" asset)
 
                           ;; compare latest version
                           _ (when (and updating? latest-version
