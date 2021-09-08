@@ -1,34 +1,31 @@
 (ns frontend.components.repo
-  (:require [rum.core :as rum]
+  (:require [clojure.string :as string]
+            [frontend.components.commit :as commit]
+            [frontend.components.encryption :as encryption]
+            [frontend.components.svg :as svg]
             [frontend.components.widgets :as widgets]
-            [frontend.ui :as ui]
-            [frontend.state :as state]
+            [frontend.config :as config]
+            [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.encrypt :as e]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.handler.page :as page-handler]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.route :as route-handler]
             [frontend.handler.export :as export-handler]
-            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.modules.shortcut.core :as shortcut]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.config :as config]
-            [reitit.frontend.easy :as rfe]
             [frontend.version :as version]
-            [frontend.components.commit :as commit]
-            [frontend.components.svg :as svg]
-            [frontend.components.encryption :as encryption]
-            [frontend.context.i18n :as i18n]
-            [clojure.string :as string]
-            [clojure.string :as str]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (rum/defc add-repo
   [args]
   (if-let [graph-types (get-in args [:query-params :graph-types])]
-    (let [graph-types-s (->> (str/split graph-types #",")
+    (let [graph-types-s (->> (string/split graph-types #",")
                              (mapv keyword))]
       (when (seq graph-types-s)
         (widgets/add-graph :graph-types graph-types-s)))
@@ -156,7 +153,7 @@
               [:div.flex.flex-row.justify-between.align-items.mt-2
                (ui/button (t :git/push)
                  :on-click (fn [] (state/set-modal! commit/add-commit-message)))
-               (if pushing? svg/loading)]]
+               (when pushing? svg/loading)]]
              [:hr]
              [:div
               (when-not (string/blank? last-pulled-at)
@@ -165,7 +162,7 @@
               [:div.flex.flex-row.justify-between.align-items
                (ui/button (t :git/pull)
                  :on-click (fn [] (repo-handler/pull-current-repo)))
-               (if pulling? svg/loading)]
+               (when pulling? svg/loading)]
               [:a.mt-5.text-sm.opacity-50.block
                {:on-click (fn []
                             (export-handler/export-repo-as-zip! repo))}

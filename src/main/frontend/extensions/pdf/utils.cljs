@@ -152,7 +152,7 @@
   (let [rge-rects (bean/->clj (.getClientRects r))
         ^js cnt-offset (.getBoundingClientRect page-cnt)]
 
-    (if (seq rge-rects)
+    (when (seq rge-rects)
       (let [rects (for [rect rge-rects]
                     {:top    (- (+ (.-top rect) (.-scrollTop page-cnt)) (.-top cnt-offset))
                      :left   (- (+ (.-left rect) (.-scrollLeft page-cnt)) (.-left cnt-offset))

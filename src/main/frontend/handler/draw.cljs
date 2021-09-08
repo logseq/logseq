@@ -1,13 +1,13 @@
 (ns frontend.handler.draw
   (:refer-clojure :exclude [load-file])
-  (:require [frontend.util :as util :refer [profile]]
-            [frontend.fs :as fs]
-            [promesa.core :as p]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.handler.file :as file-handler]
+  (:require [frontend.config :as config]
             [frontend.date :as date]
-            [frontend.config :as config]))
+            [frontend.db :as db]
+            [frontend.fs :as fs]
+            [frontend.handler.file :as file-handler]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [promesa.core :as p]))
 
 (defn create-draws-directory!
   [repo]

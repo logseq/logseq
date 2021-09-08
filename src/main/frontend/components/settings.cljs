@@ -193,7 +193,7 @@
         (fn []
           (state/set-state! [:electron/user-cfgs :spell-check] (not enabled?))
           (p/then (ipc/ipc "userAppCfgs" :spell-check (not enabled?))
-                  #(if (js/confirm (t :relaunch-confirm-to-work))
+                  #(when (js/confirm (t :relaunch-confirm-to-work))
                      (js/logseq.api.relaunch))))
         true)]]]))
 
@@ -532,7 +532,7 @@
             (let [mode (not developer-mode?)]
               (state/set-developer-mode! mode)
               (and mode (util/electron?)
-                   (if (js/confirm (t :developer-mode-alert))
+                   (when (js/confirm (t :developer-mode-alert))
                      (js/logseq.api.relaunch)))))
           [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
 
@@ -665,7 +665,7 @@
                                        (notification/show! "Custom CORS proxy updated successfully!" :success)))
                     :on-key-press  (fn [event]
                                      (let [k (gobj/get event "key")]
-                                       (if (= "Enter" k)
+                                       (when (= "Enter" k)
                                          (when-let [server (util/evalue event)]
                                            (user-handler/set-cors! server)
                                            (notification/show! "Custom CORS proxy updated successfully!" :success)))))}]]]]

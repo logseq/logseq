@@ -1,15 +1,13 @@
 (ns frontend.modules.shortcut.config
   (:require [frontend.components.commit :as commit]
+            [frontend.extensions.srs.handler :as srs]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.history :as history]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.web.nfs :as nfs-handler]
-            [frontend.extensions.srs.handler :as srs]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?]]))

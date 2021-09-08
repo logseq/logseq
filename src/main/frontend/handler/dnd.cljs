@@ -1,11 +1,9 @@
 (ns frontend.handler.dnd
-  (:require [frontend.state :as state]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
+            [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
-            [lambdaisland.glogi :as log]
-            [frontend.debug :as debug]
-            [frontend.handler.editor :as editor-handler]
+            [frontend.state :as state]
             [frontend.util :as util]))
 
 

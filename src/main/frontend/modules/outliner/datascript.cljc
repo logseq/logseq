@@ -6,9 +6,7 @@
                      [frontend.modules.outliner.pipeline :as pipelines]
                      [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
-                     [frontend.util :as util :refer [profile]]
                      [frontend.config :as config]
-                     [frontend.util :as util]
                      [lambdaisland.glogi :as log])))
 
 

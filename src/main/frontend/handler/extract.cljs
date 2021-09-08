@@ -1,23 +1,21 @@
 (ns frontend.handler.extract
   "Extract helper."
-  (:require [frontend.util :as util]
-            [frontend.db :as db]
-            [lambdaisland.glogi :as log]
-            [clojure.set :as set]
-            [frontend.utf8 :as utf8]
-            [frontend.date :as date]
-            [frontend.text :as text]
-            [frontend.util.property :as property]
-            [clojure.string :as string]
-            [frontend.format.mldoc :as mldoc]
-            [frontend.format.block :as block]
-            [frontend.format :as format]
+  (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]
-            [medley.core :as medley]
+            [clojure.set :as set]
+            [clojure.string :as string]
             [clojure.walk :as walk]
-            [frontend.state :as state]
             [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.format :as format]
+            [frontend.format.block :as block]
+            [frontend.format.mldoc :as mldoc]
+            [frontend.state :as state]
+            [frontend.text :as text]
+            [frontend.utf8 :as utf8]
+            [frontend.util :as util]
+            [frontend.util.property :as property]
+            [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
 (defn- extract-page-list
@@ -102,7 +100,7 @@
                                                     (conj
                                                      (remove #{alias} aliases)
                                                      page))
-                                           aliases (if (seq aliases)
+                                           aliases (when (seq aliases)
                                                      (map
                                                        (fn [alias]
                                                          {:block/name (string/lower-case alias)})

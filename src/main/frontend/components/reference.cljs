@@ -1,21 +1,19 @@
 (ns frontend.components.reference
-  (:require [rum.core :as rum]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [clojure.string :as string]
-            [frontend.db :as db]
+  (:require [clojure.string :as string]
             [frontend.components.block :as block]
-            [frontend.ui :as ui]
             [frontend.components.content :as content]
-            [frontend.date :as date]
             [frontend.components.editor :as editor]
-            [frontend.db-mixins :as db-mixins]
-            [clojure.string :as string]
-            [frontend.config :as config]
             [frontend.components.svg :as svg]
-            [frontend.handler.page :as page-handler]
+            [frontend.date :as date]
+            [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
             [frontend.handler.block :as block-handler]
-            [medley.core :as medley]))
+            [frontend.handler.page :as page-handler]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [medley.core :as medley]
+            [rum.core :as rum]))
 
 (rum/defc filter-dialog-inner < rum/reactive
   [filters-atom close-fn references page-name]
@@ -131,7 +129,7 @@
              [:div.flex.flex-row.flex-1.justify-between
               [:h2.font-bold.opacity-50 (let []
                                           (str n-ref " Linked Reference"
-                                               (if (> n-ref 1) "s")))]
+                                               (when (> n-ref 1) "s")))]
               [:a.opacity-50.hover:opacity-100.filter
                {:title "Filter"
                 :on-click #(state/set-modal! (filter-dialog filters-atom references page-name))}
@@ -190,7 +188,7 @@
           (ui/foldable
            [:h2.font-bold {:style {:opacity "0.3"}}
             (if @n-ref
-              (str @n-ref " Unlinked Reference" (if (> @n-ref 1)
+              (str @n-ref " Unlinked Reference" (when (> @n-ref 1)
                                                   "s"))
               "Unlinked References")]
            (fn [] (unlinked-references-aux page-name n-ref))

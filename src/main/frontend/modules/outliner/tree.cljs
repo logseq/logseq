@@ -1,9 +1,6 @@
 (ns frontend.modules.outliner.tree
-  (:require [clojure.set :as set]
-            [frontend.modules.outliner.utils :as outliner-u]
-            [frontend.debug :as debug]
-            [frontend.util :as util]
-            [frontend.db :as db]))
+  (:require [frontend.db :as db]
+            [frontend.util :as util]))
 
 (defprotocol INode
   (-get-id [this])

@@ -258,7 +258,7 @@
           (when-let [query** (query-dsl/query-wrapper query* true)]
             (react/react-query repo
                                {:query query**}
-                               (if sort-by
+                               (when sort-by
                                  {:transform-fn sort-by}))))))))
 
 (defn- query-scheduled
@@ -413,7 +413,7 @@
             root-block (.-block card)
             root-block-id (:block/uuid root-block)]
         [:div.ls-card
-         {:class (if (or preview? modal?)
+         {:class (when (or preview? modal?)
                    (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto.px-4"))}
          (let [repo (state/get-current-repo)]
            [:div.my-2.opacity-70.hover:opacity-100
@@ -530,7 +530,7 @@
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
             filtered-total (count result)
             modal? (:modal? config)]
-        [:div.flex-1 {:style (if modal? {:height "100%"})}
+        [:div.flex-1 {:style (when modal? {:height "100%"})}
          [:div.flex.flex-row.items-center.justify-between.cards-title
           [:div
            [:span.text-sm [:span.font-bold "🗂️"]

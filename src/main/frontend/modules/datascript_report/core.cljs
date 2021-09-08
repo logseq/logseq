@@ -1,8 +1,6 @@
 (ns frontend.modules.datascript-report.core
-  (:require [lambdaisland.glogi :as log]
-            [datascript.core :as d]
-            [datascript.db :as db]
-            [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [datascript.core :as d]))
 
 (def keys-of-deleted-entity 1)
 

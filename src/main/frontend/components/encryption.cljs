@@ -1,15 +1,14 @@
 (ns frontend.components.encryption
-  (:require [rum.core :as rum]
-            [promesa.core :as p]
-            [frontend.encrypt :as e]
-            [frontend.util :as util :refer [profile]]
+  (:require [clojure.string :as string]
             [frontend.context.i18n :as i18n]
-            [frontend.db.utils :as db-utils]
-            [clojure.string :as string]
-            [frontend.state :as state]
+            [frontend.encrypt :as e]
             [frontend.handler.metadata :as metadata-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.handler.notification :as notification]))
+            [frontend.util :as util]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (rum/defcs encryption-dialog-inner <
   (rum/local false ::reveal-secret-phrase?)

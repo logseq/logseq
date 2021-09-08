@@ -1,10 +1,8 @@
 (ns frontend.extensions.zip
-  (:require ["jszip" :as JSZip]
-            ["/frontend/utils" :as utils]
-            [promesa.core :as p]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.config :as config]
-            [medley.core :as medley]))
+            ["jszip" :as JSZip]
+            [promesa.core :as p]))
 
 (defn make-file [content file-name args]
   (let [blob-content (clj->js [content])

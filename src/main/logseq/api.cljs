@@ -1,37 +1,36 @@
 (ns ^:no-doc logseq.api
-  (:require [frontend.db :as db]
-            [frontend.db.model :as db-model]
-            [frontend.db.utils :as db-utils]
-            [frontend.handler.block :as block-handler]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.dnd :as editor-dnd-handler]
-            [frontend.handler.export :as export-handler]
-            [frontend.modules.outliner.core :as outliner]
-            [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.util :as util]
-            [frontend.config :as config]
-            [frontend.util.cursor :as cursor]
-            [electron.ipc :as ipc]
-            [promesa.core :as p]
-            [goog.dom :as gdom]
-            [sci.core :as sci]
-            [lambdaisland.glogi :as log]
-            [camel-snake-kebab.core :as csk]
+  (:require [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
-            [frontend.state :as state]
-            [frontend.components.plugins :as plugins]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.commands :as commands]
-            [frontend.handler.notification :as notification]
-            [datascript.core :as d]
-            [medley.core :as medley]
-            [frontend.fs :as fs]
+            [cljs.reader]
             [clojure.string :as string]
             [clojure.walk :as walk]
-            [cljs.reader]
+            [datascript.core :as d]
+            [electron.ipc :as ipc]
+            [frontend.commands :as commands]
+            [frontend.components.plugins :as plugins]
+            [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.model :as db-model]
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.utils :as db-utils]
+            [frontend.fs :as fs]
+            [frontend.handler.dnd :as editor-dnd-handler]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.handler.export :as export-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.modules.outliner.core :as outliner]
+            [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
+            [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]
+            [medley.core :as medley]
+            [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [frontend.db.query-dsl :as query-dsl]))
+            [sci.core :as sci]))
 
 ;; helpers
 (defn- normalize-keyword-for-json
@@ -105,7 +104,7 @@
           _ (when-not exist? (fs/mkdir-recur! path))
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
-          _ (if-not sub-dir? (do (log/info :debug user-path) (throw "write file denied")))
+          _ (when-not sub-dir? (do (log/info :debug user-path) (throw "write file denied")))
           user-path-root (util/node-path.dirname user-path)
           exist? (fs/file-exists? user-path-root "")
           _ (when-not exist? (fs/mkdir-recur! user-path-root))
@@ -119,9 +118,9 @@
           path (util/node-path.join path sub-root)
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
-          _ (if-not sub-dir? (do (log/info :debug user-path) (throw "read file denied")))
+          _ (when-not sub-dir? (log/info :debug user-path) (throw "read file denied"))
           exist? (fs/file-exists? "" user-path)
-          _ (when-not exist? (do (log/info :debug user-path) (throw "file not existed")))
+          _ (when-not exist? (log/info :debug user-path) (throw "file not existed"))
           content (fs/read-file "" user-path)]
     content))
 
@@ -132,9 +131,9 @@
           path (util/node-path.join path sub-root)
           user-path (util/node-path.join path file)
           sub-dir? (string/starts-with? user-path path)
-          _ (if-not sub-dir? (do (log/info :debug user-path) (throw "access file denied")))
+          _ (when-not sub-dir? (log/info :debug user-path) (throw "access file denied"))
           exist? (fs/file-exists? "" user-path)
-          _ (when-not exist? (do (log/info :debug user-path) (throw "file not existed")))
+          _ (when-not exist?(log/info :debug user-path) (throw "file not existed"))
           _ (fs/unlink! repo user-path {})]))
 
 (def ^:export write_user_tmp_file
@@ -307,7 +306,7 @@
     (when-let [page (cond
                       (number? id-or-page-name) (db-utils/pull id-or-page-name)
                       (string? id-or-page-name) (db-model/get-page id-or-page-name))]
-      (if-not (contains? page :block/left)
+      (when-not (contains? page :block/left)
         (bean/->js (normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
 
 (def ^:export get_all_pages
@@ -409,7 +408,7 @@
     (when-let [block (cond
                        (number? id-or-uuid) (db-utils/pull id-or-uuid)
                        (string? id-or-uuid) (db-model/query-block-by-uuid id-or-uuid))]
-      (if-not (contains? block :block/name)
+      (when-not (contains? block :block/name)
         (when-let [uuid (:block/uuid block)]
           (let [{:keys [includeChildren]} (bean/->clj opts)
                 block (if (not includeChildren) block (first (outliner-tree/blocks->vec-tree [block] uuid)))]
@@ -419,7 +418,7 @@
   (fn [uuid]
     (when-let [block (db-model/query-block-by-uuid uuid)]
       (let [{:block/keys [parent left]} block
-            block (if-not (= parent left) (db-utils/pull (:db/id left)))]
+            block (when-not (= parent left) (db-utils/pull (:db/id left)))]
         (and block (bean/->js (normalize-keyword-for-json block)))))))
 
 (def ^:export get_next_sibling_block

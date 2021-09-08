@@ -1,7 +1,6 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [frontend.modules.outliner.file :as file]
-            [frontend.modules.datascript-report.core :as ds-report]
-            [frontend.handler.metadata :as metadata-handler]))
+  (:require [frontend.modules.datascript-report.core :as ds-report]
+            [frontend.modules.outliner.file :as file]))
 
 (defn updated-block-hook
   [block])

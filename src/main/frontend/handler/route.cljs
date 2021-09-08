@@ -1,16 +1,15 @@
 (ns frontend.handler.route
-  (:require [frontend.util :as util]
-            [reitit.frontend.easy :as rfe]
-            [reitit.frontend.history :as rfh]
-            [frontend.state :as state]
-            [frontend.handler.plugin :as plugin-handler]
-            [goog.dom :as gdom]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.db :as db]
+  (:require [clojure.string :as string]
             [frontend.date :as date]
-            [clojure.string :as string]
+            [frontend.db :as db]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.state :as state]
+            [frontend.text :as text]
+            [frontend.util :as util]
+            [goog.dom :as gdom]
             [medley.core :as medley]
-            [frontend.text :as text]))
+            [reitit.frontend.easy :as rfe]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."

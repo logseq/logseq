@@ -1,16 +1,16 @@
 (ns frontend.handler.git
-  (:require [frontend.util :as util :refer [profile]]
-            [promesa.core :as p]
-            [lambdaisland.glogi :as log]
-            [frontend.state :as state]
+  (:require [cljs-time.local :as tl]
+            [frontend.config :as config]
+            [frontend.date :as date]
             [frontend.db :as db]
             [frontend.git :as git]
-            [frontend.date :as date]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.common :as common-handler]
-            [frontend.config :as config]
-            [cljs-time.local :as tl]))
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
+            [promesa.core :as p]))
 
 (defn- set-git-status!
   [repo-url value]
@@ -24,7 +24,7 @@
 
 (defn- set-git-error!
   [repo-url value]
-  (db/set-key-value repo-url :git/error (if value (str value))))
+  (db/set-key-value repo-url :git/error (when value (str value))))
 
 (defn git-add
   ([repo-url file]

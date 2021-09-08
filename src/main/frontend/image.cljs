@@ -1,9 +1,8 @@
 (ns frontend.image
-  (:require [goog.object :as gobj]
-            ["/frontend/exif" :as exif]
-            [frontend.util :as util]
+  (:require ["/frontend/exif" :as exif]
+            [clojure.string :as string]
             [frontend.date :as date]
-            [clojure.string :as string]))
+            [goog.object :as gobj]))
 
 (defn reverse?
   [exif-orientation]

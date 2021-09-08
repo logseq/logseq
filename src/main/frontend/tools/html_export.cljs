@@ -1,11 +1,10 @@
 (ns frontend.tools.html-export
   (:require-macros [hiccups.core :as hiccups :refer [html]])
-  (:require [frontend.db :as db]
-            [frontend.components.block :as block]
-            [frontend.extensions.slide :as slide]
-            [hiccups.runtime :as hiccupsrt]
+  (:require [clojure.set :as set]
             [clojure.walk :as walk]
-            [clojure.set :as set]
+            [frontend.components.block :as block]
+            [frontend.db :as db]
+            [frontend.extensions.slide :as slide]
             [medley.core :as medley]))
 
 ;; Consider generate a db index so that search can still works

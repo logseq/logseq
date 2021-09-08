@@ -121,8 +121,8 @@
         n (count content)
         [before after] (string/split content q-pattern 2)
         [before after] (if (>= n 64)
-                         [(if before (apply str (take-last 48 before)))
-                          (if after (apply str (take 48 after)))]
+                         [(when before (apply str (take-last 48 before)))
+                          (when after (apply str (take 48 after)))]
                          [before after])]
     [:p
      (when-not (string/blank? before)
@@ -172,6 +172,7 @@
                  :left 32
                  :height 400
                  :width 700
+                 :min-width 250
                  :max-width "100%"
                  :overflow "auto"})
         :class (if all? "search-all" "absolute")}

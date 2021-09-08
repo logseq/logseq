@@ -1,14 +1,12 @@
 (ns frontend.fixtures
-  (:require [cljs.test :refer [deftest is are testing use-fixtures run-tests]]
-            [frontend.react-impls :as react-impls]
-            [frontend.react :as react-test]
+  (:require [datascript.core :as d]
+            [frontend.config :as config]
+            [frontend.db-schema :as db-schema]
             [frontend.db.conn :as conn]
             [frontend.db.react :as db-react]
-            [rum.core :as rum]
-            [datascript.core :as d]
-            [frontend.db-schema :as db-schema]
-            [frontend.state :as state]
-            [frontend.config :as config]))
+            [frontend.react :as react-test]
+            [frontend.react-impls :as react-impls]
+            [frontend.state :as state]))
 
 (defn load-test-env
   [f]

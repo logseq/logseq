@@ -1,9 +1,9 @@
 (ns frontend.template
-  (:require [frontend.util :as util :refer [profile]]
-            [frontend.date :as date]
+  (:require [cljs-time.coerce :as tc]
             [clojure.string :as string]
-            [cljs-time.coerce :as tc]
-            [frontend.state :as state]))
+            [frontend.date :as date]
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defn- variable-rules
   []

@@ -1,15 +1,8 @@
 (ns frontend.handler.editor.lifecycle
-  (:require [frontend.state :as state]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]
-            [clojure.string :as string]
+  (:require [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.keyboards :as keyboards-handler]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.editor :as editor-handler :refer [get-state]]
-            [frontend.handler.notification :as notification]
-            [frontend.db :as db]
-            [frontend.date :as date]
-            [promesa.core :as p]))
+            [frontend.state :as state]
+            [goog.dom :as gdom]))
 
 (defn did-mount!
   [state]

@@ -1,12 +1,11 @@
 (ns frontend.components.theme
-  (:require [rum.core :as rum]
-            [frontend.extensions.pdf.highlights :as pdf]
-            [frontend.util :as util]
-            [frontend.ui :as ui]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.route :as route-handler]
+  (:require [frontend.extensions.pdf.highlights :as pdf]
             [frontend.handler.plugin :as plugin-handler]
-            [frontend.components.svg :as svg]))
+            [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [rum.core :as rum]))
 
 (rum/defc container
   [{:keys [route theme on-click current-repo nfs-granted? db-restoring? sidebar-open? system-theme?] :as props} child]

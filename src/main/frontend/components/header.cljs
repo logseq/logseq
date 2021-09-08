@@ -1,29 +1,22 @@
 (ns frontend.components.header
-  (:require [rum.core :as rum]
-            [reitit.frontend.easy :as rfe]
-            [clojure.string :as string]
-            [frontend.db :as db]
-            [frontend.ui :as ui]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [frontend.storage :as storage]
+  (:require [frontend.components.export :as export]
+            [frontend.components.plugins :as plugins]
+            [frontend.components.repo :as repo]
+            [frontend.components.right-sidebar :as sidebar]
+            [frontend.components.search :as search]
+            [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
-            [frontend.handler.ui :as ui-handler]
-            [frontend.handler.user :as user-handler]
-            [frontend.handler.plugin :as plugin-handler]
-            [frontend.components.svg :as svg]
-            [frontend.components.repo :as repo]
-            [frontend.components.search :as search]
-            [frontend.components.export :as export]
-            [frontend.components.plugins :as plugins]
-            [frontend.components.right-sidebar :as sidebar]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs]
-            [frontend.mixins :as mixins]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]))
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [reitit.frontend.easy :as rfe]
+            [rum.core :as rum]))
 
 (rum/defc logo < rum/reactive
   [{:keys [white? electron-mac?]}]
@@ -226,7 +219,7 @@
              [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
               (t :open)])]])
 
-       (if config/publishing?
+       (when config/publishing?
          [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
           (t :graph)])
 

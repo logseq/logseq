@@ -1,11 +1,9 @@
 (ns frontend.db.outliner-test
-  (:require [datascript.core :as d]
-            [frontend.db.conn :as conn]
+  (:require [cljs.test :refer [deftest is use-fixtures]]
+            [datascript.core :as d]
+            [frontend.core-test :as core-test]
             [frontend.db.outliner :as outliner]
-            [cljs.test :refer [deftest is are testing use-fixtures run-tests]]
-            [cljs-run-test :refer [run-test]]
-            [frontend.fixtures :as fixtures]
-            [frontend.core-test :as core-test]))
+            [frontend.fixtures :as fixtures]))
 
 (use-fixtures :each fixtures/reset-db)
 
