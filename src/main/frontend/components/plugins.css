@@ -320,6 +320,13 @@
   min-width: 900px;
 }
 
+
+html[data-theme='dark'] {
+  .lsp-frame-readme {
+    background-color: #eeeeee;
+  }
+}
+
 .block-content {
   .lsp-hook-ui-slot {
     display: flex;

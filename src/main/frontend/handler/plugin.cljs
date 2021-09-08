@@ -248,17 +248,18 @@
 
 (defn open-readme!
   [url item display]
-  (if url
-    ;; local
-    (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)
-                content (parse-user-md-content content item)]
-          (and (string/blank? (string/trim content)) (throw nil))
-          (state/set-state! :plugin/active-readme [content item])
-          (state/set-modal! (fn [_] (display))))
-        (p/catch #(do (js/console.warn %)
-                      (notifications/show! "No README content." :warn))))
-    ;; market
-    (state/set-modal! (fn [_] (display (:repo item) nil)))))
+  (let [repo (:repo item)]
+    (if (nil? repo)
+      ;; local
+      (-> (p/let [content (invoke-exported-api "load_plugin_readme" url)
+                  content (parse-user-md-content content item)]
+            (and (string/blank? (string/trim content)) (throw nil))
+            (state/set-state! :plugin/active-readme [content item])
+            (state/set-modal! (fn [_] (display))))
+          (p/catch #(do (js/console.warn %)
+                        (notifications/show! "No README content." :warn))))
+      ;; market
+      (state/set-modal! (fn [_] (display repo nil))))))
 
 (defn load-unpacked-plugin
   []
