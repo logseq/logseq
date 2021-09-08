@@ -168,6 +168,7 @@ export function invokeHostExportedApi (
   method: string,
   ...args: Array<any>
 ) {
+  method = method?.replace(/^[_$]+/, '')
   const method1 = snakeCase(method)
 
   // @ts-ignore

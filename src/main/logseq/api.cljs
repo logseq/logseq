@@ -471,7 +471,7 @@
         (bean/->js blocks)))))
 
 ;; plugins
-(def ^:export install_plugin
+(def ^:export __install_plugin
   (fn [^js manifest]
     (when-let [{:keys [repo id] :as mft} (bean/->clj manifest)]
       (if-not (and repo id)
