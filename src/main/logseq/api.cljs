@@ -133,7 +133,7 @@
           sub-dir? (string/starts-with? user-path path)
           _ (when-not sub-dir? (log/info :debug user-path) (throw "access file denied"))
           exist? (fs/file-exists? "" user-path)
-          _ (when-not exist?(log/info :debug user-path) (throw "file not existed"))
+          _ (when-not exist? (log/info :debug user-path) (throw "file not existed"))
           _ (fs/unlink! repo user-path {})]))
 
 (def ^:export write_user_tmp_file
@@ -418,7 +418,10 @@
       (when-not (contains? block :block/name)
         (when-let [uuid (:block/uuid block)]
           (let [{:keys [includeChildren]} (bean/->clj opts)
-                block (if (not includeChildren) block (first (outliner-tree/blocks->vec-tree [block] uuid)))]
+                repo (state/get-current-repo)
+                block (if (not includeChildren)
+                        block (first (outliner-tree/blocks->vec-tree
+                                       (db-model/get-block-and-children repo uuid) uuid)))]
             (bean/->js (normalize-keyword-for-json block))))))))
 
 (def ^:export get_previous_sibling_block
