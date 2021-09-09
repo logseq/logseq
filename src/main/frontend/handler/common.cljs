@@ -327,6 +327,9 @@
                      (drawer/remove-logbook)
                      (drawer/with-logbook block))
         content (with-timetracking block content)
+        content (if uuid ; persist uuid into content
+                  (property/insert-property format content "ID" (str uuid))
+                  content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
@@ -367,3 +370,14 @@
         (assoc :block/content content
                :block/properties new-properties)
         (merge (if level {:block/level level} {})))))
+
+(defn reorder-blocks
+  [blocks]
+  (if (<= (count blocks) 1)
+    blocks
+    (let [[f s & others] blocks]
+      (if (= (or (:block/left s)
+                 (:block/parent s))
+             {:db/id (:db/id f)})
+        blocks
+        (reverse blocks)))))

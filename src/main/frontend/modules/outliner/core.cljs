@@ -336,6 +336,7 @@
   "Insert nodes as children(or siblings) of target-node.
   new-nodes-tree is an vector of blocks, e.g [1 [2 3] 4 [5 [6 7]]]"
   [new-nodes-tree target-node sibling?]
+  {:pre [(> (count new-nodes-tree) 0)]}
   (ds/auto-transact!
    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-nodes}
    (let [loc (zip/vector-zip new-nodes-tree)]

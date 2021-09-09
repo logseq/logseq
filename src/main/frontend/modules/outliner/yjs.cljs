@@ -8,7 +8,9 @@
             [frontend.handler.common :as common-handler]
             [frontend.state :as state]
             [frontend.db :as db]
-            [frontend.db.model :as db-model]))
+            [frontend.db.model :as db-model]
+            [clojure.zip :as zip]
+            [datascript.core :as d]))
 
 (set! *warn-on-infer* false)
 
@@ -119,7 +121,9 @@
 (defn- insert-node [left-id parent-id id contentmap]
   {:pre [(seq parent-id)]}
   (let [left-id (or left-id parent-id)
-        content (str "- " (.get contentmap id))
+        content (frontend.util.property/insert-property
+                 :markdown (str "- " (.get contentmap id))
+                 "ID" id)
         target-node (outliner-core/block (db-model/query-block-by-uuid left-id))
         format (:block/format target-node)
         new-node (outliner-core/block
@@ -132,7 +136,6 @@
 (defn- delete-node [id]
   (when-let [block (db-model/query-block-by-uuid id)]
     (outliner-core/delete-node (outliner-core/block block) false)))
-
 
 (defn- observe-struct-fn [page-name]
   (fn [events]
@@ -158,14 +161,21 @@
     (mapv (fn [[k v]]
             (case (get "action" v)
               "update" (update-block-content k)
-              "delete" (delete-node k))) keys)))
+              "delete" (delete-node k)
+              (println "action" v))) keys)))
 
 (defn observe-page-doc [page-name doc]
+  (let [struct (.getArray doc (str page-name "-struct"))
+        contentmap (contentmap)]
+    (.unobserveDeep struct (observe-struct-fn-memo page-name))
+    (.unobserve contentmap observe-content-fn)
+    ;; (.observeDeep struct (observe-struct-fn-memo page-name))
+    (.observe contentmap observe-content-fn)))
+
+(defn unobserve-page-doc [page-name doc]
   (let [struct (.getArray doc (str page-name "-struct"))]
     (.unobserveDeep struct (observe-struct-fn-memo page-name))
-    (.unobserve struct observe-content-fn)
-    (.observeDeep struct (observe-struct-fn-memo page-name))
-    (.observe struct observe-content-fn)))
+    (.unobserve struct observe-content-fn)))
 
 (defn merge-doc [doc1 doc2]
   (let [s1 (y/encodeStateVector doc1)
@@ -183,16 +193,79 @@
   )
 
 
+(defn- remove-all-blocks-in-page [page-blocks page-name]
+  (let [order-blocks (common-handler/reorder-blocks page-blocks)
+        start-block (first order-blocks)
+        end-block (last order-blocks)
+        block-ids (mapv (fn [b] [:block/uuid (:block/uuid b)]) order-blocks)]
+    (when (and start-block end-block)
+      (outliner-core/delete-nodes (outliner-core/block start-block)
+                                  (outliner-core/block end-block)
+                                  block-ids))))
+
+(defn- insert-doc-contents [page-name]
+  (let [page-block (db/pull (:db/id (db/get-page page-name)))
+        format (or (:block/format page-block)
+                   (state/get-preferred-format))
+        smap (js->clj (.toJSON (contentmap)))
+        content-tree (clojure.walk/prewalk-replace smap (js->clj (.toJSON (structarray page-name))))
+        content-tree-z (zip/vector-zip content-tree)
+        node-tree (loop [loc content-tree-z]
+                    (if (zip/end? loc)
+                      (zip/root loc)
+                      (cond
+                        (vector? (zip/node loc))
+                        (recur (zip/next loc))
+
+                        (string? (zip/node loc))
+                        (let [block (first
+                                     (block/extract-blocks
+                                      (mldoc/->edn (zip/node loc) (mldoc/default-config format))
+                                      (zip/node loc) true format))
+                              block (merge
+                                     (dissoc block
+                                             :block/pre-block?
+                                             :db/id
+                                             :block/left
+                                             :block/parent
+                                             :block/file)
+                                     {:block/page (select-keys page-block [:db/id])
+                                      :block/format format
+                                      :block/path-refs (->> (cons (:db/id page-block)
+                                                                  (:block/path-refs block))
+                                                            (remove nil?))})]
+                          (if (:block/uuid block)
+                            (recur (zip/next
+                                    (zip/replace
+                                     loc
+                                     (outliner-core/block block))))
+                            (recur (zip/remove loc))))
+                        :else
+                        (recur (zip/next loc)))))]
+    (when-not (empty? node-tree)
+      (outliner-core/insert-nodes node-tree (outliner-core/block page-block) false)
+      (let [new-block-uuids (mapv (fn [n] (:block/uuid (:data n))) (flatten node-tree))
+            new-blocks (db/pull-many (state/get-current-repo) '[*] (map (fn [id] [:block/uuid id]) new-block-uuids))]
+        new-blocks))))
+
+(defn doc->page-blocks [page-blocks page-name]
+  (let [contentmap (contentmap)
+        struct (structarray page-name)]
+    (remove-all-blocks-in-page page-blocks page-name)
+    (when-let [new-blocks (insert-doc-contents page-name)]
+      (db/refresh! (state/get-current-repo) {:key :block/insert :data new-blocks}))))
+
 (defn start-sync-page [page-name]
-  (let [page-blocks (db/get-page-blocks page-name)]
+  (let [page-blocks (db/get-page-blocks-no-cache page-name)]
     (page-blocks->doc page-blocks page-name)
     (observe-page-doc page-name doc-local)
     (sync-doc doc-local doc-remote)
-    (merge-doc doc-remote doc-local)))
+    (distinct-struct (structarray page-name) (atom #{}))
+    (merge-doc doc-remote doc-local)
+    (doc->page-blocks page-blocks page-name)))
 
 (defn stop-sync-page [page-name]
-  ;; TODO
-  )
+  (unobserve-page-doc page-name doc-local))
 
 (defn- goto-innermost-struct-array [pos struct]
   (loop [i 0 s struct]
@@ -234,6 +307,10 @@
   INext
   (-next [_] (next pos-vec))
 
+  ISeq
+  (-first [_] (first pos-vec))
+  (-rest [_] (rest pos-vec))
+
   IComparable
   (-compare [this other]
     (let [pos1 (.-pos-vec this)
@@ -263,30 +340,36 @@
   (let [toplevel (js->clj (.toArray struct))
         index (.indexOf toplevel id)]
     (if (not= -1 index)
-      [index]
+      (->Pos [index])
       (loop [i 0]
         (if (>= i (count toplevel))
           nil
           (let [sublevel (get toplevel i)]
             (if (instance? y/Array sublevel)
-              (if-let [index (find-pos sublevel id)]
+              (if-let [index (.-pos-vec (find-pos sublevel id))]
                 (->Pos (vec (flatten [i index])))
                 (recur (+ i 1)))
               (recur (+ i 1)))))))))
 
 (defn- common-prefix [vec1 vec2]
-  (let [len1 (count vec1)
-        len2 (count vec2)]
-    (loop [i 0 r1 vec1 r2 vec2]
-      (cond
-        (or (>= i len1) (>= i len2))
-        [(subvec vec1 0 i) r1 r2]
+  (let [vec1 (or (.-pos-vec vec1) vec1)
+        vec2 (or (.-pos-vec vec2) vec2)]
+    (try
+      (let [len1 (count vec1)
+            len2 (count vec2)]
+        (loop [i 0 r1 vec1 r2 vec2]
+          (cond
+            (or (>= i len1) (>= i len2))
+            [(subvec vec1 0 i) r1 r2]
 
-        (= (vec1 i) (vec2 i))
-        (recur (inc i) (vec (rest r1)) (vec (rest r2)))
+            (= (get vec1 i) (get vec2 i))
+            (recur (inc i) (vec (rest r1)) (vec (rest r2)))
 
-        :else
-        [(subvec vec1 0 i) r1 r2]))))
+            :else
+            [(subvec vec1 0 i) r1 r2])))
+      (catch js/Error e
+        (println e vec1 vec2)
+        (js/console.trace)))))
 
 (defn distance [pos-vec1 pos-vec2]
     "(distance [1 2] [1 4]) => [[[1 2] 3]] => [[prefix-of-THIS-pos length]]
@@ -354,7 +437,8 @@
           :else
           (do
             (.insert struct* (last pos) (clj->js [s]))
-            (recur (inc i) (.inc-pos pos))))))))
+            (recur (inc i) (.inc-pos pos)))))))
+    )
 
 
 (defn insert-nodes-yjs [page-name new-nodes-tree target-uuid sibling?]
@@ -386,14 +470,19 @@
   ([new-node target-node sibling? {:keys [blocks-atom skip-transact?]
                                    :or {skip-transact? false}
                                    :as opts}]
-   (println "insert-node-op: " [new-node target-node sibling? opts])
    (let [target-block (:data target-node)]
      (when-let [page-name (or (:block/name target-block)
                               (:block/name (db/entity (:db/id (:block/page target-block)))))]
        (insert-node-yjs page-name new-node (str (:block/uuid target-block)) sibling?)
        (distinct-struct (structarray page-name) (atom #{}))
        (merge-doc doc-remote doc-local)
-       (outliner-core/insert-node new-node target-node sibling? opts)))))
+       (try (outliner-core/insert-node new-node target-node sibling? opts)
+            (catch js/Error e
+              (println e)
+              (println new-node target-node)
+              (js/console.trace)
+              )
+            )))))
 
 
 (defn- delete-range-nodes-prefix-part [prefix-vec start-pos-vec end-pos-vec struct]
@@ -438,8 +527,9 @@
 
 (defn delete-nodes-yjs [page-name start-uuid end-uuid]
   (let [struct (structarray page-name)
-        start-pos (find-pos struct start-uuid)
-        end-pos (find-pos struct end-uuid)]
+        start-pos (find-pos struct (str start-uuid))
+        end-pos (find-pos struct (str end-uuid))]
+    (println "delete-nodes-yjs" start-uuid end-uuid)
     (delete-range-nodes start-pos end-pos struct)))
 
 (defn delete-nodes-op [start-node end-node block-ids]
