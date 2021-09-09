@@ -1,16 +1,14 @@
 (ns frontend.handler.metadata
-  (:require [frontend.state :as state]
-            [frontend.handler.file :as file-handler]
-            [cljs.reader :as reader]
+  (:require [cljs.reader :as reader]
+            [clojure.string :as string]
+            [datascript.db :as ddb]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [datascript.db :as ddb]
-            [clojure.string :as string]
-            [promesa.core :as p]
-            [frontend.util :as util]
-            [frontend.date :as date]
-            [frontend.handler.common :as common-handler]))
+            [frontend.handler.common :as common-handler]
+            [frontend.handler.file :as file-handler]
+            [frontend.state :as state]
+            [promesa.core :as p]))
 
 (def default-metadata-str "{}")
 

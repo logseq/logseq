@@ -1,12 +1,10 @@
 (ns frontend.idb
-  (:require [cljs-bean.core :as bean]
-            [goog.object :as gobj]
-            [promesa.core :as p]
+  (:require ["/frontend/idbkv" :as idb-keyval :refer [Store]]
             [clojure.string :as string]
             [frontend.config :as config]
-            [frontend.util :as util]
             [frontend.storage :as storage]
-            ["/frontend/idbkv" :as idb-keyval :refer [Store]]))
+            [goog.object :as gobj]
+            [promesa.core :as p]))
 
 
 ;; offline db

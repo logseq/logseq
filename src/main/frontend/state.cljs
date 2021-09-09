@@ -1,20 +1,20 @@
 (ns frontend.state
-  (:require [frontend.storage :as storage]
-            [rum.core :as rum]
-            [frontend.util :as util :refer [profile]]
-            [frontend.util.cursor :as cursor]
-            [clojure.string :as string]
-            [cljs-bean.core :as bean]
-            [medley.core :as medley]
-            [goog.object :as gobj]
-            [goog.dom :as gdom]
-            [dommy.core :as dom]
-            [cljs.core.async :as async]
-            [lambdaisland.glogi :as log]
+  (:require [cljs-bean.core :as bean]
             [cljs-time.core :as t]
-            [promesa.core :as p]
+            [cljs-time.format :as tf]
+            [cljs.core.async :as async]
+            [clojure.string :as string]
+            [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [cljs-time.format :as tf]))
+            [frontend.storage :as storage]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
+            [goog.dom :as gdom]
+            [goog.object :as gobj]
+            [lambdaisland.glogi :as log]
+            [medley.core :as medley]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defonce ^:private state
   (let [document-mode? (or (storage/get :document/mode?) false)

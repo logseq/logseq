@@ -1,12 +1,11 @@
 (ns frontend.extensions.calc
   (:refer-clojure :exclude [eval])
-  (:require #?(:clj [clojure.java.io :as io])
+  (:require [clojure.edn :as edn]
+            [clojure.string :as str]
+            [frontend.util :as util]
+            #?(:clj [clojure.java.io :as io])
             #?(:cljs [shadow.resource :as rc])
             #?(:cljs [rum.core :as rum])
-            [clojure.string :as str]
-            [clojure.edn :as edn]
-            [clojure.test :as test :refer [deftest testing is are]]
-            [frontend.util :as util]
             #?(:clj [instaparse.core :as insta]
                :cljs [instaparse.core :as insta :refer-macros [defparser]])))
 

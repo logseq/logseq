@@ -1,11 +1,9 @@
 (ns frontend.handler.editor.keyboards
-  (:require [frontend.state :as state]
-            [frontend.util :as util]
+  (:require [dommy.core :as d]
             [frontend.handler.editor :as editor-handler]
-            [dommy.core :as d]
-            [goog.dom :as gdom]
-            [goog.object :as gobj]
-            [frontend.mixins :as mixins]))
+            [frontend.mixins :as mixins]
+            [frontend.state :as state]
+            [goog.dom :as gdom]))
 
 ;; TODO: don't depend on handler.editor
 

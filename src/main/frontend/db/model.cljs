@@ -147,15 +147,6 @@
       [?page :block/name]]
     (conn/get-conn repo)))
 
-(defn get-modified-pages
-  [repo]
-  (-> (d/q
-       '[:find ?page-name
-         :where
-         [?page :block/original-name ?page-name]]
-       (conn/get-conn repo))
-      (db-utils/seq-flatten)))
-
 (defn get-page-alias
   [repo page-name]
   (when-let [conn (and repo (conn/get-conn repo))]
@@ -1378,3 +1369,15 @@
                               '[:db/id :block/name :block/original-name
                                 {:block/file [:db/id :file/path]}]
                               ids))))))
+
+(defn get-latest-changed-pages
+  [repo]
+  (->>
+   (d/q
+     '[:find [(pull ?page [:block/name :block/file :block/updated-at]) ...]
+       :where
+       [?page :block/name]]
+     (conn/get-conn repo))
+   (filter :block/file)
+   (sort-by :block/updated-at >)
+   (take 200)))

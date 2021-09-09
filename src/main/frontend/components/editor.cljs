@@ -2,19 +2,19 @@
   (:require [clojure.string :as string]
             [dommy.core :as d]
             [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos *matched-block-commands *matched-commands *show-block-commands *show-commands *slash-caret-pos *first-command-group]]
+             :refer [*angle-bracket-caret-pos *first-command-group *matched-block-commands *matched-commands *show-block-commands *show-commands *slash-caret-pos]]
+            [frontend.components.block :as block]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
-            [frontend.components.block :as block]
             [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.extensions.zotero :as zotero]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -301,7 +301,7 @@
                             (- (max (* 2 offset-top) delta-height) 16)
                             max-height))
                         max-height)
-        x-overflow? (if (and (seq rect) (> vw-width max-width))
+        x-overflow? (when (and (seq rect) (> vw-width max-width))
                       (let [delta-width (- vw-width (+ (:left rect) left))]
                         (< delta-width (* max-width 0.5))))] ;; FIXME: for translateY layer
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
@@ -314,7 +314,7 @@
                ;; TODO: auto responsive fixed size
                :width "fit-content"
                :z-index    11}
-              (if set-default-width?
+              (when set-default-width?
                 {:width max-width})
               (if config/mobile?
                 {:left 0}

@@ -140,7 +140,7 @@
                        (string/join "/"))
           sub-dir-handle-path (str "handle/"
                                    (subs dir 1)
-                                   (if sub-dir
+                                   (when sub-dir
                                      (str "/" sub-dir)))
           handle-path (if (= "/" (last sub-dir-handle-path))
                         (subs sub-dir-handle-path 0 (dec (count sub-dir-handle-path)))

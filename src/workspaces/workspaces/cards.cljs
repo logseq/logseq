@@ -1,14 +1,9 @@
 (ns workspaces.cards
-  (:require [nubank.workspaces.core :as ws]
-            [nubank.workspaces.model :as wsm]
-            [nubank.workspaces.card-types.react :as ct.react]
-            [nubank.workspaces.card-types.test :as ct.test]
-            [cljs.test :refer [is async]]
-            [rum.core :as rum]
+  (:require [frontend.extensions.graph :as graph]
             [frontend.ui :as ui]
-            [frontend.extensions.graph :as graph]
-            [frontend.extensions.graph.pixi :as pixi]
-            [cljs-bean.core :as bean]))
+            [nubank.workspaces.card-types.react :as ct.react]
+            [nubank.workspaces.core :as ws]
+            [rum.core :as rum]))
 
 ;; simple function to create react elemnents
 (defn element [name props & children]

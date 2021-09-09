@@ -1,6 +1,7 @@
 (ns frontend.components.sidebar
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
+            [frontend.components.command-palette :as command-palette]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
             [frontend.components.repo :as repo]
@@ -8,15 +9,12 @@
             [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
-            [frontend.components.command-palette :as command-palette]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.web.nfs :as nfs-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
@@ -81,7 +79,7 @@
               "translate-x-0"
               "-translate-x-full")
      :style {:max-width "86vw"}}
-    (if @open?
+    (when @open?
       [:div.absolute.top-0.right-0.p-1
        [:button#close-left-bar.close-panel-btn.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
         {:on-click close-fn}

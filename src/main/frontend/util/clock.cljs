@@ -56,18 +56,19 @@
 (defn clock-summary
   [body string?]
   (when-let [logbook (drawer/get-logbook body)]
-    (when-let [clock-lines (last logbook)]
-      (let [times (map #(string/trim (last (string/split % "=>"))) clock-lines)
-            hours (map #(int (first (string/split % ":"))) times)
-            minutes (map #(int (second (string/split % ":"))) times)
-            hours (reduce + hours)
-            minutes (reduce + minutes)]
-        (if string?
-          (util/format "%s%s"
-                      (if (>= hours 1)
-                        (if hours (str hours "h"))
-                        "")
-                      (if (zero? minutes)
-                        ""
-                        (str minutes "m")))
-          (+ (* hours 60) minutes))))))
+    (when-let [logbook-lines (last logbook)]
+      (when-let [clock-lines (filter #(string/starts-with? % "CLOCK:") logbook-lines)]
+       (let [times (map #(string/trim (last (string/split % "=>"))) clock-lines)
+             hours (map #(int (first (string/split % ":"))) times)
+             minutes (map #(int (second (string/split % ":"))) times)
+             hours (reduce + hours)
+             minutes (reduce + minutes)]
+         (if string?
+           (util/format "%s%s"
+                        (if (>= hours 1)
+                          (when hours (str hours "h"))
+                          "")
+                        (if (zero? minutes)
+                          ""
+                          (str minutes "m")))
+           (+ (* hours 60) minutes)))))))

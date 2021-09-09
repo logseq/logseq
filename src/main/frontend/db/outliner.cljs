@@ -1,10 +1,8 @@
 (ns frontend.db.outliner
   (:require [datascript.core :as d]
             [frontend.db :as db]
-            [frontend.db.react :as react]
-            [frontend.util :as util]
-            [frontend.debug :as debug]
-            [frontend.db.utils :as db-utils]))
+            [frontend.db.utils :as db-utils]
+            [frontend.util :as util]))
 
 (defn get-by-id
   [conn id]

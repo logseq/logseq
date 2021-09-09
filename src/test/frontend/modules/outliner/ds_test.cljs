@@ -1,7 +1,7 @@
 (ns frontend.modules.outliner.ds-test
-  (:require [cljs.test :refer [deftest is are testing use-fixtures run-tests] :as test]
+  (:require [cljs-run-test :refer [run-test]]
+            [cljs.test :refer [deftest is use-fixtures] :as test]
             [frontend.fixtures :as fixtures]
-            [cljs-run-test :refer [run-test]]
             [frontend.modules.outliner.datascript :as ds]))
 
 (use-fixtures :each

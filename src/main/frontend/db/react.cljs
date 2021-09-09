@@ -256,7 +256,7 @@
                             (distinct))
               refed-pages (map
                            (fn [[k page-id]]
-                             (if (= k :block/refed-blocks)
+                             (when (= k :block/refed-blocks)
                                [:page/ref-pages page-id]))
                             related-keys)
               all-refed-blocks (get-current-repo-refs-keys)

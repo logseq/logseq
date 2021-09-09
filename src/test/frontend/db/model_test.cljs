@@ -1,11 +1,6 @@
 (ns frontend.db.model-test
-  (:require [frontend.db.model :as model]
-            [frontend.db.config :refer [test-db] :as config]
-            [datascript.core :as d]
-            [frontend.db-schema :as schema]
-            [frontend.handler.repo :as repo-handler]
-            [promesa.core :as p]
-            [cljs.test :refer [deftest is are testing use-fixtures]]))
+  (:require [cljs.test :refer [use-fixtures]]
+            [frontend.db.config :as config]))
 
 ;; (deftest test-page-alias-with-multiple-alias
 ;;   []

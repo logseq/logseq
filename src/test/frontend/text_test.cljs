@@ -1,6 +1,6 @@
 (ns frontend.text-test
-  (:require [frontend.text :as text]
-            [cljs.test :refer [deftest is are testing use-fixtures]]))
+  (:require [cljs.test :refer [are deftest testing]]
+            [frontend.text :as text]))
 
 (deftest page-ref?
   []

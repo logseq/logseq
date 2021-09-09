@@ -1,20 +1,8 @@
 (ns frontend.handler.block
-  (:require [frontend.util :as util]
-            [frontend.util.property :as property]
+  (:require [clojure.set :as set]
             [clojure.walk :as walk]
             [frontend.db :as db]
-            [frontend.state :as state]
-            [frontend.format.mldoc :as mldoc]
-            [frontend.date :as date]
-            [frontend.config :as config]
-            [datascript.core :as d]
-            [clojure.set :as set]
-            [medley.core :as medley]
-            [frontend.format.block :as block]
-            [frontend.debug :as debug]
-            [clojure.string :as string]
-            [frontend.text :as text]
-            [frontend.handler.common :as common-handler]))
+            [frontend.format.block :as block]))
 
 (defn get-block-ids
   [block]

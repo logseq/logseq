@@ -1,5 +1,5 @@
 (ns frontend.util.marker-test
-  (:require [cljs.test :refer [deftest is are testing]]
+  (:require [cljs.test :refer [are deftest]]
             [frontend.util.marker :as marker]))
 
 (deftest add-or-update-marker-markdown

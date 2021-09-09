@@ -1,21 +1,17 @@
 (ns frontend.search
-  (:require [frontend.db :as db]
-            [frontend.search.db :as search-db :refer [indices]]
-            [frontend.config :as config]
-            [frontend.state :as state]
-            [frontend.util :as util :refer [profile]]
-            [cljs-bean.core :as bean]
+  (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [clojure.set :as set]
+            [frontend.config :as config]
+            [frontend.db :as db]
             [frontend.regex :as regex]
-            [cljs-bean.core :as bean]
-            [goog.object :as gobj]
-            [medley.core :as medley]
-            [promesa.core :as p]
-            ["/frontend/utils" :as utils]
-            [frontend.search.protocol :as protocol]
             [frontend.search.browser :as search-browser]
-            [frontend.search.node :as search-node]))
+            [frontend.search.db :as search-db :refer [indices]]
+            [frontend.search.node :as search-node]
+            [frontend.search.protocol :as protocol]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [goog.object :as gobj]
+            [promesa.core :as p]))
 
 (defn get-engine
   [repo]

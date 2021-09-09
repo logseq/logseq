@@ -1,16 +1,16 @@
 (ns frontend.components.commit
-  (:require [rum.core :as rum]
-            [frontend.util :as util :refer [profile]]
-            [frontend.util.cursor :as cursor]
-            [clojure.string :as string]
-            [frontend.handler.repo :as repo-handler]
-            [frontend.state :as state]
-            [frontend.mixins :as mixins]
+  (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.handler.notification :as notification]
-            [promesa.core :as p]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.mixins :as mixins]
+            [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [electron.ipc :as ipc]))
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (defn commit-and-push!
   []

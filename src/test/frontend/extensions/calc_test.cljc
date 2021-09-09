@@ -1,5 +1,5 @@
 (ns frontend.extensions.calc-test
-  (:require [clojure.test :as test :refer [deftest testing is are]]
+  (:require [clojure.test :as test :refer [are deftest testing]]
             [frontend.extensions.calc :as calc]))
 
 (defn run [expr]

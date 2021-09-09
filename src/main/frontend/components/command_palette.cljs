@@ -62,10 +62,8 @@
 (rum/defc command-palette-modal < rum/reactive
   []
   (let [open? (state/sub :ui/command-palette-open?)]
-    (if open?
+    (when open?
       (state/set-modal!
        #(command-palette {:commands (cp/get-commands)})
        {:fullscreen? false
-        :close-btn?  false})
-      (state/close-modal!))
-    nil))
+        :close-btn?  false}))))

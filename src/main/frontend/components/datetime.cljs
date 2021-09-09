@@ -1,15 +1,15 @@
 (ns frontend.components.datetime
-  (:require [rum.core :as rum]
-            [frontend.util :as util :refer [profile]]
+  (:require [cljs-time.core :as t]
+            [clojure.string :as string]
+            [frontend.commands :as commands]
             [frontend.components.svg :as svg]
             [frontend.date :as date]
-            [frontend.state :as state]
-            [frontend.handler.repeated :as repeated]
             [frontend.handler.editor :as editor-handler]
-            [cljs-time.core :as t]
+            [frontend.handler.repeated :as repeated]
+            [frontend.state :as state]
             [frontend.ui :as ui]
-            [frontend.commands :as commands]
-            [clojure.string :as string]))
+            [frontend.util :as util]
+            [rum.core :as rum]))
 
 (defonce default-timestamp-value {:date nil
                                   :time ""

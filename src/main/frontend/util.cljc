@@ -793,7 +793,7 @@
   (safe-re-find (re-pattern uuid-pattern) s))
 
 (defn drop-nth [n coll]
-  (keep-indexed #(if (not= %1 n) %2) coll))
+  (keep-indexed #(when (not= %1 n) %2) coll))
 
 (defn capitalize-all [s]
   (some->> (string/split s #" ")
@@ -959,7 +959,7 @@
        [(.getData c "text/html") (.getData c "text")]
        (if-let [c (gobj/getValueByKeys event "originalEvent" "clipboardData")]
          [(.getData c "text/html") (.getData c "text")]
-         (if-let [c (gobj/get js/window "clipboardData")]
+         (when-let [c (gobj/get js/window "clipboardData")]
            [(.getData c "Text") (.getData c "Text")])))))
 
 (defn pp-str [x]
