@@ -9,8 +9,10 @@ const del = require('del')
 
 const outputPath = path.join(__dirname, 'static')
 const resourcesPath = path.join(__dirname, 'resources')
+const publicStaticPath = path.join(__dirname, 'public/static')
 const sourcePath = path.join(__dirname, 'src/main/frontend')
 const resourceFilePath = path.join(resourcesPath, '**')
+const outputFilePath = path.join(outputPath, '**')
 
 const css = {
   watchCSS () {
@@ -45,6 +47,15 @@ const common = {
 
   keepSyncResourceFile () {
     return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
+  },
+
+
+  syncStatic() {
+      return gulp.src(outputFilePath).pipe(gulp.dest(publicStaticPath))
+  },
+
+  keeypSyncStatic() {
+      return gulp.watch(outputFilePath, { ignoreInitial: true }, common.syncStatic)
   }
 }
 
@@ -98,5 +109,5 @@ exports.electronMaker = async () => {
 }
 
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile, gulp.parallel(common.keepSyncResourceFile, css.watchCSS))
+exports.watch = gulp.series(common.syncResourceFile, common.syncStatic, gulp.parallel(common.keepSyncResourceFile, css.watchCSS, common.keeypSyncStatic))
 exports.build = gulp.series(common.clean, common.syncResourceFile, css.buildCSS)
