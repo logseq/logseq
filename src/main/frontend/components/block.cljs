@@ -31,7 +31,6 @@
             [frontend.components.plugins :as plugins]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.extract :as extract]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repeated :as repeated]
@@ -1165,7 +1164,7 @@
 
             (and (string/starts-with? a "[[")
                  (string/ends-with? a "]]"))
-            (let [page-name (extract/extract-page-name-from-ref a)]
+            (let [page-name (text/extract-page-name-from-ref a)]
               (when-not (string/blank? page-name)
                 (page-embed config page-name)))
 
