@@ -19,6 +19,14 @@
    (string/starts-with? s "((")
    (string/ends-with? s "))")))
 
+(defn extract-page-name-from-ref
+  [ref]
+  (when-not (string/blank? ref)
+    (if-let [matches (or (re-matches #"\[\[file:.+\]\[(.+)\]\]" ref)
+                         (re-matches #"\[\[(.+)\]\]" ref))]
+      (string/trim (last matches))
+      ref)))
+
 (defonce page-ref-re #"\[\[(.*?)\]\]")
 
 (defonce page-ref-re-2 #"(\[\[.*?\]\])")

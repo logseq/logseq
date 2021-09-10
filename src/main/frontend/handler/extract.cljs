@@ -51,13 +51,6 @@
               (or first-block-name file-name)
               (or file-name first-block-name)))))))
 
-(defn extract-page-name-from-ref
-  [ref]
-  (when-not (string/blank? ref)
-    (if-let [matches (or (re-matches #"\[\[file:.+\]\[(.+)\]\]" ref)
-                         (re-matches #"\[\[(.+)\]\]" ref))]
-      (string/trim (last matches))
-      ref)))
 
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
