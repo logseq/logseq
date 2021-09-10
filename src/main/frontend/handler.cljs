@@ -219,6 +219,7 @@
                                             [:div
                                              [:h1.title "Reload Logseq?"]
                                              (ui/button "YES"
+                                               :autoFocus "on"
                                                :on-click (fn []
                                                            (pool/terminate-parser-pool!)
                                                            (p/let [_ (el/persist-dbs!)]
