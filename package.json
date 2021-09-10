@@ -4,6 +4,7 @@
     "private": true,
     "main": "static/electron.js",
     "devDependencies": {
+        "@capacitor/cli": "^3.2.2",
         "@tailwindcss/ui": "0.7.2",
         "@types/gulp": "^4.0.7",
         "cross-env": "^7.0.3",
@@ -52,6 +53,9 @@
         "cljs:build-electron": "clojure -A:cljs compile parser-worker app electron"
     },
     "dependencies": {
+        "@capacitor/android": "^3.2.2",
+        "@capacitor/core": "^3.2.2",
+        "@capacitor/ios": "^3.2.2",
         "@excalidraw/excalidraw": "^0.4.2",
         "@kanru/rage-wasm": "^0.2.1",
         "@sentry/browser": "^6.4.1",

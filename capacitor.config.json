@@ -1,0 +1,10 @@
+{
+  "appId": "com.logseq.app",
+  "appName": "Logseq",
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "server": {
+      "url": "http://192.168.50.122:3001",
+      "cleartext": true
+  }
+}
