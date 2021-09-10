@@ -301,11 +301,26 @@
                             (- (max (* 2 offset-top) delta-height) 16)
                             max-height))
                         max-height)
-        x-overflow? (when (and (seq rect) (> vw-width max-width))
-                      (let [delta-width (- vw-width (+ (:left rect) left))]
-                        (< delta-width (* max-width 0.5))))] ;; FIXME: for translateY layer
+        right-sidebar? (:ui/sidebar-open? @state/state)
+        editing-key    (first (keys (:editor/editing? @state/state)))
+        *el (rum/use-ref nil)
+        _ (rum/use-effect! (fn []
+                             (when-let [^js/HTMLElement cnt
+                                        (and right-sidebar? editing-key
+                                             (js/document.querySelector "#main-container"))]
+                               (when (.contains cnt (js/document.querySelector (str "#" editing-key)))
+                                 (let [el  (rum/deref *el)
+                                       ofx (- (.-scrollWidth cnt) (.-clientWidth cnt))]
+                                   (when (> ofx 0)
+                                     (set! (.-transform (.-style el)) (str "translateX(-" (+ ofx 20) "px)")))))))
+                           [right-sidebar? editing-key])
+        ;; FIXME: for translateY layer
+        x-overflow-vw? (when (and (seq rect) (> vw-width max-width))
+                         (let [delta-width (- vw-width (+ (:left rect) left))]
+                           (< delta-width (* max-width 0.5))))]
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
-     {:class (if x-overflow? "is-overflow-vw-x" "")
+     {:ref *el
+      :class (if x-overflow-vw? "is-overflow-vw-x" "")
       :on-mouse-down (fn [e] (.stopPropagation e))
       :style (merge
               {:top        (+ top offset-top)
@@ -417,7 +432,6 @@
        [:span {:id (str "mock-text_" idx)
                :key idx} c]))])
 
-
 (rum/defcs box < rum/reactive
   {:init (fn [state]
            (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
@@ -480,17 +494,19 @@
       true
       *slash-caret-pos)
 
-     (transition-cp
-      (datetime-comp/date-picker id format nil)
-      false
-      *slash-caret-pos)
+     (when (state/sub :editor/show-date-picker?)
+       (transition-cp
+        (datetime-comp/date-picker id format nil)
+        false
+        *slash-caret-pos))
 
-     (transition-cp
-      (input id
-             (fn [command m pos]
-               (editor-handler/handle-command-input command id format m pos)))
-      true
-      *slash-caret-pos)
+     (when (state/sub :editor/show-input)
+       (transition-cp
+         (input id
+                (fn [command m pos]
+                  (editor-handler/handle-command-input command id format m pos)))
+         true
+         *slash-caret-pos))
 
      (when (state/sub :editor/show-zotero)
        (transition-cp
