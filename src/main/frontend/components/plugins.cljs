@@ -172,9 +172,12 @@
          ]
 
         [:div.flag
-         [:p.text-xs.text-gray-300.pr-2.flex.justify-between.dark:opacity-40
+         [:p.text-xs.pr-2.flex.justify-between
           [:small author]
-          [:small (str "ID: " id)]]]
+          [:small {:on-click #(do
+                                (notification/show! "Copied!" :success)
+                                (util/copy-to-clipboard! id))}
+           (str "ID: " id)]]]
 
         [:div.flag.is-top.opacity-50
          (if repo

@@ -76,6 +76,15 @@
       left: 0;
       width: 100%;
 
+      > p {
+        color: var(--ls-primary-text-color);
+        opacity: .3;
+
+        > small:last-child {
+          cursor: pointer;
+        }
+      }
+
       &.is-top {
         width: unset;
         top: 4px;
