@@ -1379,7 +1379,7 @@
      (let [path (string/lower-case path)]
        (not
         (some #(string/ends-with? path %)
-              [".md" ".markdown" ".org" ".edn" ".css"]))))))
+              [".md" ".markdown" ".org" ".edn" ".css" ".png" ".jpg" ".jpeg"]))))))
 
 (defn wrapped-by-quotes?
   [v]

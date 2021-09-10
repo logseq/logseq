@@ -190,6 +190,10 @@
        (when plugin-handler/lsp-enabled?
          (plugins/hook-ui-items :toolbar))
 
+       [:a (when refreshing?
+             [:div {:class "animate-spin-reverse"}
+              svg/refresh])]
+
        (when electron-mac?
          (logo {:white? white?
                 :electron-mac? true}))
