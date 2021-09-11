@@ -107,7 +107,7 @@
 .block-body ul,
 .block-body ol,
 .block-body dl {
-  margin-bottom: 2em;
+  margin-bottom: 0em;
 
   > li {
     margin: 0;
