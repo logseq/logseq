@@ -55,7 +55,8 @@
   (try
     (let [graph-path (get-graph-path)
           p (.join path graph-path ".git")]
-      (when (.isFile (fs/statSync p))
+      (when (and (fs/existsSync p)
+                 (.isFile (fs/statSync p)))
         (let [content (.toString (fs/readFileSync p))
               dir-path (string/replace content "gitdir: " "")]
           (when (and content
