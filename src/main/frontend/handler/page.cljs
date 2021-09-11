@@ -610,7 +610,8 @@
                                           format
                                           {:last-pattern (str "[[" (if @editor-handler/*selected-text "" q))
                                            :end-pattern "]]"
-                                           :postfix-fn   (fn [s] (util/replace-first "]]" s ""))}))))))
+                                           :postfix-fn   (fn [s] (util/replace-first "]]" s ""))
+                                           :forward-pos 3}))))))
 
 (defn create-today-journal!
   []
