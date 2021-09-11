@@ -546,6 +546,7 @@
       :on-mouse-down (fn [e] (.stopPropagation e))}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
+                                      :parent (:block config)
                                       :id (str id)
                                       :embed-id id
                                       :embed? true
@@ -1836,11 +1837,11 @@
        [:div.flex.flex-row
         (when (and (:embed? config)
                    (not (:page-embed? config))
-                   (= (:embed-id config) uuid))
+                   (:parent config))
           [:a.opacity-30.hover:opacity-100.svg-small.inline
            {:on-mouse-down (fn [e]
                              (util/stop e)
-                             (when-let [block (:block config)]
+                             (when-let [block (:parent config)]
                                (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
            svg/edit])
 
