@@ -1937,7 +1937,8 @@
                        format
                        {:last-pattern (str "((" (if @*selected-text "" q))
                         :end-pattern "))"
-                        :postfix-fn   (fn [s] (util/replace-first "))" s ""))})
+                        :postfix-fn   (fn [s] (util/replace-first "))" s ""))
+                        :forward-pos 3})
 
       ;; Save it so it'll be parsed correctly in the future
       (set-block-property! (:block/uuid chosen)
