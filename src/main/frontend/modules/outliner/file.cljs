@@ -26,6 +26,7 @@
                    (string/blank? (:block/content (first blocks)))
                    (nil? (:block/file page-block)))
       (let [tree (tree/blocks->vec-tree blocks (:block/name page-block))]
+        (prn "[DEBUG] 3. Block tree built")
         (file/save-tree page-block tree)))))
 
 (defn write-files!
@@ -43,7 +44,10 @@
 
 (defn sync-to-file
   [{page-db-id :db/id}]
-  (when page-db-id
+  (if (nil? page-db-id)
+    (notification/show!
+     "Write file failed, can't find the current page!"
+     :error)
     (async/put! write-chan page-db-id)))
 
 (util/batch write-chan

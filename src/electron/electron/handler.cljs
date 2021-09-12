@@ -57,13 +57,18 @@
   (utils/read-file path))
 
 (defmethod handle :writeFile [_window [_ path content]]
-  ;; TODO: handle error
-  (let [^js Buf (.-Buffer buffer)
-        ^js content (if (instance? js/ArrayBuffer content)
-                  (.from Buf content) content)]
+  (try
+    (let [^js Buf (.-Buffer buffer)
+          ^js content (if (instance? js/ArrayBuffer content)
+                        (.from Buf content) content)]
 
-    (fs/writeFileSync path content)
-    (fs/statSync path)))
+      (fs/writeFileSync path content)
+      (fs/statSync path))
+    (catch js/Error e
+      (utils/send-to-renderer "notification" {:type "error"
+                                              :payload (str "Write to the file " path
+                                                            " failed, "
+                                                            error)}))))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (fs/renameSync old-path new-path))
