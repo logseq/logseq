@@ -1437,35 +1437,22 @@
                 :checked checked?}))
 
 (defn marker-switch
-  [{:block/keys [pre-block? marker] :as block}]
+  [{:block/keys [marker] :as block}]
   (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
     (let [set-marker-fn (fn [marker]
                           (fn [e]
                             (util/stop e)
-                            (editor-handler/set-marker block marker)))]
-      (case marker
-        "NOW"
-        [:a.marker-switch.block-marker
-         {:title "Change from NOW to LATER"
-          :on-click (set-marker-fn "LATER")}
-         "NOW"]
-        "LATER"
-        [:a.marker-switch.block-marker
-         {:title "Change from LATER to NOW"
-          :on-click (set-marker-fn "NOW")}
-         "LATER"]
-
-        "TODO"
-        [:a.marker-switch.block-marker
-         {:title "Change from TODO to DOING"
-          :on-click (set-marker-fn "DOING")}
-         "TODO"]
-        "DOING"
-        [:a.marker-switch.block-marker
-         {:title "Change from DOING to TODO"
-          :on-click (set-marker-fn "TODO")}
-         "DOING"]
-        nil))))
+                            (editor-handler/set-marker block marker)))
+          next-marker (case marker
+                        "NOW" "LATER"
+                        "LATER" "NOW"
+                        "TODO" "DOING"
+                        "DOING" "TODO")]
+      [(keyword (str "a.marker-switch.block-marker." marker))
+       {:title (util/format "Change from %s to %s" marker next-marker)
+        :value marker
+        :on-click (set-marker-fn next-marker)}
+       marker])))
 
 (defn marker-cp
   [{:block/keys [pre-block? marker] :as block}]
