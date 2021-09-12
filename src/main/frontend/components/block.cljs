@@ -2460,7 +2460,7 @@
 (rum/defc src-cp < rum/static
   [config options html-export?]
   (when options
-    (let [{:keys [lines language options _]} options
+    (let [{:keys [lines language]} options
           attr (when language
                  {:data-lang language})
           code (join-lines lines)]
