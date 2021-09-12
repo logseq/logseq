@@ -36,9 +36,16 @@
             has-typ-drawer? (some (fn [x] (mldoc/typ-drawer? x typ)) ast)
             lines (string/split-lines content)
             title (first lines)
-            body (string/join "\n" (rest lines))
-            start-idx (.indexOf lines (drawer-start typ))
-            end-idx (let [[before after] (split-at start-idx lines)]
+            body (rest lines)
+            scheduled (filter #(string/starts-with? % "SCHEDULED") lines)
+            deadline (filter #(string/starts-with? % "DEADLINE") lines)
+            body-without-timestamps (vec
+                                     (filter
+                                      #(not (or (string/starts-with? % "SCHEDULED")
+                                                (string/starts-with? % "DEADLINE")))
+                                      body))
+            start-idx (.indexOf body-without-timestamps (drawer-start typ))
+            end-idx (let [[before after] (split-at start-idx body-without-timestamps)]
                       (+ (count before) (.indexOf after drawer-end)))
             result  (cond
                       (not has-typ-drawer?)
@@ -46,28 +53,30 @@
                         (if has-properties?
                           (cond
                             (= :org format)
-                            (let [prop-start-idx (.indexOf lines property/properties-start)
-                                  prop-end-idx (.indexOf lines property/properties-end)
-                                  properties (subvec lines prop-start-idx (inc prop-end-idx))
-                                  after (subvec lines (inc prop-end-idx))]
-                              (string/join "\n" (concat [title] properties [drawer] after)))
+                            (let [prop-start-idx (.indexOf body-without-timestamps property/properties-start)
+                                  prop-end-idx (.indexOf body-without-timestamps property/properties-end)
+                                  properties (subvec body-without-timestamps prop-start-idx (inc prop-end-idx))
+                                  after (subvec body-without-timestamps (inc prop-end-idx))]
+                              (string/join "\n" (concat [title] scheduled deadline properties [drawer] after)))
 
                             :else
                             (let [properties-count (count (second (first (second ast))))
-                                  before (subvec lines 0 (inc properties-count))
-                                  after (rest lines)]
-                              (string/join "\n" (concat before [drawer] after))))
-                          (str title "\n" drawer "\n" body)))
+                                  properties (subvec body-without-timestamps 0 (inc properties-count))
+                                  after (rest body-without-timestamps)]
+                              (string/join "\n" (concat [title] scheduled deadline properties [drawer] after))))
+                          (string/join "\n" (concat [title] scheduled deadline [drawer] body-without-timestamps))))
 
                       (and has-typ-drawer?
                            (>= start-idx 0) (> end-idx 0) (> end-idx start-idx))
-                      (let [before (subvec lines 0 start-idx)
+                      (let [before (subvec body-without-timestamps 0 start-idx)
                             middle (conj
-                                    (subvec lines (inc start-idx) end-idx)
+                                    (subvec body-without-timestamps (inc start-idx) end-idx)
                                     value)
-                            after (subvec lines (inc end-idx))
-                            lines (concat before [(drawer-start typ)] middle [drawer-end] after)]
+                            after (subvec body-without-timestamps (inc end-idx))
+                            lines (concat [title] scheduled deadline before
+                                          [(drawer-start typ)] middle [drawer-end] after)]
                         (string/join "\n" lines))
+                      
                       :else
                       content)]
         (string/trimr result))

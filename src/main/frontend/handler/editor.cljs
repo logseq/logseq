@@ -341,7 +341,7 @@
                   (property/with-built-in-properties properties content format)
                   content)
         content (with-timetracking block content)
-        content (drawer/with-logbook block content)
+        ;; content (drawer/with-logbook block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
