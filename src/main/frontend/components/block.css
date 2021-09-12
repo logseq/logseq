@@ -230,13 +230,33 @@
   opacity: 0.5;
   font-size: 85%;
   margin: 0 2px 0 0px;
-  font-weight: 600;
+  font-weight: 650;
+  border: 0px;
+  opacity: 1;
 }
 
 .marker-switch {
   &:hover {
     color: var(--ls-link-text-hover-color);
     opacity: 1;
+  }
+
+  &.block-marker{
+    &.TODO {
+      color: red;
+    }
+  
+    &.DOING {
+      color: deeppink;
+    }
+  
+    &.NOW {
+      color: green;
+    }
+  
+    &.LATER {
+      color: dodgerblue;
+    }
   }
 }
 
