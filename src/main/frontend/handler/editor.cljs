@@ -1899,14 +1899,19 @@
     (when @*auto-save-timeout
       (js/clearTimeout @*auto-save-timeout))
     (mark-last-input-time! repo)
-    (reset! *auto-save-timeout
-            (js/setTimeout
-             (fn []
-               (when (state/input-idle? repo)
-                 (state/set-editor-op! :auto-save)
-                 (save-current-block! {})
-                 (state/set-editor-op! nil)))
-             500))))
+    (when-not
+        (and
+         (= (:db/id (:block/parent block))
+            (:db/id (:block/page block)))            ; don't auto-save for page's properties block
+         (get-in block [:block/properties :title]))
+      (reset! *auto-save-timeout
+              (js/setTimeout
+               (fn []
+                 (when (state/input-idle? repo)
+                   (state/set-editor-op! :auto-save)
+                   (save-current-block! {})
+                   (state/set-editor-op! nil)))
+               500)))))
 
 (defn handle-last-input []
   (let [input           (state/get-input)
