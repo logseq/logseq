@@ -1,18 +1,25 @@
 (ns frontend.modules.outliner.pipeline
   (:require [frontend.modules.datascript-report.core :as ds-report]
             [frontend.modules.outliner.file :as file]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [frontend.state :as state]
+            [frontend.util :as util]))
 
 (defn updated-block-hook
   [block])
 
 (defn updated-page-hook
   [page]
-  (let [page (db/entity (:db/id page))]
+  (let [page (db/entity (:db/id page))
+        path (:file/path (:block/file page))
+        page-title (or (:block/original-name page)
+                       (:block/name page))]
     (prn "[DEBUG] 2. Start writing file: "
          {:page-id (:db/id page)
           :page (:block/name page)
-          :file (:file/path (:block/file page))}))
+          :file path})
+    (when (util/electron?)
+      (state/wait-for-write-ack! page-title path)))
   (file/sync-to-file page))
 
 (defn invoke-hooks

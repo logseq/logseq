@@ -160,7 +160,10 @@
       ;; command palette
       :command-palette/commands []
 
-      :view/components {}})))
+      :view/components {}
+
+      :debug/write-acks {}
+      })))
 
 
 (defn sub
@@ -1481,3 +1484,29 @@
 
 (defn remove-watch-state [key]
   (remove-watch state key))
+
+(defonce ack-wait-timeouts (atom {}))
+
+;; For debugging file changes are not saved on disk.
+(defn wait-for-write-ack!
+  [page-title file-path]
+  (when file-path
+    (let [requested-at (util/time-ms)]
+      (set-state! [:debug/write-acks file-path :last-requested-at] requested-at)
+      (when-let [timeout (get @ack-wait-timeouts file-path)]
+        (js/clearTimeout timeout))
+      (let [timeout (js/setTimeout (fn []
+                                     (let [last-ack-at (get-in @state [:debug/write-acks file-path :last-ack-at])]
+                                       (when-not (and last-ack-at
+                                                      (< requested-at last-ack-at (+ requested-at 3000)))
+                                         (js/alert (str "Logseq failed to save the page "
+                                                        page-title
+                                                        " to the file: "
+                                                        file-path
+                                                        ". Stop editing this page anymore, and copy all the blocks of this page to another editor to avoid any data-loss."))))) 1000)]
+        (swap! ack-wait-timeouts assoc file-path timeout)))))
+
+(defn ack-file-write!
+  [file-path]
+  (let [ack-at (util/time-ms)]
+    (set-state! [:debug/write-acks file-path :last-ack-at] ack-at)))
