@@ -13,7 +13,7 @@
 (rum/defc intro
   []
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div#intro.pl-1
+    [:div#logseq-intro.pl-1
      [:div.flex-1
       [:div.flex.flex-col.pl-1.ls-block
        [:hr {:style {:margin-top 200}}]
