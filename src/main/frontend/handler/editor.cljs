@@ -362,7 +362,9 @@
                              :else
                              (let [content' (str (config/get-block-pattern format) (if block-with-title? " " "\n") content)]
                                [content content']))
-        block (assoc block :block/content content')
+        block (assoc block
+                     :block/content content'
+                     :block/format format)
         block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
         block (block/parse-block block)
         block (if (and first-block? (:block/pre-block? block))
