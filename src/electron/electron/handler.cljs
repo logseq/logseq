@@ -65,7 +65,7 @@
 
       (fs/writeFileSync path content)
       (fs/statSync path))
-    (catch js/Error error
+    (catch js/Error e
       (utils/send-to-renderer "notification" {:type "error"
                                               :payload (str "Write to the file " path
                                                             " failed, "
