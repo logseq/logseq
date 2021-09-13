@@ -55,6 +55,7 @@
     "dependencies": {
         "@capacitor/android": "^3.2.2",
         "@capacitor/core": "^3.2.2",
+        "@capacitor/filesystem": "^1.0.3",
         "@capacitor/ios": "^3.2.2",
         "@excalidraw/excalidraw": "^0.4.2",
         "@kanru/rage-wasm": "^0.2.1",

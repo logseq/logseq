@@ -945,6 +945,11 @@
   dependencies:
     tslib "^2.1.0"
 
+"@capacitor/filesystem@^1.0.3":
+  version "1.0.3"
+  resolved "https://registry.yarnpkg.com/@capacitor/filesystem/-/filesystem-1.0.3.tgz#70a5bb6c6cadfd952799b0793609d8ee077c4e92"
+  integrity sha512-7vmIGsO/qheb20xbaY9/ohLDD1BPEcp7EcX/LV6CFB3R0fMqPp43mg85Yy6WnC2nV5mR27xtzkcSEndRVsHshg==
+
 "@capacitor/ios@^3.2.2":
   version "3.2.2"
   resolved "https://registry.yarnpkg.com/@capacitor/ios/-/ios-3.2.2.tgz#0417cf89df23f651c6a1e20a8fb98294a918ce1f"
