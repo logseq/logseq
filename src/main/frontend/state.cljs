@@ -1499,11 +1499,16 @@
                                      (let [last-ack-at (get-in @state [:debug/write-acks file-path :last-ack-at])]
                                        (when-not (and last-ack-at
                                                       (< requested-at last-ack-at (+ requested-at 3000)))
-                                         (js/alert (str "Logseq failed to save the page "
-                                                        page-title
-                                                        " to the file: "
-                                                        file-path
-                                                        ". Stop editing this page anymore, and copy all the blocks of this page to another editor to avoid any data-loss.")))))
+                                         (let [step (get-in @state [:debug/write-acks file-path :step])]
+                                           (pub-event! [:instrument {:type :debug/write-failed
+                                                                     :payload {:step step}}])
+                                           (js/alert (str "Logseq failed to save the page "
+                                                         page-title
+                                                         " to the file: "
+                                                         file-path
+                                                         ". Stop editing this page anymore, and copy all the blocks of this page to another editor to avoid any data-loss.\n"
+                                                         "Last step: "
+                                                         step))))))
                                    3000)]
         (swap! ack-wait-timeouts assoc file-path timeout)))))
 
@@ -1511,3 +1516,7 @@
   [file-path]
   (let [ack-at (util/time-ms)]
     (set-state! [:debug/write-acks file-path :last-ack-at] ack-at)))
+
+(defn set-ack-step!
+  [file-path step]
+  (set-state! [:debug/write-acks file-path :step] step))

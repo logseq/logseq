@@ -19,6 +19,7 @@
           :page (:block/name page)
           :file path})
     (when (util/electron?)
+      (state/set-ack-step! path :start-writing)
       (state/wait-for-write-ack! page-title path)))
   (file/sync-to-file page))
 

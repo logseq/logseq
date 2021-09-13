@@ -2,7 +2,8 @@
   (:require [frontend.config :as cfg]
             [frontend.util :as util]
             [frontend.version :refer [version]]
-            ["posthog-js" :as posthog]))
+            ["posthog-js" :as posthog]
+            [cljs-bean.core :as bean]))
 
 (def ^:const token "qUumrWobEk2dKiKt1b32CMEZy8fgNS94rb_Bq4WutPA")
 (def ^:const masked "masked")
@@ -36,6 +37,9 @@
     (do
       (init)
       (posthog/opt_in_capturing))))
+
+(defn capture [id data]
+  (posthog/capture (str id) (bean/->js data)))
 
 (comment
   (posthog/debug))

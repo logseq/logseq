@@ -96,6 +96,8 @@
     (let [chan-callback (:chan-callback opts)]
       (async/put! chan [repo files opts])
       (prn "[DEBUG] 4. Pushed to the write channel")
+      (doseq [file (map first files)]
+        (state/set-ack-step! file :pushed-to-channel))
       (when chan-callback
         (chan-callback)))))
 

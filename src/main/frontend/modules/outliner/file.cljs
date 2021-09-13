@@ -27,6 +27,8 @@
                    (nil? (:block/file page-block)))
       (let [tree (tree/blocks->vec-tree blocks (:block/name page-block))]
         (prn "[DEBUG] 3. Block tree built")
+        (let [path (:file/path (:block/file (db/entity page-db-id)))]
+          (state/set-ack-step! path :start-writing))
         (file/save-tree page-block tree)))))
 
 (defn write-files!
