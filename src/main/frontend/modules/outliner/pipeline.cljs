@@ -3,7 +3,8 @@
             [frontend.modules.outliner.file :as file]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.debug :as debug]))
 
 (defn updated-block-hook
   [block])
@@ -17,9 +18,11 @@
     (prn "[DEBUG] 2. Start writing file: "
          {:page-id (:db/id page)
           :page (:block/name page)
-          :file path})
+          :file path
+          :time (util/time-ms)})
     (when (util/electron?)
-      (state/wait-for-write-ack! page-title path)))
+      (debug/set-ack-step! path :start-writing)
+      (debug/wait-for-write-ack! page-title path)))
   (file/sync-to-file page))
 
 (defn invoke-hooks

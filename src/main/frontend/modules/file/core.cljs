@@ -6,7 +6,8 @@
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.debug :as debug]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -96,6 +97,8 @@
     (let [chan-callback (:chan-callback opts)]
       (async/put! chan [repo files opts])
       (prn "[DEBUG] 4. Pushed to the write channel")
+      (doseq [file (map first files)]
+        (debug/set-ack-step! file :pushed-to-channel))
       (when chan-callback
         (chan-callback)))))
 

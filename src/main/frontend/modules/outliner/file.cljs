@@ -10,7 +10,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
-            [lambdaisland.glogi :as log]))
+            [lambdaisland.glogi :as log]
+            [frontend.debug :as debug]))
 
 (def write-chan (async/chan))
 
@@ -26,7 +27,9 @@
                    (string/blank? (:block/content (first blocks)))
                    (nil? (:block/file page-block)))
       (let [tree (tree/blocks->vec-tree blocks (:block/name page-block))]
-        (prn "[DEBUG] 3. Block tree built")
+        (prn "[DEBUG] 3. Block tree built" {:time (util/time-ms)})
+        (let [path (:file/path (:block/file (db/entity page-db-id)))]
+          (debug/set-ack-step! path :start-writing))
         (file/save-tree page-block tree)))))
 
 (defn write-files!
@@ -52,5 +55,4 @@
 
 (util/batch write-chan
             batch-write-interval
-            #(state/input-idle? (state/get-current-repo))
             write-files!)

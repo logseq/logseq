@@ -69,7 +69,7 @@
       (utils/send-to-renderer "notification" {:type "error"
                                               :payload (str "Write to the file " path
                                                             " failed, "
-                                                            error)}))))
+                                                            e)}))))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (fs/renameSync old-path new-path))
