@@ -157,6 +157,8 @@
                                                  #{})
       :date-picker/date nil
 
+      :youtube/players {}
+
       ;; command palette
       :command-palette/commands []
 
