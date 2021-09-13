@@ -50,6 +50,7 @@
 
 (defn safe-re-find
   [pattern s]
+  (assert (string? s))
   #?(:cljs
      (when-not (string? s)
        ;; TODO: sentry
