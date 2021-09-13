@@ -6,11 +6,13 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             [clojure.string :as string]
+            [electron.utils :refer [logger]]
             [electron.configs :as cfgs]
             [electron.utils :refer [*win fetch extract-zip] :as utils]))
 
 ;; update & install
 (def *installing-or-updating (atom nil))
+(def debug (fn [& args] (apply (.-info logger) (conj args "[Marketplace]"))))
 (def emit (fn [type payload]
             (.. ^js @*win -webContents
                 (send (name type) (bean/->js payload)))))
@@ -26,7 +28,7 @@
             endpoint (api "releases/latest")
             ^js res (fetch endpoint)
             res (.json res)
-            _ (js/console.debug "[Release Latest]" endpoint ": " res)
+            _ (js/console.debug "[Release Latest] " endpoint)
             res (bean/->clj res)
             version (:tag_name res)
             asset (first (filter #(= "application/zip" (:content_type %)) (:assets res)))]
@@ -129,16 +131,16 @@
               ;; get releases
               (-> (p/let [[asset latest-version] (fetch-latest-release-asset item)
 
-                          _ (js/console.debug "[Release Asset] #" latest-version " =>" asset)
+                          _ (debug "[Release Asset] #" latest-version " =>" (:url asset))
 
                           ;; compare latest version
                           _ (when (and updating? latest-version
                                        (. semver valid latest-version))
 
-                              (js/console.debug "[Updating Latest?] " version " > " latest-version)
+                              (debug "[Updating Latest?] " version " > " latest-version)
 
                               (if (. semver lt version latest-version)
-                                (js/console.debug "[Updating Latest] " latest-version)
+                                (debug "[Updating Latest] " latest-version)
                                 (throw (js/Error. :no-new-version))))
 
                           dl-url (if-not (string? asset)
@@ -148,7 +150,8 @@
                               (throw (js/Error. :release-asset-not-found)))
 
                           dest (.join path cfgs/dot-root "plugins" (:id item))
-                          _ (download-asset-zip item dl-url dest)]
+                          _ (download-asset-zip item dl-url dest)
+                          _ (debug "[Updated DONE] " latest-version)]
 
                     (emit :lsp-installed
                           {:status  :completed

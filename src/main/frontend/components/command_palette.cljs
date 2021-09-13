@@ -66,4 +66,5 @@
       (state/set-modal!
        #(command-palette {:commands (cp/get-commands)})
        {:fullscreen? false
-        :close-btn?  false}))))
+        :close-btn?  false}))
+    nil))

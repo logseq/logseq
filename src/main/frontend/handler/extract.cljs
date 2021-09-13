@@ -51,6 +51,7 @@
               (or first-block-name file-name)
               (or file-name first-block-name)))))))
 
+
 ;; TODO: performance improvement
 (defn- extract-pages-and-blocks
   [repo-url format ast properties file content utf8-content journal?]

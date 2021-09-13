@@ -70,6 +70,9 @@
         (->
          (p/let [result (ipc/ipc "writeFile" path content)
                  mtime (gobj/get result "mtime")]
+           (prn "[DEBUG] 5. The file was saved successfully!" {:path path})
+           (when (util/electron?)
+             (state/ack-file-write! path))
            (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)

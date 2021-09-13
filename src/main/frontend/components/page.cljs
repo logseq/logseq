@@ -240,7 +240,7 @@
            :on-click (fn []
                        (let [value (string/trim @input)]
                          (when-not (string/blank? value)
-                           (page-handler/rename! page-name value)
+                           (page-handler/rename! (or title page-name) value)
                            (state/close-modal!))))}
           (t :submit)]]
         [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto

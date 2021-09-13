@@ -40,7 +40,7 @@
                          (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                            (text/build-data-value page-names)))]
     [:div.flex-1.journal.page (cond->
-                               {:class (if intro? "intro" "")}
+                               {:class (if intro? "logseq-intro" "")}
                                 data-page-tags
                                 (assoc :data-page-tags data-page-tags))
 

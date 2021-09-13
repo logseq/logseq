@@ -546,6 +546,7 @@
       :on-mouse-down (fn [e] (.stopPropagation e))}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
+                                      :parent (:block config)
                                       :id (str id)
                                       :embed-id id
                                       :embed? true
@@ -1164,9 +1165,7 @@
 
             (and (string/starts-with? a "[[")
                  (string/ends-with? a "]]"))
-            (let [page-name (-> (string/replace a "[[" "")
-                                (string/replace "]]" "")
-                                string/trim)]
+            (let [page-name (text/extract-page-name-from-ref a)]
               (when-not (string/blank? page-name)
                 (page-embed config page-name)))
 
@@ -1838,11 +1837,11 @@
        [:div.flex.flex-row
         (when (and (:embed? config)
                    (not (:page-embed? config))
-                   (= (:embed-id config) uuid))
+                   (:parent config))
           [:a.opacity-30.hover:opacity-100.svg-small.inline
            {:on-mouse-down (fn [e]
                              (util/stop e)
-                             (when-let [block (:block config)]
+                             (when-let [block (:parent config)]
                                (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
            svg/edit])
 
@@ -2461,7 +2460,7 @@
 (rum/defc src-cp < rum/static
   [config options html-export?]
   (when options
-    (let [{:keys [language lines pos_meta]} options
+    (let [{:keys [lines language]} options
           attr (when language
                  {:data-lang language})
           code (join-lines lines)]

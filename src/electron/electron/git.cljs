@@ -55,7 +55,8 @@
   (try
     (let [graph-path (get-graph-path)
           p (.join path graph-path ".git")]
-      (when (.isFile (fs/statSync p))
+      (when (and (fs/existsSync p)
+                 (.isFile (fs/statSync p)))
         (let [content (.toString (fs/readFileSync p))
               dir-path (string/replace content "gitdir: " "")]
           (when (and content
@@ -115,8 +116,7 @@
                    (if (string/starts-with? error "Author identity unknown")
                      (utils/send-to-renderer "setGitUsernameAndEmail" {:type "git"})
                      (utils/send-to-renderer "notification" {:type "error"
-                                                             :payload error}))))))
-     )))
+                                                             :payload error})))))))))
 
 (defonce quotes-regex #"\"[^\"]+\"")
 (defn wrapped-by-quotes?

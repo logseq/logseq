@@ -319,10 +319,13 @@
           space? (when (and last-pattern prefix)
                    (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
                              (util/safe-subs prefix 0 last-index))]
-                     (not (and s
-                               (string/ends-with? s "(")
-                               (or (string/starts-with? last-pattern "((")
-                                   (string/starts-with? last-pattern "[["))))))
+                     (not
+                      (or
+                       (and s
+                            (string/ends-with? s "(")
+                            (or (string/starts-with? last-pattern "((")
+                                (string/starts-with? last-pattern "[[")))
+                       (string/starts-with? s "{{embed")))))
           space? (if (and space? (string/starts-with? last-pattern "#[["))
                    false
                    space?)

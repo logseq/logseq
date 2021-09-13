@@ -1899,14 +1899,19 @@
     (when @*auto-save-timeout
       (js/clearTimeout @*auto-save-timeout))
     (mark-last-input-time! repo)
-    (reset! *auto-save-timeout
-            (js/setTimeout
-             (fn []
-               (when (state/input-idle? repo)
-                 (state/set-editor-op! :auto-save)
-                 (save-current-block! {})
-                 (state/set-editor-op! nil)))
-             500))))
+    (when-not
+        (and
+         (= (:db/id (:block/parent block))
+            (:db/id (:block/page block)))            ; don't auto-save for page's properties block
+         (get-in block [:block/properties :title]))
+      (reset! *auto-save-timeout
+              (js/setTimeout
+               (fn []
+                 (when (state/input-idle? repo)
+                   (state/set-editor-op! :auto-save)
+                   (save-current-block! {})
+                   (state/set-editor-op! nil)))
+               500)))))
 
 (defn handle-last-input []
   (let [input           (state/get-input)
@@ -1937,7 +1942,8 @@
                        format
                        {:last-pattern (str "((" (if @*selected-text "" q))
                         :end-pattern "))"
-                        :postfix-fn   (fn [s] (util/replace-first "))" s ""))})
+                        :postfix-fn   (fn [s] (util/replace-first "))" s ""))
+                        :forward-pos 3})
 
       ;; Save it so it'll be parsed correctly in the future
       (set-block-property! (:block/uuid chosen)
