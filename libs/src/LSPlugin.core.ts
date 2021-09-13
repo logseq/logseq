@@ -399,6 +399,7 @@ class PluginLocal
   }
 
   _resolveResourceFullUrl (filePath: string, localRoot?: string) {
+    if (!filePath?.trim()) return
     localRoot = localRoot || this._localRoot
     const reg = /^(http|file)/
     if (!reg.test(filePath)) {

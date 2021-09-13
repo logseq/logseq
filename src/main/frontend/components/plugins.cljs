@@ -153,7 +153,7 @@
        [:div.l.link-block
         {:on-click #(plugin-handler/open-readme!
                       url item (if repo remote-readme-display local-markdown-display))}
-        (if icon
+        (if (and icon (not (string/blank? icon)))
           [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
           svg/folder)
 
