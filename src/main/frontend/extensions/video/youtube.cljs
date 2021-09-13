@@ -41,7 +41,6 @@
   {:did-mount
    (fn [state]
      (go
-       (def jjj state)
        (<! (load-youtube-api))
        (register-player state))
      state)}
@@ -49,7 +48,6 @@
   (let [width  (min (- (util/get-width) 96)
                     560)
         height (int (* width (/ 315 560)))]
-    (def xxx state)
     [:iframe
      {:id                (str "youtube-player-" id)
       :allow-full-screen "allowfullscreen"
