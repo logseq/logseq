@@ -254,6 +254,7 @@ export class ChildAPI {
 export type PostMateOptions = {
   container: HTMLElement
   url: string
+  id?: string
   classListArray?: Array<string>
   name?: string
   model?: any
@@ -281,7 +282,8 @@ export class Postmate {
     this.url = opts.url
     this.parent = window
     this.frame = document.createElement('iframe')
-    this.frame.name = opts.name || ''
+    if (opts.id) this.frame.id = opts.id
+    if (opts.name) this.frame.name = opts.name
     this.frame.classList.add.apply(this.frame.classList, opts.classListArray || [])
     this.container.appendChild(this.frame)
     this.child = this.frame.contentWindow

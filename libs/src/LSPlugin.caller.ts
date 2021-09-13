@@ -190,13 +190,18 @@ class LSPluginCaller extends EventEmitter {
   async _setupIframeSandbox () {
     const cnt = document.body
     const pl = this._pluginLocal!
+    const id = pl.id
     const url = new URL(pl.options.entry!)
 
     url.searchParams
       .set(`__v__`, IS_DEV ? Date.now().toString() : pl.options.version)
 
+    // clear zombie sandbox
+    const zb = cnt.querySelector(`#${id}`)
+    if (zb) zb.parentElement.removeChild(zb)
+
     const pt = new Postmate({
-      container: cnt, url: url.href,
+      id, container: cnt, url: url.href,
       classListArray: ['lsp-iframe-sandbox'],
       model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) }
     })
@@ -217,7 +222,6 @@ class LSPluginCaller extends EventEmitter {
         this._connected = true
         this.emit('connected')
 
-        refChild.frame.setAttribute('id', pl.id)
         refChild.on(LSPMSGFn(pl.id), ({ type, payload }: any) => {
           debug(`[call from plugin] `, type, payload)
 

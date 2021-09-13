@@ -129,7 +129,7 @@
   ([d]
    (hero-icon d {}))
   ([d options]
-   [:svg (merge {:fill "currentColor", :view-box "0 0 24 24", :height "24", :width "24"}
+   [:svg (merge {:fill "currentColor", :viewBox "0 0 24 24", :height "24", :width "24"}
                 options)
     [:path
      {:stroke-linejoin "round"
@@ -396,7 +396,7 @@
 
 (rum/defc logo
   [dark?]
-  [:svg.svg-shadow
+  [:svg
    {:fill (if dark? "currentColor" "#002B36"), :view-box "0 0 21 21", :height "21", :width "21"}
    [:ellipse
     {:transform
@@ -658,6 +658,54 @@
   ([size]
    [:svg.icon {:fill "none" :width size :height size :viewBox "0 0 24 24" :stroke "currentColor"}
     [:path {:stroke-linecap "round" :stroke-linejoin "round" :stroke-width "2" :d "M5 13l4 4L19 7"}]]))
+
+(defn cloud-down
+  ([] (cloud-down 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:path {:d "M19 18a3.5 3.5 0 0 0 0 -7h-1a5 4.5 0 0 0 -11 -2a4.6 4.4 0 0 0 -2.1 8.4"}]
+    [:line {:x1 "12" :y1 "13" :x2 "12" :y2 "22"}]
+    [:polyline {:points "9 19 12 22 15 19"}]]))
+
+(defn star
+  ([] (star 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:path {:d "M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z"}]]))
+
+(defn apps
+  ([] (apps 16))
+  ([size]
+   [:svg.icon-apps {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:rect {:x "4" :y "4" :width "6" :height "6" :rx "1"}]
+    [:rect {:x "4" :y "14" :width "6" :height "6" :rx "1"}]
+    [:rect {:x "14" :y "14" :width "6" :height "6" :rx "1"}]
+    [:line {:x1 "14" :y1 "7" :x2 "20" :y2 "7"}]
+    [:line {:x1 "17" :y1 "4" :x2 "17" :y2 "10"}]]))
+
+(defn reload
+  ([] (reload 16))
+  ([size]
+   [:svg.icon-reload {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:path {:d "M4.05 11a8 8 0 1 1 .5 4m-.5 5v-5h5"}]]))
+
+(defn settings
+  ([] (settings 16))
+  ([size]
+   [:svg.icon-settings {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:path {:d "M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065z"}]
+    [:circle {:cx "12" :cy "12" :r "3"}]]))
+
+(defn offline
+  ([] (offline 16))
+  ([size]
+   [:svg.icon-offline {:viewBox "0 0 1024 1024" :width size :height size}
+    [:path {:d "M512 183.466667c149.333333 0 292.266667 46.933333 409.6 132.266666 19.2 12.8 23.466667 40.533333 8.533333 59.733334-12.8 19.2-40.533333 23.466667-59.733333 8.533333-102.4-74.666667-228.266667-115.2-358.4-115.2-130.133333 0-256 40.533333-358.4 115.2-19.2 12.8-44.8 8.533333-59.733333-8.533333-12.8-19.2-8.533333-44.8 8.533333-59.733334 119.466667-85.333333 260.266667-132.266667 409.6-132.266666z m0 170.666666c108.8 0 211.2 32 298.666667 91.733334 19.2 12.8 23.466667 40.533333 10.666666 59.733333-12.8 19.2-40.533333 23.466667-59.733333 10.666667-72.533333-51.2-160-78.933333-251.733333-78.933334-91.733333 0-177.066667 27.733333-249.6 76.8-19.2 12.8-44.8 8.533333-59.733334-10.666666-12.8-19.2-8.533333-44.8 10.666667-59.733334 89.6-57.6 192-89.6 300.8-89.6z m0 168.533334c23.466667 0 42.666667 19.2 42.666667 42.666666s-19.2 42.666667-42.666667 42.666667c-51.2 0-100.266667 14.933333-142.933333 40.533333-19.2 12.8-46.933333 6.4-57.6-14.933333-12.8-19.2-6.4-46.933333 14.933333-57.6 53.333333-34.133333 117.333333-53.333333 185.6-53.333333z m0 189.866666c34.133333 0 64 27.733333 64 64 0 34.133333-27.733333 64-64 64s-64-27.733333-64-64c0-34.133333 27.733333-64 64-64z m164.266667-106.666666l89.6 89.6 89.6-89.6c17.066667-17.066667 42.666667-17.066667 59.733333 0 17.066667 17.066667 17.066667 42.666667 0 59.733333l-89.6 89.6 89.6 89.6c17.066667 17.066667 17.066667 42.666667 0 59.733333-17.066667 17.066667-42.666667 17.066667-59.733333 0l-89.6-89.6-89.6 89.6c-17.066667 17.066667-42.666667 17.066667-59.733334 0-17.066667-17.066667-17.066667-42.666667 0-59.733333l89.6-89.6-89.6-89.6c-17.066667-17.066667-17.066667-42.666667 0-59.733333 14.933333-17.066667 42.666667-17.066667 59.733334 0z" :fill "currentColor"}]]))
 
 (def arrow-expand
   (hero-icon "M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"))

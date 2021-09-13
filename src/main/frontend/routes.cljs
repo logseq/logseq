@@ -76,4 +76,4 @@
 
    ["/plugins"
     {:name :plugins
-     :view plugins/installed-page}]])
+     :view plugins/plugins-page}]])

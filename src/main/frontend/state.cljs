@@ -138,6 +138,9 @@
       :plugin/simple-commands       {}
       :plugin/selected-theme        nil
       :plugin/selected-unpacked-pkg nil
+      :plugin/marketplace-pkgs      nil
+      :plugin/marketplace-stats     nil
+      :plugin/installing            nil
       :plugin/active-readme         nil
 
       ;; pdf

@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [mac? win32? linux? prod? dev? logger open]]
+            [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open]]
             [electron.configs :as cfgs]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -207,7 +207,11 @@
                        (js/decodeURIComponent url) url)
                  url (if-not win32? (string/replace url "file://" "") url)]
              (.. logger (info "new-window" url))
-             (open url))
+             (if (string/includes?
+                   (.normalize path url)
+                   (.join path (. app getAppPath) "index.html"))
+               (.info logger "pass-window" url)
+               (open url)))
            (.preventDefault e)))
 
     (doto win
@@ -217,8 +221,6 @@
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
          (.removeHandler ipcMain call-app-channel))))
-
-(defonce *win (atom nil))
 
 (defn- destroy-window!
   [^js win]

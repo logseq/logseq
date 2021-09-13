@@ -4,6 +4,7 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [frontend.components.diff :as diff]
+            [frontend.components.plugins :as plugin]
             [frontend.components.encryption :as encryption]
             [frontend.components.git :as git-component]
             [frontend.components.shell :as shell]
@@ -138,6 +139,9 @@
 
 (defmethod handle :modal/show-cards [_]
   (state/set-modal! srs/global-cards))
+
+(defmethod handle :modal/show-themes-modal [_]
+  (plugin/open-select-theme!))
 
 (rum/defc modal-output
   [content]

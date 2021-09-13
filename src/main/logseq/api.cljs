@@ -133,7 +133,7 @@
           sub-dir? (string/starts-with? user-path path)
           _ (when-not sub-dir? (log/info :debug user-path) (throw "access file denied"))
           exist? (fs/file-exists? "" user-path)
-          _ (when-not exist?(log/info :debug user-path) (throw "file not existed"))
+          _ (when-not exist? (log/info :debug user-path) (throw "file not existed"))
           _ (fs/unlink! repo user-path {})]))
 
 (def ^:export write_user_tmp_file
@@ -209,6 +209,13 @@
             path (plugin-handler/get-ls-dotdir-root)
             path (util/node-path.join path "settings" (str key ".json"))]
       (fs/write-file! repo "" path (js/JSON.stringify data nil 2) {:skip-compare? true}))))
+
+(def ^:export unlink_plugin_user_settings
+  (fn [key]
+    (p/let [repo ""
+            path (plugin-handler/get-ls-dotdir-root)
+            path (util/node-path.join path "settings" (str key ".json"))]
+      (fs/unlink! repo path nil))))
 
 (def ^:export register_plugin_slash_command
   (fn [pid ^js cmd-actions]
@@ -411,7 +418,10 @@
       (when-not (contains? block :block/name)
         (when-let [uuid (:block/uuid block)]
           (let [{:keys [includeChildren]} (bean/->clj opts)
-                block (if (not includeChildren) block (first (outliner-tree/blocks->vec-tree [block] uuid)))]
+                repo (state/get-current-repo)
+                block (if (not includeChildren)
+                        block (first (outliner-tree/blocks->vec-tree
+                                       (db-model/get-block-and-children repo uuid) uuid)))]
             (bean/->js (normalize-keyword-for-json block))))))))
 
 (def ^:export get_previous_sibling_block
@@ -461,6 +471,14 @@
             blocks (outliner-tree/blocks->vec-tree blocks page-name)
             blocks (normalize-keyword-for-json blocks)]
         (bean/->js blocks)))))
+
+;; plugins
+(def ^:export __install_plugin
+  (fn [^js manifest]
+    (when-let [{:keys [repo id] :as mft} (bean/->clj manifest)]
+      (if-not (and repo id)
+        (throw (js/Error. "[required] :repo :id"))
+        (plugin-handler/install-marketplace-plugin mft)))))
 
 ;; db
 (defn ^:export q
