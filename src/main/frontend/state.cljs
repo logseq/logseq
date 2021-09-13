@@ -1503,7 +1503,8 @@
                                                         page-title
                                                         " to the file: "
                                                         file-path
-                                                        ". Stop editing this page anymore, and copy all the blocks of this page to another editor to avoid any data-loss."))))) 1000)]
+                                                        ". Stop editing this page anymore, and copy all the blocks of this page to another editor to avoid any data-loss.")))))
+                                   3000)]
         (swap! ack-wait-timeouts assoc file-path timeout)))))
 
 (defn ack-file-write!
