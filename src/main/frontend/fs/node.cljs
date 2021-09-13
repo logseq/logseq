@@ -9,7 +9,8 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.debug :as debug]))
 
 (defn concat-path
   [dir path]
@@ -72,8 +73,8 @@
                  mtime (gobj/get result "mtime")]
            (prn "[DEBUG] 5. The file was saved successfully!" {:path path})
            (when (util/electron?)
-             (state/set-ack-step! path :saved-successfully)
-             (state/ack-file-write! path))
+             (debug/set-ack-step! path :saved-successfully)
+             (debug/ack-file-write! path))
            (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)
