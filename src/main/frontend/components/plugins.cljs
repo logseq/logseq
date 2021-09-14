@@ -308,11 +308,23 @@
 
       [:div.cp__plugins-installed
        [:div.mb-4.flex.items-center.justify-between
-        (ui/button
-          (t :plugin/load-unpacked)
-          :intent "logseq"
-          :on-click plugin-handler/load-unpacked-plugin)
-        (unpacked-plugin-loader selected-unpacked-pkg)
+
+        [:div.flex.align-items
+         (ui/button
+           (t :plugin/load-unpacked)
+           :title (t :plugin/unpacked-tips)
+           :intent "logseq"
+           :on-click plugin-handler/load-unpacked-plugin)
+
+         (ui/button
+           [:span.flex.items-center
+            [:i {:style {:transform "scale(.8)"}} svg/external-link] "Samples for Developer"]
+           :class "ml-2"
+           :intent "logseq"
+           :on-click #(plugin-handler/invoke-exported-api
+                        "open_external_link" "https://github.com/logseq/logseq-plugin-samples"))
+
+         (unpacked-plugin-loader selected-unpacked-pkg)]
 
         (when (util/electron?)
           [:div.flex.align-items

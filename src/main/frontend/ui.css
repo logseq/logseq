@@ -152,6 +152,17 @@
     }
   }
 
+  &[intent='link'] {
+    @apply focus:border-gray-500 dark:hover:text-gray-200;
+
+    color: var(--ls-primary-text-color);
+    background: transparent;
+
+    &:hover {
+      color: var(--ls-link-text-color);
+    }
+  }
+
   &.p-1 {
     padding: 0.25rem 0.5rem !important;
   }
