@@ -31,7 +31,8 @@
 (def link-steps [[:editor/input (str slash "link")]
                  [:editor/show-input [{:command :link
                                        :id :link
-                                       :placeholder "Link"}
+                                       :placeholder "Link"
+                                       :autoFocus true}
                                       {:command :link
                                        :id :label
                                        :placeholder "Label"}]]])
