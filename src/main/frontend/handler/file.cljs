@@ -246,6 +246,9 @@
                                (fs/write-file! repo (config/get-repo-dir repo) path content
                                                {:old-content original-content}))
                              (p/catch (fn [error]
+                                        (state/pub-event! [:instrument {:type :write-file/failed
+                                                                        :payload {:path path
+                                                                                  :error error}}])
                                         (log/error :write-file/failed {:path path
                                                                        :content content
                                                                        :error error}))))))
