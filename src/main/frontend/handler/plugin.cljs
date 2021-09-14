@@ -24,7 +24,7 @@
 (defn invoke-exported-api
   [type & args]
   (try
-    (apply js-invoke js/logseq.api type args)
+    (apply js-invoke (aget js/window.logseq "api") type args)
     (catch js/Error e (js/console.error e))))
 
 ;; state handlers
