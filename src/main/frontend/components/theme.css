@@ -101,12 +101,3 @@ html.is-resizing-buf {
     transition: none;
   }
 }
-
-body[data-page=plugins] {
-  .cp__sidebar-main-content {
-    max-width: 1280px;
-    width: 80%;
-    padding-left: 30px;
-    padding-right: 30px;
-  }
-}
