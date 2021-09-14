@@ -78,7 +78,7 @@
 
       > p {
         color: var(--ls-primary-text-color);
-        opacity: .3;
+        opacity: .5;
 
         > small:last-child {
           cursor: pointer;

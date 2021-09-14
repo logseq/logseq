@@ -325,8 +325,9 @@
         :plugin/open-package "Open package"
         :plugin/load-unpacked "Load unpacked plugin"
         :plugin/open-preferences "Open plugin preferences file"
-        :plugin/restart "Restart"
+        :plugin/restart "Restart App"
         :plugin/marketplace-tips "If the plugin you installed from marketplace for the first time not work properly, you could try to restart the application."
+        :plugin/unpacked-tips "For development purposes or to load the trusted community plugin from local disk."
         :plugin/up-to-date "It's up to date"
 
         :pdf/copy-ref "Copy ref"
@@ -1017,10 +1018,11 @@
            :plugin/marketplace "插件市场"
            :plugin/open-settings "打开配置项"
            :plugin/open-package "打开包目录"
-           :plugin/load-unpacked "手动载入外部插件"
+           :plugin/load-unpacked "手动载入插件"
            :plugin/open-preferences "打开预设配置文件"
            :plugin/restart "重启应用"
            :plugin/marketplace-tips "如果首次从市场安装或更新的插件，遇到非预期工作情况，可以尝试重启应用。"
+           :plugin/unpacked-tips "用于开发目的或者从本地磁盘载入可信的社区插件。"
            :plugin/up-to-date "已经是最新了"
 
            :pdf/copy-ref "复制引用"
