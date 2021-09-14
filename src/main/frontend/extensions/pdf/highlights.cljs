@@ -836,10 +836,16 @@
          ;; metadata
          [:a.button.is-info
           {:title    "Document info"
-           :on-click #(do
-                        (p/let [ret (pdf-utils/get-meta-data$ viewer)]
-                          (state/set-modal! (make-docinfo-in-modal ret))))}
+           :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
+                        (state/set-modal! (make-docinfo-in-modal ret)))}
           (svg/icon-info)]
+
+         ;; annotations
+         [:a.button
+          {:title    "Annotations page"
+           :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
+          (svg/annotations 16)]
+
 
          [:a.button
           {:on-click #(state/set-state! :pdf/current nil)}
@@ -1009,9 +1015,9 @@
             "MissingPDFException"
             (do
               (notification/show!
-               (str (.-message error) " Is this the correct path?")
-               :error
-               false)
+                (str (.-message error) " Is this the correct path?")
+                :error
+                false)
               (state/set-state! :pdf/current nil)))))
       [(:error state)])
 

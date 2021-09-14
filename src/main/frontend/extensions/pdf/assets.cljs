@@ -225,6 +225,12 @@
   (when id
     (rfe/push-state :page {:name (str id)})))
 
+(defn goto-annotations-page!
+  ([current] (goto-annotations-page! current nil))
+  ([current id]
+   (when-let [name (:key current)]
+     (rfe/push-state :page {:name (str "hls__" name)} (if id {:anchor (str "block-content-" + id)} nil)))))
+
 (rum/defc area-display
   [block stamp]
   (let [id (:block/uuid block)
