@@ -80,6 +80,23 @@
           blocks)
     arr))
 
+
+(defn- ensure-block-data [block format other-props]
+  (dissoc
+   (merge (common-handler/wrap-parse-block block)
+          {:block/format format}
+          other-props)
+   :block/pre-block?))
+
+(defn- content->block [content format other-props]
+  (->
+   (assoc
+    (first
+     (block/extract-blocks (mldoc/->edn content (mldoc/default-config format))
+                           content true format))
+    :block/format format)
+   (ensure-block-data format other-props)))
+
 (defn page-blocks->doc [page-blocks page-name]
   (if-let [t (tree/blocks->vec-tree page-blocks page-name)]
     (let [content (contentmap)
@@ -88,20 +105,16 @@
       (->struct-array t struct))))
 
 
-(defn- update-block-content [uuid]
-  (println "[YJS] update-block-content" uuid (.get (contentmap) uuid))
-  (when-let [block (db-model/query-block-by-uuid uuid)]
+(defn- update-block-content [id]
+  (println "[YJS] update-block-content" id (.get (contentmap) id))
+  (when-let [block (db-model/query-block-by-uuid id)]
     (let [content-map (contentmap)
           format (or (:block/format block) :markdown)
-          new-content (str "- " (.toString (.get content-map uuid))) ;TODO orgmode
-          updated-block (first
-                         (block/extract-blocks
-                          (mldoc/->edn new-content  (mldoc/default-config format))
-                          new-content true format))
-          updated-block (common-handler/wrap-parse-block (merge block updated-block))]
+          new-content (.toString (.get content-map id)) ;TODO orgmode
+          updated-block (content->block new-content format nil)]
+      (def www updated-block)
       (outliner-core/save-node (outliner-core/block updated-block))
-      (db/refresh! (state/get-current-repo) {:key :block/insert :data [updated-block]})
-      (def iii updated-block))))
+      (db/refresh! (state/get-current-repo) {:key :block/insert :data [updated-block]}))))
 
 (defn- get-item-left&parent [item id]
   (let [item-content id
@@ -159,27 +172,22 @@
     [arrays add-items delete-items]))
 
 
-;; (defn- move-node []
-;;   (outliner-core/move-node))
+
 (defn- insert-node [left-id parent-id id contentmap]
   {:pre [(seq parent-id)]}
   (println "[YJS]insert-node:" left-id parent-id id)
   (let [left-id (or left-id parent-id)
         format :markdown
-        content (str "- " (property/insert-property
-                           format
-                           (property/remove-id-property format  (.get contentmap id))
-                           "ID" id)) ;TODO orgmode
+        content (property/insert-property
+                       format
+                       (property/remove-id-property format  (.get contentmap id))
+                       "ID" id) ;TODO orgmode
         target-block (db-model/query-block-by-uuid left-id)
         target-node (outliner-core/block target-block)
-        format (:block/format target-node)
-        new-block (->
-                   (common-handler/wrap-parse-block
-                    (first
-                     (block/extract-blocks (mldoc/->edn content (mldoc/default-config format))
-                                           content true format)))
-                   (merge {:block/page (:block/page target-block)
-                           :block/uuid (uuid id)}))
+        new-block (content->block content format
+                                  {:block/page (:block/page target-block)
+                                   :block/uuid (uuid id)
+                                   :block/format format} )
         new-node (outliner-core/block new-block)
         sibling? (not= parent-id left-id)]
     (def zzz [new-node target-node sibling?])
