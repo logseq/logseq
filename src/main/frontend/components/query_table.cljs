@@ -40,7 +40,7 @@
                   (remove (property/built-in-properties))
                   (remove #{:template}))
         keys (if page? (cons :page keys) (cons :block keys))
-        keys (if page? (concat keys [:created-at :updated-at]) keys)]
+        keys (if page? (distinct (concat keys [:created-at :updated-at])) keys)]
     keys))
 
 (defn attach-clock-property
@@ -85,11 +85,12 @@
                  query-properties
                  (get-keys result page?))
           included-keys #{:created-at :updated-at}
-          keys (if (some included-keys keys)
-                 (concat included-keys
-                         (remove included-keys keys)
-                         (filter included-keys keys))
-                 keys)
+          keys (distinct
+                (if (some included-keys keys)
+                  (concat (remove included-keys keys)
+                          (filter included-keys keys)
+                          included-keys)
+                  keys))
           sort-by-fn (fn [item]
                        (let [key sort-by-item]
                          (case key
