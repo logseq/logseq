@@ -85,7 +85,7 @@
 
 (rum/defc pdf-highlights-ctx-menu
   [^js viewer
-   {:keys [highlight vw-pos point]}
+   {:keys [highlight point ^js range]}
    {:keys [clear-ctx-tip! add-hl! upd-hl! del-hl!]}]
 
   (rum/use-effect!
@@ -130,7 +130,8 @@
 
                         "copy"
                         (do
-                          (front-utils/copy-to-clipboard! (:text content))
+                          (front-utils/copy-to-clipboard!
+                            (or (:text content) (.toString range)))
                           (pdf-utils/clear-all-selection))
 
                         "link"
@@ -147,7 +148,7 @@
                         (let [properties {:color action}]
                           (if-not id
                             ;; add highlight
-                            (let [highlight (merge highlight
+                            (let [highlight (merge (if (fn? highlight) (highlight) highlight)
                                                    {:id         (pdf-utils/gen-uuid)
                                                     :properties properties})]
                               (add-hl! highlight)
@@ -448,7 +449,7 @@
         *mounted (rum/use-ref false)
         [sel-state, set-sel-state!] (rum/use-state {:range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
-        [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :point nil :reset-fn nil})
+        [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :range nil :point nil :reset-fn nil})
 
         clear-ctx-tip! (rum/use-callback
                          #(let [reset-fn (:reset-fn tip-state)]
@@ -543,30 +544,30 @@
     (rum/use-effect!
       (fn []
         (when-let [^js sel-range (and (not (:collapsed sel-state)) (:range sel-state))]
-          (when-let [page-info (pdf-utils/get-page-from-range sel-range)]
-            (when-let [sel-rects (pdf-utils/get-range-rects<-page-cnt sel-range (:page-el page-info))]
-              (let [page (int (:page-number page-info))
-                    ^js point (:point sel-state)
-                    ^js bounding (pdf-utils/get-bounding-rect sel-rects)
-                    vw-pos {:bounding bounding :rects sel-rects :page page}
-                    sc-pos (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
+          (let [^js point (:point sel-state)
+                hl-fn #(when-let [page-info (pdf-utils/get-page-from-range sel-range)]
+                         (when-let [sel-rects (pdf-utils/get-range-rects<-page-cnt sel-range (:page-el page-info))]
+                           (let [page (int (:page-number page-info))
+                                 ^js bounding (pdf-utils/get-bounding-rect sel-rects)
+                                 vw-pos {:bounding bounding :rects sel-rects :page page}
+                                 sc-pos (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
 
-                ;; TODO: debug
-                ;;(dd "[VW x SC] ====>" vw-pos sc-pos)
-                ;;(dd "[Range] ====> [" page-info "]" (.toString sel-range) point)
-                ;;(dd "[Rects] ====>" sel-rects " [Bounding] ====>" bounding)
+                             ;; TODO: debug
+                             ;;(dd "[VW x SC] ====>" vw-pos sc-pos)
+                             ;;(dd "[Range] ====> [" page-info "]" (.toString sel-range) point)
+                             ;;(dd "[Rects] ====>" sel-rects " [Bounding] ====>" bounding)
 
 
-                (let [hl {:id         nil
-                          :page       page
-                          :position   sc-pos
-                          :content    {:text (.toString sel-range)}
-                          :properties {}}]
+                             {:id         nil
+                              :page       page
+                              :position   sc-pos
+                              :content    {:text (.toString sel-range)}
+                              :properties {}})))]
 
-                  ;; show context menu
-                  (set-tip-state! {:highlight hl
-                                   :vw-pos    vw-pos
-                                   :point     point})))))))
+            ;; show ctx menu
+            (set-tip-state! {:highlight hl-fn
+                             :range sel-range
+                             :point     point}))))
 
       [(:range sel-state)])
 
@@ -882,6 +883,7 @@
                                      :eventBus             event-bus
                                      :linkService          link-service
                                      :enhanceTextSelection true
+                                     :textLayerMode        2
                                      :removePageBorders    true})]
                (. link-service setDocument pdf-document)
                (. link-service setViewer viewer)
