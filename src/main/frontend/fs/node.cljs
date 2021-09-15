@@ -65,7 +65,11 @@
          (not (contains? #{"excalidraw" "edn"} ext))
          (not (string/includes? path "/.recycle/"))
          (zero? pending-writes))
-        (state/pub-event! [:file/not-matched-from-disk path disk-content content])
+        (do
+          (when (util/electron?)
+            (debug/set-ack-step! path :saved-successfully)
+            (debug/ack-file-write! path))
+          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
 
         :else
         (->
