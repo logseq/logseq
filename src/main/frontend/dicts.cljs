@@ -327,7 +327,7 @@
         :plugin/open-preferences "Open plugin preferences file"
         :plugin/restart "Restart App"
         :plugin/unpacked-tips "Select the plugin directory"
-        :plugin/contribute "✨ Write and submit my plugin"
+        :plugin/contribute "✨ Write and submit new plugin"
         :plugin/marketplace-tips "If the plugin doesn't work correctly when first installed, try to restart Logseq."
         :plugin/up-to-date "It's up to date"
 
