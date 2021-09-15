@@ -969,11 +969,6 @@
   ([path]
    (get-in @state [:ui/paths-scroll-positions path] 0)))
 
-(defn get-journal-template
-  []
-  (when-let [repo (get-current-repo)]
-    (get-in @state [:config repo :default-templates :journals])))
-
 (defn set-today!
   [value]
   (set-state! :today value))
