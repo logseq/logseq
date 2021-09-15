@@ -477,6 +477,7 @@
    ^{:doc "Others"}
    [:go/home
     :go/journals
+    :command/run
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
