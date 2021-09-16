@@ -629,6 +629,10 @@ body.is-pdf-active {
   top: 0;
 
   z-index: 3;
+
+  .highlightAnnotation, .underlineAnnotation {
+    display: none;
+  }
 }
 
 .textLayer ::selection {
