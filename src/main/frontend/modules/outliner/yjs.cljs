@@ -18,6 +18,9 @@
 (def doc-local (y/Doc.))
 (def doc-remote (y/Doc.))
 
+(def syncing-pages (atom #{}))
+
+
 (def wsProvider1 (y-ws/WebsocketProvider. "ws://localhost:1234", "test-user", doc-remote))
 
 (defn- contentmap [] (.getMap doc-local "content"))
@@ -27,7 +30,11 @@
 (defn- remote-structarray [page-name] (.getArray doc-remote (str page-name "-struct")))
 
 (defn- assoc-contents [contents contentmap]
-  (mapv (fn [[k v]] (.set contentmap k v)) contents))
+  (mapv (fn [[k v]]  (.set contentmap k v)) contents))
+
+(defn- dissoc-contents [ids contentmap]
+  (mapv (fn [id] (.delete contentmap id)) ids))
+
 
 (defn- distinct-struct [struct id-set]
   (loop [i 0]
@@ -111,10 +118,10 @@
     (let [content-map (contentmap)
           format (or (:block/format block) :markdown)
           new-content (.toString (.get content-map id)) ;TODO orgmode
-          updated-block (content->block new-content format nil)]
+          updated-block (content->block new-content format {:block/page (:block/page block)})]
       (def www updated-block)
       (outliner-core/save-node (outliner-core/block updated-block))
-      (db/refresh! (state/get-current-repo) {:key :block/insert :data [updated-block]}))))
+      (db/refresh! (state/get-current-repo) {:key :block/change :data [updated-block]}))))
 
 (defn- get-item-left&parent [item id]
   (let [item-content id
@@ -186,8 +193,7 @@
         target-node (outliner-core/block target-block)
         new-block (content->block content format
                                   {:block/page (:block/page target-block)
-                                   :block/uuid (uuid id)
-                                   :block/format format} )
+                                   :block/uuid (uuid id)} )
         new-node (outliner-core/block new-block)
         sibling? (not= parent-id left-id)]
     (def zzz [new-node target-node sibling?])
@@ -195,9 +201,10 @@
     (db/refresh! (state/get-current-repo) {:key :block/insert :data [new-block]})))
 
 (defn- delete-node [id]
+  (println "[YJS] delete-node" id)
   (when-let [block (db-model/query-block-by-uuid id)]
     (outliner-core/delete-node (outliner-core/block block) false)
-    true))
+    (db/refresh! (state/get-current-repo)  {:key :block/change :data [block]})))
 
 (defn- observe-struct-fn [page-name]
   (fn [events]
@@ -206,7 +213,6 @@
           contentmap (contentmap)]
       (mapv
        (fn [item]
-         (def yyy item)
          (mapv (fn [id]
                  (println "observe-struct-fn id:" id)
                  (let [[left-id parent-id] (get-item-left&parent item id)
@@ -221,6 +227,8 @@
 (def observe-struct-fn-memo (memoize observe-struct-fn))
 
 (defn- observe-content-fn [event]
+  (println "[YJS] observe-content-fn")
+  (js/console.log event)
   (when-not (.-local (.-transaction event))
     (let [keys (js->clj (into [] (.-keys event)))]
       (mapv (fn [[k v]]
@@ -252,10 +260,7 @@
 
 (defn sync-doc [local remote]
   (.on remote "update" (fn [update]
-                         (y/applyUpdate local update)))
-  ;; (.on local "update" (fn [update]
-  ;;                       (y/applyUpdate remote update)))
-  )
+                         (y/applyUpdate local update))))
 
 
 (defn- remove-all-blocks-in-page [page-blocks page-name]
@@ -347,29 +352,38 @@
       s
       (recur (inc i) (.get s (get pos i))))))
 
+
+
 (deftype Pos [pos-vec]
 
   Object
   (toString [_] pos-vec)
 
+  ;; [1 2 3] -> [1 2 4]
   (inc-pos [_] (Pos. (conj (vec (butlast pos-vec)) (inc (last pos-vec)))))
+  ;; [1 2 3] -> [1 2 4 0]
   (inc-level-pos [_] (Pos. (conj (Pos. (conj (vec (butlast pos-vec)) (inc (last pos-vec)))) 0)))
+  ;; [1 2 3] -> [1 2 3 0]
   (add-next-level [_] (Pos. (conj pos-vec 0)))
+  ;; [1 2 3] -> [1 2]
+  (upper-level [_]
+    (when-some [pos-vec* (butlast pos-vec)]
+      (Pos. pos-vec*)))
 
   (next-sibling-pos [_ struct]
     (let [inner-struct (goto-innermost-struct-array pos-vec struct)
           next-item (.get inner-struct (inc (last pos-vec)))]
-    (if (instance? y/Array next-item)
-      (Pos. (conj (vec (butlast pos-vec)) (+ 2 (last pos-vec))))
-      (Pos. (conj (vec (butlast pos-vec)) (+ 1 (last pos-vec)))))))
+      (if (instance? y/Array next-item)
+        (Pos. (conj (vec (butlast pos-vec)) (+ 2 (last pos-vec))))
+        (Pos. (conj (vec (butlast pos-vec)) (+ 1 (last pos-vec)))))))
 
   (next-non-sibling-pos! [this struct]
     "create a y/Array when no child follows item at POS"
     (let [inner-struct (goto-innermost-struct-array this struct)
-        next-item (.get inner-struct (inc (last this)))]
-    (when-not (instance? y/Array next-item)
-      (.insert inner-struct (inc (last this)) (clj->js [(y/Array.)])))
-    (.inc-level-pos this)))
+          next-item (.get inner-struct (inc (last this)))]
+      (when-not (instance? y/Array next-item)
+        (.insert inner-struct (inc (last this)) (clj->js [(y/Array.)])))
+      (.inc-level-pos this)))
 
   ICounted
   (-count [_] (count pos-vec))
@@ -410,6 +424,17 @@
               (= nthi1 nthi2)
               (recur (inc i)))))))))
 
+(defn- delete-item [pos root-struct]
+  "Delete item at POS. Also delete struct when empty"
+  (let [inner-struct (goto-innermost-struct-array pos root-struct)
+        last-pos-index (last pos)]
+    (.delete inner-struct last-pos-index 1)
+    (when-some [upper-pos (.upper-level pos)]
+      (let [last-upper-pos-index (last upper-pos)]
+        (when (= 0 (.-length inner-struct))
+          (let [inner-upper-struct (goto-innermost-struct-array upper-pos root-struct)]
+            (.delete inner-upper-struct last-upper-pos-index 1)))))))
+
 (defn find-pos [struct id]
   (let [toplevel (js->clj (.toArray struct))
         index (.indexOf toplevel id)]
@@ -446,39 +471,13 @@
         (println e vec1 vec2)
         (js/console.trace)))))
 
-;; (defn distance [pos-vec1 pos-vec2]
-;;     "(distance [1 2] [1 4]) => [[[1 2] 3]] => [[prefix-of-THIS-pos length]]
-;; (distance [1 2 3 1] [1 4 1]) => [[[1 2 3 1] :all] [[1 2 4] :all] [[1 3] 1] [[1 4 0] 2]]"
-;;   (let [[same-prefix-vec pos-vec1* pos-vec2*] (common-prefix pos-vec1 pos-vec2)
-;;         r (transient [])]
-;;     (when (> (count pos-vec1*) 1)
-;;       (conj! r [(vec (concat same-prefix-vec pos-vec1*)) :all]))
-;;     (loop [sublen (dec (count pos-vec1*))]
-;;       (when (> sublen 1)
-;;         (let [prefix (vec (concat same-prefix-vec (subvec pos-vec1* 0 sublen)))
-;;               prefix* (conj (vec (butlast prefix)) (inc (last prefix)))]
-;;           (conj! r [prefix* :all])
-;;           (recur (dec sublen)))))
-;;     (let [prefix (vec (concat same-prefix-vec (subvec pos-vec1* 0 1)))
-;;           prefix* (conj (vec (butlast prefix)) (inc (last prefix)))]
-;;       (if-let [pos-vec2*-first (pos-vec2 0 nil)]
-;;         (conj! r [])
-;;         )
-;;       )
 
-;;     (persistent! r)
-;;     ))
-
-
-;;; outliner op + yjs op
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; outliner op + yjs op ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; (defn move-subtree [root target-node sibling?]
 ;;   (outliner-core/move-subtree root target-node sibling?))
-
-
-;; (defn indent-outdent-nodes [nodes indent?]
-;;   )
-
 
 (defn- nodes-tree->struct&content [nodes-tree]
   (let [contents (atom {})
@@ -493,7 +492,6 @@
                       (str block-uuid))
                     node)) nodes-tree)]
     [struct @contents]))
-
 
 
 (defn- insert-nodes-aux [insert-structs pos struct]
@@ -512,8 +510,7 @@
           :else
           (do
             (.insert struct* (last pos) (clj->js [s]))
-            (recur (inc i) (.inc-pos pos)))))))
-    )
+            (recur (inc i) (.inc-pos pos))))))))
 
 
 (defn insert-nodes-yjs [page-name new-nodes-tree target-uuid sibling?]
@@ -556,41 +553,49 @@
             (catch js/Error e
               (println e)
               (println new-node target-node)
-              (js/console.trace)
-              )
-            )))))
+              (js/console.trace)))))))
 
 
-(defn- delete-range-nodes-prefix-part [prefix-vec start-pos-vec end-pos-vec struct]
-  (let [start-pos-vec-len (count start-pos-vec)]
-    ;; (when (> start-pos-vec-len 0))
-    (let [inner-struct (goto-innermost-struct-array (->Pos (vec (concat prefix-vec start-pos-vec))) struct)
-          start-index (last start-pos-vec)
-          len-to-remove (if (and (end-pos-vec 0 nil) (= start-pos-vec-len 1))
-                          (if (> (count end-pos-vec) 1)
-                            (- (end-pos-vec 0) start-index)
-                            (inc (- (end-pos-vec 0) start-index)))
-                          (- (.-length inner-struct) start-index))]
-      (.delete inner-struct start-index len-to-remove)
-      (if (>= start-pos-vec-len 2)
-        (delete-range-nodes-prefix-part [prefix-vec
+(defn- delete-range-nodes-prefix-part
+  ([prefix-vec start-pos-vec end-pos-vec struct] (delete-range-nodes-prefix-part prefix-vec start-pos-vec end-pos-vec struct false))
+  ([prefix-vec start-pos-vec end-pos-vec struct debug?]
+   (let [start-pos-vec-len (count start-pos-vec)]
+     ;; (when (> start-pos-vec-len 0))
+     (let [inner-struct (goto-innermost-struct-array (->Pos (vec (concat prefix-vec start-pos-vec))) struct)
+           start-index (last start-pos-vec)
+           len-to-remove (if (and (end-pos-vec 0 nil) (= start-pos-vec-len 1))
+                           (if (> (count end-pos-vec) 1)
+                             (- (end-pos-vec 0) start-index)
+                             (inc (- (end-pos-vec 0) start-index)))
+                           (- (.-length inner-struct) start-index))]
+       (if debug?
+         (println "delete: struct:" (.toJSON inner-struct)
+                  "start-index" start-index
+                  "len-to-remove" len-to-remove)
+         (.delete inner-struct start-index len-to-remove))
+       (if (>= start-pos-vec-len 2)
+         (delete-range-nodes-prefix-part prefix-vec
                                          (conj (subvec start-pos-vec 0 (- start-pos-vec-len 2))
                                                (inc (start-pos-vec (- start-pos-vec-len 2) nil)))
-                                         end-pos-vec struct])
-        len-to-remove))))
+                                         end-pos-vec struct debug?)
+         len-to-remove)))))
 
 
-(defn- delete-range-nodes-suffix-part [prefix-vec end-pos-vec struct]
-  (let [end-pos-vec-len (count end-pos-vec)]
-    (when (> end-pos-vec-len 0)
-      (let [inner-struct (goto-innermost-struct-array (->Pos (vec (concat prefix-vec end-pos-vec))) struct)]
-        (if (<= (dec (.-length inner-struct)) (last end-pos-vec))
-          (delete-range-nodes-suffix-part prefix-vec (butlast end-pos-vec) struct)
-          (when (>= end-pos-vec-len 2)
-            (let [next-end-pos-vec (conj (subvec end-pos-vec 0 (- end-pos-vec-len 2))
-                                         (dec (end-pos-vec (- end-pos-vec-len 2))))]
-              (.delete inner-struct 0 (inc (last end-pos-vec)))
-              (delete-range-nodes-suffix-part prefix-vec next-end-pos-vec struct))))))))
+(defn- delete-range-nodes-suffix-part
+  ([prefix-vec end-pos-vec struct] (delete-range-nodes-suffix-part prefix-vec end-pos-vec struct false))
+  ([prefix-vec end-pos-vec struct debug?]
+   (let [end-pos-vec-len (count end-pos-vec)]
+     (when (> end-pos-vec-len 0)
+       (let [inner-struct (goto-innermost-struct-array (->Pos (vec (concat prefix-vec end-pos-vec))) struct)]
+         (if (<= (dec (.-length inner-struct)) (last end-pos-vec))
+           (delete-range-nodes-suffix-part prefix-vec (butlast end-pos-vec) struct)
+           (when (>= end-pos-vec-len 2)
+             (let [next-end-pos-vec (conj (subvec end-pos-vec 0 (- end-pos-vec-len 2))
+                                          (dec (end-pos-vec (- end-pos-vec-len 2))))]
+               (if debug?
+                 (println "delete struct:" (.toJSON inner-struct) "len" (inc (last end-pos-vec)))
+                 (.delete inner-struct 0 (inc (last end-pos-vec))))
+               (delete-range-nodes-suffix-part prefix-vec next-end-pos-vec struct)))))))))
 
 (defn delete-range-nodes [start-pos end-pos struct]
   ;; {:pre [(<= (compare start-pos end-pos) 0)]}
@@ -601,12 +606,15 @@
           (delete-range-nodes-suffix-part same-prefix-vec pos-vec2*-after-delete-prefix-part struct))
         (delete-range-nodes-suffix-part same-prefix-vec pos-vec2* struct)))))
 
-(defn delete-nodes-yjs [page-name start-uuid end-uuid]
+(defn delete-nodes-yjs [page-name start-uuid end-uuid block-ids]
   (let [struct (structarray page-name)
         start-pos (find-pos struct (str start-uuid))
-        end-pos (find-pos struct (str end-uuid))]
-    (println "delete-nodes-yjs" start-uuid end-uuid)
-    (delete-range-nodes start-pos end-pos struct)))
+        end-pos (find-pos struct (str end-uuid))
+        ids (mapv (fn [id-tuple] (str (second id-tuple))) block-ids)]
+    (delete-range-nodes start-pos end-pos struct)
+    (println "delete-nodes-yjs:" ids)
+    (dissoc-contents ids (contentmap))))
+
 
 (defn delete-nodes-op [start-node end-node block-ids]
   (let [start-block (:data start-node)
@@ -615,31 +623,74 @@
                              (:block/name (db/entity (:db/id (:block/page start-block)))))]
       (when-let [start-uuid (:block/uuid start-block)]
         (when-let [end-uuid (:block/uuid end-block)]
-          (delete-nodes-yjs page-name start-uuid end-uuid)
+          (delete-nodes-yjs page-name start-uuid end-uuid block-ids)
           (distinct-struct (structarray page-name) (atom #{}))
           (merge-doc doc-remote doc-local)
           (outliner-core/delete-nodes start-node end-node block-ids))))))
 
+(defn delete-node-yjs [page-name id]
+  (let [struct (structarray page-name)
+        pos (find-pos struct id)]
+    (delete-item pos struct)
+    (dissoc-contents [id] (contentmap))))
+
+(defn delete-node-op [node children?]
+  (let [block (:data node)]
+    (when-let [page-name (:block/name (db/entity (:db/id (:block/page block))))]
+      (let [uuid (str (:block/uuid block))]
+        (delete-node-yjs page-name uuid)
+        (merge-doc doc-remote doc-local)
+        (outliner-core/delete-node node children?)))))
+
 (defn save-node-op [node]
   (let [block (:data node)
         contentmap (contentmap)]
-
     (when-let [page-name (:block/name (db/entity (:db/id (:block/page block))))]
       (when-let [block-uuid (:block/uuid block)]
-        (def uuu node)
         (.set contentmap (str block-uuid) (:block/content block))
         (distinct-struct (structarray page-name) (atom #{}))
         (merge-doc doc-remote doc-local)
+        (outliner-core/save-node node)))))
 
-        (outliner-core/save-node node)
 
-             ))))
 
-(start-sync-page "test-page")
+
+(defn indent-outdent-nodes-op [nodes indent?]
+  (println "[YJS] indent-outdent-nodes(before):" nodes indent?)
+  (outliner-core/indent-outdent-nodes nodes indent?)
+  (println "[YJS] indent-outdent-nodes(after):"
+           (mapv (fn [node]
+                   (db/pull (:db/id (:data node))))
+                 nodes)))
+
+
+
+
 ;; (defn move-subtree-yjs [src-page-name dst-page-name root target-node sibling?]
 
 ;;   )
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+;; functions for debug ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn- struct->content-struct [struct contentmap]
+  (mapv (fn [i]
+          (cond
+            (string? i)
+            (try (.toString (.get contentmap i))
+                 (catch js/Error e
+                   (println e)
+                   (println i)))
+
+            :else
+            (struct->content-struct i contentmap))) struct))
+
+(defn- page-contents [page-name]
+  (let [struct (.toJSON (structarray page-name))
+        contentmap (contentmap)]
+    (struct->content-struct struct contentmap)))
 
 (comment
  (def test-doc (y/Doc.))

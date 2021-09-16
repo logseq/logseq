@@ -754,7 +754,7 @@
     (when block
       (->
        (outliner-core/block block)
-       (outliner-core/delete-node children?))
+       (outliner-yjs/delete-node-op children?))
       (db/refresh! repo {:key :block/change :data [block]}))))
 
 (defn- move-to-prev-block
@@ -1713,7 +1713,7 @@
                 top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
                                                  (get-in % [:block/parent :db/id])) blocks)
                                      (map outliner-core/block))]
-            (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+            (outliner-yjs/indent-outdent-nodes-op top-level-nodes (= direction :right))
             (let [opts {:key :block/change
                         :data blocks}]
               (db/refresh! repo opts)
@@ -2033,7 +2033,7 @@
             _ (outliner-yjs/insert-nodes-op metadata-replaced-blocks target-block sibling?)
             _ (when (and delete-editing-block? editing-block)
                 (when-let [id (:db/id editing-block)]
-                  (outliner-core/delete-node (outliner-core/block (db/pull id)) true)))
+                  (outliner-yjs/delete-node-op (outliner-core/block (db/pull id)) true)))
             new-blocks (db/pull-many repo '[*] (map (fn [id] [:block/uuid id]) @new-block-uuids))]
         (db/refresh! repo {:key :block/insert :data new-blocks})
         (last metadata-replaced-blocks)))))
@@ -2518,7 +2518,7 @@
   (let [{:keys [block]} (get-state)]
     (when block
       (let [current-node (outliner-core/block block)]
-        (outliner-core/indent-outdent-nodes [current-node] indent?)
+        (outliner-yjs/indent-outdent-nodes-op [current-node] indent?)
         (let [repo (state/get-current-repo)]
           (db/refresh! repo
                        {:key :block/change :data [(:data current-node)]}))))
