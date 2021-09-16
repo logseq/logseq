@@ -113,7 +113,7 @@
           :options {:on-click state/open-settings!}
           :icon svg/settings-sm})
 
-       (when developer-mode?
+       (when (and developer-mode? (util/electron?))
          {:title (t :plugins)
           :options {:href (rfe/href :plugins)}})
 
