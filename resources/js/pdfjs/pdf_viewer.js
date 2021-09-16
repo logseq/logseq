@@ -6178,7 +6178,7 @@
                   renderingQueue: this.renderingQueue,
                   textLayerFactory,
                   textLayerMode: this.textLayerMode,
-                  annotationLayerFactory: null,
+                  annotationLayerFactory: this,
                   xfaLayerFactory,
                   imageResourcesPath: this.imageResourcesPath,
                   renderInteractiveForms: this.renderInteractiveForms,

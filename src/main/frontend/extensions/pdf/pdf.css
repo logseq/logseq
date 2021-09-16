@@ -61,11 +61,7 @@
 
   &-outline {
     position: absolute;
-    right: 30px;
-
-
-    &-wrap {
-    }
+    right: 15px;
 
     > section {
       white-space: pre-wrap;
@@ -195,8 +191,7 @@
 
   &-viewer {
     position: absolute;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: auto;
     width: 100%;
     height: 100%;
 
@@ -204,8 +199,6 @@
     }
 
     > .pdfViewer {
-      overflow: hidden;
-
       &.disabled-text-selection {
         user-select: none;
         pointer-events: none;
@@ -393,6 +386,8 @@
   &-wrap {
     position: absolute;
     top: 40px;
+    right: 0;
+    left: 0;
     width: 100%;
     height: 92vh;
     background-color: rgba(0, 0, 0, 0);
