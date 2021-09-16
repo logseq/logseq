@@ -113,7 +113,7 @@
           :options {:on-click state/open-settings!}
           :icon svg/settings-sm})
 
-       (when developer-mode?
+       (when (and developer-mode? (util/electron?))
          {:title (t :plugins)
           :options {:href (rfe/href :plugins)}})
 
@@ -187,6 +187,9 @@
          (search/search)
          [:div.flex-1])
 
+       (when plugin-handler/lsp-enabled?
+         (plugins/hook-ui-items :toolbar))
+
        [:a (when refreshing?
              [:div {:class "animate-spin-reverse"}
               svg/refresh])]
@@ -194,16 +197,16 @@
        (when electron-mac?
          (logo {:white? white?
                 :electron-mac? true}))
-
        (when electron-mac? (back-and-forward true))
 
        (new-block-mode)
 
+       (when refreshing?
+         [:div {:class "animate-spin-reverse"}
+          svg/refresh])
+
        (when-not (util/electron?)
          (login logged?))
-
-       (when plugin-handler/lsp-enabled?
-         (plugins/hook-ui-items :toolbar))
 
        (repo/sync-status current-repo)
 

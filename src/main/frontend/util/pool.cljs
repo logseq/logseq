@@ -11,7 +11,8 @@
   ([]
    (create-parser-pool! 8))
   ([num]
-   (p/let [static-path (if (util/electron?)
+   (p/let [static-path (if (and (util/electron?)
+                                (= "file:" (.-protocol js/location)))
                          (ipc/ipc :getDirname)
                          "/static")
            path (str static-path "/js/parser-worker.js")

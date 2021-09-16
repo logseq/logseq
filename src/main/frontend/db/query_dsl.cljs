@@ -317,9 +317,17 @@
            nil))
 
        (= 'page fe)
-       (let [page-name (string/lower-case (first (rest e)))
+       (let [page-name (string/lower-case (str (first (rest e))))
              page-name (text/page-ref-un-brackets! page-name)]
          [['?b :block/page [:block/name page-name]]])
+
+       (and (= 'namespace fe)
+            (= 2 (count e)))
+       (let [page-name (string/lower-case (str (first (rest e))))
+             page (text/page-ref-un-brackets! page-name)]
+         (when-not (string/blank? page)
+           [['?p :block/namespace '?parent]
+            ['?parent :block/name page]]))
 
        (= 'page-property fe)
        (let [[k v] (rest e)

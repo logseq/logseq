@@ -5,7 +5,7 @@ const { ipcRenderer, contextBridge, shell, clipboard, webFrame } = require('elec
 const IS_MAC = process.platform === 'darwin'
 const IS_WIN32 = process.platform === 'win32'
 
-function getFilePathFromClipboard() {
+function getFilePathFromClipboard () {
   if (IS_WIN32) {
     const rawFilePath = clipboard.read('FileNameW')
     return rawFilePath.replace(new RegExp(String.fromCharCode(0), 'g'), '')
@@ -16,7 +16,7 @@ function getFilePathFromClipboard() {
   }
 }
 
-function isClipboardHasImage() {
+function isClipboardHasImage () {
   return !clipboard.readImage().isEmpty()
 }
 
@@ -25,16 +25,32 @@ contextBridge.exposeInMainWorld('apis', {
     return await ipcRenderer.invoke('main', arg)
   },
 
+  addListener: ipcRenderer.on.bind(ipcRenderer),
+  removeListener: ipcRenderer.removeListener.bind(ipcRenderer),
+  removeAllListeners: ipcRenderer.removeAllListeners.bind(ipcRenderer),
+
   on: (channel, callback) => {
     const newCallback = (_, data) => callback(data)
     ipcRenderer.on(channel, newCallback)
+  },
+
+  off: (channel, callback) => {
+    if (!callback) {
+      ipcRenderer.removeAllListeners(channel)
+    } else {
+      ipcRenderer.removeListener(channel, callback)
+    }
+  },
+
+  once: (channel, callback) => {
+    ipcRenderer.on(channel, callback)
   },
 
   checkForUpdates: async (...args) => {
     await ipcRenderer.invoke('check-for-updates', ...args)
   },
 
-  setUpdatesCallback(cb) {
+  setUpdatesCallback (cb) {
     if (typeof cb !== 'function') return
 
     const channel = 'updates-callback'
@@ -42,19 +58,19 @@ contextBridge.exposeInMainWorld('apis', {
     ipcRenderer.on(channel, cb)
   },
 
-  installUpdatesAndQuitApp() {
+  installUpdatesAndQuitApp () {
     ipcRenderer.invoke('install-updates', true)
   },
 
-  async openExternal(url, options) {
+  async openExternal (url, options) {
     await shell.openExternal(url, options)
   },
 
-  async openPath(path) {
+  async openPath (path) {
     await shell.openPath(path)
   },
 
-  showItemInFolder(fullpath) {
+  showItemInFolder (fullpath) {
     if (IS_WIN32) {
       shell.openPath(path.dirname(fullpath))
     } else {
@@ -67,7 +83,7 @@ contextBridge.exposeInMainWorld('apis', {
    *
    * @param {string} html html file with embedded state
    */
-  exportPublishAssets(html, customCSSPath, repoPath, assetFilenames) {
+  exportPublishAssets (html, customCSSPath, repoPath, assetFilenames) {
     ipcRenderer.invoke(
       'export-publish-assets',
       html,
@@ -85,7 +101,7 @@ contextBridge.exposeInMainWorld('apis', {
    * @param from?
    * @returns {Promise<void>}
    */
-  async copyFileToAssets(repoPathRoot, to, from) {
+  async copyFileToAssets (repoPathRoot, to, from) {
     if (from && fs.statSync(from).isDirectory()) {
       throw new Error('not support copy directory')
     }
@@ -120,7 +136,7 @@ contextBridge.exposeInMainWorld('apis', {
     }
   },
 
-  toggleMaxOrMinActiveWindow(isToggleMin = false) {
+  toggleMaxOrMinActiveWindow (isToggleMin = false) {
     ipcRenderer.invoke('toggle-max-or-min-active-win', isToggleMin)
   },
 
@@ -130,7 +146,7 @@ contextBridge.exposeInMainWorld('apis', {
    * @param args
    * @private
    */
-  async _callApplication(type, ...args) {
+  async _callApplication (type, ...args) {
     return await ipcRenderer.invoke('call-application', type, ...args)
   },
 

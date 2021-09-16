@@ -8,6 +8,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
             [frontend.util :refer [mac?]]))
@@ -359,6 +360,14 @@
     {:desc    "Toggle wide mode"
      :binding "t w"
      :fn      ui-handler/toggle-wide-mode!}
+    :ui/select-theme-color
+    {:desc    "Select available theme colors"
+     :binding    "t i"
+     :fn      plugin-handler/show-themes-modal!}
+    :ui/goto-plugins
+    {:desc    "Go to plugins dashboard"
+     :binding    "t p"
+     :fn      plugin-handler/goto-plugins-dashboard!}
     :editor/toggle-open-blocks
     {:desc    "Toggle open blocks (collapse or expand all blocks)"
      :binding "t o"
@@ -468,10 +477,11 @@
    ^{:doc "Others"}
    [:go/home
     :go/journals
+    :command/run
+    :command-palette/toggle
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
-    :graph/re-index
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete

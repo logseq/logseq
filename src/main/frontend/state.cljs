@@ -138,6 +138,9 @@
       :plugin/simple-commands       {}
       :plugin/selected-theme        nil
       :plugin/selected-unpacked-pkg nil
+      :plugin/marketplace-pkgs      nil
+      :plugin/marketplace-stats     nil
+      :plugin/installing            nil
       :plugin/active-readme         nil
 
       ;; pdf
@@ -157,10 +160,15 @@
                                                  #{})
       :date-picker/date nil
 
+      :youtube/players {}
+
       ;; command palette
       :command-palette/commands []
 
-      :view/components {}})))
+      :view/components {}
+
+      :debug/write-acks {}
+      })))
 
 
 (defn sub
@@ -961,11 +969,6 @@
   ([path]
    (get-in @state [:ui/paths-scroll-positions path] 0)))
 
-(defn get-journal-template
-  []
-  (when-let [repo (get-current-repo)]
-    (get-in @state [:config repo :default-templates :journals])))
-
 (defn set-today!
   [value]
   (set-state! :today value))
@@ -1374,6 +1377,14 @@
      (when (integer? value)
        value))
    2))
+
+(defn get-linked-references-collapsed-threshold
+  []
+  (or
+   (when-let [value (:ref/linked-references-collapsed-threshold (get-config))]
+     (when (integer? value)
+       value))
+   100))
 
 (defn get-events-chan
   []

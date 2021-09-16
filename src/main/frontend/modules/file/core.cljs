@@ -6,7 +6,8 @@
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.debug :as debug]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -90,12 +91,16 @@
 
 (defn push-to-write-chan
   [files & opts]
-  (let [repo (state/get-current-repo)]
-    (when-let [chan (state/get-file-write-chan)]
-      (let [chan-callback (:chan-callback opts)]
-        (async/put! chan [repo files opts])
-        (when chan-callback
-          (chan-callback))))))
+  (let [repo (state/get-current-repo)
+        chan (state/get-file-write-chan)]
+    (assert (some? chan) "File write chan shouldn't be nil")
+    (let [chan-callback (:chan-callback opts)]
+      (async/put! chan [repo files opts])
+      (prn "[DEBUG] 4. Pushed to the write channel")
+      (doseq [file (map first files)]
+        (debug/set-ack-step! file :pushed-to-channel))
+      (when chan-callback
+        (chan-callback)))))
 
 (defn- transact-file-tx-if-not-exists!
   [page ok-handler]

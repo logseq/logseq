@@ -9,7 +9,8 @@
             [frontend.handler.file :as file-handler]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.state :as state]))
 
 (defn- set-missing-block-ids!
   [content]
@@ -46,17 +47,24 @@
           (and (= "change" type)
                (not= (string/trim content) (string/trim db-content))
                (not (string/includes? path "logseq/pages-metadata.edn")))
-          (p/let [
-                  ;; save the previous content in Logseq first and commit it to avoid
-                  ;; any data-loss.
-                  _ (file-handler/alter-file repo path db-content {:re-render-root? false
-                                                                   :reset? false
-                                                                   :skip-compare? true})
-                  _ (ipc/ipc "gitCommitAll" "Save the file from Logseq's database")
-                  _ (file-handler/alter-file repo path content {:re-render-root? true
-                                                                :skip-compare? true})]
-            (set-missing-block-ids! content)
-            (db/set-file-last-modified-at! repo path mtime))
+          (when-not (and
+                     (string/includes? path (str "/" (config/get-journals-directory) "/"))
+                     (or
+                      (= (string/trim content)
+                         (string/trim (or (state/get-default-journal-template) "")))
+                      (= (string/trim content) "-")
+                      (= (string/trim content) "*")))
+            (p/let [
+                    ;; save the previous content in Logseq first and commit it to avoid
+                    ;; any data-loss.
+                    _ (file-handler/alter-file repo path db-content {:re-render-root? false
+                                                                     :reset? false
+                                                                     :skip-compare? true})
+                    _ (ipc/ipc "gitCommitAll" "Save the file from Logseq's database")
+                    _ (file-handler/alter-file repo path content {:re-render-root? true
+                                                                  :skip-compare? true})]
+              (set-missing-block-ids! content)
+              (db/set-file-last-modified-at! repo path mtime)))
 
           (contains? #{"add" "change" "unlink"} type)
           nil

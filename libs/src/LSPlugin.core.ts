@@ -144,6 +144,7 @@ type PluginLocalOptions = {
   mode: 'shadow' | 'iframe'
   settings?: PluginSettings
   logger?: PluginLogger
+  effect?: boolean
 
   [key: string]: any
 }
@@ -357,11 +358,10 @@ class PluginLocal
 
   async _setupUserSettings () {
     const { _options } = this
-    const key = _options.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_' + this.id
     const logger = _options.logger = new PluginLogger('Loader')
 
     try {
-      const [userSettingsFilePath, userSettings] = await invokeHostExportedApi('load_plugin_user_settings', key)
+      const [userSettingsFilePath, userSettings] = await invokeHostExportedApi('load_plugin_user_settings', this.id)
       this._dotSettingsFile = userSettingsFilePath
 
       const settings = _options.settings = new PluginSettings(userSettings)
@@ -381,7 +381,7 @@ class PluginLocal
         }
 
         if (a) {
-          invokeHostExportedApi(`save_plugin_user_settings`, key, a)
+          invokeHostExportedApi(`save_plugin_user_settings`, this.id, a)
         }
       })
     } catch (e) {
@@ -399,13 +399,14 @@ class PluginLocal
   }
 
   _resolveResourceFullUrl (filePath: string, localRoot?: string) {
+    if (!filePath?.trim()) return
     localRoot = localRoot || this._localRoot
     const reg = /^(http|file)/
     if (!reg.test(filePath)) {
       const url = path.join(localRoot, filePath)
       filePath = reg.test(url) ? url : (PROTOCOL_FILE + url)
     }
-    return this.isInstalledInDotRoot ?
+    return (!this.options.effect && this.isInstalledInDotRoot) ?
       convertToLSPResource(filePath, this.dotPluginsRoot) : filePath
   }
 
@@ -430,7 +431,9 @@ class PluginLocal
     }
 
     // Pick legal attrs
-    ['name', 'author', 'repository', 'version', 'description'].forEach(k => {
+    ['name', 'author', 'repository', 'version',
+      'description', 'repo', 'title', 'effect'
+    ].forEach(k => {
       this._options[k] = pkg[k]
     })
 
@@ -447,21 +450,26 @@ class PluginLocal
       }
     }
 
+    const title = logseq.title || pkg.title
     const icon = logseq.icon || pkg.icon
 
-    if (icon) {
-      this._options.icon = this._resolveResourceFullUrl(icon)
-    }
+    this._options.title = title
+    this._options.icon = icon &&
+      this._resolveResourceFullUrl(icon)
 
     // TODO: strategy for Logseq plugins center
-    if (logseq.id) {
-      this._id = logseq.id
+    if (this.isInstalledInDotRoot) {
+      this._id = path.basename(localRoot)
     } else {
-      logseq.id = this.id
-      try {
-        await invokeHostExportedApi('save_plugin_config', url, { ...pkg, logseq })
-      } catch (e) {
-        debug('[save plugin ID Error] ', e)
+      if (logseq.id) {
+        this._id = logseq.id
+      } else {
+        logseq.id = this.id
+        try {
+          await invokeHostExportedApi('save_plugin_config', url, { ...pkg, logseq })
+        } catch (e) {
+          debug('[save plugin ID Error] ', e)
+        }
       }
     }
 
@@ -609,7 +617,13 @@ class PluginLocal
   }
 
   async reload () {
-    debug('TODO: reload plugin', this.id)
+    if (this.pending) {
+      return
+    }
+
+    await this.unload()
+    await this.load()
+    this._ctx.emit('reloaded', this)
   }
 
   /**
@@ -624,7 +638,7 @@ class PluginLocal
       await this.unload()
 
       if (this.isInstalledInDotRoot) {
-        debug('TODO: remove plugin local files from user home root :)')
+        this._ctx.emit('unlink-plugin', this.id)
       }
 
       return
@@ -648,6 +662,7 @@ class PluginLocal
       this.emit('unloaded')
     } catch (e) {
       debug('[plugin unload Error]', e)
+      return false
     } finally {
       this._status = PluginLocalLoadStatus.UNLOADED
     }
@@ -773,7 +788,7 @@ class PluginLocal
  */
 class LSPluginCore
   extends EventEmitter<'beforeenable' | 'enabled' | 'beforedisable' | 'disabled' | 'registered' | 'error' | 'unregistered' |
-    'theme-changed' | 'theme-selected' | 'settings-changed'>
+    'theme-changed' | 'theme-selected' | 'settings-changed' | 'unlink-plugin' | 'reloaded'>
   implements ILSPluginThemeManager {
 
   private _isRegistering = false
@@ -782,6 +797,7 @@ class LSPluginCore
   private _userPreferences: Partial<UserPreferences> = {}
   private _registeredThemes = new Map<PluginLocalIdentity, Array<ThemeOptions>>()
   private _registeredPlugins = new Map<PluginLocalIdentity, PluginLocal>()
+  private _currentTheme: { dis: () => void, pid: PluginLocalIdentity, opt: ThemeOptions }
 
   /**
    * @param _options
@@ -933,8 +949,12 @@ class LSPluginCore
     }
 
     for (const identity of plugins) {
-      const p = this.ensurePlugin(identity)
-      await p.reload()
+      try {
+        const p = this.ensurePlugin(identity)
+        await p.reload()
+      } catch (e) {
+        debug(e)
+      }
     }
   }
 
@@ -1065,9 +1085,22 @@ class LSPluginCore
   }
 
   async selectTheme (opt?: ThemeOptions, effect = true): Promise<void> {
-    setupInjectedTheme(opt?.url)
+    // clear current
+    if (this._currentTheme) {
+      this._currentTheme.dis?.()
+    }
+
+    const disInjectedTheme = setupInjectedTheme(opt?.url)
     this.emit('theme-selected', opt)
-    effect && this.saveUserPreferences({ theme: opt })
+    effect && await this.saveUserPreferences({ theme: opt?.url ? opt : null })
+    if (opt?.url) {
+      this._currentTheme = {
+        dis: () => {
+          disInjectedTheme()
+          effect && this.saveUserPreferences({ theme: null })
+        }, opt, pid: opt.pid
+      }
+    }
   }
 
   async unregisterTheme (id: PluginLocalIdentity): Promise<void> {
@@ -1076,6 +1109,12 @@ class LSPluginCore
     if (!this._registeredThemes.has(id)) return
     this._registeredThemes.delete(id)
     this.emit('theme-changed', this.themes, { id })
+    if (this._currentTheme?.pid == id) {
+      this._currentTheme.dis?.()
+      this._currentTheme = null
+      // reset current theme
+      this.emit('theme-selected', null)
+    }
   }
 }
 

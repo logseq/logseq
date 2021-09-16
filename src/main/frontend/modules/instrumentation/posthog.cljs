@@ -2,7 +2,8 @@
   (:require [frontend.config :as cfg]
             [frontend.util :as util]
             [frontend.version :refer [version]]
-            ["posthog-js" :as posthog]))
+            ["posthog-js" :as posthog]
+            [cljs-bean.core :as bean]))
 
 (def ^:const token "qUumrWobEk2dKiKt1b32CMEZy8fgNS94rb_Bq4WutPA")
 (def ^:const masked "masked")
@@ -16,7 +17,8 @@
      :schema_ver 0
      ;; hack, did not find ways to hack data on-the-fly with posthog-js
      :$ip masked
-     :$current_url masked})))
+     :$current_url masked
+     :$pathname masked})))
 
 (def config
   {:api_host "https://app.posthog.com"
@@ -36,6 +38,13 @@
     (do
       (init)
       (posthog/opt_in_capturing))))
+
+(defn capture [id data]
+  (try
+    (posthog/capture (str id) (bean/->js data))
+    (catch js/Error _e
+      ;; opt out or network issues
+      nil)))
 
 (comment
   (posthog/debug))

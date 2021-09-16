@@ -46,7 +46,7 @@
        (throw e)))))
 
 (defn check-for-updates
-  [{:keys           [repo ^js ^js win]
+  [{:keys           [repo ^js win]
     [auto-download] :args}]
   (let [emit (fn [type payload]
                (.. win -webContents

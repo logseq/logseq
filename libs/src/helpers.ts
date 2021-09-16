@@ -168,6 +168,7 @@ export function invokeHostExportedApi (
   method: string,
   ...args: Array<any>
 ) {
+  method = method?.replace(/^[_$]+/, '')
   const method1 = snakeCase(method)
 
   // @ts-ignore
@@ -335,7 +336,11 @@ export function setupInjectedTheme (url?: string) {
   document.head.appendChild(link)
 
   return (injectedThemeEffect = () => {
-    document.head.removeChild(link)
+    try {
+      document.head.removeChild(link)
+    } catch (e) {
+      console.error(e)
+    }
     injectedThemeEffect = null
   })
 }

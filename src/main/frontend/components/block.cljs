@@ -26,6 +26,7 @@
             [frontend.extensions.sci :as sci]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.zotero :as zotero]
+            [frontend.extensions.video.youtube :as youtube]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.components.plugins :as plugins]
@@ -1084,17 +1085,11 @@
                                     :else
                                     (nth (util/safe-re-find YouTube-regex url) 5))]
               (when-not (string/blank? youtube-id)
-                (let [width (min (- (util/get-width) 96)
-                                 560)
-                      height (int (* width (/ 315 560)))]
-                  [:iframe
-                   {:allow-full-screen "allowfullscreen"
-                    :allow
-                    "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-                    :frame-border "0"
-                    :src (str "https://www.youtube.com/embed/" youtube-id)
-                    :height height
-                    :width width}])))))
+                (youtube/youtube-video youtube-id)))))
+
+        (= name "youtube-timestamp")
+        (when-let [seconds (first arguments)]
+          (youtube/timestamp seconds))
 
         (= name "tutorial-video")
         (tutorial-video)
@@ -2447,7 +2442,7 @@
 (rum/defc src-cp < rum/static
   [config options html-export?]
   (when options
-    (let [{:keys [lines language options _]} options
+    (let [{:keys [lines language]} options
           attr (when language
                  {:data-lang language})
           code (join-lines lines)]

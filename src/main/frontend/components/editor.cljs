@@ -249,17 +249,6 @@
                       command (:command (first input-option))]
                   (on-submit command @input-value pos))
                 (reset! input-value nil))))})))
-  {:did-update
-   (fn [state]
-     (when-let [show-input (state/get-editor-show-input)]
-       (let [id (str "modal-input-"
-                     (name (:id (first show-input))))
-             first-input (gdom/getElement id)]
-         (when (and first-input
-                    (not (d/has-class? first-input "focused")))
-           (.focus first-input)
-           (d/add-class! first-input "focused"))))
-     state)}
   [state id on-submit]
   (when-let [input-option (state/sub :editor/show-input)]
     (let [{:keys [pos]} (util/react *slash-caret-pos)
@@ -267,7 +256,7 @@
       (when (seq input-option)
         (let [command (:command (first input-option))]
           [:div.p-2.mt-2.rounded-md.shadow-sm.bg-base-2
-           (for [{:keys [id placeholder type] :as input-item} input-option]
+           (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
              [:div.my-3
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
@@ -279,7 +268,9 @@
                                    (swap! input-value assoc id (util/evalue e)))
                   :auto-complete (if (util/chrome?) "chrome-off" "off")}
                   placeholder
-                  (assoc :placeholder placeholder))
+                  (assoc :placeholder placeholder)
+                  autoFocus
+                  (assoc :auto-focus true))
                 (dissoc input-item :id))]])
            (ui/button
             "Submit"

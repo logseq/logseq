@@ -55,6 +55,7 @@ export type UIOptions = UIPathOptions | UISlotOptions
 
 export interface LSPluginPkgConfig {
   id: PluginLocalIdentity
+  title: string
   mode: 'shadow' | 'iframe'
   themes: Array<ThemeOptions>
   icon: string

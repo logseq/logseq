@@ -5,6 +5,7 @@
     ["electron" :refer [^js app] :as electron]
     [cljs.reader :as reader]))
 
+(defonce dot-root (.join path (.getPath app "home") ".logseq"))
 (defonce cfg-root (.getPath app "userData"))
 (defonce cfg-path (.join path cfg-root "configs.edn"))
 

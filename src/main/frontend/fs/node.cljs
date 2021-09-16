@@ -9,7 +9,8 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.debug :as debug]))
 
 (defn concat-path
   [dir path]
@@ -64,12 +65,20 @@
          (not (contains? #{"excalidraw" "edn"} ext))
          (not (string/includes? path "/.recycle/"))
          (zero? pending-writes))
-        (state/pub-event! [:file/not-matched-from-disk path disk-content content])
+        (do
+          (when (util/electron?)
+            (debug/set-ack-step! path :saved-successfully)
+            (debug/ack-file-write! path))
+          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
 
         :else
         (->
          (p/let [result (ipc/ipc "writeFile" path content)
                  mtime (gobj/get result "mtime")]
+           (prn "[DEBUG] 5. The file was saved successfully!" {:path path})
+           (when (util/electron?)
+             (debug/set-ack-step! path :saved-successfully)
+             (debug/ack-file-write! path))
            (db/set-file-last-modified-at! repo path mtime)
            (p/let [content (if (encrypt/encrypted-db? (state/get-current-repo))
                              (encrypt/decrypt content)

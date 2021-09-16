@@ -11,9 +11,18 @@ module.exports = {
   darkMode: 'class',
   theme: {
     extend: {
+      animation: {
+        'spin-reverse': 'spin 2s linear infinite reverse',
+      },
       spacing: {
         '128': '32rem',
         '144': '36rem'
+      },
+      scale: {
+        '200': '2',
+        '250': '2.5',
+        '300': '3',
+        '400': '4',
       }
     },
     colors: {
@@ -40,11 +49,6 @@ module.exports = {
       yellow: colors.amber,
       orange: colors.orange,
       rose: colors.rose
-    },
-    extend: {
-      animation: {
-        'spin-reverse': 'spin 2s linear infinite reverse',
-      }
     }
   }
 }

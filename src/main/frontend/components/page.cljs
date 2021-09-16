@@ -240,7 +240,7 @@
            :on-click (fn []
                        (let [value (string/trim @input)]
                          (when-not (string/blank? value)
-                           (page-handler/rename! page-name value)
+                           (page-handler/rename! (or title page-name) value)
                            (state/close-modal!))))}
           (t :submit)]]
         [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
@@ -366,6 +366,7 @@
                               page-name)]
                    (db/get-page-format page))
           journal? (db/journal-page? page-name)
+          fmt-journal? (boolean (date/journal-title->int page-name))
           sidebar? (:sidebar? option)]
       (rum/with-context [[t] i18n/*tongue-context*]
         (let [route-page-name path-page-name
@@ -387,10 +388,14 @@
                       (= page-name (string/lower-case (date/journal-name))))
               developer-mode? (state/sub [:ui/developer-mode?])
               public? (true? (:public properties))]
-          [:div.flex-1.page.relative (if (seq (:block/tags page))
-                                       (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
-                                         {:data-page-tags (text/build-data-value page-names)})
-                                       {})
+          [:div.flex-1.page.relative
+           (merge (if (seq (:block/tags page))
+                    (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
+                      {:data-page-tags (text/build-data-value page-names)})
+                    {})
+
+             {:class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+
            [:div.relative
             (when (and (not sidebar?)
                        (not block?))
@@ -416,7 +421,8 @@
                                   page-name
                                   path-page-name))]
                     (if (pdf-assets/hls-file? title)
-                      (pdf-assets/human-hls-filename-display title) title))]]]
+                      (pdf-assets/human-hls-filename-display title)
+                      (if fmt-journal? (date/journal-title->custom-format title) title)))]]]
                (when (not config/publishing?)
                  [:div.flex.flex-row
                   (when plugin-handler/lsp-enabled?

@@ -112,9 +112,7 @@
                      [:div#sidebar-nav-wrapper.flex-col.pt-4.hidden.sm:block
                       {:style {:flex (if (state/get-left-sidebar-open?)
                                        "0 1 20%"
-                                       "0 0 0px")
-                               :border-right (str "1px solid "
-                                                  (if white? "#f0f8ff" "#073642"))}}
+                                       "0 0 0px")}}
                       (when (state/sub :ui/left-sidebar-open?)
                         (sidebar-nav route-match nil))]
                      [:div#main-content-container.w-full.flex.justify-center
@@ -319,7 +317,8 @@
         default-home (get-default-home-if-valid)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (theme/container
-       {:theme         theme
+       {:t             t
+        :theme         theme
         :route         route-match
         :current-repo  current-repo
         :nfs-granted?  granted?

@@ -3,7 +3,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.components.sidebar :as sidebar]
-            [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.plugin :refer [lsp-enabled?] :as plugin-handler]
             [frontend.context.i18n :as i18n]))
 
 (rum/defc route-view

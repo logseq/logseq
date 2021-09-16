@@ -239,29 +239,23 @@
           (chan-callback))))))
 
 (defn alter-files-handler!
-  [repo files {:keys [add-history? update-status? finish-handler reset? chan]
-               :or {add-history? true
-                    update-status? true
-                    reset? false}} file->content]
+  [repo files {:keys [finish-handler chan]} file->content]
   (let [write-file-f (fn [[path content]]
                        (let [original-content (get file->content path)]
                          (-> (p/let [_ (nfs/check-directory-permission! repo)]
                                (fs/write-file! repo (config/get-repo-dir repo) path content
                                                {:old-content original-content}))
                              (p/catch (fn [error]
+                                        (state/pub-event! [:instrument {:type :write-file/failed
+                                                                        :payload {:path path
+                                                                                  :error error}}])
                                         (log/error :write-file/failed {:path path
                                                                        :content content
                                                                        :error error}))))))
         finish-handler (fn []
                          (when finish-handler
                            (finish-handler))
-                         (ui-handler/re-render-file!)
-                         ;; (when add-history?
-                         ;;   (let [files-tx (mapv (fn [[path content]]
-                         ;;                          (let [original-content (get file->content path)]
-                         ;;                            [path original-content content])) files)]
-                         ;;     (history/add-history! repo files-tx)))
-                         )]
+                         (ui-handler/re-render-file!))]
     (-> (p/all (map write-file-f files))
         (p/then (fn []
                   (finish-handler)
@@ -291,7 +285,6 @@
      (p/catch (fn [err]
                 (js/console.error "error: " err))))))
 
-;; TODO: batch writes, how to deal with file history?
 (defn run-writes-chan!
   []
   (let [chan (state/get-file-write-chan)]

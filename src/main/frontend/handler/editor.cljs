@@ -362,7 +362,9 @@
                              :else
                              (let [content' (str (config/get-block-pattern format) (if block-with-title? " " "\n") content)]
                                [content content']))
-        block (assoc block :block/content content')
+        block (assoc block
+                     :block/content content'
+                     :block/format format)
         block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
         block (block/parse-block block)
         block (if (and first-block? (:block/pre-block? block))
@@ -1899,14 +1901,19 @@
     (when @*auto-save-timeout
       (js/clearTimeout @*auto-save-timeout))
     (mark-last-input-time! repo)
-    (reset! *auto-save-timeout
-            (js/setTimeout
-             (fn []
-               (when (state/input-idle? repo)
-                 (state/set-editor-op! :auto-save)
-                 (save-current-block! {})
-                 (state/set-editor-op! nil)))
-             500))))
+    (when-not
+        (and
+         (= (:db/id (:block/parent block))
+            (:db/id (:block/page block)))            ; don't auto-save for page's properties block
+         (get-in block [:block/properties :title]))
+      (reset! *auto-save-timeout
+              (js/setTimeout
+               (fn []
+                 (when (state/input-idle? repo)
+                   (state/set-editor-op! :auto-save)
+                   (save-current-block! {})
+                   (state/set-editor-op! nil)))
+               500)))))
 
 (defn handle-last-input []
   (let [input           (state/get-input)

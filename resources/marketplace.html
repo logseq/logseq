@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Logseq Marketplace</title>
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/4.0.0/github-markdown.min.css"
+        integrity="sha512-Oy18vBnbSJkXTndr2n6lDMO5NN31UljR8e/ICzVPrGpSud4Gkckb8yUpqhKuUNoE+o9gAb4O/rAxxw1ojyUVzg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"/>
+  <style>
+    html, body {
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+      font-family: sans-serif;
+      width: 100%;
+      height: 100%;
+    }
+
+    body {
+      display: flex;
+    }
+
+    #app {
+      display: flex;
+      justify-content: center;
+      flex: 1;
+      width: 900px;
+      min-height: 100%;
+      padding: 30px;
+      margin: 0 auto;
+      color: #333;
+    }
+
+    #app > strong {
+      padding-top: 30vh;
+      font-weight: 400;
+    }
+
+    pre {
+      max-width: 800px;
+    }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="./js/marked.min.js"></script>
+<script>
+  ;(async function () {
+    const app = document.getElementById('app')
+    const url = new URL(location.href)
+    const setMsg = (msg) => app.innerHTML = `<strong>${msg}</strong>`
+    const repo = url.searchParams.get('repo')
+    if (!repo) {
+      return setMsg('Repo parameter not found!')
+    }
+
+    const setContent = (content) => app.innerHTML = `<main class="markdown-body">${content}</main>`
+    const endpoint = (repo, branch, file) => `https://raw.githubusercontent.com/${repo}/${branch}/${file}`
+
+    let content = ''
+    let points = [
+      endpoint(repo, 'master', 'README.md'), endpoint(repo, 'main', 'README.md'),
+      endpoint(repo, 'master', 'readme.md'), endpoint(repo, 'main', 'readme.md')]
+    let readme
+
+    setMsg('Loading ...')
+
+    for (let url of points) {
+      try {
+        const res = await fetch(url)
+        if (res.status !== 200) {
+          throw new Error(res.statusText)
+        }
+        content = await res.text()
+        readme = url
+        break
+      } catch (e) {
+        console.debug('Error:', url, e.message)
+      }
+    }
+
+    const fixLink = (link) => readme.replace(/README\.md$/i, link)
+    const isRelative = (href) => href && !href.startsWith('http') && !!href.match(/^([.\/]+|[^\/]+)/) && href.replace(/^[.\/]+/, '')
+    marked.use({
+      renderer: {
+        link (href, title, text) {
+          return `<a href="${href}" target="_blank" title="${title}">${text}</a>`
+        },
+
+        image (href, title, text) {
+          let link = isRelative(href)
+
+          if (link) {
+            link = fixLink(link)
+            return `<img style="max-width: 100%;" src="${link}" alt="${title}" />`
+          }
+
+          return false
+        }
+      }
+    })
+
+    content = marked(content).replace('src="./', `src="${fixLink('')}`)
+    setContent(content)
+  }())
+</script>
+</body>
+</html>

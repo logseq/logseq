@@ -7,6 +7,7 @@
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.extensions.video.youtube :as youtube]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -30,7 +31,8 @@
 (def link-steps [[:editor/input (str slash "link")]
                  [:editor/show-input [{:command :link
                                        :id :link
-                                       :placeholder "Link"}
+                                       :placeholder "Link"
+                                       :autoFocus true}
                                       {:command :link
                                        :id :label
                                        :placeholder "Label"}]]])
@@ -146,7 +148,7 @@
                  (util/format "\n#+END_%s" (string/upper-case type)))
          template (str
                    left
-                   (if optional (str (if (= format :markdown) "" " ") optional) "")
+                   (if optional (str " " optional) "")
                    "\n"
                    right)
          backward-pos (if (= type "src")
@@ -268,6 +270,8 @@
 
      ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
                                                             :backward-pos 2}]]]
+
+     ["Embed Youtube Timestamp" [[:youtube/insert-timestamp]]]
 
      ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
                                                         :backward-pos 2}]]]
@@ -562,6 +566,11 @@
 
 (defmethod handle-step :editor/show-zotero [[_]]
   (state/set-editor-show-zotero! true))
+
+(defmethod handle-step :youtube/insert-timestamp [[_]]
+  (let [input-id (state/get-edit-input-id)
+        macro (youtube/gen-youtube-ts-macro)]
+    (insert! input-id macro {})))
 
 (defmethod handle-step :editor/show-date-picker [[_ type]]
   (if (and
