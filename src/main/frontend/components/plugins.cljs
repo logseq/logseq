@@ -229,7 +229,7 @@
                (t :plugin/uninstall)]]]]
 
            [:div.r.flex.items-center
-            (if (not disabled)
+            (if (and (not iir) (not disabled))
               [:a.btn
                {:on-click #(js-invoke js/LSPluginCore "reload" id)}
                (t :plugin/reload)])
