@@ -68,7 +68,7 @@
                               (state/set-modal! nil))}
               [:section
                [:strong.block (when plg (str (:name plg) " / ")) (:name opt)]
-               [:small.opacity-30.italic (:description opt)]]
+               [:small.opacity-50.italic (:description opt)]]
               [:small.flex-shrink-0.flex.items-center.opacity-10
                (if current-selected (svg/check 28))]]))
          themes)])))
@@ -164,9 +164,9 @@
         [:h3.head.text-xl.font-bold.pt-1.5
 
          [:span name]
-         (if (not market?) [:sup.inline-block.px-1.text-xs.opacity-30 version])]
+         (if (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
-        [:div.desc.text-xs.opacity-60
+        [:div.desc.text-xs.opacity-70
          [:p description]
          ;;[:small (js/JSON.stringify (bean/->js settings))]
          ]
@@ -308,38 +308,41 @@
 
       [:div.cp__plugins-installed
        [:div.mb-4.flex.items-center.justify-between
-        (ui/button
-          (t :plugin/load-unpacked)
-          :intent "logseq"
-          :on-click plugin-handler/load-unpacked-plugin)
-        (unpacked-plugin-loader selected-unpacked-pkg)
+
+        [:div.flex.align-items
+         (ui/tippy {:html [:div (t :plugin/unpacked-tips)]
+                    :arrow true}
+          (ui/button
+            (t :plugin/load-unpacked)
+            :intent "logseq"
+            :on-click plugin-handler/load-unpacked-plugin))
+
+         (unpacked-plugin-loader selected-unpacked-pkg)]
 
         (when (util/electron?)
           [:div.flex.align-items
+           ;; (ui/button
+           ;;   (t :plugin/open-preferences)
+           ;;   :intent "logseq"
+           ;;   :on-click (fn []
+           ;;               (p/let [root (plugin-handler/get-ls-dotdir-root)]
+           ;;                 (js/apis.openPath (str root "/preferences.json")))))
            (ui/button
-             (t :plugin/open-preferences)
+             (t :plugin/contribute)
+             :href "https://github.com/logseq/marketplace"
              :intent "logseq"
-             :on-click (fn []
-                         (p/let [root (plugin-handler/get-ls-dotdir-root)]
-                           (js/apis.openPath (str root "/preferences.json")))))
+             :target "_blank")
 
-           (ui/button
-             [:span.flex.items-center
-              [:span.pr-1
-               (ui/Tippy
-                 {:html     [:small.inline-flex.py-2.pr-2
-                             {:style {:max-width "180px" :text-align "left" :justify-content "flex-start"}}
-                             (t :plugin/marketplace-tips)]
-                  :arrow    true
-                  :distance 18
-                  :offset   -25
-                  :theme    "transparent"}
-                 (svg/info))]
-
-              (t :plugin/restart)]
-             :class "ml-2"
-             :intent "logseq"
-             :on-click #(plugin-handler/invoke-exported-api "relaunch"))])]
+           (ui/tippy
+            {:html     [:small.inline-flex.py-2.pr-2
+                        {:style {:max-width "180px" :text-align "left" :justify-content "flex-start"}}
+                        (t :plugin/marketplace-tips)]
+             :arrow    true
+             :distance 18
+             :offset   -25
+             :interactive true
+             :theme    "transparent"}
+            (svg/info))])]
 
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [[_ item] installed-plugins]

@@ -477,10 +477,11 @@
    ^{:doc "Others"}
    [:go/home
     :go/journals
+    :command/run
+    :command-palette/toggle
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
-    :graph/re-index
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete

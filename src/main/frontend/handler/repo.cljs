@@ -100,7 +100,7 @@
            title (date/today)
            file-name (date/journal-title->default title)
            default-content (util/default-content-with-title format)
-           template (state/get-journal-template)
+           template (state/get-default-journal-template)
            template (when (and template
                              (not (string/blank? template)))
                       template)

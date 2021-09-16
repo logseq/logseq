@@ -188,7 +188,6 @@
            (fn [{:keys [toggle-fn]}]
              [:a#repo-switch.fade-link.block.pr-2.whitespace-nowrap {:on-click toggle-fn}
               [:span
-               [:span.repo-plus svg/plus]
                (let [repo-name (get-repo-name current-repo)
                      repo-name (if (util/electron?)
                                  (last
