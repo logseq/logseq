@@ -196,8 +196,8 @@
          [(t :help/terms) "https://logseq.com/blog/terms"]
          [(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
          [discord-with-icon "https://discord.gg/KpN4eHY"]]]
-    (map (fn [item]
-           [:li [:a {:href (second item) :target "_blank"} (first item)]]) list)))
+    (map (fn [[title href]]
+           [:li [:a {:href href :target "_blank"} title]]) list)))
 
 (defn help
   []
@@ -222,32 +222,37 @@
        (t :help/markdown-syntax)
        [:table
         [:tbody
-         [:tr [:td (str "**" (t :bold) "**")] [:td.text-right [:b (t :bold)]]]
-         [:tr [:td (str "_" (t :italics) "_")] [:td.text-right [:i (t :italics)]]]
-         [:tr [:td (str "~~" (t :strikethrough) "~~")] [:td.text-right [:del (t :strikethrough)]]]
-         [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
-         [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
-                                                    "help-latex"
-                                                    "E = mc^2" true false)]]
-         [:tr [:td (str "`" (t :code) "`")] [:td.text-right [:code (t :code)]]]
-         [:tr [:td [:pre "```clojure
-  (println \"Hello world!\")
-```"]] [:td.text-right
-        (highlight/highlight
-         "help-highlight"
-         {:data-lang "clojure"}
-         "(println \"Hello world!\")")]]
-         [:tr [:td "[label](https://www.example.com)"]
-          [:td.text-right
-           [:a {:href "https://www.example.com" :target "_blank"}
-            "label"]]]
-         [:tr [:td "![image](https://asset.logseq.com/static/img/logo.png)"]
-          [:td.text-right
-           [:img {:style {:float "right"
-                          :width 64
-                          :height 64}
-                  :src "https://asset.logseq.com/static/img/logo.png"
-                  :alt "image"}]]]]]]
+
+         (let [list [[(str "**" (t :bold) "**")
+                      [:b (t :bold)]]
+
+                     [(str "_" (t :italics) "_")
+                      [:i (t :italics)]]
+
+                     [(str "~~" (t :strikethrough) "~~")
+                      [:del (t :strikethrough)]]
+
+                     [(str "^^" (t :highlight) "^^")
+                      [:mark (t :highlight)]]
+
+                     ["$$E = mc^2$$"
+                      (latex/latex "help-latex" "E = mc^2" true false)]
+
+                     [(str "`" (t :code) "`")
+                      [:code (t :code)]]
+
+                     ["```clojure\n  (println \"Hello world!\")\n```"
+                      (highlight/highlight "help-highlight" {:data-lang "clojure"} "(println \"Hello world!\")")]
+
+                     ["[label](https://www.example.com)"
+                      [:a {:href "https://www.example.com" :target "_blank"} "label"]]
+
+                     ["![image](https://asset.logseq.com/static/img/logo.png)"
+                      [:img {:style {:float "right" :width 64 :height 64}
+                             :src "https://asset.logseq.com/static/img/logo.png"
+                             :alt "image"}]]]]
+
+           (map (fn [[trigger shortcut]] [:tr [:td [:pre trigger]] [:td.text-right shortcut]]) list))]]]
 
       [:li
        (t :help/org-mode-syntax)
