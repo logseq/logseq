@@ -293,38 +293,41 @@
     (rum/with-context [[t] i18n/*tongue-context*]
      (let [input (::input state)]
        [:div.cp__palette.cp__palette-main
-        [:input.cp__palette-input.w-full
-         {:type        "text"
-          :auto-focus   true
-          :placeholder (case search-mode
-                         :graph
-                         (t :graph-search)
-                         :page
-                         (t :page-search)
-                         (t :search))
-          :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-          :default-value ""
-          :on-change (fn [e]
-                       (when @search-timeout
-                         (js/clearTimeout @search-timeout))
-                       (let [value (util/evalue e)]
-                         (if (string/blank? value)
-                           (search-handler/clear-search! false)
-                           (let [search-mode (state/get-search-mode)
-                                 opts (if (= :page search-mode)
-                                        (let [current-page (or (state/get-current-page)
-                                                               (date/today))]
-                                          {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
-                                        {})]
-                             (state/set-q! value)
-                             (reset! search-timeout
-                                     (js/setTimeout
-                                      (fn []
-                                        (if (= :page search-mode)
-                                          (search-handler/search (state/get-current-repo) value opts)
-                                          (search-handler/search (state/get-current-repo) value)))
-                                      timeout))))))}]
-        [:div.w-full
+
+        [:div.input-wrap
+         [:input.cp__palette-input.w-full
+          {:type          "text"
+           :auto-focus    true
+           :placeholder   (case search-mode
+                            :graph
+                            (t :graph-search)
+                            :page
+                            (t :page-search)
+                            (t :search))
+           :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+           :default-value ""
+           :on-change     (fn [e]
+                            (when @search-timeout
+                              (js/clearTimeout @search-timeout))
+                            (let [value (util/evalue e)]
+                              (if (string/blank? value)
+                                (search-handler/clear-search! false)
+                                (let [search-mode (state/get-search-mode)
+                                      opts (if (= :page search-mode)
+                                             (let [current-page (or (state/get-current-page)
+                                                                    (date/today))]
+                                               {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
+                                             {})]
+                                  (state/set-q! value)
+                                  (reset! search-timeout
+                                          (js/setTimeout
+                                            (fn []
+                                              (if (= :page search-mode)
+                                                (search-handler/search (state/get-current-repo) value opts)
+                                                (search-handler/search (state/get-current-repo) value)))
+                                            timeout))))))}]]
+
+        [:div.search-results-wrap
          (search-auto-complete search-result search-q false)]]))))
 
 (rum/defcs search < rum/reactive
