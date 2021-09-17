@@ -11,7 +11,7 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem] :as electron]
+            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session] :as electron]
             ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
             [electron.state :as state]
@@ -61,6 +61,22 @@
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
     (.manage win-state win)
+    (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
+      (clj->js {:urls (array "*://*.youtube.com/*")})
+      (fn [^js details callback]
+        (let [url (.-url details)
+              urlObj (js/URL. url)
+              origin (.-origin urlObj)
+              requestHeaders (.-requestHeaders details)]
+          (if (and
+                (.hasOwnProperty requestHeaders "referer")
+                (not-empty (.-referer requestHeaders)))
+              (callback #js {:cancel false
+                             :requestHeaders requestHeaders})
+              (do
+                (set! (.-referer requestHeaders) origin)
+                (callback #js {:cancel false
+                               :requestHeaders requestHeaders}))))))
     (.loadURL win url)
     (when dev? (.. win -webContents (openDevTools)))
     win))
