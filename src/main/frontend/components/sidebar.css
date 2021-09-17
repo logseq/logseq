@@ -170,6 +170,7 @@
   .non-block-editor textarea,
   pre,
   pre.code {
+    margin: 0;
     background: var(--ls-right-sidebar-code-bg-color);
   }
 
