@@ -31,7 +31,7 @@
             _ (js/console.debug "[Release Latest] " endpoint)
             res (bean/->clj res)
             version (:tag_name res)
-            asset (first (filter #(= "application/zip" (:content_type %)) (:assets res)))]
+            asset (first (filter #(string/ends-with? (:name %) ".zip") (:assets res)))]
 
       [(if (and (nil? asset) theme)
          (if-let [zipball (:zipball_url res)]

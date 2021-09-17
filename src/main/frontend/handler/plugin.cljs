@@ -126,7 +126,7 @@
                              (p/then
                                (.reload pl)
                                #(do
-                                  (if theme (select-a-plugin-theme id))
+                                  ;;(if theme (select-a-plugin-theme id))
                                   (notifications/show!
                                     (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success))))
 
@@ -214,8 +214,9 @@
   (swap! state/state assoc-in [:plugin/installed-ui-items (keyword pid)] []))
 
 (defn unregister-plugin-themes
-  [pid]
-  (js/LSPluginCore.unregisterTheme pid))
+  ([pid] (unregister-plugin-themes pid true))
+  ([pid effect]
+   (js/LSPluginCore.unregisterTheme (name pid) effect)))
 
 (defn select-a-plugin-theme
   [pid]
@@ -335,6 +336,13 @@
   (p/then
     (p/let [root (get-ls-dotdir-root)
             _ (.setupPluginCore js/LSPlugin (bean/->js {:localUserConfigRoot root :dotConfigRoot root}))
+
+            clear-commands! (fn [pid]
+                              ;; commands
+                              (unregister-plugin-slash-command pid)
+                              (unregister-plugin-simple-command pid)
+                              (unregister-plugin-ui-items pid))
+
             _ (doto js/LSPluginCore
                 (.on "registered"
                      (fn [^js pl]
@@ -349,25 +357,24 @@
                 (.on "unregistered" (fn [pid]
                                       (let [pid (keyword pid)]
                                         ;; effects
-                                        (unregister-plugin-themes (name pid))
+                                        (unregister-plugin-themes pid)
                                         ;; plugins
                                         (swap! state/state md/dissoc-in [:plugin/installed-plugins pid])
                                         ;; commands
-                                        (unregister-plugin-slash-command pid)
-                                        (unregister-plugin-simple-command pid)
-                                        (unregister-plugin-ui-items pid))))
+                                        (clear-commands!))))
 
                 (.on "unlink-plugin" (fn [pid]
                                        (let [pid (keyword pid)]
                                          (ipc/ipc "uninstallMarketPlugin" (name pid)))))
 
+                (.on "beforereload" (fn [^js pl]
+                                      (let [pid (.-id pl)]
+                                        (clear-commands! pid)
+                                        (unregister-plugin-themes pid false))))
+
                 (.on "disabled" (fn [pid]
-                                  ;; effects
-                                  (unregister-plugin-themes pid)
-                                  ;; commands
-                                  (unregister-plugin-slash-command pid)
-                                  (unregister-plugin-simple-command pid)
-                                  (unregister-plugin-ui-items pid)))
+                                  (clear-commands! pid)
+                                  (unregister-plugin-themes pid)))
 
                 (.on "theme-changed" (fn [^js themes]
                                        (swap! state/state assoc :plugin/installed-themes

@@ -29,9 +29,9 @@
    (if electron-mac?
      svg/home
      (if-let [logo (and config/publishing?
-                       (get-in (state/get-config) [:project :logo]))]
-      [:img.cp__header-logo-img {:src logo}]
-      (svg/logo (not white?))))])
+                        (get-in (state/get-config) [:project :logo]))]
+       [:img.cp__header-logo-img {:src logo}]
+       (svg/logo (not white?))))])
 
 (rum/defc login
   [logged?]
@@ -43,8 +43,7 @@
        (fn [{:keys [toggle-fn]}]
          [:a.fade-link.block.p-2 {:on-click toggle-fn}
           [:span (t :login)]])
-       (let [list [
-                   ;; {:title (t :login-google)
+       (let [list [;; {:title (t :login-google)
                    ;;  :url (str config/website "/login/google")}
                    {:title (t :login-github)
                     :url (str config/website "/login/github")}]]
@@ -80,11 +79,7 @@
         {:on-click toggle-fn}
         (svg/horizontal-dots nil)])
      (->>
-      [(when-not (util/mobile?)
-         {:title (t :command.ui/toggle-right-sidebar)
-          :options {:on-click state/toggle-sidebar-open?!}})
-
-       (when current-repo
+      [(when current-repo
          {:title (t :cards-view)
           :options {:on-click #(state/pub-event! [:modal/show-cards])}})
 
@@ -107,6 +102,8 @@
          {:title (t :all-journals)
           :options {:href (rfe/href :all-journals)}
           :icon svg/calendar-sm})
+
+       {:hr true}
 
        (when-not (state/publishing-enable-editing?)
          {:title (t :settings)

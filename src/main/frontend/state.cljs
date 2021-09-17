@@ -167,8 +167,7 @@
 
       :view/components {}
 
-      :debug/write-acks {}
-      })))
+      :debug/write-acks {}})))
 
 
 (defn sub
@@ -695,7 +694,7 @@
               (fn [{:keys [installation_id] :as repo}]
                 (let [{:keys [token] :as m} (get tokens installation_id)]
                   (if (string? token)
-                    ;; Github API returns a expires_at key which is a timestamp (expires after 60 minutes at present),
+                    ;; GitHub API returns a expires_at key which is a timestamp (expires after 60 minutes at present),
                     ;; however, user's system time may be inaccurate. Here, based on the client system time, we use
                     ;; 40-minutes interval to deal with some critical conditions, for e.g. http request time consume.
                     (let [formatter (tf/formatters :date-time-no-ms)

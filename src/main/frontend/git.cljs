@@ -8,7 +8,7 @@
             [frontend.state :as state]
             [cljs-bean.core :as bean]))
 
-;; only support Github now
+;; only support GitHub now
 (defn get-username
   []
   (get-in @state/state [:me :name]))

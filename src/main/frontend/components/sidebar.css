@@ -170,7 +170,10 @@
   .non-block-editor textarea,
   pre,
   pre.code {
-    background: var(--ls-right-sidebar-code-bg-color);
+    margin: 0;
+    padding: 0;
+    font-size: 90%;
+    background: none;
   }
 
   .references {

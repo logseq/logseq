@@ -621,6 +621,7 @@ class PluginLocal
       return
     }
 
+    this._ctx.emit('beforereload', this)
     await this.unload()
     await this.load()
     this._ctx.emit('reloaded', this)
@@ -788,7 +789,7 @@ class PluginLocal
  */
 class LSPluginCore
   extends EventEmitter<'beforeenable' | 'enabled' | 'beforedisable' | 'disabled' | 'registered' | 'error' | 'unregistered' |
-    'theme-changed' | 'theme-selected' | 'settings-changed' | 'unlink-plugin' | 'reloaded'>
+    'theme-changed' | 'theme-selected' | 'settings-changed' | 'unlink-plugin' | 'beforereload' | 'reloaded'>
   implements ILSPluginThemeManager {
 
   private _isRegistering = false
@@ -1103,13 +1104,13 @@ class LSPluginCore
     }
   }
 
-  async unregisterTheme (id: PluginLocalIdentity): Promise<void> {
+  async unregisterTheme (id: PluginLocalIdentity, effect: boolean = true): Promise<void> {
     debug('unregistered Theme #', id)
 
     if (!this._registeredThemes.has(id)) return
     this._registeredThemes.delete(id)
     this.emit('theme-changed', this.themes, { id })
-    if (this._currentTheme?.pid == id) {
+    if (effect && this._currentTheme?.pid == id) {
       this._currentTheme.dis?.()
       this._currentTheme = null
       // reset current theme

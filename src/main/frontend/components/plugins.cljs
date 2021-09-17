@@ -229,7 +229,7 @@
                (t :plugin/uninstall)]]]]
 
            [:div.r.flex.items-center
-            (if (not disabled)
+            (if (and (not iir) (not disabled))
               [:a.btn
                {:on-click #(js-invoke js/LSPluginCore "reload" id)}
                (t :plugin/reload)])
@@ -332,17 +332,7 @@
              :href "https://github.com/logseq/marketplace"
              :intent "logseq"
              :target "_blank")
-
-           (ui/tippy
-            {:html     [:small.inline-flex.py-2.pr-2
-                        {:style {:max-width "180px" :text-align "left" :justify-content "flex-start"}}
-                        (t :plugin/marketplace-tips)]
-             :arrow    true
-             :distance 18
-             :offset   -25
-             :interactive true
-             :theme    "transparent"}
-            (svg/info))])]
+           ])]
 
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [[_ item] installed-plugins]
