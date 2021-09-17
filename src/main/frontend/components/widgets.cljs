@@ -51,7 +51,7 @@
              :placeholder "https://github.com/username/repo"
              :on-change (fn [e]
                           (reset! repo (util/evalue e)))}]]
-          [:label.font-medium "Default Branch (make sure it's matched with your setting on Github): "]
+          [:label.font-medium "Default Branch (make sure it's matched with your setting on GitHub): "]
           [:div.mt-2.mb-4.relative.rounded-md.shadow-sm.max-w-xs
            [:input#branch.form-input.block.w-full.sm:text-sm.sm:leading-5
             {:value @branch
@@ -66,7 +66,7 @@
            (let [branch (string/trim @branch)]
              (if (string/blank? branch)
                (notification/show!
-                [:p.text-gray-700.dark:text-gray-300 "Please input a branch, make sure it's matched with your setting on Github."]
+                [:p.text-gray-700.dark:text-gray-300 "Please input a branch, make sure it's matched with your setting on GitHub."]
                 :error
                 false)
                (let [repo (util/lowercase-first @repo)]

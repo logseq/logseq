@@ -113,7 +113,7 @@
          (t :on-boarding/discord-desc)]
         [:li
          {}
-         "Github: "
+         "GitHub: "
          [:a
           {:href "https://github.com/logseq/logseq"
            :target "_blank"}
