@@ -222,7 +222,6 @@
        (t :help/markdown-syntax)
        [:table
         [:tbody
-
          (let [list [[(str "**" (t :bold) "**")
                       [:b (t :bold)]]
 
@@ -248,7 +247,7 @@
                       [:a {:href "https://www.example.com" :target "_blank"} "label"]]
 
                      ["![image](https://asset.logseq.com/static/img/logo.png)"
-                      [:img {:style {:float "right" :width 64 :height 64}
+                      [:img {:style {:float "right" :width 32 :height 32}
                              :src "https://asset.logseq.com/static/img/logo.png"
                              :alt "image"}]]]]
 
@@ -258,29 +257,33 @@
        (t :help/org-mode-syntax)
        [:table
         [:tbody
-         [:tr [:td (str "*" (t :bold) "*")] [:td.text-right [:b (t :bold)]]]
-         [:tr [:td (str "/" (t :italics) "/")] [:td.text-right [:i (t :italics)]]]
-         [:tr [:td (str "+" (t :strikethrough) "+")] [:td.text-right [:del (t :strikethrough)]]]
-         [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
-         [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
-                                                    "help-latex"
-                                                    "E = mc^2" true false)]]
-         [:tr [:td "~Code~"] [:td.text-right [:code (t :code)]]]
-         [:tr [:td [:pre "#+BEGIN_SRC clojure
-  (println \"Hello world!\")
-#+END_SRC"]] [:td.text-right
-              (highlight/highlight
-               "help-highlight-org"
-               {:data-lang "clojure"}
-               "(println \"hello world\")")]]
-         [:tr [:td "[[https://www.example.com][label]]"]
-          [:td.text-right
-           [:a {:href "https://www.example.com"}
-            "label"]]]
-         [:tr [:td "[[https://asset.logseq.com/static/img/logo.png][image]]"]
-          [:td.text-right
-           [:img {:style {:float "right"
-                          :width 64
-                          :height 64}
-                  :src "https://asset.logseq.com/static/img/logo.png"
-                  :alt "image"}]]]]]]]]))
+         (let [list [[(str "*" (t :bold) "*")
+                      [:b (t :bold)]]
+
+                     [(str "/" (t :italics) "/")
+                      [:i (t :italics)]]
+
+                     [(str "+" (t :strikethrough) "+") [:del (t :strikethrough)]]
+
+
+                     [(str "^^" (t :highlight) "^^")
+                      [:mark (t :highlight)]]
+
+                     ["$$E = mc^2$$"
+                      (latex/latex "help-latex" "E = mc^2" true false)]
+
+                     ["~Code~"
+                      [:code (t :code)]]
+
+                     [[:pre "#+BEGIN_SRC clojure\n  (println \"Hello world!\")\n#+END_SRC"]
+                      (highlight/highlight "help-highlight-org" {:data-lang "clojure"} "(println \"hello world\")")]
+
+                     ["[[https://www.example.com][label]]"
+                      [:a {:href "https://www.example.com"} "label"]]
+
+                     ["[[https://asset.logseq.com/static/img/logo.png][image]]"
+                      [:img {:style {:float "right" :width 32 :height 32}
+                             :src "https://asset.logseq.com/static/img/logo.png"
+                             :alt "image"}]]]]
+
+           (map (fn [[trigger shortcut]] [:tr [:td [:pre trigger]] [:td.text-right shortcut]]) list))]]]]]))
