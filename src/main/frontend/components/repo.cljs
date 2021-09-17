@@ -50,13 +50,13 @@
            (when (nfs-handler/supported?)
              [:div.mr-8
               (ui/button
-                (t :open-a-directory)
-                :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
+               (t :open-a-directory)
+               :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
            (when (and (state/logged?) (not (util/electron?)))
              (ui/button
-               "Add another git repo"
-               :href (rfe/href :repo-add nil {:graph-types "github"})
-               :intent "logseq"))]
+              "Add another git repo"
+              :href (rfe/href :repo-add nil {:graph-types "github"})
+              :intent "logseq"))]
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-1 {:key id}
@@ -152,7 +152,7 @@
               ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
               [:div.flex.flex-row.justify-between.align-items.mt-2
                (ui/button (t :git/push)
-                 :on-click (fn [] (state/set-modal! commit/add-commit-message)))
+                          :on-click (fn [] (state/set-modal! commit/add-commit-message)))
                (when pushing? svg/loading)]]
              [:hr]
              [:div
@@ -161,7 +161,7 @@
                  (str ": " last-pulled-at)])
               [:div.flex.flex-row.justify-between.align-items
                (ui/button (t :git/pull)
-                 :on-click (fn [] (repo-handler/pull-current-repo)))
+                          :on-click (fn [] (repo-handler/pull-current-repo)))
                (when pulling? svg/loading)]
               [:a.mt-5.text-sm.opacity-50.block
                {:on-click (fn []
@@ -211,46 +211,46 @@
                                        (on-click url)))}})
             switch-repos)
            (cond->
-             {:modal-class (util/hiccup->class
-                            "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg")
-              :links-footer [:div
-                             (when (seq switch-repos) [:hr.my-4])
-                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
-                                  :href (rfe/href :repo-add)}
-                              (t :new-graph)]
-                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
-                                  :href (rfe/href :repos)}
-                              (t :all-graphs)]
-                             (let [nfs-repo? (config/local-db? current-repo)]
-                               (when (and nfs-repo?
-                                          (not= current-repo config/local-repo)
-                                          (nfs-handler/supported?))
-                                 [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
-                                      :on-click (fn []
-                                                  (state/pub-event!
-                                                   [:modal/show
-                                                    [:div {:style {:max-width 700}}
-                                                     [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
-                                                     (ui/button
-                                                       "Yes"
-                                                       :on-click (fn []
-                                                                   (state/close-modal!)
-                                                                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}
-                                  (t :sync-from-local-files)]))
-                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
-                                  :on-click (fn []
-                                              (state/pub-event!
-                                               [:modal/show
-                                                [:div {:style {:max-width 700}}
-                                                 [:p "Re-index will discard the current graph, and then processes all the files again as they are currently stored on disk. You will lose unsaved changes and it might take a while. Continue?"]
-                                                 (ui/button
-                                                   "Yes"
-                                                   :on-click (fn []
-                                                               (state/close-modal!)
-                                                               (repo-handler/re-index!
-                                                                nfs-handler/rebuild-index!
-                                                                page-handler/create-today-journal!)))]]))}
-                              (t :re-index)]]}
+            {:modal-class (util/hiccup->class
+                           "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg")
+             :links-footer [:div
+                            (when (seq switch-repos) [:hr.my-4])
+                            [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
+                                 :href (rfe/href :repo-add)}
+                             (t :new-graph)]
+                            [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
+                                 :href (rfe/href :repos)}
+                             (t :all-graphs)]
+                            (let [nfs-repo? (config/local-db? current-repo)]
+                              (when (and nfs-repo?
+                                         (not= current-repo config/local-repo)
+                                         (nfs-handler/supported?))
+                                [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
+                                     :on-click (fn []
+                                                 (state/pub-event!
+                                                  [:modal/show
+                                                   [:div {:style {:max-width 700}}
+                                                    [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
+                                                    (ui/button
+                                                     "Yes"
+                                                     :on-click (fn []
+                                                                 (state/close-modal!)
+                                                                 (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}
+                                 (t :sync-from-local-files)]))
+                            [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
+                                 :on-click (fn []
+                                             (state/pub-event!
+                                              [:modal/show
+                                               [:div {:style {:max-width 700}}
+                                                [:p "Re-index will discard the current graph, and then processes all the files again as they are currently stored on disk. You will lose unsaved changes and it might take a while. Continue?"]
+                                                (ui/button
+                                                 "Yes"
+                                                 :on-click (fn []
+                                                             (state/close-modal!)
+                                                             (repo-handler/re-index!
+                                                              nfs-handler/rebuild-index!
+                                                              page-handler/create-today-journal!)))]]))}
+                             (t :re-index)]]}
              (seq switch-repos)
              (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.py-2
                                    "Switch to:"]))))))))

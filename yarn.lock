@@ -6173,10 +6173,10 @@ mkdirp@^0.5.0, mkdirp@^0.5.4, mkdirp@~0.5.1:
   dependencies:
     minimist "^1.2.5"
 
-mldoc@1.0.6:
-  version "1.0.6"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.0.6.tgz#6b5c822c202207d60fda3d075ade3af452e931ad"
-  integrity sha512-wAFAHX3GkVuTIvDhXASrN9/SGKvcmARgFjtxxrpKofJI7SyUgjtpGWhuziy8UutVeZzrIDG3P+fohDGh/iX6VA==
+mldoc@1.0.7:
+  version "1.0.7"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.0.7.tgz#b2034f29973eb278ac003003149c4b0220fa480e"
+  integrity sha512-XbPTNJpgx/OslszztQshe5T7QUHSuKXG+dqOXaU5R3O3U6sFgpPYBx6CNgmVZqAwxrnhdQQV6IM3E8ETGYzEyA==
   dependencies:
     yargs "^12.0.2"
 
@@ -7616,6 +7616,8 @@ react-icons@^2.2.7:
   version "2.2.7"
   resolved "https://registry.yarnpkg.com/react-icons/-/react-icons-2.2.7.tgz#d7860826b258557510dac10680abea5ca23cf650"
   integrity sha512-0n4lcGqzJFcIQLoQytLdJCE0DKSA9dkwEZRYoGrIDJZFvIT6Hbajx5mv9geqhqFiNjUgtxg8kPyDfjlhymbGFg==
+  dependencies:
+    react-icon-base "2.1.0"
 
 react-is@^16.3.1, react-is@^16.8.1:
   version "16.13.1"

@@ -49,7 +49,7 @@
         :warning
         [:p (util/format
              "Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the \"Open\" button to open a local directory%s."
-             (if (util/electron?) "" " or connect Logseq to Github"))]))
+             (if (util/electron?) "" " or connect Logseq to GitHub"))]))
 
      (ui/foldable
       [:a.initial-color.title.journal-title

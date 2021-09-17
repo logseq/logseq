@@ -113,7 +113,7 @@
          (t :on-boarding/discord-desc)]
         [:li
          {}
-         "Github: "
+         "GitHub: "
          [:a
           {:href "https://github.com/logseq/logseq"
            :target "_blank"}
@@ -179,61 +179,32 @@
                 "https://asset.logseq.com/static/img/credits.png")
               :style {:margin "12px 0 0 0"}}]]]]))
 
+(defn links [t]
+  (let [discord-with-icon [:div.flex-row.inline-flex.items-center
+                           [:span.mr-1 (t :help/community)]
+                           svg/discord]
+        list
+        [[(t :help/start) "https://logseq.github.io/#/page/getting%20started"]
+         [(t :help/about) "https://logseq.com/blog/about"]
+         [(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
+         [(t :help/bug) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="]
+         [(t :help/feature) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="]
+         [(t :help/changelog) "https://logseq.github.io/#/page/changelog"]
+         ["FAQ" "https://logseq.github.io/#/page/faq"]
+         [(t :help/docs) "https://logseq.github.io/"]
+         [(t :help/privacy) "https://logseq.com/blog/privacy-policy"]
+         [(t :help/terms) "https://logseq.com/blog/terms"]
+         [(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
+         [discord-with-icon "https://discord.gg/KpN4eHY"]]]
+    (map (fn [[title href]]
+           [:li [:a {:href href :target "_blank"} title]]) list)))
+
 (defn help
   []
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.help.cp__sidebar-help-docs
      [:ul
-      [:li
-       [:a {:href "https://logseq.github.io/#/page/getting%20started"
-            :target "_blank"}
-        (t :help/start)]]
-      [:li
-       [:a {:href "https://logseq.com/blog/about"
-            :target "_blank"}
-        (t :help/about)]]
-      [:li
-       [:a {:href "https://trello.com/b/8txSM12G/roadmap"
-            :target "_blank"}
-        (t :help/roadmap)]]
-      [:li
-       [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="
-            :target "_blank"}
-        (t :help/bug)]]
-      [:li
-       [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="
-            :target "_blank"}
-        (t :help/feature)]]
-      [:li
-       [:a {:href "https://logseq.github.io/#/page/changelog"
-            :target "_blank"}
-        (t :help/changelog)]]
-      [:li
-       [:a {:href "https://logseq.github.io/#/page/faq"
-            :target "_blank"}
-        "FAQ"]]
-      [:li
-       [:a {:href "https://logseq.github.io/"
-            :target "_blank"}
-        (t :help/docs)]]
-      [:li
-       [:a {:href "https://logseq.com/blog/privacy-policy"
-            :target "_blank"}
-        (t :help/privacy)]]
-      [:li
-       [:a {:href "https://logseq.com/blog/terms"
-            :target "_blank"}
-        (t :help/terms)]]
-      [:li
-       [:a {:href "https://github.com/logseq/awesome-logseq"
-            :target "_blank"}
-        (t :help/awesome-logseq)]]
-      [:li
-       [:a {:href "https://discord.gg/KpN4eHY"
-            :target "_blank"}
-        [:div.flex-row.inline-flex.items-center
-         [:span.mr-1 (t :help/community)]
-         svg/discord]]]
+      (links t)
       [:li
        (t :help/shortcuts)
        (ui/button
@@ -251,60 +222,68 @@
        (t :help/markdown-syntax)
        [:table
         [:tbody
-         [:tr [:td (str "**" (t :bold) "**")] [:td.text-right [:b (t :bold)]]]
-         [:tr [:td (str "_" (t :italics) "_")] [:td.text-right [:i (t :italics)]]]
-         [:tr [:td (str "~~" (t :strikethrough) "~~")] [:td.text-right [:del (t :strikethrough)]]]
-         [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
-         [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
-                                                    "help-latex"
-                                                    "E = mc^2" true false)]]
-         [:tr [:td (str "`" (t :code) "`")] [:td.text-right [:code (t :code)]]]
-         [:tr [:td [:pre "```clojure
-  (println \"Hello world!\")
-```"]] [:td.text-right
-        (highlight/highlight
-         "help-highlight"
-         {:data-lang "clojure"}
-         "(println \"Hello world!\")")]]
-         [:tr [:td "[label](https://www.example.com)"]
-          [:td.text-right
-           [:a {:href "https://www.example.com" :target "_blank"}
-            "label"]]]
-         [:tr [:td "![image](https://asset.logseq.com/static/img/logo.png)"]
-          [:td.text-right
-           [:img {:style {:float "right"
-                          :width 64
-                          :height 64}
-                  :src "https://asset.logseq.com/static/img/logo.png"
-                  :alt "image"}]]]]]]
+         (let [list [[(str "**" (t :bold) "**")
+                      [:b (t :bold)]]
+
+                     [(str "_" (t :italics) "_")
+                      [:i (t :italics)]]
+
+                     [(str "~~" (t :strikethrough) "~~")
+                      [:del (t :strikethrough)]]
+
+                     [(str "^^" (t :highlight) "^^")
+                      [:mark (t :highlight)]]
+
+                     ["$$E = mc^2$$"
+                      (latex/latex "help-latex" "E = mc^2" true false)]
+
+                     [(str "`" (t :code) "`")
+                      [:code (t :code)]]
+
+                     ["```clojure\n  (println \"Hello world!\")\n```"
+                      (highlight/highlight "help-highlight" {:data-lang "clojure"} "(println \"Hello world!\")")]
+
+                     ["[label](https://www.example.com)"
+                      [:a {:href "https://www.example.com" :target "_blank"} "label"]]
+
+                     ["![image](https://asset.logseq.com/static/img/logo.png)"
+                      [:img {:style {:float "right" :width 32 :height 32}
+                             :src "https://asset.logseq.com/static/img/logo.png"
+                             :alt "image"}]]]]
+
+           (map (fn [[trigger shortcut]] [:tr [:td [:pre trigger]] [:td.text-right shortcut]]) list))]]]
 
       [:li
        (t :help/org-mode-syntax)
        [:table
         [:tbody
-         [:tr [:td (str "*" (t :bold) "*")] [:td.text-right [:b (t :bold)]]]
-         [:tr [:td (str "/" (t :italics) "/")] [:td.text-right [:i (t :italics)]]]
-         [:tr [:td (str "+" (t :strikethrough) "+")] [:td.text-right [:del (t :strikethrough)]]]
-         [:tr [:td (str "^^" (t :highlight) "^^")] [:td.text-right [:mark (t :highlight)]]]
-         [:tr [:td "$$E = mc^2$$"] [:td.text-right (latex/latex
-                                                    "help-latex"
-                                                    "E = mc^2" true false)]]
-         [:tr [:td "~Code~"] [:td.text-right [:code (t :code)]]]
-         [:tr [:td [:pre "#+BEGIN_SRC clojure
-  (println \"Hello world!\")
-#+END_SRC"]] [:td.text-right
-              (highlight/highlight
-               "help-highlight-org"
-               {:data-lang "clojure"}
-               "(println \"hello world\")")]]
-         [:tr [:td "[[https://www.example.com][label]]"]
-          [:td.text-right
-           [:a {:href "https://www.example.com"}
-            "label"]]]
-         [:tr [:td "[[https://asset.logseq.com/static/img/logo.png][image]]"]
-          [:td.text-right
-           [:img {:style {:float "right"
-                          :width 64
-                          :height 64}
-                  :src "https://asset.logseq.com/static/img/logo.png"
-                  :alt "image"}]]]]]]]]))
+         (let [list [[(str "*" (t :bold) "*")
+                      [:b (t :bold)]]
+
+                     [(str "/" (t :italics) "/")
+                      [:i (t :italics)]]
+
+                     [(str "+" (t :strikethrough) "+") [:del (t :strikethrough)]]
+
+
+                     [(str "^^" (t :highlight) "^^")
+                      [:mark (t :highlight)]]
+
+                     ["$$E = mc^2$$"
+                      (latex/latex "help-latex" "E = mc^2" true false)]
+
+                     ["~Code~"
+                      [:code (t :code)]]
+
+                     [[:pre "#+BEGIN_SRC clojure\n  (println \"Hello world!\")\n#+END_SRC"]
+                      (highlight/highlight "help-highlight-org" {:data-lang "clojure"} "(println \"hello world\")")]
+
+                     ["[[https://www.example.com][label]]"
+                      [:a {:href "https://www.example.com"} "label"]]
+
+                     ["[[https://asset.logseq.com/static/img/logo.png][image]]"
+                      [:img {:style {:float "right" :width 32 :height 32}
+                             :src "https://asset.logseq.com/static/img/logo.png"
+                             :alt "image"}]]]]
+
+           (map (fn [[trigger shortcut]] [:tr [:td [:pre trigger]] [:td.text-right shortcut]]) list))]]]]]))
