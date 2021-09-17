@@ -179,61 +179,32 @@
                 "https://asset.logseq.com/static/img/credits.png")
               :style {:margin "12px 0 0 0"}}]]]]))
 
+(defn links [t]
+  (let [discord-with-icon [:div.flex-row.inline-flex.items-center
+                           [:span.mr-1 (t :help/community)]
+                           svg/discord]
+        list
+        [[(t :help/start) "https://logseq.github.io/#/page/getting%20started"]
+         [(t :help/about) "https://logseq.com/blog/about"]
+         [(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
+         [(t :help/bug) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="]
+         [(t :help/feature) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="]
+         [(t :help/changelog) "https://logseq.github.io/#/page/changelog"]
+         ["FAQ" "https://logseq.github.io/#/page/faq"]
+         [(t :help/docs) "https://logseq.github.io/"]
+         [(t :help/privacy) "https://logseq.com/blog/privacy-policy"]
+         [(t :help/terms) "https://logseq.com/blog/terms"]
+         [(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
+         [discord-with-icon "https://discord.gg/KpN4eHY"]]]
+    (map (fn [item]
+           [:li [:a {:href (second item) :target "_blank"} (first item)]]) list)))
+
 (defn help
   []
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.help.cp__sidebar-help-docs
      [:ul
-      [:li
-       [:a {:href "https://logseq.github.io/#/page/getting%20started"
-            :target "_blank"}
-        (t :help/start)]]
-      [:li
-       [:a {:href "https://logseq.com/blog/about"
-            :target "_blank"}
-        (t :help/about)]]
-      [:li
-       [:a {:href "https://trello.com/b/8txSM12G/roadmap"
-            :target "_blank"}
-        (t :help/roadmap)]]
-      [:li
-       [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="
-            :target "_blank"}
-        (t :help/bug)]]
-      [:li
-       [:a {:href "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="
-            :target "_blank"}
-        (t :help/feature)]]
-      [:li
-       [:a {:href "https://logseq.github.io/#/page/changelog"
-            :target "_blank"}
-        (t :help/changelog)]]
-      [:li
-       [:a {:href "https://logseq.github.io/#/page/faq"
-            :target "_blank"}
-        "FAQ"]]
-      [:li
-       [:a {:href "https://logseq.github.io/"
-            :target "_blank"}
-        (t :help/docs)]]
-      [:li
-       [:a {:href "https://logseq.com/blog/privacy-policy"
-            :target "_blank"}
-        (t :help/privacy)]]
-      [:li
-       [:a {:href "https://logseq.com/blog/terms"
-            :target "_blank"}
-        (t :help/terms)]]
-      [:li
-       [:a {:href "https://github.com/logseq/awesome-logseq"
-            :target "_blank"}
-        (t :help/awesome-logseq)]]
-      [:li
-       [:a {:href "https://discord.gg/KpN4eHY"
-            :target "_blank"}
-        [:div.flex-row.inline-flex.items-center
-         [:span.mr-1 (t :help/community)]
-         svg/discord]]]
+      (links t)
       [:li
        (t :help/shortcuts)
        (ui/button
