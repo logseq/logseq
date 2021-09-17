@@ -59,8 +59,8 @@
 
 (defn seconds->display [seconds]
   (let [seconds (int seconds)
-        hours   (Math/floor (/ seconds 3600))
-        minutes (mod (Math/floor (/ seconds 60)) 60)
+        hours   (quot seconds 3600)
+        minutes (mod (quot seconds 60) 60)
         seconds (mod seconds 60)]
     (->> [hours minutes seconds]
          (map (fn [v] (if (< v 10) (str "0" v) (str v))))
