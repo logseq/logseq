@@ -122,7 +122,7 @@
 (defonce *initial-commands (atom nil))
 
 (defonce *first-command-group
-  {"Page Reference" "BASIC"
+  {"Page reference" "BASIC"
    "Tomorrow" "TIME & DATE"
    "LATER" "TASK"
    "A" "PRIORITY"
@@ -200,14 +200,14 @@
   (->>
    (concat
     ;; basic
-    [["Page Reference" [[:editor/input "[[]]" {:backward-pos 2}]
+    [["Page reference" [[:editor/input "[[]]" {:backward-pos 2}]
                         [:editor/search-page]] "Create a backlink to a page"]
-     ["Page Embed" (embed-page) "Embed a page here"]
-     ["Block Reference" [[:editor/input "(())" {:backward-pos 2}]
+     ["Page embed" (embed-page) "Embed a page here"]
+     ["Block reference" [[:editor/input "(())" {:backward-pos 2}]
                          [:editor/search-block :reference]] "Create a backlink to a block"]
-     ["Block Embed" (embed-block) "Embed a block here" "Embed a block here"]
+     ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
      ["Link" link-steps "Create a HTTP link"]
-     ["Image Link" link-steps "Create a HTTP link to a image"]
+     ["Image link" link-steps "Create a HTTP link to a image"]
      (when (state/markdown?)
        ["Underline" [[:editor/input "<ins></ins>"
                       {:last-pattern slash
@@ -229,8 +229,8 @@
     [["Tomorrow" #(get-page-ref-text (date/tomorrow)) "Insert the date of tomorrow"]
      ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
      ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
-     ["Current Time" #(date/get-current-time) "Insert current time"]
-     ["Date Picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
+     ["Current time" #(date/get-current-time) "Insert current time"]
+     ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
 
     ;; task management
     (get-preferred-workflow)
@@ -264,20 +264,20 @@
                  text)) "Draw a graph with Excalidraw"]
 
      (when (util/zh-CN-supported?)
-       ["Embed Bilibili Video" [[:editor/input "{{bilibili }}" {:last-pattern slash
+       ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern slash
                                                                 :backward-pos 2}]]])
      ["Embed HTML " (->inline "html")]
 
-     ["Embed Youtube Video" [[:editor/input "{{youtube }}" {:last-pattern slash
+     ["Embed Youtube video" [[:editor/input "{{youtube }}" {:last-pattern slash
                                                             :backward-pos 2}]]]
 
-     ["Embed Youtube Timestamp" [[:youtube/insert-timestamp]]]
+     ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
-     ["Embed Vimeo Video" [[:editor/input "{{vimeo }}" {:last-pattern slash
+     ["Embed Vimeo video" [[:editor/input "{{vimeo }}" {:last-pattern slash
                                                         :backward-pos 2}]]]
 
-     ["Embed Twitter" [[:editor/input "{{tweet }}" {:last-pattern slash
-                                                    :backward-pos 2}]]]]
+     ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern slash
+                                                          :backward-pos 2}]]]]
 
     @*extend-slash-commands
     ;; Allow user to modify or extend, should specify how to extend.
