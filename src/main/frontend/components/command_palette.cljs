@@ -44,13 +44,15 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [input (::input state)]
       [:div.cp__palette.cp__palette-main
-       [:input.cp__palette-input.w-full
-        {:type        "text"
-         :placeholder  (t :command-palette/prompt)
-         :auto-focus   true
-         :value       @input
-         :on-change   (fn [e] (reset! input (util/evalue e)))}]
-       [:div.w-full
+       [:div.input-wrap
+        [:input.cp__palette-input.w-full
+         {:type        "text"
+          :placeholder (t :command-palette/prompt)
+          :auto-focus  true
+          :value       @input
+          :on-change   (fn [e] (reset! input (util/evalue e)))}]]
+
+       [:div.command-results-wrap
         (ui/auto-complete
          (if (str/blank? @input)
            (cp/top-commands limit)
