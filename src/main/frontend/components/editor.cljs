@@ -92,7 +92,7 @@
          {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
           :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
           :item-render (fn [page-name chosen?]
-                         [:div.py-2.preview-trigger-wrapper
+                         [:div.preview-trigger-wrapper
                           (block/page-preview-trigger
                            {:children        [:div (search/highlight-exact-query page-name q)]
                             :open?           chosen?
@@ -101,7 +101,7 @@
                             :tippy-distance  24
                             :tippy-position  (if sidebar? "left" "right")}
                            page-name)])
-          :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a page"]
+          :empty-div   [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
           :class       "black"})))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
@@ -171,7 +171,7 @@
          matched-templates
          {:on-chosen   (editor-handler/template-on-chosen-handler id)
           :on-enter    non-exist-handler
-          :empty-div   [:div.text-gray-500.pl-4.pr-4 "Search for a template"]
+          :empty-div   [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
           :item-render (fn [[template _block-db-id]]
                          template)
           :class       "black"})))))
@@ -241,7 +241,7 @@
           input-value (get state ::input-value)]
       (when (seq input-option)
         (let [command (:command (first input-option))]
-          [:div.p-2.mt-2.rounded-md.shadow-sm.bg-base-2
+          [:div.p-2.rounded-md.shadow-lg
            (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
              [:div.my-3
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
