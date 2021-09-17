@@ -80,7 +80,7 @@
     (mapv (fn [block-or-children]
             (when (map? block-or-children)
               (.push arr (clj->js [(or (str (:block/uuid block-or-children)) "")]))
-              (when-let [children (:block/children block-or-children)]
+              (when-some [children (:block/children block-or-children)]
                 (let [child (->struct-array children nil)]
                   (when (and child (> (.-length child) 0))
                     (.push arr (clj->js [child])))))))
@@ -105,7 +105,7 @@
    (ensure-block-data format other-props)))
 
 (defn page-blocks->doc [page-blocks page-name]
-  (if-let [t (tree/blocks->vec-tree page-blocks page-name)]
+  (if-some [t (tree/blocks->vec-tree page-blocks page-name)]
     (let [content (contentmap)
           struct (structarray page-name)]
       (->content-map t content)
@@ -114,7 +114,7 @@
 
 (defn- update-block-content [id]
   (println "[YJS] update-block-content" id (.get (contentmap) id))
-  (when-let [block (db-model/query-block-by-uuid id)]
+  (when-some [block (db-model/query-block-by-uuid id)]
     (let [content-map (contentmap)
           format (or (:block/format block) :markdown)
           new-content (.toString (.get content-map id)) ;TODO orgmode
@@ -129,7 +129,7 @@
         item-index (.indexOf item-array item-content)
         left-content (loop [i (dec item-index)]
                        (when (>= i 0)
-                         (when-let [content (nth item-array i)]
+                         (when-some [content (nth item-array i)]
                            (if (instance? y/Array content)
                              (recur (dec i))
                              content))))
@@ -137,7 +137,7 @@
                           (.toArray (.-parent (.-parent item))))
         array-index (loop [i 0]
                       (when (< i (count parent-array))
-                        (when-let [item (nth parent-array i)]
+                        (when-some [item (nth parent-array i)]
                           (if (instance? y/Array item)
                             (if (not= -1 (.indexOf (.toArray item) item-content))
                               i
@@ -147,7 +147,7 @@
         parent-content (when array-index
                          (loop [i (dec array-index)]
                            (when (>= i 0)
-                             (when-let [content (nth parent-array i)]
+                             (when-some [content (nth parent-array i)]
                                (if (instance? y/Array content)
                                  (recur (dec i))
                                  content)))))]
@@ -202,7 +202,7 @@
 
 (defn- delete-node [id]
   (println "[YJS] delete-node" id)
-  (when-let [block (db-model/query-block-by-uuid id)]
+  (when-some [block (db-model/query-block-by-uuid id)]
     (outliner-core/delete-node (outliner-core/block block) false)
     (db/refresh! (state/get-current-repo)  {:key :block/change :data [block]})))
 
@@ -217,7 +217,7 @@
                  (println "observe-struct-fn id:" id)
                  (let [[left-id parent-id] (get-item-left&parent item id)
                        parent-id (or parent-id (:block/uuid (db/entity [:block/name page-name])))]
-                   (when-let [parent-id (and parent-id (str parent-id))]
+                   (when-some [parent-id (and parent-id (str parent-id))]
                      (when (db/entity [:block/uuid (uuid id)])
                        (delete-node id))
                      (insert-node left-id parent-id id contentmap))))
@@ -227,8 +227,8 @@
 (def observe-struct-fn-memo (memoize observe-struct-fn))
 
 (defn- observe-content-fn [event]
-  (println "[YJS] observe-content-fn")
-  (js/console.log event)
+  ;; (println "[YJS] observe-content-fn")
+  ;; (js/console.log event)
   (when-not (.-local (.-transaction event))
     (let [keys (js->clj (into [] (.-keys event)))]
       (mapv (fn [[k v]]
@@ -331,7 +331,7 @@
   (let [contentmap (contentmap)
         struct (structarray page-name)]
     (remove-all-blocks-in-page page-blocks page-name)
-    (when-let [new-blocks (insert-doc-contents page-name)]
+    (when-some [new-blocks (insert-doc-contents page-name)]
       (db/refresh! (state/get-current-repo) {:key :block/insert :data new-blocks}))))
 
 (defn start-sync-page [page-name]
@@ -352,6 +352,11 @@
       s
       (recur (inc i) (.get s (get pos i))))))
 
+(defn- get-pos-item [pos struct]
+  (loop [i 0 s struct]
+    (if (>= i (count pos))
+      s
+      (recur (inc i) (.get s (get pos i))))))
 
 
 (deftype Pos [pos-vec]
@@ -359,6 +364,9 @@
   Object
   (toString [_] pos-vec)
 
+  ;; [1 2 3] -> [1 2 2]
+  ;; [1 2 0] -> nil
+  (dec-pos [_] (Pos. (conj (vec (butlast pos-vec)) (dec (last pos-vec)))))
   ;; [1 2 3] -> [1 2 4]
   (inc-pos [_] (Pos. (conj (vec (butlast pos-vec)) (inc (last pos-vec)))))
   ;; [1 2 3] -> [1 2 4 0]
@@ -367,7 +375,7 @@
   (add-next-level [_] (Pos. (conj pos-vec 0)))
   ;; [1 2 3] -> [1 2]
   (upper-level [_]
-    (when-some [pos-vec* (butlast pos-vec)]
+    (when-some [pos-vec* (vec (butlast pos-vec))]
       (Pos. pos-vec*)))
 
   (next-sibling-pos [_ struct]
@@ -398,6 +406,10 @@
   ISeq
   (-first [_] (first pos-vec))
   (-rest [_] (rest pos-vec))
+
+  ISeqable
+  (-seq [_] (seq pos-vec))
+  ISequential
 
   IComparable
   (-compare [this other]
@@ -445,7 +457,7 @@
           nil
           (let [sublevel (get toplevel i)]
             (if (instance? y/Array sublevel)
-              (if-let [index-pos (find-pos sublevel id)]
+              (if-some [index-pos (find-pos sublevel id)]
                 (let [index (flatten index-pos)]
                   (->Pos (vec (flatten [i index]))))
                 (recur (+ i 1)))
@@ -516,7 +528,7 @@
 (defn insert-nodes-yjs [page-name new-nodes-tree target-uuid sibling?]
   (let [[structs contents] (nodes-tree->struct&content new-nodes-tree)
         struct (structarray page-name)]
-    (when-let [target-pos (find-pos (structarray page-name) (str target-uuid))]
+    (when-some [target-pos (find-pos (structarray page-name) (str target-uuid))]
       (let [pos (if sibling?
                   (.next-sibling-pos target-pos struct)
                   (.next-non-sibling-pos! target-pos struct))]
@@ -525,8 +537,8 @@
 
 (defn insert-nodes-op [new-nodes-tree target-node sibling?]
   (let [target-block (:data target-node)]
-    (when-let [page-name (or (:block/name target-block)
-                             (:block/name (db/entity (:db/id (:block/page target-block)))))]
+    (when-some [page-name (or (:block/name target-block)
+                              (:block/name (db/entity (:db/id (:block/page target-block)))))]
       (insert-nodes-yjs page-name new-nodes-tree (str (:block/uuid target-block)) sibling?)
       (distinct-struct (structarray page-name) (atom #{}))
       (merge-doc doc-remote doc-local)
@@ -544,8 +556,8 @@
                                    :as opts}]
    (println "[YJS] insert-node-op" new-node)
    (let [target-block (:data target-node)]
-     (when-let [page-name (or (:block/name target-block)
-                              (:block/name (db/entity (:db/id (:block/page target-block)))))]
+     (when-some [page-name (or (:block/name target-block)
+                               (:block/name (db/entity (:db/id (:block/page target-block)))))]
        (insert-node-yjs page-name new-node (str (:block/uuid target-block)) sibling?)
        (distinct-struct (structarray page-name) (atom #{}))
        (merge-doc doc-remote doc-local)
@@ -619,10 +631,10 @@
 (defn delete-nodes-op [start-node end-node block-ids]
   (let [start-block (:data start-node)
         end-block (:data end-node)]
-    (when-let [page-name (or (:block/name start-block)
-                             (:block/name (db/entity (:db/id (:block/page start-block)))))]
-      (when-let [start-uuid (:block/uuid start-block)]
-        (when-let [end-uuid (:block/uuid end-block)]
+    (when-some [page-name (or (:block/name start-block)
+                              (:block/name (db/entity (:db/id (:block/page start-block)))))]
+      (when-some [start-uuid (:block/uuid start-block)]
+        (when-some [end-uuid (:block/uuid end-block)]
           (delete-nodes-yjs page-name start-uuid end-uuid block-ids)
           (distinct-struct (structarray page-name) (atom #{}))
           (merge-doc doc-remote doc-local)
@@ -636,7 +648,7 @@
 
 (defn delete-node-op [node children?]
   (let [block (:data node)]
-    (when-let [page-name (:block/name (db/entity (:db/id (:block/page block))))]
+    (when-some [page-name (:block/name (db/entity (:db/id (:block/page block))))]
       (let [uuid (str (:block/uuid block))]
         (delete-node-yjs page-name uuid)
         (merge-doc doc-remote doc-local)
@@ -645,23 +657,87 @@
 (defn save-node-op [node]
   (let [block (:data node)
         contentmap (contentmap)]
-    (when-let [page-name (:block/name (db/entity (:db/id (:block/page block))))]
-      (when-let [block-uuid (:block/uuid block)]
+    (when-some [page-name (:block/name (db/entity (:db/id (:block/page block))))]
+      (when-some [block-uuid (:block/uuid block)]
         (.set contentmap (str block-uuid) (:block/content block))
         (distinct-struct (structarray page-name) (atom #{}))
         (merge-doc doc-remote doc-local)
         (outliner-core/save-node node)))))
 
+(defn- outdentable? [pos]
+  (> (count pos) 1))
 
+(defn- indentable? [pos]
+  (not= 0 (last pos)))
 
+(defn- indent-item [struct id]
+  "indent an item(and its children)"
+  (when-some [pos (find-pos struct id)]
+    (when (indentable? pos)
+      (let [item-parent-array (goto-innermost-struct-array pos struct)
+            item (get-pos-item pos struct)
+            item-children (get-pos-item (.inc-pos pos) struct)
+            item-children-clone (and item-children (instance? y/Array item-children)
+                                     (.clone item-children))
+            push-items (if item-children-clone
+                         [item item-children-clone]
+                         [item])]
+        (let [prev-item (get-pos-item (.dec-pos pos) struct)]
+          (.delete item-parent-array (last pos) (if item-children-clone 2 1))
+                                        ; [other-item prev-item item]
+          (if (instance? y/Array prev-item)  ;prev-item is array
+            (do
+              (.push prev-item (clj->js push-items)))
+            ;; prev-item is not array
+            (let [insert-pos (last pos)
+                  new-array (y/Array.)]
+              (.insert item-parent-array insert-pos (clj->js [new-array]))
+              (.push new-array (clj->js push-items)))))))))
+
+(defn- outdent-item [struct id]
+  "outdent an item(and its children)"
+  (when-some [pos (find-pos struct id)]
+    (when (outdentable? pos)
+      (let [upper-pos (.upper-level pos)
+            item-parent-array (goto-innermost-struct-array pos struct)
+            item-parent-parent-array (goto-innermost-struct-array upper-pos struct)
+            item (get-pos-item pos struct)
+            item-children (get-pos-item (.inc-pos pos) struct)
+            item-children-clone (and item-children (instance? y/Array item-children)
+                                     (.clone item-children))
+            item-parent-array-clone (.clone item-parent-array)]
+        (.delete item-parent-array (last pos) (- (.-length item-parent-array) (last pos)))
+        (.delete item-parent-array-clone 0 (+ (last pos) (if item-children-clone 2 1)))
+        (let [empty-parent-array? (= 0 (.-length item-parent-array))
+              insert-pos (if empty-parent-array? (last upper-pos) (inc (last upper-pos)))
+              insert-items (if item-children-clone [item item-children-clone] [item])]
+          (when empty-parent-array?
+            (.delete item-parent-parent-array (last upper-pos) 1))
+          (.insert item-parent-parent-array insert-pos (clj->js insert-items))
+          (when (> (.-length item-parent-array-clone) 0)
+            (.insert item-parent-parent-array (+ insert-pos (if item-children-clone 2 1))
+                     (clj->js [item-parent-array-clone]))))))))
+
+(defn- indent-outdent-nodes-yjs [page-name ids indent?]
+  (let [struct (structarray page-name)]
+    (mapv
+     (fn [id]
+       (if indent?
+         (indent-item struct id)
+         (outdent-item struct id)))
+     ids)))
 
 (defn indent-outdent-nodes-op [nodes indent?]
-  (println "[YJS] indent-outdent-nodes(before):" nodes indent?)
-  (outliner-core/indent-outdent-nodes nodes indent?)
-  (println "[YJS] indent-outdent-nodes(after):"
-           (mapv (fn [node]
-                   (db/pull (:db/id (:data node))))
-                 nodes)))
+  (when-some [page-name
+              (:block/name (db/entity (:db/id (:block/page (:data (first nodes))))))]
+    (let [ids (mapv (fn [node] (str (:block/uuid (:data node))))nodes)]
+      (println "[YJS] indent-outdent-nodes(before):" nodes indent?)
+      (indent-outdent-nodes-yjs page-name ids indent?)
+      (outliner-core/indent-outdent-nodes nodes indent?)
+      (println "[YJS] indent-outdent-nodes(after):"
+               (mapv (fn [node]
+                       (db/pull (:db/id (:data node))))
+                     nodes)))))
 
 
 
@@ -692,15 +768,15 @@
         contentmap (contentmap)]
     (struct->content-struct struct contentmap)))
 
-(comment
- (def test-doc (y/Doc.))
- (def test-struct (.getArray test-doc "test-struct"))
- (.insert test-struct 0 (clj->js ["1"]))
- (.insert test-struct 1 (clj->js ["2"]))
- (.insert test-struct 2 (clj->js [(y/Array.)]))
- (.insert (.get test-struct 2) 0 (clj->js ["3"]))
- (.insert (.get test-struct 2) 1 (clj->js ["4"]))
- (.insert (.get test-struct 2) 2 (clj->js [(y/Array.)]))
- (.insert (.get (.get test-struct 2) 2) 0 (clj->js ["5"]))
- (println (.toJSON test-struct))
+(defn- build-test-struct []
+  (def test-doc (y/Doc.))
+  (def test-struct (.getArray test-doc "test-struct"))
+  (.insert test-struct 0 (clj->js ["1"]))
+  (.insert test-struct 1 (clj->js ["2"]))
+  (.insert test-struct 2 (clj->js [(y/Array.)]))
+  (.insert (.get test-struct 2) 0 (clj->js ["3"]))
+  (.insert (.get test-struct 2) 1 (clj->js ["4"]))
+  (.insert (.get test-struct 2) 2 (clj->js [(y/Array.)]))
+  (.insert (.get (.get test-struct 2) 2) 0 (clj->js ["5"]))
+  (println (.toJSON test-struct))
  )
