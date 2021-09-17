@@ -28,7 +28,7 @@
 ;; 1. When you click a publish button, it'll downloads a zip which includes the
 ;;    html, css, javascript and other files (image, mp3, etc.), the serialized
 ;;    data should include all the public pages and blocks.
-;; 2. Built-in sync with Github Pages, you should specify a Github repo for publishing.
+;; 2. Built-in sync with GitHub Pages, you should specify a GitHub repo for publishing.
 
 (defn restore-from-transit-str!
   []
