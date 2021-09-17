@@ -44,7 +44,7 @@
                              (state/set-editor-in-composition! true))))
         props (assoc props
                      :on-change (fn [e] (when-not (state/editor-in-composition?)
-                                         (on-change e)))
+                                          (on-change e)))
                      :on-composition-start on-composition
                      :on-composition-update on-composition
                      :on-composition-end on-composition)]
@@ -91,19 +91,18 @@
    (fn [{:keys [close-fn] :as state}]
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
-      (for [{:keys [options title icon]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon hr]} (if (fn? links) (links) links)]
         (let [new-options
               (assoc options
                      :on-click (fn [e]
                                  (when-let [on-click-fn (:on-click options)]
                                    (on-click-fn e))
                                  (close-fn)))
-              child [:div
-                     {:style {:display "flex" :flex-direction "row"}}
-                     [:div {:style {:margin-right "8px"}} title]
-                     ;; [:div {:style {:position "absolute" :right "8px"}}
-                     ;;  icon]
-                     ]]
+              child (if hr
+                      [:hr.my-1]
+                      [:div
+                       {:style {:display "flex" :flex-direction "row"}}
+                       [:div {:style {:margin-right "8px"}} title]])]
           (rum/with-key
             (menu-link new-options child)
             title)))
@@ -211,7 +210,7 @@
                        :key     (name k)}
                       (fn [state]
                         (notification-content state (:content v) (:status v) k)))))
-              contents)))))
+                 contents)))))
 
 (defn checkbox
   [option]
@@ -265,8 +264,8 @@
    when soft keyboard setup"
   []
   (when (and
-       (util/ios?)
-       (not (nil? js/window.visualViewport)))
+         (util/ios?)
+         (not (nil? js/window.visualViewport)))
     (let [viewport js/visualViewport
           style (get-dynamic-style-node)
           sheet (.-sheet style)
@@ -584,15 +583,15 @@
     [:div.flex.flex-col
      [:div.content
       [:div.flex-1.flex-row.foldable-title (cond->
-                                             {:on-mouse-over #(reset! control? true)
-                                              :on-mouse-out  #(reset! control? false)}
+                                            {:on-mouse-over #(reset! control? true)
+                                             :on-mouse-out  #(reset! control? false)}
                                              title-trigger?
                                              (assoc :on-mouse-down on-mouse-down
                                                     :class "cursor"))
        [:div.flex.flex-row.items-center
         [:a.block-control.opacity-50.hover:opacity-100.mr-2
          (cond->
-           {:style    {:width       14
+          {:style    {:width       14
                       :height      16
                       :margin-left -24}}
            (not title-trigger?)
@@ -647,8 +646,8 @@
                    (on-change value)))}
    (for [{:keys [label value selected]} options]
      [:option (cond->
-                {:key   label
-                 :value (or value label)}
+               {:key   label
+                :value (or value label)}
                 selected
                 (assoc :selected selected))
       label])])
