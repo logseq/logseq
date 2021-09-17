@@ -1,5 +1,6 @@
-.cp__command-palette {
+.cp__palette {
   &-main {
+    max-height: 60vh;
     margin: -1rem;
 
     width: 80vw;

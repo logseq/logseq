@@ -251,12 +251,7 @@
     :editor/redo
     {:desc    "Redo"
      :binding ["shift+mod+z" "mod+y"]
-     :fn      history/redo!}
-    ;; FIXME
-    ;; save in block editing only doesn't seems needed?
-    :editor/save
-    {:binding "mod+s"
-     :fn      editor-handler/save!}}
+     :fn      history/redo!}}
 
    :shortcut.handler/global-prevent-default
    ^{:before m/prevent-default-behavior}

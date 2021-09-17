@@ -79,13 +79,7 @@
         {:on-click toggle-fn}
         (svg/horizontal-dots nil)])
      (->>
-      [(when-not (util/mobile?)
-         {:title (t :command.ui/toggle-right-sidebar)
-          :options {:on-click state/toggle-sidebar-open?!}})
-
-       {:hr true}
-
-       (when current-repo
+      [(when current-repo
          {:title (t :cards-view)
           :options {:on-click #(state/pub-event! [:modal/show-cards])}})
 

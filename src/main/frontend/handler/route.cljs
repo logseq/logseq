@@ -104,8 +104,7 @@
   [search-mode]
   (when search-mode
     (state/set-search-mode! search-mode))
-  (when-let [element (gdom/getElement "search-field")]
-    (.focus element)))
+  (state/pub-event! [:go/search]))
 
 (defn go-to-journals!
   []
