@@ -1107,8 +1107,9 @@
                 (youtube/youtube-video youtube-id)))))
 
         (= name "youtube-timestamp")
-        (when-let [seconds (first arguments)]
-          (youtube/timestamp seconds))
+        (when-let [timestamp (first arguments)]
+          (when-let [seconds (youtube/parse-timestamp timestamp)]
+            (youtube/timestamp seconds)))
 
         (= name "tutorial-video")
         (tutorial-video)
