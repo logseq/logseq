@@ -171,7 +171,9 @@
   pre,
   pre.code {
     margin: 0;
-    background: var(--ls-right-sidebar-code-bg-color);
+    padding: 0;
+    font-size: 90%;
+    background: none;
   }
 
   .references {
