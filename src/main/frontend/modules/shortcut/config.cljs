@@ -1,6 +1,7 @@
 (ns frontend.modules.shortcut.config
   (:require [frontend.components.commit :as commit]
             [frontend.extensions.srs.handler :as srs]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.history :as history]
@@ -309,7 +310,15 @@
      :binding "mod+c mod+c"
      :fn      #(do
                  (state/clear-sidebar-blocks!)
-                 (state/hide-right-sidebar!))}}
+                 (state/hide-right-sidebar!))}
+    :pdf/previous-page
+    {:desc    "Previous page of current pdf doc"
+     :binding "ctrl+k"
+     :fn      pdf-utils/prev-page}
+    :pdf/next-page
+    {:desc    "Next page of current pdf doc"
+     :binding "ctrl+j"
+     :fn      pdf-utils/next-page}}
 
    :shortcut.handler/misc
    ;; always overrides the copy due to "mod+c mod+s"

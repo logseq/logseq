@@ -159,3 +159,16 @@
                      :width  (.-width rect)
                      :height (.-height rect)})]
         (optimize-client-reacts rects)))))
+
+;; TODO: which viewer instance?
+(defn next-page
+  []
+  (try
+    (js-invoke js/window.lsPdfViewer "nextPage")
+    (catch js/Error e nil)))
+
+(defn prev-page
+  []
+  (try
+    (js-invoke js/window.lsPdfViewer "previousPage")
+    (catch js/Error e nil)))

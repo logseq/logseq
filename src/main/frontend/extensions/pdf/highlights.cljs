@@ -566,7 +566,7 @@
 
             ;; show ctx menu
             (set-tip-state! {:highlight hl-fn
-                             :range sel-range
+                             :range     sel-range
                              :point     point}))))
 
       [(:range sel-state)])
@@ -787,6 +787,9 @@
   (let [[area-mode? set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
         [settings-visible?, set-settings-visible!] (rum/use-state false)
+        *page-ref (rum/use-ref nil)
+        [current-page-num, set-current-page-num!] (rum/use-state 1)
+        [total-page-num, set-total-page-num!] (rum/use-state 1)
         [viewer-theme, set-viewer-theme!] (rum/use-state (or (storage/get "ls-pdf-viewer-theme") "light"))]
 
     ;; themes hooks
@@ -797,6 +800,23 @@
           (storage/set "ls-pdf-viewer-theme" viewer-theme)
           #(js-delete (. el -dataset) "theme")))
       [viewer-theme])
+
+    ;; pager hooks
+    (rum/use-effect!
+      (fn []
+        (when-let [total (and viewer (.-numPages (.-pdfDocument viewer)))]
+          (let [^js bus (.-eventBus viewer)
+                page-fn (fn [^js evt]
+                          (let [^js input (rum/deref *page-ref)
+                                num (.-pageNumber evt)]
+                            (set! (. input -value) num)
+                            (set-current-page-num! num)))]
+
+            (set-total-page-num! total)
+            (set-current-page-num! (.-currentPageNumber viewer))
+            (.on bus "pagechanging" page-fn)
+            #(.off bus "pagechanging" page-fn))))
+      [viewer])
 
     (rum/with-context
       [[t] i18n/*tongue-context*]
@@ -847,6 +867,25 @@
            :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
           (svg/annotations 16)]
 
+         ;; pager
+         [:div.pager.flex.items-center.ml-3
+
+          [:span.nu.flex.items-center.opacity-70
+           [:input {:ref            *page-ref
+                    :type           "number"
+                    :default-value  current-page-num
+                    :on-mouse-enter #(.select ^js (.-target %))
+                    :on-key-up      (fn [^js e]
+                                      (let [^js input (.-target e)
+                                            value (front-utils/safe-parse-int (.-value input))]
+                                        (when (and (= (.-keyCode e) 13) value (> value 0))
+                                          (set! (. viewer -currentPageNumber)
+                                                (if (> value total-page-num) total-page-num value)))))}]
+           [:small "/ " total-page-num]]
+
+          [:span.ct.flex.items-center
+           [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
+           [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
 
          [:a.button
           {:on-click #(state/set-state! :pdf/current nil)}

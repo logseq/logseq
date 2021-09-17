@@ -12,6 +12,13 @@
   --ph-view-container-width: 42vw;
 }
 
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .extensions__pdf {
 
   &-container {
@@ -53,6 +60,33 @@
             opacity: 1;
             border-bottom: 2px solid #969494;
             border-radius: 0;
+          }
+
+          &:active {
+            opacity: .6;
+          }
+        }
+      }
+
+      .pager {
+        > .nu {
+          padding-right: 4px;
+
+          input {
+            user-select: inherit;
+            width: 30px;
+            text-align: right;
+            padding-right: 4px;
+          }
+        }
+
+        > .ct {
+          .button {
+            margin: 0;
+
+            &:last-child {
+              padding-right: 3px;
+            }
           }
         }
       }
@@ -146,7 +180,7 @@
   &-settings {
     &-inner.hls-popup-box {
       position: absolute;
-      right: 206px;
+      right: 345px;
       width: 178px;
       padding: 15px 10px;
     }
