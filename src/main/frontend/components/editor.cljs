@@ -500,7 +500,8 @@
        :auto-focus        false
        :class             (get-editor-heading-class content)})
 
-     (mock-textarea)
+     (when (state/sub [:ui/developer-mode?])
+      (mock-textarea))
      (modals id format)
 
      (when format
