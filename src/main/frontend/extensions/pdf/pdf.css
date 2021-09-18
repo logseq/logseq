@@ -586,6 +586,7 @@ input::-webkit-inner-spin-button {
       img {
         margin: 0;
         box-shadow: none;
+        max-width: 80%;
       }
     }
   }
