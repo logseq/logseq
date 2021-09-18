@@ -237,7 +237,7 @@
      :binding "shift+tab"
      :fn      (editor-handler/keydown-tab-handler :left)}
     :editor/copy
-    {:desc    "Copy"
+    {:desc    "Copy (copies either selection, or block reference)"
      :binding "mod+c"
      :fn      editor-handler/shortcut-copy}
     :editor/cut
