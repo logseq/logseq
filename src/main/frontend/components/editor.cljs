@@ -415,12 +415,10 @@
     (ui/css-transition
      {:key key
       :class-names {:enter "origin-top-left opacity-0 transform scale-95"
-                    :enter-done "origin-top-left transition opacity-100"
-                    :enter-active "origin-top-left transition"
-                    :exit "origin-top-left transition opacity-0 transform scale-95"
-                    :exit-active "origin-top-left transition"
-                    :exit-done "origin-top-left transition opacity-0 transform scale-95"}
-      :timeout 100}
+                    :enter-done "origin-top-left transition opacity-100 transform scale-100"
+                    :exit "origin-top-left transition opacity-0 transform scale-95"}
+      :timeout {:enter 0
+                :exit 150}}
      (fn [_]
        (absolute-modal
         component
