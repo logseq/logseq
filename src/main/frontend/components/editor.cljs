@@ -48,7 +48,7 @@
                                 (and
                                  (not (fn? command-steps))
                                  (not (contains? (set (map first command-steps)) :editor/input))
-                                 (not (contains? #{"Date Picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
+                                 (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
             (editor-handler/insert-command! id command-steps
                                             format
                                             {:restore? restore-slash?}))))
