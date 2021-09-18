@@ -7,6 +7,7 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.notification :as notification]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -868,7 +869,7 @@
           (svg/annotations 16)]
 
          ;; pager
-         [:div.pager.flex.items-center.ml-3
+         [:div.pager.flex.items-center.ml-1
 
           [:span.nu.flex.items-center.opacity-70
            [:input {:ref            *page-ref
@@ -1116,8 +1117,8 @@
   nil)
 
 (rum/defcs playground
-  < rum/static
-    rum/reactive
+  < rum/static rum/reactive
+  (shortcut/mixin :shortcut.handler/pdf)
   [state]
   (let [pdf-current (state/sub :pdf/current)]
     [:div.extensions__pdf-playground
