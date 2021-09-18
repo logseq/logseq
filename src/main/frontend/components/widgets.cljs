@@ -1,5 +1,6 @@
 (ns frontend.components.widgets
   (:require [clojure.string :as string]
+            [promesa.core :as p]
             [frontend.mobile.util :as mobile]
             [frontend.context.i18n :as i18n]
             [frontend.handler.notification :as notification]
@@ -89,7 +90,7 @@
        (ui/button "Open mobile graph test"
                   :on-click
                   (fn []
-                    (let [folder (.pickFolder mobile/folder-picker)]
+                    (p/let [folder (.pickFolder mobile/folder-picker)]
                       (js/console.log folder)
                       ;;TODO
                       nil)))
