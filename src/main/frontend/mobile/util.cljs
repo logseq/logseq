@@ -1,5 +1,5 @@
 (ns frontend.mobile.util
-  (:require ["@capacitor/core" :refer [Capacitor]]))
+  (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]))
 
 (defn platform []
   (.getPlatform Capacitor))
@@ -12,3 +12,5 @@
 
 (defn is-plugin-available? [name]
   (.isPluginAvailable Capacitor name))
+
+(defonce folder-picker (registerPlugin "FolderPicker"))
