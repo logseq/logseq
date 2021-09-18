@@ -1,6 +1,13 @@
-.cp__command-palette {
+.cp__palette {
+  --palettle-input-height: 64px;
+  --palettle-container-height: 70vh;
+
   &-main {
-    margin: -1rem;
+    max-height: var(--palettle-container-height);
+    margin: -2rem;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 
     width: 80vw;
 
@@ -12,10 +19,22 @@
       background-color: transparent;
       transition: none;
       border: none;
+      border-radius: unset !important;
     }
 
     .chosen {
       background-color: var(--ls-quaternary-background-color);
+    }
+
+    .command-results-wrap,
+    .search-results-wrap > div:first-child {
+      overflow-x: hidden;
+      overflow-y: auto;
+      max-height: calc(var(--palettle-container-height) - var(--palettle-input-height));
+    }
+
+    .input-wrap {
+      height: var(--palettle-input-height);
     }
   }
 

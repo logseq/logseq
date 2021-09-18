@@ -8,6 +8,7 @@
             [frontend.components.encryption :as encryption]
             [frontend.components.git :as git-component]
             [frontend.components.shell :as shell]
+            [frontend.components.search :as search]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
@@ -186,6 +187,11 @@
 (defmethod handle :command/run [_]
   (when (util/electron?)
     (state/set-modal! shell/shell)))
+
+(defmethod handle :go/search [_]
+  (state/set-modal! search/search-modal
+                    {:fullscreen? false
+                     :close-btn?  false}))
 
 (defmethod handle :instrument [[_ {:keys [type payload]}]]
   (posthog/capture type payload))

@@ -130,7 +130,7 @@
      :fn      editor-handler/strike-through-format!}
     :editor/insert-link
     {:desc    "HTML Link"
-     :binding "mod+k"
+     :binding "mod+l"
      :fn      editor-handler/html-link-format!}
     :editor/move-block-up
     {:desc    "Move block up"
@@ -252,12 +252,7 @@
     :editor/redo
     {:desc    "Redo"
      :binding ["shift+mod+z" "mod+y"]
-     :fn      history/redo!}
-    ;; FIXME
-    ;; save in block editing only doesn't seems needed?
-    :editor/save
-    {:binding "mod+s"
-     :fn      editor-handler/save!}}
+     :fn      history/redo!}}
 
    :shortcut.handler/global-prevent-default
    ^{:before m/prevent-default-behavior}
@@ -279,11 +274,11 @@
      :fn      config-handler/toggle-ui-show-brackets!}
     :go/search-in-page
     {:desc    "Search in the current page"
-     :binding "mod+shift+u"
+     :binding ["mod+shift+k" "mod+shift+u"]
      :fn      #(route-handler/go-to-search! :page)}
     :go/search
     {:desc    "Full text search"
-     :binding "mod+u"
+     :binding ["mod+k" "mod+u"]
      :fn      #(route-handler/go-to-search! :global)}
     :go/journals
     {:desc    "Jump to journals"

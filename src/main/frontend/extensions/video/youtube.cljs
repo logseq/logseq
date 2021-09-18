@@ -59,10 +59,16 @@
 
 (defn seconds->display [seconds]
   (let [seconds (int seconds)
-        minutes (Math/floor (/ seconds 60))
-        remaining-seconds (- seconds (* 60 minutes))
-        remaining-seconds (if (zero? remaining-seconds) "00" remaining-seconds)]
-    (str minutes ":" remaining-seconds)))
+        hours   (quot seconds 3600)
+        minutes (mod (quot seconds 60) 60)
+        seconds (mod seconds 60)]
+    (->> [hours minutes seconds]
+         (map (fn [v] (if (< v 10) (str "0" v) (str v))))
+         (keep-indexed (fn [idx v]
+                         (when (or (> idx 0)
+                                   (not= v "00"))
+                           v)))
+         (str/join ":"))))
 
 (defn dom-after-video-node? [video-node target]
   (not (zero?
@@ -96,3 +102,37 @@
 (defn gen-youtube-ts-macro []
   (when-let [player (get-player (state/get-input))]
     (util/format "{{youtube-timestamp %s}}" (Math/floor (.getCurrentTime ^js player)))))
+
+(defn parse-timestamp [timestamp]
+  (let [reg #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$"
+        reg-number #"^\d+$"
+        timestamp (str timestamp)
+        total-seconds (-> (re-matches reg-number timestamp)
+                          util/safe-parse-int)
+        [_ hours minutes seconds] (re-matches reg timestamp)
+        [hours minutes seconds] (map util/safe-parse-int [hours minutes seconds])]
+    (cond
+      total-seconds
+      total-seconds
+
+      (and minutes seconds)
+      (+ (* 3600 hours) (* 60 minutes) seconds)
+
+      :else
+      nil)))
+
+(comment
+  ;; hh:mm:ss
+  (re-matches #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$" "123:22:23") ;; => ["123:22:23" "123" "22" "23"]
+  (re-matches #"^(?:(\d+):)?([0-5]\d):([0-5]\d)$" "30:23") ;; => ["30:23" nil "30" "23"]
+
+  (parse-timestamp "01:23") ;; => 83
+
+  (parse-timestamp "01:01:23") ;; => 3683
+
+  ;; seconds->display
+  ;; https://stackoverflow.com/questions/1322732/convert-seconds-to-hh-mm-ss-with-javascript
+  (seconds->display 129600) ;; => "36:00:00"
+  (seconds->display 13545) ;; => "03:45:45"
+  (seconds->display 18) ;; => "00:18"
+  )
