@@ -259,8 +259,6 @@
 
 (defn beginning-of-line
   [content pos]
-  (println "content: " content)
-  (println "pos: " pos)
   (or (zero? pos)
       (when-let [pre-char (subs content (dec pos) pos)]
         (println "pre-char: " pre-char)
