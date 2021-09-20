@@ -1152,3 +1152,17 @@ html[data-theme='dark'] .keyboard-shortcut > code {
 .overflow-y-scroll {
     overflow-y: scroll;
 }
+
+/* Fix time css element */
+time {
+  margin-right: 5px;
+  font-family: monospace;
+}
+
+.is-paragraph {
+  display: inline;
+}
+
+.raw_html {
+  display: inline;
+}
