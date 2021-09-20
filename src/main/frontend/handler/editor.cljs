@@ -2115,8 +2115,9 @@
   (into []
         (mapcat
          (fn [e]
-           (let [e* (select-keys e [:content :properties])]
-             (if-let [children (:children e)]
+           (let [e* (select-keys e [:content :properties])
+                 children (:children e)]
+             (if (seq children)
                [e* (tree->vec-tree (:children e))]
                [e*])))
          tree)))
