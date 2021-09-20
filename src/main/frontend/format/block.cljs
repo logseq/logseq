@@ -741,8 +741,7 @@
 
 (defn trim-paragraph-special-break-lines
   [[typ paras]]
-  (println typ paras)
-  (when (= typ "Paragraph")
+  (if (= typ "Paragraph")
     (let [indexed-paras (map-indexed vector paras)
           ast [typ (->> (filter
                          #(let [[index value] %]
@@ -752,7 +751,8 @@
                                                  (first (nth paras (dec index)))))))
                          indexed-paras)
                         (map #(last %)))]]
-      ast)))
+      ast)
+    [typ paras]))
 
 (defn trim-break-lines!
   [ast]
