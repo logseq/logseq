@@ -390,7 +390,13 @@
          [:div.search-results-wrap
           (if (seq search-result)
             (search-auto-complete search-result search-q false)
-            (recent-search-and-pages in-page-search?))]]))))
+            (recent-search-and-pages in-page-search?))
+          [:div.p-4.flex.flex-row.justify-between.opacity-70.hover:opacity-100.cursor.text-sm {:on-click (fn []
+                                                                                                           (state/toggle! :ui/command-palette-open?))}
+           [:div
+            "Tip: " [:code (util/->platform-shortcut "Ctrl+Shift+p")] " to open the commands palette"]
+           [:a.button
+            (svg/icon-cmd 20)]]]]))))
 
 (rum/defc more < rum/reactive
   [route]
