@@ -75,7 +75,6 @@
         (->
          (p/let [result (ipc/ipc "writeFile" path content)
                  mtime (gobj/get result "mtime")]
-           (prn "[DEBUG] 5. The file was saved successfully!" {:path path})
            (when (util/electron?)
              (debug/set-ack-step! path :saved-successfully)
              (debug/ack-file-write! path))
@@ -88,6 +87,9 @@
              (ok-handler repo path result))
            result)
          (p/catch (fn [error]
+                    (state/pub-event! [:instrument {:type :debug/write-failed
+                                                    :payload {:step :ipc-write-file
+                                                              :error error}}])
                     (if error-handler
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
