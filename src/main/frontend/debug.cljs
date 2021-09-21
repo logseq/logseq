@@ -30,15 +30,16 @@
                                          (let [step (get-in @state/state [:debug/write-acks file-path :step])]
                                            (state/pub-event! [:instrument {:type :debug/write-failed
                                                                            :payload {:step step}}])
-                                           (notification/show!
-                                            (str "Logseq failed to save the page "
-                                                 page-title
-                                                 " to the file: "
-                                                 file-path
-                                                 ". Stop editing this page anymore, and copy all the blocks of this page to another editor to avoid any data-loss.\n"
-                                                 "Last step: "
-                                                 step)
-                                            :error)))))
+                                           ;; (notification/show!
+                                           ;;  (str "Logseq failed to save the page "
+                                           ;;       page-title
+                                           ;;       " to the file: "
+                                           ;;       file-path
+                                           ;;       ". Stop editing this page anymore, and copy all the blocks of this page to another editor to avoid any data-loss.\n"
+                                           ;;       "Last step: "
+                                           ;;       step)
+                                           ;;  :error)
+                                           ))))
                                    default-write-ack-timeout)]
         (swap! ack-wait-timeouts assoc file-path timeout)))))
 

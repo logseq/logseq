@@ -15,7 +15,7 @@
                   (.visit cy "http://localhost:3001"))
           (it "template-basic" []
               (.. cy
-                  (get "#search-field")
+                  (get "#search-button")
                   (click)
                   (type "template test page")
                   (wait 1000)

@@ -15,7 +15,7 @@
 
   (it "Search" []
     (.. cy
-        (get "#search-field")
+        (get "#search-button")
         (click)
         (type "welcome to Logseq"))
     (.. cy (get "#ui__ac-inner")
@@ -25,14 +25,14 @@
 
     ;; create new page
     (.. cy
-        (get "#search-field")
+        (get "#search-button")
         (click)
         (type "new page"))
 
     (.wait cy 1000)
 
     (.. cy
-        (get "#search-field")
+        (get "#search-button")
         (type "{enter}"))
 
     ;; edit bullet

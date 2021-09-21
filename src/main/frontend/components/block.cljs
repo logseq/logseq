@@ -1787,7 +1787,8 @@
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id properties content format edit-input-id))))]
     [:div.block-content.inline
-     (cond-> {:id (str "block-content-" uuid)}
+     (cond-> {:id (str "block-content-" uuid)
+              :on-mouse-up util/clear-selection!}
        (not slide?)
        (merge attrs))
 
