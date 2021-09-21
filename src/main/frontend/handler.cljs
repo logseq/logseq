@@ -218,7 +218,7 @@
                          (state/pub-event! [:modal/show
                                             [:div
                                              [:h1.title "Reload Logseq?"]
-                                             (ui/button "YES"
+                                             (ui/button [:span "Yes " (ui/keyboard-shortcut ["enter"])]
                                                :autoFocus "on"
                                                :on-click (fn []
                                                            (pool/terminate-parser-pool!)

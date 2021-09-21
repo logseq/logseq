@@ -416,7 +416,7 @@
 
 ;; `sequence` can be a list of symbols or strings
 (defn keyboard-shortcut [sequence]
-  [:div.keyboard-shortcut
+  [:span.keyboard-shortcut
    (map-indexed (fn [i key]
                   [:code {:key i}
                    ;; Display "cmd" rather than "meta" to the user to describe the Mac
