@@ -435,13 +435,14 @@
                             3 [:span "Show clozes " (ui/keyboard-shortcut [:s])])
                           :id "card-answers"
                           :class "mr-2"
+                          :large? true
                           :on-click #(reset! phase next-phase)))
 
              (when (and (> (count cards) 1) preview?)
-               (ui/button "Next(n)"
+               (ui/button [:span "Next " (ui/keyboard-shortcut [:n])]
                           :id "card-next"
-                          :small? true
                           :class "mr-2"
+                          :large? true
                           :on-click #(skip-card card card-index cards phase review-records cb)))
 
              (when (and (not preview?) (= 1 next-phase))
@@ -451,6 +452,7 @@
                  [:div.flex.flex-row.justify-between
                   (ui/button [:span "Forgotten " (ui/keyboard-shortcut [:f])]
                              :id "card-forgotten"
+                             :large? true
                              :on-click (fn []
                                          (score-and-next-card 1 card card-index cards phase review-records cb)
                                          (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
@@ -458,10 +460,12 @@
 
                   (ui/button [:span "Remembered " (ui/keyboard-shortcut [:r])]
                              :id "card-remembered"
+                             :large? true
                              :on-click #(score-and-next-card 5 card card-index cards phase review-records cb))
 
                   (ui/button [:span "Took a while to recall " (ui/keyboard-shortcut [:t])]
                              :id "card-recall"
+                             :large? true
                              :on-click #(score-and-next-card 3 card card-index cards phase review-records cb))]))]
 
             (when preview?
