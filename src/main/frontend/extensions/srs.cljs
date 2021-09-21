@@ -400,8 +400,8 @@
   (rum/local 0 ::card-index)
   (rum/local {} ::review-records)
   [state blocks {preview? :preview?
-                modal? :modal?
-                cb :callback}]
+                 modal? :modal?
+                 cb :callback}]
   (let [cards (map ->card blocks)
         review-records (::review-records state)
         card-index (::card-index state)
@@ -433,17 +433,17 @@
                             1 "Hide answers(s)"
                             2 "Show Answers(s)"
                             3 "Show clozes(s)")
-                 :id "card-answers"
-                 :class "mr-2"
-                 :small? true
-                 :on-click #(reset! phase next-phase)))
+                          :id "card-answers"
+                          :class "mr-2"
+                          :small? true
+                          :on-click #(reset! phase next-phase)))
 
              (when (and (> (count cards) 1) preview?)
                (ui/button "Next(n)"
-                 :id "card-next"
-                 :small? true
-                 :class "mr-2"
-                 :on-click #(skip-card card card-index cards phase review-records cb)))
+                          :id "card-next"
+                          :small? true
+                          :class "mr-2"
+                          :on-click #(skip-card card card-index cards phase review-records cb)))
 
              (when (and (not preview?) (= 1 next-phase))
                (let [interval-days-score-3 (get (get-next-interval card 3) card-last-interval-property)
@@ -451,37 +451,37 @@
                      interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
                  [:div.flex.flex-row.justify-between
                   (ui/button "Forgotten(f)"
-                    :id "card-forgotten"
-                    :small? true
-                    :on-click (fn []
-                                (score-and-next-card 1 card card-index cards phase review-records cb)
-                                (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                                  (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))))
+                             :id "card-forgotten"
+                             :small? true
+                             :on-click (fn []
+                                         (score-and-next-card 1 card card-index cards phase review-records cb)
+                                         (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
+                                           (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))))
 
                   (ui/button "Remembered(r)"
-                    :id "card-remembered"
-                    :small? true
-                    :on-click #(score-and-next-card 5 card card-index cards phase review-records cb))
+                             :id "card-remembered"
+                             :small? true
+                             :on-click #(score-and-next-card 5 card card-index cards phase review-records cb))
 
                   (ui/button "Take a while to recall(t)"
-                    :id "card-recall"
-                    :class (util/hiccup->class "opacity-60.hover:opacity-100")
-                    :small? true
-                    :on-click #(score-and-next-card 3 card card-index cards phase review-records cb))]))]
+                             :id "card-recall"
+                             :class (util/hiccup->class "opacity-60.hover:opacity-100")
+                             :small? true
+                             :on-click #(score-and-next-card 3 card card-index cards phase review-records cb))]))]
 
             (when preview?
               (ui/tippy {:html [:div.text-sm
                                 "Reset this card so that you can review it immediately."]
                          :class "tippy-hover"
                          :interactive true}
-               (ui/button "Reset"
-                 :id "card-reset"
-                 :class (util/hiccup->class "opacity-60.hover:opacity-100")
-                 :small? true
-                 :on-click #(operation-reset! card))))]
+                        (ui/button "Reset"
+                                   :id "card-reset"
+                                   :class (util/hiccup->class "opacity-60.hover:opacity-100")
+                                   :small? true
+                                   :on-click #(operation-reset! card))))]
            [:div.my-4
             (ui/button "Click to review"
-              :small? true)])]))))
+                       :small? true)])]))))
 
 (rum/defc view-modal <
   (shortcut/mixin :shortcut.handler/cards)
@@ -592,21 +592,21 @@
         (if (or
              (nil? result)
              (and result (empty? @result)))
-         [:div.ls-card
-          [:h1.title "Time to create your first card!"]
+          [:div.ls-card
+           [:h1.title "Time to create your first card!"]
 
-          [:div
-           [:p "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."]
-           [:img.my-4 {:src "https://logseq.github.io/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
-           [:p "You can "
-            [:a {:href "https://logseq.github.io/#/page/cards" :target "_blank"}
-             "click this link"]
-            " to check the documentation."]]]
+           [:div
+            [:p "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."]
+            [:img.my-4 {:src "https://logseq.github.io/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
+            [:p "You can "
+             [:a {:href "https://logseq.github.io/#/page/cards" :target "_blank"}
+              "click this link"]
+             " to check the documentation."]]]
 
-         [:div.opacity-60.custom-query-title.ls-card
-          [:div.w-full.flex-1
-           [:code.p-1 (str "Cards: " query-string)]]
-          [:div.mt-2.ml-2.font-medium "No matched cards"]])))))
+          [:div.opacity-60.custom-query-title.ls-card
+           [:div.w-full.flex-1
+            [:code.p-1 (str "Cards: " query-string)]]
+           [:div.mt-2.ml-2.font-medium "No matched cards"]])))))
 
 (rum/defc global-cards
   []
