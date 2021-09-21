@@ -242,7 +242,9 @@
   [repo files {:keys [finish-handler chan]} file->content]
   (let [write-file-f (fn [[path content]]
                        (let [original-content (get file->content path)]
-                         (-> (p/let [_ (nfs/check-directory-permission! repo)]
+                         (-> (p/let [_ (or
+                                        (util/electron?)
+                                        (nfs/check-directory-permission! repo))]
                                (fs/write-file! repo (config/get-repo-dir repo) path content
                                                {:old-content original-content}))
                              (p/catch (fn [error]
