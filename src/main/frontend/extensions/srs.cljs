@@ -430,12 +430,11 @@
             [:div.flex-1
              (when-not (and (not preview?) (= next-phase 1))
                (ui/button (case next-phase
-                            1 "Hide answers(s)"
-                            2 "Show Answers(s)"
-                            3 "Show clozes(s)")
+                            1 [:span "Hide answers " (ui/keyboard-shortcut [:s])]
+                            2 [:span "Show answers " (ui/keyboard-shortcut [:s])]
+                            3 [:span "Show clozes " (ui/keyboard-shortcut [:s])])
                           :id "card-answers"
                           :class "mr-2"
-                          :small? true
                           :on-click #(reset! phase next-phase)))
 
              (when (and (> (count cards) 1) preview?)
@@ -450,23 +449,19 @@
                      interval-days-score-4 (get (get-next-interval card 5) card-last-interval-property)
                      interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
                  [:div.flex.flex-row.justify-between
-                  (ui/button "Forgotten(f)"
+                  (ui/button [:span "Forgotten " (ui/keyboard-shortcut [:f])]
                              :id "card-forgotten"
-                             :small? true
                              :on-click (fn []
                                          (score-and-next-card 1 card card-index cards phase review-records cb)
                                          (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
                                            (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))))
 
-                  (ui/button "Remembered(r)"
+                  (ui/button [:span "Remembered " (ui/keyboard-shortcut [:r])]
                              :id "card-remembered"
-                             :small? true
                              :on-click #(score-and-next-card 5 card card-index cards phase review-records cb))
 
-                  (ui/button "Take a while to recall(t)"
+                  (ui/button [:span "Took a while to recall " (ui/keyboard-shortcut [:t])]
                              :id "card-recall"
-                             :class (util/hiccup->class "opacity-60.hover:opacity-100")
-                             :small? true
                              :on-click #(score-and-next-card 3 card card-index cards phase review-records cb))]))]
 
             (when preview?
@@ -480,7 +475,7 @@
                                    :small? true
                                    :on-click #(operation-reset! card))))]
            [:div.my-4
-            (ui/button "Click to review"
+            (ui/button [:span "Review cards " (ui/keyboard-shortcut [:t :c])]
                        :small? true)])]))))
 
 (rum/defc view-modal <
@@ -642,3 +637,4 @@
          (state/get-current-repo)
          block-id
          (str (string/trim content) " #" card-hash-tag))))))
+
