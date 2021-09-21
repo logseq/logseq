@@ -295,17 +295,16 @@
                                         :path-params {:name data}})
                       :search
                       (let [q data]
-                        (fn []
-                          (state/set-q! q)
-                          (let [search-mode (state/get-search-mode)
-                                opts (if (= :page search-mode)
-                                       (let [current-page (or (state/get-current-page)
-                                                              (date/today))]
-                                         {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
-                                       {})]
-                            (if (= :page search-mode)
-                              (search-handler/search (state/get-current-repo) q opts)
-                              (search-handler/search (state/get-current-repo) q)))))
+                        (state/set-q! q)
+                        (let [search-mode (state/get-search-mode)
+                              opts (if (= :page search-mode)
+                                     (let [current-page (or (state/get-current-page)
+                                                            (date/today))]
+                                       {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
+                                     {})]
+                          (if (= :page search-mode)
+                            (search-handler/search (state/get-current-repo) q opts)
+                            (search-handler/search (state/get-current-repo) q))))
 
                       nil))
        :on-shift-chosen (fn [{:keys [type data]}]
@@ -366,7 +365,7 @@
                              (t :page-search)
                              (t :search))
             :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-            :default-value ""
+            :value         search-q
             :on-change     (fn [e]
                              (when @search-timeout
                                (js/clearTimeout @search-timeout))
