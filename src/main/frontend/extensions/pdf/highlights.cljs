@@ -21,6 +21,7 @@
   (apply js/console.debug args))
 
 (def *area-mode? (atom false))
+(def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
 
 (defn reset-current-pdf!
   []
@@ -632,9 +633,10 @@
         })]))
 
 (rum/defc pdf-settings
-  [^js viewer theme {:keys [hide-settings! select-theme!]}]
+  [^js viewer theme {:keys [hide-settings! select-theme! t]}]
 
-  (let [*el-popup (rum/use-ref nil)]
+  (let [*el-popup (rum/use-ref nil)
+        [area-dashed? set-area-dashed?] (use-atom *area-dashed?)]
 
     (rum/use-effect!
       (fn []
@@ -646,6 +648,11 @@
           (.addEventListener el-popup "keyup" cb)
           #(.removeEventListener el-popup "keyup" cb)))
       [])
+
+    (rum/use-effect!
+      (fn []
+        (storage/set "ls-pdf-area-is-dashed" (boolean area-dashed?)))
+      [area-dashed?])
 
     [:div.extensions__pdf-settings.hls-popup-wrap.visible
      {:on-click (fn [^js/MouseEvent e]
@@ -662,8 +669,12 @@
               [:button.flex.items-center.justify-center
                {:key it :class it :on-click #(do (select-theme! it) (hide-settings!))}
                (when (= theme it) (svg/check))])
-            ["light", "warm", "dark"])
-       ]]]))
+            ["light", "warm", "dark"])]
+
+      [:div.extensions__pdf-settings-item.toggle-input
+       [:label (t :pdf/toggle-dashed)]
+       (ui/toggle area-dashed? #(set-area-dashed? (not area-dashed?)) true)]
+      ]]))
 
 (rum/defc pdf-outline-item
   [^js viewer
@@ -900,7 +911,8 @@
             (pdf-settings
               viewer
               viewer-theme
-              {:hide-settings! #(set-settings-visible! false)
+              {:t t
+               :hide-settings! #(set-settings-visible! false)
                :select-theme!  #(set-viewer-theme! %)}))])))
 
 (rum/defc pdf-viewer
@@ -909,6 +921,7 @@
   ;;(dd "==== render pdf-viewer ====")
 
   (let [*el-ref (rum/create-ref)
+        [area-dashed?, set-area-dashed?] (use-atom *area-dashed?)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
         [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})
         [page-ready?, set-page-ready!] (rum/use-state false)]
@@ -971,7 +984,8 @@
 
     (let [^js viewer (:viewer state)]
       [:div.extensions__pdf-viewer-cnt
-       [:div.extensions__pdf-viewer {:ref *el-ref}
+       [:div.extensions__pdf-viewer
+        {:ref *el-ref :class (front-utils/classnames [{:is-area-dashed @*area-dashed?}])}
         [:div.pdfViewer "viewer pdf"]
         [:div.pp-holder]
 
@@ -1118,7 +1132,7 @@
 
 (rum/defcs playground
   < rum/static rum/reactive
-  (shortcut/mixin :shortcut.handler/pdf)
+    (shortcut/mixin :shortcut.handler/pdf)
   [state]
   (let [pdf-current (state/sub :pdf/current)]
     [:div.extensions__pdf-playground

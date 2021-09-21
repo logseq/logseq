@@ -220,6 +220,17 @@ input::-webkit-inner-spin-button {
           }
         }
       }
+
+      &.toggle-input {
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        padding: 0 9px;
+        padding-top: 12px;
+        margin-top: 13px;
+        opacity: 0.8;
+        border-top: 1px solid #ccc;
+      }
     }
   }
 
@@ -238,6 +249,8 @@ input::-webkit-inner-spin-button {
         pointer-events: none;
       }
     }
+
+
   }
 
   &-resizer {
@@ -266,25 +279,41 @@ input::-webkit-inner-spin-button {
     background-color: #FCD713FF;
     mix-blend-mode: multiply;
     touch-action: none;
+    border-style: dashed;
 
     &[data-color=yellow] {
       background-color: var(--ph-highlight-color-yellow);
+      border-color: var(--ph-highlight-color-yellow);
     }
 
     &[data-color=blue] {
       background-color: var(--ph-highlight-color-blue);
+      border-color: var(--ph-highlight-color-blue);
     }
 
     &[data-color=green] {
       background-color: var(--ph-highlight-color-green);
+      border-color: var(--ph-highlight-color-green);
     }
 
     &[data-color=red] {
       background-color: var(--ph-highlight-color-red);
+      border-color: var(--ph-highlight-color-red);
     }
 
     &[data-color=purple] {
       background-color: var(--ph-highlight-color-purple);
+      border-color: var(--ph-highlight-color-purple);
+    }
+  }
+
+  &-viewer.is-area-dashed {
+    .extensions__pdf {
+      &-hls-area-region {
+        background-color: transparent;
+        border-width: 3px;
+        opacity: 1 !important;
+      }
     }
   }
 
