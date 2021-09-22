@@ -2202,11 +2202,10 @@
              last-block (paste-block-vec-tree-at-target tree [:id :template :template-including-parent] opts)]
          (clear-when-saved!)
          (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]})
-         (let [block (:data (last (flatten last-block)))]
-           (edit-block! block :max (:block/format block) (:block/uuid block))))))
-
-   (when-let [input (gdom/getElement element-id)]
-     (.focus input))))
+         (let [block (if (tree/satisfied-inode? last-block)
+                       (:data last-block)
+                       (:data (last (flatten last-block))))]
+           (edit-block! block :max (:block/format block) (:block/uuid block))))))))
 
 (defn template-on-chosen-handler
   [element-id]
