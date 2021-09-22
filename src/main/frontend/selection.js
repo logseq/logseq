@@ -1,7 +1,7 @@
 // Copied from https://stackoverflow.com/a/20336116
-function isDescendant(parent, child) {
+const isDescendant=(parent, child)=> {
      // from http://stackoverflow.com/questions/2234979/how-to-check-in-javascript-if-one-element-is-a-child-of-another
-     var node = child;
+     let node = child;
      while (node != null) {
          if (node == parent) {
              return true;
@@ -11,10 +11,10 @@ function isDescendant(parent, child) {
      return false;
 }
 
-function getNodesBetween(rootNode, node1, node2) {
-  var resultNodes = [];
-  var isBetweenNodes = false;
-  for (var i = 0; i < rootNode.childNodes.length; i+= 1) {
+const getNodesBetween=(rootNode, node1, node2)=> {
+  const resultNodes = [];
+  let isBetweenNodes = false;
+  for (let i = 0; i < rootNode.childNodes.length; i+= 1) {
     if (isDescendant(rootNode.childNodes[i], node1) || isDescendant(rootNode.childNodes[i], node2)) {
       if (resultNodes.length == 0) {
         isBetweenNodes = true;
@@ -39,9 +39,9 @@ function getNodesBetween(rootNode, node1, node2) {
   }
 }
 
-export var getSelectedNodes = function (selectionAncestor, startNode) {
+export const getSelectedNodes =  (selectionAncestor, startNode)=> {
   // from https://developer.mozilla.org/en-US/docs/Web/API/Selection
-  var selection = null;
+  let selection = null;
   if(window.getSelection){
     selection = window.getSelection();
   } else if(document.selection){
@@ -52,13 +52,13 @@ export var getSelectedNodes = function (selectionAncestor, startNode) {
     if (selection.isCollapsed) {
       return [];
     };
-    var node2 = selection.focusNode;
+    const node2 = selection.focusNode;
     return getNodesBetween(selectionAncestor, startNode, node2);
   }
 };
 
-export var clearSelection = function () {
-  var selection = null;
+export const clearSelection =  ()=> {
+  let selection = null;
   if(window.getSelection){
     selection = window.getSelection();
   } else if(document.selection){
