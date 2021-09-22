@@ -1,6 +1,7 @@
 (ns frontend.modules.shortcut.config
   (:require [frontend.components.commit :as commit]
             [frontend.extensions.srs.handler :as srs]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.history :as history]
@@ -36,6 +37,17 @@
     {:desc    "Date picker: Select next week"
      :binding "down"
      :fn      ui-handler/shortcut-next-week}}
+
+   :shortcut.handler/pdf
+   ^{:before m/prevent-default-behavior}
+   {:pdf/previous-page
+    {:desc    "Previous page of current pdf doc"
+     :binding "ctrl+p"
+     :fn      pdf-utils/prev-page}
+    :pdf/next-page
+    {:desc    "Next page of current pdf doc"
+     :binding "ctrl+n"
+     :fn      pdf-utils/next-page}}
 
    :shortcut.handler/auto-complete
    {:auto-complete/complete

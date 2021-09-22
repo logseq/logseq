@@ -333,7 +333,6 @@
              :intent "logseq"
              :target "_blank")
            ])]
-
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [[_ item] installed-plugins]
           (rum/with-key
