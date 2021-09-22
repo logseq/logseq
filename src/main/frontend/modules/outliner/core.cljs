@@ -584,7 +584,7 @@
   Args:
     root: root of subtree
     target-node: the destination
-    sibling?: as sibling of the target-node or child"
+    sibling?: as sibling of the target-node or first child"
   [root target-node sibling?]
   {:pre [(every? tree/satisfied-inode? [root target-node])
          (boolean? sibling?)]}

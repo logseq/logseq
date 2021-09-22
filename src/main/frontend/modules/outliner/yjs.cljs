@@ -139,6 +139,18 @@
       s
       (recur (inc i) (.get s (get pos i))))))
 
+(defn- get-child-array [pos struct]
+  "return child array if exists.
+[1 [2 3]]
+ ^
+pos
+
+return [2 3]
+"
+  (let [child (get-pos-item (.inc-pos pos) struct)]
+    (when (instance? y/Array child)
+      child)))
+
 (defn- distinct-struct [struct id-set]
   (loop [i 0]
     (when (< i (.-length struct))
@@ -718,9 +730,8 @@
     (when (indentable? pos)
       (let [item-parent-array (goto-innermost-struct-array pos struct)
             item (get-pos-item pos struct)
-            item-children (get-pos-item (.inc-pos pos) struct)
-            item-children-clone (and item-children (instance? y/Array item-children)
-                                     (.clone item-children))
+            item-children (get-child-array pos struct)
+            item-children-clone (and item-children (.clone item-children))
             push-items (if item-children-clone
                          [item item-children-clone]
                          [item])]
@@ -744,9 +755,8 @@
             item-parent-array (goto-innermost-struct-array pos struct)
             item-parent-parent-array (goto-innermost-struct-array upper-pos struct)
             item (get-pos-item pos struct)
-            item-children (get-pos-item (.inc-pos pos) struct)
-            item-children-clone (and item-children (instance? y/Array item-children)
-                                     (.clone item-children))
+            item-children (get-child-array pos struct)
+            item-children-clone (and item-children (.clone item-children))
             item-parent-array-clone (.clone item-parent-array)]
         (.delete item-parent-array (last pos) (- (.-length item-parent-array) (last pos)))
         (.delete item-parent-array-clone 0 (+ (last pos) (if item-children-clone 2 1)))
@@ -772,7 +782,7 @@
 (defn indent-outdent-nodes-op [nodes indent?]
   (when-some [page-name
               (:block/name (db/entity (:db/id (:block/page (:data (first nodes))))))]
-    (let [ids (mapv (fn [node] (str (:block/uuid (:data node))))nodes)]
+    (let [ids (mapv (fn [node] (str (:block/uuid (:data node)))) nodes)]
       (println "[YJS] indent-outdent-nodes(before):" nodes indent?)
       (indent-outdent-nodes-yjs page-name ids indent?)
       (merge-doc doc-remote doc-local)
@@ -782,13 +792,44 @@
                        (db/pull (:db/id (:data node))))
                      nodes)))))
 
+(defn move-subtree-same-page-yjs [struct root-id target-id sibling?]
+  (when (find-pos struct target-id)
+    (when-some [root-pos (find-pos struct root-id)]
+      (let [root-item (get-pos-item root-pos struct)
+            root-item-parent-array (goto-innermost-struct-array root-pos struct)
+            child-array (get-child-array root-pos struct)
+            child-array-clone (and child-array (.clone child-array))
+            insert-items (if child-array [root-item child-array-clone] [root-item])]
+        (.delete root-item-parent-array (last root-pos) (if child-array 2 1))
+        (when (= 0 (.-length root-item-parent-array))
+          (let [upper-pos (.upper-level root-pos)
+                root-item-parent-parent-array (goto-innermost-struct-array upper-pos struct)]
+            (.delete root-item-parent-parent-array (last upper-pos))))
+        (let [target-pos (find-pos struct target-id)
+              target-item-parent-array (goto-innermost-struct-array target-pos struct)]
+          (if sibling?
+            (let [sibling-insert-pos (let [insert-pos (.inc-pos target-pos)
+                                           next-item (get-pos-item insert-pos struct)]
+                                       (if (instance? y/Array next-item)
+                                         (inc (last insert-pos))
+                                         (last insert-pos)))]
+              (.insert target-item-parent-array sibling-insert-pos (clj->js insert-items)))
+            (let [insert-pos (inc (last target-pos))
+                  new-array (when-not (instance? y/Array (.get target-item-parent-array insert-pos))
+                              (y/Array.))]
+              (when new-array
+                (.insert target-item-parent-array insert-pos (clj->js [new-array])))
+              (let [target-child-array (.get target-item-parent-array insert-pos)]
+                (.insert target-child-array 0 (clj->js insert-items))))))))))
 
-
-
-;; (defn move-subtree-yjs [src-page-name dst-page-name root target-node sibling?]
-
-;;   )
-
+(defn move-subtree-same-page-op [root target-node sibling?]
+  (when-some [page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))]
+    (let [struct (structarray page-name)
+          root-id (str (:block/uuid (:data root)))
+          target-id (str (:block/uuid (:data target-node)))]
+      (move-subtree-same-page-yjs struct root-id target-id sibling?)
+      (merge-doc doc-remote doc-local)
+      (outliner-core/move-subtree root target-node sibling?))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; functions for debug ;;
@@ -821,6 +862,6 @@
   (.insert (.get test-struct 2) 1 (clj->js ["4"]))
   (.insert (.get test-struct 2) 2 (clj->js [(y/Array.)]))
   (.insert (.get (.get test-struct 2) 2) 0 (clj->js ["5"]))
-  (.observeDeep test-struct (fn [e] (println e) (def eee e)))
+  (.observeDeep test-struct (fn [e] (def eee e)))
   (println (.toJSON test-struct))
  )

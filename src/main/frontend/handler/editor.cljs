@@ -2149,7 +2149,7 @@
   [node]
   (when-not (parent-is-page? node)
     (let [parent-node (tree/-get-parent node)]
-      (outliner-core/move-subtree node parent-node true)))
+      (outliner-yjs/move-subtree-same-page-op node parent-node true)))
   (let [repo (state/get-current-repo)]
     (db/refresh! repo {:key :block/change :data [(:data node)]})))
 
