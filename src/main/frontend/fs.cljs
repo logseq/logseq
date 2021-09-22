@@ -7,6 +7,8 @@
             [frontend.fs.bfs :as bfs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.node :as node]
+            [frontend.fs.capacitor-fs :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.fs.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -16,6 +18,7 @@
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
 (defonce node-record (node/->Node))
+(defonce mobile-record (mobile/->Capacitorfs))
 
 (defn local-db?
   [dir]
@@ -32,6 +35,9 @@
     (cond
       (and (util/electron?) (not bfs-local?) (not git-repo?))
       node-record
+
+      (mobile-util/is-native-platform?)
+      mobile-record
 
       (local-db? dir)
       nfs-record
