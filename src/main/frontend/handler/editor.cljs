@@ -213,7 +213,8 @@
        (let [block (or (db/pull [:block/uuid block-id]) block)
              edit-input-id (if (uuid? id)
                              (get-edit-input-id-with-block-id id)
-                             (str (subs id 0 (- (count id) 36)) block-id))
+                             (-> (str (subs id 0 (- (count id) 36)) block-id)
+                                 (string/replace "ls-block" "edit-block")))
              content (or custom-content (:block/content block) "")
              content-length (count content)
              text-range (cond
@@ -854,6 +855,26 @@
        (outliner-core/delete-node children?))
       (db/refresh! repo {:key :block/change :data [block]}))))
 
+(defn- move-to-prev-block
+  [repo sibling-block format id value]
+  (when (and repo sibling-block)
+    (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
+      (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
+        (let [original-content (util/trim-safe (:block/content block))
+              value' (-> (property/remove-built-in-properties format original-content)
+                         (drawer/remove-logbook))
+              new-value (str value' " " (string/triml value))
+              tail-len (count (string/triml value))
+              pos (max
+                   (if original-content
+                     (utf8/length (utf8/encode original-content))
+                     0)
+                   0)]
+          (edit-block! block pos format id
+                       {:custom-content new-value
+                        :tail-len tail-len
+                        :move-cursor? false}))))))
+
 (defn delete-block!
   ([repo e]
    (delete-block! repo e true))
@@ -877,23 +898,7 @@
                  (let [block-parent (gdom/getElement block-parent-id)
                        sibling-block (util/get-prev-block-non-collapsed block-parent)]
                    (delete-block-aux! block delete-children?)
-                   (when (and repo sibling-block)
-                     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-                       (when-let [block (db/pull repo '[*] [:block/uuid (uuid sibling-block-id)])]
-                         (let [original-content (util/trim-safe (:block/content block))
-                               value' (-> (property/remove-built-in-properties format original-content)
-                                          (drawer/remove-logbook))
-                               new-value (str value' " " (string/triml value))
-                               tail-len (count (string/triml value))
-                               pos (max
-                                    (if original-content
-                                      (utf8/length (utf8/encode original-content))
-                                      0)
-                                    0)]
-                           (edit-block! block pos format id
-                                        {:custom-content new-value
-                                         :tail-len tail-len
-                                         :move-cursor? false})))))))))))))
+                   (move-to-prev-block repo sibling-block format id value)))))))))
    (state/set-editor-op! nil)))
 
 (defn- get-end-block-parent
@@ -925,20 +930,30 @@
         (reverse blocks)))))
 
 (defn delete-blocks!
-  [repo block-uuids]
-  (when (seq block-uuids)
-    (let [lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-          blocks (db/pull-many repo '[*] lookup-refs)
-          blocks (reorder-blocks blocks)
-          start-node (outliner-core/block (first blocks))
-          end-node (get-top-level-end-node blocks)]
-      (if (= start-node end-node)
-        (delete-block-aux! (first blocks) true)
-        (when (outliner-core/delete-nodes start-node end-node lookup-refs)
-          (let [opts {:key :block/change
-                      :data blocks}]
-            (db/refresh! repo opts)
-            (ui-handler/re-render-root!)))))))
+  [repo dom-blocks]
+  (let [block-uuids (distinct (map #(uuid (dom/attr % "blockid")) dom-blocks))]
+    (when (seq block-uuids)
+      (let [uuid->dom-block (zipmap block-uuids dom-blocks)
+            lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
+            blocks (db/pull-many repo '[*] lookup-refs)
+            blocks (reorder-blocks blocks)
+            start-node (outliner-core/block (first blocks))
+            end-node (get-top-level-end-node blocks)
+            block (first blocks)
+            block-parent (get uuid->dom-block (:block/uuid block))
+            sibling-block (when block-parent (util/get-prev-block-non-collapsed block-parent))]
+        (if (= start-node end-node)
+          (delete-block-aux! (first blocks) true)
+          (when (outliner-core/delete-nodes start-node end-node lookup-refs)
+            (let [opts {:key :block/change
+                        :data blocks}]
+              (db/refresh! repo opts)
+              (ui-handler/re-render-root!))))
+        (when sibling-block
+          (move-to-prev-block repo sibling-block
+                              (:block/format block)
+                              (dom/attr sibling-block "id")
+                              ""))))))
 
 (defn- block-property-aux!
   [block-id key value]
@@ -1145,9 +1160,8 @@
                            (or (= "true" (dom/attr block "data-transclude"))
                                (= "true" (dom/attr block "data-query")))) blocks)]
       (when (seq blocks)
-        (let [repo (state/get-current-repo)
-              ids (distinct (map #(uuid (dom/attr % "blockid")) blocks))]
-          (delete-blocks! repo ids))))))
+        (let [repo (state/get-current-repo)]
+          (delete-blocks! repo blocks))))))
 
 (defn- get-nearest-page
   []
