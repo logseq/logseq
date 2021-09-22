@@ -2202,11 +2202,8 @@
              last-block (paste-block-vec-tree-at-target tree [:id :template :template-including-parent] opts)]
          (clear-when-saved!)
          (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]})
-         ;; FIXME:
-         ;; (js/setTimeout
-         ;;  #(edit-block! {:block/uuid (:block/uuid last-block)} :max nil (:block/uuid last-block))
-         ;;  100)
-         )))
+         (let [block (:data (last (flatten last-block)))]
+           (edit-block! block :max (:block/format block) (:block/uuid block))))))
 
    (when-let [input (gdom/getElement element-id)]
      (.focus input))))
