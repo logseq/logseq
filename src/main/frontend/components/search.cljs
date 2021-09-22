@@ -279,7 +279,16 @@
                 (ui/toggle in-page-search?
                            (fn [_value]
                              (state/set-search-mode! (if in-page-search? :global :page)))
-                           true)]])]
+                           true)]
+               (ui/tippy {:html [:div
+                                 "Tip: " [:code (util/->platform-shortcut "Ctrl+Shift+p")] " to open the commands palette"]
+                          :interactive     true
+                          :arrow true}
+                         [:a.inline-block
+                          {:style {:margin-top 1
+                                   :margin-left 12}
+                           :on-click #(state/toggle! :ui/command-palette-open?)}
+                          (svg/icon-cmd 20)])])]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
                     (remove nil?)
@@ -389,13 +398,7 @@
          [:div.search-results-wrap
           (if (seq search-result)
             (search-auto-complete search-result search-q false)
-            (recent-search-and-pages in-page-search?))
-          [:div.p-4.flex.flex-row.justify-between.opacity-70.hover:opacity-100.cursor.text-sm {:on-click (fn []
-                                                                                                           (state/toggle! :ui/command-palette-open?))}
-           [:div
-            "Tip: " [:code (util/->platform-shortcut "Ctrl+Shift+p")] " to open the commands palette"]
-           [:a.button
-            (svg/icon-cmd 20)]]]]))))
+            (recent-search-and-pages in-page-search?))]]))))
 
 (rum/defc more < rum/reactive
   [route]
