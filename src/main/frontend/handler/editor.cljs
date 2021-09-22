@@ -1826,6 +1826,14 @@
       :org (util/format "[[%s][%s]]" link label)
       nil)))
 
+(defn- get-image-link
+  [format link label]
+  (let [link (or link "")
+        label (or label "")]
+    (case (keyword format)
+      :markdown (util/format "![%s](%s)" label link)
+      :org (util/format "[[%s]]"))))
+
 (defn handle-command-input
   [command id format m pos]
   (case command
@@ -1836,6 +1844,15 @@
         nil
         (insert-command! id
                          (get-link format link label)
+                         format
+                         {:last-pattern (str commands/slash "link")})))
+    :image-link
+    (let [{:keys [link label]} m]
+      (if (and (string/blank? link)
+               (string/blank? label))
+        nil
+        (insert-command! id
+                         (get-image-link format link label)
                          format
                          {:last-pattern (str commands/slash "link")})))
     nil)

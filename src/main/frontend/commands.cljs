@@ -37,6 +37,15 @@
                                        :id :label
                                        :placeholder "Label"}]]])
 
+(def image-link-steps [[:editor/input (str slash "link")]
+                       [:editor/show-input [{:command :image-link
+                                             :id :link
+                                             :placeholder "Link"
+                                             :autoFocus true}
+                                            {:command :image-link
+                                             :id :label
+                                             :placeholder "Label"}]]])
+
 (def zotero-steps [[:editor/input (str slash "zotero")]
                    [:editor/show-zotero]])
 
@@ -207,7 +216,7 @@
                          [:editor/search-block :reference]] "Create a backlink to a block"]
      ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
      ["Link" link-steps "Create a HTTP link"]
-     ["Image link" link-steps "Create a HTTP link to a image"]
+     ["Image link" image-link-steps "Create a HTTP link to a image"]
      (when (state/markdown?)
        ["Underline" [[:editor/input "<ins></ins>"
                       {:last-pattern slash
