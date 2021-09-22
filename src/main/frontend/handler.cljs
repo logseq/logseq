@@ -218,12 +218,14 @@
                          (state/pub-event! [:modal/show
                                             [:div
                                              [:h1.title "Reload Logseq?"]
-                                             (ui/button "YES"
-                                               :autoFocus "on"
-                                               :on-click (fn []
-                                                           (pool/terminate-parser-pool!)
-                                                           (p/let [_ (el/persist-dbs!)]
-                                                             (reset! triggered? true)
-                                                             (js/window.location.reload))))]])
+                                             (ui/button
+                                              [:span "Yes " (ui/keyboard-shortcut ["enter"])]
+                                              :autoFocus "on"
+                                              :large? true
+                                              :on-click (fn []
+                                                          (pool/terminate-parser-pool!)
+                                                          (p/let [_ (el/persist-dbs!)]
+                                                            (reset! triggered? true)
+                                                            (js/window.location.reload))))]])
                          (reset! triggered? false)
                          (set! (.-returnValue e) "")))))

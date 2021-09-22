@@ -39,27 +39,6 @@
               :sidebar?   true
               :repo       repo}))
 
-(defn recent-pages
-  []
-  (let [pages (->> (db/get-key-value :recent/pages)
-                   (remove nil?)
-                   (remove #(= (string/lower-case %) "contents")))]
-    [:div.recent-pages.text-sm.flex-col.flex.ml-3.mt-2
-     (when (seq pages)
-       (for [page pages]
-         [:a.page-ref.mb-1 {:key      (str "recent-page-" page)
-                   :href     (rfe/href :page {:name page})
-                   :on-click (fn [e]
-                               (when (gobj/get e "shiftKey")
-                                 (when-let [page (db/pull [:block/name (string/lower-case page)])]
-                                   (state/sidebar-add-block!
-                                    (state/get-current-repo)
-                                    (:db/id page)
-                                    :page
-                                    {:page page}))
-                                 (.preventDefault e)))}
-          page]))]))
-
 (rum/defc contents < rum/reactive db-mixins/query
   []
   [:div.contents.flex-col.flex.ml-3
@@ -73,9 +52,6 @@
     [(or (state/get-favorites-name)
          (t :right-side-bar/favorites))
      (contents)]
-
-    :recent
-    [(t :right-side-bar/recent) (recent-pages)]
 
     :help
     [(t :right-side-bar/help) (onboarding/help)]
@@ -249,12 +225,6 @@
                                                              (state/sidebar-add-block! repo "contents" :contents nil))}
               (or (state/get-favorites-name)
                   (t :right-side-bar/favorites))]]
-
-            [:div.ml-4.text-sm
-             [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                             (state/sidebar-add-block! repo "recent" :recent nil))}
-
-              (t :right-side-bar/recent)]]
 
             [:div.ml-4.text-sm
              [:a.cp__right-sidebar-settings-btn {:on-click (fn []

@@ -4,6 +4,7 @@
             [frontend.db :as db]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.text :as text]
             [frontend.util :as util]
@@ -102,6 +103,7 @@
 
 (defn go-to-search!
   [search-mode]
+  (search-handler/clear-search! false)
   (when search-mode
     (state/set-search-mode! search-mode))
   (state/pub-event! [:go/search]))

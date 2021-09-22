@@ -15,8 +15,7 @@
   (let [roam-importing? (rum/react *roam-importing?)
         opml-importing? (rum/react *opml-importing?)]
     [:div#import
-     [:h1.title "Import JSON from Roam Research (experimental)"]
-     [:p.text-sm.mb-8 "Export to Roam Research is coming!"]
+     [:h1.title "Import JSON from Roam Research"]
 
      [:input
       {:id "import-roam"

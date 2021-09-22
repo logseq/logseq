@@ -41,7 +41,8 @@
 
       (ui/dropdown-with-links
        (fn [{:keys [toggle-fn]}]
-         [:a.fade-link.block.p-2 {:on-click toggle-fn}
+         [:a.button.text-sm.font-medium.block {:on-click toggle-fn
+                                               :style {:margin-right 12}}
           [:span (t :login)]])
        (let [list [;; {:title (t :login-google)
                    ;;  :url (str config/website "/login/google")}
@@ -180,9 +181,18 @@
 
        (when electron-not-mac? (back-and-forward))
 
-       (if current-repo
-         (search/search)
-         [:div.flex-1])
+       [:div.flex-1.flex]
+
+       (when current-repo
+         (ui/tippy
+          {:html [:div.text-sm.font-medium
+                  "Shortcut: "
+                  [:code (util/->platform-shortcut "Ctrl + k")]]
+           :interactive     true
+           :arrow true}
+          [:a.button#search-button
+           {:on-click #(state/pub-event! [:go/search])}
+           svg/search]))
 
        (when plugin-handler/lsp-enabled?
          (plugins/hook-ui-items :toolbar))

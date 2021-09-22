@@ -44,8 +44,7 @@
                editor-cursor (state/get-current-edit-block-and-position)
                meta (merge opts {:editor-cursor editor-cursor})
                rs (d/transact! conn txs meta)]
-           (prn "[DEBUG] 1. Logseq DB transacted")
-          (when-not config/test?
+           (when-not config/test?
             (after-transact-pipelines rs))
           rs)
          (catch js/Error e
