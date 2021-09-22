@@ -42,11 +42,11 @@
    ^{:before m/prevent-default-behavior}
    {:pdf/previous-page
     {:desc    "Previous page of current pdf doc"
-     :binding "ctrl+k"
+     :binding "ctrl+p"
      :fn      pdf-utils/prev-page}
     :pdf/next-page
     {:desc    "Next page of current pdf doc"
-     :binding "ctrl+j"
+     :binding "ctrl+n"
      :fn      pdf-utils/next-page}}
 
    :shortcut.handler/auto-complete
