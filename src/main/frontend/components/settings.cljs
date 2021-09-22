@@ -199,7 +199,7 @@
 
 (rum/defcs switch-git-auto-commit-row < rum/reactive
   [state t]
-  (let [enabled? (not (state/sub [:electron/user-cfgs :git/disable-auto-commit?]))]
+  (let [enabled? (state/get-git-auto-commit-enabled?)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       "Enable Git auto commit"]

@@ -1491,3 +1491,7 @@
 
 (defn remove-watch-state [key]
   (remove-watch state key))
+
+(defn get-git-auto-commit-enabled?
+  []
+  (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
