@@ -55,14 +55,10 @@
                       (= (string/trim content) "-")
                       (= (string/trim content) "*")))
             (p/let [
-                    ;; save the previous content in Logseq first and commit it to avoid
-                    ;; any data-loss.
-                    _ (file-handler/alter-file repo path db-content {:re-render-root? false
-                                                                     :reset? false
-                                                                     :skip-compare? true})
-                    _ (ipc/ipc "gitCommitAll" "Save the file from Logseq's database")
+                    ;; save the previous content in a bak file to avoid data overwritten.
+                    _ (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content)
                     _ (file-handler/alter-file repo path content {:re-render-root? true
-                                                                  :skip-compare? true})]
+                                                                  :from-disk? true})]
               (set-missing-block-ids! content)
               (db/set-file-last-modified-at! repo path mtime)))
 
