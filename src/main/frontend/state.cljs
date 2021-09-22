@@ -167,7 +167,9 @@
 
       :view/components {}
 
-      :debug/write-acks {}})))
+      :debug/write-acks {}
+
+      :encryption/graph-parsing? false})))
 
 
 (defn sub

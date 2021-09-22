@@ -30,7 +30,9 @@
     (let [repo (config/get-local-repo dir)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and content (not (encrypt/content-encrypted? content)))
+      (when (and content
+                 (not (encrypt/content-encrypted? content))
+                 (not (:encryption/graph-parsing? @state/state)))
         (cond
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))
