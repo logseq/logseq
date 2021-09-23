@@ -188,7 +188,6 @@ class LSPluginCaller extends EventEmitter {
   }
 
   async _setupIframeSandbox () {
-    const cnt = document.body
     const pl = this._pluginLocal!
     const id = pl.id
     const url = new URL(pl.options.entry!)
@@ -197,11 +196,16 @@ class LSPluginCaller extends EventEmitter {
       .set(`__v__`, IS_DEV ? Date.now().toString() : pl.options.version)
 
     // clear zombie sandbox
-    const zb = cnt.querySelector(`#${id}`)
+    const zb = document.querySelector(`#${id}`)
     if (zb) zb.parentElement.removeChild(zb)
 
+    const cnt = document.createElement('div')
+    cnt.classList.add('lsp-iframe-sandbox-container')
+    cnt.id = id
+    document.body.appendChild(cnt)
+
     const pt = new Postmate({
-      id, container: cnt, url: url.href,
+      id: id + '_iframe', container: cnt, url: url.href,
       classListArray: ['lsp-iframe-sandbox'],
       model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) }
     })
@@ -310,10 +314,18 @@ class LSPluginCaller extends EventEmitter {
   }
 
   _getSandboxIframeContainer () {
-    return this._parent?.frame
+    return this._parent?.frame.parentNode as HTMLDivElement
   }
 
   _getSandboxShadowContainer () {
+    return this._shadow?.frame.parentNode as HTMLDivElement
+  }
+
+  _getSandboxIframeRoot () {
+    return this._parent?.frame
+  }
+
+  _getSandboxShadowRoot () {
     return this._shadow?.frame
   }
 
@@ -322,13 +334,18 @@ class LSPluginCaller extends EventEmitter {
   }
 
   async destroy () {
+    let root: HTMLElement = null
     if (this._parent) {
+      root = this._getSandboxIframeContainer()
       await this._parent.destroy()
     }
 
     if (this._shadow) {
+      root = this._getSandboxShadowContainer()
       this._shadow.destroy()
     }
+
+    root?.parentNode.removeChild(root)
   }
 }
 

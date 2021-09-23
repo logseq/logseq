@@ -20,7 +20,7 @@ export type StyleOptions = {
   style: StyleString
 }
 
-export type UIFrameAttrs = {
+export type UIContainerAttrs = {
   draggable: boolean
   resizable: boolean
 

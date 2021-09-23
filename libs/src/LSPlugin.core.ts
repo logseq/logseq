@@ -26,7 +26,7 @@ import {
   LSPluginPkgConfig,
   StyleOptions,
   StyleString,
-  ThemeOptions, UIFrameAttrs,
+  ThemeOptions, UIContainerAttrs,
   UIOptions
 } from './LSPlugin'
 import { snakeCase } from 'snake-case'
@@ -175,13 +175,13 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
   const _ = (label: string): any => `main-ui:${label}`
 
   pluginLocal.on(_('visible'), ({ visible, toggle, cursor }) => {
-    const el = pluginLocal.getMainUI()
+    const el = pluginLocal.getMainUIContainer()
     el?.classList[toggle ? 'toggle' : (visible ? 'add' : 'remove')]('visible')
     // pluginLocal.caller!.callUserModel(LSPMSG, { type: _('visible'), payload: visible })
     // auto focus frame
     if (visible) {
       if (!pluginLocal.shadow && el) {
-        (el as HTMLIFrameElement).contentWindow?.focus()
+        (el.querySelector('iframe') as HTMLIFrameElement)?.contentWindow?.focus()
       }
     }
 
@@ -190,15 +190,18 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
     }
   })
 
-  pluginLocal.on(_('attrs'), (attrs: Partial<UIFrameAttrs>) => {
-    const el = pluginLocal.getMainUI()
+  pluginLocal.on(_('attrs'), (attrs: Partial<UIContainerAttrs>) => {
+    const el = pluginLocal.getMainUIContainer()
     Object.entries(attrs).forEach(([k, v]) => {
       el?.setAttribute(k, v)
+      if (k === 'draggable' && v) {
+        pluginLocal._setupDraggableContainer(el)
+      }
     })
   })
 
   pluginLocal.on(_('style'), (style: Record<string, any>) => {
-    const el = pluginLocal.getMainUI()
+    const el = pluginLocal.getMainUIContainer()
     Object.entries(style).forEach(([k, v]) => {
       el!.style[k] = v
     })
@@ -390,7 +393,7 @@ class PluginLocal
     }
   }
 
-  getMainUI (): HTMLElement | undefined {
+  getMainUIContainer (): HTMLElement | undefined {
     if (this.shadow) {
       return this.caller?._getSandboxShadowContainer()
     }
@@ -430,15 +433,16 @@ class PluginLocal
       throw new IllegalPluginPackageError(e.message)
     }
 
-    // Pick legal attrs
-    ['name', 'author', 'repository', 'version',
-      'description', 'repo', 'title', 'effect'
-    ].forEach(k => {
+    const localRoot = this._localRoot = safetyPathNormalize(url)
+    const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
+
+      // Pick legal attrs
+    ;['name', 'author', 'repository', 'version',
+      'description', 'repo', 'title', 'effect',
+    ].concat(!this.isInstalledInDotRoot ? ['devEntry'] : []).forEach(k => {
       this._options[k] = pkg[k]
     })
 
-    const localRoot = this._localRoot = safetyPathNormalize(url)
-    const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
     const validateMain = (main) => main && /\.(js|html)$/.test(main)
 
     // Entry from main
@@ -496,8 +500,8 @@ class PluginLocal
   }
 
   async _tryToNormalizeEntry () {
-    let { entry, settings } = this.options
-    let devEntry = settings?.get('_devEntry')
+    let { entry, settings, devEntry } = this.options
+    devEntry = devEntry || settings?.get('_devEntry')
 
     if (devEntry) {
       this._options.entry = devEntry
@@ -553,6 +557,16 @@ class PluginLocal
       // @ts-ignore
       this.emit('provider:theme', options)
     })
+  }
+
+  _setupDraggableContainer (el: HTMLElement) {
+    const ds = el.dataset
+    if (ds.inited_draggable) return
+    const handle = document.createElement('div')
+    handle.classList.add('draggable-handle')
+    el.prepend(handle)
+
+    ds.inited_draggable = 'true'
   }
 
   async load (readyIndicator?: DeferredActor) {
