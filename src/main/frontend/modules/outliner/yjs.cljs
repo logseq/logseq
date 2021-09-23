@@ -172,7 +172,7 @@ return [2 3]
                    (instance? y/Array (.get struct (inc i))))
                 (let [next-item (.get struct (inc i))]
                   (distinct-struct next-item id-set)
-                  (.push (.get struct (dec i)) (.toArray next-item))
+                  (.push (.get struct (dec i)) (.toJSON next-item))
                   (.delete struct (inc i))
                   (.delete struct i)
                   (recur i))
@@ -844,6 +844,12 @@ return [2 3]
   (let [struct (.toJSON (structarray page-name))
         contentmap (contentmap)]
     (struct->content-struct struct contentmap)))
+
+(defn- remote-page-contents [page-name]
+  (let [struct (.toJSON (remote-structarray page-name))
+        contentmap (remote-contentmap)]
+    (struct->content-struct struct contentmap)))
+
 
 (defn- build-test-struct []
   (def test-doc (y/Doc.))
