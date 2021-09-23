@@ -1465,9 +1465,9 @@
                         "LATER" "NOW"
                         "TODO" "DOING"
                         "DOING" "TODO")]
-      [(keyword (str "a.marker-switch.block-marker." marker))
-       {:title (util/format "Change from %s to %s" marker next-marker)
-        :value marker
+      [:a
+       {:class (str "marker-switch block-marker " marker)
+        :title (util/format "Change from %s to %s" marker next-marker)
         :on-click (set-marker-fn next-marker)}
        marker])))
 
