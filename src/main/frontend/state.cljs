@@ -100,7 +100,7 @@
       :editor/block-dom-id nil
       :editor/set-timestamp-block nil
       :editor/last-input-time nil
-      :editor/new-block-toggle? document-mode?
+      :editor/document-mode? document-mode?
       :editor/args nil
       :db/last-transact-time {}
       :db/last-persist-transact-ids {}
@@ -301,7 +301,11 @@
 
 (defn sub-graph-config
   []
-  (:graph/settings (get (sub-config) (get-current-repo))))
+  (get (sub-config) (get-current-repo)))
+
+(defn sub-graph-config-settings
+  []
+  (:graph/settings (sub-graph-config)))
 
 ;; Enable by default
 (defn show-brackets?
@@ -1126,20 +1130,20 @@
   []
   (get @state :notification/contents))
 
-(defn get-new-block-toggle?
+(defn document-mode?
   []
-  (get @state :editor/new-block-toggle?))
+  (get @state :document/mode?))
 
-(defn toggle-new-block-shortcut!
+(defn doc-mode-enter-for-new-line?
   []
-  (update-state! :editor/new-block-toggle? not))
+  (and (document-mode?)
+       (not (:shortcut/doc-mode-enter-for-new-block? (sub-graph-config)))))
 
 (defn toggle-document-mode!
   []
-  (let [mode (get @state :document/mode?)]
+  (let [mode (document-mode?)]
     (set-state! :document/mode? (not mode))
-    (storage/set :document/mode? (not mode)))
-  (toggle-new-block-shortcut!))
+    (storage/set :document/mode? (not mode))))
 
 (defn enable-tooltip?
   []

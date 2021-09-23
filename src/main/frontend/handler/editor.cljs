@@ -2266,14 +2266,14 @@
       (cursor/move-cursor-to input (inc selected-start)))))
 
 (defn keydown-new-block-handler [state e]
-  (if (state/get-new-block-toggle?)
+  (if (state/doc-mode-enter-for-new-line?)
     (keydown-new-line)
     (do
       (.preventDefault e)
       (keydown-new-block state))))
 
 (defn keydown-new-line-handler [state e]
-  (if (state/get-new-block-toggle?)
+  (if (state/doc-mode-enter-for-new-line?)
     (keydown-new-block state)
     (do
       (.preventDefault e)
