@@ -116,7 +116,15 @@
 
 (defn open-dir
   [ok-handler]
-  (let [record (if (util/electron?) node-record nfs-record)]
+  (let [record (cond
+                 (util/electron?)
+                 node-record
+
+                 (mobile-util/is-native-platform?)
+                 mobile-record
+
+                 :else
+                 nfs-record)]
     (p/let [result (protocol/open-dir record ok-handler)]
       (if (util/electron?)
         (let [[dir & paths] (bean/->clj result)]

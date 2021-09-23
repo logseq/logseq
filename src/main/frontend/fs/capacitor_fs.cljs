@@ -1,8 +1,58 @@
 (ns frontend.fs.capacitor-fs
   (:require [frontend.fs.protocol :as protocol]
             [lambdaisland.glogi :as log]
+            [cljs.core.async :as a]
+            [cljs.core.async.interop :refer [<p!]]
+            [frontend.util :as futil]
             ["@capacitor/filesystem" :refer [Filesystem Directory Encoding]]
+            [frontend.mobile.util :as util]
             [promesa.core :as p]))
+
+(defn readdir
+  "readdir recursively"
+  [path]
+  (p/loop [result []
+           dirs [path]]
+    (if (empty? dirs)
+      result
+      (p/let [d (first dirs)
+              files (.readdir Filesystem (clj->js {:path d}))
+              files (-> files
+                        js->clj
+                        (get "files" []))
+              files (->> files
+                         (map (fn [file] (futil/node-path.join d file))))
+              files-with-stats (p/all
+                                (mapv
+                                 (fn [file]
+                                   (p/chain
+                                    (.stat Filesystem (clj->js {:path file}))
+                                    #(js->clj % :keywordize-keys true)))
+                                 files))
+              files-dir (->> files-with-stats
+                             (filterv
+                              (fn [{:keys [type]}]
+                                (= type "directory")))
+                             (mapv :uri))
+
+              files-result
+              (p/all
+               (->> files-with-stats
+                    (filter
+                     (fn [{:keys [type]}]
+                       (= type "file")))
+                    (mapv
+                     (fn [{:keys [uri] :as file-result}]
+                       (p/chain
+                        (.readFile Filesystem
+                                   (clj->js
+                                    {:path uri
+                                     :encoding (.-UTF8 Encoding)}))
+                        #(js->clj % :keywordize-keys true)
+                        :data
+                        #(assoc file-result :content %))))))]
+        (p/recur (concat result files-result)
+                 (concat (rest dirs) files-dir))))))
 
 (defrecord Capacitorfs []
   protocol/Fs
@@ -55,8 +105,55 @@
   (stat [this dir path]
     nil)
   (open-dir [this ok-handler]
-    nil)
+    (p/let [path (p/chain
+                  (.pickFolder util/folder-picker)
+                  #(js->clj % :keywordize-keys true)
+                  :path)
+            files (readdir path)]
+      (js/console.log path)
+      (js/console.log files)
+      (into [] (concat [path] files))))
   (get-files [this path-or-handle ok-handler]
     nil)
   (watch-dir! [this dir]
     nil))
+
+
+(comment
+  ;;open-dir result
+  #_
+  ["/storage/emulated/0/untitled folder 21"
+   {:type    "file",
+    :size    2,
+    :mtime   1630049904000,
+    :uri     "file:///storage/emulated/0/untitled%20folder%2021/pages/contents.md",
+    :ctime   1630049904000,
+    :content "-\n"}
+   {:type    "file",
+    :size    0,
+    :mtime   1630049904000,
+    :uri     "file:///storage/emulated/0/untitled%20folder%2021/logseq/custom.css",
+    :ctime   1630049904000,
+    :content ""}
+   {:type    "file",
+    :size    2,
+    :mtime   1630049904000,
+    :uri     "file:///storage/emulated/0/untitled%20folder%2021/logseq/metadata.edn",
+    :ctime   1630049904000,
+    :content "{}"}
+   {:type  "file",
+    :size  181,
+    :mtime 1630050535000,
+    :uri
+    "file:///storage/emulated/0/untitled%20folder%2021/journals/2021_08_27.md",
+    :ctime 1630050535000,
+    :content
+    "- xx\n- xxx\n- xxx\n- xxxxxxxx\n- xxx\n- xzcxz\n- xzcxzc\n- asdsad\n- asdsadasda\n- asdsdaasdsad\n- asdasasdas\n- asdsad\n- sad\n- asd\n- asdsad\n- asdasd\n- sadsd\n-\n- asd\n- saddsa\n- asdsaasd\n- asd"}
+   {:type  "file",
+    :size  132,
+    :mtime 1630311293000,
+    :uri
+    "file:///storage/emulated/0/untitled%20folder%2021/journals/2021_08_30.md",
+    :ctime 1630311293000,
+    :content
+    "- ccc\n- sadsa\n- sadasd\n- asdasd\n- asdasd\n\t- asdasd\n\t\t- asdasdsasd\n\t\t\t- sdsad\n\t\t-\n- sadasd\n- asdas\n- sadasd\n-\n-\n\t- sadasdasd\n\t- asdsd"}])
