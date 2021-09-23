@@ -28,6 +28,25 @@
 (defonce *angle-bracket-caret-pos (atom nil))
 (defonce *current-command (atom nil))
 
+(def query-doc
+  [:div {:on-mouse-down (fn [e] (.stopPropagation e))}
+   [:div.font-medium.text-lg.mb-2 "Query examples:"]
+   [:ul.mb-1
+    [:li.mb-1 [:code "{{query #tag}}"]]
+    [:li.mb-1 [:code "{{query [[page]]}}"]]
+    [:li.mb-1 [:code "{{query \"full-text search\"}}"]]
+    [:li.mb-1 [:code "{{query (and [[project]] (task NOW LATER))}}"]]
+    [:li.mb-1 [:code "{{query (or [[page 1]] [[page 2]])}}"]]
+    [:li.mb-1 [:code "{{query (and (between -7d +7d) (task DONE))}}"]]
+    [:li.mb-1 [:code "{{query (property key value)}}"]]
+    [:li.mb-1 [:code "{{query (page-tags #tag)}}"]]]
+
+   [:p "Check more examples at "
+    [:a {:href "https://logseq.github.io/#/page/queries"
+         :target "_blank"}
+     "Queries documentation"]
+    "."]])
+
 (def link-steps [[:editor/input (str slash "link")]
                  [:editor/show-input [{:command :link
                                        :id :link
@@ -250,7 +269,7 @@
 
     ;; advanced
 
-    [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] "Create a DataScript query"]
+    [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] query-doc]
      ["Zotero" zotero-steps "Import Zotero journal article"]
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
@@ -300,9 +319,9 @@
   (when restore-slash-caret-pos?
     (reset! *slash-caret-pos nil))
   (reset! *show-commands false)
-  (reset! *matched-commands @*initial-commands)
   (reset! *angle-bracket-caret-pos nil)
   (reset! *show-block-commands false)
+  (reset! *matched-commands @*initial-commands)
   (reset! *matched-block-commands (block-commands-map)))
 
 (defn insert!

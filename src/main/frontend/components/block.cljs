@@ -1076,8 +1076,10 @@
         [:div.dsl-query
          (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
-                         {:title [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
-                                  (str "Query: " query)]
+                         {:title (ui/tippy {:html commands/query-doc
+                                            :interactive true}
+                                  [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
+                                   (str "Query: " query)])
                           :query query}))]
 
         (= name "function")
@@ -1788,7 +1790,9 @@
                                         (block-content-on-mouse-down e block block-id properties content format edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :on-mouse-up util/clear-selection!}
+              :on-mouse-up (fn [_e]
+                             (when-not (string/includes? content "```")
+                               (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
 
@@ -2304,7 +2308,7 @@
                          (and (util/electron?) (string? result)) ; full-text search
                          (if (string/blank? result)
                            (atom [])
-                           (p/let [blocks (search/block-search repo result {:limit 30})]
+                           (p/let [blocks (search/block-search repo (string/trim result) {:limit 30})]
                              (when (seq blocks)
                                (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
                                  (reset! result-atom result)))))
@@ -2351,6 +2355,7 @@
            transformed-query-result (when query-result
                                       (db/custom-query-result-transform query-result remove-blocks q))
            not-grouped-by-page? (or table?
+                                    (boolean (:result-transform q))
                                     (and (string? query) (string/includes? query "(by-page false)")))
            result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
                     (db-utils/group-by-page transformed-query-result)
@@ -2776,7 +2781,8 @@
    (cond-> option
      (:document/mode? config) (assoc :class "doc-mode"))
    (cond
-     (:custom-query? config)
+     (and (:custom-query? config)
+          (:group-by-page? config))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
