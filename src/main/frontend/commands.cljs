@@ -300,9 +300,9 @@
   (when restore-slash-caret-pos?
     (reset! *slash-caret-pos nil))
   (reset! *show-commands false)
-  (reset! *matched-commands @*initial-commands)
   (reset! *angle-bracket-caret-pos nil)
   (reset! *show-block-commands false)
+  (reset! *matched-commands @*initial-commands)
   (reset! *matched-block-commands (block-commands-map)))
 
 (defn insert!
