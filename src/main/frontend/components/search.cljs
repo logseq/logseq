@@ -292,8 +292,14 @@
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
                     (remove nil?)
-                    (remove #(= (string/lower-case %) "contents"))
-                    (mapv (fn [page] {:type :page :data page})))
+                    (remove #(= (string/lower-case %) "contents")))
+         journal-except-today? (fn [name]
+                                 (and (date/valid-journal-title? name)
+                                      (not= (string/lower-case name)
+                                            (string/lower-case (date/journal-name)))))
+         pages (when-not (:show-journals-in-recent? (state/get-config))
+                 (filter #(not (journal-except-today? %)) pages))
+         pages (mapv (fn [page] {:type :page :data page}) pages)
          result (concat (take 5 recent-search) pages)]
      (ui/auto-complete
       result
