@@ -51,7 +51,7 @@
   ;; [1 2 3] -> [1 2 4]
   (inc-pos [_] (Pos. (conj (vec (butlast pos-vec)) (inc (last pos-vec)))))
   ;; [1 2 3] -> [1 2 4 0]
-  (inc-level-pos [_] (Pos. (conj (Pos. (conj (vec (butlast pos-vec)) (inc (last pos-vec)))) 0)))
+  (inc-level-pos [_] (Pos. (conj (conj (vec (butlast pos-vec)) (inc (last pos-vec))) 0)))
   ;; [1 2 3] -> [1 2 3 0]
   (add-next-level [_] (Pos. (conj pos-vec 0)))
   ;; [1 2 3] -> [1 2]
@@ -416,14 +416,10 @@ return [2 3]
 
 
 (defn- remove-all-blocks-in-page [page-blocks page-name]
-  (let [order-blocks (common-handler/reorder-blocks page-blocks)
-        start-block (first order-blocks)
-        end-block (last order-blocks)
-        block-ids (mapv (fn [b] [:block/uuid (:block/uuid b)]) order-blocks)]
-    (when (and start-block end-block)
-      (outliner-core/delete-nodes (outliner-core/block start-block)
-                                  (outliner-core/block end-block)
-                                  block-ids))))
+  (let [tx-data (mapv (fn [block]
+                        [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                      page-blocks)]
+    (db/transact! tx-data)))
 
 (defn- insert-doc-contents [page-name]
   (let [page-block (db/pull (:db/id (db/get-page page-name)))
@@ -578,27 +574,27 @@ return [2 3]
             (recur (inc i) (.inc-pos pos))))))))
 
 
-(defn insert-nodes-yjs [page-name new-nodes-tree target-uuid sibling?]
-  (let [[structs contents] (nodes-tree->struct&content new-nodes-tree)
-        struct (structarray page-name)]
-    (when-some [target-pos (find-pos (structarray page-name) (str target-uuid))]
+(defn insert-nodes-yjs [struct new-nodes-tree target-uuid sibling?]
+  (let [[structs contents] (nodes-tree->struct&content new-nodes-tree)]
+    (when-some [target-pos (find-pos struct (str target-uuid))]
       (let [pos (if sibling?
                   (.next-sibling-pos target-pos struct)
                   (.next-non-sibling-pos! target-pos struct))]
-        (insert-nodes-aux structs pos (structarray page-name))
+        (insert-nodes-aux structs pos struct)
         (assoc-contents contents (contentmap))))))
 
 (defn insert-nodes-op [new-nodes-tree target-node sibling?]
   (let [target-block (:data target-node)]
     (when-some [page-name (or (:block/name target-block)
                               (:block/name (db/entity (:db/id (:block/page target-block)))))]
-      (insert-nodes-yjs page-name new-nodes-tree (str (:block/uuid target-block)) sibling?)
-      (distinct-struct (structarray page-name) (atom #{}))
-      (merge-doc doc-remote doc-local)
-      (outliner-core/insert-nodes new-nodes-tree target-node sibling?))))
+      (let [struct (structarray page-name)]
+        (insert-nodes-yjs struct new-nodes-tree (str (:block/uuid target-block)) sibling?)
+        (distinct-struct struct (atom #{}))
+        (merge-doc doc-remote doc-local)
+        (outliner-core/insert-nodes new-nodes-tree target-node sibling?)))))
 
-(defn insert-node-yjs [page-name new-node target-uuid sibling?]
-  (insert-nodes-yjs page-name [new-node] target-uuid sibling?))
+(defn insert-node-yjs [struct new-node target-uuid sibling?]
+  (insert-nodes-yjs struct [new-node] target-uuid sibling?))
 
 (defn insert-node-op
   ([new-node target-node sibling?]
@@ -611,14 +607,11 @@ return [2 3]
    (let [target-block (:data target-node)]
      (when-some [page-name (or (:block/name target-block)
                                (:block/name (db/entity (:db/id (:block/page target-block)))))]
-       (insert-node-yjs page-name new-node (str (:block/uuid target-block)) sibling?)
-       (distinct-struct (structarray page-name) (atom #{}))
-       (merge-doc doc-remote doc-local)
-       (try (outliner-core/insert-node new-node target-node sibling? opts)
-            (catch js/Error e
-              (println e)
-              (println new-node target-node)
-              (js/console.trace)))))))
+       (let [struct (structarray page-name)]
+         (insert-node-yjs struct new-node (str (:block/uuid target-block)) sibling?)
+         (distinct-struct struct (atom #{}))
+         (merge-doc doc-remote doc-local)
+         (outliner-core/insert-node new-node target-node sibling? opts))))))
 
 
 (defn- delete-range-nodes-prefix-part
