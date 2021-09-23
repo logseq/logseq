@@ -36,8 +36,24 @@
         :item-render
         (fn [item]
           (let [command-name (first item)
-                command-doc (get item 2)]
-            [:div {:title (when (state/show-command-doc?) command-doc)} command-name]))
+                command-doc (get item 2)
+                doc (when (state/show-command-doc?) command-doc)]
+            (cond
+              (string? doc)
+              [:div {:title doc}
+               command-name]
+
+              (vector? doc)
+              (ui/tippy {:html doc
+                         :interactive true
+                         :open? true
+                         :fixed-position? true
+                         :position "right"
+                         :distance 10}
+                        [:div command-name])
+
+              :else
+              [:div command-name])))
 
         :on-chosen
         (fn [chosen-item]
