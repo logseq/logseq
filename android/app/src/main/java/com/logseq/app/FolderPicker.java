@@ -1,8 +1,13 @@
 package com.logseq.app;
 
+import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
+import android.provider.DocumentsContract;
 
 import androidx.activity.result.ActivityResult;
+import androidx.documentfile.provider.DocumentFile;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -27,7 +32,11 @@ public class FolderPicker extends Plugin {
             return;
         }
         JSObject ret = new JSObject();
-        ret.put("result", result.getData().getData());
+        Context context = this.getContext();
+        Uri treeUri = result.getData().getData();
+        Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri,
+                DocumentsContract.getTreeDocumentId(treeUri));
+        ret.put("path", FileUtil.getPath(context, docUri));
         call.resolve(ret);
     }
 }
