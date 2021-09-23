@@ -202,6 +202,20 @@ class LSPluginCaller extends EventEmitter {
     const cnt = document.createElement('div')
     cnt.classList.add('lsp-iframe-sandbox-container')
     cnt.id = id
+
+    // TODO: apply any container layout data
+    {
+      const mainLayoutInfo = this._pluginLocal.settings.get('layout')?.[0]
+      if (mainLayoutInfo) {
+        cnt.dataset.inited_layout = 'true'
+        const { width, height, left, top } = mainLayoutInfo
+        Object.assign(cnt.style, {
+          width: width + 'px', height: height + 'px',
+          left: left + 'px', top: top + 'px'
+        })
+      }
+    }
+
     document.body.appendChild(cnt)
 
     const pt = new Postmate({

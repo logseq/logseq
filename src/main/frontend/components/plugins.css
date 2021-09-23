@@ -313,7 +313,7 @@
     margin: 0;
 
     &.visible {
-      z-index: 1;
+      z-index: var(--ls-z-index-level-2);
       width: 100%;
       height: 100%;
       visibility: visible;
@@ -333,6 +333,37 @@
       .lsp-shadow-sandbox {
         height: calc(100% - var(--ls-draggable-handle-height));
         top: var(--ls-draggable-handle-height)
+      }
+
+      &.is-dragging {
+        height: var(--ls-draggable-handle-height) !important;
+        overflow: hidden;
+        opacity: .7;
+
+        > .draggable-handle {
+          background-color: green;
+        }
+      }
+    }
+
+    &[resizable=true] {
+      > .resizable-handle {
+        position: absolute;
+        bottom: -1px;
+        right: -1px;
+        height: 15px;
+        width: 15px;
+        z-index: 2;
+        opacity: 0;
+        cursor: nwse-resize;
+        user-select: none;
+      }
+
+      &.is-resizing {
+        > .resizable-handle {
+          width: 90%;
+          height: 80%;
+        }
       }
     }
   }

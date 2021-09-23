@@ -197,12 +197,24 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
       if (k === 'draggable' && v) {
         pluginLocal._setupDraggableContainer(el)
       }
+
+      if (k === 'resizable' && v) {
+        pluginLocal._setupResizableContainer(el)
+      }
     })
   })
 
   pluginLocal.on(_('style'), (style: Record<string, any>) => {
     const el = pluginLocal.getMainUIContainer()
+    const isInitedLayout = !!el.dataset.inited_layout
+
     Object.entries(style).forEach(([k, v]) => {
+      if (isInitedLayout && [
+        'left', 'top', 'bottom', 'right', 'width', 'height'
+      ].includes(k)) {
+        return
+      }
+
       el!.style[k] = v
     })
   })
@@ -559,6 +571,12 @@ class PluginLocal
     })
   }
 
+  _persistMainUILayoutData (e: { width: number, height: number, left: number, top: number }) {
+    const layouts = this.settings.get('layouts') || []
+    layouts[0] = e
+    this.settings.set('layout', layouts)
+  }
+
   _setupDraggableContainer (el: HTMLElement) {
     const ds = el.dataset
     if (ds.inited_draggable) return
@@ -566,7 +584,28 @@ class PluginLocal
     handle.classList.add('draggable-handle')
     el.prepend(handle)
 
+    // @ts-ignore
+    const layoutUtils = window.frontend.modules.layout.utils
+    layoutUtils.setup_draggable_container_BANG_(el,
+      this._persistMainUILayoutData.bind(this))
+
     ds.inited_draggable = 'true'
+  }
+
+  _setupResizableContainer (el: HTMLElement) {
+    const ds = el.dataset
+    if (ds.inited_resizable) return
+
+    const handle = document.createElement('div')
+    handle.classList.add('resizable-handle')
+    el.prepend(handle)
+
+    // @ts-ignore
+    const layoutUtils = window.frontend.modules.layout.utils
+    layoutUtils.setup_resizable_container_BANG_(el,
+      this._persistMainUILayoutData.bind(this))
+
+    ds.inited_resizable = 'true'
   }
 
   async load (readyIndicator?: DeferredActor) {

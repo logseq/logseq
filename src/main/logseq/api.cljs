@@ -22,6 +22,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.modules.layout.utils :as layout-utils]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
