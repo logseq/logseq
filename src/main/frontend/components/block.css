@@ -158,7 +158,7 @@
   border-bottom: 0.5px solid;
   border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
-  padding: 2px 5px;
+  padding: 2px 0;
   display: inline;
 
   &:hover {
