@@ -479,7 +479,7 @@
                                    :small? true
                                    :on-click #(operation-reset! card))))]
            [:div.my-4
-            (ui/button [:span "Review cards " (ui/keyboard-shortcut [:t :c])]
+            (ui/button "Review cards"
                        :small? true)])]))))
 
 (rum/defc view-modal <
@@ -641,4 +641,3 @@
          (state/get-current-repo)
          block-id
          (str (string/trim content) " #" card-hash-tag))))))
-
