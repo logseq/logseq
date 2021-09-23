@@ -740,19 +740,19 @@
        (every? #(= % ["Break_Line"]) break-lines)))
 
 (defn trim-paragraph-special-break-lines
-  [[typ paras]]
-  (if (= typ "Paragraph")
-    (let [indexed-paras (map-indexed vector paras)
-          ast [typ (->> (filter
-                         #(let [[index value] %]
-                            (not (and (> index 0)
-                                      (= value ["Break_Line"])
-                                      (contains? #{"Timestamp" "Macro"}
-                                                 (first (nth paras (dec index)))))))
-                         indexed-paras)
-                        (map #(last %)))]]
-      ast)
-    [typ paras]))
+  [ast]
+  (let [[typ paras] ast]
+    (if (= typ "Paragraph")
+      (let [indexed-paras (map-indexed vector paras)]
+        [typ (->> (filter
+                            #(let [[index value] %]
+                               (not (and (> index 0)
+                                         (= value ["Break_Line"])
+                                         (contains? #{"Timestamp" "Macro"}
+                                                    (first (nth paras (dec index)))))))
+                            indexed-paras)
+                           (map #(last %)))])
+      ast)))
 
 (defn trim-break-lines!
   [ast]
