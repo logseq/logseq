@@ -15,11 +15,6 @@
         path (:file/path (:block/file page))
         page-title (or (:block/original-name page)
                        (:block/name page))]
-    (prn "[DEBUG] 2. Start writing file: "
-         {:page-id (:db/id page)
-          :page (:block/name page)
-          :file path
-          :time (util/time-ms)})
     (when (util/electron?)
       (debug/set-ack-step! path :start-writing)
       (debug/wait-for-write-ack! page-title path)))

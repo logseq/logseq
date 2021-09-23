@@ -1135,6 +1135,7 @@ a.page-op {
   background-color: var(--ls-quaternary-background-color);
   padding: 2px 4px !important;
   border-radius: 6px;
+  color: var(--ls-secondary-text-color);
 }
 
 html[data-theme='light'] .keyboard-shortcut > code {
@@ -1142,7 +1143,7 @@ html[data-theme='light'] .keyboard-shortcut > code {
 }
 
 html[data-theme='dark'] .keyboard-shortcut > code {
-  box-shadow: inset 0 -1px 0 var(--ls-primary-background-color), 0 0 1px 1px rgba(255, 255, 255,.1);
+  box-shadow: inset 0 -1px 0 var(--ls-primary-background-color), 0 0 1px 1px rgba(255, 255, 255,.2);
 }
 
 .ui__modal-panel {

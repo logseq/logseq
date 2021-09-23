@@ -161,7 +161,8 @@
                            (p/let [repo (state/get-current-repo)
                                    keys (e/decrypt-with-passphrase value db-encrypted-secret)]
                              (e/save-key-pair! repo keys)
-                             (close-fn true)))))}
+                             (close-fn true)
+                             (state/set-state! :encryption/graph-parsing? false)))))}
           "Submit"]]]])))
 
 (defn encryption-input-secret-dialog

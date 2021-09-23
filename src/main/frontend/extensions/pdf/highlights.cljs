@@ -7,6 +7,7 @@
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.handler.notification :as notification]
+            [frontend.modules.shortcut.core :as shortcut]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -20,6 +21,7 @@
   (apply js/console.debug args))
 
 (def *area-mode? (atom false))
+(def *area-dashed? (atom ((fnil identity false) (storage/get (str "ls-pdf-area-is-dashed")))))
 
 (defn reset-current-pdf!
   []
@@ -85,7 +87,7 @@
 
 (rum/defc pdf-highlights-ctx-menu
   [^js viewer
-   {:keys [highlight vw-pos point]}
+   {:keys [highlight point ^js range]}
    {:keys [clear-ctx-tip! add-hl! upd-hl! del-hl!]}]
 
   (rum/use-effect!
@@ -130,7 +132,8 @@
 
                         "copy"
                         (do
-                          (front-utils/copy-to-clipboard! (:text content))
+                          (front-utils/copy-to-clipboard!
+                            (or (:text content) (.toString range)))
                           (pdf-utils/clear-all-selection))
 
                         "link"
@@ -147,7 +150,7 @@
                         (let [properties {:color action}]
                           (if-not id
                             ;; add highlight
-                            (let [highlight (merge highlight
+                            (let [highlight (merge (if (fn? highlight) (highlight) highlight)
                                                    {:id         (pdf-utils/gen-uuid)
                                                     :properties properties})]
                               (add-hl! highlight)
@@ -448,7 +451,7 @@
         *mounted (rum/use-ref false)
         [sel-state, set-sel-state!] (rum/use-state {:range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
-        [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :point nil :reset-fn nil})
+        [tip-state, set-tip-state!] (rum/use-state {:highlight nil :vw-pos nil :range nil :point nil :reset-fn nil})
 
         clear-ctx-tip! (rum/use-callback
                          #(let [reset-fn (:reset-fn tip-state)]
@@ -543,30 +546,30 @@
     (rum/use-effect!
       (fn []
         (when-let [^js sel-range (and (not (:collapsed sel-state)) (:range sel-state))]
-          (when-let [page-info (pdf-utils/get-page-from-range sel-range)]
-            (when-let [sel-rects (pdf-utils/get-range-rects<-page-cnt sel-range (:page-el page-info))]
-              (let [page (int (:page-number page-info))
-                    ^js point (:point sel-state)
-                    ^js bounding (pdf-utils/get-bounding-rect sel-rects)
-                    vw-pos {:bounding bounding :rects sel-rects :page page}
-                    sc-pos (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
+          (let [^js point (:point sel-state)
+                hl-fn #(when-let [page-info (pdf-utils/get-page-from-range sel-range)]
+                         (when-let [sel-rects (pdf-utils/get-range-rects<-page-cnt sel-range (:page-el page-info))]
+                           (let [page (int (:page-number page-info))
+                                 ^js bounding (pdf-utils/get-bounding-rect sel-rects)
+                                 vw-pos {:bounding bounding :rects sel-rects :page page}
+                                 sc-pos (pdf-utils/vw-to-scaled-pos viewer vw-pos)]
 
-                ;; TODO: debug
-                ;;(dd "[VW x SC] ====>" vw-pos sc-pos)
-                ;;(dd "[Range] ====> [" page-info "]" (.toString sel-range) point)
-                ;;(dd "[Rects] ====>" sel-rects " [Bounding] ====>" bounding)
+                             ;; TODO: debug
+                             ;;(dd "[VW x SC] ====>" vw-pos sc-pos)
+                             ;;(dd "[Range] ====> [" page-info "]" (.toString sel-range) point)
+                             ;;(dd "[Rects] ====>" sel-rects " [Bounding] ====>" bounding)
 
 
-                (let [hl {:id         nil
-                          :page       page
-                          :position   sc-pos
-                          :content    {:text (.toString sel-range)}
-                          :properties {}}]
+                             {:id         nil
+                              :page       page
+                              :position   sc-pos
+                              :content    {:text (.toString sel-range)}
+                              :properties {}})))]
 
-                  ;; show context menu
-                  (set-tip-state! {:highlight hl
-                                   :vw-pos    vw-pos
-                                   :point     point})))))))
+            ;; show ctx menu
+            (set-tip-state! {:highlight hl-fn
+                             :range     sel-range
+                             :point     point}))))
 
       [(:range sel-state)])
 
@@ -630,9 +633,10 @@
         })]))
 
 (rum/defc pdf-settings
-  [^js viewer theme {:keys [hide-settings! select-theme!]}]
+  [^js viewer theme {:keys [hide-settings! select-theme! t]}]
 
-  (let [*el-popup (rum/use-ref nil)]
+  (let [*el-popup (rum/use-ref nil)
+        [area-dashed? set-area-dashed?] (use-atom *area-dashed?)]
 
     (rum/use-effect!
       (fn []
@@ -644,6 +648,11 @@
           (.addEventListener el-popup "keyup" cb)
           #(.removeEventListener el-popup "keyup" cb)))
       [])
+
+    (rum/use-effect!
+      (fn []
+        (storage/set "ls-pdf-area-is-dashed" (boolean area-dashed?)))
+      [area-dashed?])
 
     [:div.extensions__pdf-settings.hls-popup-wrap.visible
      {:on-click (fn [^js/MouseEvent e]
@@ -660,8 +669,12 @@
               [:button.flex.items-center.justify-center
                {:key it :class it :on-click #(do (select-theme! it) (hide-settings!))}
                (when (= theme it) (svg/check))])
-            ["light", "warm", "dark"])
-       ]]]))
+            ["light", "warm", "dark"])]
+
+      [:div.extensions__pdf-settings-item.toggle-input
+       [:label (t :pdf/toggle-dashed)]
+       (ui/toggle area-dashed? #(set-area-dashed? (not area-dashed?)) true)]
+      ]]))
 
 (rum/defc pdf-outline-item
   [^js viewer
@@ -786,6 +799,9 @@
   (let [[area-mode? set-area-mode!] (use-atom *area-mode?)
         [outline-visible?, set-outline-visible!] (rum/use-state false)
         [settings-visible?, set-settings-visible!] (rum/use-state false)
+        *page-ref (rum/use-ref nil)
+        [current-page-num, set-current-page-num!] (rum/use-state 1)
+        [total-page-num, set-total-page-num!] (rum/use-state 1)
         [viewer-theme, set-viewer-theme!] (rum/use-state (or (storage/get "ls-pdf-viewer-theme") "light"))]
 
     ;; themes hooks
@@ -796,6 +812,23 @@
           (storage/set "ls-pdf-viewer-theme" viewer-theme)
           #(js-delete (. el -dataset) "theme")))
       [viewer-theme])
+
+    ;; pager hooks
+    (rum/use-effect!
+      (fn []
+        (when-let [total (and viewer (.-numPages (.-pdfDocument viewer)))]
+          (let [^js bus (.-eventBus viewer)
+                page-fn (fn [^js evt]
+                          (let [^js input (rum/deref *page-ref)
+                                num (.-pageNumber evt)]
+                            (set! (. input -value) num)
+                            (set-current-page-num! num)))]
+
+            (set-total-page-num! total)
+            (set-current-page-num! (.-currentPageNumber viewer))
+            (.on bus "pagechanging" page-fn)
+            #(.off bus "pagechanging" page-fn))))
+      [viewer])
 
     (rum/with-context
       [[t] i18n/*tongue-context*]
@@ -836,10 +869,35 @@
          ;; metadata
          [:a.button.is-info
           {:title    "Document info"
-           :on-click #(do
-                        (p/let [ret (pdf-utils/get-meta-data$ viewer)]
-                          (state/set-modal! (make-docinfo-in-modal ret))))}
+           :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
+                        (state/set-modal! (make-docinfo-in-modal ret)))}
           (svg/icon-info)]
+
+         ;; annotations
+         [:a.button
+          {:title    "Annotations page"
+           :on-click #(pdf-assets/goto-annotations-page! (:pdf/current @state/state))}
+          (svg/annotations 16)]
+
+         ;; pager
+         [:div.pager.flex.items-center.ml-1
+
+          [:span.nu.flex.items-center.opacity-70
+           [:input {:ref            *page-ref
+                    :type           "number"
+                    :default-value  current-page-num
+                    :on-mouse-enter #(.select ^js (.-target %))
+                    :on-key-up      (fn [^js e]
+                                      (let [^js input (.-target e)
+                                            value (front-utils/safe-parse-int (.-value input))]
+                                        (when (and (= (.-keyCode e) 13) value (> value 0))
+                                          (set! (. viewer -currentPageNumber)
+                                                (if (> value total-page-num) total-page-num value)))))}]
+           [:small "/ " total-page-num]]
+
+          [:span.ct.flex.items-center
+           [:a.button {:on-click #(. viewer previousPage)} (svg/up-narrow)]
+           [:a.button {:on-click #(. viewer nextPage)} (svg/down-narrow)]]]
 
          [:a.button
           {:on-click #(state/set-state! :pdf/current nil)}
@@ -853,7 +911,8 @@
             (pdf-settings
               viewer
               viewer-theme
-              {:hide-settings! #(set-settings-visible! false)
+              {:t t
+               :hide-settings! #(set-settings-visible! false)
                :select-theme!  #(set-viewer-theme! %)}))])))
 
 (rum/defc pdf-viewer
@@ -862,6 +921,7 @@
   ;;(dd "==== render pdf-viewer ====")
 
   (let [*el-ref (rum/create-ref)
+        [area-dashed?, set-area-dashed?] (use-atom *area-dashed?)
         [state, set-state!] (rum/use-state {:viewer nil :bus nil :link nil :el nil})
         [ano-state, set-ano-state!] (rum/use-state {:loaded-pages []})
         [page-ready?, set-page-ready!] (rum/use-state false)]
@@ -876,6 +936,7 @@
                                      :eventBus             event-bus
                                      :linkService          link-service
                                      :enhanceTextSelection true
+                                     :textLayerMode        2
                                      :removePageBorders    true})]
                (. link-service setDocument pdf-document)
                (. link-service setViewer viewer)
@@ -923,7 +984,8 @@
 
     (let [^js viewer (:viewer state)]
       [:div.extensions__pdf-viewer-cnt
-       [:div.extensions__pdf-viewer {:ref *el-ref}
+       [:div.extensions__pdf-viewer
+        {:ref *el-ref :class (front-utils/classnames [{:is-area-dashed @*area-dashed?}])}
         [:div.pdfViewer "viewer pdf"]
         [:div.pp-holder]
 
@@ -1009,9 +1071,9 @@
             "MissingPDFException"
             (do
               (notification/show!
-               (str (.-message error) " Is this the correct path?")
-               :error
-               false)
+                (str (.-message error) " Is this the correct path?")
+                :error
+                false)
               (state/set-state! :pdf/current nil)))))
       [(:error state)])
 
@@ -1069,8 +1131,8 @@
   nil)
 
 (rum/defcs playground
-  < rum/static
-    rum/reactive
+  < rum/static rum/reactive
+    (shortcut/mixin :shortcut.handler/pdf)
   [state]
   (let [pdf-current (state/sub :pdf/current)]
     [:div.extensions__pdf-playground

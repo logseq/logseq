@@ -279,7 +279,16 @@
                 (ui/toggle in-page-search?
                            (fn [_value]
                              (state/set-search-mode! (if in-page-search? :global :page)))
-                           true)]])]
+                           true)]
+               (ui/tippy {:html [:div
+                                 "Tip: " [:code (util/->platform-shortcut "Ctrl+Shift+p")] " to open the commands palette"]
+                          :interactive     true
+                          :arrow true}
+                         [:a.inline-block
+                          {:style {:margin-top 1
+                                   :margin-left 12}
+                           :on-click #(state/toggle! :ui/command-palette-open?)}
+                          (svg/icon-cmd 20)])])]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
                     (remove nil?)
@@ -295,17 +304,16 @@
                                         :path-params {:name data}})
                       :search
                       (let [q data]
-                        (fn []
-                          (state/set-q! q)
-                          (let [search-mode (state/get-search-mode)
-                                opts (if (= :page search-mode)
-                                       (let [current-page (or (state/get-current-page)
-                                                              (date/today))]
-                                         {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
-                                       {})]
-                            (if (= :page search-mode)
-                              (search-handler/search (state/get-current-repo) q opts)
-                              (search-handler/search (state/get-current-repo) q)))))
+                        (state/set-q! q)
+                        (let [search-mode (state/get-search-mode)
+                              opts (if (= :page search-mode)
+                                     (let [current-page (or (state/get-current-page)
+                                                            (date/today))]
+                                       {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
+                                     {})]
+                          (if (= :page search-mode)
+                            (search-handler/search (state/get-current-repo) q opts)
+                            (search-handler/search (state/get-current-repo) q))))
 
                       nil))
        :on-shift-chosen (fn [{:keys [type data]}]
@@ -366,7 +374,7 @@
                              (t :page-search)
                              (t :search))
             :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-            :default-value ""
+            :value         search-q
             :on-change     (fn [e]
                              (when @search-timeout
                                (js/clearTimeout @search-timeout))

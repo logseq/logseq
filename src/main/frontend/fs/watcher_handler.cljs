@@ -30,7 +30,9 @@
     (let [repo (config/get-local-repo dir)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and content (not (encrypt/content-encrypted? content)))
+      (when (and content
+                 (not (encrypt/content-encrypted? content))
+                 (not (:encryption/graph-parsing? @state/state)))
         (cond
           (and (= "add" type)
                (not= (string/trim content) (string/trim db-content))
@@ -55,14 +57,10 @@
                       (= (string/trim content) "-")
                       (= (string/trim content) "*")))
             (p/let [
-                    ;; save the previous content in Logseq first and commit it to avoid
-                    ;; any data-loss.
-                    _ (file-handler/alter-file repo path db-content {:re-render-root? false
-                                                                     :reset? false
-                                                                     :skip-compare? true})
-                    _ (ipc/ipc "gitCommitAll" "Save the file from Logseq's database")
+                    ;; save the previous content in a bak file to avoid data overwritten.
+                    _ (ipc/ipc "backupDbFile" (config/get-local-dir repo) path db-content)
                     _ (file-handler/alter-file repo path content {:re-render-root? true
-                                                                  :skip-compare? true})]
+                                                                  :from-disk? true})]
               (set-missing-block-ids! content)
               (db/set-file-last-modified-at! repo path mtime)))
 

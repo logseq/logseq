@@ -12,6 +12,13 @@
   --ph-view-container-width: 42vw;
 }
 
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .extensions__pdf {
 
   &-container {
@@ -54,6 +61,33 @@
             border-bottom: 2px solid #969494;
             border-radius: 0;
           }
+
+          &:active {
+            opacity: .6;
+          }
+        }
+      }
+
+      .pager {
+        > .nu {
+          padding-right: 4px;
+
+          input {
+            user-select: inherit;
+            width: 35px;
+            text-align: right;
+            padding-right: 4px;
+          }
+        }
+
+        > .ct {
+          .button {
+            margin: 0;
+
+            &:last-child {
+              padding-right: 3px;
+            }
+          }
         }
       }
     }
@@ -61,11 +95,7 @@
 
   &-outline {
     position: absolute;
-    right: 30px;
-
-
-    &-wrap {
-    }
+    right: 15px;
 
     > section {
       white-space: pre-wrap;
@@ -150,7 +180,7 @@
   &-settings {
     &-inner.hls-popup-box {
       position: absolute;
-      right: 206px;
+      right: 345px;
       width: 178px;
       padding: 15px 10px;
     }
@@ -190,13 +220,23 @@
           }
         }
       }
+
+      &.toggle-input {
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        padding: 0 9px;
+        padding-top: 12px;
+        margin-top: 13px;
+        opacity: 0.8;
+        border-top: 1px solid #ccc;
+      }
     }
   }
 
   &-viewer {
     position: absolute;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: auto;
     width: 100%;
     height: 100%;
 
@@ -204,13 +244,13 @@
     }
 
     > .pdfViewer {
-      overflow: hidden;
-
       &.disabled-text-selection {
         user-select: none;
         pointer-events: none;
       }
     }
+
+
   }
 
   &-resizer {
@@ -239,25 +279,41 @@
     background-color: #FCD713FF;
     mix-blend-mode: multiply;
     touch-action: none;
+    border-style: dashed;
 
     &[data-color=yellow] {
       background-color: var(--ph-highlight-color-yellow);
+      border-color: var(--ph-highlight-color-yellow);
     }
 
     &[data-color=blue] {
       background-color: var(--ph-highlight-color-blue);
+      border-color: var(--ph-highlight-color-blue);
     }
 
     &[data-color=green] {
       background-color: var(--ph-highlight-color-green);
+      border-color: var(--ph-highlight-color-green);
     }
 
     &[data-color=red] {
       background-color: var(--ph-highlight-color-red);
+      border-color: var(--ph-highlight-color-red);
     }
 
     &[data-color=purple] {
       background-color: var(--ph-highlight-color-purple);
+      border-color: var(--ph-highlight-color-purple);
+    }
+  }
+
+  &-viewer.is-area-dashed {
+    .extensions__pdf {
+      &-hls-area-region {
+        background-color: transparent;
+        border-width: 3px;
+        opacity: 1 !important;
+      }
     }
   }
 
@@ -393,6 +449,8 @@
   &-wrap {
     position: absolute;
     top: 40px;
+    right: 0;
+    left: 0;
     width: 100%;
     height: 92vh;
     background-color: rgba(0, 0, 0, 0);
@@ -557,6 +615,7 @@
       img {
         margin: 0;
         box-shadow: none;
+        max-width: 80%;
       }
     }
   }
@@ -634,6 +693,10 @@ body.is-pdf-active {
   top: 0;
 
   z-index: 3;
+
+  .highlightAnnotation, .underlineAnnotation {
+    display: none;
+  }
 }
 
 .textLayer ::selection {

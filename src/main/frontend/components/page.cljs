@@ -429,11 +429,6 @@
                     (plugins/hook-ui-slot :page-head-actions-slotted nil)
                     (plugins/hook-ui-items :pagebar))
 
-                  [:a.opacity-60.hover:opacity-100.page-op.mr-1
-                   {:title "Search in current page"
-                    :on-click #(route-handler/go-to-search! :page)}
-                   svg/search]
-
                   (page-menu repo t page page-name page-original-name title
                              journal? public? developer-mode?)])])
             [:div

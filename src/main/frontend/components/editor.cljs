@@ -26,45 +26,63 @@
 (rum/defc commands < rum/reactive
   [id format]
   (let [matched (util/react *matched-commands)]
-    (ui/auto-complete
-     matched
-     {:get-group-name
-      (fn [item]
-        (get *first-command-group (first item)))
+    (when (util/react *show-commands)
+      (ui/auto-complete
+       matched
+       {:get-group-name
+        (fn [item]
+          (get *first-command-group (first item)))
 
-      :item-render
-      (fn [item]
-        (let [command-name (first item)
-              command-doc (get item 2)]
-          [:div {:title (when (state/show-command-doc?) command-doc)} command-name]))
+        :item-render
+        (fn [item]
+          (let [command-name (first item)
+                command-doc (get item 2)
+                doc (when (state/show-command-doc?) command-doc)]
+            (cond
+              (string? doc)
+              [:div {:title doc}
+               command-name]
 
-      :on-chosen
-      (fn [chosen-item]
-        (let [command (first chosen-item)]
-          (reset! commands/*current-command command)
-          (let [command-steps (get (into {} matched) command)
-                restore-slash? (or
-                                (contains? #{"Today" "Yesterday" "Tomorrow"} command)
-                                (and
-                                 (not (fn? command-steps))
-                                 (not (contains? (set (map first command-steps)) :editor/input))
-                                 (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
-            (editor-handler/insert-command! id command-steps
-                                            format
-                                            {:restore? restore-slash?}))))
-      :class
-      "black"})))
+              (vector? doc)
+              (ui/tippy {:html doc
+                         :interactive true
+                         :open? true
+                         :fixed-position? true
+                         :position "right"
+                         :distance 10}
+                        [:div command-name])
+
+              :else
+              [:div command-name])))
+
+        :on-chosen
+        (fn [chosen-item]
+          (let [command (first chosen-item)]
+            (reset! commands/*current-command command)
+            (let [command-steps (get (into {} matched) command)
+                  restore-slash? (or
+                                  (contains? #{"Today" "Yesterday" "Tomorrow"} command)
+                                  (and
+                                   (not (fn? command-steps))
+                                   (not (contains? (set (map first command-steps)) :editor/input))
+                                   (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
+              (editor-handler/insert-command! id command-steps
+                                              format
+                                              {:restore? restore-slash?}))))
+        :class
+        "black"}))))
 
 (rum/defc block-commands < rum/reactive
   [id format]
-  (let [matched (util/react *matched-block-commands)]
-    (ui/auto-complete
-     (map first matched)
-     {:on-chosen (fn [chosen]
-                   (editor-handler/insert-command! id (get (into {} matched) chosen)
-                                                   format
-                                                   {:last-pattern commands/angle-bracket}))
-      :class     "black"})))
+  (when (util/react *show-block-commands)
+    (let [matched (util/react *matched-block-commands)]
+      (ui/auto-complete
+       (map first matched)
+       {:on-chosen (fn [chosen]
+                     (editor-handler/insert-command! id (get (into {} matched) chosen)
+                                                     format
+                                                     {:last-pattern commands/angle-bracket}))
+        :class     "black"}))))
 
 (defn- in-sidebar? [el]
   (not (.contains (.getElementById js/document "left-container") el)))
@@ -72,37 +90,38 @@
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id format]
-  (let [pos (:editor/last-saved-cursor @state/state)
-        input (gdom/getElement id)]
-    (when input
-      (let [current-pos (cursor/pos input)
-            edit-content (or (state/sub [:editor/content id]) "")
-            edit-block (state/sub :editor/block)
-            sidebar? (in-sidebar? input)
-            q (or
-               @editor-handler/*selected-text
-               (when (state/sub :editor/show-page-search-hashtag?)
-                 (util/safe-subs edit-content pos current-pos))
-               (when (> (count edit-content) current-pos)
-                 (util/safe-subs edit-content pos current-pos)))
-            matched-pages (when-not (string/blank? q)
-                            (editor-handler/get-matched-pages q))]
-        (ui/auto-complete
-         matched-pages
-         {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
-          :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
-          :item-render (fn [page-name chosen?]
-                         [:div.preview-trigger-wrapper
-                          (block/page-preview-trigger
-                           {:children        [:div (search/highlight-exact-query page-name q)]
-                            :open?           chosen?
-                            :manual?         true
-                            :fixed-position? true
-                            :tippy-distance  24
-                            :tippy-position  (if sidebar? "left" "right")}
-                           page-name)])
-          :empty-div   [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
-          :class       "black"})))))
+  (when (state/sub :editor/show-page-search?)
+    (let [pos (:editor/last-saved-cursor @state/state)
+          input (gdom/getElement id)]
+      (when input
+        (let [current-pos (cursor/pos input)
+              edit-content (or (state/sub [:editor/content id]) "")
+              edit-block (state/sub :editor/block)
+              sidebar? (in-sidebar? input)
+              q (or
+                 @editor-handler/*selected-text
+                 (when (state/sub :editor/show-page-search-hashtag?)
+                   (util/safe-subs edit-content pos current-pos))
+                 (when (> (count edit-content) current-pos)
+                   (util/safe-subs edit-content pos current-pos)))
+              matched-pages (when-not (string/blank? q)
+                              (editor-handler/get-matched-pages q))]
+          (ui/auto-complete
+           matched-pages
+           {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
+            :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
+            :item-render (fn [page-name chosen?]
+                           [:div.preview-trigger-wrapper
+                            (block/page-preview-trigger
+                             {:children        [:div (search/highlight-exact-query page-name q)]
+                              :open?           chosen?
+                              :manual?         true
+                              :fixed-position? true
+                              :tippy-distance  24
+                              :tippy-position  (if sidebar? "left" "right")}
+                             page-name)])
+            :empty-div   [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
+            :class       "black"}))))))
 
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
@@ -139,42 +158,44 @@
                    (state/clear-search-result!)
                    state)}
   [state id format]
-  (let [pos (:editor/last-saved-cursor @state/state)
-        input (gdom/getElement id)
-        [id format] (:rum/args state)
-        current-pos (cursor/pos input)
-        edit-content (state/sub [:editor/content id])
-        edit-block (state/get-edit-block)
-        q (or
-           @editor-handler/*selected-text
-           (when (> (count edit-content) current-pos)
-             (subs edit-content pos current-pos)))]
-    (when input
-      (block-search-auto-complete edit-block input id q format))))
+  (when (state/sub :editor/show-block-search?)
+    (let [pos (:editor/last-saved-cursor @state/state)
+          input (gdom/getElement id)
+          [id format] (:rum/args state)
+          current-pos (cursor/pos input)
+          edit-content (state/sub [:editor/content id])
+          edit-block (state/get-edit-block)
+          q (or
+             @editor-handler/*selected-text
+             (when (> (count edit-content) current-pos)
+               (subs edit-content pos current-pos)))]
+      (when input
+        (block-search-auto-complete edit-block input id q format)))))
 
 (rum/defc template-search < rum/reactive
   {:will-unmount (fn [state] (reset! editor-handler/*selected-text nil) state)}
   [id format]
-  (let [pos (:editor/last-saved-cursor @state/state)
-        input (gdom/getElement id)]
-    (when input
-      (let [current-pos (cursor/pos input)
-            edit-content (state/sub [:editor/content id])
-            q (or
-               (when (>= (count edit-content) current-pos)
-                 (subs edit-content pos current-pos))
-               "")
-            matched-templates (editor-handler/get-matched-templates q)
-            non-exist-handler (fn [_state]
-                                (state/set-editor-show-template-search! false))]
-        (ui/auto-complete
-         matched-templates
-         {:on-chosen   (editor-handler/template-on-chosen-handler id)
-          :on-enter    non-exist-handler
-          :empty-div   [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
-          :item-render (fn [[template _block-db-id]]
-                         template)
-          :class       "black"})))))
+  (when (state/sub :editor/show-template-search?)
+    (let [pos (:editor/last-saved-cursor @state/state)
+          input (gdom/getElement id)]
+      (when input
+        (let [current-pos (cursor/pos input)
+              edit-content (state/sub [:editor/content id])
+              q (or
+                 (when (>= (count edit-content) current-pos)
+                   (subs edit-content pos current-pos))
+                 "")
+              matched-templates (editor-handler/get-matched-templates q)
+              non-exist-handler (fn [_state]
+                                  (state/set-editor-show-template-search! false))]
+          (ui/auto-complete
+           matched-templates
+           {:on-chosen   (editor-handler/template-on-chosen-handler id)
+            :on-enter    non-exist-handler
+            :empty-div   [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
+            :item-render (fn [[template _block-db-id]]
+                           template)
+            :class       "black"}))))))
 
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
@@ -415,12 +436,10 @@
     (ui/css-transition
      {:key key
       :class-names {:enter "origin-top-left opacity-0 transform scale-95"
-                    :enter-done "origin-top-left transition opacity-100"
-                    :enter-active "origin-top-left transition"
-                    :exit "origin-top-left transition opacity-0 transform scale-95"
-                    :exit-active "origin-top-left transition"
-                    :exit-done "origin-top-left transition opacity-0 transform scale-95"}
-      :timeout 100}
+                    :enter-done "origin-top-left transition opacity-100 transform scale-100"
+                    :exit "origin-top-left transition opacity-0 transform scale-95"}
+      :timeout {:enter 0
+                :exit 150}}
      (fn [_]
        (absolute-modal
         component
@@ -464,7 +483,10 @@
                      true (util/react *slash-caret-pos))
 
      (state/sub :editor/show-zotero)
-     (animated-modal "zotero-search" (zotero/zotero-search id) false (util/react *slash-caret-pos)))))
+     (animated-modal "zotero-search" (zotero/zotero-search id) false (util/react *slash-caret-pos))
+
+     :else
+     nil)))
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]

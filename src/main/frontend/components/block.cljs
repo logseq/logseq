@@ -1076,8 +1076,10 @@
         [:div.dsl-query
          (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
-                         {:title [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
-                                  (str "Query: " query)]
+                         {:title (ui/tippy {:html commands/query-doc
+                                            :interactive true}
+                                  [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
+                                   (str "Query: " query)])
                           :query query}))]
 
         (= name "function")
@@ -1774,7 +1776,8 @@
                 (assoc mouse-down-key (fn [e]
                                         (block-content-on-mouse-down e block block-id properties content format edit-input-id))))]
     [:div.block-content.inline
-     (cond-> {:id (str "block-content-" uuid)}
+     (cond-> {:id (str "block-content-" uuid)
+              :on-mouse-up util/clear-selection!}
        (not slide?)
        (merge attrs))
 
@@ -2290,7 +2293,7 @@
                          (and (util/electron?) (string? result)) ; full-text search
                          (if (string/blank? result)
                            (atom [])
-                           (p/let [blocks (search/block-search repo result {:limit 30})]
+                           (p/let [blocks (search/block-search repo (string/trim result) {:limit 30})]
                              (when (seq blocks)
                                (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
                                  (reset! result-atom result)))))

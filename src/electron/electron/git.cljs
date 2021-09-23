@@ -54,6 +54,7 @@
   []
   (try
     (let [graph-path (get-graph-path)
+          _ (and (string/blank? graph-path) (throw (js/Error. "Empty graph path")))
           p (.join path graph-path ".git")]
       (when (and (fs/existsSync p)
                  (.isFile (fs/statSync p)))

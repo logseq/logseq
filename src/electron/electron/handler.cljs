@@ -54,6 +54,17 @@
         new-path (str recycle-dir "/" file-name)]
     (fs/renameSync path new-path)))
 
+(defmethod handle :backupDbFile [_window [_ repo path db-content]]
+  (let [basename (path/basename path)
+        file-name (-> (string/replace path (str repo "/") "")
+                      (string/replace "/" "_")
+                      (string/replace "\\" "_"))
+        bak-dir (str repo "/logseq/bak")
+        _ (fs-extra/ensureDirSync bak-dir)
+        new-path (str bak-dir "/" file-name "." (.toISOString (js/Date.)))]
+    (fs/writeFileSync new-path db-content)
+    (fs/statSync new-path)))
+
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
 

@@ -87,16 +87,19 @@
           ^js canvas' (.createElement doc "canvas")
           dpr js/window.devicePixelRatio
           repo-cur (state/get-current-repo)
-          repo-dir (config/get-repo-dir repo-cur)]
+          repo-dir (config/get-repo-dir repo-cur)
+          dw (* dpr width)
+          dh (* dpr height)]
 
-      (set! (. canvas' -width) width)
-      (set! (. canvas' -height) height)
+      (set! (. canvas' -width) dw)
+      (set! (. canvas' -height) dh)
 
-      (when-let [^js ctx (.getContext canvas' "2d")]
+      (when-let [^js ctx (.getContext canvas' "2d" #js{:alpha false})]
+        (set! (. ctx -imageSmoothingEnabled) false)
         (.drawImage
           ctx canvas
           (* left dpr) (* top dpr) (* width dpr) (* height dpr)
-          0 0 width height)
+          0 0 dw dh)
 
         (let [callback (fn [^js png]
                          ;; write image file
@@ -224,6 +227,12 @@
   [{:keys [id]}]
   (when id
     (rfe/push-state :page {:name (str id)})))
+
+(defn goto-annotations-page!
+  ([current] (goto-annotations-page! current nil))
+  ([current id]
+   (when-let [name (:key current)]
+     (rfe/push-state :page {:name (str "hls__" name)} (if id {:anchor (str "block-content-" + id)} nil)))))
 
 (rum/defc area-display
   [block stamp]

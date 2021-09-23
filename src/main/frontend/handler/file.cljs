@@ -23,7 +23,8 @@
             [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.debug :as debug]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -245,6 +246,7 @@
                          (-> (p/let [_ (or
                                         (util/electron?)
                                         (nfs/check-directory-permission! repo))]
+                               (debug/set-ack-step! path :write-file)
                                (fs/write-file! repo (config/get-repo-dir repo) path content
                                                {:old-content original-content}))
                              (p/catch (fn [error]
@@ -291,9 +293,20 @@
   []
   (let [chan (state/get-file-write-chan)]
     (async/go-loop []
-      (let [args (async/<! chan)]
+      (let [args (async/<! chan)
+            files (second args)]
+
+        (doseq [path (map first files)]
+          (debug/set-ack-step! path :start-write-file))
+
         ;; return a channel
-        (<p! (apply alter-files-handler! args)))
+        (try
+          (<p! (apply alter-files-handler! args))
+          (catch js/Error e
+            (log/error :file/write-failed e)
+            (state/pub-event! [:instrument {:type :debug/write-failed
+                                            :payload {:step :start-to-write
+                                                      :error e}}]))))
       (recur))
     chan))
 

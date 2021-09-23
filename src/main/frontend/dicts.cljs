@@ -334,6 +334,7 @@
         :pdf/copy-ref "Copy ref"
         :pdf/copy-text "Copy text"
         :pdf/linked-ref "Linked references"
+        :pdf/toggle-dashed "Dashed style for area highlight"
         :command-palette/prompt "Type a command"}
 
    :de {:help/about "Über Logseq"
@@ -1029,6 +1030,7 @@
            :pdf/copy-ref "复制引用"
            :pdf/copy-text "复制文本"
            :pdf/linked-ref "转到注解"
+           :pdf/toggle-dashed "区域选取为虚线"
            :command-palette/prompt "输入指令"}
 
    :zh-Hant {:on-boarding/title "你好，歡迎使用 Logseq！"
