@@ -14,6 +14,9 @@
             [datascript.core :as d]))
 (set! *warn-on-infer* false)
 
+(def ^:dynamic *debug* true)
+(declare validate-struct)
+
 (def doc-local (y/Doc.))
 (def doc-remote (y/Doc.))
 
@@ -368,26 +371,35 @@ return [2 3]
 
 (defn- observe-struct-fn [page-name]
   (fn [events]
-    (def xxx events)
-    (let [[arrays added-items deleted-items] (events->array&items events)
-          contentmap (contentmap)]
-      (mapv
-       (fn [item]
-         (observe-struct-fn-aux-insert-ids (.-arr (.-content item)) page-name contentmap)
-         (when-some [yarray (.-type (.-content item))]
-           (observe-struct-fn-aux-insert-items-array yarray page-name contentmap)))
-       added-items))))
+    (try
+      (let [[arrays added-items deleted-items] (events->array&items events)
+            contentmap (contentmap)]
+        (mapv
+         (fn [item]
+           (observe-struct-fn-aux-insert-ids (.-arr (.-content item)) page-name contentmap)
+           (when-some [yarray (.-type (.-content item))]
+             (observe-struct-fn-aux-insert-items-array yarray page-name contentmap)))
+         added-items))
+      (catch js/Error e
+        (js/console.log "observe-struct-fn:")
+        (js/console.log events)
+        (js/console.log e)))))
 
 (def observe-struct-fn-memo (memoize observe-struct-fn))
 
 (defn- observe-content-fn [event]
-  (when-not (.-local (.-transaction event))
-    (let [keys (js->clj (into [] (.-keys event)))]
-      (mapv (fn [[k v]]
-              (case (get v "action")
-                "update" (update-block-content k)
-                "delete" (delete-node k)
-                (println "action" v))) keys))))
+  (try
+    (when-not (.-local (.-transaction event))
+      (let [keys (js->clj (into [] (.-keys event)))]
+        (mapv (fn [[k v]]
+                (case (get v "action")
+                  "update" (update-block-content k)
+                  "delete" (delete-node k)
+                  (println "action" v))) keys)))
+    (catch js/Error e
+      (js/console.log "observe-content-fn:")
+      (js/console.log event)
+      (js/console.log e))))
 
 (defn observe-page-doc [page-name doc]
   (let [struct (.getArray doc (str page-name "-struct"))
@@ -484,6 +496,7 @@ return [2 3]
 
 (defn start-sync-page [page-name]
   (let [page-blocks (db/get-page-blocks-no-cache page-name)]
+    (unobserve-page-doc page-name doc-local)
     (page-blocks->doc page-blocks page-name)
     (sync-doc doc-local doc-remote)
     (distinct-struct (structarray page-name) (atom #{}))
@@ -591,6 +604,7 @@ return [2 3]
         (insert-nodes-yjs struct new-nodes-tree (str (:block/uuid target-block)) sibling?)
         (distinct-struct struct (atom #{}))
         (merge-doc doc-remote doc-local)
+        (when *debug* (validate-struct struct))
         (outliner-core/insert-nodes new-nodes-tree target-node sibling?)))))
 
 (defn insert-node-yjs [struct new-node target-uuid sibling?]
@@ -611,6 +625,7 @@ return [2 3]
          (insert-node-yjs struct new-node (str (:block/uuid target-block)) sibling?)
          (distinct-struct struct (atom #{}))
          (merge-doc doc-remote doc-local)
+         (when *debug* (validate-struct struct))
          (outliner-core/insert-node new-node target-node sibling? opts))))))
 
 
@@ -664,9 +679,8 @@ return [2 3]
           (delete-range-nodes-suffix-part same-prefix-vec pos-vec2*-after-delete-prefix-part struct))
         (delete-range-nodes-suffix-part same-prefix-vec pos-vec2* struct)))))
 
-(defn delete-nodes-yjs [page-name start-uuid end-uuid block-ids]
-  (let [struct (structarray page-name)
-        start-pos (find-pos struct (str start-uuid))
+(defn delete-nodes-yjs [struct start-uuid end-uuid block-ids]
+  (let [start-pos (find-pos struct (str start-uuid))
         end-pos (find-pos struct (str end-uuid))
         ids (mapv (fn [id-tuple] (str (second id-tuple))) block-ids)]
     (delete-range-nodes start-pos end-pos struct)
@@ -681,23 +695,26 @@ return [2 3]
                               (:block/name (db/entity (:db/id (:block/page start-block)))))]
       (when-some [start-uuid (:block/uuid start-block)]
         (when-some [end-uuid (:block/uuid end-block)]
-          (delete-nodes-yjs page-name start-uuid end-uuid block-ids)
-          (distinct-struct (structarray page-name) (atom #{}))
-          (merge-doc doc-remote doc-local)
-          (outliner-core/delete-nodes start-node end-node block-ids))))))
+          (let [struct (structarray page-name)]
+            (delete-nodes-yjs struct start-uuid end-uuid block-ids)
+            (distinct-struct struct (atom #{}))
+            (merge-doc doc-remote doc-local)
+            (when *debug* (validate-struct struct))
+            (outliner-core/delete-nodes start-node end-node block-ids)))))))
 
-(defn delete-node-yjs [page-name id]
-  (let [struct (structarray page-name)
-        pos (find-pos struct id)]
+(defn delete-node-yjs [struct id]
+  (let [pos (find-pos struct id)]
     (delete-item pos struct)
     (dissoc-contents [id] (contentmap))))
 
 (defn delete-node-op [node children?]
   (let [block (:data node)]
     (when-some [page-name (:block/name (db/entity (:db/id (:block/page block))))]
-      (let [uuid (str (:block/uuid block))]
-        (delete-node-yjs page-name uuid)
+      (let [uuid (str (:block/uuid block))
+            struct (structarray page-name)]
+        (delete-node-yjs struct uuid)
         (merge-doc doc-remote doc-local)
+        (when *debug* (validate-struct struct))
         (outliner-core/delete-node node children?)))))
 
 (defn save-node-op [node]
@@ -705,10 +722,12 @@ return [2 3]
         contentmap (contentmap)]
     (when-some [page-name (:block/name (db/entity (:db/id (:block/page block))))]
       (when-some [block-uuid (:block/uuid block)]
-        (.set contentmap (str block-uuid) (:block/content block))
-        (distinct-struct (structarray page-name) (atom #{}))
-        (merge-doc doc-remote doc-local)
-        (outliner-core/save-node node)))))
+        (let [struct (structarray page-name)]
+          (.set contentmap (str block-uuid) (:block/content block))
+          (distinct-struct struct (atom #{}))
+          (merge-doc doc-remote doc-local)
+          (when *debug* (validate-struct struct))
+          (outliner-core/save-node node))))))
 
 (defn- outdentable? [pos]
   (> (count pos) 1))
@@ -763,22 +782,23 @@ return [2 3]
             (.insert item-parent-parent-array (+ insert-pos (if item-children-clone 2 1))
                      (clj->js [item-parent-array-clone]))))))))
 
-(defn- indent-outdent-nodes-yjs [page-name ids indent?]
-  (let [struct (structarray page-name)]
-    (mapv
-     (fn [id]
-       (if indent?
-         (indent-item struct id)
-         (outdent-item struct id)))
-     ids)))
+(defn- indent-outdent-nodes-yjs [struct ids indent?]
+  (mapv
+   (fn [id]
+     (if indent?
+       (indent-item struct id)
+       (outdent-item struct id)))
+   ids))
 
 (defn indent-outdent-nodes-op [nodes indent?]
   (when-some [page-name
               (:block/name (db/entity (:db/id (:block/page (:data (first nodes))))))]
-    (let [ids (mapv (fn [node] (str (:block/uuid (:data node)))) nodes)]
+    (let [ids (mapv (fn [node] (str (:block/uuid (:data node)))) nodes)
+          struct (structarray page-name)]
       (println "[YJS] indent-outdent-nodes(before):" nodes indent?)
-      (indent-outdent-nodes-yjs page-name ids indent?)
+      (indent-outdent-nodes-yjs struct ids indent?)
       (merge-doc doc-remote doc-local)
+      (when *debug* (validate-struct struct))
       (outliner-core/indent-outdent-nodes nodes indent?)
       (println "[YJS] indent-outdent-nodes(after):"
                (mapv (fn [node]
@@ -822,6 +842,7 @@ return [2 3]
           target-id (str (:block/uuid (:data target-node)))]
       (move-subtree-same-page-yjs struct root-id target-id sibling?)
       (merge-doc doc-remote doc-local)
+      (when *debug* (validate-struct struct))
       (outliner-core/move-subtree root target-node sibling?))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -862,5 +883,22 @@ return [2 3]
   (.insert (.get test-struct 2) 2 (clj->js [(y/Array.)]))
   (.insert (.get (.get test-struct 2) 2) 0 (clj->js ["5"]))
   (.observeDeep test-struct (fn [e] (def eee e)))
-  (println (.toJSON test-struct))
- )
+  (println (.toJSON test-struct)))
+
+
+
+(defn- validate-struct-aux [arr parent-pos]
+  (loop [i 0]
+    (when (< i (count arr))
+      (when (vector? (arr i))
+        (assert (not= 0 i)
+                (str "vector at pos 0, pos: " (conj parent-pos i)))
+        (assert (and (> i 0) (vector? (arr (dec i))))
+                (str "continuous arrays, pos: " (conj parent-pos i)))
+        (validate-struct-aux (arr i) (conj parent-pos i)))
+      (recur (inc i)))))
+
+(defn- validate-struct [struct]
+  "ensure struct array has a legal structure"
+  (let [arr (js->clj (.toJSON struct))]
+    (validate-struct-aux arr [])))
