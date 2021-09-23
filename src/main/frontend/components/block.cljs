@@ -1790,7 +1790,9 @@
                                         (block-content-on-mouse-down e block block-id properties content format edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :on-mouse-up util/clear-selection!}
+              :on-mouse-up (fn [_e]
+                             (when-not (string/includes? content "```")
+                               (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
 
