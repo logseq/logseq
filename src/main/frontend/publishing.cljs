@@ -13,7 +13,8 @@
             [cljs.reader :as reader]
             [frontend.components.page :as component-page]
             [frontend.components.editor :as component-editor]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.handler.events :as events]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -72,6 +73,7 @@
   (restore-from-transit-str!)
   (restore-state!)
   (shortcut/refresh!)
+  (events/run!)
   (start))
 
 (defn stop []
