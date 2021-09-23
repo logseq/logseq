@@ -120,12 +120,10 @@
     (.. ^js window -webContents
         (send "open-dir-confirmed"
               (bean/->js {:opened? true})))
-    (let [[dir & paths] (bean/->clj (get-files path))]
-      [(:path dir) paths])))
+    (get-files path)))
 
 (defmethod handle :getFiles [window [_ path]]
-  (let [result (bean/->clj (get-files path))]
-    (rest result)))
+  (get-files path))
 
 (defmethod handle :persistent-dbs-saved [window _]
   (async/put! state/persistent-dbs-chan true)
