@@ -49,8 +49,8 @@
 
 (defn invoke-command [{:keys [action] :as cmd}]
   (add-history cmd)
-  (state/set-state! :ui/command-palette-open? false)
-  (js/setTimeout (fn [] (action)) 200))
+  (state/close-modal!)
+  (action))
 
 (defn top-commands [limit]
   (->> (get-commands)
