@@ -2353,6 +2353,7 @@
            transformed-query-result (when query-result
                                       (db/custom-query-result-transform query-result remove-blocks q))
            not-grouped-by-page? (or table?
+                                    (boolean (:result-transform q))
                                     (and (string? query) (string/includes? query "(by-page false)")))
            result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
                     (db-utils/group-by-page transformed-query-result)
@@ -2778,7 +2779,8 @@
    (cond-> option
      (:document/mode? config) (assoc :class "doc-mode"))
    (cond
-     (:custom-query? config)
+     (and (:custom-query? config)
+          (:group-by-page? config))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
