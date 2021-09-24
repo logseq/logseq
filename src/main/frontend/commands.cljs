@@ -163,15 +163,16 @@
    (->block type nil))
   ([type optional]
    (let [format (get (state/get-edit-block) :block/format)
-         org-src? (and (= format :org)
+         markdown-src? (and (= format :markdown)
                        (= (string/lower-case type) "src"))
          [left right] (cond
-                        org-src?
+                        markdown-src?
+                        ["```" "\n```"]
+
+                        :else
                         (->> ["#+BEGIN_%s" "\n#+END_%s"]
                              (map #(util/format %
-                                                (string/upper-case type))))
-                        :else
-                        ["```" "\n```"])
+                                                (string/upper-case type)))))
          template (str
                    left
                    (if optional (str " " optional) "")
