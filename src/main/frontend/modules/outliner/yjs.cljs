@@ -154,6 +154,20 @@ return [2 3]
     (when (instance? y/Array child)
       child)))
 
+(defn- merge-consecutive-arrays [struct pos]
+  "[1 [2] [3]] -> [1 [2 3]]
+      ^
+     POS"
+  (let [inner-struct (goto-innermost-struct-array pos struct)
+        pos-item (.get inner-struct (last pos))]
+    (when (instance? y/Array pos-item)
+      (loop [i (inc (last pos))]
+        (when-some [next-item (.get inner-struct i)]
+          (when (instance? y/Array next-item)
+            (.push pos-item (.toJSON next-item))
+            (.delete inner-struct i)
+            (recur (inc i))))))))
+
 (defn- distinct-struct [struct id-set]
   (loop [i 0]
     (when (< i (.-length struct))
@@ -761,6 +775,11 @@ return [2 3]
 
 (defn- outdent-item [struct id]
   "outdent an item(and its children)"
+  ;; struct=[1 [2 [3] 4]]
+  ;; item-parent-array=[2 [3]]
+  ;; item-parent-parent-array=[1 [2 [3] 4]]
+  ;; item=2
+  ;; item-children=[3]
   (when-some [pos (find-pos struct id)]
     (when (outdentable? pos)
       (let [upper-pos (.upper-level pos)
@@ -780,7 +799,10 @@ return [2 3]
           (.insert item-parent-parent-array insert-pos (clj->js insert-items))
           (when (> (.-length item-parent-array-clone) 0)
             (.insert item-parent-parent-array (+ insert-pos (if item-children-clone 2 1))
-                     (clj->js [item-parent-array-clone]))))))))
+                     (clj->js [item-parent-array-clone])))
+          (when item-children-clone
+            (merge-consecutive-arrays item-parent-parent-array
+                                      (->Pos [(inc insert-pos)]))))))))
 
 (defn- indent-outdent-nodes-yjs [struct ids indent?]
   (mapv
@@ -893,7 +915,7 @@ return [2 3]
       (when (vector? (arr i))
         (assert (not= 0 i)
                 (str "vector at pos 0, pos: " (conj parent-pos i)))
-        (assert (and (> i 0) (vector? (arr (dec i))))
+        (assert (or (= i 0) (not (vector? (arr (dec i)))))
                 (str "continuous arrays, pos: " (conj parent-pos i)))
         (validate-struct-aux (arr i) (conj parent-pos i)))
       (recur (inc i)))))
