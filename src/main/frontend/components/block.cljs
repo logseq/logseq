@@ -1778,7 +1778,10 @@
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-mouse-up (fn [_e]
-                             (when-not (string/includes? content "```")
+                             (when (and
+                                    (state/in-selection-mode?)
+                                    (not (string/includes? content "```")))
+                               ;; clear highlighted text
                                (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
