@@ -307,15 +307,19 @@
                   (remove string/blank?)
                   (distinct))
         refs (atom refs)]
-    (walk/postwalk
+    (walk/prewalk
      (fn [form]
-       (when-let [page (get-page-reference form)]
-         (swap! refs conj page))
-       (when-let [tag (get-tag form)]
-         (let [tag (text/page-ref-un-brackets! tag)]
-           (when (util/tag-valid? tag)
-            (swap! refs conj tag))))
-       form)
+       ;; skip custom queries
+       (when-not (and (vector? form)
+                      (= (first form) "Custom")
+                      (= (second form) "query"))
+         (when-let [page (get-page-reference form)]
+           (swap! refs conj page))
+         (when-let [tag (get-tag form)]
+           (let [tag (text/page-ref-un-brackets! tag)]
+             (when (util/tag-valid? tag)
+               (swap! refs conj tag))))
+         form))
      (concat title body))
     (let [refs (remove string/blank? @refs)
           children-pages (->> (mapcat (fn [p]
