@@ -199,6 +199,53 @@
      [])
     [:span.resizer {:ref el-ref}]))
 
+(rum/defcs sidebar-inner <
+  (rum/local false ::anim-finished?)
+  {:will-mount (fn [state]
+                 (js/setTimeout (fn [] (reset! (get state ::anim-finished?) true)) 300)
+                 state)}
+  [state repo t blocks]
+  (let [*anim-finished? (get state ::anim-finished?)]
+    [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
+
+     (sidebar-resizer)
+     [:div.cp__right-sidebar-scrollable
+      [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-2.h-12
+       [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
+        [:div.ml-4.text-sm
+         [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
+                                                         (state/sidebar-add-block! repo "contents" :contents nil))}
+          (or (state/get-favorites-name)
+              (t :right-side-bar/favorites))]]
+
+        [:div.ml-4.text-sm
+         [:a.cp__right-sidebar-settings-btn {:on-click (fn []
+                                                         (when-let [page (get-current-page)]
+                                                           (state/sidebar-add-block!
+                                                            repo
+                                                            (str "page-graph-" page)
+                                                            :page-graph
+                                                            page)))}
+          (t :right-side-bar/page)]]
+
+        [:div.ml-4.text-sm
+         [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                         (state/sidebar-add-block! repo "help" :help nil))}
+          (t :right-side-bar/help)]]]
+
+       [:div.flex.align-items {:style {:z-index 999
+                                       :margin-right 2}}
+        (toggle)]]
+
+      [:.sidebar-item-list.flex-1.scrollbar-spacing {:style {:height "100vh"}}
+       (if @*anim-finished?
+         (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
+           (rum/with-key
+             (sidebar-item repo idx db-id block-type block-data t)
+             (str "sidebar-block-" idx)))
+         [:div.p-4
+          [:span.font-medium.opacity-50 "Loading ..."]])]]]))
+
 (rum/defcs sidebar < rum/reactive
   [state]
   (let [blocks (state/sub :sidebar/blocks)
@@ -207,47 +254,9 @@
                  blocks)
         sidebar-open? (state/sub :ui/sidebar-open?)
         repo (state/sub :git/current-repo)
-        match (state/sub :route-match)
-        theme (state/sub :ui/theme)
         t (i18n/use-tongue)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#right-sidebar.cp__right-sidebar.h-screen
        {:class (if sidebar-open? "open" "closed")}
        (when sidebar-open?
-         [:div.cp__right-sidebar-inner.flex.flex-col.h-full#right-sidebar-container
-
-          (sidebar-resizer)
-          [:div.cp__right-sidebar-scrollable
-           [:div.cp__right-sidebar-topbar.flex.flex-row.justify-between.items-center.pl-4.pr-2.h-12
-           [:div.cp__right-sidebar-settings.hide-scrollbar {:key "right-sidebar-settings"}
-            [:div.ml-4.text-sm
-             [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
-                                                             (state/sidebar-add-block! repo "contents" :contents nil))}
-              (or (state/get-favorites-name)
-                  (t :right-side-bar/favorites))]]
-
-            [:div.ml-4.text-sm
-             [:a.cp__right-sidebar-settings-btn {:on-click (fn []
-                                                             (when-let [page (get-current-page)]
-                                                               (state/sidebar-add-block!
-                                                                repo
-                                                                (str "page-graph-" page)
-                                                                :page-graph
-                                                                page)))}
-              (t :right-side-bar/page)]]
-
-            [:div.ml-4.text-sm
-             [:a.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                             (state/sidebar-add-block! repo "help" :help nil))}
-              (t :right-side-bar/help)]]]
-
-           (when sidebar-open?
-             [:div.flex.align-items {:style {:z-index 999
-                                             :margin-right 2}}
-              (toggle)])]
-
-           [:.sidebar-item-list.flex-1.scrollbar-spacing {:style {:height "100vh"}}
-            (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
-              (rum/with-key
-                (sidebar-item repo idx db-id block-type block-data t)
-                (str "sidebar-block-" idx)))]]])])))
+         (sidebar-inner repo t blocks))])))
