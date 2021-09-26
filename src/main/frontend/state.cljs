@@ -126,6 +126,7 @@
       :preferred-language (storage/get :preferred-language)
 
       ;; electron
+      :electron/auto-updater-downloaded false
       :electron/updater-pending? false
       :electron/updater {}
       :electron/user-cfgs nil

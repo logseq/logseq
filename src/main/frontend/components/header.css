@@ -36,26 +36,66 @@
     transform: scale(0.6);
     color: red;
   }
+
+  &-tips {
+    position: absolute;
+    width: 100%;
+    padding: 0 0;
+    transform: translateY(100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--ls-secondary-background-color);
+    box-sizing: border-box;
+    margin: 0;
+    left: 0;
+    top: -2px;
+    color: var(--ls-secondary-text-color);
+
+    > p {
+      margin: 0;
+      padding: 0 0 6px 0;
+    }
+
+    a {
+      color: var(--ls-link-text-color) !important;
+    }
+
+    a.restart {
+      position: relative;
+      top: 3px;
+      cursor: pointer !important;
+
+      svg {
+        color: currentColor !important;
+      }
+
+      > strong {
+        display: inline-block;
+        padding-left: 2px;
+      }
+    }
+  }
 }
 
 .is-electron.is-mac .cp__header {
-    padding-left: 78px;
-    -moz-transition: padding-left .3s ease-in;
-    -o-transition: padding-left  .3s ease-in;
-    -webkit-transition: padding-left  .3s ease-in;
-    transition: padding-left  .3s ease-in;
+  padding-left: 78px;
+  -moz-transition: padding-left .3s ease-in;
+  -o-transition: padding-left .3s ease-in;
+  -webkit-transition: padding-left .3s ease-in;
+  transition: padding-left .3s ease-in;
 }
 
 .cp__header .navigation svg {
-    transform: scale(0.7);
+  transform: scale(0.7);
 }
 
 .is-electron.is-mac.is-fullscreen .cp__header {
-    padding-left: 0;
+  padding-left: 0;
 }
 
 .cp__header a, .cp__header svg {
-    -webkit-app-region: no-drag;
+  -webkit-app-region: no-drag;
 }
 
 .cp__header-left-menu {
@@ -103,7 +143,7 @@
 }
 
 .cp__header-logo svg {
-    transform: scale(0.9);
+  transform: scale(0.9);
 }
 
 #repo-name {
@@ -118,17 +158,17 @@
 }
 
 a.button {
-    padding: 0.25rem;
-    opacity: 0.6;
-    display: block;
-    border-radius: 4px;
+  padding: 0.25rem;
+  opacity: 0.6;
+  display: block;
+  border-radius: 4px;
 }
 
 a.button:hover {
-    opacity: 1;
-    background: var(--ls-tertiary-background-color);
+  opacity: 1;
+  background: var(--ls-tertiary-background-color);
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
-    cursor: default !important;
+  cursor: default !important;
 }

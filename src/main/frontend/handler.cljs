@@ -229,3 +229,10 @@
                                                             (js/window.location.reload))))]])
                          (reset! triggered? false)
                          (set! (.-returnValue e) "")))))
+
+(defn quit-and-install-new-version!
+  []
+  (p/let [_ (el/persist-dbs!)
+          _ (reset! triggered? true)
+          _ (ipc/invoke "set-quit-dirty-state" false)]
+    (ipc/ipc :quitAndInstall)))
