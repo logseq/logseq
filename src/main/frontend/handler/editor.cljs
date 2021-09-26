@@ -102,8 +102,10 @@
 (defn italics-format! []
   (format-text! config/get-italic))
 
-(defn highlight-format! []
-  (format-text! config/get-highlight))
+(defn highlight-format! [state]
+  (when-let [block (state/get-edit-block)]
+    (let [format (:block/format block)]
+      (format-text! #(config/get-highlight format)))))
 
 (defn strike-through-format! []
   (format-text! config/get-strike-through))

@@ -167,7 +167,12 @@
 
 (defn get-highlight
   [format]
-  "==")
+  (case format
+    :org
+    "^^"
+    :markdown
+    "=="
+    ""))
 
 (defn get-code
   [format]
