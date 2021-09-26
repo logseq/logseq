@@ -15,7 +15,7 @@
 (set! *warn-on-infer* false)
 
 (def ^:dynamic *debug* true)
-(declare validate-struct)
+(declare validate-struct start-sync-page)
 
 (defonce doc-local (y/Doc.))
 (defonce doc-remote (y/Doc.))
@@ -30,6 +30,13 @@
 
 (defn- remote-contentmap [] (.getMap doc-remote "content"))
 (defn- remote-structarray [page-name] (.getArray doc-remote (str page-name "-struct")))
+
+(defn- page-syncing? [page-name]
+  (some? (.get (.-share doc-local) (str page-name "-struct"))))
+
+(defn- ensure-page-sync [page-name]
+  (when-not (page-syncing? page-name)
+    (start-sync-page page-name)))
 
 (defn- assoc-contents [contents contentmap]
   (mapv (fn [[k v]]  (.set contentmap k v)) contents))
@@ -255,8 +262,8 @@ return [2 3]
     (let [content-map (contentmap)
           format (or (:block/format block) :markdown)
           new-content (.toString (.get content-map id)) ;TODO orgmode
-          updated-block (content->block new-content format {:block/page (:block/page block)})]
-      (def www updated-block)
+          updated-block (content->block new-content format {:block/page (:block/page block)
+                                                            :block/file (:block/file block)})]
       (outliner-core/save-node (outliner-core/block updated-block))
       (db/refresh! (state/get-current-repo) {:key :block/change :data [updated-block]}))))
 
@@ -346,6 +353,7 @@ return [2 3]
         target-node (outliner-core/block target-block)
         new-block (content->block content format
                                   {:block/page (:block/page target-block)
+                                   :block/file (:block/file target-block)
                                    :block/uuid (uuid id)} )
         new-node (outliner-core/block new-block)
         sibling? (not= parent-id left-id)]
@@ -619,12 +627,31 @@ return [2 3]
   (let [target-block (:data target-node)]
     (when-some [page-name (or (:block/name target-block)
                               (:block/name (db/entity (:db/id (:block/page target-block)))))]
-      (let [struct (structarray page-name)]
-        (insert-nodes-yjs struct new-nodes-tree (str (:block/uuid target-block)) sibling?)
+      (let [struct (structarray page-name)
+            block-page (:block/page target-block)
+            block-file (:block/file target-block)
+            new-nodes-tree*
+            (clojure.walk/postwalk (fn [node]
+                                     (if (instance? outliner-core/Block node)
+                                       (let [block (:data node)
+                                             id (str (:block/uuid block))
+                                             content (property/insert-property
+                                                      :markdown
+                                                      (property/remove-id-property :markdown  (:block/content block))
+                                                      "ID" id)]
+                                         (outliner-core/block
+                                          (content->block content :markdown
+                                                          {:block/page block-page
+                                                           :block/uuid (uuid id)
+                                                           :block/file block-file})))
+                                       node))
+                               new-nodes-tree)]
+        (def www [new-nodes-tree new-nodes-tree*])
+        (insert-nodes-yjs struct new-nodes-tree* (str (:block/uuid target-block)) sibling?)
         (distinct-struct struct (atom #{}))
         (merge-doc doc-remote doc-local)
         (when *debug* (validate-struct struct))
-        (outliner-core/insert-nodes new-nodes-tree target-node sibling?)))))
+        (outliner-core/insert-nodes new-nodes-tree* target-node sibling?)))))
 
 (defn insert-node-yjs [struct new-node target-uuid sibling?]
   (insert-nodes-yjs struct [new-node] target-uuid sibling?))
@@ -706,15 +733,10 @@ return [2 3]
     (delete-child-array end-pos struct)
     (delete-range-nodes-aux same-prefix-vec pos-vec1* pos-vec2* struct)))
 
-(defn delete-nodes-yjs [struct start-uuid end-uuid block-ids]
-  (let [start-pos (find-pos struct (str start-uuid))
-        end-pos (find-pos struct (str end-uuid))
-        [start-pos end-pos] (if (< (compare start-pos end-pos) 0)
-                              [start-pos end-pos]
-                              [end-pos start-pos])
-        ids (mapv (fn [id-tuple] (str (second id-tuple))) block-ids)]
+(defn delete-nodes-yjs [struct start-pos end-pos block-ids]
+  (let [ids (mapv (fn [id-tuple] (str (second id-tuple))) block-ids)]
     (println "[YJS] delete-nodes-yjs: "
-             start-uuid end-uuid block-ids (.toString start-pos) (.toString end-pos))
+             block-ids (.toString start-pos) (.toString end-pos))
     (delete-range-nodes start-pos end-pos struct)
     (dissoc-contents ids (contentmap))))
 
@@ -726,15 +748,26 @@ return [2 3]
                               (:block/name (db/entity (:db/id (:block/page start-block)))))]
       (when-some [start-uuid (:block/uuid start-block)]
         (when-some [end-uuid (:block/uuid end-block)]
-          (let [struct (structarray page-name)]
-            (delete-nodes-yjs struct start-uuid end-uuid block-ids)
+          (let [struct (structarray page-name)
+                start-pos (find-pos struct (str start-uuid))
+                end-pos (find-pos struct (str end-uuid))
+                [start-pos end-pos start-node end-node]
+                (if (< (compare start-pos end-pos) 0)
+                  [start-pos end-pos start-node end-node]
+                  [end-pos start-pos end-node start-node])]
+            (delete-nodes-yjs struct start-pos end-pos block-ids)
             (distinct-struct struct (atom #{}))
             (merge-doc doc-remote doc-local)
             (when *debug* (validate-struct struct))
             (outliner-core/delete-nodes start-node end-node block-ids)))))))
 
-(defn delete-node-yjs [struct id]
+(defn delete-node-yjs [struct id children?]
   (let [pos (find-pos struct id)]
+    (when children?
+      (when-some [child-array (get-child-array pos struct)]
+        (let [child-ids (flatten (js->clj (.toJSON child-array)))]
+          (delete-child-array pos struct)
+          (dissoc-contents child-ids (contentmap)))))
     (delete-item pos struct)
     (dissoc-contents [id] (contentmap))))
 
@@ -744,7 +777,7 @@ return [2 3]
       (let [uuid (str (:block/uuid block))
             struct (structarray page-name)]
         (println "[YJS] delete-node-op: " uuid children?)
-        (delete-node-yjs struct uuid)
+        (delete-node-yjs struct uuid children?)
         (merge-doc doc-remote doc-local)
         (when *debug* (validate-struct struct))
         (outliner-core/delete-node node children?)))))
@@ -874,6 +907,16 @@ return [2 3]
                 (.insert target-item-parent-array insert-pos (clj->js [new-array])))
               (let [target-child-array (.get target-item-parent-array insert-pos)]
                 (.insert target-child-array 0 (clj->js insert-items))))))))))
+
+;; (defn move-subtree-across-pages-yjs [root target-node sibling?]
+;;   (let [root-page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))
+;;         target-page-name
+;;         (or (:block/name (:data target-node))   ; maybe page-block
+;;             (:block/name (db/entity (:db/id (:block/page (:data target-node))))))]
+;;     (ensure-page-sync target-page-name)
+
+;;     )
+;;   )
 
 (defn move-subtree-same-page-op [root target-node sibling?]
   (when-some [page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))]
