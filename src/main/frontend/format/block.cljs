@@ -622,7 +622,8 @@
                           (block-keywordize)))
                        (select-keys first-block [:block/file :block/format :block/page]))
                       blocks)
-                     blocks)]
+                     blocks)
+            blocks (map (fn [block] (dissoc block :block/anchor)) blocks)]
         (with-path-refs blocks)))
     (catch js/Error e
       (js/console.error "extract-blocks-failed")

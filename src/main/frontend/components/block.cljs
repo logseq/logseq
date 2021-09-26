@@ -1523,7 +1523,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority anchor meta format content pre-block? page properties unordered level heading-level]
+  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority meta format content pre-block? page properties unordered level heading-level]
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1553,8 +1553,7 @@
     (->elem
      elem
      (merge
-      {:id anchor
-       :data-hl-type (:hl-type properties)}
+      {:data-hl-type (:hl-type properties)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
