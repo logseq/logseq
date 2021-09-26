@@ -17,13 +17,13 @@
 (def ^:dynamic *debug* true)
 (declare validate-struct)
 
-(def doc-local (y/Doc.))
-(def doc-remote (y/Doc.))
+(defonce doc-local (y/Doc.))
+(defonce doc-remote (y/Doc.))
 
 (def syncing-pages (atom #{}))
 
 
-(def wsProvider1 (y-ws/WebsocketProvider. "ws://localhost:1234", "test-user", doc-remote))
+(defonce wsProvider1 (y-ws/WebsocketProvider. "ws://localhost:1234", "test-user", doc-remote))
 
 (defn- contentmap [] (.getMap doc-local "content"))
 (defn- structarray [page-name] (.getArray doc-local (str page-name "-struct")))
@@ -137,10 +137,15 @@
               (recur (+ i 1)))))))))
 
 (defn- get-pos-item [pos struct]
-  (loop [i 0 s struct]
-    (if (>= i (count pos))
-      s
-      (recur (inc i) (.get s (get pos i))))))
+  (try
+    (loop [i 0 s struct]
+      (if (>= i (count pos))
+        s
+        (recur (inc i) (.get s (get pos i)))))
+    (catch js/Error e
+      (println e)
+      (println (.toString pos) (.toJSON struct))
+      (throw e))))
 
 (defn- get-child-array [pos struct]
   "return child array if exists.
@@ -150,7 +155,7 @@ pos
 
 return [2 3]
 "
-  (let [child (get-pos-item (.inc-pos pos) struct)]
+  (when-some [child (get-pos-item (.inc-pos pos) struct)]
     (when (instance? y/Array child)
       child)))
 
@@ -642,63 +647,75 @@ return [2 3]
          (when *debug* (validate-struct struct))
          (outliner-core/insert-node new-node target-node sibling? opts))))))
 
+(defn- delete-range-nodes-aux [prefix-vec start-pos-vec end-pos-vec struct]
+  {:pre [(> (count start-pos-vec) 0)
+         (> (count end-pos-vec) 0)]}
+  (let [start-pos-length (count start-pos-vec)
+        end-pos-length (count end-pos-vec)
+        *end-pos-vec (atom end-pos-vec)]
+    (loop [i (dec start-pos-length)]
+      (when (> i 0)
+        (let [pos (->Pos (vec (concat prefix-vec (subvec start-pos-vec 0 (inc i)))))
+              pos (if (instance? y/Array (get-pos-item pos struct)) (.inc-pos pos) pos)
+              inner-struct (goto-innermost-struct-array pos struct)
+              inner-parent-struct (goto-innermost-struct-array (.upper-level pos) struct)]
+          (.delete inner-struct (last pos) (- (.-length inner-struct) (last pos)))
+          (when (= 0 (.-length inner-struct))
+            (.delete inner-parent-struct (last (.upper-level pos)))
+            (when (= i 1)
+              (swap! *end-pos-vec (fn [v] (vec (concat [(dec (first v))] (rest v)))))))
+          (recur (dec i)))))
+    (loop [i (dec end-pos-length)]
+      (when (> i 0)
+        (let [pos (->Pos (vec (concat prefix-vec (subvec @*end-pos-vec 0 (inc i)))))
+              pos (if (instance? y/Array (get-pos-item pos struct)) (.dec-pos pos) pos)
+              inner-struct (goto-innermost-struct-array pos struct)
+              inner-parent-struct (goto-innermost-struct-array (.upper-level pos) struct)]
+          (.delete inner-struct 0 (inc (last pos)))
+          (if (= 0 (.-length inner-struct))
+            (do
+              (.delete inner-parent-struct (last (.upper-level pos)))
+              (swap! *end-pos-vec
+                     (fn [v]
+                       (assoc v (dec i) (dec (v (dec i))))))
+              (recur (dec i)))
+            (recur (dec i))))))
+    (let [start-pos (->Pos (conj prefix-vec (first start-pos-vec)))
+          end-pos (->Pos (conj prefix-vec (first @*end-pos-vec)))
+          inner-struct (goto-innermost-struct-array start-pos struct)
+          start-index (if (instance? y/Array (get-pos-item start-pos struct))
+                        (inc (last start-pos))
+                        (last start-pos))
+          end-index (if (instance? y/Array (get-pos-item end-pos struct))
+                      (dec (last end-pos))
+                      (last end-pos))]
+      (.delete inner-struct start-index (inc (- end-index start-index)))
+      (when (= 0 (.-length inner-struct))
+        (let [inner-parent-struct
+              (goto-innermost-struct-array (.upper-level start-pos) struct)]
+          (.delete inner-parent-struct (last (.upper-level start-pos))))))))
 
-(defn- delete-range-nodes-prefix-part
-  ([prefix-vec start-pos-vec end-pos-vec struct] (delete-range-nodes-prefix-part prefix-vec start-pos-vec end-pos-vec struct false))
-  ([prefix-vec start-pos-vec end-pos-vec struct debug?]
-   (let [start-pos-vec-len (count start-pos-vec)]
-     ;; (when (> start-pos-vec-len 0))
-     (let [inner-struct (goto-innermost-struct-array (->Pos (vec (concat prefix-vec start-pos-vec))) struct)
-           start-index (last start-pos-vec)
-           len-to-remove (if (and (end-pos-vec 0 nil) (= start-pos-vec-len 1))
-                           (if (> (count end-pos-vec) 1)
-                             (- (end-pos-vec 0) start-index)
-                             (inc (- (end-pos-vec 0) start-index)))
-                           (- (.-length inner-struct) start-index))]
-       (if debug?
-         (println "delete: struct:" (.toJSON inner-struct)
-                  "start-index" start-index
-                  "len-to-remove" len-to-remove)
-         (.delete inner-struct start-index len-to-remove))
-       (if (>= start-pos-vec-len 2)
-         (delete-range-nodes-prefix-part prefix-vec
-                                         (conj (subvec start-pos-vec 0 (- start-pos-vec-len 2))
-                                               (inc (start-pos-vec (- start-pos-vec-len 2) nil)))
-                                         end-pos-vec struct debug?)
-         len-to-remove)))))
-
-
-(defn- delete-range-nodes-suffix-part
-  ([prefix-vec end-pos-vec struct] (delete-range-nodes-suffix-part prefix-vec end-pos-vec struct false))
-  ([prefix-vec end-pos-vec struct debug?]
-   (let [end-pos-vec-len (count end-pos-vec)]
-     (when (> end-pos-vec-len 0)
-       (let [inner-struct (goto-innermost-struct-array (->Pos (vec (concat prefix-vec end-pos-vec))) struct)]
-         (if (<= (dec (.-length inner-struct)) (last end-pos-vec))
-           (delete-range-nodes-suffix-part prefix-vec (butlast end-pos-vec) struct)
-           (when (>= end-pos-vec-len 2)
-             (let [next-end-pos-vec (conj (subvec end-pos-vec 0 (- end-pos-vec-len 2))
-                                          (dec (end-pos-vec (- end-pos-vec-len 2))))]
-               (if debug?
-                 (println "delete struct:" (.toJSON inner-struct) "len" (inc (last end-pos-vec)))
-                 (.delete inner-struct 0 (inc (last end-pos-vec))))
-               (delete-range-nodes-suffix-part prefix-vec next-end-pos-vec struct)))))))))
+(defn- delete-child-array [pos struct]
+  (when (some? (get-child-array pos struct))
+    (let [inner-struct (goto-innermost-struct-array pos struct)]
+      (.delete inner-struct (last (.inc-pos pos))))))
 
 (defn delete-range-nodes [start-pos end-pos struct]
   ;; {:pre [(<= (compare start-pos end-pos) 0)]}
   (let [[same-prefix-vec pos-vec1* pos-vec2*] (common-prefix start-pos end-pos)]
-    (let [len-removed (delete-range-nodes-prefix-part same-prefix-vec pos-vec1* pos-vec2* struct)]
-      (if (>(count pos-vec2*) 0)
-        (let [pos-vec2*-after-delete-prefix-part (vec (cons (- (first pos-vec2*) len-removed) (rest pos-vec2*)))]
-          (delete-range-nodes-suffix-part same-prefix-vec pos-vec2*-after-delete-prefix-part struct))
-        (delete-range-nodes-suffix-part same-prefix-vec pos-vec2* struct)))))
+    (delete-child-array end-pos struct)
+    (delete-range-nodes-aux same-prefix-vec pos-vec1* pos-vec2* struct)))
 
 (defn delete-nodes-yjs [struct start-uuid end-uuid block-ids]
   (let [start-pos (find-pos struct (str start-uuid))
         end-pos (find-pos struct (str end-uuid))
+        [start-pos end-pos] (if (< (compare start-pos end-pos) 0)
+                              [start-pos end-pos]
+                              [end-pos start-pos])
         ids (mapv (fn [id-tuple] (str (second id-tuple))) block-ids)]
+    (println "[YJS] delete-nodes-yjs: "
+             start-uuid end-uuid block-ids (.toString start-pos) (.toString end-pos))
     (delete-range-nodes start-pos end-pos struct)
-    (println "delete-nodes-yjs:" ids)
     (dissoc-contents ids (contentmap))))
 
 
@@ -726,6 +743,7 @@ return [2 3]
     (when-some [page-name (:block/name (db/entity (:db/id (:block/page block))))]
       (let [uuid (str (:block/uuid block))
             struct (structarray page-name)]
+        (println "[YJS] delete-node-op: " uuid children?)
         (delete-node-yjs struct uuid)
         (merge-doc doc-remote doc-local)
         (when *debug* (validate-struct struct))
@@ -901,9 +919,11 @@ return [2 3]
   (.insert test-struct 1 (clj->js ["2"]))
   (.insert test-struct 2 (clj->js [(y/Array.)]))
   (.insert (.get test-struct 2) 0 (clj->js ["3"]))
-  (.insert (.get test-struct 2) 1 (clj->js ["4"]))
-  (.insert (.get test-struct 2) 2 (clj->js [(y/Array.)]))
-  (.insert (.get (.get test-struct 2) 2) 0 (clj->js ["5"]))
+  (.insert (.get test-struct 2) 1 (clj->js [(y/Array.)]))
+  (.insert (.get test-struct 2) 2 (clj->js ["5"]))
+  (.insert (.get test-struct 2) 3 (clj->js [(y/Array.)]))
+  (.insert (get-pos-item (->Pos [2 1]) test-struct) 0 (clj->js ["4"]))
+  (.insert (get-pos-item (->Pos [2 3]) test-struct) 0 (clj->js ["6"]))
   (.observeDeep test-struct (fn [e] (def eee e)))
   (println (.toJSON test-struct)))
 
