@@ -1,8 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.Logseq',
-  appName: 'capacitor-testapp',
+  appId: 'com.logseq.app',
+  appName: 'Logseq',
   bundledWebRuntime: false,
   webDir: 'public',
   server: {

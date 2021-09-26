@@ -1,6 +1,6 @@
-- install list:
+## install list:
 * Android studio
-* SDK 29
+* SDK 30
 * other sdk tools in Android studio preference setting https://capacitorjs.com/docs/getting-started/environment-setup
 * change the server url in capacitor.config.json with your local ip:3001 (run ifconfig to check)
 * run `yarn && yarn app-watch`
@@ -9,3 +9,9 @@
 * click the run button in Android stutio to run the project
 * after logseq startup in Android virtual device, repl should be able to connect
 * for browser console print and devtool remote debug, open chrome, type url chrome://inspect/#devices, you should see your device there, click inspect
+
+
+## Develop without opening Android Studio
+1. brew install gradle
+2. cd web/android && gradle wrapper
+3. install android sdk 30
