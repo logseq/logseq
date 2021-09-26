@@ -35,7 +35,7 @@
       (-> (gdom/getElement "mock-text")
           gdom/getChildren
           array-seq
-          (util/nth-safe (dec pos))
+          (util/nth-safe pos)
           mock-char-pos
           (assoc :rect rect))
       (catch :default _e
