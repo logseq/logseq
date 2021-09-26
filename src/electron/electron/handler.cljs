@@ -1,5 +1,5 @@
 (ns electron.handler
-  (:require ["electron" :refer [ipcMain dialog app]]
+  (:require ["electron" :refer [ipcMain dialog app autoUpdater]]
             [cljs-bean.core :as bean]
             ["fs" :as fs]
             ["buffer" :as buffer]
@@ -219,6 +219,9 @@
 
 (defmethod handle :uninstallMarketPlugin [_ [_ id]]
   (plugin/uninstall! id))
+
+(defmethod handle :quitAndInstall []
+  (.quitAndInstall autoUpdater))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
