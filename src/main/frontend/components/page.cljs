@@ -301,7 +301,9 @@
 
                       (when (state/get-current-page)
                         {:title   (t :export)
-                         :options {:on-click #(state/set-modal! export/export-page)}})
+                         :options {:on-click #(state/set-modal!
+                                               (fn []
+                                                 (export/export-blocks [(:block/uuid page)])))}})
 
                       (when (util/electron?)
                         {:title   (t (if public? :page/make-private :page/make-public))
