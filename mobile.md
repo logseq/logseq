@@ -13,5 +13,6 @@
 
 ## Develop without opening Android Studio
 1. brew install gradle
-2. cd web/android && gradle wrapper
-3. install android sdk 30
+2. make sure java version using 11
+3. cd web/android && gradle wrapper
+4. install android sdk 30
