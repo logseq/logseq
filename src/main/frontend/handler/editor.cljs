@@ -102,8 +102,10 @@
 (defn italics-format! []
   (format-text! config/get-italic))
 
-(defn highlight-format! []
-  (format-text! config/get-highlight))
+(defn highlight-format! [state]
+  (when-let [block (state/get-edit-block)]
+    (let [format (:block/format block)]
+      (format-text! #(config/get-highlight format)))))
 
 (defn strike-through-format! []
   (format-text! config/get-strike-through))
@@ -341,7 +343,6 @@
                   (property/with-built-in-properties properties content format)
                   content)
         content (with-timetracking block content)
-        content (drawer/with-logbook block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
@@ -1826,6 +1827,14 @@
       :org (util/format "[[%s][%s]]" link label)
       nil)))
 
+(defn- get-image-link
+  [format link label]
+  (let [link (or link "")
+        label (or label "")]
+    (case (keyword format)
+      :markdown (util/format "![%s](%s)" label link)
+      :org (util/format "[[%s]]"))))
+
 (defn handle-command-input
   [command id format m pos]
   (case command
@@ -1836,6 +1845,15 @@
         nil
         (insert-command! id
                          (get-link format link label)
+                         format
+                         {:last-pattern (str commands/slash "link")})))
+    :image-link
+    (let [{:keys [link label]} m]
+      (if (and (string/blank? link)
+               (string/blank? label))
+        nil
+        (insert-command! id
+                         (get-image-link format link label)
                          format
                          {:last-pattern (str commands/slash "link")})))
     nil)
@@ -2266,14 +2284,14 @@
       (cursor/move-cursor-to input (inc selected-start)))))
 
 (defn keydown-new-block-handler [state e]
-  (if (state/get-new-block-toggle?)
+  (if (state/doc-mode-enter-for-new-line?)
     (keydown-new-line)
     (do
       (.preventDefault e)
       (keydown-new-block state))))
 
 (defn keydown-new-line-handler [state e]
-  (if (state/get-new-block-toggle?)
+  (if (state/doc-mode-enter-for-new-line?)
     (keydown-new-block state)
     (do
       (.preventDefault e)
@@ -2813,6 +2831,7 @@
 (defn editor-on-paste!
   [id]
   (fn [e]
+    (state/set-state! :editor/on-paste? true)
     (if-let [handled
              (let [pick-one-allowed-item
                    (fn [items]

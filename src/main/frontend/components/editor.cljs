@@ -405,15 +405,17 @@
       (starts-with? content "DONE ") "done-block"
       :else "normal-block")))
 
-(rum/defc mock-textarea
-  < rum/reactive
+(rum/defc mock-textarea <
+  rum/static
   {:did-update
    (fn [state]
-     (try (editor-handler/handle-last-input)
-          (catch js/Error _e
-            nil))
+     (when-not (:editor/on-paste? @state/state)
+       (try (editor-handler/handle-last-input)
+            (catch js/Error _e
+              nil)))
+     (state/set-state! :editor/on-paste? false)
      state)}
-  []
+  [content]
   [:div#mock-text
    {:style {:width "100%"
             :height "100%"
@@ -421,14 +423,20 @@
             :visibility "hidden"
             :top 0
             :left 0}}
-   (for [[idx c] (map-indexed
-                  vector
-                  (string/split (str (state/sub [:editor/content (state/get-edit-input-id)]) "0") ""))]
-     (if (= c "\n")
-       [:span {:id (str "mock-text_" idx)
-               :key idx} "0" [:br]]
-       [:span {:id (str "mock-text_" idx)
-               :key idx} c]))])
+   (let [content (str content "0")]
+     (for [[idx c] (map-indexed
+                   vector
+                   (string/split content ""))]
+      (if (= c "\n")
+        [:span {:id (str "mock-text_" idx)
+                :key idx} "0" [:br]]
+        [:span {:id (str "mock-text_" idx)
+                :key idx} c])))])
+
+(rum/defc mock-textarea-wrapper < rum/reactive
+  []
+  (let [content (state/sub [:editor/content (state/get-edit-input-id)])]
+    (mock-textarea content)))
 
 (defn animated-modal
   [key component set-default-width? *pos]
@@ -492,12 +500,7 @@
   {:init (fn [state]
            (assoc state ::heading-level (:heading-level (first (:rum/args state)))))
    :did-mount (fn [state]
-                ;; TODO:
-                ;; if we quickly click into a block when editing another block,
-                ;; this will happen before the `will-unmount` event, which will
-                ;; lost the content in the editing block.
                 (state/set-editor-args! (:rum/args state))
-                ;; (js/setTimeout #(state/set-editor-args! (:rum/args state)) 20)
                 state)}
   (mixins/event-mixin setup-key-listener!)
   (shortcut/mixin :shortcut.handler/block-editing-only)
@@ -522,7 +525,7 @@
        :auto-focus        false
        :class             (get-editor-heading-class content)})
 
-     (mock-textarea)
+     (mock-textarea-wrapper)
      (modals id format)
 
      (when format

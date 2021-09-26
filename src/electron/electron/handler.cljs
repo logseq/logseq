@@ -61,7 +61,8 @@
                       (string/replace "\\" "_"))
         bak-dir (str repo "/logseq/bak")
         _ (fs-extra/ensureDirSync bak-dir)
-        new-path (str bak-dir "/" file-name "." (.toISOString (js/Date.)))]
+        new-path (str bak-dir "/" file-name "."
+                      (string/replace (.toISOString (js/Date.)) ":" "_"))]
     (fs/writeFileSync new-path db-content)
     (fs/statSync new-path)))
 

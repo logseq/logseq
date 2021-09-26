@@ -140,15 +140,23 @@ jobs:
         with:
           node-version: 16
 
-      # - name: Cache Node Modules
-      #   uses: actions/cache@v2
-      #   with:
-      #     path: |
-      #       **/node_modules
-      #     key: ${{ runner.os }}-node-modules
+      - name: Cache Node Modules
+        uses: actions/cache@v2
+        with:
+         path: |
+           **/node_modules
+         key: ${{ runner.os }}-node-modules
+
+      - name: Deps Electron app
+        run: yarn install
+        working-directory: ./static
+
+      - name: Fix Deps Electron app
+        run: yarn run postinstall
+        working-directory: ./static/node_modules/dugite/
 
       - name: Build/Release Electron app
-        run: yarn install  && yarn electron:make
+        run: yarn electron:make
         working-directory: ./static
 
       - name: Change Artifact Name

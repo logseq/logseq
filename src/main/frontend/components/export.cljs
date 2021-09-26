@@ -89,10 +89,10 @@
      [:div
       {:class "mb-2"}
       (ui/button "Text"
-                 :class "mr-2 w-20"
+                 :class "mr-4 w-20"
                  :on-click #(reset! *export-block-type :text))
       (ui/button "OPML"
-                 :class "mr-2 w-20"
+                 :class "mr-4 w-20"
                  :on-click #(reset! *export-block-type :opml))
       (ui/button "HTML"
                  :class "w-20"
@@ -104,7 +104,7 @@
                                   (assoc opt :selected true)
                                   opt))))]
        [:div [:div.flex.items-center
-              [:label.mr-8
+              [:label.mr-4
                {:style {:visibility (if (= :text type) "visible" "hidden")}}
                "Indentation style:"]
               [:select.block.my-2.text-lg.rounded.border
@@ -130,8 +130,9 @@
          [:div
           {:style {:visibility (if (= :text type) "visible" "hidden")}}
           "[[text]] -> text"]
+
          (ui/checkbox {:style {:margin-right 6
-                               :margin-left 10
+                               :margin-left "1em"
                                :visibility (if (= :text type) "visible" "hidden")}
                        :checked (contains? text-remove-options :emphasis)
                        :on-change (fn [e]
@@ -141,7 +142,8 @@
           {:style {:visibility (if (= :text type) "visible" "hidden")}}
           "remove emphasis"]]])
 
-     (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")
-                :on-click (fn []
-                            (util/copy-to-clipboard! content (= type :html))
-                            (reset! copied? true)))]))
+     [:div.mt-4
+      (ui/button (if @copied? "Copied to clipboard!" "Copy to clipboard")
+        :on-click (fn []
+                    (util/copy-to-clipboard! content (= type :html))
+                    (reset! copied? true)))]]))

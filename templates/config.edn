@@ -92,6 +92,10 @@
  ;;  :editor/right           ["ctrl+l" "right"]}
  :shortcuts {}
 
+ ;; By default, pressing `Enter` in the document mode will create a new line.
+ ;; Set this to `true` so that it's the same behaviour as the usual outliner mode.
+ :shortcut/doc-mode-enter-for-new-block? false
+
  ;; Whether to show command doc on hover
  :ui/show-command-doc? true
 

@@ -10,6 +10,7 @@
             [frontend.extensions.video.youtube :as youtube]
             [frontend.search :as search]
             [frontend.state :as state]
+            [frontend.text :as text]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.marker :as marker]
@@ -55,6 +56,15 @@
                                       {:command :link
                                        :id :label
                                        :placeholder "Label"}]]])
+
+(def image-link-steps [[:editor/input (str slash "link")]
+                       [:editor/show-input [{:command :image-link
+                                             :id :link
+                                             :placeholder "Link"
+                                             :autoFocus true}
+                                            {:command :image-link
+                                             :id :label
+                                             :placeholder "Label"}]]])
 
 (def zotero-steps [[:editor/input (str slash "zotero")]
                    [:editor/show-zotero]])
@@ -152,19 +162,17 @@
   ([type]
    (->block type nil))
   ([type optional]
-   (let [format (get (state/get-edit-block) :block/format :markdown)
-         t (string/lower-case type)
-         markdown-src? (and (= format :markdown) (= t "src"))
-         left (cond
-                markdown-src?
-                "```"
+   (let [format (get (state/get-edit-block) :block/format)
+         markdown-src? (and (= format :markdown)
+                       (= (string/lower-case type) "src"))
+         [left right] (cond
+                        markdown-src?
+                        ["```" "\n```"]
 
-                :else
-                (util/format "#+BEGIN_%s"
-                             (string/upper-case type)))
-         right (if markdown-src?
-                 (str "\n```")
-                 (util/format "\n#+END_%s" (string/upper-case type)))
+                        :else
+                        (->> ["#+BEGIN_%s" "\n#+END_%s"]
+                             (map #(util/format %
+                                                (string/upper-case type)))))
          template (str
                    left
                    (if optional (str " " optional) "")
@@ -173,7 +181,8 @@
          backward-pos (if (= type "src")
                         (+ 1 (count right))
                         (count right))]
-     [[:editor/input template {:last-pattern angle-bracket
+     [[:editor/input template {:type "block"
+                               :last-pattern angle-bracket
                                :backward-pos backward-pos}]])))
 
 (defn ->properties
@@ -181,7 +190,8 @@
   (let [template (util/format
                   ":PROPERTIES:\n:: \n:END:\n")
         backward-pos 9]
-    [[:editor/input template {:last-pattern angle-bracket
+    [[:editor/input template {:type "properties"
+                              :last-pattern angle-bracket
                               :backward-pos backward-pos}]]))
 
 ;; https://orgmode.org/manual/Structure-Templates.html
@@ -226,7 +236,7 @@
                          [:editor/search-block :reference]] "Create a backlink to a block"]
      ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
      ["Link" link-steps "Create a HTTP link"]
-     ["Image link" link-steps "Create a HTTP link to a image"]
+     ["Image link" image-link-steps "Create a HTTP link to a image"]
      (when (state/markdown?)
        ["Underline" [[:editor/input "<ins></ins>"
                       {:last-pattern slash
@@ -475,7 +485,20 @@
 
 (defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]
-    (insert! input-id value option)))
+    (let [last-pattern (:last-pattern option)
+          type (:type option)
+          input (gdom/getElement input-id)
+          content (gobj/get input "value")
+          pos (cursor/pos input)
+          pos (if last-pattern
+                (string/last-index-of content last-pattern pos)
+                pos)
+          beginning-of-line? (text/beginning-of-line content pos)
+          value (if (and (contains? #{"block" "properties"} type)
+                         (not beginning-of-line?))
+                  (str "\n" value)
+                  value)]
+      (insert! input-id value option))))
 
 (defmethod handle-step :editor/cursor-back [[_ n]]
   (when-let [input-id (state/get-edit-input-id)]

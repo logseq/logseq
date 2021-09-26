@@ -12,7 +12,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
-            [frontend.util :refer [mac?]]))
+            [frontend.util :refer [mac?] :as util]))
 
 ;; TODO: how to extend this for plugins usage? An atom?
 (def default-config
@@ -139,10 +139,6 @@
     {:desc    "Strikethrough"
      :binding "mod+shift+s"
      :fn      editor-handler/strike-through-format!}
-    :editor/insert-link
-    {:desc    "HTML Link"
-     :binding "mod+l"
-     :fn      editor-handler/html-link-format!}
     :editor/move-block-up
     {:desc    "Move block up"
      :binding (if mac? "mod+shift+up"  "alt+shift+up")
@@ -267,7 +263,11 @@
 
    :shortcut.handler/global-prevent-default
    ^{:before m/prevent-default-behavior}
-   {:editor/select-all-blocks
+   {:editor/insert-link
+    {:desc    "HTML Link"
+     :binding "mod+l"
+     :fn      editor-handler/html-link-format!}
+    :editor/select-all-blocks
     {:desc    "Select all blocks"
      :binding "mod+shift+a"
      :fn      editor-handler/select-all-blocks!}

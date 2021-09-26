@@ -301,7 +301,9 @@
 
                       (when (state/get-current-page)
                         {:title   (t :export)
-                         :options {:on-click #(state/set-modal! export/export-page)}})
+                         :options {:on-click #(state/set-modal!
+                                               (fn []
+                                                 (export/export-blocks [(:block/uuid page)])))}})
 
                       (when (util/electron?)
                         {:title   (t (if public? :page/make-private :page/make-public))
@@ -679,7 +681,7 @@
                    (state/set-search-mode! :global)
                    state)}
   [state]
-  (let [settings (state/sub-graph-config)
+  (let [settings (state/sub-graph-config-settings)
         theme (state/sub :ui/theme)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)

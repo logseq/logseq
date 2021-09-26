@@ -252,7 +252,7 @@
                              (p/catch (fn [error]
                                         (state/pub-event! [:instrument {:type :write-file/failed
                                                                         :payload {:path path
-                                                                                  :error error}}])
+                                                                                  :error (str error)}}])
                                         (log/error :write-file/failed {:path path
                                                                        :content content
                                                                        :error error}))))))

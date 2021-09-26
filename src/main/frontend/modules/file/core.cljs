@@ -15,7 +15,7 @@
     (string/join (str "\n" spaces-tabs) lines)))
 
 (defn transform-content
-  [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline parent]} level {:keys [heading-to-list?]}]
+  [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
   (let [content (or content "")
         heading-with-title? (seq title)
         first-block? (= left page)
@@ -80,11 +80,13 @@
          level init-level]
     (if (nil? f)
       (string/join "\n" block-contents)
-      (let [content (transform-content f level opts)
+      (let [page? (nil? (:block/page f))
+            content (if page? nil (transform-content f level opts))
             new-content
-            (if-let [children (seq (:block/children f))]
-              [content (tree->file-content children {:init-level (inc level)})]
-              [content])]
+            (->> (if-let [children (seq (:block/children f))]
+                   [content (tree->file-content children {:init-level (inc level)})]
+                   [content])
+                 (remove nil?))]
         (recur (into block-contents new-content) r level)))))
 
 (def init-level 1)
