@@ -2831,6 +2831,7 @@
 (defn editor-on-paste!
   [id]
   (fn [e]
+    (state/set-state! :editor/on-paste? true)
     (if-let [handled
              (let [pick-one-allowed-item
                    (fn [items]

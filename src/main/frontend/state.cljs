@@ -102,6 +102,7 @@
       :editor/last-input-time nil
       :editor/document-mode? document-mode?
       :editor/args nil
+      :editor/on-paste? false
       :db/last-transact-time {}
       :db/last-persist-transact-ids {}
       ;; whether database is persisted
