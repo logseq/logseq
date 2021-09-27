@@ -7,7 +7,8 @@
             [cljs-bean.core :as bean]
             ["@capacitor/filesystem" :refer [Filesystem Directory Encoding]]
             [frontend.mobile.util :as util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.string :as string]))
 
 (defn check-permission-android []
   (p/let [permission (.checkPermissions Filesystem)
@@ -99,7 +100,8 @@
                                 :encoding (.-UTF8 Encoding)}))]
         content)))
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
-    (let [path (str dir "/" path)]
+    (let [path (->> (str dir "/" path)
+                    (string/replace "//" "/"))]
       (p/catch
          (p/let [result (.writeFile Filesystem
                                     (clj->js
