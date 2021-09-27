@@ -3,6 +3,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
+            [frontend.modules.outliner.yjs :as outliner-yjs]
             [frontend.state :as state]
             [frontend.util :as util]))
 
@@ -62,13 +63,13 @@
                    (tree/-get-left-id target-node))]
             (if first-child?
               (let [parent (tree/-get-parent target-node)]
-                (outliner-core/move-subtree current-node parent false))
-              (outliner-core/move-subtree current-node target-node true)))
+                (outliner-yjs/move-subtree-op current-node parent false))
+              (outliner-yjs/move-subtree-op current-node target-node true)))
           nested?
-          (outliner-core/move-subtree current-node target-node false)
+          (outliner-yjs/move-subtree-op current-node target-node false)
 
           :else
-          (outliner-core/move-subtree current-node target-node true))
+          (outliner-yjs/move-subtree-op current-node target-node true))
         (db/refresh! repo {:key :block/change
                            :data [(:data current-node) (:data target-node)]}))
 

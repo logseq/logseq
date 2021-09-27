@@ -212,6 +212,56 @@ return [2 3]
               (swap! id-set #(conj % s))
               (recur (inc i)))))))))
 
+(defn- uuid-tree->node-tree [uuid-tree format page-block]
+  (let [contentmap (contentmap)
+        content-tree
+        (loop [loc (zip/vector-zip uuid-tree)]
+          (if (zip/end? loc)
+            (zip/root loc)
+            (cond
+              (string? (zip/node loc))
+              (recur (zip/next
+                      (zip/replace
+                       loc
+                       (property/insert-property
+                        format
+                        (property/remove-id-property
+                         format
+                         (.toString (.get contentmap (zip/node loc))))
+                        "ID" (zip/node loc)))))
+              :else (recur (zip/next loc)))))
+        node-tree
+        (loop [loc (zip/vector-zip content-tree)]
+          (if (zip/end? loc)
+            (zip/root loc)
+            (cond
+              (string? (zip/node loc))
+              (let [block (first
+                           (block/extract-blocks
+                            (mldoc/->edn (zip/node loc)
+                                         (mldoc/default-config format))
+                            (zip/node loc) true format))
+                    block (merge
+                           (dissoc block
+                                   :block/pre-block?
+                                   :db/id
+                                   :block/left
+                                   :block/parent
+                                   :block/file)
+                           {:block/page (select-keys page-block [:db/id])
+                            :block/format format
+                            :block/path-refs (->> (cons (:db/id page-block)
+                                                        (:block/path-refs block))
+                                                  (remove nil?))})]
+                (if (:block/uuid block)
+                  (recur (zip/next
+                          (zip/replace
+                           loc
+                           (outliner-core/block block))))
+                  (recur (zip/remove loc))))
+              :else (recur (zip/next loc)))))]
+    node-tree))
+
 (defn- ->content-map [blocks map]
   (clojure.walk/postwalk (fn [v]
                            (when (and (map? v) (:block/uuid v))
@@ -464,50 +514,10 @@ return [2 3]
   (let [page-block (db/pull (:db/id (db/get-page page-name)))
         format (or (:block/format page-block)
                    (state/get-preferred-format))
-        contentmap (contentmap)
-        content-tree (loop [loc (zip/vector-zip (js->clj (.toJSON (structarray page-name))))]
-                       (if (zip/end? loc)
-                         (zip/root loc)
-                         (cond
-                           (string? (zip/node loc))
-                           (recur (zip/next
-                                   (zip/replace loc (property/insert-property
-                                                     format
-                                                     (property/remove-id-property
-                                                      format (.toString (.get contentmap (zip/node loc))))
-                                                     "ID" (zip/node loc)))))
-
-                           :else
-                           (recur (zip/next loc)))))
-        node-tree (loop [loc (zip/vector-zip content-tree)]
-                    (if (zip/end? loc)
-                      (zip/root loc)
-                      (cond
-                        (string? (zip/node loc))
-                        (let [block (first
-                                     (block/extract-blocks
-                                      (mldoc/->edn (zip/node loc) (mldoc/default-config format))
-                                      (zip/node loc) true format))
-                              block (merge
-                                     (dissoc block
-                                             :block/pre-block?
-                                             :db/id
-                                             :block/left
-                                             :block/parent
-                                             :block/file)
-                                     {:block/page (select-keys page-block [:db/id])
-                                      :block/format format
-                                      :block/path-refs (->> (cons (:db/id page-block)
-                                                                  (:block/path-refs block))
-                                                            (remove nil?))})]
-                          (if (:block/uuid block)
-                            (recur (zip/next
-                                    (zip/replace
-                                     loc
-                                     (outliner-core/block block))))
-                            (recur (zip/remove loc))))
-                        :else
-                        (recur (zip/next loc)))))]
+        node-tree (uuid-tree->node-tree
+                   (js->clj (.toJSON (structarray page-name)))
+                   format
+                   page-block)]
     (when-not (empty? node-tree)
       (outliner-core/insert-nodes node-tree (outliner-core/block page-block) false)
       (let [new-block-uuids (mapv (fn [n] (:block/uuid (:data n))) (flatten node-tree))
@@ -761,15 +771,20 @@ return [2 3]
             (when *debug* (validate-struct struct))
             (outliner-core/delete-nodes start-node end-node block-ids)))))))
 
-(defn delete-node-yjs [struct id children?]
-  (let [pos (find-pos struct id)]
+(defn- delete-node-struct-yjs [struct id children?]
+  (let [pos (find-pos struct id)
+        *delete-ids (atom [id])]
     (when children?
       (when-some [child-array (get-child-array pos struct)]
         (let [child-ids (flatten (js->clj (.toJSON child-array)))]
           (delete-child-array pos struct)
-          (dissoc-contents child-ids (contentmap)))))
+          (swap! *delete-ids #(concat % child-ids)))))
     (delete-item pos struct)
-    (dissoc-contents [id] (contentmap))))
+    @*delete-ids))
+
+(defn delete-node-yjs [struct id children?]
+  (let [delete-ids (delete-node-struct-yjs struct id children?)]
+    (dissoc-contents delete-ids (contentmap))))
 
 (defn delete-node-op [node children?]
   (let [block (:data node)]
@@ -908,15 +923,28 @@ return [2 3]
               (let [target-child-array (.get target-item-parent-array insert-pos)]
                 (.insert target-child-array 0 (clj->js insert-items))))))))))
 
-;; (defn move-subtree-across-pages-yjs [root target-node sibling?]
-;;   (let [root-page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))
-;;         target-page-name
-;;         (or (:block/name (:data target-node))   ; maybe page-block
-;;             (:block/name (db/entity (:db/id (:block/page (:data target-node))))))]
-;;     (ensure-page-sync target-page-name)
-
-;;     )
-;;   )
+(defn move-subtree-across-pages-op
+  [root-page-name target-page-name root target-node sibling?]
+  (let [target-block (:data target-node)
+        root-struct (structarray root-page-name)
+        root-id (str (:block/uuid (:data root)))
+        target-id (str (:block/uuid target-block))]
+    (ensure-page-sync target-page-name)
+    (let [root-pos (find-pos root-struct root-id)
+          child-array (get-child-array root-pos root-struct)
+          uuids-to-insert (if child-array [root-id (js->clj (.toJSON child-array))]
+                              [root-id])
+          contentmap (contentmap)
+          target-struct (structarray target-page-name)]
+      (delete-node-struct-yjs root-struct root-id true)
+      (let [page-block (or (:block/page target-block) target-block)
+            block-tree (uuid-tree->node-tree uuids-to-insert :markdown page-block)]
+        (insert-nodes-yjs target-struct block-tree target-id sibling?)
+        (merge-doc doc-remote doc-local)
+        (when *debug*
+          (validate-struct root-struct)
+          (validate-struct target-struct))
+        (outliner-core/move-subtree root target-node sibling?)))))
 
 (defn move-subtree-same-page-op [root target-node sibling?]
   (when-some [page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))]
@@ -927,6 +955,17 @@ return [2 3]
       (merge-doc doc-remote doc-local)
       (when *debug* (validate-struct struct))
       (outliner-core/move-subtree root target-node sibling?))))
+
+(defn move-subtree-op [root target-node sibling?]
+  (let [target-block (:data target-node)
+        root-page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))
+        target-page-name
+        (or (:block/name target-block)   ; maybe page-block
+            (:block/name (db/entity (:db/id (:block/page target-block)))))]
+    (if (= root-page-name target-page-name)
+      (move-subtree-same-page-op root target-node sibling?)
+      (move-subtree-across-pages-op
+       root-page-name target-page-name root target-node sibling?))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; functions for debug ;;
