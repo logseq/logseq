@@ -406,6 +406,17 @@
          [:h1.title {:style {:margin-left -2}}
           title]]))))
 
+(def need-update-sync-status (atom false))
+
+(rum/defc sync-status < rum/reactive []
+  (let [_ (rum/react need-update-sync-status)]
+    [:div.cursor.w-2.h-2.sync-status.mr-2
+     {:class (if (yjs/current-page-syncing?)
+               "bg-green-600"
+               "bg-orange-400")
+      :style {:border-radius "50%"
+              :margin-top 2}}]))
+
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
   [state {:keys [repo page-name preview?] :as option}]
@@ -465,16 +476,13 @@
                     (plugins/hook-ui-slot :page-head-actions-slotted nil)
                     (plugins/hook-ui-items :pagebar))
 
-                  [:div.cursor.w-2.h-2.sync-status.mr-2
-                   {:class (if (yjs/current-page-syncing?)
-                             "bg-green-600"
-                             "bg-orange-400")
-                    :style {:border-radius "50%"
-                            :margin-top 2}}]
+                  (sync-status)
 
                   [:a.opacity-60.hover:opacity-100.page-op.mr-1
                    {:title "Sync current page"
-                    :on-click #(yjs/sync-current-page!)}
+                    :on-click (fn []
+                                (yjs/sync-current-page!)
+                                (swap! need-update-sync-status not))}
                    svg/refresh]])])
             [:div
              (when (and block? (not sidebar?))

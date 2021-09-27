@@ -1045,9 +1045,11 @@ return [2 3]
   "ensure no left-id conflict"
   (let [blocks (db/get-page-blocks-no-cache page-name)
         id->left-map (mapv
-                      (fn [block] [(str (:block/uuid block)) (:db/id (:block/left block))])
+                      (fn [block] [(str (:block/uuid block))
+                                   [(:db/id (:block/left block))
+                                    (:db/id (:block/parent block))]])
                       blocks)
         grouped (group-by second id->left-map)
-        conflict (some (fn [s] (> (count (second s)) 1)) grouped)]
-    (assert (nil? conflict)
-            (str "left-id conflict: " conflict))))
+        conflict (some (fn [s] (and (> (count (second s)) 1) s)) grouped)]
+    (assert (not conflict)
+            (str "left-id conflict: " (seq conflict)))))
