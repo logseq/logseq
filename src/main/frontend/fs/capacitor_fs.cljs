@@ -4,6 +4,7 @@
             [cljs.core.async :as a]
             [cljs.core.async.interop :refer [<p!]]
             [frontend.util :as futil]
+            [frontend.config :as config]
             [cljs-bean.core :as bean]
             ["@capacitor/filesystem" :refer [Filesystem Directory Encoding]]
             [frontend.mobile.util :as util]
@@ -100,8 +101,10 @@
                                 :encoding (.-UTF8 Encoding)}))]
         content)))
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
-    (let [path (->> (str dir "/" path)
-                    (string/replace "//" "/"))]
+    (let [path (if (string/starts-with? path (config/get-repo-dir repo))
+                 path
+                 (-> (str dir "/" path)
+                     (string/replace "//" "/")))]
       (p/catch
          (p/let [result (.writeFile Filesystem
                                     (clj->js
