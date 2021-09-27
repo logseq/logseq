@@ -2265,26 +2265,8 @@
                         (db/entity [:block/name (string/lower-case id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
-(defn- keydown-new-block
-  [state]
-  (when-not (auto-complete?)
-    (let [{:keys [block config]} (get-state)]
-      (when block
-        (let [content (state/get-edit-content)
-              current-node (outliner-core/block block)
-              has-right? (-> (tree/-get-right current-node)
-                             (tree/satisfied-inode?))]
-          (if (and
-               (string/blank? content)
-               (not has-right?)
-               (not (last-top-level-child? config current-node)))
-            (outdent-on-enter current-node)
-            (profile
-             "Insert block"
-             (insert-new-block! state))))))))
-
-(defn- keydown-new-line
-  []
+(defn- keydown-insert
+  [insertion]
   (when-not (auto-complete?)
     (let [^js input (state/get-input)
           selected-start (gobj/get input "selectionStart")
@@ -2293,8 +2275,70 @@
           s1 (subs value 0 selected-start)
           s2 (subs value selected-end)]
       (state/set-edit-content! (state/get-edit-input-id)
-                               (str s1 "\n" s2))
-      (cursor/move-cursor-to input (inc selected-start)))))
+                               (str s1 insertion s2))
+      (cursor/move-cursor-to input (+ selected-start (count insertion))))))
+
+(defn- keydown-new-line []
+  (keydown-insert "\n"))
+
+(defn- keydown-new-block
+  [state]
+  (when-not (auto-complete?)
+    (let [{:keys [block config]} (get-state)]
+      (when block
+        (let [input (state/get-input)
+              content (gobj/get input "value")
+              pos (cursor/pos input)
+              current-node (outliner-core/block block)
+              has-right? (-> (tree/-get-right current-node)
+                             (tree/satisfied-inode?))]
+          
+          (cond
+            ;; empty block
+            (and
+             (string/blank? content)
+             (not has-right?)
+             (not (last-top-level-child? config current-node)))
+            (outdent-on-enter current-node)
+
+            ;; cursor in block ref
+            (thingatpt/block-ref-at-point content pos)
+            (open-block-in-sidebar! 
+             (uuid (:raw-content (thingatpt/block-ref-at-point content pos))))
+
+            ;; cursor in page ref
+            (thingatpt/page-ref-at-point content pos)
+            (route-handler/redirect!
+             {:to :page
+              :path-params {:name (:raw-content (thingatpt/page-ref-at-point content pos))}})
+
+            ;; cursor in properties drawer
+            (thingatpt/properties-at-point content pos)
+            (if-let [pro-key (thingatpt/thing-at-point {:left ":" :right ":"} content pos "\n")]
+              (case (:raw-content pro-key)
+                "PROPERTIES"
+                ;;When cursor in "PROPERTIES", add :|: in a new line and move cursor to | 
+                (do
+                  (cursor/move-cursor-to input (text/goto-end-of-line content pos))
+                  (keydown-insert "\n:: ")
+                  (cursor/move-cursor-backward input 2))
+                "END"
+                ;; When cursor in "END", new block (respect the previous enter behavior)
+                (do
+                  (cursor/move-cursor-to-end input)
+                  (insert-new-block! state))
+                ;; cursor in other positions of :ke|y:, move to line end for inserting value.
+                (cursor/move-cursor-to input (text/goto-end-of-line content pos)))
+              
+              ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to | 
+              (do
+                (keydown-insert "\n:: ")
+                (cursor/move-cursor-backward input 2)))
+            
+            :else
+            (profile
+             "Insert block"
+             (insert-new-block! state))))))))
 
 (defn keydown-new-block-handler [state e]
   (if (state/doc-mode-enter-for-new-line?)
