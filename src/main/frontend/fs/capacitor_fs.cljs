@@ -71,15 +71,18 @@
     (p/let [result (.mkdir Filesystem
                       (clj->js
                        {:path dir
-                        :directory (.-ExternalStorage Directory)}))]
-      (js/console.log result)))
+                        ;; :directory (.-ExternalStorage Directory)
+                        }))]
+      (js/console.log result)
+      result))
   (mkdir-recur! [this dir]
     (p/let [result (.mkdir Filesystem
                            (clj->js
                             {:path dir
-                             :directory (.-ExternalStorage Directory)
+                             ;; :directory (.-ExternalStorage Directory)
                              :recursive true}))]
-      (js/console.log result)))
+      (js/console.log result)
+      result))
   (readdir [this dir]                   ; recursive
     nil)
   (unlink! [this repo path _opts]
@@ -95,27 +98,29 @@
                                 :directory (.-ExternalStorage Directory)
                                 :encoding (.-UTF8 Encoding)}))]
         content)))
-  (write-file! [this repo _dir path content {:keys [ok-handler error-handler] :as opts}]
-    (p/catch
-        (p/let [result (.writeFile Filesystem
-                                   (clj->js
-                                    {:path path
-                                     :data content
-                                     :encoding (.-UTF8 Encoding)
-                                     :recursive true}))]
-          (when ok-handler
-            (ok-handler repo path result)))
-        (fn [error]
-          (if error-handler
-            (error-handler error)
-            (log/error :write-file-failed error)))))
+  (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
+    (let [path (str dir "/" path)]
+      (p/catch
+         (p/let [result (.writeFile Filesystem
+                                    (clj->js
+                                     {:path path
+                                      :data content
+                                      :encoding (.-UTF8 Encoding)
+                                      :recursive true}))]
+           (when ok-handler
+             (ok-handler repo path result)))
+         (fn [error]
+           (if error-handler
+             (error-handler error)
+             (log/error :write-file-failed error))))))
   (rename! [this repo old-path new-path]
     nil)
   (stat [this dir path]
     (let [path (str dir path)]
       (p/let [result (.stat Filesystem (clj->js
                                         {:path path
-                                         :directory (.-ExternalStorage Directory)}))]
+                                         ;; :directory (.-ExternalStorage Directory)
+                                         }))]
        result)))
   (open-dir [this ok-handler]
     (case (util/platform)
