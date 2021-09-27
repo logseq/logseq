@@ -656,7 +656,6 @@ return [2 3]
                                                            :block/file block-file})))
                                        node))
                                new-nodes-tree)]
-        (def www [new-nodes-tree new-nodes-tree*])
         (insert-nodes-yjs struct new-nodes-tree* (str (:block/uuid target-block)) sibling?)
         (distinct-struct struct (atom #{}))
         (merge-doc doc-remote doc-local)
@@ -673,7 +672,7 @@ return [2 3]
   ([new-node target-node sibling? {:keys [blocks-atom skip-transact?]
                                    :or {skip-transact? false}
                                    :as opts}]
-   (println "[YJS] insert-node-op" new-node)
+   (println "[YJS] insert-node-op: " (str (:block/uuid (:data new-node))))
    (let [target-block (:data target-node)]
      (when-some [page-name (or (:block/name target-block)
                                (:block/name (db/entity (:db/id (:block/page target-block)))))]
@@ -883,15 +882,10 @@ return [2 3]
               (:block/name (db/entity (:db/id (:block/page (:data (first nodes))))))]
     (let [ids (mapv (fn [node] (str (:block/uuid (:data node)))) nodes)
           struct (structarray page-name)]
-      (println "[YJS] indent-outdent-nodes(before):" nodes indent?)
       (indent-outdent-nodes-yjs struct ids indent?)
       (merge-doc doc-remote doc-local)
       (when *debug* (validate-struct struct))
-      (outliner-core/indent-outdent-nodes nodes indent?)
-      (println "[YJS] indent-outdent-nodes(after):"
-               (mapv (fn [node]
-                       (db/pull (:db/id (:data node))))
-                     nodes)))))
+      (outliner-core/indent-outdent-nodes nodes indent?))))
 
 (defn move-subtree-same-page-yjs [struct root-id target-id sibling?]
   (when (find-pos struct target-id)
