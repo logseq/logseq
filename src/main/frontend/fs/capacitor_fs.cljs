@@ -4,9 +4,19 @@
             [cljs.core.async :as a]
             [cljs.core.async.interop :refer [<p!]]
             [frontend.util :as futil]
+            [cljs-bean.core :as bean]
             ["@capacitor/filesystem" :refer [Filesystem Directory Encoding]]
             [frontend.mobile.util :as util]
             [promesa.core :as p]))
+
+(defn check-permission-android []
+  (p/let [permission (.checkPermissions Filesystem)
+          permission (-> permission
+                         bean/->clj
+                         :publicStorage)]
+    (when-not (= permission "granted")
+      (p/do!
+       (.requestPermissions Filesystem)))))
 
 (defn readdir
   "readdir recursively"
@@ -103,14 +113,17 @@
   (stat [this dir path]
     nil)
   (open-dir [this ok-handler]
-    (p/let [path (p/chain
-                  (.pickFolder util/folder-picker)
-                  #(js->clj % :keywordize-keys true)
-                  :path)
-            files (readdir path)]
-      (js/console.log path)
-      (js/console.log files)
-      (into [] (concat [{:path path}] files))))
+    (case (util/platform)
+      "android"
+      (p/let [_    (check-permission-android)
+              path (p/chain
+                    (.pickFolder util/folder-picker)
+                    #(js->clj % :keywordize-keys true)
+                    :path)
+              files (readdir path)]
+        (js/console.log path)
+        (js/console.log files)
+        (into [] (concat [{:path path}] files)))))
   (get-files [this path-or-handle ok-handler]
     nil)
   (watch-dir! [this dir]
