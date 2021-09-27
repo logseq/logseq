@@ -240,7 +240,9 @@
          [:div {:class "animate-spin-reverse"}
           svg/refresh])
 
-       (when-not (util/electron?)
+       (when (and
+              (not (mobile-util/is-native-platform?))
+              (not (util/electron?)))
          (login logged?))
 
        (repo/sync-status current-repo)
