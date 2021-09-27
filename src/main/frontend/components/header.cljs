@@ -18,7 +18,8 @@
             [frontend.util :as util]
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (rum/defc logo < rum/reactive
   [{:keys [white? electron-mac?]}]
@@ -186,8 +187,10 @@
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
         electron-not-mac? (and (util/electron?) (not electron-mac?))
-        show-open-folder? (and (nfs/supported?) (empty? repos)
-                               (not config/publishing?))
+        show-open-folder? (or
+                           (and (nfs/supported?) (empty? repos)
+                                (not config/publishing?))
+                           (mobile-util/is-native-platform?))
         refreshing? (state/sub :nfs/refreshing?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
