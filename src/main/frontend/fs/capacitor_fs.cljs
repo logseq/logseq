@@ -67,6 +67,7 @@
 (defrecord Capacitorfs []
   protocol/Fs
   (mkdir! [this dir]
+    (prn "mkdir: " dir)
     (p/let [result (.mkdir Filesystem
                       (clj->js
                        {:path dir
@@ -111,7 +112,11 @@
   (rename! [this repo old-path new-path]
     nil)
   (stat [this dir path]
-    nil)
+    (let [path (str dir path)]
+      (p/let [result (.stat Filesystem (clj->js
+                                        {:path path
+                                         :directory (.-ExternalStorage Directory)}))]
+       result)))
   (open-dir [this ok-handler]
     (case (util/platform)
       "android"

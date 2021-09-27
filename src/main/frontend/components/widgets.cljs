@@ -86,36 +86,28 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.flex.flex-col
      [:h1.title "Add a graph"]
-     (if (mobile/is-native-platform?)
-       (ui/button "Open mobile graph test"
-                  :on-click
-                  (fn []
-                    (p/let [folder (.pickFolder mobile/folder-picker)]
-                      (js/console.log folder)
-                      ;;TODO
-                      nil)))
-       (let [nfs-supported? (nfs/supported?)]
-         [:div.cp__widgets-open-local-directory
-          [:div.select-file-wrap.cursor
-           (when nfs-supported?
-             {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)})
+     (let [nfs-supported? (or (nfs/supported?) (mobile/is-native-platform?))]
+       [:div.cp__widgets-open-local-directory
+        [:div.select-file-wrap.cursor
+         (when nfs-supported?
+           {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)})
 
-           [:div
-            [:h1.title "Open a local directory"]
-            [:p "Logseq supports both Markdown and Org-mode. You can open an existing directory or create a new one on your device, a directory is also known simply as a folder. Your data will be stored only on this device."]
-            [:p "After you have opened your directory, it will create three folders in that directory:"]
-            [:ul
-             [:li "/journals - store your journal pages"]
-             [:li "/pages - store the other pages"]
-             [:li "/logseq - store configuration, custom.css, and some metadata."]]
-            (when-not nfs-supported?
-              (ui/admonition :warning
-                             [:p "It seems that your browser doesn't support the "
+         [:div
+          [:h1.title "Open a local directory"]
+          [:p "Logseq supports both Markdown and Org-mode. You can open an existing directory or create a new one on your device, a directory is also known simply as a folder. Your data will be stored only on this device."]
+          [:p "After you have opened your directory, it will create three folders in that directory:"]
+          [:ul
+           [:li "/journals - store your journal pages"]
+           [:li "/pages - store the other pages"]
+           [:li "/logseq - store configuration, custom.css, and some metadata."]]
+          (when-not nfs-supported?
+            (ui/admonition :warning
+                           [:p "It seems that your browser doesn't support the "
 
-                              [:a {:href   "https://web.dev/file-system-access/"
-                                   :target "_blank"}
-                               "new native filesystem API"]
-                              [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]]))]]]))]))
+                            [:a {:href   "https://web.dev/file-system-access/"
+                                 :target "_blank"}
+                             "new native filesystem API"]
+                            [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]]))]]])]))
 
 (rum/defcs add-graph <
   [state & {:keys [graph-types]
