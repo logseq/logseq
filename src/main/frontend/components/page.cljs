@@ -28,6 +28,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.shell :as shell]
+            [frontend.handler.yjs :as yjs]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -462,7 +463,19 @@
                  [:div.flex.flex-row
                   (when plugin-handler/lsp-enabled?
                     (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                    (plugins/hook-ui-items :pagebar))])])
+                    (plugins/hook-ui-items :pagebar))
+
+                  [:div.cursor.w-2.h-2.sync-status.mr-2
+                   {:class (if (yjs/current-page-syncing?)
+                             "bg-green-600"
+                             "bg-orange-400")
+                    :style {:border-radius "50%"
+                            :margin-top 2}}]
+
+                  [:a.opacity-60.hover:opacity-100.page-op.mr-1
+                   {:title "Sync current page"
+                    :on-click #(yjs/sync-current-page!)}
+                   svg/refresh]])])
             [:div
              (when (and block? (not sidebar?))
                (let [config {:id "block-parent"

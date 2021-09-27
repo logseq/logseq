@@ -15,7 +15,7 @@
 (set! *warn-on-infer* false)
 
 (def ^:dynamic *debug* true)
-(declare validate-struct start-sync-page)
+(declare validate-struct validate-no-left-conflict start-sync-page)
 
 (defonce doc-local (y/Doc.))
 (defonce doc-remote (y/Doc.))
@@ -31,8 +31,8 @@
 (defn- remote-contentmap [] (.getMap doc-remote "content"))
 (defn- remote-structarray [page-name] (.getArray doc-remote (str page-name "-struct")))
 
-(defn- page-syncing? [page-name]
-  (some? (.get (.-share doc-local) (str page-name "-struct"))))
+(defn page-syncing? [page-name]
+  (some? (seq (structarray page-name))))
 
 (defn- ensure-page-sync [page-name]
   (when-not (page-syncing? page-name)
@@ -299,7 +299,7 @@ return [2 3]
    (ensure-block-data format other-props)))
 
 (defn page-blocks->doc [page-blocks page-name]
-  (if-some [t (tree/blocks->vec-tree page-blocks page-name)]
+  (when-some [t (tree/blocks->vec-tree page-blocks page-name)]
     (let [content (contentmap)
           struct (structarray page-name)]
       (->content-map t content)
@@ -659,7 +659,9 @@ return [2 3]
         (insert-nodes-yjs struct new-nodes-tree* (str (:block/uuid target-block)) sibling?)
         (distinct-struct struct (atom #{}))
         (merge-doc doc-remote doc-local)
-        (when *debug* (validate-struct struct))
+        (when *debug*
+          (validate-struct struct)
+          (validate-no-left-conflict page-name))
         (outliner-core/insert-nodes new-nodes-tree* target-node sibling?)))))
 
 (defn insert-node-yjs [struct new-node target-uuid sibling?]
@@ -680,7 +682,9 @@ return [2 3]
          (insert-node-yjs struct new-node (str (:block/uuid target-block)) sibling?)
          (distinct-struct struct (atom #{}))
          (merge-doc doc-remote doc-local)
-         (when *debug* (validate-struct struct))
+         (when *debug*
+           (validate-struct struct)
+           (validate-no-left-conflict page-name))
          (outliner-core/insert-node new-node target-node sibling? opts))))))
 
 (defn- delete-range-nodes-aux [prefix-vec start-pos-vec end-pos-vec struct]
@@ -767,7 +771,9 @@ return [2 3]
             (delete-nodes-yjs struct start-pos end-pos block-ids)
             (distinct-struct struct (atom #{}))
             (merge-doc doc-remote doc-local)
-            (when *debug* (validate-struct struct))
+            (when *debug*
+              (validate-struct struct)
+              (validate-no-left-conflict page-name))
             (outliner-core/delete-nodes start-node end-node block-ids)))))))
 
 (defn- delete-node-struct-yjs [struct id children?]
@@ -793,7 +799,9 @@ return [2 3]
         (println "[YJS] delete-node-op: " uuid children?)
         (delete-node-yjs struct uuid children?)
         (merge-doc doc-remote doc-local)
-        (when *debug* (validate-struct struct))
+        (when *debug*
+          (validate-struct struct)
+          (validate-no-left-conflict page-name))
         (outliner-core/delete-node node children?)))))
 
 (defn save-node-op [node]
@@ -805,7 +813,9 @@ return [2 3]
           (.set contentmap (str block-uuid) (:block/content block))
           (distinct-struct struct (atom #{}))
           (merge-doc doc-remote doc-local)
-          (when *debug* (validate-struct struct))
+          (when *debug*
+            (validate-struct struct)
+            (validate-no-left-conflict page-name))
           (outliner-core/save-node node))))))
 
 (defn- outdentable? [pos]
@@ -884,7 +894,9 @@ return [2 3]
           struct (structarray page-name)]
       (indent-outdent-nodes-yjs struct ids indent?)
       (merge-doc doc-remote doc-local)
-      (when *debug* (validate-struct struct))
+      (when *debug*
+        (validate-struct struct)
+        (validate-no-left-conflict page-name))
       (outliner-core/indent-outdent-nodes nodes indent?))))
 
 (defn move-subtree-same-page-yjs [struct root-id target-id sibling?]
@@ -937,7 +949,9 @@ return [2 3]
         (merge-doc doc-remote doc-local)
         (when *debug*
           (validate-struct root-struct)
-          (validate-struct target-struct))
+          (validate-struct target-struct)
+          (validate-no-left-conflict root-page-name)
+          (validate-no-left-conflict target-page-name))
         (outliner-core/move-subtree root target-node sibling?)))))
 
 (defn move-subtree-same-page-op [root target-node sibling?]
@@ -947,7 +961,9 @@ return [2 3]
           target-id (str (:block/uuid (:data target-node)))]
       (move-subtree-same-page-yjs struct root-id target-id sibling?)
       (merge-doc doc-remote doc-local)
-      (when *debug* (validate-struct struct))
+      (when *debug*
+        (validate-struct struct)
+        (validate-no-left-conflict page-name))
       (outliner-core/move-subtree root target-node sibling?))))
 
 (defn move-subtree-op [root target-node sibling?]
@@ -960,6 +976,10 @@ return [2 3]
       (move-subtree-same-page-op root target-node sibling?)
       (move-subtree-across-pages-op
        root-page-name target-page-name root target-node sibling?))))
+
+;;; TODO
+;; (defn move-node-op [node up?]
+;;   (outliner-core/move-node node up?))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; functions for debug ;;
@@ -1020,3 +1040,14 @@ return [2 3]
   "ensure struct array has a legal structure"
   (let [arr (js->clj (.toJSON struct))]
     (validate-struct-aux arr [])))
+
+(defn- validate-no-left-conflict [page-name]
+  "ensure no left-id conflict"
+  (let [blocks (db/get-page-blocks-no-cache page-name)
+        id->left-map (mapv
+                      (fn [block] [(str (:block/uuid block)) (:db/id (:block/left block))])
+                      blocks)
+        grouped (group-by second id->left-map)
+        conflict (some (fn [s] (> (count (second s)) 1)) grouped)]
+    (assert (nil? conflict)
+            (str "left-id conflict: " conflict))))
