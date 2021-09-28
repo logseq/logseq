@@ -2310,7 +2310,7 @@
             (thingatpt/page-ref-at-point content pos)
             (route-handler/redirect!
              {:to :page
-              :path-params {:name (:raw-content (thingatpt/page-ref-at-point content pos))}})
+              :path-params {:name (:link (thingatpt/page-ref-at-point content pos))}})
 
             ;; cursor in properties drawer
             (thingatpt/properties-at-point content pos)
