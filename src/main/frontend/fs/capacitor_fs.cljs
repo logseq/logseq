@@ -86,7 +86,7 @@
       (js/console.log result)
       result))
   (readdir [this dir]                   ; recursive
-    nil)
+    (readdir dir))
   (unlink! [this repo path _opts]
     nil)
   (rmdir! [this dir]
