@@ -202,23 +202,23 @@
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
    [:button.bottom-action
     {:on-click #(editor-handler/indent-outdent true)}
-    svg/indent-block]
+    (ui/icon "chevrons-right")]
    [:button.bottom-action
     {:on-click #(editor-handler/indent-outdent false)}
-    svg/outdent-block]
+    (ui/icon "chevrons-left")]
    [:button.bottom-action
     {:on-click (editor-handler/move-up-down true)}
-    svg/move-up-block]
+    (ui/icon "chevron-up")]
    [:button.bottom-action
     {:on-click (editor-handler/move-up-down false)}
-    svg/move-down-block]
+    (ui/icon "chevron-down")]
+   [:button.bottom-action
+    {:on-click #(editor-handler/cycle-todo!)}
+    (ui/icon "checkbox")]
    [:button.bottom-action
     {:on-click #(commands/simple-insert! parent-id "\n" {})}
-    svg/multi-line-input]
-   [:button.bottom-action
-    {:on-click #(commands/insert-before! parent-id "TODO " {})}
-    svg/checkbox]
-   [:button.font-extrabold.bottom-action.-mt-1
+    (ui/icon "arrow-back")]
+   [:button.bottom-action.text-sm
     {:on-click #(commands/simple-insert!
                  parent-id "[[]]"
                  {:backward-pos 2
@@ -226,7 +226,7 @@
                                   (reset! commands/*slash-caret-pos new-pos)
                                   (commands/handle-step [:editor/search-page]))})}
     "[[]]"]
-   [:button.font-extrabold.bottom-action.-mt-1
+   [:button.bottom-action.text-sm
     {:on-click #(commands/simple-insert!
                  parent-id "(())"
                  {:backward-pos 2
@@ -234,7 +234,7 @@
                                   (reset! commands/*slash-caret-pos new-pos)
                                   (commands/handle-step [:editor/search-block]))})}
     "(())"]
-   [:button.font-extrabold.bottom-action.-mt-1
+   [:button.bottom-action.text-sm
     {:on-click #(commands/simple-insert! parent-id "/" {})}
     "/"]])
 
@@ -319,7 +319,8 @@
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
       :class (if x-overflow-vw? "is-overflow-vw-x" "")
-      :on-mouse-down (fn [e] (.stopPropagation e))
+      :on-mouse-down (fn [e]
+                       (.stopPropagation e))
       :style (merge
               {:top        (+ top offset-top)
                :max-height to-max-height
