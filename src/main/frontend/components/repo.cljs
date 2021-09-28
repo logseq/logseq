@@ -187,7 +187,9 @@
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch.fade-link.block.pr-2.whitespace-nowrap {:on-click toggle-fn}
+             [:a#repo-switch.block.pr-2.whitespace-nowrap {:on-click toggle-fn
+                                                           :class (when-not (util/mobile?)
+                                                                    "fade-link")}
               [:span
                (let [repo-name (get-repo-name current-repo)
                      repo-name (if (or (util/electron?)
