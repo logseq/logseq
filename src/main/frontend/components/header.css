@@ -108,7 +108,7 @@
 
 #repo-name {
   vertical-align: middle;
-  display: inline-block;
+  display: inline;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
