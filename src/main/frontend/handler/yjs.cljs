@@ -23,7 +23,7 @@
   (when (and (seq address) (seq roomname) (seq username))
     (println "setup-sync-server! " address roomname username)
     (when @server-conn
-      (.disconnect server-conn))
+      (.disconnect @server-conn))
     (.destroy @outliner-yjs/doc-remote)
     (.destroy @outliner-yjs/doc-local)
     (reset! outliner-yjs/doc-remote (y/Doc.))
