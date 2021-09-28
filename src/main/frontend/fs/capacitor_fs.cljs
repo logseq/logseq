@@ -33,6 +33,8 @@
                         js->clj
                         (get "files" []))
               files (->> files
+                         (remove (fn [file] (string/starts-with? file "."))))
+              files (->> files
                          (map (fn [file] (futil/node-path.join d file))))
               files-with-stats (p/all
                                 (mapv
@@ -53,6 +55,10 @@
                     (filter
                      (fn [{:keys [type]}]
                        (= type "file")))
+                    (filter
+                     (fn [{:keys [uri]}]
+                       (some #(string/ends-with? uri %)
+                             [".md" ".markdown" ".org" ".edn" ".css"])))
                     (mapv
                      (fn [{:keys [uri] :as file-result}]
                        (p/chain
