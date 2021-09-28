@@ -249,7 +249,7 @@
 
        (when-not (util/mobile?)
          [:div.repos
-          (repo/repos-dropdown nil)])
+          (repo/repos-dropdown nil nil)])
 
        (when show-open-folder?
          [:a.text-sm.font-medium.button

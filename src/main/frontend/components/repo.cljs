@@ -172,13 +172,14 @@
                (t :git/version) (str " " version/version)]]])))])))
 
 (rum/defc repos-dropdown < rum/reactive
-  [on-click]
+  [on-click close-modal-fn]
   (when-let [current-repo (state/sub :git/current-repo)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (let [get-repo-name (fn [repo]
                             (if (config/local-db? repo)
                               (config/get-local-dir repo)
                               (db/get-repo-path repo)))
+            close-modal-fn (if (fn? close-modal-fn) close-modal-fn (fn []))
             repos (state/sub [:me :repos])
             repos (remove (fn [r] (= config/local-repo (:url r))) repos)
             switch-repos (remove (fn [repo]
@@ -212,7 +213,8 @@
                                      (when-not (= :draw (state/get-current-route))
                                        (route-handler/redirect-to-home!))
                                      (when on-click
-                                       (on-click url)))}})
+                                       (on-click url))
+                                     (close-modal-fn))}})
             switch-repos)
            (cond->
             {:modal-class (util/hiccup->class
@@ -220,9 +222,11 @@
              :links-footer [:div
                             (when (seq switch-repos) [:hr.my-4])
                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
+                                 :on-click close-modal-fn
                                  :href (rfe/href :repo-add)}
                              (t :new-graph)]
                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
+                                 :on-click close-modal-fn
                                  :href (rfe/href :repos)}
                              (t :all-graphs)]
                             (let [nfs-repo? (config/local-db? current-repo)]
@@ -231,6 +235,7 @@
                                          (nfs-handler/supported?))
                                 [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                      :on-click (fn []
+                                                 (close-modal-fn)
                                                  (state/pub-event!
                                                   [:modal/show
                                                    [:div {:style {:max-width 700}}
@@ -243,6 +248,7 @@
                                  (t :sync-from-local-files)]))
                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                  :on-click (fn []
+                                             (close-modal-fn)
                                              (state/pub-event!
                                               [:modal/show
                                                [:div {:style {:max-width 700}}
