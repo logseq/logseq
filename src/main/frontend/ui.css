@@ -25,7 +25,7 @@
         }
       }
 
-      &:hover {
+      &:hover, &.chosen {
         .has-help small {
           visibility: visible;
         }
