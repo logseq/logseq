@@ -8,6 +8,7 @@
             [clojure.walk :as walk]
             [datascript.core :as dc]
             [dommy.core :as d]
+            [frontend.mobile.util :as mobile]
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -254,7 +255,7 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
-    (when (or granted? (util/electron?))
+    (when (or granted? (util/electron?) (mobile/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
