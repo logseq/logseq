@@ -48,7 +48,8 @@
 
          [:div.pl-1.content.mt-3
           [:div.flex.flex-row.my-4
-           (when (nfs-handler/supported?)
+           (when (or (nfs-handler/supported?)
+                     (mobile-util/is-native-platform?))
              [:div.mr-8
               (ui/button
                (t :open-a-directory)
