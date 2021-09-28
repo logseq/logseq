@@ -2068,9 +2068,13 @@
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/properties
                                         :block/parent :block/left
-                                        :block/children :block/content]]
-                      (not= (select-keys (second (:rum/args old-state)) compare-keys)
-                            (select-keys (second (:rum/args new-state)) compare-keys))))}
+                                        :block/children :block/content]
+                          config-compare-keys [:show-cloze?]]
+                      (or
+                       (not= (select-keys (second (:rum/args old-state)) compare-keys)
+                             (select-keys (second (:rum/args new-state)) compare-keys))
+                       (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                             (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
   [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type idx] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
