@@ -348,7 +348,8 @@
 
 (defn get-repo-path
   [repo-url path]
-  (if (and (util/electron?) (local-db? repo-url))
+  (if (and (or (util/electron?) (mobile-util/is-native-platform?))
+           (local-db? repo-url))
     path
     (util/node-path.join (get-repo-dir repo-url) path)))
 
@@ -356,7 +357,7 @@
   [repo-url relative-path]
   (when (and repo-url relative-path)
     (cond
-      (and (util/electron?) (local-db? repo-url))
+      (and (or (util/electron?) (mobile-util/is-native-platform?)) (local-db? repo-url))
       (let [dir (get-repo-dir repo-url)]
         (if (string/starts-with? relative-path dir)
           relative-path

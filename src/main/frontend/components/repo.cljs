@@ -20,7 +20,8 @@
             [frontend.util :as util]
             [frontend.version :as version]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (rum/defc add-repo
   [args]
@@ -189,7 +190,8 @@
              [:a#repo-switch.fade-link.block.pr-2.whitespace-nowrap {:on-click toggle-fn}
               [:span
                (let [repo-name (get-repo-name current-repo)
-                     repo-name (if (util/electron?)
+                     repo-name (if (or (util/electron?)
+                                       (mobile-util/is-native-platform?))
                                  (last
                                   (string/split repo-name #"/"))
                                  repo-name)]
