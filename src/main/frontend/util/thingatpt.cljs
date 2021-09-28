@@ -3,6 +3,7 @@
             [frontend.state :as state]
             [frontend.util.property :as property-util]
             [frontend.util.cursor :as cursor]
+            [frontend.text :as text]
             [frontend.handler.route :as handler-route]
             [goog.object :as gobj]))
 
@@ -32,10 +33,13 @@
              :end end*}))))))
 
 (defn block-ref-at-point [& [content pos]]
-  (thing-at-point {:left "((" :right "))"} content pos " "))
+  (let [uuid (thing-at-point {:left "((" :right "))"} content pos " ")]
+    (or (uuid? uuid) uuid)))
 
 (defn page-ref-at-point [& [content pos]]
-  (thing-at-point {:left "[[" :right "]]"} content pos " "))
+  (let [page-ref (thing-at-point {:left "[[" :right "]]"} content pos)
+        page-name (text/extract-page-name-from-ref (:full-content page-ref))]
+    (assoc page-ref :link page-name)))
 
 (defn embed-macro-at-point [& [content pos]]
   (thing-at-point {:left "{{embed" :right "}}"} content pos " "))
