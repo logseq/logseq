@@ -751,3 +751,19 @@
 
 (def arrow-expand
   (hero-icon "M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"))
+
+
+(def cloud
+  [:svg.icon.icon-tabler.icon-tabler-cloud
+   {:stroke-linejoin "round",
+    :stroke-linecap "round",
+    :fill "none",
+    :stroke "currentColor",
+    :stroke-width "2",
+    :viewbox "0 0 24 24",
+    :height "24",
+    :width "24"}
+   [:path {:fill "none", :d "M0 0h24v24H0z", :stroke "none"}]
+   [:path
+    {:d
+     "M7 18a4.6 4.4 0 0 1 0 -9a5 4.5 0 0 1 11 2h1a3.5 3.5 0 0 1 0 7h-12"}]])

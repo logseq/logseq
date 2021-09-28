@@ -17,19 +17,16 @@
 (def ^:dynamic *debug* true)
 (declare validate-struct validate-no-left-conflict start-sync-page)
 
-(defonce doc-local (y/Doc.))
-(defonce doc-remote (y/Doc.))
+(defonce doc-local (atom (y/Doc.)))
+(defonce doc-remote (atom (y/Doc.)))
 
 (def syncing-pages (atom #{}))
 
+(defn- contentmap [] (.getMap @doc-local "content"))
+(defn- structarray [page-name] (.getArray @doc-local (str page-name "-struct")))
 
-(defonce wsProvider1 (y-ws/WebsocketProvider. "ws://localhost:1234", "test-user", doc-remote))
-
-(defn- contentmap [] (.getMap doc-local "content"))
-(defn- structarray [page-name] (.getArray doc-local (str page-name "-struct")))
-
-(defn- remote-contentmap [] (.getMap doc-remote "content"))
-(defn- remote-structarray [page-name] (.getArray doc-remote (str page-name "-struct")))
+(defn- remote-contentmap [] (.getMap @doc-remote "content"))
+(defn- remote-structarray [page-name] (.getArray @doc-remote (str page-name "-struct")))
 
 (defn page-syncing? [page-name]
   (some? (seq (structarray page-name))))
@@ -533,16 +530,16 @@ return [2 3]
 
 (defn start-sync-page [page-name]
   (let [page-blocks (db/get-page-blocks-no-cache page-name)]
-    (unobserve-page-doc page-name doc-local)
+    (unobserve-page-doc page-name @doc-local)
     (page-blocks->doc page-blocks page-name)
-    (sync-doc doc-local doc-remote)
+    (sync-doc @doc-local @doc-remote)
     (distinct-struct (structarray page-name) (atom #{}))
-    (merge-doc doc-remote doc-local)
+    (merge-doc @doc-remote @doc-local)
     (doc->page-blocks page-blocks page-name)
-    (observe-page-doc page-name doc-local)))
+    (observe-page-doc page-name @doc-local)))
 
 (defn stop-sync-page [page-name]
-  (unobserve-page-doc page-name doc-local))
+  (unobserve-page-doc page-name @doc-local))
 
 
 
@@ -658,7 +655,7 @@ return [2 3]
                                new-nodes-tree)]
         (insert-nodes-yjs struct new-nodes-tree* (str (:block/uuid target-block)) sibling?)
         (distinct-struct struct (atom #{}))
-        (merge-doc doc-remote doc-local)
+        (merge-doc @doc-remote @doc-local)
         (when *debug*
           (validate-struct struct)
           (validate-no-left-conflict page-name))
@@ -681,7 +678,7 @@ return [2 3]
        (let [struct (structarray page-name)]
          (insert-node-yjs struct new-node (str (:block/uuid target-block)) sibling?)
          (distinct-struct struct (atom #{}))
-         (merge-doc doc-remote doc-local)
+         (merge-doc @doc-remote @doc-local)
          (when *debug*
            (validate-struct struct)
            (validate-no-left-conflict page-name))
@@ -770,7 +767,7 @@ return [2 3]
                   [end-pos start-pos end-node start-node])]
             (delete-nodes-yjs struct start-pos end-pos block-ids)
             (distinct-struct struct (atom #{}))
-            (merge-doc doc-remote doc-local)
+            (merge-doc @doc-remote @doc-local)
             (when *debug*
               (validate-struct struct)
               (validate-no-left-conflict page-name))
@@ -798,7 +795,7 @@ return [2 3]
             struct (structarray page-name)]
         (println "[YJS] delete-node-op: " uuid children?)
         (delete-node-yjs struct uuid children?)
-        (merge-doc doc-remote doc-local)
+        (merge-doc @doc-remote @doc-local)
         (when *debug*
           (validate-struct struct)
           (validate-no-left-conflict page-name))
@@ -812,7 +809,7 @@ return [2 3]
         (let [struct (structarray page-name)]
           (.set contentmap (str block-uuid) (:block/content block))
           (distinct-struct struct (atom #{}))
-          (merge-doc doc-remote doc-local)
+          (merge-doc @doc-remote @doc-local)
           (when *debug*
             (validate-struct struct)
             (validate-no-left-conflict page-name))
@@ -893,7 +890,7 @@ return [2 3]
     (let [ids (mapv (fn [node] (str (:block/uuid (:data node)))) nodes)
           struct (structarray page-name)]
       (indent-outdent-nodes-yjs struct ids indent?)
-      (merge-doc doc-remote doc-local)
+      (merge-doc @doc-remote @doc-local)
       (when *debug*
         (validate-struct struct)
         (validate-no-left-conflict page-name))
@@ -946,7 +943,7 @@ return [2 3]
       (let [page-block (or (:block/page target-block) target-block)
             block-tree (uuid-tree->node-tree uuids-to-insert :markdown page-block)]
         (insert-nodes-yjs target-struct block-tree target-id sibling?)
-        (merge-doc doc-remote doc-local)
+        (merge-doc @doc-remote @doc-local)
         (when *debug*
           (validate-struct root-struct)
           (validate-struct target-struct)
@@ -960,7 +957,7 @@ return [2 3]
           root-id (str (:block/uuid (:data root)))
           target-id (str (:block/uuid (:data target-node)))]
       (move-subtree-same-page-yjs struct root-id target-id sibling?)
-      (merge-doc doc-remote doc-local)
+      (merge-doc @doc-remote @doc-local)
       (when *debug*
         (validate-struct struct)
         (validate-no-left-conflict page-name))

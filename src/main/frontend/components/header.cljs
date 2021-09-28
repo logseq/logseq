@@ -6,6 +6,7 @@
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [frontend.components.yjs :as yjs]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.handler :as handler]
@@ -214,10 +215,15 @@
 
        (new-block-mode)
 
+
        (when refreshing?
          [:div {:class "animate-spin-reverse"}
           svg/refresh])
 
+       [:div
+        {:on-click (fn [_]
+                     (state/set-modal! yjs/setup-sync-server))}
+        svg/cloud]
        (repo/sync-status current-repo)
 
        (when show-open-folder?
