@@ -218,26 +218,40 @@
     {:on-click #(editor-handler/cycle-todo!)}
     (ui/icon "checkbox")]
    [:button.bottom-action
-    {:on-click #(commands/simple-insert! parent-id "\n" {})}
+    {:on-click #(do
+                  (commands/simple-insert! parent-id "\n"
+                                           {:forward-pos 1})
+                  ;; TODO: should we add this focus step to `simple-insert!`?
+                  (when-let [input (gdom/getElement parent-id)]
+                    (.focus input)))}
     (ui/icon "arrow-back")]
    [:button.bottom-action.text-sm
-    {:on-click #(commands/simple-insert!
-                 parent-id "[[]]"
-                 {:backward-pos 2
-                  :check-fn     (fn [_ _ new-pos]
-                                  (reset! commands/*slash-caret-pos new-pos)
-                                  (commands/handle-step [:editor/search-page]))})}
+    {:on-click #(do
+                  (commands/simple-insert!
+                  parent-id "[[]]"
+                  {:backward-pos 2
+                   :check-fn     (fn [_ _ new-pos]
+                                   (reset! commands/*slash-caret-pos new-pos)
+                                   (commands/handle-step [:editor/search-page]))})
+                  (when-let [input (gdom/getElement parent-id)]
+                    (.focus input)))}
     "[[]]"]
    [:button.bottom-action.text-sm
-    {:on-click #(commands/simple-insert!
+    {:on-click #(do
+                 (commands/simple-insert!
                  parent-id "(())"
                  {:backward-pos 2
                   :check-fn     (fn [_ _ new-pos]
                                   (reset! commands/*slash-caret-pos new-pos)
-                                  (commands/handle-step [:editor/search-block]))})}
+                                  (commands/handle-step [:editor/search-block]))})
+                 (when-let [input (gdom/getElement parent-id)]
+                   (.focus input)))}
     "(())"]
    [:button.bottom-action.text-sm
-    {:on-click #(commands/simple-insert! parent-id "/" {})}
+    {:on-click #(do
+                  (commands/simple-insert! parent-id "/" {})
+                  (when-let [input (gdom/getElement parent-id)]
+                    (.focus input)))}
     "/"]])
 
 (rum/defcs input < rum/reactive
