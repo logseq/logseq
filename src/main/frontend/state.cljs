@@ -1149,9 +1149,11 @@
 
 (defn enable-tooltip?
   []
-  (get (get (sub-config) (get-current-repo))
-       :ui/enable-tooltip?
-       true))
+  (if (util/mobile?)
+    false
+    (get (get (sub-config) (get-current-repo))
+        :ui/enable-tooltip?
+        true)))
 
 (defn show-command-doc?
   []

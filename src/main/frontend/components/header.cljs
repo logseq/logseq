@@ -187,10 +187,10 @@
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
         electron-not-mac? (and (util/electron?) (not electron-mac?))
-        show-open-folder? (or
-                           (and (nfs/supported?) (empty? repos)
-                                (not config/publishing?))
-                           (mobile-util/is-native-platform?))
+        show-open-folder? (and (or (nfs/supported?)
+                                   (mobile-util/is-native-platform?))
+                               (empty? repos)
+                               (not config/publishing?))
         refreshing? (state/sub :nfs/refreshing?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
@@ -247,8 +247,9 @@
 
        (repo/sync-status current-repo)
 
-       [:div.repos
-        (repo/repos-dropdown nil)]
+       (when-not (util/mobile?)
+         [:div.repos
+          (repo/repos-dropdown nil)])
 
        (when show-open-folder?
          [:a.text-sm.font-medium.button
