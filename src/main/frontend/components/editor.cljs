@@ -44,13 +44,15 @@
                command-name]
 
               (vector? doc)
-              (ui/tippy {:html doc
-                         :interactive true
-                         :open? true
-                         :fixed-position? true
-                         :position "right"
-                         :distance 10}
-                        [:div command-name])
+              [:div.has-help
+               command-name
+               (ui/tippy
+                 {:html doc
+                  :interactive true
+                  :fixed-position? true
+                  :position "right"}
+
+                [:small (svg/help-circle)])]
 
               :else
               [:div command-name])))
@@ -425,13 +427,13 @@
             :left 0}}
    (let [content (str content "0")]
      (for [[idx c] (map-indexed
-                   vector
-                   (string/split content ""))]
-      (if (= c "\n")
-        [:span {:id (str "mock-text_" idx)
-                :key idx} "0" [:br]]
-        [:span {:id (str "mock-text_" idx)
-                :key idx} c])))])
+                    vector
+                    (string/split content ""))]
+       (if (= c "\n")
+         [:span {:id (str "mock-text_" idx)
+                 :key idx} "0" [:br]]
+         [:span {:id (str "mock-text_" idx)
+                 :key idx} c])))])
 
 (rum/defc mock-textarea-wrapper < rum/reactive
   []
@@ -453,7 +455,6 @@
         component
         set-default-width?
         *pos)))))
-
 
 (rum/defc modals < rum/reactive
   "React to atom changes, find and render the correct modal"

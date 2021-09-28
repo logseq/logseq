@@ -752,5 +752,14 @@
     [:path {:d "M16 4h2a2 2 0 0 1 2 2v2"}]
     [:path {:d "M16 20h2a2 2 0 0 0 2 -2v-2"}]]))
 
+(defn help-circle
+  ([] (help-circle 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:circle {:cx "12" :cy "12" :r "9"}]
+    [:line {:x1 "12" :y1 "17" :x2 "12" :y2 "17.01"}]
+    [:path {:d "M12 13.5a1.5 1.5 0 0 1 1 -1.5a2.6 2.6 0 1 0 -3 -4"}]]))
+
 (def arrow-expand
   (hero-icon "M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"))
