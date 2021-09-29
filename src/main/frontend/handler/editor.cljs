@@ -2296,7 +2296,8 @@
               has-right? (-> (tree/-get-right current-node)
                              (tree/satisfied-inode?))
               thing-at-point ;intern is not supported in cljs, need a more elegant solution
-              (or (thingatpt/block-ref-at-point input)
+              (or (thingatpt/markup-at-point input)
+                  (thingatpt/block-ref-at-point input)
                   (thingatpt/page-ref-at-point input)
                   (thingatpt/properties-at-point input)
                   (thingatpt/list-item-at-point input))]
@@ -2304,6 +2305,11 @@
           (cond
             thing-at-point
             (case (:type thing-at-point)
+              "markup" (let [right-bound (:bounds thing-at-point)]
+                         (cursor/move-cursor-to
+                          input
+                          (+ (string/index-of content right-bound pos)
+                             (count right-bound))))
               "block-ref" (open-block-in-sidebar! (:link thing-at-point))
               "page-ref" (route-handler/redirect-to-page! (:link thing-at-point))
               "list-item"
