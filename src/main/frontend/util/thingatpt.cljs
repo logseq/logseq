@@ -92,17 +92,18 @@
 
 (defn- get-list-item-indent&bullet [line]
   (when-not (string/blank? line)
-    (or (re-matches #"^([ \t\r]*)(\+|\*|-) .*$" line)
-        (re-matches #"^([\s]*)(\d+)\. .*$" line))))
+    (or (re-matches #"^([ \t\r]*)(\+|\*|-) (\[[X ]\])*.*$" line)
+        (re-matches #"^([\s]*)(\d+)\. (\[[X ]\])*.*$" line))))
 
 (defn list-item-at-point [& [input]]
   (when-let [line (line-at-point input)]
-    (when-let [[_ indent bullet]
+    (when-let [[_ indent bullet checkbox]
                (get-list-item-indent&bullet (:raw-content line))]
       (assoc line
              :type "list-item"
              :indent indent
              :bullet bullet
+             :checkbox checkbox
              :ordered (int? bullet)))))
 
 (defn- get-markup-at-point [& [input]]
