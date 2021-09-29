@@ -177,39 +177,46 @@
                 "https://asset.logseq.com/static/img/credits.png")
               :style {:margin "12px 0 0 0"}}]]]]))
 
-(defn links [t]
-  (let [discord-with-icon [:div.flex-row.inline-flex.items-center
-                           [:span.mr-1 (t :help/community)]
-                           svg/discord]
-        list
-        [[(t :help/start) "https://logseq.github.io/#/page/getting%20started"]
-         [(t :help/about) "https://logseq.com/blog/about"]
-         [(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
-         [(t :help/bug) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="]
-         [(t :help/feature) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="]
-         [(t :help/changelog) "https://logseq.github.io/#/page/changelog"]
-         ["FAQ" "https://logseq.github.io/#/page/faq"]
-         [(t :help/docs) "https://logseq.github.io/"]
-         [(t :help/privacy) "https://logseq.com/blog/privacy-policy"]
-         [(t :help/terms) "https://logseq.com/blog/terms"]
-         [(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
-         [discord-with-icon "https://discord.gg/KpN4eHY"]]]
-    (map (fn [[title href]]
-           [:li [:a {:href href :target "_blank"} title]]) list)))
-
 (defn help
   []
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.help.cp__sidebar-help-docs
-     [:ul
-      (links t)
-      [:li
-       (t :help/shortcuts)
-       (ui/button
-        "Customize"
-        :class "text-sm p-1 ml-3"
-        :on-click
-        (fn []
-          (route-handler/redirect! {:to :shortcut-setting})))]
+     (let [discord-with-icon [:div.flex-row.inline-flex.items-center
+                              [:span.mr-1 (t :help/community)]
+                              svg/discord]
+           list
+           [{:title "About"
+             :children [[(t :help/start) "https://logseq.github.io/#/page/getting%20started"]
+                        [(t :help/about) "https://logseq.com/blog/about"]]}
 
-      ]]))
+            {:title "Documentation"
+             :children [["FAQ" "https://logseq.github.io/#/page/faq"]
+                        [(t :help/docs) "https://logseq.github.io/"]
+                        [[:a
+                          {:on-click (fn [] (route-handler/redirect! {:to :shortcut-setting}))}
+                          (t :help/shortcuts)]]]}
+
+            {:title "Development"
+             :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
+                        [(t :help/bug) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="]
+                        [(t :help/feature) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="]
+                        [(t :help/changelog) "https://logseq.github.io/#/page/changelog"]]}
+
+            {:title "Terms"
+             :children [[(t :help/privacy) "https://logseq.com/blog/privacy-policy"]
+                        [(t :help/terms) "https://logseq.com/blog/terms"]]}
+
+            {:title "Community"
+             :children [[(t :help/awesome-logseq) "https://github.com/logseq/awesome-logseq"]
+                        [discord-with-icon "https://discord.gg/KpN4eHY"]]}]]
+
+       (map (fn [sublist]
+              [[:p.mt-4.mb-1 [:b (:title sublist)]]
+              [:ul
+               (map (fn [[title href]]
+                      [:li
+                       (if href
+                         [:a {:href href :target "_blank"} title]
+                         title)])
+                    (:children sublist))]])
+            list))]))
