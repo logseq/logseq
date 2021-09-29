@@ -185,16 +185,18 @@
                               [:span.mr-1 (t :help/community)]
                               svg/discord]
            list
-           [{:title "About"
-             :children [[(t :help/start) "https://logseq.github.io/#/page/getting%20started"]
-                        [(t :help/about) "https://logseq.com/blog/about"]]}
-
-            {:title "Documentation"
+           [{:title "Usage"
              :children [[[:a
                           {:on-click (fn [] (route-handler/redirect! {:to :shortcut-setting}))}
-                          (t :help/shortcuts)]]
+                          [:div.flex-row.inline-flex.items-center
+                           [:span.mr-1 (t :help/shortcuts)]
+                           (svg/icon-cmd 18)]]]
                         [(t :help/docs) "https://logseq.github.io/"]
                         ["FAQ" "https://logseq.github.io/#/page/faq"]]}
+
+            {:title "About"
+             :children [[(t :help/start) "https://logseq.github.io/#/page/getting%20started"]
+                        [(t :help/about) "https://logseq.com/blog/about"]]}
 
             {:title "Development"
              :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
