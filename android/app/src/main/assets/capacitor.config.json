@@ -4,7 +4,7 @@
 	"bundledWebRuntime": false,
 	"webDir": "public",
 	"server": {
-		"url": "http://192.168.147.189:3001",
+		"url": "http://192.168.1.59:3001",
 		"cleartext": true
 	}
 }

@@ -114,17 +114,21 @@
   [dir path]
   (protocol/stat (get-fs dir) dir path))
 
+(defn- get-record
+  []
+  (cond
+    (util/electron?)
+    node-record
+
+    (mobile-util/is-native-platform?)
+    mobile-record
+
+    :else
+    nfs-record))
+
 (defn open-dir
   [ok-handler]
-  (let [record (cond
-                 (util/electron?)
-                 node-record
-
-                 (mobile-util/is-native-platform?)
-                 mobile-record
-
-                 :else
-                 nfs-record)]
+  (let [record (get-record)]
     (->
      (p/let [result (protocol/open-dir record ok-handler)]
        (if (or (util/electron?)
@@ -137,9 +141,10 @@
 
 (defn get-files
   [path-or-handle ok-handler]
-  (let [record (if (util/electron?) node-record nfs-record)]
+  (let [record (get-record)]
     (p/let [result (protocol/get-files record path-or-handle ok-handler)]
-      (if (util/electron?)
+      (if (or (util/electron?)
+              (mobile-util/is-native-platform?))
         (let [result (bean/->clj result)]
           (rest result))
         result))))

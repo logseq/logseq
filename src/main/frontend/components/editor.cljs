@@ -235,7 +235,7 @@
                                    (commands/handle-step [:editor/search-page]))})
                   (when-let [input (gdom/getElement parent-id)]
                     (.focus input)))}
-    "[[]]"]
+    "[["]
    [:button.bottom-action.text-sm
     {:on-click #(do
                  (commands/simple-insert!
@@ -246,7 +246,7 @@
                                   (commands/handle-step [:editor/search-block]))})
                  (when-let [input (gdom/getElement parent-id)]
                    (.focus input)))}
-    "(())"]
+    "(("]
    [:button.bottom-action.text-sm
     {:on-click #(do
                   (commands/simple-insert! parent-id "/" {})

@@ -279,8 +279,10 @@
        (when re-index?
          (state/set-graph-syncing? true))
        (->
-        (p/let [handle (idb/get-item handle-path)]
-          (when (or handle electron?)   ; electron doesn't store the file handle
+        (p/let [handle (-> (idb/get-item handle-path)
+                           (p/catch (fn [_error]
+                                      nil)))]
+          (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
             (p/let [_ (when handle (nfs/verify-permission repo handle true))
                     files-result (fs/get-files (if nfs? handle
                                                    (config/get-local-dir repo))

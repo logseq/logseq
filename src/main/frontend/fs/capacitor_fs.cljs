@@ -145,8 +145,8 @@
         (js/console.log path)
         (js/console.log files)
         (into [] (concat [{:path path}] files)))))
-  (get-files [this path-or-handle ok-handler]
-    nil)
+  (get-files [this path-or-handle _ok-handler]
+    (readdir path-or-handle))
   (watch-dir! [this dir]
     nil))
 
