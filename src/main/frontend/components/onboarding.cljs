@@ -190,11 +190,11 @@
                         [(t :help/about) "https://logseq.com/blog/about"]]}
 
             {:title "Documentation"
-             :children [["FAQ" "https://logseq.github.io/#/page/faq"]
-                        [(t :help/docs) "https://logseq.github.io/"]
-                        [[:a
+             :children [[[:a
                           {:on-click (fn [] (route-handler/redirect! {:to :shortcut-setting}))}
-                          (t :help/shortcuts)]]]}
+                          (t :help/shortcuts)]]
+                        [(t :help/docs) "https://logseq.github.io/"]
+                        ["FAQ" "https://logseq.github.io/#/page/faq"]]}
 
             {:title "Development"
              :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
