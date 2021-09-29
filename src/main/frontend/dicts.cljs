@@ -70,7 +70,7 @@
         :help/shortcuts-triggers "Triggers"
         :help/shortcut "Shortcut"
         :help/slash-autocomplete "Slash autocomplete"
-        :help/block-content-autocomplete "Block content (Src, Quote, Query, etc) Autocomplete"
+        :help/block-content-autocomplete "Block content autocomplete"
         :help/reference-autocomplete "Page reference autocomplete"
         :help/block-reference "Block reference"
         :help/key-commands "Key commands"
