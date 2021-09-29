@@ -59,7 +59,7 @@
           list))
        nil))))
 
-(rum/defc left-menu-button < rum/reactive
+(rum/defc left-menu-button
   [{:keys [on-click]}]
   [:button#left-menu.cp__header-left-menu
    {:on-click on-click}
@@ -199,7 +199,8 @@
                                (js/window.apis.toggleMaxOrMinActiveWindow))))}
        (left-menu-button {:on-click (fn []
                                       (open-fn)
-                                      (state/set-left-sidebar-open! true))})
+                                      (state/set-left-sidebar-open!
+                                        (not (:ui/left-sidebar-open? @state/state))))})
 
        (when-not electron-mac?
          (logo {:white? white?}))

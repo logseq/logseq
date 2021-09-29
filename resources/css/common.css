@@ -8,6 +8,8 @@
   --ls-main-content-max-width-wide: 100%;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
+  --ls-left-sidebar-width: 240px;
+  --ls-left-sidebar-nav-btn-size: 38px;
 }
 
 @media (prefers-color-scheme: dark) {

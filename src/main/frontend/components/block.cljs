@@ -388,7 +388,9 @@
               (create-first-block!)
               (route-handler/redirect! {:to :page
                                         :path-params {:name redirect-page-name}}))))
-        (when (and contents-page? (state/get-left-sidebar-open?))
+        (when (and contents-page?
+                   (util/mobile?)
+                   (state/get-left-sidebar-open?))
           (ui-handler/close-left-sidebar!)))}
 
      (if (and (coll? children) (seq children))

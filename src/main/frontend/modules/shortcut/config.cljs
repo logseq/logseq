@@ -259,7 +259,11 @@
     :editor/redo
     {:desc    "Redo"
      :binding ["shift+mod+z" "mod+y"]
-     :fn      history/redo!}}
+     :fn      history/redo!}
+    :editor/new-page
+    {:desc    "New page"
+     :binding (if util/mac? "mod+n" "alt+n")
+     :fn      #(state/pub-event! [:modal/show-new-page-modal])}}
 
    :shortcut.handler/global-prevent-default
    ^{:before m/prevent-default-behavior}
@@ -322,12 +326,12 @@
    ;; always overrides the copy due to "mod+c mod+s"
    {:misc/copy
     {:binding "mod+c"
-     :fn     (fn [] (js/document.execCommand "copy"))}
+     :fn      (fn [] (js/document.execCommand "copy"))}
 
     :command-palette/toggle
-    {:desc "Toggle command palette"
+    {:desc    "Toggle command palette"
      :binding "mod+shift+p"
-     :fn  (fn [] (state/toggle! :ui/command-palette-open?))}}
+     :fn      (fn [] (state/toggle! :ui/command-palette-open?))}}
 
    :shortcut.handler/global-non-editing-only
    ^{:before m/enable-when-not-editing-mode!}
@@ -351,6 +355,10 @@
     {:desc    "Toggle right sidebar"
      :binding "t r"
      :fn      ui-handler/toggle-right-sidebar!}
+    :ui/toggle-left-sidebar
+    {:desc    "Toggle left sidebar"
+     :binding "t l"
+     :fn      ui-handler/toggle-left-sidebar!}
     :ui/toggle-help
     {:desc    "Toggle help"
      :binding "shift+/"
@@ -369,11 +377,11 @@
      :fn      ui-handler/toggle-wide-mode!}
     :ui/select-theme-color
     {:desc    "Select available theme colors"
-     :binding    "t i"
+     :binding "t i"
      :fn      plugin-handler/show-themes-modal!}
     :ui/goto-plugins
     {:desc    "Go to plugins dashboard"
-     :binding    "t p"
+     :binding "t p"
      :fn      plugin-handler/goto-plugins-dashboard!}
     :editor/toggle-open-blocks
     {:desc    "Toggle open blocks (collapse or expand all blocks)"

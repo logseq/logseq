@@ -50,6 +50,7 @@
       (db/get-block-and-children repo block-id)
       (do
         (page-handler/add-page-to-recent! repo page-original-name)
+        (js/setTimeout #(model/refresh-recent-pages) 300)
         (db/get-page-blocks repo page-name)))))
 
 (defn- open-first-block!
