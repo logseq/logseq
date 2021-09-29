@@ -7,6 +7,7 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
+            [frontend.handler :as handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.user :as user-handler]
@@ -15,8 +16,10 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (rum/defc logo < rum/reactive
   [{:keys [white? electron-mac?]}]
@@ -154,6 +157,29 @@
     {:title "Go Forward" :on-click #(js/window.history.forward)}
     svg/arrow-narrow-right]])
 
+(rum/defc updater-tips-new-version
+  [t]
+  (let [[downloaded, set-downloaded] (rum/use-state nil)
+        _ (rum/use-effect!
+            (fn []
+              (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
+                (let [callback (fn [_ & args]
+                                 (js/console.debug "[new-version downloaded] args:" args)
+                                 (let [args (bean/->clj args)]
+                                   (set-downloaded args)
+                                   (state/set-state! :electron/auto-updater-downloaded args))
+                                 nil)]
+                  (js/apis.addListener channel callback)
+                  #(js/apis.removeListener channel callback))))
+            [])]
+
+    (when downloaded
+      [:div.cp__header-tips
+       [:p (t :updater/new-version-install)
+        [:a.ui__button.restart
+         {:on-click #(handler/quit-and-install-new-version!)}
+         (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
+
 (rum/defc header < rum/reactive
   [{:keys [open-fn current-repo white? logged? page? route-match me default-home new-block-mode]}]
   (let [local-repo? (= current-repo config/local-repo)
@@ -161,7 +187,9 @@
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
         electron-not-mac? (and (util/electron?) (not electron-mac?))
-        show-open-folder? (and (nfs/supported?) (empty? repos)
+        show-open-folder? (and (or (nfs/supported?)
+                                   (mobile-util/is-native-platform?))
+                               (empty? repos)
                                (not config/publishing?))
         refreshing? (state/sub :nfs/refreshing?)]
     (rum/with-context [[t] i18n/*tongue-context*]
@@ -212,13 +240,16 @@
          [:div {:class "animate-spin-reverse"}
           svg/refresh])
 
-       (when-not (util/electron?)
+       (when (and
+              (not (mobile-util/is-native-platform?))
+              (not (util/electron?)))
          (login logged?))
 
        (repo/sync-status current-repo)
 
-       [:div.repos
-        (repo/repos-dropdown nil)]
+       (when-not (util/mobile?)
+         [:div.repos
+          (repo/repos-dropdown nil nil)])
 
        (when show-open-folder?
          [:a.text-sm.font-medium.button
@@ -238,4 +269,6 @@
                        :current-repo current-repo
                        :default-home default-home})
 
-       (when (not (state/sub :ui/sidebar-open?)) (sidebar/toggle))])))
+       (when (not (state/sub :ui/sidebar-open?)) (sidebar/toggle))
+
+       (updater-tips-new-version t)])))

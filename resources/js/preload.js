@@ -25,6 +25,10 @@ contextBridge.exposeInMainWorld('apis', {
     return await ipcRenderer.invoke('main', arg)
   },
 
+  invoke: async (channel, args) => {
+    return await ipcRenderer.invoke(channel, ...args)
+  },
+
   addListener: ipcRenderer.on.bind(ipcRenderer),
   removeListener: ipcRenderer.removeListener.bind(ipcRenderer),
   removeAllListeners: ipcRenderer.removeAllListeners.bind(ipcRenderer),

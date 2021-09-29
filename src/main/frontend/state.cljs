@@ -126,6 +126,7 @@
       :preferred-language (storage/get :preferred-language)
 
       ;; electron
+      :electron/auto-updater-downloaded false
       :electron/updater-pending? false
       :electron/updater {}
       :electron/user-cfgs nil
@@ -1148,9 +1149,11 @@
 
 (defn enable-tooltip?
   []
-  (get (get (sub-config) (get-current-repo))
-       :ui/enable-tooltip?
-       true))
+  (if (util/mobile?)
+    false
+    (get (get (sub-config) (get-current-repo))
+        :ui/enable-tooltip?
+        true)))
 
 (defn show-command-doc?
   []

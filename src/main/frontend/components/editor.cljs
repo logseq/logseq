@@ -44,13 +44,15 @@
                command-name]
 
               (vector? doc)
-              (ui/tippy {:html doc
-                         :interactive true
-                         :open? true
-                         :fixed-position? true
-                         :position "right"
-                         :distance 10}
-                        [:div command-name])
+              [:div.has-help
+               command-name
+               (ui/tippy
+                 {:html doc
+                  :interactive true
+                  :fixed-position? true
+                  :position "right"}
+
+                [:small (svg/help-circle)])]
 
               :else
               [:div command-name])))
@@ -202,40 +204,54 @@
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
    [:button.bottom-action
     {:on-click #(editor-handler/indent-outdent true)}
-    svg/indent-block]
+    (ui/icon "chevrons-right")]
    [:button.bottom-action
     {:on-click #(editor-handler/indent-outdent false)}
-    svg/outdent-block]
+    (ui/icon "chevrons-left")]
    [:button.bottom-action
     {:on-click (editor-handler/move-up-down true)}
-    svg/move-up-block]
+    (ui/icon "chevron-up")]
    [:button.bottom-action
     {:on-click (editor-handler/move-up-down false)}
-    svg/move-down-block]
+    (ui/icon "chevron-down")]
    [:button.bottom-action
-    {:on-click #(commands/simple-insert! parent-id "\n" {})}
-    svg/multi-line-input]
+    {:on-click #(editor-handler/cycle-todo!)}
+    (ui/icon "checkbox")]
    [:button.bottom-action
-    {:on-click #(commands/insert-before! parent-id "TODO " {})}
-    svg/checkbox]
-   [:button.font-extrabold.bottom-action.-mt-1
-    {:on-click #(commands/simple-insert!
-                 parent-id "[[]]"
-                 {:backward-pos 2
-                  :check-fn     (fn [_ _ new-pos]
-                                  (reset! commands/*slash-caret-pos new-pos)
-                                  (commands/handle-step [:editor/search-page]))})}
-    "[[]]"]
-   [:button.font-extrabold.bottom-action.-mt-1
-    {:on-click #(commands/simple-insert!
+    {:on-click #(do
+                  (commands/simple-insert! parent-id "\n"
+                                           {:forward-pos 1})
+                  ;; TODO: should we add this focus step to `simple-insert!`?
+                  (when-let [input (gdom/getElement parent-id)]
+                    (.focus input)))}
+    (ui/icon "arrow-back")]
+   [:button.bottom-action.text-sm
+    {:on-click #(do
+                  (commands/simple-insert!
+                  parent-id "[[]]"
+                  {:backward-pos 2
+                   :check-fn     (fn [_ _ new-pos]
+                                   (reset! commands/*slash-caret-pos new-pos)
+                                   (commands/handle-step [:editor/search-page]))})
+                  (when-let [input (gdom/getElement parent-id)]
+                    (.focus input)))}
+    "[["]
+   [:button.bottom-action.text-sm
+    {:on-click #(do
+                 (commands/simple-insert!
                  parent-id "(())"
                  {:backward-pos 2
                   :check-fn     (fn [_ _ new-pos]
                                   (reset! commands/*slash-caret-pos new-pos)
-                                  (commands/handle-step [:editor/search-block]))})}
-    "(())"]
-   [:button.font-extrabold.bottom-action.-mt-1
-    {:on-click #(commands/simple-insert! parent-id "/" {})}
+                                  (commands/handle-step [:editor/search-block]))})
+                 (when-let [input (gdom/getElement parent-id)]
+                   (.focus input)))}
+    "(("]
+   [:button.bottom-action.text-sm
+    {:on-click #(do
+                  (commands/simple-insert! parent-id "/" {})
+                  (when-let [input (gdom/getElement parent-id)]
+                    (.focus input)))}
     "/"]])
 
 (rum/defcs input < rum/reactive
@@ -319,7 +335,8 @@
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref *el
       :class (if x-overflow-vw? "is-overflow-vw-x" "")
-      :on-mouse-down (fn [e] (.stopPropagation e))
+      :on-mouse-down (fn [e]
+                       (.stopPropagation e))
       :style (merge
               {:top        (+ top offset-top)
                :max-height to-max-height
@@ -425,13 +442,13 @@
             :left 0}}
    (let [content (str content "0")]
      (for [[idx c] (map-indexed
-                   vector
-                   (string/split content ""))]
-      (if (= c "\n")
-        [:span {:id (str "mock-text_" idx)
-                :key idx} "0" [:br]]
-        [:span {:id (str "mock-text_" idx)
-                :key idx} c])))])
+                    vector
+                    (string/split content ""))]
+       (if (= c "\n")
+         [:span {:id (str "mock-text_" idx)
+                 :key idx} "0" [:br]]
+         [:span {:id (str "mock-text_" idx)
+                 :key idx} c])))])
 
 (rum/defc mock-textarea-wrapper < rum/reactive
   []
@@ -453,7 +470,6 @@
         component
         set-default-width?
         *pos)))))
-
 
 (rum/defc modals < rum/reactive
   "React to atom changes, find and render the correct modal"

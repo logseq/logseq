@@ -7,6 +7,8 @@
             [frontend.fs.bfs :as bfs]
             [frontend.fs.nfs :as nfs]
             [frontend.fs.node :as node]
+            [frontend.fs.capacitor-fs :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.fs.protocol :as protocol]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -16,6 +18,7 @@
 (defonce nfs-record (nfs/->Nfs))
 (defonce bfs-record (bfs/->Bfs))
 (defonce node-record (node/->Node))
+(defonce mobile-record (mobile/->Capacitorfs))
 
 (defn local-db?
   [dir]
@@ -32,6 +35,9 @@
     (cond
       (and (util/electron?) (not bfs-local?) (not git-repo?))
       node-record
+
+      (mobile-util/is-native-platform?)
+      mobile-record
 
       (local-db? dir)
       nfs-record
@@ -108,20 +114,37 @@
   [dir path]
   (protocol/stat (get-fs dir) dir path))
 
+(defn- get-record
+  []
+  (cond
+    (util/electron?)
+    node-record
+
+    (mobile-util/is-native-platform?)
+    mobile-record
+
+    :else
+    nfs-record))
+
 (defn open-dir
   [ok-handler]
-  (let [record (if (util/electron?) node-record nfs-record)]
-    (p/let [result (protocol/open-dir record ok-handler)]
-      (if (util/electron?)
-        (let [[dir & paths] (bean/->clj result)]
-          [(:path dir) paths])
-        result))))
+  (let [record (get-record)]
+    (->
+     (p/let [result (protocol/open-dir record ok-handler)]
+       (if (or (util/electron?)
+               (mobile-util/is-native-platform?))
+         (let [[dir & paths] (bean/->clj result)]
+           [(:path dir) paths])
+         result))
+     (p/catch (fn [error]
+                (js/console.error error))))))
 
 (defn get-files
   [path-or-handle ok-handler]
-  (let [record (if (util/electron?) node-record nfs-record)]
+  (let [record (get-record)]
     (p/let [result (protocol/get-files record path-or-handle ok-handler)]
-      (if (util/electron?)
+      (if (or (util/electron?)
+              (mobile-util/is-native-platform?))
         (let [result (bean/->clj result)]
           (rest result))
         result))))

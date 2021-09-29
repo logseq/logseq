@@ -8,6 +8,7 @@
             [clojure.walk :as walk]
             [datascript.core :as dc]
             [dommy.core :as d]
+            [frontend.mobile.util :as mobile]
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -254,7 +255,7 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
-    (when (or granted? (util/electron?))
+    (when (or granted? (util/electron?) (mobile/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
@@ -2067,9 +2068,13 @@
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/properties
                                         :block/parent :block/left
-                                        :block/children :block/content]]
-                      (not= (select-keys (second (:rum/args old-state)) compare-keys)
-                            (select-keys (second (:rum/args new-state)) compare-keys))))}
+                                        :block/children :block/content]
+                          config-compare-keys [:show-cloze?]]
+                      (or
+                       (not= (select-keys (second (:rum/args old-state)) compare-keys)
+                             (select-keys (second (:rum/args new-state)) compare-keys))
+                       (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                             (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
   [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type idx] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)

@@ -3,7 +3,8 @@
             [clojure.string :as string]
             [frontend.state :as state]
             [frontend.util :as util]
-            [shadow.resource :as rc]))
+            [shadow.resource :as rc]
+            [frontend.mobile.util :as mobile-util]))
 
 (goog-define DEV-RELEASE false)
 (defonce dev-release? DEV-RELEASE)
@@ -334,15 +335,21 @@
 
 (defn get-repo-dir
   [repo-url]
-  (if (and (util/electron?) (local-db? repo-url))
+  (cond
+    (or
+     (mobile-util/is-native-platform?)
+     (and (util/electron?) (local-db? repo-url)))
     (get-local-dir repo-url)
+
+    :else
     (str "/"
          (->> (take-last 2 (string/split repo-url #"/"))
               (string/join "_")))))
 
 (defn get-repo-path
   [repo-url path]
-  (if (and (util/electron?) (local-db? repo-url))
+  (if (and (or (util/electron?) (mobile-util/is-native-platform?))
+           (local-db? repo-url))
     path
     (util/node-path.join (get-repo-dir repo-url) path)))
 
@@ -350,7 +357,7 @@
   [repo-url relative-path]
   (when (and repo-url relative-path)
     (cond
-      (and (util/electron?) (local-db? repo-url))
+      (and (or (util/electron?) (mobile-util/is-native-platform?)) (local-db? repo-url))
       (let [dir (get-repo-dir repo-url)]
         (if (string/starts-with? relative-path dir)
           relative-path

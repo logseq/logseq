@@ -91,7 +91,7 @@
            :stroke-linejoin "round"
            :stroke-linecap "round"}]]]])
     [:div.flex-shrink-0.flex.items-center.px-4.h-16.head-wrap
-     (repo/repos-dropdown nil)]
+     (repo/repos-dropdown nil close-fn)]
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 

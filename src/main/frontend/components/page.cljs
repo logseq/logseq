@@ -745,7 +745,8 @@
   [state]
   (let [current-repo (state/sub :git/current-repo)
         *sort-by-item (get state ::sort-by-item)
-        *desc? (get state ::desc?)]
+        *desc? (get state ::desc?)
+        mobile? (util/mobile?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1
        [:h1.title (t :all-pages)]
@@ -757,9 +758,12 @@
             [:thead
              [:tr
               (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
-              (sortable-title (t :page/backlinks) :block/backlinks  *sort-by-item *desc?)
-              (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?)
-              (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?)]]
+              (when-not mobile?
+                (sortable-title (t :page/backlinks) :block/backlinks  *sort-by-item *desc?))
+              (when-not mobile?
+                (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?))
+              (when-not mobile?
+                (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?))]]
             [:tbody
              (for [{:block/keys [name created-at updated-at backlinks] :as page} pages]
                [:tr {:key name}
@@ -773,10 +777,13 @@
                                            {:page (:block/name page)}))))
                           :href (rfe/href :page {:name (:block/name page)})}
                       (block/page-cp {} page)]]
-                [:td [:span.text-gray-500.text-sm backlinks]]
-                [:td [:span.text-gray-500.text-sm (if created-at
-                                                    (date/int->local-time-2 created-at)
-                                                    "Unknown")]]
-                [:td [:span.text-gray-500.text-sm (if updated-at
-                                                    (date/int->local-time-2 updated-at)
-                                                    "Unknown")]]])]]))])))
+                (when-not mobile?
+                  [:td [:span.text-gray-500.text-sm backlinks]])
+                (when-not mobile?
+                  [:td [:span.text-gray-500.text-sm (if created-at
+                                                     (date/int->local-time-2 created-at)
+                                                     "Unknown")]])
+                (when-not mobile?
+                  [:td [:span.text-gray-500.text-sm (if updated-at
+                                                     (date/int->local-time-2 updated-at)
+                                                     "Unknown")]])])]]))])))

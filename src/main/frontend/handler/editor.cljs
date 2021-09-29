@@ -48,7 +48,8 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [frontend.mobile.util :as mobile]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1478,8 +1479,15 @@
   [path] ;; path start with "/assets" or compatible for "../assets"
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         path (string/replace path "../" "/")]
-    (if (util/electron?)
+    (cond
+      (util/electron?)
       (str "assets://" repo-dir path)
+
+      (mobile/is-native-platform?)
+      (mobile/convert-file-src
+       (str "file://" repo-dir path))
+
+      :else
       (let [handle-path (str "handle" repo-dir path)
             cached-url (get @*assets-url-cache (keyword handle-path))]
         (if cached-url
@@ -1782,7 +1790,10 @@
                       :data [block]}]
             (db/refresh! repo opts)))
         (when-let [block-node (util/get-first-block-by-id block-id)]
-          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))))
+          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})
+          (when-let [input-id (state/get-edit-input-id)]
+            (when-let [input (gdom/getElement input-id)]
+              (.focus input))))))))
 
 ;; selections
 (defn on-tab
