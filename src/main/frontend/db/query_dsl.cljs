@@ -464,18 +464,17 @@
               (subs result 1 (dec (count result)))
               result)
             (when-let [query (query-wrapper query blocks?)]
-              (let [result (react/react-query repo
-                                              {:query query
-                                               :query-string query-string}
-                                              (cond->
-                                                {:use-cache? false}
-                                                sort-by
-                                                (assoc :transform-fn sort-by)))]
-                (if @sample
-                  (do
-                    (swap! result (fn [col] (take @sample (shuffle col))))
-                    result)
-                  result)))))))))
+              (let [sort-by (or sort-by identity)
+                    random-samples (if @sample
+                                     (fn [col]
+                                       (take @sample (shuffle col)))
+                                     identity)
+                    transform-fn (comp sort-by random-samples)]
+                (react/react-query repo
+                                   {:query query
+                                    :query-string query-string}
+                                   {:use-cache? false
+                                    :transform-fn transform-fn})))))))))
 
 (defn custom-query
   [repo query-m query-opts]
