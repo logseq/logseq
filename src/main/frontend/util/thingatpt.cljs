@@ -3,6 +3,7 @@
             [frontend.state :as state]
             [frontend.util.property :as property-util]
             [frontend.util.cursor :as cursor]
+            [frontend.config :as config]
             [frontend.text :as text]
             [goog.object :as gobj]))
 
@@ -26,6 +27,7 @@
                         [left right ignore]))
              {:full-content (subs content start end*)
               :raw-content (subs content (+ start (count left)) end)
+              :bounds bounds
               :start start
               :end end*})))))))
 
@@ -102,3 +104,17 @@
              :indent indent
              :bullet bullet
              :ordered (int? bullet)))))
+
+(defn- get-markup-at-point [& [input]]
+  (let [format (state/get-preferred-format)]
+   (or (thing-at-point (config/get-hr format) input)
+       (thing-at-point (config/get-bold format) input)
+       (thing-at-point (config/get-italic format) input)
+       (thing-at-point (config/get-underline format) input)
+       (thing-at-point (config/get-strike-through format) input)
+       (thing-at-point (config/get-highlight format) input)
+       (thing-at-point (config/get-code format) input))))
+
+(defn markup-at-point [& [input]]
+  (when-let [markup (get-markup-at-point input)]
+    (assoc markup :type "markup")))
