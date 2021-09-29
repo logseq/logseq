@@ -2252,7 +2252,7 @@
                         (db/entity [:block/name (string/lower-case id)]))]
       (= (:block/uuid entity) (tree/-get-parent-id current-node)))))
 
-(defn- keydown-insert
+(defn- insert
   [insertion]
   (when-not (auto-complete?)
     (let [^js input (state/get-input)
@@ -2265,8 +2265,11 @@
                                (str s1 insertion s2))
       (cursor/move-cursor-to input (+ selected-start (count insertion))))))
 
-(defn- keydown-new-line []
-  (keydown-insert "\n"))
+(defn- keydown-new-line
+  []
+  (insert "\n"))
+
+(declare delete-and-update)
 
 (defn- keydown-new-block
   [state]
@@ -2278,49 +2281,54 @@
               pos (cursor/pos input)
               current-node (outliner-core/block block)
               has-right? (-> (tree/-get-right current-node)
-                             (tree/satisfied-inode?))]
-          
+                             (tree/satisfied-inode?))
+              thing-at-point ;intern is not supported in cljs, need a more elegant solution
+              (or (thingatpt/block-ref-at-point input)
+                  (thingatpt/page-ref-at-point input)
+                  (thingatpt/properties-at-point input)
+                  (thingatpt/list-item-at-point input))]
+          (println "thingatpt:" thing-at-point)
           (cond
-            ;; empty block
+            thing-at-point
+            (case (:type thing-at-point)
+              "block-ref" (open-block-in-sidebar! (:link thing-at-point))
+              "page-ref" (route-handler/redirect-to-page! (:link thing-at-point))
+              "list-item"
+              (let [{:keys [full-content indent bullet ordered]} thing-at-point
+                    next-bullet (if ordered
+                                  (str (inc bullet) ".")
+                                  bullet)]
+                (if (= (count full-content) (if ordered (+ (count bullet) 2) 2))
+                  (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
+                  (do (cursor/move-cursor-to-line-end input)
+                      (insert (str "\n" indent next-bullet " ")))))
+              "properties-drawer"
+              (let [property-key (:raw-content (thingatpt/property-key-at-point input))
+                    move-to-pos (if (= (:block/format config) :org) 2 3)]
+                (if property-key
+                  (case property-key
+                    ;;When cursor in "PROPERTIES", add :|: in a new line and move cursor to | 
+                    "PROPERTIES"
+                    (do (cursor/move-cursor-to-line-end input)
+                        (insert "\n:: ")
+                        (cursor/move-cursor-backward input move-to-pos))
+                    ;; When cursor in "END", new block (respect the previous enter behavior)
+                    "END"
+                    (do
+                      (cursor/move-cursor-to-end input)
+                      (insert-new-block! state))
+                    ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
+                    (cursor/move-cursor-to-line-end input))
+                 
+                  ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to | 
+                  (do (insert "\n:: ")
+                      (cursor/move-cursor-backward input move-to-pos)))))
+
             (and
              (string/blank? content)
              (not has-right?)
              (not (last-top-level-child? config current-node)))
             (outdent-on-enter current-node)
-
-            ;; cursor in block ref
-            (thingatpt/block-ref-at-point content pos)
-            (open-block-in-sidebar! 
-             (uuid (:raw-content (thingatpt/block-ref-at-point content pos))))
-
-            ;; cursor in page ref
-            (thingatpt/page-ref-at-point content pos)
-            (route-handler/redirect!
-             {:to :page
-              :path-params {:name (:link (thingatpt/page-ref-at-point content pos))}})
-
-            ;; cursor in properties drawer
-            (thingatpt/properties-at-point content pos)
-            (if-let [pro-key (thingatpt/thing-at-point {:left ":" :right ":"} content pos "\n")]
-              (case (:raw-content pro-key)
-                "PROPERTIES"
-                ;;When cursor in "PROPERTIES", add :|: in a new line and move cursor to | 
-                (do
-                  (cursor/move-cursor-to input (text/goto-end-of-line content pos))
-                  (keydown-insert "\n:: ")
-                  (cursor/move-cursor-backward input 2))
-                "END"
-                ;; When cursor in "END", new block (respect the previous enter behavior)
-                (do
-                  (cursor/move-cursor-to-end input)
-                  (insert-new-block! state))
-                ;; cursor in other positions of :ke|y:, move to line end for inserting value.
-                (cursor/move-cursor-to input (text/goto-end-of-line content pos)))
-              
-              ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to | 
-              (do
-                (keydown-insert "\n:: ")
-                (cursor/move-cursor-backward input 2)))
             
             :else
             (profile

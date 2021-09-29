@@ -24,6 +24,11 @@
   []
   (redirect! {:to :home}))
 
+(defn redirect-to-page!
+  [page-name]
+  (redirect! {:to :page
+              :path-params {:name page-name}}))
+
 (defn get-title
   [name path-params]
   (case name
