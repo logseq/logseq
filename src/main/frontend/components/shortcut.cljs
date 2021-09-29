@@ -82,16 +82,16 @@
      [:tbody
       [:tr
        [:td.text-left (t :help/slash-autocomplete)]
-       [:td.text-right "/"]]
+       [:td.text-right [:code "/"]]]
       [:tr
        [:td.text-left (t :help/block-content-autocomplete)]
-       [:td.text-right "<"]]
+       [:td.text-right [:code "<"]]]
       [:tr
        [:td.text-left (t :help/reference-autocomplete)]
-       [:td.text-right "[[]]"]]
+       [:td.text-right [:code "[[]]"]]]
       [:tr
        [:td.text-left (t :help/block-reference)]
-       [:td.text-right "(())"]]
+       [:td.text-right [:code "(())"]]]
       [:tr
        [:td.text-left (t :command.editor/open-link-in-sidebar)]
        [:td.text-right "shift-click"]]
