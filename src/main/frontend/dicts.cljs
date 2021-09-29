@@ -82,7 +82,7 @@
         :more "More"
         :search/result-for "Search result for "
         :search/items "items"
-        :help/context-menu "Context menu"
+        :help/context-menu "Block context menu"
         :help/fold-unfold "Fold/unfold blocks (when not in edit mode)"
         :help/markdown-syntax "Markdown syntax"
         :help/org-mode-syntax "Org mode syntax"
