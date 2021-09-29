@@ -46,7 +46,7 @@
               files-dir (->> files-with-stats
                              (filterv
                               (fn [{:keys [type]}]
-                                (= type "directory")))
+                                (contains? #{"directory" "NSFileTypeDirectory"} type)))
                              (mapv :uri))
 
               files-result
@@ -54,7 +54,7 @@
                (->> files-with-stats
                     (filter
                      (fn [{:keys [type]}]
-                       (= type "file")))
+                       (contains? #{"file" "NSFileTypeRegular"} type)))
                     (filter
                      (fn [{:keys [uri]}]
                        (some #(string/ends-with? uri %)
@@ -107,8 +107,14 @@
                                 :encoding (.-UTF8 Encoding)}))]
         content)))
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
-    (let [path (if (string/starts-with? path (config/get-repo-dir repo))
+    (let [path (cond
+                 (= (util/platform) "ios")
                  path
+
+                 (string/starts-with? path (config/get-repo-dir repo))
+                 path
+
+                 :else
                  (-> (str dir "/" path)
                      (string/replace "//" "/")))]
       (p/catch
@@ -134,17 +140,15 @@
                                          }))]
        result)))
   (open-dir [this ok-handler]
-    (case (util/platform)
-      "android"
-      (p/let [_    (check-permission-android)
-              path (p/chain
-                    (.pickFolder util/folder-picker)
-                    #(js->clj % :keywordize-keys true)
-                    :path)
-              files (readdir path)]
-        (js/console.log path)
-        (js/console.log files)
-        (into [] (concat [{:path path}] files)))))
+    (p/let [_    (when (= (util/platform) "android") (check-permission-android))
+            path (p/chain
+                  (.pickFolder util/folder-picker)
+                  #(js->clj % :keywordize-keys true)
+                  :path)
+            files (readdir path)]
+      (js/console.log path)
+      (js/console.log files)
+      (into [] (concat [{:path path}] files))))
   (get-files [this path-or-handle ok-handler]
     nil)
   (watch-dir! [this dir]
