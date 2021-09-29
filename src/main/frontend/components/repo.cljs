@@ -233,7 +233,8 @@
                             (let [nfs-repo? (config/local-db? current-repo)]
                               (when (and nfs-repo?
                                          (not= current-repo config/local-repo)
-                                         (nfs-handler/supported?))
+                                         (or (nfs-handler/supported?)
+                                             (mobile-util/is-native-platform?)))
                                 [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                      :on-click (fn []
                                                  (close-modal-fn)
