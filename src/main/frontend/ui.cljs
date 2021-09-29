@@ -351,12 +351,12 @@
   "Render an infinite list."
   [state list-element-id body {:keys [on-load has-more on-top-reached]}]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (rum/fragment
+    [:div
      body
      (when has-more
        [:a.fade-link.text-link.font-bold.text-4xl
         {:on-click on-load}
-        (t :page/earlier)]))))
+        (t :page/earlier)])]))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
@@ -709,3 +709,7 @@
              :class                 "contents"
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
+
+(rum/defc icon
+  [class]
+  [:i {:class (str "ti ti-" class)}])

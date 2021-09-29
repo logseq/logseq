@@ -18,7 +18,8 @@
             [frontend.util :as util]
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (rum/defc logo < rum/reactive
   [{:keys [white? electron-mac?]}]
@@ -186,7 +187,9 @@
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
         electron-not-mac? (and (util/electron?) (not electron-mac?))
-        show-open-folder? (and (nfs/supported?) (empty? repos)
+        show-open-folder? (and (or (nfs/supported?)
+                                   (mobile-util/is-native-platform?))
+                               (empty? repos)
                                (not config/publishing?))
         refreshing? (state/sub :nfs/refreshing?)]
     (rum/with-context [[t] i18n/*tongue-context*]
@@ -238,13 +241,16 @@
          [:div {:class "animate-spin-reverse"}
           svg/refresh])
 
-       (when-not (util/electron?)
+       (when (and
+              (not (mobile-util/is-native-platform?))
+              (not (util/electron?)))
          (login logged?))
 
        (repo/sync-status current-repo)
 
-       [:div.repos
-        (repo/repos-dropdown nil)]
+       (when-not (util/mobile?)
+         [:div.repos
+          (repo/repos-dropdown nil nil)])
 
        (when show-open-folder?
          [:a.text-sm.font-medium.button

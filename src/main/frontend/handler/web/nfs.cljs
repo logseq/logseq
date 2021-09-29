@@ -19,7 +19,8 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn remove-ignore-files
   [files]
@@ -42,9 +43,18 @@
       (p/resolved files))))
 
 (defn- ->db-files
-  [electron? dir-name result]
+  [mobile-native? electron? dir-name result]
   (->>
-   (if electron?
+   (cond
+     mobile-native?
+     (map (fn [{:keys [uri content type size mtime]}]
+            {:file/path             (string/replace uri "file://" "")
+             :file/last-modified-at mtime
+             :file/size             size
+             :file/content content})
+       result)
+
+     electron?
      (map (fn [{:keys [path stat content]}]
             (let [{:keys [mtime size]} stat]
               {:file/path             path
@@ -52,6 +62,8 @@
                :file/size             size
                :file/content content}))
        result)
+
+     :else
      (let [result (flatten (bean/->clj result))]
        (map (fn [file]
               (let [handle (gobj/get file "handle")
@@ -107,7 +119,9 @@
   [ok-handler]
   (let [path-handles (atom {})
         electron? (util/electron?)
-        nfs? (not electron?)]
+        mobile-native? (mobile-util/is-native-platform?)
+        nfs? (and (not electron?)
+                  (not mobile-native?))]
     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
     (->
      (p/let [result (fs/open-dir (fn [path handle]
@@ -126,7 +140,7 @@
                  (idb/set-item! root-handle-path root-handle)
                  (nfs/add-nfs-file-handle! root-handle-path root-handle))
              result (nth result 1)
-             files (-> (->db-files electron? dir-name result)
+             files (-> (->db-files mobile-native? electron? dir-name result)
                        remove-ignore-files)
              _ (when nfs?
                  (let [file-paths (set (map :file/path files))]
@@ -170,7 +184,8 @@
      (p/catch (fn [error]
                 (if (contains? #{"AbortError" "Error"} (gobj/get error "name"))
                   (state/set-loading-files! false)
-                  (log/error :nfs/open-dir-error error)))))))
+                  ;; (log/error :nfs/open-dir-error error)
+                  (log/error :exception error)))))))
 
 (defn- compute-diffs
   [old-files new-files]
@@ -258,19 +273,23 @@
            handle-path (str config/local-handle-prefix dir-name)
            path-handles (atom {})
            electron? (util/electron?)
-           nfs? (not electron?)]
+           mobile-native? (mobile-util/is-native-platform?)
+           nfs? (and (not electron?)
+                     (not mobile-native?))]
        (when re-index?
          (state/set-graph-syncing? true))
        (->
-        (p/let [handle (idb/get-item handle-path)]
-          (when (or handle electron?)   ; electron doesn't store the file handle
+        (p/let [handle (-> (idb/get-item handle-path)
+                           (p/catch (fn [_error]
+                                      nil)))]
+          (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
             (p/let [_ (when handle (nfs/verify-permission repo handle true))
                     files-result (fs/get-files (if nfs? handle
                                                    (config/get-local-dir repo))
                                                (fn [path handle]
                                                  (when nfs?
                                                    (swap! path-handles assoc path handle))))
-                    new-files (-> (->db-files electron? dir-name files-result)
+                    new-files (-> (->db-files mobile-native? electron? dir-name files-result)
                                   remove-ignore-files)
                     _ (when nfs?
                         (let [file-paths (set (map :file/path new-files))]

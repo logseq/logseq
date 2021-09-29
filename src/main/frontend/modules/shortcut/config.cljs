@@ -12,7 +12,8 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
-            [frontend.util :refer [mac?] :as util]))
+            [frontend.util :refer [mac?] :as util]
+            [frontend.commands :as commands]))
 
 ;; TODO: how to extend this for plugins usage? An atom?
 (def default-config
@@ -190,7 +191,11 @@
     :editor/paste-text-in-one-block-at-point
     {:desc "Paste text into one block at point"
      :binding "mod+shift+v"
-     :fn editor-handler/paste-text-in-one-block-at-point}}
+     :fn editor-handler/paste-text-in-one-block-at-point}
+    :editor/insert-youtube-timestamp
+    {:desc    "Insert youtube timestamp"
+     :binding "mod+shift+y"
+     :fn      commands/insert-youtube-timestamp}}
 
    :shortcut.handler/editor-global
    ^{:before m/enable-when-not-component-editing!}
@@ -497,6 +502,7 @@
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
+    :editor/insert-youtube-timestamp
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete

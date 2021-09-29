@@ -3,7 +3,8 @@
             [frontend.config :as config]
             [frontend.util :as util]
             [promesa.core :as p]
-            ["threads" :refer [Pool Worker spawn]]))
+            ["threads" :refer [Pool Worker spawn]]
+            [frontend.mobile.util :as mobile-util]))
 
 (defonce parser-pool (atom nil))
 
@@ -16,7 +17,8 @@
                          (ipc/ipc :getDirname)
                          "/static")
            path (str static-path "/js/parser-worker.js")
-           path (if (util/electron?)
+           path (if (or (util/electron?)
+                        (mobile-util/is-native-platform?))
                   path
                   (config/asset-uri path))]
      (Pool.

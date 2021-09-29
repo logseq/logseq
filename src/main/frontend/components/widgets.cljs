@@ -1,5 +1,7 @@
 (ns frontend.components.widgets
   (:require [clojure.string :as string]
+            [promesa.core :as p]
+            [frontend.mobile.util :as mobile]
             [frontend.context.i18n :as i18n]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
@@ -84,11 +86,12 @@
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.flex.flex-col
      [:h1.title "Add a graph"]
-     (let [nfs-supported? (nfs/supported?)]
+     (let [nfs-supported? (or (nfs/supported?) (mobile/is-native-platform?))]
        [:div.cp__widgets-open-local-directory
         [:div.select-file-wrap.cursor
          (when nfs-supported?
            {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)})
+
          [:div
           [:h1.title "Open a local directory"]
           [:p "Logseq supports both Markdown and Org-mode. You can open an existing directory or create a new one on your device, a directory is also known simply as a folder. Your data will be stored only on this device."]
@@ -101,7 +104,7 @@
             (ui/admonition :warning
                            [:p "It seems that your browser doesn't support the "
 
-                            [:a {:href "https://web.dev/file-system-access/"
+                            [:a {:href   "https://web.dev/file-system-access/"
                                  :target "_blank"}
                              "new native filesystem API"]
                             [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]]))]]])]))

@@ -16,7 +16,10 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.context.i18n :as i18n]))
 
 (rum/defc blocks-cp < rum/reactive db-mixins/query
   {}
@@ -39,47 +42,56 @@
         data-page-tags (when (seq (:block/tags page-entity))
                          (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
                            (text/build-data-value page-names)))]
-    [:div.flex-1.journal.page (cond->
-                               {:class (if intro? "logseq-intro" "")}
-                                data-page-tags
-                                (assoc :data-page-tags data-page-tags))
+    (if (and (mobile-util/is-native-platform?) intro?)
+      (rum/with-context [[t] i18n/*tongue-context*]
+        [:div
+         [:h1.title
+          (t :new-graph)]
 
-     (when intro?
-       (ui/admonition
-        :warning
-        [:p (util/format
-             "Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the \"Open\" button to open a local directory%s."
-             (if (util/electron?) "" " or connect Logseq to GitHub"))]))
+         (ui/button
+           (t :open-a-directory)
+           :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
+      [:div.flex-1.journal.page (cond->
+                                 {:class (if intro? "logseq-intro" "")}
+                                 data-page-tags
+                                 (assoc :data-page-tags data-page-tags))
 
-     (ui/foldable
-      [:a.initial-color.title.journal-title
-       {:href     (rfe/href :page {:name page})
-        :on-click (fn [e]
-                    (when (gobj/get e "shiftKey")
-                      (when-let [page page-entity]
-                        (state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id page)
-                         :page
-                         {:page     page
-                          :journal? true}))
-                      (.preventDefault e)))}
-       [:h1.title
-        (util/capitalize-all title)]]
+      (when intro?
+        (ui/admonition
+         :warning
+         [:p (util/format
+              "Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the \"Open\" button to open a local directory%s."
+              (if (util/electron?) "" " or connect Logseq to GitHub"))]))
 
-      (blocks-cp repo page format)
+      (ui/foldable
+       [:a.initial-color.title.journal-title
+        {:href     (rfe/href :page {:name page})
+         :on-click (fn [e]
+                     (when (gobj/get e "shiftKey")
+                       (when-let [page page-entity]
+                         (state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id page)
+                          :page
+                          {:page     page
+                           :journal? true}))
+                       (.preventDefault e)))}
+        [:h1.title
+         (util/capitalize-all title)]]
 
-      {})
+       (blocks-cp repo page format)
 
-     (when intro? (widgets/add-graph))
+       {})
 
-     (page/today-queries repo today? false)
+      (when intro? (widgets/add-graph))
 
-     (rum/with-key
-       (reference/references title false)
-       (str title "-refs"))
+      (page/today-queries repo today? false)
 
-     (when intro? (onboarding/intro))]))
+      (rum/with-key
+        (reference/references title false)
+        (str title "-refs"))
+
+      (when intro? (onboarding/intro))])))
 
 (rum/defc journals < rum/reactive
   [latest-journals]

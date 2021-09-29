@@ -637,6 +637,13 @@
                      (count val))]
        (.setRangeText input "" start end))))
 
+#?(:cljs
+   (defn insert-at-current-position!
+     [input text]
+     (let [start (.-selectionStart input)
+           end   (.-selectionEnd input)]
+       (.setRangeText input text start end "end"))))
+
 ;; copied from re_com
 #?(:cljs
    (defn deref-or-value

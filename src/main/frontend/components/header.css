@@ -2,7 +2,7 @@
   @apply shadow z-10 h-12;
   -webkit-app-region: drag;
 
-  padding: 0 0.5rem;
+  padding-right: 0.5rem;
   display: flex;
   align-items: center;
   flex: 0 0 auto;
@@ -146,7 +146,7 @@
 
 #repo-name {
   vertical-align: middle;
-  display: inline-block;
+  display: inline;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
