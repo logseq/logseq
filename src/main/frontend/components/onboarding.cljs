@@ -3,7 +3,6 @@
             [frontend.components.svg :as svg]
             [frontend.context.i18n :as i18n]
             [frontend.handler.route :as route-handler]
-            [frontend.ui :as ui]
             [frontend.util :as util]
             [rum.core :as rum]
             [frontend.config :as config]))

@@ -11,6 +11,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.handler.web.nfs :as nfs]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -21,7 +22,7 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
-(rum/defc logo < rum/reactive
+(rum/defc home-btn < rum/reactive
   [{:keys [white? electron-mac?]}]
   [:a.cp__header-logo
    {:class (when electron-mac? "button")
@@ -44,8 +45,7 @@
 
       (ui/dropdown-with-links
        (fn [{:keys [toggle-fn]}]
-         [:a.button.text-sm.font-medium.block {:on-click toggle-fn
-                                               :style {:margin-right 12}}
+         [:a.button.text-sm.font-medium.block {:on-click toggle-fn}
           [:span (t :login)]])
        (let [list [;; {:title (t :login-google)
                    ;;  :url (str config/website "/login/google")}
@@ -204,23 +204,25 @@
                                       (open-fn)
                                       (state/set-left-sidebar-open! true))})
 
-       (when-not electron-mac?
-         (logo {:white? white?}))
 
-       (when electron-not-mac? (back-and-forward))
-
-       [:div.flex-1.flex]
+       (home-btn {:white? white? :electron-mac? electron-mac?})
+       (when electron-mac? (back-and-forward true))
 
        (when current-repo
          (ui/tippy
           {:html [:div.text-sm.font-medium
                   "Shortcut: "
+                  ;; TODO: Pull from config so it displays custom shortcut, not just the default
                   [:code (util/->platform-shortcut "Ctrl + k")]]
-           :interactive     true
+           :interactive true
            :arrow true}
           [:a.button#search-button
            {:on-click #(state/pub-event! [:go/search])}
            svg/search]))
+
+       (when electron-not-mac? (back-and-forward))
+
+       [:div.flex-1.flex] ;; Spacer in the middle ------------------------------
 
        (when plugin-handler/lsp-enabled?
          (plugins/hook-ui-items :toolbar))
@@ -228,11 +230,6 @@
        [:a (when refreshing?
              [:div {:class "animate-spin-reverse"}
               svg/refresh])]
-
-       (when electron-mac?
-         (logo {:white? white?
-                :electron-mac? true}))
-       (when electron-mac? (back-and-forward true))
 
        (new-block-mode)
 
@@ -263,6 +260,12 @@
        (when config/publishing?
          [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
           (t :graph)])
+
+       ;; Go to Keyboard Shortcuts page
+       [:a.button
+        {:title "Keyboard shortcuts"
+         :on-click (fn [] (route-handler/redirect! {:to :shortcut-setting}))}
+        (svg/icon-cmd 20)]
 
        (dropdown-menu {:me me
                        :t t

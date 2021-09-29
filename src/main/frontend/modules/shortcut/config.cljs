@@ -344,6 +344,10 @@
     {:desc    "Go to home"
      :binding "g h"
      :fn      #(route-handler/redirect! {:to :home})}
+    :go/keyboard-shortcuts
+    {:desc    "Go to keyboard shortcuts"
+     :binding "g s"
+     :fn      #(route-handler/redirect! {:to :shortcut-setting})}
     :ui/toggle-document-mode
     {:desc    "Toggle document mode"
      :binding "t d"

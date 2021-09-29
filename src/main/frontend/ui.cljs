@@ -70,7 +70,7 @@
        :as   opts}]]
   (let [{:keys [open? toggle-fn]} state
         modal-content (modal-content-fn state)]
-    [:div.ml-1.relative {:style {:z-index z-index}}
+    [:div.relative {:style {:z-index z-index}}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
