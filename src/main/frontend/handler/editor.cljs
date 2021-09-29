@@ -2300,7 +2300,7 @@
               "block-ref" (open-block-in-sidebar! (:link thing-at-point))
               "page-ref" (route-handler/redirect-to-page! (:link thing-at-point))
               "list-item"
-              (let [{:keys [full-content indent bullet ordered]} thing-at-point
+              (let [{:keys [full-content indent bullet ordered _]} thing-at-point
                     next-bullet (if ordered
                                   (str (inc bullet) ".")
                                   bullet)]
