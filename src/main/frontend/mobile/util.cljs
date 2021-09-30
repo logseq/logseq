@@ -15,6 +15,7 @@
   (.isPluginAvailable Capacitor name))
 
 (defonce folder-picker (registerPlugin "FolderPicker"))
+(defonce file-watcher (registerPlugin "FileWatcher"))
 
 (defn hide-splash []
   (.hide SplashScreen))
