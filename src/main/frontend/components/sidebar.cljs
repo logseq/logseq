@@ -52,7 +52,7 @@
                        ^js parent (.closest target ".nav-content-item")]
                    (.toggle (.-classList parent) "is-expand")))}
 
-    [:strong.text-lg name]
+    [:strong.text-md name]
     [:span.flex.items-center
      (when (fn? edit-fn)
        [:a.edit {:on-click edit-fn} (svg/icon-editor)])
@@ -70,10 +70,10 @@
 
 (rum/defc favorite-contents
   < rum/reactive db-mixins/query
-  []
+  [t]
 
   (nav-content-item
-   "Favorites"
+   (t :left-side-bar/nav-favorites)
 
    {:class "favorites"
     :edit-fn
@@ -96,49 +96,61 @@
 
 (rum/defc recent-contents
   < rum/reactive db-mixins/query
-  []
+  [t]
 
   (nav-content-item
-    "Recent Pages"
+    (t :left-side-bar/nav-recent-pages)
 
-    {:class "recent"}
+   {:class "recent"}
 
-    (let [pages (state/sub :editor/recent-pages)]
+   (let [pages (state/sub :editor/recent-pages)]
 
-      [:ul
-       (for [name pages]
-         [:li {:key name}
-          [:a {:href (rfe/href :page {:name name})} name]])])))
+     [:ul
+      (for [name pages]
+        [:li {:key name}
+         [:a {:href (rfe/href :page {:name name})} name]])])))
 
 (rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn]
-  (let [active? (fn [route] (= route (get-in route-match [:data :name])))
-        page-active? (fn [page]
-                       (= page (get-in route-match [:parameters :path :name])))
-        left-sidebar? (state/sub :ui/left-sidebar-open?)]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [active? (fn [route] (= route (get-in route-match [:data :name])))
+          page-active? (fn [page]
+                         (= page (get-in route-match [:parameters :path :name])))
+          left-sidebar? (state/sub :ui/left-sidebar-open?)]
 
-    (when left-sidebar?
-      [:nav.left-sidebar-inner
-       (nav-content-item
-         "Shortcuts"
-         nil
-         [:div.shortcut-links
-          [:div.wrap
-           [:div.item [:a.link {:href (rfe/href :all-journals) :title "Journals"} (ui/icon "calendar")]]
-           [:div.item [:a.link {:on-click #(state/pub-event! [:modal/show-cards]) :title "SRS cards"} (ui/icon "versions")]]
-           [:div.item [:a.link {:href (rfe/href :graph) :title "Graph views"} (ui/icon "hierarchy")]]
-           [:div.item [:a.link {:href (rfe/href :all-pages) :title "All pages"} (ui/icon "files")]]]])
+      (when left-sidebar?
+        [:nav.left-sidebar-inner
+         (nav-content-item
 
-       [:div.shortcut-cnts
-        (favorite-contents)
-        (recent-contents)]
+          (t :left-side-bar/nav-shortcuts)
 
-       [:div.shortcut-acts
+          nil
+          [:div.shortcut-links
+           [:div.wrap
+            [:div.item [:a.link {:href (rfe/href :all-journals) :title "Journals"} (ui/icon "calendar")]]
+            [:div.item [:a.link {:on-click #(state/pub-event! [:modal/show-cards]) :title "SRS cards"} (ui/icon "versions")]]
+            [:div.item [:a.link {:href (rfe/href :graph) :title "Graph views"} (ui/icon "hierarchy")]]
+            [:div.item [:a.link {:href (rfe/href :all-pages) :title "All pages"} (ui/icon "files")]]]])
 
-        (ui/button "+ New Page"
-                   :intent "logseq"
-                   :class "new-page"
-                   :on-click #(show-new-page-modal!))]])))
+         [:div.shortcut-cnts
+          (favorite-contents t)
+          (recent-contents t)]
+
+         [:div.shortcut-acts
+
+          (ui/tippy
+            {:html [:div.text-sm.font-medium
+                    "Shortcut: "
+                    [:code (util/->platform-shortcut "Ctrl + n")]]
+             :delay 500
+             :hideDelay 1
+             :interactive true
+             :arrow true}
+            (ui/button
+              (str "+ " (t :left-side-bar/new-page))
+              :intent "logseq"
+              :class "new-page"
+              :on-click #(show-new-page-modal!)))]]))))
 
 (rum/defc sidebar-mobile-sidebar < rum/reactive
   [{:keys [open? close-fn route-match]}]

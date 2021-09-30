@@ -137,6 +137,10 @@ nav.left-sidebar-inner {
     display: flex;
     justify-content: center;
 
+    > div {
+      width: 100%;
+    }
+
     .new-page {
       width: 96%;
       border-radius: 4px;
@@ -209,6 +213,7 @@ nav.left-sidebar-inner {
             text-overflow: ellipsis;
             overflow: hidden;
             white-space: nowrap;
+            font-size: 15px;
 
             padding: 4px 25px;
             padding-left: 32px;

@@ -63,12 +63,24 @@
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
-    [:button#left-menu.cp__header-left-menu
-     {:on-click on-click}
-     (ui/icon
-       (if left-sidebar-open?
+
+    (ui/tippy
+      {:html [:div.text-sm.font-medium
+              "Shortcut: "
+              [:code (util/->platform-shortcut "t l")]]
+       :delay 500
+       :hideDelay 1
+       :position "right"
+       :interactive true
+       :arrow true}
+
+      [:button#left-menu.cp__header-left-menu
+       {:on-click on-click}
+       (ui/icon
+         (if left-sidebar-open?
            "indent-increase" "indent-decrease")
-       {:style {:fontSize "22px"}})]))
+         {:style {:fontSize "22px"}})])
+    ))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
@@ -268,6 +280,7 @@
                        :current-repo current-repo
                        :default-home default-home})
 
-       (when (not (state/sub :ui/sidebar-open?)) (sidebar/toggle))
+       (when (not (state/sub :ui/sidebar-open?))
+         (sidebar/toggle))
 
        (updater-tips-new-version t)])))

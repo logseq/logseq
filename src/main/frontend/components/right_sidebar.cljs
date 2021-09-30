@@ -22,8 +22,19 @@
 (rum/defc toggle
   []
   (when-not (util/mobile?)
-    [:a.button {:on-click state/toggle-sidebar-open?!}
-    (ui/icon "layout-sidebar-right" {:style {:fontSize "22px" :opacity ".6"}})]))
+    (ui/tippy
+      {:html [:div.text-sm.font-medium
+              "Shortcut: "
+              [:code (util/->platform-shortcut "t r")]]
+       :delay 500
+       :hideDelay 1
+       :position "left"
+       :interactive true
+       :arrow true}
+
+      [:a.button
+       {:on-click state/toggle-sidebar-open?!}
+       (ui/icon "layout-sidebar-right" {:style {:fontSize "22px" :opacity ".6"}})])))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
