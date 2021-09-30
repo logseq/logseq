@@ -3,8 +3,10 @@
 	"appName": "Logseq",
 	"bundledWebRuntime": false,
 	"webDir": "public",
-	"server": {
-		"url": "http://192.168.1.59:3001",
-		"cleartext": true
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 3000,
+			"launchAutoHide": false
+		}
 	}
 }
