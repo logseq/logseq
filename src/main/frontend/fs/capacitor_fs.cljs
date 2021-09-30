@@ -28,10 +28,10 @@
     (if (empty? dirs)
       result
       (p/let [d (first dirs)
-              files (.readdir Filesystem (clj->js {:path d}))
+              files (.readdir Filesystem (bean/->js {:path d}))
               files (-> files
-                        js->clj
-                        (get "files" []))
+                        bean/->clj
+                        (get :files []))
               files (->> files
                          (remove (fn [file] (string/starts-with? file "."))))
               files (->> files
@@ -40,8 +40,8 @@
                                 (mapv
                                  (fn [file]
                                    (p/chain
-                                    (.stat Filesystem (clj->js {:path file}))
-                                    #(js->clj % :keywordize-keys true)))
+                                    (.stat Filesystem (bean/->js {:path file}))
+                                    bean/->clj))
                                  files))
               files-dir (->> files-with-stats
                              (filterv
@@ -63,10 +63,10 @@
                      (fn [{:keys [uri] :as file-result}]
                        (p/chain
                         (.readFile Filesystem
-                                   (clj->js
+                                   (bean/->js
                                     {:path uri
                                      :encoding (.-UTF8 Encoding)}))
-                        #(js->clj % :keywordize-keys true)
+                        bean/->clj
                         :data
                         #(assoc file-result :content %))))))]
         (p/recur (concat result files-result)
@@ -77,7 +77,7 @@
   (mkdir! [this dir]
     (prn "mkdir: " dir)
     (p/let [result (.mkdir Filesystem
-                      (clj->js
+                      (bean/->js
                        {:path dir
                         ;; :directory (.-ExternalStorage Directory)
                         }))]
@@ -85,7 +85,7 @@
       result))
   (mkdir-recur! [this dir]
     (p/let [result (.mkdir Filesystem
-                           (clj->js
+                           (bean/->js
                             {:path dir
                              ;; :directory (.-ExternalStorage Directory)
                              :recursive true}))]
@@ -101,7 +101,7 @@
   (read-file [this dir path _options]
     (let [path (str dir path)]
       (p/let [content (.readFile Filesystem
-                              (clj->js
+                              (bean/->js
                                {:path path
                                 :directory (.-ExternalStorage Directory)
                                 :encoding (.-UTF8 Encoding)}))]
@@ -113,7 +113,7 @@
                      (string/replace "//" "/")))]
       (p/catch
          (p/let [result (.writeFile Filesystem
-                                    (clj->js
+                                    (bean/->js
                                      {:path path
                                       :data content
                                       :encoding (.-UTF8 Encoding)
@@ -128,7 +128,7 @@
     nil)
   (stat [this dir path]
     (let [path (str dir path)]
-      (p/let [result (.stat Filesystem (clj->js
+      (p/let [result (.stat Filesystem (bean/->js
                                         {:path path
                                          ;; :directory (.-ExternalStorage Directory)
                                          }))]
@@ -139,7 +139,7 @@
       (p/let [_    (check-permission-android)
               path (p/chain
                     (.pickFolder util/folder-picker)
-                    #(js->clj % :keywordize-keys true)
+                    bean/->clj
                     :path)
               files (readdir path)]
         (js/console.log path)
