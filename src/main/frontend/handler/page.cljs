@@ -444,8 +444,20 @@
     (editor-handler/api-insert-new-block!
      content
      {:page "Contents"})
+    ;;(notification/show! (util/format "Added to %s!" (state/get-favorites-name)) :success)
+    (editor-handler/clear-when-saved!)))
+
+(defn handle-add-page-to-favorites!
+  [page-name]
+  (create!
+    page-name {:redirect? false :create-first-block? true})
+  (let [content (str "[[" page-name "]]")]
+    (editor-handler/api-insert-new-block!
+      content
+      {:page "Favorites"})
     (notification/show! (util/format "Added to %s!" (state/get-favorites-name)) :success)
     (editor-handler/clear-when-saved!)))
+
 
 (defn has-more-journals?
   []

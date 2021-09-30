@@ -276,7 +276,10 @@
         links (fn [] (->>
                      [(when-not contents?
                         {:title   (t :page/add-to-favorites)
-                         :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+                         :options {:on-click
+                                   (fn []
+                                     (page-handler/handle-add-page-to-contents! page-original-name)
+                                     (page-handler/handle-add-page-to-favorites! page-original-name))}})
 
                       {:title "Go to presentation mode"
                        :options {:on-click (fn []

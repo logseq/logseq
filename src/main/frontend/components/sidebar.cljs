@@ -78,13 +78,13 @@
    {:class "favorites"
     :edit-fn
     (fn [e]
-      (rfe/push-state :page {:name "contents"})
+      (rfe/push-state :page {:name "Favorites"})
       (util/stop e))}
 
-   (let [blocks (let [page-eid (:db/id (db-model/get-page "contents"))]
+   (let [blocks (let [page-eid (:db/id (db-model/get-page "Favorites"))]
                   (filterv
                    #(= page-eid (:db/id (:block/parent %)))
-                   (db-model/get-page-blocks "contents")))]
+                   (db-model/get-page-blocks "Favorites")))]
 
      [:ul
       (for [it blocks
