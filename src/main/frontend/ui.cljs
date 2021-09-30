@@ -710,6 +710,7 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
-(rum/defc icon
-  [class]
-  [:i {:class (str "ti ti-" class)}])
+(defn icon
+  ([class] (icon class nil))
+  ([class opts]
+   [:i (merge {:class (str "ti ti-" class)} opts)]))
