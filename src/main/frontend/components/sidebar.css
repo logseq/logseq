@@ -15,6 +15,10 @@
     padding-left: 0 !important;
     margin-left: var(--ls-left-sidebar-width);
   }
+
+  .cp__header-left-menu {
+    @apply pl-2;
+  }
 }
 
 #app-container {
@@ -103,6 +107,7 @@ nav.left-sidebar-inner {
           align-items: center;
           justify-content: center;
           overflow: hidden;
+          font-size: 22px;
         }
 
         &:hover {
@@ -140,7 +145,7 @@ nav.left-sidebar-inner {
   }
 
   .nav-content-item {
-    padding: 15px 25px 0 25px;
+    padding: 15px 25px 0 20px;
 
     > .hd {
       display: flex;
@@ -153,6 +158,7 @@ nav.left-sidebar-inner {
       > strong {
         color: var(--ls-primary-text-color);
         opacity: .4;
+        font-weight: 400;
       }
 
       > span {
@@ -163,11 +169,10 @@ nav.left-sidebar-inner {
           transition: none;
 
           &:hover {
-            opacity: 1;
+            opacity: 1 !important;
           }
 
           &:last-child {
-            display: block;
             transform: translateY(-6px) translateX(2px) rotate(90deg);
           }
         }
@@ -179,7 +184,8 @@ nav.left-sidebar-inner {
             display: block;
 
             &:last-child {
-              opacity: 1;
+              display: block;
+              opacity: .6;
             }
           }
         }
@@ -196,28 +202,16 @@ nav.left-sidebar-inner {
 
         > li {
           margin: 0 -25px;
-          text-overflow: ellipsis;
-          overflow: hidden;
-          white-space: nowrap;
-          width: 100%;
-          -webkit-line-clamp: 1;
-          display: -webkit-box;
 
           a {
-            display: flex;
-            align-items: center;
-
-            &:before {
-              @apply text-xs rounded border flex items-center justify-center mr-1;
-              width: .9rem;
-              height: .9rem;
-              font-size: 10px;
-              line-height: 1;
-              content: "P";
-              opacity: .7;
-            }
+            width: 100%;
+            display: block;
+            text-overflow: ellipsis;
+            overflow: hidden;
+            white-space: nowrap;
 
             padding: 4px 25px;
+            padding-left: 32px;
             color: var(--ls-primary-text-color);
 
             &:hover {
@@ -278,6 +272,7 @@ nav.left-sidebar-inner {
   width: 100%;
   max-width: var(--ls-main-content-max-width);
   flex: 1;
+  padding: 0 3rem;
 
   h1.title {
     padding-right: 15px;

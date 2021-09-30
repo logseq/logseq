@@ -18,7 +18,6 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.page :as page-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
@@ -125,10 +124,10 @@
          nil
          [:div.shortcut-links
           [:div.wrap
-           [:div.item [:a.link (svg/offline 20)]]
-           [:div.item [:a.link (svg/help-circle 20)]]
-           [:div.item [:a.link (svg/settings 20)]]
-           [:div.item [:a.link (svg/reload 20)]]]])
+           [:div.item [:a.link {:href (rfe/href :all-journals) :title "Journals"} (ui/icon "calendar")]]
+           [:div.item [:a.link {:on-click #(state/pub-event! [:modal/show-cards]) :title "SRS cards"} (ui/icon "play-card")]]
+           [:div.item [:a.link {:href (rfe/href :graph) :title "Graph views"} (ui/icon "share")]]
+           [:div.item [:a.link {:href (rfe/href :all-pages) :title "All pages"} (ui/icon "files")]]]])
 
        [:div.shortcut-cnts
         (favorite-contents)
@@ -198,7 +197,6 @@
           (sidebar-nav route-match nil)])
 
        [:div#main-content-container.w-full.flex.justify-center
-        {:style {:margin-top (if global-graph-pages? 0 "2rem")}}
         [:div.cp__sidebar-main-content
          {:data-is-global-graph-pages global-graph-pages?
           :data-is-full-width         (or global-graph-pages?

@@ -94,18 +94,18 @@
 }
 
 .cp__header-left-menu {
-  @apply px-4 mr-4;
+  @apply px-1 mr-3;
   color: var(--ls-link-text-color);
-  display: block;
-  height: 100%;
   opacity: .9;
+  display: flex;
+  align-items: center;
 
   &:hover {
     opacity: 1;
   }
 
   &:active {
-    background: var(--ls-menu-hover-color);
+    opacity: .8;
   }
 }
 

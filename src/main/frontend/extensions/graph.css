@@ -7,3 +7,9 @@
     position: relative;
     z-index: 4;
 }
+
+body[data-page=graph] {
+    .cp__sidebar-main-content {
+        max-width: 90% !important;
+    }
+}

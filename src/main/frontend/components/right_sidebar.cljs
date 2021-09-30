@@ -23,7 +23,7 @@
   []
   (when-not (util/mobile?)
     [:a.button {:on-click state/toggle-sidebar-open?!}
-    (svg/menu)]))
+    (ui/icon "layout-sidebar-right" {:style {:fontSize "22px" :opacity ".6"}})]))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]

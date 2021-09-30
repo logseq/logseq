@@ -60,17 +60,15 @@
           list))
        nil))))
 
-(rum/defc left-menu-button
+(rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
-  [:button#left-menu.cp__header-left-menu
-   {:on-click on-click}
-   [:svg.h-6.w-6
-    {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-    [:path
-     {:d "M4 6h16M4 12h16M4 18h7"
-      :stroke-width "2"
-      :stroke-linejoin "round"
-      :stroke-linecap "round"}]]])
+  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
+    [:button#left-menu.cp__header-left-menu
+     {:on-click on-click}
+     (ui/icon
+       (if left-sidebar-open?
+           "indent-increase" "indent-decrease")
+       {:style {:fontSize "22px"}})]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
