@@ -49,8 +49,7 @@
   [repo idx db-id block-type block-data t]
   (case block-type
     :contents
-    [(or (state/get-favorites-name)
-         (t :right-side-bar/favorites))
+    [(t :right-side-bar/contents)
      (contents)]
 
     :help
