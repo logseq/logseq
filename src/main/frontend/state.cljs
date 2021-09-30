@@ -61,7 +61,7 @@
       :ui/fullscreen? false
       :ui/settings-open? false
       :ui/sidebar-open? false
-      :ui/left-sidebar-open? false
+      :ui/left-sidebar-open? (boolean (storage/get "ls-left-sidebar-open?"))
       :ui/theme (or (storage/get :ui/theme) "dark")
       :ui/system-theme? ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
       :ui/wide-mode? false
@@ -1119,6 +1119,7 @@
 
 (defn set-left-sidebar-open!
   [value]
+  (storage/set "ls-left-sidebar-open?" (boolean value))
   (set-state! :ui/left-sidebar-open? value))
 
 (defn set-developer-mode!

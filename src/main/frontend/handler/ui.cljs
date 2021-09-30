@@ -17,7 +17,8 @@
 
 (defn toggle-left-sidebar!
   []
-  (swap! state/state update :ui/left-sidebar-open? not))
+  (state/set-left-sidebar-open!
+    (not (@state/state :ui/left-sidebar-open?))))
 
 (defn hide-right-sidebar
   []
