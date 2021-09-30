@@ -94,7 +94,7 @@
 }
 
 .cp__header-left-menu {
-  @apply px-1 mr-3;
+  @apply px-1;
   color: var(--ls-link-text-color);
   opacity: .9;
   display: flex;
@@ -106,6 +106,13 @@
 
   &:active {
     opacity: .8;
+  }
+}
+
+.is-win32 .cp__header {
+  .cp__header-left-menu {
+    position: relative;
+    right: -3px;
   }
 }
 

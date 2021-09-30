@@ -10,6 +10,10 @@
   }
 }
 
+.is-electron.is-mac .cp__sidebar-left-layout {
+  padding-top: 30px;
+}
+
 .ls-left-sidebar-open {
   .cp__header {
     padding-left: 0 !important;
@@ -248,7 +252,6 @@ nav.left-sidebar-inner {
 .cp__sidebar-left-layout {
   @apply flex-col sm:block;
 
-  padding-top: 30px;
   background-color: var(--ls-secondary-background-color);
   width: var(--ls-left-sidebar-width);
   height: 100vh;

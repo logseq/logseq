@@ -43,11 +43,11 @@
    ^{:before m/prevent-default-behavior}
    {:pdf/previous-page
     {:desc    "Previous page of current pdf doc"
-     :binding "ctrl+p"
+     :binding "alt+p"
      :fn      pdf-utils/prev-page}
     :pdf/next-page
     {:desc    "Next page of current pdf doc"
-     :binding "ctrl+n"
+     :binding "alt+n"
      :fn      pdf-utils/next-page}}
 
    :shortcut.handler/auto-complete
@@ -142,7 +142,7 @@
      :fn      editor-handler/strike-through-format!}
     :editor/move-block-up
     {:desc    "Move block up"
-     :binding (if mac? "mod+shift+up"  "alt+shift+up")
+     :binding (if mac? "mod+shift+up" "alt+shift+up")
      :fn      (editor-handler/move-up-down true)}
     :editor/move-block-down
     {:desc    "Move block down"
@@ -185,13 +185,13 @@
      :binding (if mac? false "alt+w")
      :fn      editor-handler/backward-kill-word}
     :editor/replace-block-reference-at-point
-    {:desc "Replace block reference with its content at point"
+    {:desc    "Replace block reference with its content at point"
      :binding "mod+shift+r"
-     :fn editor-handler/replace-block-reference-with-content-at-point}
+     :fn      editor-handler/replace-block-reference-with-content-at-point}
     :editor/paste-text-in-one-block-at-point
-    {:desc "Paste text into one block at point"
+    {:desc    "Paste text into one block at point"
      :binding "mod+shift+v"
-     :fn editor-handler/paste-text-in-one-block-at-point}
+     :fn      editor-handler/paste-text-in-one-block-at-point}
     :editor/insert-youtube-timestamp
     {:desc    "Insert youtube timestamp"
      :binding "mod+shift+y"
@@ -267,7 +267,7 @@
      :fn      history/redo!}
     :editor/new-page
     {:desc    "New page"
-     :binding (if util/mac? "mod+n" "alt+n")
+     :binding "mod+n"
      :fn      #(state/pub-event! [:modal/show-new-page-modal])}}
 
    :shortcut.handler/global-prevent-default
