@@ -11,7 +11,7 @@ const config: CapacitorConfig = {
             launchAutoHide: false,
             androidScaleType: "CENTER_CROP",
             splashImmersive: true,
-            backgroundColor: "#00405b"
+            backgroundColor: "#002b36"
         },
     }
     // do not commit this into source control
