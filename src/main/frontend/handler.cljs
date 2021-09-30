@@ -17,6 +17,7 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.mobile.util :as mobile]
+            [frontend.mobile.file-watcher :as mobile-file-watcher]
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
@@ -119,6 +120,8 @@
 
                             (watch-for-date!)
                             (file-handler/watch-for-local-dirs!)
+                            (when (mobile/is-native-platform?)
+                              (mobile-file-watcher/listen-file-changes))
                             ;; (when-not (state/logged?)
                             ;;   (state/pub-event! [:after-db-restore repos]))
                             ))

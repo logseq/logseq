@@ -99,18 +99,23 @@
     ;; Too dangerious!!! We'll never implement this.
     nil)
   (read-file [this dir path _options]
-    (let [path (str dir path)]
-      (p/let [content (.readFile Filesystem
-                              (bean/->js
-                               {:path path
-                                :directory (.-ExternalStorage Directory)
-                                :encoding (.-UTF8 Encoding)}))]
-        content)))
+    (js/console.log "read#dir" dir)
+    (js/console.log "read#path" path)
+    (p/let [path
+            (if (string/starts-with? path "file://") path (futil/node-path.join dir path))
+            content (.readFile Filesystem
+                               (bean/->js
+                                {:path path
+                                 :encoding (.-UTF8 Encoding)}))]
+      (-> content bean/->clj :data)))
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
+    (js/console.log "write#path" path)
     (let [path (if (string/starts-with? path (config/get-repo-dir repo))
                  path
                  (-> (str dir "/" path)
                      (string/replace "//" "/")))]
+      (js/console.log "write#dir" dir)
+      (js/console.log "write#path" path)
       (p/catch
          (p/let [result (.writeFile Filesystem
                                     (bean/->js
@@ -127,12 +132,11 @@
   (rename! [this repo old-path new-path]
     nil)
   (stat [this dir path]
-    (let [path (str dir path)]
-      (p/let [result (.stat Filesystem (bean/->js
-                                        {:path path
-                                         ;; :directory (.-ExternalStorage Directory)
-                                         }))]
-       result)))
+    (js/console.log "stat#dir" dir)
+    (js/console.log "stat#path" path)
+    (p/let [path   (futil/node-path.join dir path)
+            result (.stat Filesystem (bean/->js {:path path}))]
+      (bean/->clj result)))
   (open-dir [this ok-handler]
     (case (util/platform)
       "android"
@@ -148,7 +152,18 @@
   (get-files [this path-or-handle _ok-handler]
     (readdir path-or-handle))
   (watch-dir! [this dir]
-    nil))
+    ;; TODO ios file watcher
+    (when (and (= (util/platform) "android") dir)
+      (p/do!
+       (js/console.log "#start-watch-dir" dir)
+       (.startWatching util/file-watcher (bean/->js {:path dir}))))))
+
+
+#_
+(.addListener util/file-watcher
+              "fileChanged"
+              (fn [e]
+                (js/console.log (bean/->clj e))))
 
 
 (comment

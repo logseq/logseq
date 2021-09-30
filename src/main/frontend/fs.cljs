@@ -151,7 +151,10 @@
 
 (defn watch-dir!
   [dir]
-  (protocol/watch-dir! node-record dir))
+  (let [record (if (util/electron?)
+                 node-record
+                 mobile-record)]
+    (protocol/watch-dir! record dir)))
 
 (defn mkdir-if-not-exists
   [dir]

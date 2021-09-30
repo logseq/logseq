@@ -17,6 +17,9 @@ public class FileWatcher extends Plugin {
     @PluginMethod()
     public void startWatching(PluginCall call) {
         String path = call.getString("path");
+        if (observer != null) {
+            observer.stopWatching();
+        }
         observer = new RecursiveFileObserver(path, new RecursiveFileObserver.EventListener() {
             @Override
             public void onEvent(int event, File file) {

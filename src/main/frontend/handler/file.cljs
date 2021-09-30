@@ -11,6 +11,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as model]
+            [frontend.mobile.util :as mobile]
             [frontend.format :as format]
             [frontend.fs :as fs]
             [frontend.fs.nfs :as nfs]
@@ -312,7 +313,7 @@
 
 (defn watch-for-local-dirs!
   []
-  (when (util/electron?)
+  (when (or (util/electron?) (mobile/is-native-platform?))
     (let [repos (->> (state/get-repos)
                      (filter (fn [repo]
                                (config/local-db? (:url repo)))))
