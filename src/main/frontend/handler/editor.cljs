@@ -1790,7 +1790,10 @@
                       :data [block]}]
             (db/refresh! repo opts)))
         (when-let [block-node (util/get-first-block-by-id block-id)]
-          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))))
+          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})
+          (when-let [input-id (state/get-edit-input-id)]
+            (when-let [input (gdom/getElement input-id)]
+              (.focus input))))))))
 
 ;; selections
 (defn on-tab
