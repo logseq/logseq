@@ -678,6 +678,18 @@ body.is-pdf-active {
   #head {
     padding-left: 0;
   }
+
+  #main-content.is-left-sidebar-open {
+    padding-left: unset;
+  }
+
+ .ls-left-sidebar-open .cp__header {
+    margin-left: unset;
+  }
+
+  .cp__header-left-menu {
+    display: none;
+  }
 }
 
 /* overrides for pdf_viewer.css from PDF.JS web viewer */
