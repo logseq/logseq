@@ -125,8 +125,8 @@
          [:div.shortcut-links
           [:div.wrap
            [:div.item [:a.link {:href (rfe/href :all-journals) :title "Journals"} (ui/icon "calendar")]]
-           [:div.item [:a.link {:on-click #(state/pub-event! [:modal/show-cards]) :title "SRS cards"} (ui/icon "play-card")]]
-           [:div.item [:a.link {:href (rfe/href :graph) :title "Graph views"} (ui/icon "share")]]
+           [:div.item [:a.link {:on-click #(state/pub-event! [:modal/show-cards]) :title "SRS cards"} (ui/icon "versions")]]
+           [:div.item [:a.link {:href (rfe/href :graph) :title "Graph views"} (ui/icon "hierarchy")]]
            [:div.item [:a.link {:href (rfe/href :all-pages) :title "All pages"} (ui/icon "files")]]]])
 
        [:div.shortcut-cnts
