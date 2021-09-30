@@ -145,5 +145,8 @@
     (reset-redo)
     (let [updated-blocks (db-report/get-blocks tx-report)
           entity {:blocks updated-blocks :txs tx-data
-                  :editor-cursor (:editor-cursor tx-meta)}]
+                  :editor-cursor (:editor-cursor tx-meta)
+                  :outliner-op (:outliner-op tx-meta)
+                  :other-meta (:other-meta tx-meta)}]
+      (println "tx-meta: " tx-meta)
       (push-undo entity))))
