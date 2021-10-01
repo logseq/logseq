@@ -405,6 +405,11 @@
   (let [cards (map ->card blocks)
         review-records (::review-records state)
         card-index (::card-index state)
+        card-index (if (> (count cards) @card-index)
+                     card-index
+                     (do
+                       (swap! card-index dec)
+                       card-index))
         card (util/nth-safe cards @card-index)]
     (if-not card
       review-finished
