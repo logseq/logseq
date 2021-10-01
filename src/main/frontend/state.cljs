@@ -173,7 +173,9 @@
 
       :debug/write-acks {}
 
-      :encryption/graph-parsing? false})))
+      :encryption/graph-parsing? false
+
+      :favorites/dragging nil})))
 
 
 (defn sub

@@ -515,6 +515,16 @@
 
 (component-macro/register cloze-macro-name cloze-macro-show)
 
+(defn get-srs-cards-total
+  []
+  (let [repo (state/get-current-repo)
+        query-string ""
+        *query-result (query repo query-string)]
+    (when *query-result
+      (let [blocks (rum/react *query-result)
+            {:keys [result]} (query-scheduled repo blocks (tl/local-now))]
+        (count result)))))
+
 ;;; register cards macro
 (rum/defcs cards
   < rum/reactive

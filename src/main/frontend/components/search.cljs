@@ -284,11 +284,10 @@
                                  "Tip: " [:code (util/->platform-shortcut "Ctrl+Shift+p")] " to open the commands palette"]
                           :interactive     true
                           :arrow true}
-                         [:a.inline-block
-                          {:style {:margin-top 1
-                                   :margin-left 12}
+                         [:a.inline-block.fade-link
+                          {:style {:margin-left 12}
                            :on-click #(state/toggle! :ui/command-palette-open?)}
-                          (svg/icon-cmd 20)])])]
+                          (ui/icon "command" {:style {:font-size 20}})])])]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
                     (remove nil?)

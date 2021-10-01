@@ -686,10 +686,6 @@ body.is-pdf-active {
  .ls-left-sidebar-open .cp__header {
     margin-left: unset;
   }
-
-  .cp__header-left-menu {
-    display: none;
-  }
 }
 
 /* overrides for pdf_viewer.css from PDF.JS web viewer */

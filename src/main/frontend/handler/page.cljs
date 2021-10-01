@@ -19,6 +19,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
+            [frontend.handler.config :as config-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -438,26 +439,44 @@
         :else
         (rename-page-aux old-name new-name)))))
 
-(defn handle-add-page-to-contents!
+(defn favorite-page!
   [page-name]
-  (let [content (str "[[" page-name "]]")]
-    (editor-handler/api-insert-new-block!
-     content
-     {:page "Contents"})
-    ;;(notification/show! (util/format "Added to %s!" (state/get-favorites-name)) :success)
-    (editor-handler/clear-when-saved!)))
+  (when-not (string/blank? page-name)
+    (let [favorites (->
+                     (cons
+                      page-name
+                      (or (:favorites (state/get-config)) []))
+                     (distinct))]
+      (config-handler/set-config! :favorites favorites))))
 
-(defn handle-add-page-to-favorites!
+(defn unfavorite-page!
   [page-name]
-  (create!
-    page-name {:redirect? false :create-first-block? true})
-  (let [content (str "[[" page-name "]]")]
-    (editor-handler/api-insert-new-block!
-      content
-      {:page "Favorites"})
-    (notification/show! (util/format "Added to %s!" (state/get-favorites-name)) :success)
-    (editor-handler/clear-when-saved!)))
+  (when-not (string/blank? page-name)
+    (let [favorites (->> (:favorites (state/get-config))
+                         (remove #(= (string/lower-case %) (string/lower-case page-name))))]
+      (config-handler/set-config! :favorites favorites))))
 
+(defn- split-col-by-element
+  [col element]
+  (let [col (vec col)
+        idx (.indexOf col element)]
+    [(subvec col 0 (inc idx))
+     (subvec col (inc idx))]))
+
+(defn reorder-favorites!
+  [{:keys [to up?]}]
+  (let [favorites (:favorites (state/get-config))
+        from (get @state/state :favorites/dragging)]
+    (when (and from to (not= from to))
+      (let [[prev next] (split-col-by-element favorites to)
+            [prev next] (mapv #(remove (fn [e] (= from e)) %) [prev next])
+            favorites (->>
+                       (if up?
+                         (concat (drop-last prev) [from (last prev)] next)
+                         (concat prev [from] next))
+                       (remove nil?)
+                       (distinct))]
+        (config-handler/set-config! :favorites favorites)))))
 
 (defn has-more-journals?
   []

@@ -93,29 +93,6 @@
   -webkit-app-region: no-drag;
 }
 
-.cp__header-left-menu {
-  @apply px-1;
-  color: var(--ls-link-text-color);
-  opacity: .9;
-  display: flex;
-  align-items: center;
-
-  &:hover {
-    opacity: 1;
-  }
-
-  &:active {
-    opacity: .8;
-  }
-}
-
-.is-win32 .cp__header {
-  .cp__header-left-menu {
-    position: relative;
-    right: -3px;
-  }
-}
-
 .cp__header-logo {
   @apply p-2;
 }
@@ -138,10 +115,6 @@
     @apply shadow-none;
   }
 
-  /*.cp__header-left-menu {
-    display: none;
-  }*/
-
   .cp__header-logo {
     display: block;
   }
@@ -152,13 +125,11 @@
 }
 
 #repo-name {
-  vertical-align: middle;
   display: inline;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 7ch;
-  color: var(--ls-icon-color, #045591);
   height: 14px;
 }
 

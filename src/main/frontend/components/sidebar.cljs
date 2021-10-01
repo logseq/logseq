@@ -18,6 +18,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
@@ -25,7 +26,8 @@
             [frontend.util :as util]
             [reitit.frontend.easy :as rfe]
             [goog.dom :as gdom]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.extensions.srs :as srs]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -46,16 +48,14 @@
 
   [:div.nav-content-item.is-expand
    {:class class}
-   [:div.hd
+   [:div.hd.items-center.mb-2
     {:on-click (fn [^js/MouseEvent e]
                  (let [^js target (.-target e)
                        ^js parent (.closest target ".nav-content-item")]
                    (.toggle (.-classList parent) "is-expand")))}
 
-    [:strong.text-md name]
-    [:span.flex.items-center
-     (when (fn? edit-fn)
-       [:a.edit {:on-click edit-fn} (svg/icon-editor)])
+    [:a.font-medium.fade-link name]
+    [:span
      [:a.more svg/arrow-down-v2]]]
    [:div.bd child]])
 
@@ -68,12 +68,53 @@
       (when (= "Page_ref" (first link-ref))
         (second link-ref)))))
 
-(rum/defc favorite-contents
-  < rum/reactive db-mixins/query
-  [t]
+(defn- delta-y
+  [e]
+  (let [rect (.. (.. e -target) getBoundingClientRect)]
+    (- (.. e -pageY) (.. rect -top))))
 
+(defn- move-up?
+  [e]
+  (let [delta (delta-y e)]
+    (< delta 14)))
+
+(rum/defcs favorite-item <
+  (rum/local nil ::up?)
+  (rum/local nil ::dragging-over)
+  [state t name]
+  (let [up? (get state ::up?)
+        dragging-over (get state ::dragging-over)
+        target (state/sub :favorites/dragging)]
+    [:li.favorite-item
+     {:key name
+      :class (if (and target @dragging-over (not= target @dragging-over))
+               "dragging-target"
+               "")
+      :draggable true
+      :on-drag-start (fn [event]
+                       (state/set-state! :favorites/dragging name))
+      :on-drag-over (fn [e]
+                      (util/stop e)
+                      (reset! dragging-over name)
+                      (when-not (= name (get @state/state :favorites/dragging))
+                        (reset! up? (move-up? e))))
+      :on-drag-leave (fn [e]
+                       (reset! dragging-over nil))
+      :on-drop (fn [e]
+                 (page-handler/reorder-favorites! {:to name
+                                                   :up? (move-up? e)})
+                 (reset! up? nil)
+                 (reset! dragging-over nil))}
+     [:a {:href (rfe/href :page {:name name})}
+      name]]))
+
+(rum/defc favorites < rum/reactive
+  [t]
   (nav-content-item
-   (t :left-side-bar/nav-favorites)
+   [:a.flex.items-center.text-sm.font-medium.rounded-md
+    (ui/icon "star mr-1" {:style {:font-size 18}})
+    [:span.flex-1.uppercase {:style {:padding-top 2}}
+     (t :left-side-bar/nav-favorites)]]
 
    {:class "favorites"
     :edit-fn
@@ -81,25 +122,22 @@
       (rfe/push-state :page {:name "Favorites"})
       (util/stop e))}
 
-   (let [blocks (let [page-eid (:db/id (db-model/get-page "Favorites"))]
-                  (filterv
-                   #(= page-eid (:db/id (:block/parent %)))
-                   (db-model/get-page-blocks "Favorites")))]
+   (let [favorites (:favorites (state/sub-graph-config))]
+     (when (seq favorites)
+       [:ul.favorites
+        (for [name favorites]
+          (when-not (string/blank? name)
+            (favorite-item t name)))]))))
 
-     [:ul
-      (for [it blocks
-            :let [name (pick-one-ast-page-ref it)]
-            :when (not (string/blank? name))]
-        [:li {:key (:block/uuid it)}
-         [:a
-          {:href (rfe/href :page {:name name})} name]])])))
-
-(rum/defc recent-contents
+(rum/defc recent-pages
   < rum/reactive db-mixins/query
   [t]
 
   (nav-content-item
-    (t :left-side-bar/nav-recent-pages)
+   [:a.flex.items-center.text-sm.font-medium.rounded-md
+    (ui/icon "history mr-1" {:style {:font-size 18}})
+    [:span.flex-1.uppercase {:style {:padding-top 2}}
+     (t :left-side-bar/nav-recent-pages)]]
 
    {:class "recent"}
 
@@ -110,47 +148,50 @@
         [:li {:key name}
          [:a {:href (rfe/href :page {:name name})} name]])])))
 
+(rum/defc flashcards < rum/reactive
+  []
+  (let [num (srs/get-srs-cards-total)]
+    [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
+     (ui/icon "infinity mr-3" {:style {:font-size 20}})
+     [:span.flex-1 "Flashcards"]
+     (when (and num (not (zero? num)))
+       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full num])]))
+
 (rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [active? (fn [route] (= route (get-in route-match [:data :name])))
           page-active? (fn [page]
                          (= page (get-in route-match [:parameters :path :name])))
-          left-sidebar? (state/sub :ui/left-sidebar-open?)]
-
+          left-sidebar? (state/sub :ui/left-sidebar-open?)
+          white? (= "white" (state/sub :ui/theme))]
       (when left-sidebar?
-        [:nav.left-sidebar-inner
-         (nav-content-item
+        [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
+         [:div.flex.flex-col.pt-5.pb-4.overflow-y-auto
+          (when-not (util/mobile?)
+            [:div.flex.items-center.flex-shrink-0.px-4.mb-5
+             [:a {:href (rfe/href :home)}
+              (svg/logo (not white?))]
+             [:div.repos.ml-2
+              (repo/repos-dropdown nil nil)]])
+          [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-journals)}
+            (ui/icon "calendar mr-3" {:style {:font-size 20}})
+            [:span.flex-1 "Journals"]]
 
-          (t :left-side-bar/nav-shortcuts)
+           (flashcards)
 
-          nil
-          [:div.shortcut-links
-           [:div.wrap
-            [:div.item [:a.link {:href (rfe/href :all-journals) :title "Journals"} (ui/icon "calendar")]]
-            [:div.item [:a.link {:on-click #(state/pub-event! [:modal/show-cards]) :title "SRS cards"} (ui/icon "versions")]]
-            [:div.item [:a.link {:href (rfe/href :graph) :title "Graph views"} (ui/icon "hierarchy")]]
-            [:div.item [:a.link {:href (rfe/href :all-pages) :title "All pages"} (ui/icon "files")]]]])
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :graph)}
+            (ui/icon "hierarchy mr-3" {:style {:font-size 20}})
+            [:span.flex-1 "Graph view"]]
 
-         [:div.shortcut-cnts
-          (favorite-contents t)
-          (recent-contents t)]
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-pages)}
+            (ui/icon "files mr-3" {:style {:font-size 20}})
+            [:span.flex-1 "All pages"]]]
 
-         [:div.shortcut-acts
+          (favorites t)
 
-          (ui/tippy
-            {:html [:div.text-sm.font-medium
-                    "Shortcut: "
-                    [:code (util/->platform-shortcut "Ctrl + n")]]
-             :delay 500
-             :hideDelay 1
-             :interactive true
-             :arrow true}
-            (ui/button
-              (str "+ " (t :left-side-bar/new-page))
-              :intent "logseq"
-              :class "new-page"
-              :on-click #(show-new-page-modal!)))]]))))
+          (recent-pages t)]]))))
 
 (rum/defc sidebar-mobile-sidebar < rum/reactive
   [{:keys [open? close-fn route-match]}]

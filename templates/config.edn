@@ -40,12 +40,12 @@
  ;; If not specified, Logseq default opens journals page on startup
  ;; value for `:page` is name of page
  ;; Possible options for `:sidebar` are
- ;; 1. `"Contents"` to open up `Favorites` in sidebar by default
+ ;; 1. `"Contents"` to open up `Contents` in sidebar by default
  ;; 2. `page name` to open up some page in sidebar
  ;; 3. Or multiple pages in an array ["Contents" "Page A" "Page B"]
  ;; If `:sidebar` is not set, sidebar will be hidden
  ;; Example:
- ;; 1. Setup page "Changelog" as home page and "Favorites" in sidebar
+ ;; 1. Setup page "Changelog" as home page and "Contents" in sidebar
  ;; :default-home {:page "Changelog", :sidebar "Contents"}
  ;; 2. Setup page "Jun 3rd, 2021" as home page without sidebar
  ;; :default-home {:page "Jun 3rd, 2021"}

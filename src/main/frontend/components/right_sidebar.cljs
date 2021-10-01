@@ -26,15 +26,15 @@
       {:html [:div.text-sm.font-medium
               "Shortcut: "
               [:code (util/->platform-shortcut "t r")]]
-       :delay 500
+       :delay 2000
        :hideDelay 1
        :position "left"
        :interactive true
        :arrow true}
 
-      [:a.button
+      [:a.button.fade-link.toggle
        {:on-click state/toggle-sidebar-open?!}
-       (ui/icon "layout-sidebar-right" {:style {:fontSize "22px" :opacity ".6"}})])))
+       (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -225,8 +225,7 @@
         [:div.ml-4.text-sm
          [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
                                                          (state/sidebar-add-block! repo "contents" :contents nil))}
-          (or (state/get-favorites-name)
-              (t :right-side-bar/favorites))]]
+          (t :right-side-bar/contents)]]
 
         [:div.ml-4.text-sm
          [:a.cp__right-sidebar-settings-btn {:on-click (fn []
