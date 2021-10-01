@@ -119,3 +119,24 @@
 (defn markup-at-point [& [input]]
   (when-let [markup (get-markup-at-point input)]
     (assoc markup :type "markup")))
+
+(defn admonition&src-at-point [& [input]]
+  (when-let [admonition&src (thing-at-point ["#+BEGIN_" "#+END_"] input)]
+    (let [params (string/split
+                  (first (string/split-lines (:full-content admonition&src)))
+                  #"\s")]
+      (cond (coll? params)
+            (assoc admonition&src
+                   :type "source-block"
+                   :language (ffirst params)
+                   :headers (when (> (count params) 2)
+                              (last (params)))
+                   :end (+ (:end admonition&src) (count "src")))
+            :else
+            (when-let [name (-> params
+                                (string/replace "#+BEGIN_" "")
+                                string/trim)]
+              (assoc admonition&src
+                     :type "admonition-block"
+                     :name name
+                     :end (+ (:end admonition&src) (count name))))))))
