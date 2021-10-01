@@ -186,13 +186,6 @@
                                         (not (:ui/left-sidebar-open? @state/state))))})
 
 
-       (when electron-mac? (back-and-forward true))
-
-       (when (and
-              (not (mobile-util/is-native-platform?))
-              (not (util/electron?)))
-         (login logged?))
-
        (when current-repo
          (ui/tippy
           {:html [:div.text-sm.font-medium
@@ -200,20 +193,26 @@
                   ;; TODO: Pull from config so it displays custom shortcut, not just the default
                   [:code (util/->platform-shortcut "Ctrl + k")]]
            :interactive true
+           :delay [2000, 0]
            :arrow true}
           [:a.button#search-button
            {:on-click #(state/pub-event! [:go/search])}
            (ui/icon "search" {:style {:fontSize 20}})]))
 
-       (when electron-not-mac? (back-and-forward electron-mac?))
-
        [:div.flex-1.flex] ;; Spacer in the middle ------------------------------
+
+       (when (and
+              (not (mobile-util/is-native-platform?))
+              (not (util/electron?)))
+         (login logged?))
 
        (when plugin-handler/lsp-enabled?
          (plugins/hook-ui-items :toolbar))
 
        (when (not= (state/get-current-route) :home)
          (home-button))
+
+       (when electron-mac? (back-and-forward electron-mac?))
 
        (new-block-mode)
 
@@ -235,12 +234,6 @@
        (when config/publishing?
          [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
           (t :graph)])
-
-       ;; Go to Keyboard Shortcuts page
-       [:a.button
-        {:title "Keyboard shortcuts"
-         :on-click (fn [] (route-handler/redirect! {:to :shortcut-setting}))}
-        (svg/icon-cmd 20)]
 
        (dropdown-menu {:me me
                        :t t
