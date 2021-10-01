@@ -88,6 +88,10 @@
     min-width: 180px;
   }
 
+  a.item > span {
+    margin-top: 3px;
+  }
+
   .nav-content-item {
     padding: 32px 0 0 0;
 

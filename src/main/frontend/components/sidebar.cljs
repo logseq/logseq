@@ -170,9 +170,9 @@
          [:div.flex.flex-col.pt-5.pb-4.overflow-y-auto
           (when-not (util/mobile?)
             [:div.flex.items-center.flex-shrink-0.px-4.mb-5
-             [:a {:href (rfe/href :home)}
+             [:a.mr-3 {:href (rfe/href :home)}
               (svg/logo (not white?))]
-             [:div.repos.ml-2
+             [:div.repos
               (repo/repos-dropdown nil nil)]])
           [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-journals)}
