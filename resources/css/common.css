@@ -1121,6 +1121,10 @@ a.tooltip-priority {
   border-color: var(--ls-primary-text-color);
 }
 
+#help-latex .katex-html {
+  text-align: right;
+}
+
 a.page-op {
     svg {
         transform: scale(0.9);

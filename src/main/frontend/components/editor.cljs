@@ -202,57 +202,81 @@
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
-   [:button.bottom-action
-    {:on-click #(editor-handler/indent-outdent true)}
-    (ui/icon "chevrons-right")]
-   [:button.bottom-action
-    {:on-click #(editor-handler/indent-outdent false)}
-    (ui/icon "chevrons-left")]
-   [:button.bottom-action
-    {:on-click (editor-handler/move-up-down true)}
-    (ui/icon "chevron-up")]
-   [:button.bottom-action
-    {:on-click (editor-handler/move-up-down false)}
-    (ui/icon "chevron-down")]
-   [:button.bottom-action
-    {:on-click #(editor-handler/cycle-todo!)}
-    (ui/icon "checkbox")]
-   [:button.bottom-action
-    {:on-click #(do
-                  (commands/simple-insert! parent-id "\n"
-                                           {:forward-pos 1})
-                  ;; TODO: should we add this focus step to `simple-insert!`?
-                  (when-let [input (gdom/getElement parent-id)]
-                    (.focus input)))}
-    (ui/icon "arrow-back")]
-   [:button.bottom-action.text-sm
-    {:on-click #(do
-                  (commands/simple-insert!
-                  parent-id "[[]]"
-                  {:backward-pos 2
-                   :check-fn     (fn [_ _ new-pos]
-                                   (reset! commands/*slash-caret-pos new-pos)
-                                   (commands/handle-step [:editor/search-page]))})
-                  (when-let [input (gdom/getElement parent-id)]
-                    (.focus input)))}
-    "[["]
-   [:button.bottom-action.text-sm
-    {:on-click #(do
-                 (commands/simple-insert!
-                 parent-id "(())"
-                 {:backward-pos 2
-                  :check-fn     (fn [_ _ new-pos]
-                                  (reset! commands/*slash-caret-pos new-pos)
-                                  (commands/handle-step [:editor/search-block]))})
-                 (when-let [input (gdom/getElement parent-id)]
-                   (.focus input)))}
-    "(("]
-   [:button.bottom-action.text-sm
-    {:on-click #(do
-                  (commands/simple-insert! parent-id "/" {})
-                  (when-let [input (gdom/getElement parent-id)]
-                    (.focus input)))}
-    "/"]])
+   [:div.flex.justify-evenly.w-full
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (editor-handler/indent-outdent true))}
+      (ui/icon "chevrons-right")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (editor-handler/indent-outdent false))}
+      (ui/icon "chevrons-left")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        ((editor-handler/move-up-down true)))}
+      (ui/icon "chevron-up")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        ((editor-handler/move-up-down false)))}
+      (ui/icon "chevron-down")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (editor-handler/cycle-todo!))}
+      (ui/icon "checkbox")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (commands/simple-insert! parent-id "\n"
+                                                 {:forward-pos 1})
+                        ;; TODO: should we add this focus step to `simple-insert!`?
+                        (when-let [input (gdom/getElement parent-id)]
+                          (.focus input)))}
+      (ui/icon "arrow-back")]]
+    [:div
+     [:button.bottom-action.text-sm
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (commands/simple-insert!
+                         parent-id "[[]]"
+                         {:backward-pos 2
+                          :check-fn     (fn [_ _ new-pos]
+                                          (reset! commands/*slash-caret-pos new-pos)
+                                          (commands/handle-step [:editor/search-page]))})
+                        (when-let [input (gdom/getElement parent-id)]
+                          (.focus input)))}
+      "[["]]
+    [:div
+     [:button.bottom-action.text-sm
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (commands/simple-insert!
+                         parent-id "(())"
+                         {:backward-pos 2
+                          :check-fn     (fn [_ _ new-pos]
+                                          (reset! commands/*slash-caret-pos new-pos)
+                                          (commands/handle-step [:editor/search-block]))})
+                        (when-let [input (gdom/getElement parent-id)]
+                          (.focus input)))}
+      "(("]]
+    [:div
+     [:button.bottom-action.text-sm
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (commands/simple-insert! parent-id "/" {})
+                        (when-let [input (gdom/getElement parent-id)]
+                          (.focus input)))}
+      "/"]]]])
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)

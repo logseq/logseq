@@ -635,11 +635,8 @@
     (when (state/enable-journals? repo)
       (state/set-today! (date/today))
       (when (or (db/cloned? repo)
-                (and (or (config/local-db? repo)
-                         (= "local" repo))
-                     ;; config file exists
-                     (let [path (config/get-config-path)]
-                       (db/get-file path))))
+                (or (config/local-db? repo)
+                    (= "local" repo)))
         (let [title (date/today)
               today-page (string/lower-case title)
               template (state/get-default-journal-template)]

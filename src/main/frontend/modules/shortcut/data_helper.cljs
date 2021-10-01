@@ -111,10 +111,10 @@
   (let [tmp (cond
               (false? binding)
               (cond
-                (and util/mac? (= k :editor/kill-line-after))    "disabled (system default: ctrl+k)"
-                (and util/mac? (= k :editor/beginning-of-block)) "disabled (system default: ctrl+a)"
-                (and util/mac? (= k :editor/end-of-block))       "disabled (system default: ctrl+e)"
-                (and util/mac? (= k :editor/backward-kill-word)) "disabled (system default: opt+delete)"
+                (and util/mac? (= k :editor/kill-line-after))    "system default: ctrl+k"
+                (and util/mac? (= k :editor/beginning-of-block)) "system default: ctrl+a"
+                (and util/mac? (= k :editor/end-of-block))       "system default: ctrl+e"
+                (and util/mac? (= k :editor/backward-kill-word)) "system default: opt+delete"
                 :else "disabled")
 
               (string? binding)
@@ -129,6 +129,9 @@
     ;; mod key, because that's what the Mac keyboards actually say.
     (str/replace tmp "meta" "cmd")))
 
+;; Given the displayed binding, prepare it to be put back into config.edn
+(defn binding-for-storage [binding]
+  (str/replace binding "cmd" "meta"))
 
 (defn remove-shortcut [k]
   (let [repo (state/get-current-repo)
