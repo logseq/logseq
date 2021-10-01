@@ -189,9 +189,7 @@
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch.block.pr-2.whitespace-nowrap {:on-click toggle-fn
-                                                           :class (when-not (util/mobile?)
-                                                                    "fade-link")}
+             [:a#repo-switch.block.pr-2.whitespace-nowrap {:on-click toggle-fn}
               [:span
                (let [repo-name (get-repo-name current-repo)
                      repo-name (if (or (util/electron?)
@@ -199,8 +197,8 @@
                                  (last
                                   (string/split repo-name #"/"))
                                  repo-name)]
-                 [:span#repo-name {:title repo-name} repo-name])
-               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]]])
+                 [:span#repo-name.font-medium {:title repo-name} repo-name])
+               [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]])
            (mapv
             (fn [{:keys [id url]}]
               {:title (get-repo-name url)
@@ -219,7 +217,7 @@
             switch-repos)
            (cond->
             {:modal-class (util/hiccup->class
-                           "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg")
+                           "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")
              :links-footer [:div
                             (when (seq switch-repos) [:hr.my-4])
                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"

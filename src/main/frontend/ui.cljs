@@ -99,13 +99,15 @@
                                    (on-click-fn e))
                                  (close-fn)))
               child (if hr
-                      [:hr.my-1]
+                      nil
                       [:div
                        {:style {:display "flex" :flex-direction "row"}}
                        [:div {:style {:margin-right "8px"}} title]])]
-          (rum/with-key
-            (menu-link new-options child)
-            title)))
+          (if hr
+            [:hr.my-1]
+            (rum/with-key
+              (menu-link new-options child)
+              title))))
       (when links-footer links-footer)])
    opts))
 
@@ -710,6 +712,7 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
-(rum/defc icon
-  [class]
-  [:i {:class (str "ti ti-" class)}])
+(defn icon
+  ([class] (icon class nil))
+  ([class opts]
+   [:i (merge {:class (str "ti ti-" class)} opts)]))

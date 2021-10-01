@@ -2,6 +2,7 @@
   (:require [frontend.components.export :as export]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
+            [frontend.components.page :as page]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
@@ -22,20 +23,14 @@
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]))
 
-(rum/defc home-btn < rum/reactive
-  [{:keys [white? electron-mac?]}]
-  [:a.cp__header-logo
-   {:class (when electron-mac? "button")
-    :href     (rfe/href :home)
+(rum/defc home-button
+  []
+  [:a.button
+   {:href     (rfe/href :home)
     :on-click (fn []
                 (util/scroll-to-top)
                 (state/set-journals-length! 2))}
-   (if electron-mac?
-     svg/home
-     (if-let [logo (and config/publishing?
-                        (get-in (state/get-config) [:project :logo]))]
-       [:img.cp__header-logo-img {:src logo}]
-       (svg/logo (not white?))))])
+   (ui/icon "home" {:style {:fontSize 20}})])
 
 (rum/defc login
   [logged?]
@@ -62,54 +57,38 @@
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
-  [:button#left-menu.cp__header-left-menu
-   {:on-click on-click}
-   [:svg.h-6.w-6
-    {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-    [:path
-     {:d "M4 6h16M4 12h16M4 18h7"
-      :stroke-width "2"
-      :stroke-linejoin "round"
-      :stroke-linecap "round"}]]])
+  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
+
+    (ui/tippy
+      {:html [:div.text-sm.font-medium
+              "Shortcut: "
+              [:code (util/->platform-shortcut "t l")]]
+       :delay 2000
+       :hideDelay 1
+       :position "right"
+       :interactive true
+       :arrow true}
+
+      [:a#left-menu.cp__header-left-menu.button
+       {:on-click on-click
+        :style {:margin-left 10}}
+       (ui/icon "menu-2" {:style {:fontSize 20}})])))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
   (let [projects (state/sub [:me :projects])
         developer-mode? (state/sub [:ui/developer-mode?])
-        logged? (state/logged?)]
+        logged? (state/logged?)
+        page-menu (page/page-menu t)
+        page-menu-and-hr (when (seq page-menu)
+                           (concat page-menu [{:hr true}]))]
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
-       [:a.cp__right-menu-button.button
+       [:a.button
         {:on-click toggle-fn}
-        (svg/horizontal-dots nil)])
+        (ui/icon "dots" {:style {:fontSize 20}})])
      (->>
-      [(when current-repo
-         {:title (t :cards-view)
-          :options {:on-click #(state/pub-event! [:modal/show-cards])}})
-
-       (when current-repo
-         {:title (t :graph-view)
-          :options {:href (rfe/href :graph)}
-          :icon svg/graph-sm})
-
-       (when current-repo
-         {:title (t :all-pages)
-          :options {:href (rfe/href :all-pages)}
-          :icon svg/pages-sm})
-
-       (when (and current-repo (not config/publishing?))
-         {:title (t :all-files)
-          :options {:href (rfe/href :all-files)}
-          :icon svg/folder-sm})
-
-       (when (and default-home current-repo)
-         {:title (t :all-journals)
-          :options {:href (rfe/href :all-journals)}
-          :icon svg/calendar-sm})
-
-       {:hr true}
-
-       (when-not (state/publishing-enable-editing?)
+      [(when-not (state/publishing-enable-editing?)
          {:title (t :settings)
           :options {:on-click state/open-settings!}
           :icon svg/settings-sm})
@@ -123,7 +102,7 @@
           :options {:on-click #(plugins/open-select-theme!)}})
 
        (when current-repo
-         {:title (t :export)
+         {:title (t :export-graph)
           :options {:on-click #(state/set-modal! export/export)}
           :icon nil})
 
@@ -142,6 +121,7 @@
          {:title (t :sign-out)
           :options {:on-click user-handler/sign-out!}
           :icon svg/logout-sm})]
+      (concat page-menu-and-hr)
       (remove nil?))
      ;; {:links-footer (when (and (util/electron?) (not logged?))
      ;;                  [:div.px-2.py-2 (login logged?)])}
@@ -202,11 +182,9 @@
                                (js/window.apis.toggleMaxOrMinActiveWindow))))}
        (left-menu-button {:on-click (fn []
                                       (open-fn)
-                                      (state/set-left-sidebar-open! true))})
+                                      (state/set-left-sidebar-open!
+                                        (not (:ui/left-sidebar-open? @state/state))))})
 
-
-       (home-btn {:white? white? :electron-mac? electron-mac?})
-       (when electron-mac? (back-and-forward true))
 
        (when current-repo
          (ui/tippy
@@ -215,21 +193,26 @@
                   ;; TODO: Pull from config so it displays custom shortcut, not just the default
                   [:code (util/->platform-shortcut "Ctrl + k")]]
            :interactive true
+           :delay [2000, 0]
            :arrow true}
           [:a.button#search-button
            {:on-click #(state/pub-event! [:go/search])}
-           svg/search]))
-
-       (when electron-not-mac? (back-and-forward))
+           (ui/icon "search" {:style {:fontSize 20}})]))
 
        [:div.flex-1.flex] ;; Spacer in the middle ------------------------------
+
+       (when (and
+              (not (mobile-util/is-native-platform?))
+              (not (util/electron?)))
+         (login logged?))
 
        (when plugin-handler/lsp-enabled?
          (plugins/hook-ui-items :toolbar))
 
-       [:a (when refreshing?
-             [:div {:class "animate-spin-reverse"}
-              svg/refresh])]
+       (when (not= (state/get-current-route) :home)
+         (home-button))
+
+       (when electron-mac? (back-and-forward electron-mac?))
 
        (new-block-mode)
 
@@ -237,16 +220,7 @@
          [:div {:class "animate-spin-reverse"}
           svg/refresh])
 
-       (when (and
-              (not (mobile-util/is-native-platform?))
-              (not (util/electron?)))
-         (login logged?))
-
        (repo/sync-status current-repo)
-
-       (when-not (util/mobile?)
-         [:div.repos
-          (repo/repos-dropdown nil nil)])
 
        (when show-open-folder?
          [:a.text-sm.font-medium.button
@@ -261,17 +235,12 @@
          [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
           (t :graph)])
 
-       ;; Go to Keyboard Shortcuts page
-       [:a.button
-        {:title "Keyboard shortcuts"
-         :on-click (fn [] (route-handler/redirect! {:to :shortcut-setting}))}
-        (svg/icon-cmd 20)]
-
        (dropdown-menu {:me me
                        :t t
                        :current-repo current-repo
                        :default-home default-home})
 
-       (when (not (state/sub :ui/sidebar-open?)) (sidebar/toggle))
+       (when (not (state/sub :ui/sidebar-open?))
+         (sidebar/toggle))
 
        (updater-tips-new-version t)])))

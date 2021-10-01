@@ -34,6 +34,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repeated :as repeated]
@@ -373,6 +374,9 @@
       :on-mouse-down
       (fn [e]
         (util/stop e)
+        (when redirect-page-name
+          (page-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name)
+          (js/setTimeout #(model/refresh-recent-pages) 300))
         (let [create-first-block! (fn []
                                     (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
                                       (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
@@ -389,7 +393,9 @@
               (create-first-block!)
               (route-handler/redirect! {:to :page
                                         :path-params {:name redirect-page-name}}))))
-        (when (and contents-page? (state/get-left-sidebar-open?))
+        (when (and contents-page?
+                   (util/mobile?)
+                   (state/get-left-sidebar-open?))
           (ui-handler/close-left-sidebar!)))}
 
      (if (and (coll? children) (seq children))

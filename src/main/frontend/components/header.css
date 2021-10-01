@@ -13,7 +13,6 @@
   left: 0;
   right: 0;
   user-select: none;
-  transition: width 0.3s;
   line-height: 1;
 
   .it svg {
@@ -80,10 +79,6 @@
 
 .is-electron.is-mac .cp__header {
   padding-left: 78px;
-  -moz-transition: padding-left .3s ease-in;
-  -o-transition: padding-left .3s ease-in;
-  -webkit-transition: padding-left .3s ease-in;
-  transition: padding-left .3s ease-in;
 }
 
 .cp__header .navigation svg {
@@ -96,19 +91,6 @@
 
 .cp__header a, .cp__header svg {
   -webkit-app-region: no-drag;
-}
-
-.cp__header-left-menu {
-  @apply px-4 mr-4;
-  border-right: 1px solid var(--ls-secondary-background-color);
-  color: var(--ls-link-text-color);
-  display: block;
-  height: 100%;
-}
-
-.cp__header-left-menu:focus {
-  @apply outline-none;
-  background: var(--ls-menu-hover-color);
 }
 
 .cp__header-logo {
@@ -133,10 +115,6 @@
     @apply shadow-none;
   }
 
-  .cp__header-left-menu {
-    display: none;
-  }
-
   .cp__header-logo {
     display: block;
   }
@@ -147,13 +125,11 @@
 }
 
 #repo-name {
-  vertical-align: middle;
   display: inline;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 7ch;
-  color: var(--ls-icon-color, #045591);
   height: 14px;
 }
 

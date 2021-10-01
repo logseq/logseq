@@ -113,7 +113,7 @@
 (defn- new-version-downloaded-cb
   [_ & args]
   (.info logger "[update-downloaded]" args)
-  (when-let [web-contents (and @*win (. @*win -webContents))]
+  (when-let [web-contents (and @*win (. ^js @*win -webContents))]
     (.send web-contents "auto-updater-downloaded" (bean/->js args))))
 
 (defn init-auto-updater
