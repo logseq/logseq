@@ -205,32 +205,6 @@
        (p/catch (fn [err]
                   (js/console.error "error: " err)))))))
 
-(defn delete!
-  [page-name ok-handler]
-  (when page-name
-    (when-let [repo (state/get-current-repo)]
-      (let [page-name (string/lower-case page-name)
-            blocks (db/get-page-blocks page-name)
-            tx-data (mapv
-                     (fn [block]
-                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                     blocks)]
-        (db/transact! tx-data)
-
-        (delete-file! repo page-name)
-
-        ;; if other page alias this pagename,
-        ;; then just remove some attrs of this entity instead of retractEntity
-        (if (model/get-alias-source-page (state/get-current-repo) page-name)
-          (when-let [id (:db/id (db/entity [:block/name page-name]))]
-            (let [txs (mapv (fn [attribute]
-                              [:db/retract id attribute])
-                            db-schema/retract-page-attributes)]
-              (db/transact! txs)))
-          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
-
-        (ok-handler)))))
-
 (defn- compute-new-file-path
   [old-path new-page-name]
   (let [result (string/split old-path "/")
@@ -345,6 +319,53 @@
           (p/let [_ (rename-file-aux! repo old-path new-path)]
             (println "Renamed " old-path " to " new-path)))))))
 
+(defn favorite-page!
+  [page-name]
+  (when-not (string/blank? page-name)
+    (let [favorites (->
+                     (cons
+                      page-name
+                      (or (:favorites (state/get-config)) []))
+                     (distinct)
+                     (vec))]
+      (config-handler/set-config! :favorites favorites))))
+
+(defn unfavorite-page!
+  [page-name]
+  (when-not (string/blank? page-name)
+    (let [favorites (->> (:favorites (state/get-config))
+                         (remove #(= (string/lower-case %) (string/lower-case page-name)))
+                         (vec))]
+      (config-handler/set-config! :favorites favorites))))
+
+(defn delete!
+  [page-name ok-handler]
+  (when page-name
+    (when-let [repo (state/get-current-repo)]
+      (let [page-name (string/lower-case page-name)
+            blocks (db/get-page-blocks page-name)
+            tx-data (mapv
+                     (fn [block]
+                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                     blocks)]
+        (db/transact! tx-data)
+
+        (delete-file! repo page-name)
+
+        ;; if other page alias this pagename,
+        ;; then just remove some attrs of this entity instead of retractEntity
+        (if (model/get-alias-source-page (state/get-current-repo) page-name)
+          (when-let [id (:db/id (db/entity [:block/name page-name]))]
+            (let [txs (mapv (fn [attribute]
+                              [:db/retract id attribute])
+                            db-schema/retract-page-attributes)]
+              (db/transact! txs)))
+          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
+
+        (unfavorite-page! page-name)
+
+        (ok-handler)))))
+
 (defn- rename-page-aux [old-name new-name]
   (when-let [repo (state/get-current-repo)]
     (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
@@ -418,6 +439,9 @@
 
       (repo-handler/push-if-auto-enabled! repo)
 
+      (p/let [_ (unfavorite-page! old-name)]
+        (favorite-page! new-name))
+
       (ui-handler/re-render-root!))))
 
 (defn rename!
@@ -438,23 +462,6 @@
 
         :else
         (rename-page-aux old-name new-name)))))
-
-(defn favorite-page!
-  [page-name]
-  (when-not (string/blank? page-name)
-    (let [favorites (->
-                     (cons
-                      page-name
-                      (or (:favorites (state/get-config)) []))
-                     (distinct))]
-      (config-handler/set-config! :favorites favorites))))
-
-(defn unfavorite-page!
-  [page-name]
-  (when-not (string/blank? page-name)
-    (let [favorites (->> (:favorites (state/get-config))
-                         (remove #(= (string/lower-case %) (string/lower-case page-name))))]
-      (config-handler/set-config! :favorites favorites))))
 
 (defn- split-col-by-element
   [col element]
