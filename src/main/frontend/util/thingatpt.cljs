@@ -120,7 +120,7 @@
   (when-let [markup (get-markup-at-point input)]
     (assoc markup :type "markup")))
 
-(defn admonition&src-at-point [& [input]]
+(defn- org-admonition&src-at-point [& [input]]
   (when-let [admonition&src (thing-at-point ["#+BEGIN_" "#+END_"] input)]
     (let [params (string/split
                   (first (string/split-lines (:full-content admonition&src)))
@@ -140,3 +140,22 @@
                      :type "admonition-block"
                      :name name
                      :end (+ (:end admonition&src) (count name))))))))
+
+(defn- markdown-src-at-point [& [input]]
+  (when-let [markdown-src (thing-at-point ["```" "```"] input)]
+    (let [language (-> (:full-content markdown-src)
+                       string/split-lines
+                       first
+                       (string/replace "```" "")
+                       string/trim)]
+      (when-not (string/blank? language)
+            (assoc markdown-src
+                   :type "source-block"
+                   :language language
+                   :headers nil)))))
+
+(defn admonition&src-at-point [& [input]]
+  (or (org-admonition&src-at-point input)
+      (markdown-src-at-point input)))
+
+
