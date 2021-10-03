@@ -15,7 +15,6 @@
             [goog.object :as gobj]
             [goog.string :as gstring]
             [goog.userAgent]
-            ["path" :as nodePath]
             [promesa.core :as p]))
   (:require
    [clojure.core.async :as async]
@@ -33,7 +32,7 @@
      (-pr-writer [sym writer _]
        (-write writer (str "\"" (.toString sym) "\"")))))
 
-#?(:cljs (defonce ^js node-path nodePath))
+#?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defn app-scroll-container-node []
            (gdom/getElement "main-container")))
 

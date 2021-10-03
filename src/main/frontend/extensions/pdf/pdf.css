@@ -673,6 +673,7 @@ body.is-pdf-active {
 
   #sidebar-nav-wrapper {
     border: none !important;
+    display: none;
   }
 
   #head {
