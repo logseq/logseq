@@ -264,11 +264,7 @@
     :editor/redo
     {:desc    "Redo"
      :binding ["shift+mod+z" "mod+y"]
-     :fn      history/redo!}
-    :editor/new-page
-    {:desc    "New page"
-     :binding "mod+n"
-     :fn      #(state/pub-event! [:modal/show-new-page-modal])}}
+     :fn      history/redo!}}
 
    :shortcut.handler/global-prevent-default
    ^{:before m/prevent-default-behavior}

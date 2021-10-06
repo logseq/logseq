@@ -9,7 +9,6 @@
             [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
-            [frontend.components.modals :refer [show-new-page-modal!]]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]

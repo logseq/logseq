@@ -302,10 +302,6 @@
                                   (:db/id page)
                                   :page-presentation
                                   {:page page}))}}
-          (when (and (not contents?)
-                     (not journal?))
-            {:title   (t :page/rename)
-             :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
 
           (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
             [{:title   (t :page/open-in-finder)
@@ -360,6 +356,53 @@
          (flatten)
          (remove nil?))))))
 
+(rum/defcs page-title <
+  {:init (fn [state]
+           (assoc state ::title-value (atom (second (:rum/args state)))))}
+  (rum/local false ::edit?)
+  [state page-name title format fmt-journal?]
+  (let [*title-value (get state ::title-value)
+        *edit? (get state ::edit?)
+        repo (state/get-current-repo)
+        title (if (and (string/includes? title "[[")
+                       (string/includes? title "]]"))
+                (let [ast (mldoc/->edn title (mldoc/default-config format))]
+                  (block/markup-element-cp {} (ffirst ast)))
+                title)
+        hls-file? (pdf-assets/hls-file? title)
+        title (if hls-file?
+                (pdf-assets/human-hls-filename-display title)
+                (if fmt-journal? (date/journal-title->custom-format title) title))]
+    (if @*edit?
+      [:h1.title {:style {:margin-left -2}}
+       [:input.w-full
+        {:type          "text"
+         :auto-focus    true
+         :style         {:outline "none"
+                         :font-weight 600}
+         :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+         :default-value         @*title-value
+         :on-change     (fn [e]
+                          (let [value (util/evalue e)]
+                            (when-not (string/blank? value)
+                              (reset! *title-value value))))
+         :on-blur       (fn [e]
+                          (page-handler/rename! (or title page-name) @*title-value)
+                          (reset! *edit? false))}]]
+      [:a.page-title {:on-click (fn [e]
+                                 (.preventDefault e)
+                                 (if (gobj/get e "shiftKey")
+                                   (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                                     (state/sidebar-add-block!
+                                      repo
+                                      (:db/id page)
+                                      :page
+                                      {:page page}))
+                                   (when (and (not hls-file?) (not fmt-journal?))
+                                     (reset! *edit? true))))}
+      [:h1.title {:style {:margin-left -2}}
+       title]])))
+
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
   [state {:keys [repo page-name preview?] :as option}]
@@ -411,28 +454,7 @@
                        (not block?))
               [:div.flex.flex-row.space-between
                [:div.flex-1.flex-row
-                [:a.page-title {:on-click (fn [e]
-                                            (.preventDefault e)
-                                            (when (gobj/get e "shiftKey")
-                                              (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                                                (state/sidebar-add-block!
-                                                 repo
-                                                 (:db/id page)
-                                                 :page
-                                                 {:page page}))))}
-                 [:h1.title {:style {:margin-left -2}}
-                  (let [title (if page-original-name
-                                (if (and (string/includes? page-original-name "[[")
-                                         (string/includes? page-original-name "]]"))
-                                  (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
-                                    (block/markup-element-cp {} (ffirst ast)))
-                                  page-original-name)
-                                (or
-                                  page-name
-                                  path-page-name))]
-                    (if (pdf-assets/hls-file? title)
-                      (pdf-assets/human-hls-filename-display title)
-                      (if fmt-journal? (date/journal-title->custom-format title) title)))]]]
+                (page-title page-name title format fmt-journal?)]
                (when (not config/publishing?)
                  [:div.flex.flex-row
                   (when plugin-handler/lsp-enabled?

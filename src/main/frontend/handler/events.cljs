@@ -6,7 +6,6 @@
             [frontend.components.diff :as diff]
             [frontend.components.plugins :as plugin]
             [frontend.components.encryption :as encryption]
-            [frontend.components.modals :as modals]
             [frontend.components.git :as git-component]
             [frontend.components.shell :as shell]
             [frontend.components.search :as search]
@@ -53,9 +52,6 @@
 
 (defmethod handle :repo/install-error [[_ repo-url title]]
   (show-install-error! repo-url title))
-
-(defmethod handle :modal/show-new-page-modal []
-  (modals/show-new-page-modal!))
 
 (defmethod handle :modal/encryption-setup-dialog [[_ repo-url close-fn]]
   (state/set-modal!
