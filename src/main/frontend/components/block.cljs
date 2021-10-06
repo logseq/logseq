@@ -577,10 +577,10 @@
       :on-mouse-down (fn [e] (.stopPropagation e))}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
-                                      :parent (:block config)
                                       :id (str id)
                                       :embed-id id
                                       :embed? true
+                                      :embed-parent (:block config)
                                       :ref? false))]]))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
@@ -1342,7 +1342,7 @@
                    config (cond->
                            (-> config
                                (assoc :block/uuid (:block/uuid child))
-                               (dissoc :breadcrumb-show?))
+                               (dissoc :breadcrumb-show? :embed-parent))
                             ref?
                             (assoc :ref-child? true))]
                (rum/with-key (block-container config child)
@@ -1855,14 +1855,13 @@
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (block-content config block edit-input-id block-id slide?)]
-       [:div.flex.flex-row
+       [:div.flex.flex-row.items-center
         (when (and (:embed? config)
-                   (not (:page-embed? config))
-                   (:parent config))
+                   (:embed-parent config))
           [:a.opacity-30.hover:opacity-100.svg-small.inline
            {:on-mouse-down (fn [e]
                              (util/stop e)
-                             (when-let [block (:parent config)]
+                             (when-let [block (:embed-parent config)]
                                (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
            svg/edit])
 
