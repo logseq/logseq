@@ -258,7 +258,7 @@
 
        ;; desktop left sidebar layout
        (when-not mobile?
-         [:div#sidebar-nav-wrapper.cp__sidebar-left-layout.overflow-y-scroll.h-full
+         [:div#sidebar-nav-wrapper.cp__sidebar-left-layout.overflow-y-auto.h-full
           {:class (util/classnames [{:is-open left-sidebar-open?}])}
 
           ;; sidebar contents

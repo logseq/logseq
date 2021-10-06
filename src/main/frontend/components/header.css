@@ -125,7 +125,7 @@
 }
 
 #repo-name {
-  display: inline;
+  display: table-cell;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

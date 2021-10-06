@@ -356,11 +356,8 @@
         blocks-count (or (db/blocks-count) 0)
         search-mode (state/sub :search/mode)
         timeout (cond
-                  (util/electron?)
-                  180
-
                   (> blocks-count 2000)
-                  500
+                  400
 
                   :else
                   300)
