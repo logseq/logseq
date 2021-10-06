@@ -182,7 +182,7 @@
           white? (= "white" (state/sub :ui/theme))]
       (when left-sidebar?
         [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
-         [:div.flex.flex-col.pb-4.overflow-y-auto {:style {:padding-top "0.75rem"}}
+         [:div.flex.flex-col.pb-4 {:style {:padding-top "0.75rem"}}
           (when-not (util/mobile?)
             [:div.flex.items-center.flex-shrink-0.px-4.mb-5
              [:a.mr-3 {:href (rfe/href :home)}
@@ -258,7 +258,7 @@
 
        ;; desktop left sidebar layout
        (when-not mobile?
-         [:div#sidebar-nav-wrapper.cp__sidebar-left-layout
+         [:div#sidebar-nav-wrapper.cp__sidebar-left-layout.overflow-y-scroll.h-full
           {:class (util/classnames [{:is-open left-sidebar-open?}])}
 
           ;; sidebar contents

@@ -1855,7 +1855,7 @@
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (block-content config block edit-input-id block-id slide?)]
-       [:div.flex.flex-row.items-center
+       [:div.flex.flex-row
         (when (and (:embed? config)
                    (:embed-parent config))
           [:a.opacity-30.hover:opacity-100.svg-small.inline

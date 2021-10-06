@@ -357,8 +357,8 @@
          (remove nil?))))))
 
 (rum/defcs page-title <
-  {:init (fn [state]
-           (assoc state ::title-value (atom (second (:rum/args state)))))}
+  {:will-update (fn [state]
+                  (assoc state ::title-value (atom (second (:rum/args state)))))}
   (rum/local false ::edit?)
   [state page-name title format fmt-journal?]
   (let [*title-value (get state ::title-value)
@@ -388,7 +388,8 @@
                               (reset! *title-value value))))
          :on-blur       (fn [e]
                           (page-handler/rename! (or title page-name) @*title-value)
-                          (reset! *edit? false))}]]
+                          (reset! *edit? false)
+                          (reset! *title-value ""))}]]
       [:a.page-title {:on-click (fn [e]
                                  (.preventDefault e)
                                  (if (gobj/get e "shiftKey")
@@ -447,7 +448,8 @@
                       {:data-page-tags (text/build-data-value page-names)})
                     {})
 
-             {:class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+                  {:key path-page-name
+                   :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
            [:div.relative
             (when (and (not sidebar?)

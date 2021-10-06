@@ -200,7 +200,8 @@
                               (route/redirect! {:to :page
                                                 :path-params {:name page}
                                                 :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))))
-                        nil))
+                        nil)
+                      (state/close-modal!))
          :on-shift-chosen (fn [{:keys [type data alias]}]
                             (search-handler/add-search-to-recent! repo search-q)
                             (case type
@@ -229,7 +230,8 @@
                               (route/redirect! {:to :file
                                                 :path-params {:path data}})
 
-                              nil))
+                              nil)
+                            (state/close-modal!))
          :item-render (fn [{:keys [type data alias]}]
                         (let [search-mode (state/get-search-mode)]
                           [:div {:class "py-2"} (case type
