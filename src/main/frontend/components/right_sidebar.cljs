@@ -130,7 +130,8 @@
    (close nil on-close))
   ([class on-close]
    [:a.close.opacity-50.hover:opacity-100.flex.items-center
-    (cond-> {:on-click on-close}
+    (cond-> {:on-click on-close
+             :style {:margin-right -4}}
       class
       (assoc :class class))
     svg/close]))
