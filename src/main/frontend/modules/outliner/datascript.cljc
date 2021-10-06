@@ -7,8 +7,8 @@
                      [frontend.modules.editor.undo-redo :as undo-redo]
                      [frontend.state :as state]
                      [frontend.config :as config]
-                     [lambdaisland.glogi :as log])))
-
+                     [lambdaisland.glogi :as log]
+                     [frontend.util :as util])))
 
 #?(:cljs
    (defn new-outliner-txs-state [] (atom [])))
@@ -36,7 +36,7 @@
 #?(:cljs
    (defn transact!
      [txs opts]
-     ;; (util/pprint txs)
+     (util/pprint txs)
      (when (and (seq txs)
                 (not (:skip-transact? opts)))
        (try

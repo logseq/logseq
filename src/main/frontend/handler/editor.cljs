@@ -542,7 +542,7 @@
         new-m {:block/uuid (db/new-block-id)
                :block/content fst-block-text}
         prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format
-                                                  :block/page :block/file :block/journal?]) new-m)
+                                                  :block/page :block/journal?]) new-m)
                        (wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))
         _ (outliner-core/save-node (outliner-core/block current-block))
@@ -575,7 +575,7 @@
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
         next-block (-> (merge (select-keys block [:block/parent :block/left :block/format
-                                                  :block/page :block/file :block/journal?]) new-m)
+                                                  :block/page :block/journal?]) new-m)
                        (wrap-parse-block))
         sibling? (when block-self? false)
         {:keys [sibling? blocks]} (profile
@@ -683,7 +683,7 @@
               content (if (seq properties)
                         (property/insert-properties format content properties)
                         content)
-              new-block (-> (select-keys block [:block/page :block/file :block/journal?
+              new-block (-> (select-keys block [:block/page :block/journal?
                                                 :block/journal-day])
                             (assoc :block/content content
                                    :block/format format))
@@ -693,10 +693,7 @@
                                  (:db/id (:block/page new-block))))
               new-block (-> new-block
                             (wrap-parse-block)
-                            (assoc :block/uuid (or custom-uuid (db/new-block-id))))
-              new-block (if-let [db-id (:db/id (:block/file block))]
-                          (assoc new-block :block/file db-id)
-                          new-block)]
+                            (assoc :block/uuid (or custom-uuid (db/new-block-id))))]
           (let [[block-m sibling?] (cond
                                      before?
                                      (let [block (db/pull (:db/id (:block/left block)))
@@ -1558,12 +1555,7 @@
 ;; assets/journals_2021_02_03_1612350230540_0.png
 (defn resolve-relative-path
   [file-path]
-  (if-let [current-file (or (some-> (state/get-edit-block)
-                                    :block/file
-                                    :db/id
-                                    (db/entity)
-                                    :file/path)
-
+  (if-let [current-file (or (db-model/get-block-file-path (state/get-edit-block))
                             ;; fix dummy file path of page
                             (and (util/electron?)
                                  (util/node-path.join
@@ -2095,7 +2087,7 @@
             editing-block))))
 
 (defn- paste-block-tree-at-point-edit-aux
-  [uuid file page exclude-properties format content-update-fn]
+  [uuid page exclude-properties format content-update-fn]
   (fn [block]
     (outliner-core/block
      (let [[new-content new-title]
@@ -2123,8 +2115,7 @@
                             :block/uuid
                             :db/id
                             :block/left
-                            :block/parent
-                            :block/file)
+                            :block/parent)
                     {:block/uuid uuid
                      :block/page (select-keys page [:db/id])
                      :block/format format
@@ -2136,9 +2127,7 @@
                      :block/title new-title
                      :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
                                            (remove nil?))})]
-       (if file
-         (assoc m :block/file (select-keys file [:db/id]))
-         m)))))
+       m))))
 
 (defn paste-block-vec-tree-at-target
   [tree exclude-properties {:keys [content-update-fn
@@ -2148,7 +2137,6 @@
   (let [repo (state/get-current-repo)
         page (or page-block
                  (:block/page (db/entity (:db/id (state/get-edit-block)))))
-        file (:block/file page)
         [target-block sibling? delete-editing-block? editing-block]
         ((or get-pos-fn get-block-tree-insert-pos-at-point))]
     (when target-block
@@ -2167,7 +2155,7 @@
                      (recur (zip/next (zip/edit
                                        loc
                                        (paste-block-tree-at-point-edit-aux
-                                        uuid file page exclude-properties format content-update-fn)))))))))
+                                        uuid page exclude-properties format content-update-fn)))))))))
             _ (when editing-block
                 (let [editing-block (outliner-core/block editing-block)]
                   (outliner-core/save-node editing-block)))

@@ -183,23 +183,9 @@
                :where
                [?file :file/path ?path]
                [(?pred $ ?path)]
-               [?block :block/file ?file]]
+               [?p :block/file ?file]
+               [?block :block/page ?p]]
              (conn/get-conn repo-url) pred)
-        db-utils/seq-flatten)))
-
-(defn get-files-non-page-blocks
-  [repo-url paths]
-  (let [paths (set paths)
-        pred (fn [_db e]
-               (contains? paths e))]
-    (-> (d/q '[:find ?block
-               :in $ ?pred
-               :where
-               [?file :file/path ?path]
-               [(?pred $ ?path)]
-               [?block :block/file ?file]
-               [(missing? $ ?block :block/name)]]
-          (conn/get-conn repo-url) pred)
         db-utils/seq-flatten)))
 
 (defn get-file-blocks
@@ -208,7 +194,8 @@
              :in $ ?path
              :where
              [?file :file/path ?path]
-             [?block :block/file ?file]]
+             [?p :block/file ?file]
+             [?block :block/page ?p]]
            (conn/get-conn repo-url) path)
       db-utils/seq-flatten))
 
@@ -403,37 +390,32 @@
     (:block/properties page)))
 
 ;; FIXME: alert
-(defn- keep-only-one-file
-  [blocks]
-  (filter (fn [b] (= (:block/file b) (:block/file (first blocks)))) blocks))
-
 (defn sort-by-left
   ([blocks parent]
    (sort-by-left blocks parent true))
   ([blocks parent check?]
-   (let [blocks (keep-only-one-file blocks)]
-     (when check?
-       (when (not= (count blocks) (count (set (map :block/left blocks))))
-         (let [duplicates (->> (map (comp :db/id :block/left) blocks)
-                               frequencies
-                               (filter (fn [[_k v]] (> v 1)))
-                               (map (fn [[k _v]]
-                                      (let [left (db-utils/pull k)]
-                                        {:left left
-                                         :duplicates (->>
-                                                      (filter (fn [block]
-                                                                (= k (:db/id (:block/left block))))
-                                                              blocks)
-                                                      (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
-           (util/pprint duplicates)))
-       (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
+   (when check?
+     (when (not= (count blocks) (count (set (map :block/left blocks))))
+       (let [duplicates (->> (map (comp :db/id :block/left) blocks)
+                             frequencies
+                             (filter (fn [[_k v]] (> v 1)))
+                             (map (fn [[k _v]]
+                                    (let [left (db-utils/pull k)]
+                                      {:left left
+                                       :duplicates (->>
+                                                    (filter (fn [block]
+                                                              (= k (:db/id (:block/left block))))
+                                                            blocks)
+                                                    (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
+         (util/pprint duplicates)))
+     (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
 
-    (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
-      (loop [block parent
-             result []]
-        (if-let [next (get left->blocks (:db/id block))]
-          (recur next (conj result next))
-          (vec result)))))))
+   (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
+     (loop [block parent
+            result []]
+       (if-let [next (get left->blocks (:db/id block))]
+         (recur next (conj result next))
+         (vec result))))))
 
 (defn- sort-by-left-recursive
   [form]
@@ -688,6 +670,11 @@
   (some-> (or (db-utils/entity [:block/name page-name])
               (db-utils/entity [:block/original-name page-name]))
           :block/file))
+
+(defn get-block-file-path
+  [block]
+  (when-let [page-id (:db/id (:block/page block))]
+    (:file/path (:block/file (db-utils/entity page-id)))))
 
 (defn get-file-page-id
   [file-path]
@@ -1256,8 +1243,7 @@
 (defn delete-blocks
   [repo-url files delete-page?]
   (when (seq files)
-    (let [f (if delete-page? get-files-blocks get-files-non-page-blocks)
-          blocks (f repo-url files)]
+    (let [blocks (get-files-blocks repo-url files)]
       (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks))))
 
 (defn delete-files

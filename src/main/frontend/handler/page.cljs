@@ -47,8 +47,11 @@
 
 (defn get-page-file-path
   ([] (get-page-file-path (state/get-current-page)))
-  ([page-name] (when-let [page (db/entity [:block/name page-name])]
-                 (:file/path (:block/file page)))))
+  ([page-name]
+   (when page-name
+     (let [page-name (string/lower-case page-name)]
+       (when-let [page (db/entity [:block/name page-name])]
+        (:file/path (:block/file page)))))))
 
 (defn- build-title [page]
   (let [original-name (:block/original-name page)]
@@ -155,7 +158,6 @@
                                       (str (name key) ":: " value))
                      :block/format format
                      :block/properties {key value}
-                     :block/file (:block/file page)
                      :block/pre-block? true}]
           (outliner-core/insert-node (outliner-core/block block)
                                      (outliner-core/block page)
@@ -505,10 +507,7 @@
 
 (defn get-page-ref-text
   [page]
-  (let [edit-block-file-path (some-> (state/get-edit-block)
-                                     (get-in [:block/file :db/id])
-                                     db/entity
-                                     :file/path)
+  (let [edit-block-file-path (model/get-block-file-path (state/get-edit-block))
         page-name (string/lower-case page)]
     (if (and edit-block-file-path
              (state/org-mode-file-link? (state/get-current-repo)))

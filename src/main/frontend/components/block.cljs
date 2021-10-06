@@ -2788,11 +2788,7 @@
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:class (when doc-mode? "document-mode")
-        :style {:margin-left (cond
-                               sidebar?
-                               0
-                               :else
-                               -10)}}
+        :style {:margin-left (if sidebar? 0 -10)}}
        (lazy-blocks config blocks)])))
 
 ;; headers to hiccup
