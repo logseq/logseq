@@ -26,6 +26,7 @@
             [frontend.util :as util]
             [reitit.frontend.easy :as rfe]
             [goog.dom :as gdom]
+            [goog.object :as gobj]
             [rum.core :as rum]
             [frontend.extensions.srs :as srs]))
 
@@ -78,6 +79,22 @@
   (let [delta (delta-y e)]
     (< delta 14)))
 
+(rum/defc page-name
+  [name]
+  [:a {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (let [name (string/lower-case name)]
+                          (if (gobj/get e "shiftKey")
+                           (when-let [page-entity (db/entity [:block/name name])]
+                             (state/sidebar-add-block!
+                              (state/get-current-repo)
+                              (:db/id page-entity)
+                              :page
+                              {:page page-entity}))
+                           (route-handler/redirect! {:to :page
+                                                     :path-params {:name name}}))))}
+   name])
+
 (rum/defcs favorite-item <
   (rum/local nil ::up?)
   (rum/local nil ::dragging-over)
@@ -105,8 +122,7 @@
                                                    :up? (move-up? e)})
                  (reset! up? nil)
                  (reset! dragging-over nil))}
-     [:a {:href (rfe/href :page {:name name})}
-      name]]))
+     (page-name name)]))
 
 (rum/defc favorites < rum/reactive
   [t]
@@ -146,7 +162,7 @@
      [:ul
       (for [name pages]
         [:li {:key name}
-         [:a {:href (rfe/href :page {:name name})} name]])])))
+         (page-name name)])])))
 
 (rum/defc flashcards < rum/reactive
   []

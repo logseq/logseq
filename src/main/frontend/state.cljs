@@ -746,7 +746,6 @@
     (update-state! :sidebar/blocks (fn [blocks]
                                      (->> (remove #(= (second %) db-id) blocks)
                                           (cons [repo db-id block-type block-data])
-                                        ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
     (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
