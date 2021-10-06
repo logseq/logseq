@@ -125,15 +125,9 @@
       (let [file-path (config/get-file-path repo path)
             page-blocks (db/get-page-blocks-no-cache (:block/name page))
             file {:file/path file-path}
-            tx (->>
-                (concat
-                 [{:file/path file-path}
-                  {:block/name (:block/name page)
-                   :block/file file}]
-                 (map (fn [block] {:db/id (:db/id block)
-                                  :block/file file})
-                   page-blocks))
-                (remove nil?))]
+            tx [{:file/path file-path}
+                {:block/name (:block/name page)
+                 :block/file file}]]
         (db/transact! tx)
         (when ok-handler (ok-handler))))))
 

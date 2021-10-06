@@ -123,6 +123,13 @@
            (update item :block/refs keep-block-ref-f))
       data)))
 
+(defn- page-exists-in-another-file
+  [page file]
+  (when-let [page-name (:block/name page)]
+    (let [current-file (:file/path (db/get-page-file page-name))]
+      (when (not= file current-file)
+       current-file))))
+
 (defn reset-file!
   [repo-url file content]
   (let [electron-local-repo? (and (util/electron?)
@@ -148,8 +155,11 @@
           file-content [{:file/path file}]]
       (p/let [tx (if (contains? config/mldoc-support-formats format)
                    (p/let [delete-blocks (db/delete-file-blocks! repo-url file)
-                           [pages block-ids blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
+                           [pages blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
+                           _ (when-let [current-file (page-exists-in-another-file (first pages) file)]
+                               (p/rejected (str "Page already exists with another file: " current-file)))
                            blocks (remove-non-exists-refs! blocks)
+                           block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
                            pages (extract-handler/with-ref-pages pages blocks)]
                      (concat file-content delete-blocks pages block-ids blocks))
                    file-content)]
@@ -190,10 +200,7 @@
                          (restore-config! repo true))
                        (when (= path (config/get-custom-css-path repo))
                          (ui-handler/add-style-if-exists!))
-                       (when re-render-root? (ui-handler/re-render-root!))
-                       ;; (when (and add-history? original-content)
-                       ;;   (history/add-history! repo [[path original-content content]]))
-                       )
+                       (when re-render-root? (ui-handler/re-render-root!)))
                      (fn [error]
                        (println "Write file failed, path: " path ", content: " content)
                        (log/error :write/failed error))))))

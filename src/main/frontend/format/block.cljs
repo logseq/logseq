@@ -624,7 +624,7 @@
                            :pre-block? true
                            :unordered true}
                           (block-keywordize)))
-                       (select-keys first-block [:block/file :block/format :block/page]))
+                       (select-keys first-block [:block/format :block/page]))
                       blocks)
                      blocks)
             blocks (map (fn [block] (dissoc block :block/anchor)) blocks)]
