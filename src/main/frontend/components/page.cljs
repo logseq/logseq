@@ -443,7 +443,7 @@
                (let [config {:id "block-parent"
                              :block? true}]
                  [:div.mb-4
-                  (block/block-parents config repo block-id format true)]))
+                  (block/block-parents config repo block-id format {})]))
 
              ;; blocks
              (let [page (if block?

@@ -688,7 +688,8 @@
                                         {:style {:width      735
                                                  :text-align "left"
                                                  :max-height 600}}
-                                        [(block-parents config repo block-id (:block/format config))
+                                        [(block-parents config repo block-id (:block/format config)
+                                                        {:indent? true})
                                          (blocks-container
                                           (db/get-block-and-children repo block-id)
                                           (assoc config :id (str id) :preview? true))]])
@@ -1933,31 +1934,37 @@
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
 (defn block-parents
-  ([config repo block-id format]
-   (block-parents config repo block-id format true))
-  ([config repo block-id format show-page?]
-   (let [parents (db/get-block-parents repo block-id 3)
-         page (db/get-block-page repo block-id)
-         page-name (:block/name page)
-         page-original-name (:block/original-name page)
-         show? (or (seq parents) show-page? page-name)]
-     (when show?
-       (let [page-name-props (when show-page?
-                               [:page
-                                (rfe/href :page {:name page-name})
-                                (or page-original-name page-name)])
-             parents-props (doall
-                            (for [{:block/keys [uuid title name] :as block} parents]
-                              (when-not name ; not page
-                                [block
-                                 (rfe/href :page {:name uuid})
-                                 (->elem :span (map-inline config title))])))
-             breadcrumb (->> (into [] parents-props)
-                             (concat [page-name-props])
-                             (filterv identity)
-                             (map (fn [[block href label]] (breadcrumb-fragment config block href label)))
-                             (interpose (breadcrumb-separator)))]
-         [:div.block-parents.flex-row.flex-1 breadcrumb])))))
+  [config repo block-id format {:keys [show-page? indent?]
+                                :or {show-page? true}}]
+  (let [parents (db/get-block-parents repo block-id 3)
+        page (db/get-block-page repo block-id)
+        page-name (:block/name page)
+        page-original-name (:block/original-name page)
+        show? (or (seq parents) show-page? page-name)]
+    (when show?
+      (let [page-name-props (when show-page?
+                              [:page
+                               (rfe/href :page {:name page-name})
+                               (or page-original-name page-name)])
+            parents-props (doall
+                           (for [{:block/keys [uuid title name] :as block} parents]
+                             (when-not name ; not page
+                               [block
+                                (rfe/href :page {:name uuid})
+                                (->elem :span (map-inline config title))])))
+            breadcrumb (->> (into [] parents-props)
+                            (concat [page-name-props])
+                            (filterv identity)
+                            (map (fn [[block href label]] (breadcrumb-fragment config block href label)))
+                            (interpose (breadcrumb-separator)))]
+        [:div.block-parents.flex-row.flex-1
+         {:class (when (seq breadcrumb)
+                   (str (util/hiccup->class ".opacity-70.hover:opacity-100")
+                        (when-not (:search? config)
+                          " my-2")
+                        (when indent?
+                          " ml-4")))}
+         breadcrumb]))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -2143,8 +2150,8 @@
        (assoc :data-query true))
 
      (when (and ref? breadcrumb-show?)
-       (when-let [comp (block-parents config repo uuid format false)]
-         [:div.my-2.opacity-70.ml-4.hover:opacity-100 comp]))
+       (block-parents config repo uuid format {:show-page? false
+                                               :indent? true}))
 
      ;; only render this for the first block in each container
      (when top?
@@ -2804,10 +2811,9 @@
                 (let [block (first blocks)]
                   [:div
                    (when (:breadcrumb-show? config)
-                     [:div.my-2.opacity-70.ml-4.hover:opacity-100
-                      (block-parents config (state/get-current-repo) (:block/uuid block)
-                                     (:block/format block)
-                                     false)])
+                     (block-parents config (state/get-current-repo) (:block/uuid block)
+                                    (:block/format block)
+                                    {:show-page? false}))
                    (blocks-container blocks (assoc config :breadcrumb-show? false))]))
               {})])))]
 
