@@ -366,7 +366,7 @@
 (declare page-reference)
 
 (rum/defc page-inner
-  [config page-name href redirect-page-name page-entity contents-page? children html-export? label]
+  [config page-name-in-block page-name href redirect-page-name page-entity contents-page? children html-export? label]
   (let [tag? (:tag? config)]
     [:a
      {:class (if tag? "tag" "page-ref")
@@ -415,7 +415,10 @@
          (->elem :span (map-inline config label))
 
          :else
-         (let [s (get page-entity :block/original-name page-name)]
+         (let [page-name (get page-entity :block/original-name page-name)
+               s (if (not= (string/lower-case page-name) page-name-in-block)
+                   page-name-in-block
+                   page-name)]
            (if tag? (str "#" s) s))))]))
 
 (rum/defc page-preview-trigger
@@ -459,15 +462,16 @@
 
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page? sidebar? preview?] :as config} page]
-  (when-let [page-name (:block/name page)]
-    (let [page-name (-> (string/lower-case page-name)
-                        (util/remove-boundary-slashes))
+  (when-let [page-name-in-block (:block/name page)]
+    (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
+          page-name (string/lower-case page-name-in-block)
           page-entity (db/entity [:block/name page-name])
           redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
           href (if html-export?
                  (util/encode-str page-name)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config
+                            page-name-in-block
                             page-name
                             href redirect-page-name page-entity contents-page? children html-export? label)]
       (if (and (not (util/mobile?)) (not preview?))

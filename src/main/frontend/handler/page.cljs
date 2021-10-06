@@ -248,16 +248,20 @@
 ;; 3. what if there's a tag `#foobar` and we want to replace `#foo` with `#something`?
 (defn- replace-old-page!
   [s old-name new-name]
-  (let [get-tag-pattern (fn [s] (if (string/includes? s " ")
-                                 (str "#[[" s "]]")
-                                 (str "#" s)))
-        old-tag-pattern (get-tag-pattern old-name)
-        new-tag-pattern (get-tag-pattern new-name)]
-    (let [pattern "[[%s/"]
-     (-> s
-         (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
-         (string/replace (util/format pattern old-name) (util/format pattern new-name))
-         (string/replace old-tag-pattern new-tag-pattern)))))
+  (let [get-tag (fn [s]
+                  (if (string/includes? s " ")
+                    (str "#[[" s "]]")
+                    (str "#" s)))
+        old-tag-pattern (let [old-tag (get-tag old-name)]
+                          (re-pattern (str "(?i)" old-tag)))
+        old-ref-pattern (re-pattern (util/format "(?i)\\[\\[%s\\]\\]" old-name))
+        namespace-prefix-pattern "[[%s/"
+        old-namespace-pattern (re-pattern (str "(?i)"
+                                               (util/format "\\[\\[%s/" old-name)))]
+    (-> s
+        (string/replace old-ref-pattern (util/format "[[%s]]" new-name))
+        (string/replace old-namespace-pattern (util/format namespace-prefix-pattern new-name))
+        (string/replace old-tag-pattern (get-tag new-name)))))
 
 (defn- walk-replace-old-page!
   [form old-name new-name]
