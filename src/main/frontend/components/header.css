@@ -129,7 +129,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 7ch;
+  max-width: 15ch;
   height: 14px;
 }
 
