@@ -2289,7 +2289,6 @@
                   (thingatpt/page-ref-at-point input)
                   (thingatpt/properties-at-point input)
                   (thingatpt/list-item-at-point input))]
-          (println "thingatpt:" thing-at-point)
           (cond
             thing-at-point
             (case (:type thing-at-point)
@@ -2303,14 +2302,15 @@
               "block-ref" (open-block-in-sidebar! (:link thing-at-point))
               "page-ref" (route-handler/redirect-to-page! (:link thing-at-point))
               "list-item"
-              (let [{:keys [full-content indent bullet ordered _]} thing-at-point
+              (let [{:keys [full-content indent bullet checkbox ordered _]} thing-at-point
                     next-bullet (if ordered
                                   (str (inc bullet) ".")
-                                  bullet)]
+                                  bullet)
+                    checkbox (when checkbox " [ ]")]
                 (if (= (count full-content) (if ordered (+ (count bullet) 2) 2))
                   (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
                   (do (cursor/move-cursor-to-line-end input)
-                      (insert (str "\n" indent next-bullet " ")))))
+                      (insert (str "\n" indent next-bullet checkbox " ")))))
               "properties-drawer"
               (let [property-key (:raw-content (thingatpt/property-key-at-point input))
                     move-to-pos (if (= (:block/format config) :org) 2 3)]
