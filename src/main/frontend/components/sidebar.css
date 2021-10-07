@@ -146,7 +146,7 @@
         a {
             width: 100%;
             padding: 2px 20px;
-            display: flex;
+            display: block;
             text-overflow: ellipsis;
             overflow: hidden;
             white-space: nowrap;
