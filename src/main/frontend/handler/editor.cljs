@@ -2320,7 +2320,7 @@
                                   (str (inc bullet) ".")
                                   bullet)
                     checkbox (when checkbox " [ ]")]
-                (if (= (count full-content) (if ordered (+ (count bullet) 2) 2))
+                (if (= (count full-content) (+ (if ordered (+ (count bullet) 2) 2) (count checkbox)))
                   (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
                   (do (cursor/move-cursor-to-line-end input)
                       (insert (str "\n" indent next-bullet checkbox " ")))))
