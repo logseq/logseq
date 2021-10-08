@@ -244,13 +244,6 @@ function initProviderHandlers (pluginLocal: PluginLocal) {
 
   pluginLocal.on(_('ui'), (ui: UIOptions) => {
     pluginLocal._onHostMounted(() => {
-      // safe template
-      ui.template = DOMPurify.sanitize(
-        ui.template, {
-          ADD_TAGS: ['iframe'],
-          ALLOW_UNKNOWN_PROTOCOLS: true,
-          ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling']
-        })
 
       pluginLocal._dispose(
         setupInjectedUI.call(pluginLocal,
