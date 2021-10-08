@@ -2845,38 +2845,16 @@
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (if-let [handled
-             (let [pick-one-allowed-item
-                   (fn [items]
-                     (if (util/electron?)
-                       (let [existed-file-path (js/window.apis.getFilePathFromClipboard)
-                             existed-file-path (if (and
-                                                    (string? existed-file-path)
-                                                    (not util/mac?)
-                                                    (not util/win32?)) ; FIXME: linux
-                                                 (when (util/safe-re-find #"^(/[^/ ]*)+/?$" existed-file-path)
-                                                   existed-file-path)
-                                                 existed-file-path)
-                             has-file-path? (not (string/blank? existed-file-path))
-                             has-image? (js/window.apis.isClipboardHasImage)]
-                         (when (or has-image? has-file-path?)
-                           [:asset (js/File. #js[] (if has-file-path? existed-file-path "image.png"))]))
-
-                       (when (and items (.-length items))
-                         (let [files (. (js/Array.from items) (filter #(= (.-kind %) "file")))
-                               it (gobj/get files 0) ;;; TODO: support multiple files
-                               mime (and it (.-type it))]
-                           (cond
-                             (contains? #{"image/jpeg" "image/png" "image/jpg" "image/gif"} mime) [:asset (. it getAsFile)])))))
-                   clipboard-data (gobj/get e "clipboardData")
-                   items (or (.-items clipboard-data)
-                             (.-files clipboard-data))
-                   picked (pick-one-allowed-item items)]
-               (when-let [file (second picked)]
-                 (when-let [block (state/get-edit-block)]
-                   (upload-asset id #js[file] (:block/format block) *asset-uploading? true))))]
-      (util/stop e)
-      (paste-text (.getData (gobj/get e "clipboardData") "text") e))))
+    (let [text (.getData (gobj/get e "clipboardData") "text")]
+      (if-not (string/blank? text)
+        (paste-text text e)
+        (let [handled
+              (let [clipboard-data (gobj/get e "clipboardData")
+                    files (.-files clipboard-data)]
+                (when-let [file (first files)]
+                  (when-let [block (state/get-edit-block)]
+                    (upload-asset id #js[file] (:block/format block) *asset-uploading? true))))]
+          (util/stop e))))))
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]
