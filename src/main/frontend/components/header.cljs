@@ -128,7 +128,7 @@
      )))
 
 (rum/defc back-and-forward
-  [electron-mac?]
+  []
   [:div.flex.flex-row
    [:a.it.navigation.nav-left.button
     {:title "Go Back" :on-click #(js/window.history.back)}
@@ -166,7 +166,6 @@
         repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
-        electron-not-mac? (and (util/electron?) (not electron-mac?))
         show-open-folder? (and (or (nfs/supported?)
                                    (mobile-util/is-native-platform?))
                                (empty? repos)
@@ -183,8 +182,7 @@
        (left-menu-button {:on-click (fn []
                                       (open-fn)
                                       (state/set-left-sidebar-open!
-                                        (not (:ui/left-sidebar-open? @state/state))))})
-
+                                       (not (:ui/left-sidebar-open? @state/state))))})
 
        (when current-repo
          (ui/tippy
@@ -212,7 +210,7 @@
        (when (not= (state/get-current-route) :home)
          (home-button))
 
-       (when electron-mac? (back-and-forward electron-mac?))
+       (when (util/electron?) (back-and-forward))
 
        (new-block-mode)
 
