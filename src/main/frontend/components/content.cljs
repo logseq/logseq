@@ -69,7 +69,11 @@
     (ui/menu-link
      {:key "copy block refs"
       :on-click editor-handler/copy-block-refs}
-     "Copy block refs")]])
+     "Copy block refs")
+    (ui/menu-link
+     {:key "cycle todos"
+      :on-click editor-handler/cycle-todos!}
+     "Cycle todos")]])
 
 ;; FIXME: Make it configurable
 (def block-background-colors

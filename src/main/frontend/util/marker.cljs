@@ -44,6 +44,26 @@
                         (fn [match]
                           (string/replace match old-marker new-marker))))
 
+(defn cycle-marker-state
+  [preferred-workflow marker]
+  (case marker
+    "TODO"
+    "DOING"
+
+    "DOING"
+    "DONE"
+
+    "LATER"
+    "NOW"
+
+    "NOW"
+    "DONE"
+
+    "DONE"
+    nil
+
+    (if (= :now preferred-workflow) "LATER" "TODO")))
+
 (defn cycle-marker
   [content format preferred-workflow]
   (let [markdown? (= :markdown format)

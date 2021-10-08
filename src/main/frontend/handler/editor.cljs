@@ -837,8 +837,35 @@
 
 (defn set-marker
   [{:block/keys [uuid marker content format properties] :as block} new-marker]
-  (let [new-content (string/replace-first content (re-pattern (str "^" marker)) new-marker)]
+  (let [new-content (->
+                     (if marker
+                       (string/replace-first content (re-pattern (str "^" marker)) new-marker)
+                       (str new-marker " " content))
+                     (string/triml))]
     (save-block-if-changed! block new-content)))
+
+(defn- get-selected-blocks-with-children
+  []
+  (when-let [blocks (seq (state/get-selection-blocks))]
+    (->> (mapcat (fn [block]
+                   (cons block
+                         (array-seq (dom/by-class block "ls-block"))))
+                 blocks)
+         distinct)))
+
+(defn cycle-todos!
+  []
+  (when-let [blocks (seq (get-selected-blocks-with-children))]
+    (let [repo (state/get-current-repo)
+          workflow (state/get-preferred-workflow)
+          ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                     (uuid id)) blocks))
+                   (remove nil?))]
+      (doseq [id ids]
+        (let [block (db/pull [:block/uuid id])
+              new-marker (marker/cycle-marker-state workflow (:block/marker block))
+              new-marker (if new-marker new-marker "")]
+          (set-marker block new-marker))))))
 
 (defn set-priority
   [{:block/keys [uuid marker priority content] :as block} new-priority]
@@ -1051,15 +1078,6 @@
                        (js/document.getElementsByClassName)
                        first)]
     (state/exit-editing-and-set-selected-blocks! [block])))
-
-(defn- get-selected-blocks-with-children
-  []
-  (when-let [blocks (seq (state/get-selection-blocks))]
-    (->> (mapcat (fn [block]
-                   (cons block
-                         (array-seq (dom/by-class block "ls-block"))))
-                 blocks)
-         distinct)))
 
 (defn- blocks-with-level
   [blocks]
