@@ -104,7 +104,7 @@
              :indent indent
              :bullet bullet
              :checkbox checkbox
-             :ordered (int? bullet)))))
+             :ordered (int? (cljs.reader/read-string bullet))))))
 
 (defn- get-markup-at-point [& [input]]
   (let [format (state/get-preferred-format)]
