@@ -2304,13 +2304,14 @@
               "list-item"
               (let [{:keys [full-content indent bullet checkbox ordered _]} thing-at-point
                     next-bullet (if ordered
-                                  (str (inc bullet) ".")
+                                  (str (inc (cljs.reader/read-string bullet)) ".")
                                   bullet)
-                    checkbox (when checkbox " [ ]")]
-                (if (= (count full-content) (+ (if ordered (+ (count bullet) 2) 2) (count checkbox)))
+                    checkbox (when checkbox "[ ] ")]
+                (if (= (count full-content)
+                       (+ (if ordered (+ (count bullet) 2) 2) (when checkbox (count checkbox))))
                   (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
                   (do (cursor/move-cursor-to-line-end input)
-                      (insert (str "\n" indent next-bullet checkbox " ")))))
+                      (insert (str "\n" indent next-bullet " " checkbox)))))
               "properties-drawer"
               (let [property-key (:raw-content (thingatpt/property-key-at-point input))
                     move-to-pos (if (= (:block/format config) :org) 2 3)]
