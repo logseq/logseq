@@ -65,7 +65,11 @@
                   (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
                     (state/set-modal!
                      #(export/export-blocks block-uuids))))}
-     "Copy as")]])
+     "Copy as")
+    (ui/menu-link
+     {:key "copy block refs"
+      :on-click editor-handler/copy-block-refs}
+     "Copy block refs")]])
 
 ;; FIXME: Make it configurable
 (def block-background-colors

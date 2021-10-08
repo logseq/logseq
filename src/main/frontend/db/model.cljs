@@ -20,7 +20,7 @@
 ;; correponding handlers.
 
 ;; Use it as an input argument for datalog queries
-(defonce block-attrs
+(def block-attrs
   '[:db/id
     :block/uuid
     :block/type
@@ -28,6 +28,7 @@
     :block/format
     :block/title
     :block/refs
+    :block/_refs
     :block/path-refs
     :block/tags
     :block/content
@@ -473,7 +474,7 @@
    (get-page-blocks repo-url page nil))
   ([repo-url page {:keys [use-cache? pull-keys]
                    :or {use-cache? true
-                        pull-keys '[*]}}]
+                        pull-keys block-attrs}}]
    (let [page (string/lower-case (string/trim page))
          page-entity (or (db-utils/entity repo-url [:block/name page])
                          (db-utils/entity repo-url [:block/original-name page]))

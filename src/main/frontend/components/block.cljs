@@ -1889,7 +1889,7 @@
                          [:a.fade-link
                           summary]]))))
 
-        (let [block-refs-count (count (:block/_refs (db/entity (:db/id block))))]
+        (let [block-refs-count (count (:block/_refs block))]
           (when (and block-refs-count (> block-refs-count 0))
             [:div
              [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
@@ -2084,7 +2084,8 @@
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/properties
                                         :block/parent :block/left
-                                        :block/children :block/content]
+                                        :block/children :block/content
+                                        :block/_refs]
                           config-compare-keys [:show-cloze?]]
                       (or
                        (not= (select-keys (second (:rum/args old-state)) compare-keys)

@@ -1033,12 +1033,16 @@
             (state/set-edit-content! input-id new-content)
             (save-block-if-changed! block new-content)))))))
 
+(defn- set-block-id!
+  [block-id]
+  (let [block (db/entity [:block/uuid block-id])]
+    (when-not (:block/pre-block? block)
+      (set-block-property! block-id "id" (str block-id)))))
+
 (defn copy-block-ref!
   ([block-id] (copy-block-ref! block-id #(str %)))
   ([block-id tap-clipboard]
-   (let [block (db/entity [:block/uuid block-id])]
-     (when-not (:block/pre-block? block)
-       (set-block-property! block-id "id" (str block-id))))
+   (set-block-id! block-id)
    (util/copy-to-clipboard! (tap-clipboard block-id))))
 
 (defn select-block!
@@ -1130,6 +1134,20 @@
       (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
       (state/set-copied-blocks content tree)
       (notification/show! "Copied!" :success))))
+
+(defn copy-block-refs
+  []
+  (when-let [blocks (seq (get-selected-blocks-with-children))]
+    (let [repo (state/get-current-repo)
+          ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                     (uuid id)) blocks))
+                   (remove nil?))
+          ids-str (some->> ids
+                           (map (fn [id] (util/format "((%s))" id)))
+                           (string/join "\n\n"))]
+      (doseq [id ids]
+        (set-block-id! id))
+      (util/copy-to-clipboard! ids-str))))
 
 (defn get-selected-toplevel-block-uuids
   []
