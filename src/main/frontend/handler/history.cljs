@@ -2,7 +2,7 @@
   (:require [frontend.db :as db]
             [frontend.handler.editor :as editor]
             [frontend.handler.ui :as ui-handler]
-            [frontend.modules.editor.undo-redo :as undo-redo]
+            [frontend.modules.outliner.yjs :as yjs]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]))
@@ -32,7 +32,7 @@
   (util/stop e)
   (state/set-editor-op! :undo)
   (editor/save-current-block!)
-  (let [{:keys [editor-cursor]} (undo-redo/undo)]
+  (let [{:keys [editor-cursor]} (yjs/undo)]
     (restore-cursor! editor-cursor))
   (state/set-editor-op! nil))
 
@@ -40,6 +40,6 @@
   [e]
   (util/stop e)
   (state/set-editor-op! :redo)
-  (let [{:keys [editor-cursor]} (undo-redo/redo)]
+  (let [{:keys [editor-cursor]} (yjs/redo)]
     (restore-cursor! editor-cursor))
   (state/set-editor-op! nil))

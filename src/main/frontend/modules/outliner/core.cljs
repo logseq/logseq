@@ -218,14 +218,29 @@
 (defn- get-page-name [node]
   (:block/name (db/entity (get-in node [:data :block/page :db/id]))))
 
+(defn- get-block-and-children-content-tree [uuid]
+  (-> (db/get-block-and-children (state/get-current-repo) uuid)
+      (tree/blocks->vec-tree uuid)
+      (tree/vec-tree->block-tree)
+      (tree/block-tree-keep-props [:block/uuid :block/content])))
+
 (defn save-node
-  [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (ds/auto-transact!
-   [db (ds/new-outliner-txs-state)] {:outliner-op :save-node
-                                     :other-meta {:page-name (get-page-name node)
-                                                  :node-id (tree/-get-id node)}}
-   (tree/-save node db)))
+  ([node]
+   (save-node node nil))
+  ([node {:keys [skip-undo?]
+          :or {skip-undo? false}}]
+   {:pre [(tree/satisfied-inode? node)]}
+   (let [content-before (:block/content (db/entity (:db/id (:data node))))
+         content-after (get-in node [:data :block/content])]
+     (ds/auto-transact!
+      [db (ds/new-outliner-txs-state)] {:outliner-op :save-node
+                                        :skip-undo? skip-undo?
+                                        :other-meta
+                                        {:page-name (get-page-name node)
+                                         :node-id (tree/-get-id node)
+                                         :node-content-after content-after
+                                         :node-content-before content-before}}
+      (tree/-save node db)))))
 
 (defn insert-node-as-first-child
   "Insert a node as first child."
@@ -287,15 +302,18 @@
 (defn insert-node
   ([new-node target-node sibling?]
    (insert-node new-node target-node sibling? nil))
-  ([new-node target-node sibling? {:keys [blocks-atom skip-transact?]
-                                   :or {skip-transact? false}}]
+  ([new-node target-node sibling? {:keys [blocks-atom skip-transact? skip-undo?]
+                                   :or {skip-transact? false
+                                        skip-undo? false}}]
    (let [page-name (get-page-name target-node)]
      (ds/auto-transact!
       [txs-state (ds/new-outliner-txs-state)]
       {:outliner-op :insert-node
        :skip-transact? skip-transact?
+       :skip-undo? skip-undo?
        :other-meta {:page-name page-name
                     :node-id (tree/-get-id new-node)
+                    :node-content (get-in new-node [:data :block/content])
                     :target-id (tree/-get-id target-node)
                     :sibling? sibling?}}
       (insert-node-aux new-node target-node sibling? txs-state blocks-atom)))))
@@ -345,39 +363,42 @@
 (defn insert-nodes
   "Insert nodes as children(or siblings) of target-node.
   new-nodes-tree is an vector of blocks, e.g [1 [2 3] 4 [5 [6 7]]]"
-  [new-nodes-tree target-node sibling?]
-  {:pre [(> (count new-nodes-tree) 0)]}
-  (let [page-name (get-page-name target-node)
-        target-id (tree/-get-id target-node)]
-    (ds/auto-transact!
-     [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-nodes
-                                              :other-meta {:new-nodes-tree new-nodes-tree
-                                                           :target-id target-id
-                                                           :sibling? sibling?}}
-     (let [loc (zip/vector-zip new-nodes-tree)]
-       ;; TODO: validate new-nodes-tree structure
-       (let [updated-nodes (walk-&-insert-nodes loc target-node sibling? txs-state)
-             loc (zip/vector-zip (zip/root updated-nodes))
-             ;; topmost-last-loc=4, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
-             topmost-last-loc (get-node-tree-topmost-last-loc loc)
-             ;; sub-topmost-last-loc=5, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
-             sub-topmost-last-loc (get-node-tree-sub-topmost-last-loc loc)
-             right-node (tree/-get-right target-node)
-             down-node (tree/-get-down target-node)]
-         ;; update node's left&parent after inserted nodes
-         (cond
-           (and (not sibling?) (some? right-node) (nil? down-node))
-           nil            ;ignore
-           (and sibling? (some? right-node) topmost-last-loc) ;; right-node.left=N
-           (let [topmost-last-node (zip/node topmost-last-loc)
-                 updated-node (tree/-set-left-id right-node (tree/-get-id topmost-last-node))]
-             (tree/-save updated-node txs-state))
-           (and (not sibling?) (some? down-node) topmost-last-loc) ;; down-node.left=N
-           (let [topmost-last-node (zip/node topmost-last-loc)
-                 updated-node (tree/-set-left-id down-node (tree/-get-id topmost-last-node))]
-             (tree/-save updated-node txs-state))
-           (and sibling? (some? down-node)) ;; unchanged
-           nil))))))
+  ([new-nodes-tree target-node sibling?]
+   (insert-nodes new-nodes-tree target-node sibling? nil))
+  ([new-nodes-tree target-node sibling? {:keys [skip-undo?]
+                                         :or {skip-undo? false}}]
+   {:pre [(> (count new-nodes-tree) 0)]}
+   (let [page-name (get-page-name target-node)
+         target-id (tree/-get-id target-node)]
+     (ds/auto-transact!
+      [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-nodes
+                                               :other-meta {:new-nodes-tree new-nodes-tree
+                                                            :target-id target-id
+                                                            :sibling? sibling?}}
+      (let [loc (zip/vector-zip new-nodes-tree)]
+        ;; TODO: validate new-nodes-tree structure
+        (let [updated-nodes (walk-&-insert-nodes loc target-node sibling? txs-state)
+              loc (zip/vector-zip (zip/root updated-nodes))
+              ;; topmost-last-loc=4, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
+              topmost-last-loc (get-node-tree-topmost-last-loc loc)
+              ;; sub-topmost-last-loc=5, new-nodes-tree=[1 [2 3] 4 [5 [6 7]]]
+              sub-topmost-last-loc (get-node-tree-sub-topmost-last-loc loc)
+              right-node (tree/-get-right target-node)
+              down-node (tree/-get-down target-node)]
+          ;; update node's left&parent after inserted nodes
+          (cond
+            (and (not sibling?) (some? right-node) (nil? down-node))
+            nil            ;ignore
+            (and sibling? (some? right-node) topmost-last-loc) ;; right-node.left=N
+            (let [topmost-last-node (zip/node topmost-last-loc)
+                  updated-node (tree/-set-left-id right-node (tree/-get-id topmost-last-node))]
+              (tree/-save updated-node txs-state))
+            (and (not sibling?) (some? down-node) topmost-last-loc) ;; down-node.left=N
+            (let [topmost-last-node (zip/node topmost-last-loc)
+                  updated-node (tree/-set-left-id down-node (tree/-get-id topmost-last-node))]
+              (tree/-save updated-node txs-state))
+            (and sibling? (some? down-node)) ;; unchanged
+            nil)))))))
 
 (defn move-node
   [node up?]
@@ -427,21 +448,31 @@
 
 (defn delete-node
   "Delete node from the tree."
-  [node children?]
-  {:pre [(tree/satisfied-inode? node)]}
-  (let [page-name (get-page-name node)
-        node-id (tree/-get-id node)]
-    (ds/auto-transact!
-     [txs-state (ds/new-outliner-txs-state)] {:outliner-op :delete-node
-                                              :other-meta {:page-name page-name
-                                                           :node-id node-id
-                                                           :children? children?}}
-     (let [right-node (tree/-get-right node)]
-       (tree/-del node txs-state children?)
-       (when (tree/satisfied-inode? right-node)
-         (let [left-node (tree/-get-left node)
-               new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
-           (tree/-save new-right-node txs-state)))))))
+  ([node children?]
+   (delete-node node children? nil))
+  ([node children? {:keys [skip-undo?]
+                    :or {skip-undo? false}}]
+   {:pre [(tree/satisfied-inode? node)]}
+   (let [page-name (get-page-name node)
+         node-id (tree/-get-id node)
+         tree (get-block-and-children-content-tree node-id)
+         left-id (tree/-get-left-id node)
+         parent-id (tree/-get-parent-id node)]
+     (ds/auto-transact!
+      [txs-state (ds/new-outliner-txs-state)] {:outliner-op :delete-node
+                                               :skip-undo? skip-undo?
+                                               :other-meta {:page-name page-name
+                                                            :node-id node-id
+                                                            :tree tree
+                                                            :children? children?
+                                                            :left-id left-id
+                                                            :parent-id parent-id}}
+      (let [right-node (tree/-get-right node)]
+        (tree/-del node txs-state children?)
+        (when (tree/satisfied-inode? right-node)
+          (let [left-node (tree/-get-left node)
+                new-right-node (tree/-set-left-id right-node (tree/-get-id left-node))]
+            (tree/-save new-right-node txs-state))))))))
 
 (defn- get-left-nodes
   [node limit]

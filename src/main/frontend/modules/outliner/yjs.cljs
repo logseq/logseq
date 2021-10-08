@@ -3,6 +3,7 @@
             ["y-websocket" :as y-ws]
             [frontend.modules.outliner.tree :as tree]
             [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.handler.common :as common-handler]
@@ -209,25 +210,8 @@ return [2 3]
               (swap! id-set #(conj % s))
               (recur (inc i)))))))))
 
-(defn- uuid-tree->node-tree [uuid-tree format page-block]
-  (let [contentmap (contentmap)
-        content-tree
-        (loop [loc (zip/vector-zip uuid-tree)]
-          (if (zip/end? loc)
-            (zip/root loc)
-            (cond
-              (string? (zip/node loc))
-              (recur (zip/next
-                      (zip/replace
-                       loc
-                       (property/insert-property
-                        format
-                        (property/remove-id-property
-                         format
-                         (.toString (.get contentmap (zip/node loc))))
-                        "ID" (zip/node loc)))))
-              :else (recur (zip/next loc)))))
-        node-tree
+(defn- content-tree->node-tree [content-tree format page-block]
+  (let [node-tree
         (loop [loc (zip/vector-zip content-tree)]
           (if (zip/end? loc)
             (zip/root loc)
@@ -258,6 +242,26 @@ return [2 3]
                   (recur (zip/remove loc))))
               :else (recur (zip/next loc)))))]
     node-tree))
+
+(defn- uuid-tree->node-tree [uuid-tree format page-block]
+  (let [contentmap (contentmap)
+        content-tree
+        (loop [loc (zip/vector-zip uuid-tree)]
+          (if (zip/end? loc)
+            (zip/root loc)
+            (cond
+              (string? (zip/node loc))
+              (recur (zip/next
+                      (zip/replace
+                       loc
+                       (property/insert-property
+                        format
+                        (property/remove-id-property
+                         format
+                         (.toString (.get contentmap (zip/node loc))))
+                        "ID" (zip/node loc)))))
+              :else (recur (zip/next loc)))))]
+    (content-tree->node-tree content-tree format page-block)))
 
 (defn- ->content-map [blocks map]
   (clojure.walk/postwalk (fn [v]
@@ -404,7 +408,6 @@ return [2 3]
                                    :block/uuid (uuid id)} )
         new-node (outliner-core/block new-block)
         sibling? (not= parent-id left-id)]
-    (def zzz [new-node target-node sibling?])
     (outliner-core/insert-node new-node target-node sibling?)
     (db/refresh! (state/get-current-repo) {:key :block/insert :data [new-block]})))
 
@@ -580,6 +583,7 @@ return [2 3]
         (js/console.trace)))))
 
 
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; outliner op + yjs op ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -630,36 +634,39 @@ return [2 3]
         (insert-nodes-aux structs pos struct)
         (assoc-contents contents (contentmap))))))
 
-(defn insert-nodes-op [new-nodes-tree target-node sibling?]
-  (let [target-block (:data target-node)]
-    (when-some [page-name (or (:block/name target-block)
-                              (:block/name (db/entity (:db/id (:block/page target-block)))))]
-      (let [struct (structarray page-name)
-            block-page (:block/page target-block)
-            block-file (:block/file target-block)
-            new-nodes-tree*
-            (clojure.walk/postwalk (fn [node]
-                                     (if (instance? outliner-core/Block node)
-                                       (let [block (:data node)
-                                             id (str (:block/uuid block))
-                                             content (property/insert-property
-                                                      :markdown
-                                                      (property/remove-id-property :markdown  (:block/content block))
-                                                      "ID" id)]
-                                         (outliner-core/block
-                                          (content->block content :markdown
-                                                          {:block/page block-page
-                                                           :block/uuid (uuid id)
-                                                           :block/file block-file})))
-                                       node))
-                               new-nodes-tree)]
-        (insert-nodes-yjs struct new-nodes-tree* (str (:block/uuid target-block)) sibling?)
-        (distinct-struct struct (atom #{}))
-        (merge-doc @doc-remote @doc-local)
-        (when *debug*
-          (validate-struct struct)
-          (validate-no-left-conflict page-name))
-        (outliner-core/insert-nodes new-nodes-tree* target-node sibling?)))))
+(defn insert-nodes-op
+  ([new-nodes-tree target-node sibling?]
+   (insert-nodes-op new-nodes-tree target-node sibling? {:skip-undo? false}))
+  ([new-nodes-tree target-node sibling? {:keys [skip-undo?]}]
+   (let [target-block (:data target-node)]
+     (when-some [page-name (or (:block/name target-block)
+                               (:block/name (db/entity (:db/id (:block/page target-block)))))]
+       (let [struct (structarray page-name)
+             block-page (:block/page target-block)
+             block-file (:block/file target-block)
+             new-nodes-tree*
+             (clojure.walk/postwalk (fn [node]
+                                      (if (instance? outliner-core/Block node)
+                                        (let [block (:data node)
+                                              id (str (:block/uuid block))
+                                              content (property/insert-property
+                                                       :markdown
+                                                       (property/remove-id-property :markdown  (:block/content block))
+                                                       "ID" id)]
+                                          (outliner-core/block
+                                           (content->block content :markdown
+                                                           {:block/page block-page
+                                                            :block/uuid (uuid id)
+                                                            :block/file block-file})))
+                                        node))
+                                    new-nodes-tree)]
+         (insert-nodes-yjs struct new-nodes-tree* (str (:block/uuid target-block)) sibling?)
+         (distinct-struct struct (atom #{}))
+         (merge-doc @doc-remote @doc-local)
+         (when *debug*
+           (validate-struct struct)
+           (validate-no-left-conflict page-name))
+         (outliner-core/insert-nodes new-nodes-tree* target-node sibling?))))))
 
 (defn insert-node-yjs [struct new-node target-uuid sibling?]
   (insert-nodes-yjs struct [new-node] target-uuid sibling?))
@@ -788,32 +795,39 @@ return [2 3]
   (let [delete-ids (delete-node-struct-yjs struct id children?)]
     (dissoc-contents delete-ids (contentmap))))
 
-(defn delete-node-op [node children?]
-  (let [block (:data node)]
-    (when-some [page-name (:block/name (db/entity (:db/id (:block/page block))))]
-      (let [uuid (str (:block/uuid block))
-            struct (structarray page-name)]
-        (println "[YJS] delete-node-op: " uuid children?)
-        (delete-node-yjs struct uuid children?)
-        (merge-doc @doc-remote @doc-local)
-        (when *debug*
-          (validate-struct struct)
-          (validate-no-left-conflict page-name))
-        (outliner-core/delete-node node children?)))))
+(defn delete-node-op
+  ([node children?]
+   (delete-node-op node children? {:skip-undo? false}))
+  ([node children? {:keys [skip-undo?]}]
+   (let [block (:data node)]
+     (when-some [page-name (:block/name (db/entity (:db/id (:block/page block))))]
+       (let [uuid (str (:block/uuid block))
+             struct (structarray page-name)]
+         (println "[YJS] delete-node-op: " uuid children?)
+         (delete-node-yjs struct uuid children?)
+         (merge-doc @doc-remote @doc-local)
+         (when *debug*
+           (validate-struct struct)
+           (validate-no-left-conflict page-name))
+         (outliner-core/delete-node node children? {:skip-undo? skip-undo?}))))))
 
-(defn save-node-op [node]
-  (let [block (:data node)
-        contentmap (contentmap)]
-    (when-some [page-name (:block/name (db/entity (:db/id (:block/page block))))]
-      (when-some [block-uuid (:block/uuid block)]
-        (let [struct (structarray page-name)]
-          (.set contentmap (str block-uuid) (:block/content block))
-          (distinct-struct struct (atom #{}))
-          (merge-doc @doc-remote @doc-local)
-          (when *debug*
-            (validate-struct struct)
-            (validate-no-left-conflict page-name))
-          (outliner-core/save-node node))))))
+(defn save-node-op
+  ([node]
+   (save-node-op node {:skip-undo? false}))
+  ([node {:keys [skip-undo?]}]
+   (let [block (:data node)
+         contentmap (contentmap)]
+     (when-some [page-name (:block/name (db/entity (:db/id (:block/page block))))]
+       (when-some [block-uuid (:block/uuid block)]
+         (let [struct (structarray page-name)]
+           (.set contentmap (str block-uuid) (:block/content block))
+           (distinct-struct struct (atom #{}))
+           (merge-doc @doc-remote @doc-local)
+           (println "[YJS] save-node-op: " (str block-uuid))
+           (when *debug*
+             (validate-struct struct)
+             (validate-no-left-conflict page-name))
+           (outliner-core/save-node node {:skip-undo? skip-undo?})))))))
 
 (defn- outdentable? [pos]
   (> (count pos) 1))
@@ -977,6 +991,167 @@ return [2 3]
 ;;; TODO
 ;; (defn move-node-op [node up?]
 ;;   (outliner-core/move-node node up?))
+
+
+;;;;;;;;;;;;;;;
+;; undo/redo ;;
+;;;;;;;;;;;;;;;
+
+(defn- block-tree->content-tree [tree format]
+  (let [loc (zip/vector-zip tree)]
+    (loop [loc loc]
+      (if (zip/end? loc)
+        (zip/root loc)
+        (cond
+          (map? (zip/node loc))
+          (let [block (zip/node loc)
+                uuid (str (:block/uuid block))
+                content (:block/content block)]
+            (recur
+             (zip/next
+              (zip/replace loc
+                           (property/insert-property
+                            format
+                            (property/remove-id-property format content)
+                            "ID" uuid)))))
+          :else
+          (recur (zip/next loc)))))))
+
+(defn undo-save-node [page-name txn-meta]
+  {:pre [(= :save-node (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [node-id (get-in txn-meta [:other-meta :node-id])
+        format :markdown
+        content (get-in txn-meta [:other-meta :node-content-before])
+        content* (property/insert-property
+                  format
+                  (property/remove-id-property format content)
+                  "ID" (str node-id))
+        struct (structarray page-name)
+        page-block (db/pull (:db/id (db/get-page page-name)))
+        format :markdown
+        node (first (content-tree->node-tree [content*] format page-block))]
+    (when (find-pos struct (str node-id))
+      (save-node-op node {:skip-undo? true}))))
+
+(defn redo-save-node [page-name txn-meta]
+  {:pre [(= :save-node (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [node-id (get-in txn-meta [:other-meta :node-id])
+        format :markdown
+        content (get-in txn-meta [:other-meta :node-content-after])
+        content* (property/insert-property
+                  format
+                  (property/remove-id-property format content)
+                  "ID" (str node-id))
+        struct (structarray page-name)
+        page-block (db/pull (:db/id (db/get-page page-name)))
+        node (first (content-tree->node-tree [content*] format page-block))]
+    (when (find-pos struct (str node-id))
+      (save-node-op node {:skip-undo? true}))))
+
+(defn undo-insert-node [page-name txn-meta]
+  {:pre [(= :insert-node (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [node-id (get-in txn-meta [:other-meta :node-id])
+        struct (structarray page-name)
+        node (outliner-core/block (db/pull [:block/uuid node-id]))]
+    (when (find-pos struct (str node-id))
+      (delete-node-op node false {:skip-undo? true}))))
+
+(defn redo-insert-node [page-name txn-meta]
+  {:pre [(= :insert-node (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [format :markdown
+        node-id (get-in txn-meta [:other-meta :node-id])
+        target-id (get-in txn-meta [:other-meta :target-id])
+        target-node (outliner-core/block (db/pull [:block/uuid target-id]))
+        sibling? (get-in txn-meta [:other-meta :sibling?])
+        content (get-in txn-meta [:other-meta :node-content])
+        content* (property/insert-property
+                  format
+                  (property/remove-id-property format content)
+                  "ID" (str node-id))
+        struct (structarray page-name)
+        page-block (db/pull (:db/id (db/get-page page-name)))
+        node-tree (content-tree->node-tree [content*] format page-block)]
+    (when (find-pos struct (str target-id))
+      (insert-nodes-op node-tree target-node sibling? {:skip-undo? true}))))
+
+(defn undo-delete-node [page-name txn-meta]
+  {:pre [(= :delete-node (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [node-id (get-in txn-meta [:other-meta :node-id])
+        content-block-tree (get-in txn-meta [:other-meta :tree])
+        children? (get-in txn-meta [:other-meta :children?])
+        left-id (get-in txn-meta [:other-meta :left-id])
+        parent-id (get-in txn-meta [:other-meta :parent-id])
+        [target-id sibling?] (if (= left-id parent-id)
+                               [parent-id false]
+                               [left-id true])
+        target-node (outliner-core/block (db/pull [:block/uuid target-id]))
+        page-block (db/pull (:db/id (db/get-page page-name)))
+        node-tree (content-tree->node-tree
+                   (block-tree->content-tree content-block-tree :markdown)
+                   :markdown page-block)]
+    (insert-nodes-op node-tree target-node sibling? {:skip-undo? true})))
+
+(defn redo-delete-node [page-name txn-meta]
+  {:pre [(= :delete-node (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [node-id (get-in txn-meta [:other-meta :node-id])
+        node (outliner-core/block (db/pull [:block/uuid node-id]))
+        children? (get-in txn-meta [:other-meta :children?])]
+    (delete-node-op node children? {:skip-undo? true})))
+
+(defn undo-op [page-name txn-meta]
+  (case (:outliner-op txn-meta)
+    :insert-node
+    (undo-insert-node page-name txn-meta)
+    :delete-node
+    (undo-delete-node page-name txn-meta)
+    :save-node
+    (undo-save-node page-name txn-meta)
+    (println "[UNDO]" page-name (:outliner-op txn-meta))))
+
+(defn redo-op [page-name txn-meta]
+  (case (:outliner-op txn-meta)
+    :insert-node
+    (redo-insert-node page-name txn-meta)
+    :delete-node
+    (redo-delete-node page-name txn-meta)
+    :save-node
+    (redo-save-node page-name txn-meta)
+    (println "[REDO]" page-name (:outliner-op txn-meta))))
+
+(defn undo []
+  (let [[e prev-e] (undo-redo/pop-undo)]
+    (when e
+      (let [{:keys [blocks txs]} e
+            editor-cursor
+            (if (= (get-in e [:editor-cursor :last-edit-block :block/uuid])
+                   (get-in prev-e [:editor-cursor :last-edit-block :block/uuid])) ; same block
+              (:editor-cursor prev-e)
+              (:editor-cursor e))]
+        (undo-redo/push-redo e)
+        (let [page-name
+              (or (:block/name (first blocks))
+                  (:block/name (db/entity (:db/id (:block/page (first blocks))))))]
+          (undo-op page-name e))
+        (let [blocks
+              (map (fn [x] (undo-redo/get-by-id [:block/uuid (:block/uuid x)])) blocks)]
+          (undo-redo/refresh! {:key :block/change :data (vec blocks)}))
+        (assoc e :editor-cursor editor-cursor)))))
+
+(defn redo []
+  (when-let [{:keys [blocks txs] :as e} (undo-redo/pop-redo)]
+    (undo-redo/push-undo e)
+    (let [page-name (or (:block/name (first blocks))
+                        (:block/name (db/entity (:db/id (:block/page (first blocks))))))]
+      (redo-op page-name e))
+    (let [blocks (map (fn [x] (undo-redo/get-by-id [:block/uuid (:block/uuid x)])) blocks)]
+      (undo-redo/refresh! {:key :block/change :data (vec blocks)}))
+    e))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; functions for debug ;;

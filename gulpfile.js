@@ -46,7 +46,7 @@ const common = {
   },
 
   keepSyncResourceFile () {
-    return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
+      return gulp.watch(resourceFilePath, { ignoreInitial: true, interval: 1000 }, common.syncResourceFile)
   },
 
 
@@ -55,7 +55,7 @@ const common = {
   },
 
   keeypSyncStatic() {
-      return gulp.watch(outputFilePath, { ignoreInitial: true }, common.syncStatic)
+      return gulp.watch(outputFilePath, { ignoreInitial: true, interval: 1000 }, common.syncStatic)
   }
 }
 

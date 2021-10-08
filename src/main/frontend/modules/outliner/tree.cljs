@@ -1,6 +1,7 @@
 (ns frontend.modules.outliner.tree
   (:require [frontend.db :as db]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [clojure.zip :as zip]))
 
 (defprotocol INode
   (-get-id [this])
@@ -72,6 +73,48 @@
       (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) @blocks)
             root-block (with-children root-block result)]
         [root-block]))))
+
+(defn vec-tree->block-tree [tree]
+  "
+{:id 1
+ :block/children [{:id 2} {:id 3}]}
+->
+[{:id 1}
+ [{:id 2}
+  {:id 3}]]
+"
+  (let [loc (zip/vector-zip tree)]
+    (loop [loc loc]
+      (if (zip/end? loc)
+        (zip/root loc)
+        (cond
+          (map? (zip/node loc))
+          (let [block (zip/node loc)
+                children (:block/children block)
+                block* (dissoc block :block/children)
+                loc*
+                (cond-> loc
+                  true (zip/replace block*)
+                  (seq children) (-> (zip/insert-right (vec children))
+                                       (zip/next))
+                  true (zip/next))]
+            (recur loc*))
+
+          :else
+          (recur (zip/next loc)))))))
+
+(defn block-tree-keep-props [tree props]
+  (let [loc (zip/vector-zip tree)
+        props (set props)]
+    (loop [loc loc]
+      (if (zip/end? loc)
+        (zip/root loc)
+        (cond
+          (map? (zip/node loc))
+          (let [block (zip/node loc)]
+            (recur (zip/next (zip/replace loc (select-keys block props)))))
+          :else
+          (recur (zip/next loc)))))))
 
 (defn- sort-blocks-aux
   [parents parent-groups]

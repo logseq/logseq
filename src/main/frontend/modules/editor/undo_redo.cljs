@@ -105,7 +105,7 @@
         db-report (d/transact! conn txs)]
     (do (pipelines/invoke-hooks db-report))))
 
-(defn- refresh!
+(defn refresh!
   [opts]
   (let [repo (state/get-current-repo)]
    (db/refresh! repo opts)))
@@ -141,7 +141,7 @@
 
 (defn listen-outliner-operation
   [{:keys [tx-data tx-meta] :as tx-report}]
-  (when-not (empty? tx-data)
+  (when (and (seq tx-data) (not (:skip-undo? tx-meta)))
     (reset-redo)
     (let [updated-blocks (db-report/get-blocks tx-report)
           entity {:blocks updated-blocks :txs tx-data
