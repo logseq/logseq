@@ -2,6 +2,7 @@ import { StyleString, UIOptions } from './LSPlugin'
 import { PluginLocal } from './LSPlugin.core'
 import { snakeCase } from 'snake-case'
 import * as nodePath from 'path'
+import DOMPurify from 'dompurify'
 
 interface IObject {
   [key: string]: any;
@@ -254,6 +255,16 @@ export function setupInjectedUI (
   const key = `${ui.key}-${pl.id}`
 
   let el = document.querySelector(`#${id}`) as HTMLElement
+
+  if (ui.template) {
+    // safe template
+    ui.template = DOMPurify.sanitize(
+      ui.template, {
+        ADD_TAGS: ['iframe'],
+        ALLOW_UNKNOWN_PROTOCOLS: true,
+        ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling']
+      })
+  }
 
   if (el) {
     el.innerHTML = ui.template
