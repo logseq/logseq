@@ -1199,10 +1199,12 @@
 (defn follow-link-under-cursor!
   []
   (when-let [page (get-nearest-page)]
-    (let [page-name (string/lower-case page)]
-      (state/clear-edit!)
-      (route-handler/redirect! {:to :page
-                                :path-params {:name page-name}}))))
+    (when-not (string/blank? page)
+      (let [page-name (string/lower-case page)]
+        (state/clear-edit!)
+        (insert-first-page-block-if-not-exists! page-name)
+        (route-handler/redirect! {:to :page
+                                  :path-params {:name page-name}})))))
 
 (defn open-link-in-sidebar!
   []
