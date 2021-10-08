@@ -31,6 +31,8 @@
 ;;; ================================================================
 ;;; const & vars
 
+;; TODO: simplify state
+
 (def card-hash-tag "card")
 
 (def card-last-interval-property        :card-last-interval)
@@ -378,8 +380,9 @@
   (swap! *review-records #(update % score (fn [ov] (conj ov card))))
   (if (>= (inc @*card-index) (count cards))
     (when cb
-      (swap! *card-index inc)
-      (cb @*review-records))
+      (do
+        (swap! *card-index inc)
+        (cb @*review-records)))
     (do
       (swap! *card-index inc)
       (reset! *phase 1))))
@@ -399,18 +402,24 @@
   (rum/local 1 ::phase)
   (rum/local 0 ::card-index)
   (rum/local {} ::review-records)
+  {:will-mount (fn [state]
+                 (state/set-state! :srs/mode? true)
+                 state)
+   :will-unmount (fn [state]
+                   (state/set-state! :srs/mode? false)
+                   state)}
   [state blocks {preview? :preview?
                  modal? :modal?
+                 global? :global?
                  cb :callback}]
   (let [cards (map ->card blocks)
         review-records (::review-records state)
         card-index (::card-index state)
-        card-index (if (> (count cards) @card-index)
-                     card-index
-                     (do
-                       (swap! card-index dec)
-                       card-index))
-        card (util/nth-safe cards @card-index)]
+        idx (if (and global?
+                     (>= (inc @card-index) (count blocks)))
+              (dec @card-index)
+              @card-index)
+        card (util/nth-safe cards idx)]
     (if-not card
       review-finished
       (let [phase (::phase state)
@@ -625,7 +634,8 @@
 
 (rum/defc global-cards
   []
-  (cards {:modal? true} {}))
+  (cards {:modal? true
+          :global? true} {}))
 
 (component-macro/register query-macro-name cards)
 

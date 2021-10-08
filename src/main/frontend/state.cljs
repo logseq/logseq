@@ -175,7 +175,9 @@
 
       :encryption/graph-parsing? false
 
-      :favorites/dragging nil})))
+      :favorites/dragging nil
+
+      :srs/mode? false})))
 
 
 (defn sub

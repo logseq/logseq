@@ -50,7 +50,8 @@
 
 (defn toggle-settings-modal!
   []
-  (state/toggle-settings!))
+  (when-not (:srs/mode? @state/state)
+    (state/toggle-settings!)))
 
 ;; FIXME: re-render all embedded blocks since they will not be re-rendered automatically
 
