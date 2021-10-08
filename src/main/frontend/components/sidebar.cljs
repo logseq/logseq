@@ -80,19 +80,20 @@
 
 (rum/defc page-name
   [name]
-  [:a {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (let [name (string/lower-case name)]
-                          (if (gobj/get e "shiftKey")
-                           (when-let [page-entity (db/entity [:block/name name])]
-                             (state/sidebar-add-block!
-                              (state/get-current-repo)
-                              (:db/id page-entity)
-                              :page
-                              {:page page-entity}))
-                           (route-handler/redirect! {:to :page
-                                                     :path-params {:name name}}))))}
-   name])
+  (let [original-name (db-model/get-page-original-name name)]
+    [:a {:on-click (fn [e]
+                     (util/stop e)
+                     (let [name (string/lower-case name)]
+                       (if (gobj/get e "shiftKey")
+                         (when-let [page-entity (db/entity [:block/name name])]
+                           (state/sidebar-add-block!
+                            (state/get-current-repo)
+                            (:db/id page-entity)
+                            :page
+                            {:page page-entity}))
+                         (route-handler/redirect! {:to :page
+                                                   :path-params {:name name}}))))}
+     original-name]))
 
 (rum/defcs favorite-item <
   (rum/local nil ::up?)
@@ -157,7 +158,6 @@
    {:class "recent"}
 
    (let [pages (state/sub :editor/recent-pages)]
-
      [:ul
       (for [name pages]
         [:li {:key name}

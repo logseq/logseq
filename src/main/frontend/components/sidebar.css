@@ -11,7 +11,7 @@
 }
 
 .is-electron.is-mac .cp__sidebar-left-layout {
-    padding-top: 30px;
+    padding-top: 42px;
     transition: all 0.25s;
     -webkit-transition: all 0.25s;
 }
