@@ -2366,25 +2366,34 @@
                       (insert (str "\n" indent next-bullet " " checkbox)))))
               "properties-drawer"
               (let [property-key (:raw-content (thingatpt/property-key-at-point input))
-                    move-to-pos (if (= (:block/format config) :org) 2 3)]
-                (if property-key
-                  (case property-key
-                    ;;When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
-                    "PROPERTIES"
-                    (do (cursor/move-cursor-to-line-end input)
-                        (insert "\n:: ")
-                        (cursor/move-cursor-backward input move-to-pos))
-                    ;; When cursor in "END", new block (respect the previous enter behavior)
-                    "END"
-                    (do
-                      (cursor/move-cursor-to-end input)
-                      (insert-new-block! state))
-                    ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
-                    (cursor/move-cursor-to-line-end input))
+                    move-to-pos (if (= (:block/format block) :org) 2 3)]
+                (cond (and property-key (not= property-key ""))
+                      (case property-key
+                        ;; When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
+                        "PROPERTIES"
+                        (do (cursor/move-cursor-to-line-end input)
+                            (insert "\n:: ")
+                            (cursor/move-cursor-backward input move-to-pos))
+                        ;; When cursor in "END", new block (respect the previous enter behavior)
+                        "END"
+                        (do
+                          (cursor/move-cursor-to-end input)
+                          (insert-new-block! state))
+                        ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
+                        (cursor/move-cursor-to-line-end input))
 
-                  ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
-                  (do (insert "\n:: ")
-                      (cursor/move-cursor-backward input move-to-pos)))))
+                      ;; when cursor in empty property key
+                      (and property-key (= property-key ""))
+                      (do (delete-and-update
+                           input
+                           (cursor/line-beginning-pos input)
+                           (cursor/line-end-pos input))
+                          (cursor/move-cursor-to-line-end (inc (:end thing-at-point)))))
+                      
+                      :else
+                      ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
+                      (do (insert "\n:: ")
+                          (cursor/move-cursor-backward input move-to-pos))))
 
             (and
              (string/blank? content)
