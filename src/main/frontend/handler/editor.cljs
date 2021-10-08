@@ -2313,7 +2313,9 @@
               "admonition-block" (keydown-new-line)
               "source-block" (keydown-new-line)
               "block-ref" (open-block-in-sidebar! (:link thing-at-point))
-              "page-ref" (route-handler/redirect-to-page! (:link thing-at-point))
+              "page-ref" (do
+                           (insert-first-page-block-if-not-exists! (:link thing-at-point))
+                           (route-handler/redirect-to-page! (:link thing-at-point)))
               "list-item"
               (let [{:keys [full-content indent bullet checkbox ordered _]} thing-at-point
                     next-bullet (if ordered
@@ -2330,7 +2332,7 @@
                     move-to-pos (if (= (:block/format config) :org) 2 3)]
                 (if property-key
                   (case property-key
-                    ;;When cursor in "PROPERTIES", add :|: in a new line and move cursor to | 
+                    ;;When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
                     "PROPERTIES"
                     (do (cursor/move-cursor-to-line-end input)
                         (insert "\n:: ")
@@ -2342,8 +2344,8 @@
                       (insert-new-block! state))
                     ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
                     (cursor/move-cursor-to-line-end input))
-                 
-                  ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to | 
+
+                  ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
                   (do (insert "\n:: ")
                       (cursor/move-cursor-backward input move-to-pos)))))
 
@@ -2352,7 +2354,7 @@
              (not has-right?)
              (not (last-top-level-child? config current-node)))
             (outdent-on-enter current-node)
-            
+
             :else
             (profile
              "Insert block"
