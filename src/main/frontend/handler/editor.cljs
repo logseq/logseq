@@ -1505,7 +1505,8 @@
               filename (str path "/" filename)]
                                         ;(js/console.debug "Write asset #" dir filename file)
           (if (util/electron?)
-            (let [from (.-path file)]
+            (let [from (.-path file)
+                  from (if (string/blank? from) nil from)]
               (p/then (js/window.apis.copyFileToAssets dir filename from)
                       #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
             (p/then (fs/write-file! repo dir filename (.stream file) nil)
