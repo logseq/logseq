@@ -404,8 +404,8 @@
        (when-let [title (get-in block [:block/properties :title])]
          (when-let [old-title (:block/name (db/entity (:db/id (:block/page block))))]
            (when (and (:block/pre-block? block)
-                     (not (string/blank? title))
-                     (not= (string/lower-case title) old-title))
+                      (not (string/blank? title))
+                      (not= (string/lower-case title) old-title))
              (state/pub-event! [:page/title-property-changed old-title title]))))))
 
     (repo-handler/push-if-auto-enabled! repo)))
@@ -651,10 +651,10 @@
                          [_ false true] insert-new-block-before-block-aux!
                          [_ _ _] insert-new-block-aux!)]
          (insert-fn config block value
-          {:ok-handler
-           (fn [last-block]
-             (edit-block! last-block 0 format id)
-             (clear-when-saved!))}))))
+                    {:ok-handler
+                     (fn [last-block]
+                       (edit-block! last-block 0 format id)
+                       (clear-when-saved!))}))))
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
@@ -1135,9 +1135,9 @@
         tree (blocks-vec->tree level-blocks)
         top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
         exported-md-contents (export/export-blocks-as-markdown
-                                     repo top-level-block-uuids
-                                     (state/get-export-block-text-indent-style)
-                                     (into [] (state/get-export-block-text-remove-options)))]
+                              repo top-level-block-uuids
+                              (state/get-export-block-text-indent-style)
+                              (into [] (state/get-export-block-text-remove-options)))]
     [exported-md-contents tree]))
 
 (defn copy-selection-blocks
@@ -1172,8 +1172,8 @@
   (when-let [blocks (seq (get-selected-blocks-with-children))]
     (let [repo (state/get-current-repo)
           block-ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
-                                     (uuid id)) blocks))
-                   (remove nil?))
+                                           (uuid id)) blocks))
+                         (remove nil?))
           blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
           blocks* (flatten
                    (mapv (fn [b] (if (:collapsed (:block/properties b))
@@ -1860,12 +1860,12 @@
               (db/refresh! repo opts)
               (let [blocks (doall
                             (map
-                             (fn [block]
-                               (when-let [id (gobj/get block "id")]
-                                 (when-let [block (gdom/getElement id)]
-                                   (dom/add-class! block "selected noselect")
-                                   block)))
-                             blocks-dom-nodes))]
+                              (fn [block]
+                                (when-let [id (gobj/get block "id")]
+                                  (when-let [block (gdom/getElement id)]
+                                    (dom/add-class! block "selected noselect")
+                                    block)))
+                              blocks-dom-nodes))]
                 (state/set-selection-blocks! blocks)))))))))
 
 (defn- get-link
@@ -2129,8 +2129,8 @@
                      :block/page (select-keys page [:db/id])
                      :block/format format
                      :block/properties (apply dissoc (:block/properties block)
-                                              (concat [:id :custom_id :custom-id]
-                                                      exclude-properties))
+                                         (concat [:id :custom_id :custom-id]
+                                                 exclude-properties))
                      :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
                      :block/content new-content
                      :block/title new-title
@@ -2366,35 +2366,38 @@
                       (insert (str "\n" indent next-bullet " " checkbox)))))
               "properties-drawer"
               (let [property-key (:raw-content (thingatpt/property-key-at-point input))
-                    move-to-pos (if (= (:block/format block) :org) 2 3)]
-                (cond (and property-key (not= property-key ""))
-                      (case property-key
-                        ;; When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
-                        "PROPERTIES"
-                        (do (cursor/move-cursor-to-line-end input)
-                            (insert "\n:: ")
-                            (cursor/move-cursor-backward input move-to-pos))
-                        ;; When cursor in "END", new block (respect the previous enter behavior)
-                        "END"
-                        (do
-                          (cursor/move-cursor-to-end input)
-                          (insert-new-block! state))
-                        ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
-                        (cursor/move-cursor-to-line-end input))
+                    org? (= (:block/format block) :org)
+                    move-to-pos (if org? 2 3)]
+                (if org?
+                  (cond
+                    (and property-key (not= property-key ""))
+                    (case property-key
+                      ;; When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
+                      "PROPERTIES"
+                      (do (cursor/move-cursor-to-line-end input)
+                          (insert "\n:: ")
+                          (cursor/move-cursor-backward input move-to-pos))
+                      ;; When cursor in "END", new block (respect the previous enter behavior)
+                      "END"
+                      (do
+                        (cursor/move-cursor-to-end input)
+                        (insert-new-block! state))
+                      ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
+                      (cursor/move-cursor-to-line-end input))
 
-                      ;; when cursor in empty property key
-                      ;; (and property-key (= property-key ""))
-                      ;; (do (delete-and-update
-                      ;;      input
-                      ;;      (cursor/line-beginning-pos input)
-                      ;;      (cursor/line-end-pos input))
-                      ;;     (cursor/move-cursor-to-line-end (inc (:end thing-at-point))))
-                      )
-
-                      :else
-                      ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
-                      (do (insert "\n:: ")
-                          (cursor/move-cursor-backward input move-to-pos))))
+                    ;; when cursor in empty property key
+                    ;; (and property-key (= property-key ""))
+                    ;; (do (delete-and-update
+                    ;;      input
+                    ;;      (cursor/line-beginning-pos input)
+                    ;;      (cursor/line-end-pos input))
+                    ;;     (cursor/move-cursor-to-line-end (inc (:end thing-at-point))))
+                    :else
+                    ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
+                    (do
+                      (insert "\n:: ")
+                      (cursor/move-cursor-backward input move-to-pos)))
+                  (insert "\n"))))
 
             (and
              (string/blank? content)
@@ -3343,7 +3346,7 @@
     (let [match (util/format "((%s))" (str ref-id))
           ref-block (db/entity [:block/uuid ref-id])
           block-ref-content (->> (or (:block/content ref-block)
-                                    "")
+                                     "")
                                  (property/remove-built-in-properties (:block/format ref-block))
                                  (drawer/remove-logbook))
           content (string/replace-first (:block/content block) match
