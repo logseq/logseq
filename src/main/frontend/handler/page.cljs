@@ -650,21 +650,29 @@
                     (= "local" repo)))
         (let [title (date/today)
               today-page (string/lower-case title)
-              template (state/get-default-journal-template)]
-          (when (db/page-empty? repo today-page)
-            (create! title {:redirect? false
-                            :split-namespace? false
-                            :create-first-block? (not template)
-                            :journal? true})
-            (when template
-              (let [page (db/pull [:block/name today-page])]
-                (editor-handler/insert-template!
-                 nil
-                 template
-                 {:get-pos-fn (fn []
-                                [page false false false])
-                  :page-block page})
-                (ui-handler/re-render-root!)))))))))
+              template (state/get-default-journal-template)
+              format (state/get-preferred-format repo)
+              file-name (date/journal-title->default title)
+              path (str (config/get-journals-directory) "/" file-name "."
+                        (config/get-file-extension format))
+              file-path (str "/" path)
+              repo-dir (config/get-repo-dir repo)]
+          (p/let [file-exists? (fs/file-exists? repo-dir file-path)]
+            (when (and (db/page-empty? repo today-page)
+                       (not file-exists?))
+              (create! title {:redirect? false
+                              :split-namespace? false
+                              :create-first-block? (not template)
+                              :journal? true})
+              (when template
+                (let [page (db/pull [:block/name today-page])]
+                  (editor-handler/insert-template!
+                   nil
+                   template
+                   {:get-pos-fn (fn []
+                                  [page false false false])
+                    :page-block page})
+                  (ui-handler/re-render-root!))))))))))
 
 (defn open-today-in-sidebar
   []
