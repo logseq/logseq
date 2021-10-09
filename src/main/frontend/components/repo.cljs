@@ -173,14 +173,13 @@
                (t :git/version) (str " " version/version)]]])))])))
 
 (rum/defc repos-dropdown < rum/reactive
-  [on-click close-modal-fn]
+  [toggle-dropdown-f]
   (when-let [current-repo (state/sub :git/current-repo)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (let [get-repo-name (fn [repo]
                             (if (config/local-db? repo)
                               (config/get-local-dir repo)
                               (db/get-repo-path repo)))
-            close-modal-fn (if (fn? close-modal-fn) close-modal-fn (fn []))
             repos (state/sub [:me :repos])
             repos (remove (fn [r] (= config/local-repo (:url r))) repos)
             switch-repos (remove (fn [repo]
@@ -197,10 +196,7 @@
                                                  (common-handler/reset-config! url nil)
                                                  (shortcut/refresh!)
                                                  (when-not (= :draw (state/get-current-route))
-                                                   (route-handler/redirect-to-home!))
-                                                 (when on-click
-                                                   (on-click url))
-                                                 (close-modal-fn))}})
+                                                   (route-handler/redirect-to-home!)))}})
                         switch-repos)
             links (concat repo-links
                           [(when (seq switch-repos)
@@ -242,9 +238,8 @@
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             (state/set-state! :ui/repos-switcher-toggle-fn toggle-fn)
-             [:a#repo-switch.block.pr-2.whitespace-nowrap
-              {:on-click toggle-fn}
+             (reset! toggle-dropdown-f toggle-fn)
+             [:span#repo-switch.block.pr-2.whitespace-nowrap
               [:span
                (let [repo-name (get-repo-name current-repo)
                      repo-name (if (or (util/electron?)

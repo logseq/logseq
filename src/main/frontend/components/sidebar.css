@@ -67,6 +67,10 @@
   nav > a {
     color: var(--ls-icon-color);
   }
+
+  a {
+    color: var(--ls-primary-text-color);
+  }
 }
 
 .left-sidebar-inner {
@@ -182,7 +186,7 @@
   }
 }
 
-.white-theme .left-sidebar-inner a {
+.white-theme .left-sidebar-inner a, .white-theme .left-bar a {
   color: var(--ls-primary-text-color);
 }
 

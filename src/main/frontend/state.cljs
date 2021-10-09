@@ -58,7 +58,6 @@
       :modal/show? false
 
       ;; right sidebar
-      :ui/repos-switcher-toggle-fn nil
       :ui/fullscreen? false
       :ui/settings-open? false
       :ui/sidebar-open? false

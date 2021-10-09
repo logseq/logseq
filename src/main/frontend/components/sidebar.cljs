@@ -178,21 +178,20 @@
     (let [active? (fn [route] (= route (get-in route-match [:data :name])))
           page-active? (fn [page]
                          (= page (get-in route-match [:parameters :path :name])))
-          left-sidebar? (state/sub :ui/left-sidebar-open?)]
+          left-sidebar? (state/sub :ui/left-sidebar-open?)
+          toggle-dropdown-f (atom nil)]
       (when left-sidebar?
         [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
          [:div.flex.flex-col.pb-4.wrap
           [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
-           (when-not (util/mobile?)
-             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.ignore-outside-event
-              {:on-click #(let [^js target (.-target %)
-                                ^js switcher (gdom/getElement "repo-switch")]
-                            (when-not (.closest target ".repos")
-                              (when-let [toggle (:ui/repos-switcher-toggle-fn @state/state)]
-                                (toggle))))}
-              (ui/icon "database mr-3" {:style {:font-size 20}})
-              [:div.repos
-               (repo/repos-dropdown nil nil)]])
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.ignore-outside-event
+            {:on-mouse-down (fn [e]
+                              (util/stop e)
+                              (when-let [f @toggle-dropdown-f]
+                                (f)))}
+            (ui/icon "database mr-3" {:style {:font-size 20}})
+            [:div.graphs
+             (repo/repos-dropdown toggle-dropdown-f)]]
            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-journals)}
             (ui/icon "calendar mr-3" {:style {:font-size 20}})
             [:span.flex-1 "Journals"]]
@@ -226,17 +225,9 @@
      :style {:max-width "86vw"}}
     (when @open?
       [:div.absolute.top-0.right-0.p-1
-       [:button#close-left-bar.close-panel-btn.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+       [:a.button
         {:on-click close-fn}
-        [:svg.h-6.w-6
-         {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-         [:path
-          {:d "M6 18L18 6M6 6l12 12"
-           :stroke-width "2"
-           :stroke-linejoin "round"
-           :stroke-linecap "round"}]]]])
-    [:div.flex-shrink-0.flex.items-center.px-4.h-16.head-wrap
-     (repo/repos-dropdown nil close-fn)]
+        (ui/icon "x" {:style {:font-size 24}})]])
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 
