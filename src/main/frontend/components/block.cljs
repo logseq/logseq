@@ -1367,7 +1367,8 @@
         has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
-                    (or has-children-blocks? (seq body)))
+                    (or has-children-blocks?
+                        (and (seq (:block/title block)) (seq body))))
         control-show? (and
                        (or (and (seq (:block/title block))
                                 (seq body))
