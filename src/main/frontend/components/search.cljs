@@ -8,6 +8,7 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -233,7 +234,8 @@
                               nil)
                             (state/close-modal!))
          :item-render (fn [{:keys [type data alias]}]
-                        (let [search-mode (state/get-search-mode)]
+                        (let [search-mode (state/get-search-mode)
+                              data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
                           [:div {:class "py-2"} (case type
                                                   :graph-add-filter
                                                   [:b search-q]
