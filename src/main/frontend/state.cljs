@@ -103,7 +103,6 @@
       :editor/document-mode? document-mode?
       :editor/args nil
       :editor/on-paste? false
-      :editor/recent-pages nil
 
       :db/last-transact-time {}
       :db/last-persist-transact-ids {}

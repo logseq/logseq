@@ -1358,8 +1358,3 @@
    (filter :block/file)
    (sort-by :block/updated-at >)
    (take 200)))
-
-(defn refresh-recent-pages
-  []
-  (let [results (db-utils/get-key-value :recent/pages)]
-    (state/set-state! :editor/recent-pages results)))

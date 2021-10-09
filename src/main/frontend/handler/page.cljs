@@ -535,7 +535,7 @@
   [repo page]
   (let [pages (or (db/get-key-value repo :recent/pages)
                   '())
-        new-pages (take 10 (distinct (cons page pages)))]
+        new-pages (take 15 (distinct (cons page pages)))]
     (db/set-key-value repo :recent/pages new-pages)))
 
 (defn template-exists?

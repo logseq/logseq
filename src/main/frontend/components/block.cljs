@@ -375,8 +375,7 @@
       (fn [e]
         (util/stop e)
         (when redirect-page-name
-          (page-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name)
-          (js/setTimeout #(model/refresh-recent-pages) 300))
+          (page-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name))
         (let [create-first-block! (fn []
                                     (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
                                       (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]

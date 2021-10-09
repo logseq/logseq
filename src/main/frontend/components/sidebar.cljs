@@ -149,7 +149,6 @@
 (rum/defc recent-pages
   < rum/reactive db-mixins/query
   [t]
-
   (nav-content-item
    [:a.flex.items-center.text-sm.font-medium.rounded-md
     (ui/icon "history mr-1" {:style {:font-size 18}})
@@ -158,7 +157,7 @@
 
    {:class "recent"}
 
-   (let [pages (state/sub :editor/recent-pages)]
+   (let [pages (db/sub-key-value :recent/pages)]
      [:ul
       (for [name pages]
         [:li {:key name}
