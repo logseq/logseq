@@ -242,7 +242,9 @@
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch.block.pr-2.whitespace-nowrap {:on-click toggle-fn}
+             (state/set-state! :ui/repos-switcher-toggle-fn toggle-fn)
+             [:a#repo-switch.block.pr-2.whitespace-nowrap
+              {:on-click toggle-fn}
               [:span
                (let [repo-name (get-repo-name current-repo)
                      repo-name (if (or (util/electron?)
