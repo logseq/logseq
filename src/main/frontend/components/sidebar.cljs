@@ -181,10 +181,15 @@
           left-sidebar? (state/sub :ui/left-sidebar-open?)]
       (when left-sidebar?
         [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
-         [:div.flex.flex-col.pb-4 {:style {:padding-top "1.25rem"}}
+         [:div.flex.flex-col.pb-4.wrap
           [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
            (when-not (util/mobile?)
-             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {}
+             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.ignore-outside-event
+              {:on-click #(let [^js target (.-target %)
+                                ^js switcher (gdom/getElement "repo-switch")]
+                            (when-not (.closest target ".repos")
+                              (when-let [toggle (:ui/repos-switcher-toggle-fn @state/state)]
+                                (toggle))))}
               (ui/icon "database mr-3" {:style {:font-size 20}})
               [:div.repos
                (repo/repos-dropdown nil nil)]])

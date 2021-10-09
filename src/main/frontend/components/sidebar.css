@@ -11,9 +11,8 @@
 }
 
 .is-electron.is-mac .cp__sidebar-left-layout {
-    padding-top: 42px;
-    transition: all 0.25s;
-    -webkit-transition: all 0.25s;
+  transition: all 0.25s;
+  -webkit-transition: all 0.25s;
 }
 
 #app-container {
@@ -71,14 +70,22 @@
 }
 
 .left-sidebar-inner {
- height: 100%;
+  height: 100%;
 
- .dropdown-wrapper {
+  > .wrap {
+    padding-top: 42px;
+  }
+
+  .dropdown-wrapper {
     min-width: 180px;
   }
 
-  a.item > span {
-    margin-top: 3px;
+  a.item {
+    user-select: none;
+
+    > span {
+      margin-top: 3px;
+    }
   }
 
   .nav-content-item {
@@ -88,7 +95,6 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding-bottom: 5px;
       user-select: none;
       cursor: pointer;
       padding: 0 18px;
@@ -106,6 +112,8 @@
 
           &:last-child {
             transform: translateY(-6px) translateX(2px) rotate(90deg);
+            transform-origin: center center;
+            transition: .25s transform;
           }
         }
       }
@@ -122,6 +130,10 @@
           }
         }
       }
+
+      &:active {
+        opacity: .8;
+      }
     }
 
     > .bd {
@@ -133,21 +145,21 @@
         margin: 0;
 
         a {
-            width: 100%;
-            padding: 2px 20px;
-            display: block;
-            text-overflow: ellipsis;
-            overflow: hidden;
-            white-space: nowrap;
-            color: var(--ls-primary-text-color);
+          width: 100%;
+          padding: 2px 20px;
+          display: block;
+          text-overflow: ellipsis;
+          overflow: hidden;
+          white-space: nowrap;
+          color: var(--ls-primary-text-color);
 
-            &:hover {
-                background-color: var(--ls-quaternary-background-color);
-            }
+          &:hover {
+            background-color: var(--ls-quaternary-background-color);
+          }
 
-            &:active {
-                opacity: .7;
-            }
+          &:active {
+            opacity: .7;
+          }
         }
       }
     }
@@ -155,7 +167,7 @@
     &.is-expand {
       > .hd > span > a {
         &:last-child {
-          transform: translateY(2px);
+          transform: translateY(2px) translateX(-3px);
         }
       }
 
@@ -166,12 +178,12 @@
   }
 
   a.item:hover {
-      background-color: var(--ls-quaternary-background-color);
+    background-color: var(--ls-quaternary-background-color);
   }
 }
 
-.white-theme .left-sidebar-inner a{
-    color: var(--ls-primary-text-color);
+.white-theme .left-sidebar-inner a {
+  color: var(--ls-primary-text-color);
 }
 
 .cp__sidebar-left-layout {
@@ -356,5 +368,5 @@
 }
 
 .favorites li.dragging-target {
-    border-left: 5px solid green;
+  border-left: 5px solid green;
 }
