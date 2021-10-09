@@ -71,7 +71,7 @@
 
       [:a#left-menu.cp__header-left-menu.button
        {:on-click on-click
-        :style {:margin-left 10}}
+        :style {:margin-left 12}}
        (ui/icon "menu-2" {:style {:fontSize 20}})])))
 
 (rum/defc dropdown-menu < rum/reactive

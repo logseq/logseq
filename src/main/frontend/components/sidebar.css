@@ -16,17 +16,6 @@
     -webkit-transition: all 0.25s;
 }
 
-.is-electron.is-mac.is-fullscreen .cp__sidebar-left-layout {
-  padding-top: 0;
-}
-
-.ls-left-sidebar-open {
-  .cp__header {
-    padding-left: 0 !important;
-    margin-left: var(--ls-left-sidebar-width);
-  }
-}
-
 #app-container {
   flex: 0 0 100%;
   transition: all 200ms ease-in 0s;

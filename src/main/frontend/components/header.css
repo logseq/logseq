@@ -6,7 +6,6 @@
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  background-color: var(--ls-primary-background-color, #fff);
   position: sticky;
   position: -webkit-sticky;
   top: 0;
@@ -78,7 +77,9 @@
 }
 
 .is-electron.is-mac .cp__header {
-  padding-left: 78px;
+    padding-left: 78px;
+    transition: all 0.25s;
+    -webkit-transition: all 0.25s;
 }
 
 .cp__header .navigation svg {

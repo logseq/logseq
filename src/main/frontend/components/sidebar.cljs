@@ -178,18 +178,16 @@
     (let [active? (fn [route] (= route (get-in route-match [:data :name])))
           page-active? (fn [page]
                          (= page (get-in route-match [:parameters :path :name])))
-          left-sidebar? (state/sub :ui/left-sidebar-open?)
-          white? (= "white" (state/sub :ui/theme))]
+          left-sidebar? (state/sub :ui/left-sidebar-open?)]
       (when left-sidebar?
         [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
-         [:div.flex.flex-col.pb-4 {:style {:padding-top "0.75rem"}}
-          (when-not (util/mobile?)
-            [:div.flex.items-center.flex-shrink-0.px-4.mb-5
-             [:a.mr-3 {:href (rfe/href :home)}
-              (svg/logo (not white?))]
-             [:div.repos
-              (repo/repos-dropdown nil nil)]])
+         [:div.flex.flex-col.pb-4 {:style {:padding-top "1.25rem"}}
           [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
+           (when-not (util/mobile?)
+             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {}
+              (ui/icon "database mr-3" {:style {:font-size 20}})
+              [:div.repos
+               (repo/repos-dropdown nil nil)]])
            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-journals)}
             (ui/icon "calendar mr-3" {:style {:font-size 20}})
             [:span.flex-1 "Journals"]]
