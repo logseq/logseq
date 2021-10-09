@@ -246,11 +246,17 @@
             [:span.hl-area
              [:img {:src asset-path}]]))))))
 
+(defn fix-local-asset-filename
+  [filename]
+  (when-not (string/blank? filename)
+    (let [local-asset? (re-find #"[0-9]{13}_\d$" filename)]
+      (-> filename
+          (subs 0 (- (count filename) (if local-asset? 15 0)))
+          (string/replace #"^hls__" "")
+          (string/replace "_" " ")))))
+
 (rum/defc human-hls-filename-display
   [title]
-  (let [local-asset? (re-find #"[0-9]{13}_\d$" title)]
+  (when (string/starts-with? title "hls__")
     [:a.asset-ref
-     (-> title
-         (subs 0 (- (count title) (if local-asset? 15 0)))
-         (string/replace #"^hls__" "")
-         (string/replace "_" " "))]))
+     (fix-local-asset-filename title)]))

@@ -27,7 +27,8 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
-            [frontend.extensions.srs :as srs]))
+            [frontend.extensions.srs :as srs]
+            [frontend.extensions.pdf.assets :as pdf-assets]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -93,7 +94,7 @@
                             {:page page-entity}))
                          (route-handler/redirect! {:to :page
                                                    :path-params {:name name}}))))}
-     original-name]))
+     (pdf-assets/fix-local-asset-filename original-name)]))
 
 (rum/defcs favorite-item <
   (rum/local nil ::up?)
