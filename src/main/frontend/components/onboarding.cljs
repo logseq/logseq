@@ -183,7 +183,7 @@
     [:div.help.cp__sidebar-help-docs
      (let [discord-with-icon [:div.flex-row.inline-flex.items-center
                               [:span.mr-1 (t :help/community)]
-                              svg/discord]
+                              (ui/icon "brand-discord" {:style {:font-size 20}})]
            list
            [{:title "Usage"
              :children [[[:a
