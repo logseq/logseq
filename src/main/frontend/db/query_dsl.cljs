@@ -458,7 +458,8 @@
   (when (string? query-string)
     (let [query-string (template/resolve-dynamic-template! query-string)]
       (when-not (string/blank? query-string)
-        (let [{:keys [query sort-by blocks? sample] :as result} (parse repo query-string)]
+        (let [{:keys [query sort-by blocks? sample] :as result} (parse repo query-string)
+              query (if (string? query) (string/trim query) query)]
           (if (and (string? result) (not (string/includes? result " ")))
             (if (= "\"" (first result) (last result))
               (subs result 1 (dec (count result)))
@@ -481,7 +482,8 @@
   (when (seq (:query query-m))
     (let [query-string (pr-str (:query query-m))
           query-string (template/resolve-dynamic-template! query-string)
-          {:keys [query sort-by blocks?]} (parse repo query-string)]
+          {:keys [query sort-by blocks?]} (parse repo query-string)
+          query (if (string? query) (string/trim query) query)]
       (when query
         (when-let [query (query-wrapper query blocks?)]
           (react/react-query repo

@@ -1086,13 +1086,15 @@
       (cond
         (= name "query")
         [:div.dsl-query
-         (let [query (string/join ", " arguments)]
-           (custom-query (assoc config :dsl-query? true)
-                         {:title (ui/tippy {:html commands/query-doc
-                                            :interactive true}
-                                  [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
-                                   (str "Query: " query)])
-                          :query query}))]
+         (let [query (->> (string/join ", " arguments)
+                          (string/trim))]
+           (when-not (string/blank? query)
+             (custom-query (assoc config :dsl-query? true)
+                           {:title (ui/tippy {:html commands/query-doc
+                                              :interactive true}
+                                             [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
+                                              (str "Query: " query)])
+                            :query query})))]
 
         (= name "function")
         (or
@@ -2314,7 +2316,8 @@
         repo (state/get-current-repo)
         result-atom (atom nil)
         query-atom (if (:dsl-query? config)
-                     (let [result (query-dsl/query (state/get-current-repo) (:query query))]
+                     (let [q (:query query)
+                           result (query-dsl/query (state/get-current-repo) q)]
                        (cond
                          (and (util/electron?) (string? result)) ; full-text search
                          (if (string/blank? result)
@@ -2354,37 +2357,42 @@
     [:p "Query failed: "]
     [:pre (str q)]]
    (let [dsl-query? (:dsl-query? config)
-         query-atom (:query-atom state)]
-     (let [current-block-uuid (or (:block/uuid (:block config))
-                                  (:block/uuid config))
-           current-block (db/entity [:block/uuid current-block-uuid])
-           ;; exclude the current one, otherwise it'll loop forever
-           remove-blocks (if current-block-uuid [current-block-uuid] nil)
-           query-result (and query-atom (rum/react query-atom))
-           table? (or (get-in current-block [:block/properties :query-table])
-                      (and (string? query) (string/ends-with? (string/trim query) "table")))
-           transformed-query-result (when query-result
-                                      (db/custom-query-result-transform query-result remove-blocks q))
-           not-grouped-by-page? (or table?
-                                    (boolean (:result-transform q))
-                                    (and (string? query) (string/includes? query "(by-page false)")))
-           result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                    (db-utils/group-by-page transformed-query-result)
-                    transformed-query-result)
-           _ (when-let [query-result (:query-result config)]
-               (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
-                 (reset! query-result result)))
-           view-f (and view (sci/eval-string (pr-str view)))
-           only-blocks? (:block/uuid (first result))
-           blocks-grouped-by-page? (and (seq result)
-                                        (not not-grouped-by-page?)
-                                        (coll? (first result))
-                                        (:block/name (ffirst result))
-                                        (:block/uuid (first (second (first result))))
-                                        true)
-           built-in? (built-in-custom-query? title)
-           page-list? (and (seq result)
-                           (:block/name (first result)))]
+         query-atom (:query-atom state)
+         current-block-uuid (or (:block/uuid (:block config))
+                                (:block/uuid config))
+         current-block (db/entity [:block/uuid current-block-uuid])
+         ;; exclude the current one, otherwise it'll loop forever
+         remove-blocks (if current-block-uuid [current-block-uuid] nil)
+         query-result (and query-atom (rum/react query-atom))
+         table? (or (get-in current-block [:block/properties :query-table])
+                    (and (string? query) (string/ends-with? (string/trim query) "table")))
+         transformed-query-result (when query-result
+                                    (db/custom-query-result-transform query-result remove-blocks q))
+         not-grouped-by-page? (or table?
+                                  (boolean (:result-transform q))
+                                  (and (string? query) (string/includes? query "(by-page false)")))
+         result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
+                  (db-utils/group-by-page transformed-query-result)
+                  transformed-query-result)
+         _ (when-let [query-result (:query-result config)]
+             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
+               (reset! query-result result)))
+         view-f (and view (sci/eval-string (pr-str view)))
+         only-blocks? (:block/uuid (first result))
+         blocks-grouped-by-page? (and (seq result)
+                                      (not not-grouped-by-page?)
+                                      (coll? (first result))
+                                      (:block/name (ffirst result))
+                                      (:block/uuid (first (second (first result))))
+                                      true)
+         built-in? (built-in-custom-query? title)
+         page-list? (and (seq result)
+                         (:block/name (first result)))
+         nested-query? (:custom-query? config)]
+     (if nested-query?
+       [:code (if dsl-query?
+                (util/format "{{query %s}}" query)
+                "{{query hidden}}")]
        [:div.custom-query.mt-4 (get config :attr {})
         (when-not (and built-in? (empty? result))
           (ui/foldable
@@ -2609,8 +2617,10 @@
 
         ["Custom" "query" _options result content]
         (try
-          (let [query (reader/read-string content)]
-            (custom-query config query))
+          (let [query (->> (reader/read-string content)
+                           (string/trim))]
+            (when-not (string/blank? query)
+              (custom-query config query)))
           (catch js/Error e
             (println "read-string error:")
             (js/console.error e)
