@@ -2383,12 +2383,13 @@
                         (cursor/move-cursor-to-line-end input))
 
                       ;; when cursor in empty property key
-                      (and property-key (= property-key ""))
-                      (do (delete-and-update
-                           input
-                           (cursor/line-beginning-pos input)
-                           (cursor/line-end-pos input))
-                          (cursor/move-cursor-to-line-end (inc (:end thing-at-point)))))
+                      ;; (and property-key (= property-key ""))
+                      ;; (do (delete-and-update
+                      ;;      input
+                      ;;      (cursor/line-beginning-pos input)
+                      ;;      (cursor/line-end-pos input))
+                      ;;     (cursor/move-cursor-to-line-end (inc (:end thing-at-point))))
+                      )
                       
                       :else
                       ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
