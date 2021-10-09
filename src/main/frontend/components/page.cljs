@@ -48,9 +48,7 @@
   (when page-name
     (if block?
       (db/get-block-and-children repo block-id)
-      (do
-        (page-handler/add-page-to-recent! repo page-original-name)
-        (db/get-page-blocks repo page-name)))))
+      (db/get-page-blocks repo page-name))))
 
 (defn- open-first-block!
   [state]
@@ -270,85 +268,142 @@
          {:default-collapsed? false})]])))
 
 (defn page-menu
-  [repo t page page-name page-original-name title journal? public? developer-mode?]
-  (let [contents? (= (string/lower-case (str page-name)) "contents")
-        links (fn [] (->>
-                     [(when-not contents?
-                        {:title   (t :page/add-to-favorites)
-                         :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
+  [t]
+  (when-let [page-name (and (state/get-current-page)
+                            (string/lower-case (state/get-current-page)))]
+    (let [repo (state/sub :git/current-repo)
+          page (and page-name (db/entity repo [:block/name page-name]))
+          page-original-name (:block/original-name page)
+          journal? (db/journal-page? page-name)
+          block? (and page (util/uuid-string? page-name))
+          contents? (= (string/lower-case (str page-name)) "contents")
+          {:keys [title] :as properties} (:block/properties page)
+          title (or title page-original-name page-name)
+          public? (true? (:public properties))
+          favorites (:favorites (state/sub-graph-config))
+          favorited? (contains? (set (map string/lower-case favorites))
+                                (string/lower-case page-name))
+          developer-mode? (state/sub [:ui/developer-mode?])]
+      (when (and page (not block?))
+        (->>
+         [{:title   (if favorited?
+                      (t :page/unfavorite)
+                      (t :page/add-to-favorites))
+           :options {:on-click
+                     (fn []
+                       (if favorited?
+                         (page-handler/unfavorite-page! page-original-name)
+                         (page-handler/favorite-page! page-original-name)))}}
 
-                      {:title "Go to presentation mode"
-                       :options {:on-click (fn []
-                                             (state/sidebar-add-block!
-                                              repo
-                                              (:db/id page)
-                                              :page-presentation
-                                              {:page page}))}}
-                      (when (and (not contents?)
-                                 (not journal?))
-                        {:title   (t :page/rename)
-                         :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
+          {:title (t :page/presentation-mode)
+           :options {:on-click (fn []
+                                 (state/sidebar-add-block!
+                                  repo
+                                  (:db/id page)
+                                  :page-presentation
+                                  {:page page}))}}
 
-                      (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
-                        [{:title   (t :page/open-in-finder)
-                          :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-                         {:title   (t :page/open-with-default-app)
-                          :options {:on-click #(js/window.apis.openPath file-path)}}])
+          (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
+            [{:title   (t :page/open-in-finder)
+              :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
+             {:title   (t :page/open-with-default-app)
+              :options {:on-click #(js/window.apis.openPath file-path)}}])
 
-                      (when-not contents?
-                        {:title   (t :page/delete)
-                         :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+          (when-not contents?
+            {:title   (t :page/delete)
+             :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
 
-                      (when (state/get-current-page)
-                        {:title   (t :export)
-                         :options {:on-click #(state/set-modal! export/export-page)}})
-
-                      (when (util/electron?)
-                        {:title   (t (if public? :page/make-private :page/make-public))
-                         :options {:on-click
+          (when (state/get-current-page)
+            {:title   (t :export-page)
+             :options {:on-click #(state/set-modal!
                                    (fn []
-                                     (page-handler/update-public-attribute!
-                                      page-name
-                                      (if public? false true))
-                                     (state/close-modal!))}})
+                                     (export/export-blocks [(:block/uuid page)])))}})
 
-                      (when (util/electron?)
-                        {:title   (t :page/version-history)
-                         :options {:on-click
-                                   (fn []
-                                     (shell/get-file-latest-git-log page 100))}})
+          (when (util/electron?)
+            {:title   (t (if public? :page/make-private :page/make-public))
+             :options {:on-click
+                       (fn []
+                         (page-handler/update-public-attribute!
+                          page-name
+                          (if public? false true))
+                         (state/close-modal!))}})
 
-                      (when plugin-handler/lsp-enabled?
-                        (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
-                          {:title label
-                           :options {:on-click #(commands/exec-plugin-simple-command!
-                                                 pid (assoc cmd :page (state/get-current-page)) action)}}))
+          (when (util/electron?)
+            {:title   (t :page/version-history)
+             :options {:on-click
+                       (fn []
+                         (shell/get-file-latest-git-log page 100))}})
 
-                      (when developer-mode?
-                        {:title   "(Dev) Show page data"
-                         :options {:on-click (fn []
-                                               (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
-                                                 (println page-data)
-                                                 (notification/show!
-                                                  [:div
-                                                   [:pre.code page-data]
-                                                   [:br]
-                                                   (ui/button "Copy to clipboard"
-                                                     :on-click #(.writeText js/navigator.clipboard page-data))]
-                                                  :success
-                                                  false)))}})]
-                     (flatten)
-                     (remove nil?)))]
-    (ui/dropdown-with-links
-     (fn [{:keys [toggle-fn]}]
-       [:a.cp__vertical-menu-button
-        {:title    "More options"
-         :on-click toggle-fn}
-        (svg/vertical-dots nil)])
-     links
-     {:modal-class (util/hiccup->class
-                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-nowrap.dropdown-overflow-auto.page-drop-options")
-      :z-index     1})))
+          (when plugin-handler/lsp-enabled?
+            (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
+              {:title label
+               :options {:on-click #(commands/exec-plugin-simple-command!
+                                     pid (assoc cmd :page (state/get-current-page)) action)}}))
+
+          (when developer-mode?
+            {:title   "(Dev) Show page data"
+             :options {:on-click (fn []
+                                   (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
+                                     (println page-data)
+                                     (notification/show!
+                                      [:div
+                                       [:pre.code page-data]
+                                       [:br]
+                                       (ui/button "Copy to clipboard"
+                                         :on-click #(.writeText js/navigator.clipboard page-data))]
+                                      :success
+                                      false)))}})]
+         (flatten)
+         (remove nil?))))))
+
+(rum/defcs page-title <
+  {:will-update (fn [state]
+                  (assoc state ::title-value (atom (second (:rum/args state)))))}
+  (rum/local false ::edit?)
+  [state page-name title format fmt-journal?]
+  (when title
+    (let [*title-value (get state ::title-value)
+          *edit? (get state ::edit?)
+          repo (state/get-current-repo)
+          title (if (and (string/includes? title "[[")
+                         (string/includes? title "]]"))
+                  (let [ast (mldoc/->edn title (mldoc/default-config format))]
+                    (block/markup-element-cp {} (ffirst ast)))
+                  title)
+          hls-file? (pdf-assets/hls-file? title)
+          title (if hls-file?
+                  (pdf-assets/human-hls-filename-display title)
+                  (if fmt-journal? (date/journal-title->custom-format title) title))]
+      (if @*edit?
+        [:h1.title {:style {:margin-left -2}}
+         [:input.w-full
+          {:type          "text"
+           :auto-focus    true
+           :style         {:outline "none"
+                           :font-weight 600}
+           :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+           :default-value         @*title-value
+           :on-change     (fn [e]
+                            (let [value (util/evalue e)]
+                              (when-not (string/blank? value)
+                                (reset! *title-value value))))
+           :on-blur       (fn [e]
+                            (page-handler/rename! (or title page-name) @*title-value)
+                            (reset! *edit? false)
+                            (reset! *title-value ""))}]]
+        [:a.page-title {:on-click (fn [e]
+                                    (.preventDefault e)
+                                    (if (gobj/get e "shiftKey")
+                                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                                        (state/sidebar-add-block!
+                                         repo
+                                         (:db/id page)
+                                         :page
+                                         {:page page}))
+                                      (when (and (not hls-file?) (not fmt-journal?))
+                                        (reset! *edit? true))))}
+         [:h1.title {:style {:margin-left -2}}
+          title]]))))
 
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
@@ -394,49 +449,26 @@
                       {:data-page-tags (text/build-data-value page-names)})
                     {})
 
-             {:class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+                  {:key path-page-name
+                   :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
            [:div.relative
             (when (and (not sidebar?)
                        (not block?))
               [:div.flex.flex-row.space-between
                [:div.flex-1.flex-row
-                [:a.page-title {:on-click (fn [e]
-                                            (.preventDefault e)
-                                            (when (gobj/get e "shiftKey")
-                                              (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                                                (state/sidebar-add-block!
-                                                 repo
-                                                 (:db/id page)
-                                                 :page
-                                                 {:page page}))))}
-                 [:h1.title {:style {:margin-left -2}}
-                  (let [title (if page-original-name
-                                (if (and (string/includes? page-original-name "[[")
-                                         (string/includes? page-original-name "]]"))
-                                  (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
-                                    (block/markup-element-cp {} (ffirst ast)))
-                                  page-original-name)
-                                (or
-                                  page-name
-                                  path-page-name))]
-                    (if (pdf-assets/hls-file? title)
-                      (pdf-assets/human-hls-filename-display title)
-                      (if fmt-journal? (date/journal-title->custom-format title) title)))]]]
+                (page-title page-name title format fmt-journal?)]
                (when (not config/publishing?)
                  [:div.flex.flex-row
                   (when plugin-handler/lsp-enabled?
                     (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                    (plugins/hook-ui-items :pagebar))
-
-                  (page-menu repo t page page-name page-original-name title
-                             journal? public? developer-mode?)])])
+                    (plugins/hook-ui-items :pagebar))])])
             [:div
              (when (and block? (not sidebar?))
                (let [config {:id "block-parent"
                              :block? true}]
                  [:div.mb-4
-                  (block/block-parents config repo block-id format true)]))
+                  (block/block-parents config repo block-id format {})]))
 
              ;; blocks
              (let [page (if block?
@@ -679,7 +711,7 @@
                    (state/set-search-mode! :global)
                    state)}
   [state]
-  (let [settings (state/sub-graph-config)
+  (let [settings (state/sub-graph-config-settings)
         theme (state/sub :ui/theme)
         graph (graph-handler/build-global-graph theme settings)
         search-graph-filters (state/sub :search/graph-filters)
@@ -743,10 +775,15 @@
   [state]
   (let [current-repo (state/sub :git/current-repo)
         *sort-by-item (get state ::sort-by-item)
-        *desc? (get state ::desc?)]
+        *desc? (get state ::desc?)
+        mobile? (util/mobile?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1
        [:h1.title (t :all-pages)]
+       [:a.ml-1.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
+        [:span
+         (ui/icon "files")
+         [:span.ml-1 (t :all-files)]]]
        (when current-repo
          (let [pages (->> (page-handler/get-all-pages current-repo)
                          (map (fn [page] (assoc page :block/backlinks (count (:block/_refs (db/entity (:db/id page)))))))
@@ -755,9 +792,12 @@
             [:thead
              [:tr
               (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
-              (sortable-title (t :page/backlinks) :block/backlinks  *sort-by-item *desc?)
-              (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?)
-              (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?)]]
+              (when-not mobile?
+                (sortable-title (t :page/backlinks) :block/backlinks  *sort-by-item *desc?))
+              (when-not mobile?
+                (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?))
+              (when-not mobile?
+                (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?))]]
             [:tbody
              (for [{:block/keys [name created-at updated-at backlinks] :as page} pages]
                [:tr {:key name}
@@ -771,10 +811,13 @@
                                            {:page (:block/name page)}))))
                           :href (rfe/href :page {:name (:block/name page)})}
                       (block/page-cp {} page)]]
-                [:td [:span.text-gray-500.text-sm backlinks]]
-                [:td [:span.text-gray-500.text-sm (if created-at
-                                                    (date/int->local-time-2 created-at)
-                                                    "Unknown")]]
-                [:td [:span.text-gray-500.text-sm (if updated-at
-                                                    (date/int->local-time-2 updated-at)
-                                                    "Unknown")]]])]]))])))
+                (when-not mobile?
+                  [:td [:span.text-gray-500.text-sm backlinks]])
+                (when-not mobile?
+                  [:td [:span.text-gray-500.text-sm (if created-at
+                                                     (date/int->local-time-2 created-at)
+                                                     "Unknown")]])
+                (when-not mobile?
+                  [:td [:span.text-gray-500.text-sm (if updated-at
+                                                     (date/int->local-time-2 updated-at)
+                                                     "Unknown")]])])]]))])))

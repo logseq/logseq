@@ -70,7 +70,7 @@
        :as   opts}]]
   (let [{:keys [open? toggle-fn]} state
         modal-content (modal-content-fn state)]
-    [:div.ml-1.relative {:style {:z-index z-index}}
+    [:div.relative {:style {:z-index z-index}}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
@@ -99,13 +99,15 @@
                                    (on-click-fn e))
                                  (close-fn)))
               child (if hr
-                      [:hr.my-1]
+                      nil
                       [:div
                        {:style {:display "flex" :flex-direction "row"}}
                        [:div {:style {:margin-right "8px"}} title]])]
-          (rum/with-key
-            (menu-link new-options child)
-            title)))
+          (if hr
+            [:hr.my-1]
+            (rum/with-key
+              (menu-link new-options child)
+              title))))
       (when links-footer links-footer)])
    opts))
 
@@ -113,7 +115,7 @@
   [text & {:keys [background href class intent on-click small? large?]
            :or {small? false large? false}
            :as   option}]
-  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700")
+  (let [klass (when-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center")
         klass (if background (string/replace klass "indigo" background) klass)
         klass (if small? (str klass ".px-2.py-1") klass)
         klass (if large? (str klass ".text-base") klass)]
@@ -351,12 +353,12 @@
   "Render an infinite list."
   [state list-element-id body {:keys [on-load has-more on-top-reached]}]
   (rum/with-context [[t] i18n/*tongue-context*]
-    (rum/fragment
+    [:div
      body
      (when has-more
        [:a.fade-link.text-link.font-bold.text-4xl
         {:on-click on-load}
-        (t :page/earlier)]))))
+        (t :page/earlier)])]))
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
@@ -709,3 +711,11 @@
              :class                 "contents"
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
+
+(defn icon
+  ([class] (icon class nil))
+  ([class opts]
+   [:i (merge {:class (str "ti ti-" class
+                           (when (:class opts)
+                             (str " " (string/trim (:class opts)))))}
+              (dissoc opts :class))]))

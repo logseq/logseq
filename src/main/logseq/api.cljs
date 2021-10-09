@@ -14,6 +14,7 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
+            [frontend.handler :as handler]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
@@ -22,7 +23,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.modules.layout.utils :as layout-utils]
+            [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -31,7 +32,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [sci.core :as sci]))
+            [sci.core :as sci]
+            [frontend.modules.layout.utils]))
 
 ;; helpers
 (defn- normalize-keyword-for-json
@@ -521,3 +523,8 @@
   ([content status] (let [hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
                           content (if hiccup? (parse-hiccup-ui content) content)]
                       (notification/show! content (keyword status)))))
+
+(defn ^:export force_save_graph
+  []
+  (p/let [_ (el/persist-dbs!)
+          _ (reset! handler/triggered? true)]))

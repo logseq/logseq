@@ -35,7 +35,7 @@
   [^js event current-block target-block move-to]
   (let [top? (= move-to :top)
         nested? (= move-to :nested)
-        alt-key? (.-altKey event)
+        alt-key? (and event (.-altKey event))
         repo (state/get-current-repo)]
     (cond
       alt-key?

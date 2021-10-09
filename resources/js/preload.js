@@ -16,13 +16,13 @@ function getFilePathFromClipboard () {
   }
 }
 
-function isClipboardHasImage () {
-  return !clipboard.readImage().isEmpty()
-}
-
 contextBridge.exposeInMainWorld('apis', {
   doAction: async (arg) => {
     return await ipcRenderer.invoke('main', arg)
+  },
+
+  invoke: async (channel, args) => {
+    return await ipcRenderer.invoke(channel, ...args)
   },
 
   addListener: ipcRenderer.on.bind(ipcRenderer),
@@ -151,7 +151,6 @@ contextBridge.exposeInMainWorld('apis', {
   },
 
   getFilePathFromClipboard,
-  isClipboardHasImage,
 
   setZoomFactor (factor) {
     webFrame.setZoomFactor(factor)

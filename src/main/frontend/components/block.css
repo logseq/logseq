@@ -158,7 +158,7 @@
   border-bottom: 0.5px solid;
   border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
-  padding: 2px 5px;
+  padding: 2px 0;
   display: inline;
 
   &:hover {
@@ -227,10 +227,11 @@
 
 .block-marker {
   padding: 2px 4px;
-  opacity: 0.5;
+  opacity: 0.7;
   font-size: 85%;
   margin: 0 2px 0 0px;
-  font-weight: 600;
+  font-weight: 650;
+  border: 0px;
 }
 
 .marker-switch {

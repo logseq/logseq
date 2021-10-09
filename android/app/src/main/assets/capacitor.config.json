@@ -1,0 +1,15 @@
+{
+	"appId": "com.logseq.app",
+	"appName": "Logseq",
+	"bundledWebRuntime": false,
+	"webDir": "public",
+	"plugins": {
+		"SplashScreen": {
+			"launchShowDuration": 3000,
+			"launchAutoHide": false,
+			"androidScaleType": "CENTER_CROP",
+			"splashImmersive": true,
+			"backgroundColor": "#002b36"
+		}
+	}
+}

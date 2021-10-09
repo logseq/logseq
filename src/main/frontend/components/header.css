@@ -2,7 +2,7 @@
   @apply shadow z-10 h-12;
   -webkit-app-region: drag;
 
-  padding: 0 0.5rem;
+  padding-right: 0.5rem;
   display: flex;
   align-items: center;
   flex: 0 0 auto;
@@ -13,7 +13,6 @@
   left: 0;
   right: 0;
   user-select: none;
-  transition: width 0.3s;
   line-height: 1;
 
   .it svg {
@@ -36,39 +35,62 @@
     transform: scale(0.6);
     color: red;
   }
+
+  &-tips {
+    position: absolute;
+    width: 100%;
+    padding: 0 0;
+    transform: translateY(100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--ls-secondary-background-color);
+    box-sizing: border-box;
+    margin: 0;
+    left: 0;
+    top: -2px;
+    color: var(--ls-secondary-text-color);
+
+    > p {
+      margin: 0;
+      padding: 0 0 6px 0;
+    }
+
+    a {
+      color: var(--ls-link-text-color) !important;
+    }
+
+    a.restart {
+      position: relative;
+      top: 3px;
+      cursor: pointer !important;
+
+      svg {
+        color: currentColor !important;
+      }
+
+      > strong {
+        display: inline-block;
+        padding-left: 2px;
+      }
+    }
+  }
 }
 
 .is-electron.is-mac .cp__header {
-    padding-left: 78px;
-    -moz-transition: padding-left .3s ease-in;
-    -o-transition: padding-left  .3s ease-in;
-    -webkit-transition: padding-left  .3s ease-in;
-    transition: padding-left  .3s ease-in;
+  padding-left: 78px;
 }
 
 .cp__header .navigation svg {
-    transform: scale(0.7);
+  transform: scale(0.7);
 }
 
 .is-electron.is-mac.is-fullscreen .cp__header {
-    padding-left: 0;
+  padding-left: 0;
 }
 
 .cp__header a, .cp__header svg {
-    -webkit-app-region: no-drag;
-}
-
-.cp__header-left-menu {
-  @apply px-4 mr-4;
-  border-right: 1px solid var(--ls-secondary-background-color);
-  color: var(--ls-link-text-color);
-  display: block;
-  height: 100%;
-}
-
-.cp__header-left-menu:focus {
-  @apply outline-none;
-  background: var(--ls-menu-hover-color);
+  -webkit-app-region: no-drag;
 }
 
 .cp__header-logo {
@@ -93,42 +115,36 @@
     @apply shadow-none;
   }
 
-  .cp__header-left-menu {
-    display: none;
-  }
-
   .cp__header-logo {
     display: block;
   }
 }
 
 .cp__header-logo svg {
-    transform: scale(0.9);
+  transform: scale(0.9);
 }
 
 #repo-name {
-  vertical-align: middle;
-  display: inline-block;
+  display: table-cell;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 7ch;
-  color: var(--ls-icon-color, #045591);
+  max-width: 15ch;
   height: 14px;
 }
 
 a.button {
-    padding: 0.25rem;
-    opacity: 0.6;
-    display: block;
-    border-radius: 4px;
+  padding: 0.25rem;
+  opacity: 0.6;
+  display: block;
+  border-radius: 4px;
 }
 
 a.button:hover {
-    opacity: 1;
-    background: var(--ls-tertiary-background-color);
+  opacity: 1;
+  background: var(--ls-tertiary-background-color);
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
-    cursor: default !important;
+  cursor: default !important;
 }

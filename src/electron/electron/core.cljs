@@ -11,7 +11,7 @@
             ["fs-extra" :as fs]
             ["path" :as path]
             ["os" :as os]
-            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem] :as electron]
+            ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session] :as electron]
             ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
             [electron.state :as state]
@@ -31,6 +31,7 @@
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
+(defonce *quit-dirty? (volatile! true))
 
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
 (when (js/require "electron-squirrel-startup") (.quit app))
@@ -61,6 +62,22 @@
         url MAIN_WINDOW_ENTRY
         win (BrowserWindow. (clj->js win-opts))]
     (.manage win-state win)
+    (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
+      (clj->js {:urls (array "*://*.youtube.com/*")})
+      (fn [^js details callback]
+        (let [url (.-url details)
+              urlObj (js/URL. url)
+              origin (.-origin urlObj)
+              requestHeaders (.-requestHeaders details)]
+          (if (and
+                (.hasOwnProperty requestHeaders "referer")
+                (not-empty (.-referer requestHeaders)))
+              (callback #js {:cancel false
+                             :requestHeaders requestHeaders})
+              (do
+                (set! (.-referer requestHeaders) origin)
+                (callback #js {:cancel false
+                               :requestHeaders requestHeaders}))))))
     (.loadURL win url)
     (when dev? (.. win -webContents (openDevTools)))
     win))
@@ -155,8 +172,13 @@
   (let [toggle-win-channel "toggle-max-or-min-active-win"
         call-app-channel "call-application"
         export-publish-assets "export-publish-assets"
+        quit-dirty-state "set-quit-dirty-state"
         web-contents (. win -webContents)]
     (doto ipcMain
+      (.handle quit-dirty-state
+               (fn [_ dirty?]
+                 (vreset! *quit-dirty? (boolean dirty?))))
+
       (.handle toggle-win-channel
                (fn [_ toggle-min?]
                  (when-let [active-win (.getFocusedWindow BrowserWindow)]
@@ -220,6 +242,7 @@
 
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
+         (.removeHandler ipcMain quit-dirty-state)
          (.removeHandler ipcMain call-app-channel))))
 
 (defn- destroy-window!
@@ -285,17 +308,18 @@
 
                ;; main window events
                (.on win "close" (fn [e]
-                                  (.preventDefault e)
-                                  (let [web-contents (. win -webContents)]
-                                    (.send web-contents "persistent-dbs"))
-                                  (async/go
-                                    (let [_ (async/<! state/persistent-dbs-chan)]
-                                      (if (or @*quitting? (not mac?))
-                                        (when-let [win @*win]
-                                          (destroy-window! win)
-                                          (reset! *win nil))
-                                        (do (.preventDefault ^js/Event e)
-                                            (.hide win)))))))
+                                  (when @*quit-dirty?
+                                    (.preventDefault e)
+                                    (let [web-contents (. win -webContents)]
+                                      (.send web-contents "persistent-dbs"))
+                                    (async/go
+                                      (let [_ (async/<! state/persistent-dbs-chan)]
+                                        (if (or @*quitting? (not mac?))
+                                          (when-let [win @*win]
+                                            (destroy-window! win)
+                                            (reset! *win nil))
+                                          (do (.preventDefault ^js/Event e)
+                                              (.hide win))))))))
                (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
                (.on app "activate" #(if @*win (.show win)))))))))
 

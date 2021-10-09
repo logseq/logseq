@@ -20,7 +20,8 @@
             [frontend.util :as util]
             [frontend.version :as version]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (rum/defc add-repo
   [args]
@@ -47,7 +48,8 @@
 
          [:div.pl-1.content.mt-3
           [:div.flex.flex-row.my-4
-           (when (nfs-handler/supported?)
+           (when (or (nfs-handler/supported?)
+                     (mobile-util/is-native-platform?))
              [:div.mr-8
               (ui/button
                (t :open-a-directory)
@@ -171,13 +173,14 @@
                (t :git/version) (str " " version/version)]]])))])))
 
 (rum/defc repos-dropdown < rum/reactive
-  [on-click]
+  [on-click close-modal-fn]
   (when-let [current-repo (state/sub :git/current-repo)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (let [get-repo-name (fn [repo]
                             (if (config/local-db? repo)
                               (config/get-local-dir repo)
                               (db/get-repo-path repo)))
+            close-modal-fn (if (fn? close-modal-fn) close-modal-fn (fn []))
             repos (state/sub [:me :repos])
             repos (remove (fn [r] (= config/local-repo (:url r))) repos)
             switch-repos (remove (fn [repo]
@@ -186,15 +189,16 @@
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             [:a#repo-switch.fade-link.block.pr-2.whitespace-nowrap {:on-click toggle-fn}
+             [:a#repo-switch.block.pr-2.whitespace-nowrap {:on-click toggle-fn}
               [:span
                (let [repo-name (get-repo-name current-repo)
-                     repo-name (if (util/electron?)
+                     repo-name (if (or (util/electron?)
+                                       (mobile-util/is-native-platform?))
                                  (last
                                   (string/split repo-name #"/"))
                                  repo-name)]
-                 [:span#repo-name {:title repo-name} repo-name])
-               [:span.dropdown-caret.ml-1 {:style {:border-top-color "#6b7280"}}]]])
+                 [:span#repo-name.font-medium {:title repo-name} repo-name])
+               [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]])
            (mapv
             (fn [{:keys [id url]}]
               {:title (get-repo-name url)
@@ -208,25 +212,30 @@
                                      (when-not (= :draw (state/get-current-route))
                                        (route-handler/redirect-to-home!))
                                      (when on-click
-                                       (on-click url)))}})
+                                       (on-click url))
+                                     (close-modal-fn))}})
             switch-repos)
            (cond->
             {:modal-class (util/hiccup->class
-                           "origin-top-right.absolute.left-0.mt-2.w-48.rounded-md.shadow-lg")
+                           "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")
              :links-footer [:div
                             (when (seq switch-repos) [:hr.my-4])
                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
+                                 :on-click close-modal-fn
                                  :href (rfe/href :repo-add)}
                              (t :new-graph)]
                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
+                                 :on-click close-modal-fn
                                  :href (rfe/href :repos)}
                              (t :all-graphs)]
                             (let [nfs-repo? (config/local-db? current-repo)]
                               (when (and nfs-repo?
                                          (not= current-repo config/local-repo)
-                                         (nfs-handler/supported?))
+                                         (or (nfs-handler/supported?)
+                                             (mobile-util/is-native-platform?)))
                                 [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                      :on-click (fn []
+                                                 (close-modal-fn)
                                                  (state/pub-event!
                                                   [:modal/show
                                                    [:div {:style {:max-width 700}}
@@ -239,6 +248,7 @@
                                  (t :sync-from-local-files)]))
                             [:a {:class "block px-4 py-2 text-sm transition ease-in-out duration-150 cursor menu-link"
                                  :on-click (fn []
+                                             (close-modal-fn)
                                              (state/pub-event!
                                               [:modal/show
                                                [:div {:style {:max-width 700}}

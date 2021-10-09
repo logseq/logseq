@@ -1,5 +1,6 @@
 (ns frontend.handler.metadata
   (:require [cljs.reader :as reader]
+            [cljs.pprint]
             [clojure.string :as string]
             [datascript.db :as ddb]
             [frontend.config :as config]
@@ -47,7 +48,7 @@
                        (vec))]
     (p/let [_ (-> (file-handler/create-pages-metadata-file repo)
                   (p/catch (fn [] nil)))]
-      (let [new-content (pr-str all-pages)]
+      (let [new-content (with-out-str (cljs.pprint/pprint all-pages))]
         (fs/write-file! repo
                         (config/get-repo-dir repo)
                         path

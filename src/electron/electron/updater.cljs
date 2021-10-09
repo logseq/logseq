@@ -1,5 +1,5 @@
 (ns electron.updater
-  (:require [electron.utils :refer [mac? win32? prod? open fetch logger]]
+  (:require [electron.utils :refer [mac? win32? prod? open fetch logger *win]]
             [frontend.version :refer [version]]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -9,7 +9,7 @@
             ["os" :as os]
             ["fs" :as fs]
             ["path" :as path]
-            ["electron" :refer [ipcMain app]]))
+            ["electron" :refer [ipcMain app autoUpdater]]))
 
 (def *update-ready-to-install (atom nil))
 (def *update-pending (atom nil))
@@ -110,6 +110,12 @@
              (fn []
                (emit "completed" nil))))))))
 
+(defn- new-version-downloaded-cb
+  [_ & args]
+  (.info logger "[update-downloaded]" args)
+  (when-let [web-contents (and @*win (. ^js @*win -webContents))]
+    (.send web-contents "auto-updater-downloaded" (bean/->js args))))
+
 (defn init-auto-updater
   [repo]
   (when (.valid semver electron-version)
@@ -123,7 +129,9 @@
             (debug "Found remote version" remote-version)
             (when mac?
               (when-let [f (js/require "update-electron-app")]
-                (f #js{}))))
+                (f #js{:notifyUser false})
+                (.once autoUpdater "update-downloaded"
+                       new-version-downloaded-cb))))
 
           (debug "Skip remote version [ahead of pre-release]" remote-version))))))
 

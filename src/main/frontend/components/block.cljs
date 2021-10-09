@@ -8,6 +8,7 @@
             [clojure.walk :as walk]
             [datascript.core :as dc]
             [dommy.core :as d]
+            [frontend.mobile.util :as mobile]
             [frontend.commands :as commands]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
@@ -33,6 +34,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repeated :as repeated]
@@ -254,7 +256,7 @@
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
-    (when (or granted? (util/electron?))
+    (when (or granted? (util/electron?) (mobile/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
@@ -364,7 +366,7 @@
 (declare page-reference)
 
 (rum/defc page-inner
-  [config page-name href redirect-page-name page-entity contents-page? children html-export? label]
+  [config page-name-in-block page-name href redirect-page-name page-entity contents-page? children html-export? label]
   (let [tag? (:tag? config)]
     [:a
      {:class (if tag? "tag" "page-ref")
@@ -372,6 +374,9 @@
       :on-mouse-down
       (fn [e]
         (util/stop e)
+        (when redirect-page-name
+          (page-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name)
+          (js/setTimeout #(model/refresh-recent-pages) 300))
         (let [create-first-block! (fn []
                                     (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
                                       (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
@@ -388,7 +393,9 @@
               (create-first-block!)
               (route-handler/redirect! {:to :page
                                         :path-params {:name redirect-page-name}}))))
-        (when (and contents-page? (state/get-left-sidebar-open?))
+        (when (and contents-page?
+                   (util/mobile?)
+                   (state/get-left-sidebar-open?))
           (ui-handler/close-left-sidebar!)))}
 
      (if (and (coll? children) (seq children))
@@ -408,7 +415,10 @@
          (->elem :span (map-inline config label))
 
          :else
-         (let [s (get page-entity :block/original-name page-name)]
+         (let [page-name (get page-entity :block/original-name page-name)
+               s (if (not= (string/lower-case page-name) page-name-in-block)
+                   page-name-in-block
+                   page-name)]
            (if tag? (str "#" s) s))))]))
 
 (rum/defc page-preview-trigger
@@ -452,15 +462,16 @@
 
 (rum/defc page-cp
   [{:keys [html-export? label children contents-page? sidebar? preview?] :as config} page]
-  (when-let [page-name (:block/name page)]
-    (let [page-name (-> (string/lower-case page-name)
-                        (util/remove-boundary-slashes))
+  (when-let [page-name-in-block (:block/name page)]
+    (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
+          page-name (string/lower-case page-name-in-block)
           page-entity (db/entity [:block/name page-name])
           redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
           href (if html-export?
                  (util/encode-str page-name)
                  (rfe/href :page {:name redirect-page-name}))
           inner (page-inner config
+                            page-name-in-block
                             page-name
                             href redirect-page-name page-entity contents-page? children html-export? label)]
       (if (and (not (util/mobile?)) (not preview?))
@@ -566,10 +577,10 @@
       :on-mouse-down (fn [e] (.stopPropagation e))}
      [:div.px-3.pt-1.pb-2
       (blocks-container blocks (assoc config
-                                      :parent (:block config)
                                       :id (str id)
                                       :embed-id id
                                       :embed? true
+                                      :embed-parent (:block config)
                                       :ref? false))]]))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
@@ -677,7 +688,8 @@
                                         {:style {:width      735
                                                  :text-align "left"
                                                  :max-height 600}}
-                                        [(block-parents config repo block-id (:block/format config))
+                                        [(block-parents config repo block-id (:block/format config)
+                                                        {:indent? true})
                                          (blocks-container
                                           (db/get-block-and-children repo block-id)
                                           (assoc config :id (str id) :preview? true))]])
@@ -1076,8 +1088,10 @@
         [:div.dsl-query
          (let [query (string/join ", " arguments)]
            (custom-query (assoc config :dsl-query? true)
-                         {:title [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
-                                  (str "Query: " query)]
+                         {:title (ui/tippy {:html commands/query-doc
+                                            :interactive true}
+                                  [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
+                                   (str "Query: " query)])
                           :query query}))]
 
         (= name "function")
@@ -1328,7 +1342,7 @@
                    config (cond->
                            (-> config
                                (assoc :block/uuid (:block/uuid child))
-                               (dissoc :breadcrumb-show?))
+                               (dissoc :breadcrumb-show? :embed-parent))
                             ref?
                             (assoc :ref-child? true))]
                (rum/with-key (block-container config child)
@@ -1452,35 +1466,22 @@
                 :checked checked?}))
 
 (defn marker-switch
-  [{:block/keys [pre-block? marker] :as block}]
+  [{:block/keys [marker] :as block}]
   (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
     (let [set-marker-fn (fn [marker]
                           (fn [e]
                             (util/stop e)
-                            (editor-handler/set-marker block marker)))]
-      (case marker
-        "NOW"
-        [:a.marker-switch.block-marker
-         {:title "Change from NOW to LATER"
-          :on-click (set-marker-fn "LATER")}
-         "NOW"]
-        "LATER"
-        [:a.marker-switch.block-marker
-         {:title "Change from LATER to NOW"
-          :on-click (set-marker-fn "NOW")}
-         "LATER"]
-
-        "TODO"
-        [:a.marker-switch.block-marker
-         {:title "Change from TODO to DOING"
-          :on-click (set-marker-fn "DOING")}
-         "TODO"]
-        "DOING"
-        [:a.marker-switch.block-marker
-         {:title "Change from DOING to TODO"
-          :on-click (set-marker-fn "TODO")}
-         "DOING"]
-        nil))))
+                            (editor-handler/set-marker block marker)))
+          next-marker (case marker
+                        "NOW" "LATER"
+                        "LATER" "NOW"
+                        "TODO" "DOING"
+                        "DOING" "TODO")]
+      [:a
+       {:class (str "marker-switch block-marker " marker)
+        :title (util/format "Change from %s to %s" marker next-marker)
+        :on-click (set-marker-fn next-marker)}
+       marker])))
 
 (defn marker-cp
   [{:block/keys [pre-block? marker] :as block}]
@@ -1534,7 +1535,7 @@
 (declare block-content)
 
 (defn build-block-title
-  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority anchor meta format content pre-block? page properties unordered level heading-level]
+  [{:keys [slide?] :as config} {:block/keys [uuid title tags marker priority meta format content pre-block? page properties unordered level heading-level]
                                 :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
@@ -1564,8 +1565,7 @@
     (->elem
      elem
      (merge
-      {:id anchor
-       :data-hl-type (:hl-type properties)}
+      {:data-hl-type (:hl-type properties)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -1788,7 +1788,12 @@
                                         (block-content-on-mouse-down e block block-id properties content format edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :on-mouse-up util/clear-selection!}
+              :on-mouse-up (fn [_e]
+                             (when (and
+                                    (state/in-selection-mode?)
+                                    (not (string/includes? content "```")))
+                               ;; clear highlighted text
+                               (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
 
@@ -1852,12 +1857,11 @@
         (block-content config block edit-input-id block-id slide?)]
        [:div.flex.flex-row
         (when (and (:embed? config)
-                   (not (:page-embed? config))
-                   (:parent config))
+                   (:embed-parent config))
           [:a.opacity-30.hover:opacity-100.svg-small.inline
            {:on-mouse-down (fn [e]
                              (util/stop e)
-                             (when-let [block (:parent config)]
+                             (when-let [block (:embed-parent config)]
                                (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
            svg/edit])
 
@@ -1929,31 +1933,37 @@
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
 (defn block-parents
-  ([config repo block-id format]
-   (block-parents config repo block-id format true))
-  ([config repo block-id format show-page?]
-   (let [parents (db/get-block-parents repo block-id 3)
-         page (db/get-block-page repo block-id)
-         page-name (:block/name page)
-         page-original-name (:block/original-name page)
-         show? (or (seq parents) show-page? page-name)]
-     (when show?
-       (let [page-name-props (when show-page?
-                               [:page
-                                (rfe/href :page {:name page-name})
-                                (or page-original-name page-name)])
-             parents-props (doall
-                            (for [{:block/keys [uuid title name] :as block} parents]
-                              (when-not name ; not page
-                                [block
-                                 (rfe/href :page {:name uuid})
-                                 (->elem :span (map-inline config title))])))
-             breadcrumb (->> (into [] parents-props)
-                             (concat [page-name-props])
-                             (filterv identity)
-                             (map (fn [[block href label]] (breadcrumb-fragment config block href label)))
-                             (interpose (breadcrumb-separator)))]
-         [:div.block-parents.flex-row.flex-1 breadcrumb])))))
+  [config repo block-id format {:keys [show-page? indent?]
+                                :or {show-page? true}}]
+  (let [parents (db/get-block-parents repo block-id 3)
+        page (db/get-block-page repo block-id)
+        page-name (:block/name page)
+        page-original-name (:block/original-name page)
+        show? (or (seq parents) show-page? page-name)]
+    (when show?
+      (let [page-name-props (when show-page?
+                              [:page
+                               (rfe/href :page {:name page-name})
+                               (or page-original-name page-name)])
+            parents-props (doall
+                           (for [{:block/keys [uuid title name] :as block} parents]
+                             (when-not name ; not page
+                               [block
+                                (rfe/href :page {:name uuid})
+                                (->elem :span (map-inline config title))])))
+            breadcrumb (->> (into [] parents-props)
+                            (concat [page-name-props])
+                            (filterv identity)
+                            (map (fn [[block href label]] (breadcrumb-fragment config block href label)))
+                            (interpose (breadcrumb-separator)))]
+        [:div.block-parents.flex-row.flex-1
+         {:class (when (seq breadcrumb)
+                   (str (util/hiccup->class ".opacity-70.hover:opacity-100")
+                        (when-not (:search? config)
+                          " my-2")
+                        (when indent?
+                          " ml-4")))}
+         breadcrumb]))))
 
 (defn- block-drag-over
   [event uuid top? block-id *move-to]
@@ -2074,9 +2084,13 @@
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/properties
                                         :block/parent :block/left
-                                        :block/children :block/content]]
-                      (not= (select-keys (second (:rum/args old-state)) compare-keys)
-                            (select-keys (second (:rum/args new-state)) compare-keys))))}
+                                        :block/children :block/content]
+                          config-compare-keys [:show-cloze?]]
+                      (or
+                       (not= (select-keys (second (:rum/args old-state)) compare-keys)
+                             (select-keys (second (:rum/args new-state)) compare-keys))
+                       (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
+                             (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
   [state config {:block/keys [uuid title body meta content page format repo children pre-block? top? properties refs path-refs heading-level level type idx] :as block}]
   (let [blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
@@ -2135,8 +2149,8 @@
        (assoc :data-query true))
 
      (when (and ref? breadcrumb-show?)
-       (when-let [comp (block-parents config repo uuid format false)]
-         [:div.my-2.opacity-70.ml-4.hover:opacity-100 comp]))
+       (block-parents config repo uuid format {:show-page? false
+                                               :indent? true}))
 
      ;; only render this for the first block in each container
      (when top?
@@ -2304,7 +2318,7 @@
                          (and (util/electron?) (string? result)) ; full-text search
                          (if (string/blank? result)
                            (atom [])
-                           (p/let [blocks (search/block-search repo result {:limit 30})]
+                           (p/let [blocks (search/block-search repo (string/trim result) {:limit 30})]
                              (when (seq blocks)
                                (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
                                  (reset! result-atom result)))))
@@ -2351,6 +2365,7 @@
            transformed-query-result (when query-result
                                       (db/custom-query-result-transform query-result remove-blocks q))
            not-grouped-by-page? (or table?
+                                    (boolean (:result-transform q))
                                     (and (string? query) (string/includes? query "(by-page false)")))
            result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
                     (db-utils/group-by-page transformed-query-result)
@@ -2776,7 +2791,8 @@
    (cond-> option
      (:document/mode? config) (assoc :class "doc-mode"))
    (cond
-     (:custom-query? config)
+     (and (:custom-query? config)
+          (:group-by-page? config))
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
@@ -2794,10 +2810,9 @@
                 (let [block (first blocks)]
                   [:div
                    (when (:breadcrumb-show? config)
-                     [:div.my-2.opacity-70.ml-4.hover:opacity-100
-                      (block-parents config (state/get-current-repo) (:block/uuid block)
-                                     (:block/format block)
-                                     false)])
+                     (block-parents config (state/get-current-repo) (:block/uuid block)
+                                    (:block/format block)
+                                    {:show-page? false}))
                    (blocks-container blocks (assoc config :breadcrumb-show? false))]))
               {})])))]
 

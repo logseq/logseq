@@ -48,7 +48,8 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            ["/frontend/utils" :as utils]))
+            ["/frontend/utils" :as utils]
+            [frontend.mobile.util :as mobile]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -102,8 +103,10 @@
 (defn italics-format! []
   (format-text! config/get-italic))
 
-(defn highlight-format! []
-  (format-text! config/get-highlight))
+(defn highlight-format! [state]
+  (when-let [block (state/get-edit-block)]
+    (let [format (:block/format block)]
+      (format-text! #(config/get-highlight format)))))
 
 (defn strike-through-format! []
   (format-text! config/get-strike-through))
@@ -341,7 +344,6 @@
                   (property/with-built-in-properties properties content format)
                   content)
         content (with-timetracking block content)
-        content (drawer/with-logbook block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
         first-elem-type (first (ffirst ast))
@@ -1197,10 +1199,12 @@
 (defn follow-link-under-cursor!
   []
   (when-let [page (get-nearest-page)]
-    (let [page-name (string/lower-case page)]
-      (state/clear-edit!)
-      (route-handler/redirect! {:to :page
-                                :path-params {:name page-name}}))))
+    (when-not (string/blank? page)
+      (let [page-name (string/lower-case page)]
+        (state/clear-edit!)
+        (insert-first-page-block-if-not-exists! page-name)
+        (route-handler/redirect! {:to :page
+                                  :path-params {:name page-name}})))))
 
 (defn open-link-in-sidebar!
   []
@@ -1477,8 +1481,15 @@
   [path] ;; path start with "/assets" or compatible for "../assets"
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         path (string/replace path "../" "/")]
-    (if (util/electron?)
+    (cond
+      (util/electron?)
       (str "assets://" repo-dir path)
+
+      (mobile/is-native-platform?)
+      (mobile/convert-file-src
+       (str "file://" repo-dir path))
+
+      :else
       (let [handle-path (str "handle" repo-dir path)
             cached-url (get @*assets-url-cache (keyword handle-path))]
         (if cached-url
@@ -1781,7 +1792,10 @@
                       :data [block]}]
             (db/refresh! repo opts)))
         (when-let [block-node (util/get-first-block-by-id block-id)]
-          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))))
+          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})
+          (when-let [input-id (state/get-edit-input-id)]
+            (when-let [input (gdom/getElement input-id)]
+              (.focus input))))))))
 
 ;; selections
 (defn on-tab
@@ -1826,6 +1840,14 @@
       :org (util/format "[[%s][%s]]" link label)
       nil)))
 
+(defn- get-image-link
+  [format link label]
+  (let [link (or link "")
+        label (or label "")]
+    (case (keyword format)
+      :markdown (util/format "![%s](%s)" label link)
+      :org (util/format "[[%s]]"))))
+
 (defn handle-command-input
   [command id format m pos]
   (case command
@@ -1836,6 +1858,15 @@
         nil
         (insert-command! id
                          (get-link format link label)
+                         format
+                         {:last-pattern (str commands/slash "link")})))
+    :image-link
+    (let [{:keys [link label]} m]
+      (if (and (string/blank? link)
+               (string/blank? label))
+        nil
+        (insert-command! id
+                         (get-image-link format link label)
                          format
                          {:last-pattern (str commands/slash "link")})))
     nil)
@@ -2129,8 +2160,9 @@
   (into []
         (mapcat
          (fn [e]
-           (let [e* (select-keys e [:content :properties])]
-             (if-let [children (:children e)]
+           (let [e* (select-keys e [:content :properties])
+                 children (:children e)]
+             (if (seq children)
                [e* (tree->vec-tree (:children e))]
                [e*])))
          tree)))
@@ -2202,11 +2234,10 @@
              last-block (paste-block-vec-tree-at-target tree [:id :template :template-including-parent] opts)]
          (clear-when-saved!)
          (db/refresh! repo {:key :block/insert :data [(db/pull db-id)]})
-         (let [block (:data (last (flatten last-block)))]
-           (edit-block! block :max (:block/format block) (:block/uuid block))))))
-
-   (when-let [input (gdom/getElement element-id)]
-     (.focus input))))
+         (let [block (if (tree/satisfied-inode? last-block)
+                       (:data last-block)
+                       (:data (last (flatten last-block))))]
+           (edit-block! block :max (:block/format block) (:block/uuid block))))))))
 
 (defn template-on-chosen-handler
   [element-id]
@@ -2266,14 +2297,14 @@
       (cursor/move-cursor-to input (inc selected-start)))))
 
 (defn keydown-new-block-handler [state e]
-  (if (state/get-new-block-toggle?)
+  (if (state/doc-mode-enter-for-new-line?)
     (keydown-new-line)
     (do
       (.preventDefault e)
       (keydown-new-block state))))
 
 (defn keydown-new-line-handler [state e]
-  (if (state/get-new-block-toggle?)
+  (if (state/doc-mode-enter-for-new-line?)
     (keydown-new-block state)
     (do
       (.preventDefault e)
@@ -2813,38 +2844,17 @@
 (defn editor-on-paste!
   [id]
   (fn [e]
-    (if-let [handled
-             (let [pick-one-allowed-item
-                   (fn [items]
-                     (if (util/electron?)
-                       (let [existed-file-path (js/window.apis.getFilePathFromClipboard)
-                             existed-file-path (if (and
-                                                    (string? existed-file-path)
-                                                    (not util/mac?)
-                                                    (not util/win32?)) ; FIXME: linux
-                                                 (when (util/safe-re-find #"^(/[^/ ]*)+/?$" existed-file-path)
-                                                   existed-file-path)
-                                                 existed-file-path)
-                             has-file-path? (not (string/blank? existed-file-path))
-                             has-image? (js/window.apis.isClipboardHasImage)]
-                         (when (or has-image? has-file-path?)
-                           [:asset (js/File. #js[] (if has-file-path? existed-file-path "image.png"))]))
-
-                       (when (and items (.-length items))
-                         (let [files (. (js/Array.from items) (filter #(= (.-kind %) "file")))
-                               it (gobj/get files 0) ;;; TODO: support multiple files
-                               mime (and it (.-type it))]
-                           (cond
-                             (contains? #{"image/jpeg" "image/png" "image/jpg" "image/gif"} mime) [:asset (. it getAsFile)])))))
-                   clipboard-data (gobj/get e "clipboardData")
-                   items (or (.-items clipboard-data)
-                             (.-files clipboard-data))
-                   picked (pick-one-allowed-item items)]
-               (when-let [file (second picked)]
-                 (when-let [block (state/get-edit-block)]
-                   (upload-asset id #js[file] (:block/format block) *asset-uploading? true))))]
-      (util/stop e)
-      (paste-text (.getData (gobj/get e "clipboardData") "text") e))))
+    (state/set-state! :editor/on-paste? true)
+    (let [text (.getData (gobj/get e "clipboardData") "text")]
+      (if-not (string/blank? text)
+        (paste-text text e)
+        (let [handled
+              (let [clipboard-data (gobj/get e "clipboardData")
+                    files (.-files clipboard-data)]
+                (when-let [file (first files)]
+                  (when-let [block (state/get-edit-block)]
+                    (upload-asset id #js[file] (:block/format block) *asset-uploading? true))))]
+          (util/stop e))))))
 
 (defn- cut-blocks-and-clear-selections!
   [copy?]

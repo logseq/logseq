@@ -16,6 +16,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.mobile.util :as mobile]
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
@@ -197,7 +198,9 @@
 
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
-      (restore-and-setup! me repos logged? db-schema))
+      (restore-and-setup! me repos logged? db-schema)
+      (when (mobile/is-native-platform?)
+        (p/do! (mobile/hide-splash))))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
@@ -229,3 +232,10 @@
                                                             (js/window.location.reload))))]])
                          (reset! triggered? false)
                          (set! (.-returnValue e) "")))))
+
+(defn quit-and-install-new-version!
+  []
+  (p/let [_ (el/persist-dbs!)
+          _ (reset! triggered? true)
+          _ (ipc/invoke "set-quit-dirty-state" false)]
+    (ipc/ipc :quitAndInstall)))

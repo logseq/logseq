@@ -307,15 +307,19 @@
                   (remove string/blank?)
                   (distinct))
         refs (atom refs)]
-    (walk/postwalk
+    (walk/prewalk
      (fn [form]
-       (when-let [page (get-page-reference form)]
-         (swap! refs conj page))
-       (when-let [tag (get-tag form)]
-         (let [tag (text/page-ref-un-brackets! tag)]
-           (when (util/tag-valid? tag)
-            (swap! refs conj tag))))
-       form)
+       ;; skip custom queries
+       (when-not (and (vector? form)
+                      (= (first form) "Custom")
+                      (= (second form) "query"))
+         (when-let [page (get-page-reference form)]
+           (swap! refs conj page))
+         (when-let [tag (get-tag form)]
+           (let [tag (text/page-ref-un-brackets! tag)]
+             (when (util/tag-valid? tag)
+               (swap! refs conj tag))))
+         form))
      (concat title body))
     (let [refs (remove string/blank? @refs)
           children-pages (->> (mapcat (fn [p]
@@ -622,7 +626,8 @@
                           (block-keywordize)))
                        (select-keys first-block [:block/file :block/format :block/page]))
                       blocks)
-                     blocks)]
+                     blocks)
+            blocks (map (fn [block] (dissoc block :block/anchor)) blocks)]
         (with-path-refs blocks)))
     (catch js/Error e
       (js/console.error "extract-blocks-failed")
@@ -739,6 +744,22 @@
   (and (= typ "Paragraph")
        (every? #(= % ["Break_Line"]) break-lines)))
 
+(defn trim-paragraph-special-break-lines
+  [ast]
+  (let [[typ paras] ast]
+    (if (= typ "Paragraph")
+      (let [indexed-paras (map-indexed vector paras)]
+        [typ (->> (filter
+                            #(let [[index value] %]
+                               (not (and (> index 0)
+                                         (= value ["Break_Line"])
+                                         (contains? #{"Timestamp" "Macro"}
+                                                    (first (nth paras (dec index)))))))
+                            indexed-paras)
+                           (map #(last %)))])
+      ast)))
+
 (defn trim-break-lines!
   [ast]
-  (drop-while break-line-paragraph? ast))
+  (drop-while break-line-paragraph?
+              (map trim-paragraph-special-break-lines ast)))

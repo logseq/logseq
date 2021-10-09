@@ -66,6 +66,24 @@
       (when-not file-exists?
         (file-handler/reset-file! repo-url path default-content)))))
 
+(defn create-favorites-file
+  [repo-url]
+  (spec/validate :repos/url repo-url)
+  (let [repo-dir (config/get-repo-dir repo-url)
+        format (state/get-preferred-format)
+        path (str (state/get-pages-directory)
+                  "/favorites."
+                  (config/get-file-extension format))
+        file-path (str "/" path)
+        default-content (case (name format)
+                          "org" (rc/inline "favorites.org")
+                          "markdown" (rc/inline "favorites.md")
+                          "")]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+      (when-not file-exists?
+        (file-handler/reset-file! repo-url path default-content)))))
+
 (defn create-custom-theme
   [repo-url]
   (spec/validate :repos/url repo-url)
@@ -145,6 +163,7 @@
        ;; TODO: move to frontend.handler.file
        (create-config-file-if-not-exists repo-url)
        (create-contents-file repo-url)
+       (create-favorites-file repo-url)
        (create-custom-theme repo-url)
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
@@ -256,6 +275,7 @@
           db-encrypted-secret (if db-encrypted? (:db/encrypted-secret metadata) nil)]
       (if db-encrypted?
         (let [close-fn #(parse-files-and-create-default-files! repo-url files delete-files delete-blocks file-paths first-clone? db-encrypted? re-render? re-render-opts metadata opts)]
+          (state/set-state! :encryption/graph-parsing? true)
           (state/pub-event! [:modal/encryption-input-secret-dialog repo-url
                              db-encrypted-secret
                              close-fn]))
@@ -553,6 +573,7 @@
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (create-config-file-if-not-exists repo)
              (create-contents-file repo)
+             (create-favorites-file repo)
              (create-custom-theme repo)
              (state/set-db-restoring! false)
              (ui-handler/re-render-root!)))

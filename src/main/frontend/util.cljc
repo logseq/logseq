@@ -15,7 +15,6 @@
             [goog.object :as gobj]
             [goog.string :as gstring]
             [goog.userAgent]
-            ["path" :as nodePath]
             [promesa.core :as p]))
   (:require
    [clojure.core.async :as async]
@@ -33,7 +32,7 @@
      (-pr-writer [sym writer _]
        (-write writer (str "\"" (.toString sym) "\"")))))
 
-#?(:cljs (defonce ^js node-path nodePath))
+#?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defn app-scroll-container-node []
            (gdom/getElement "main-container")))
 
@@ -636,6 +635,13 @@
            end   (or (string/index-of val \newline start)
                      (count val))]
        (.setRangeText input "" start end))))
+
+#?(:cljs
+   (defn insert-at-current-position!
+     [input text]
+     (let [start (.-selectionStart input)
+           end   (.-selectionEnd input)]
+       (.setRangeText input text start end "end"))))
 
 ;; copied from re_com
 #?(:cljs

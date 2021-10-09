@@ -199,7 +199,7 @@
 
 (rum/defcs switch-git-auto-commit-row < rum/reactive
   [state t]
-  (let [enabled? (not (state/sub [:electron/user-cfgs :git/disable-auto-commit?]))]
+  (let [enabled? (state/get-git-auto-commit-enabled?)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       "Enable Git auto commit"]
@@ -584,18 +584,19 @@
 
         [:aside.md:w-64
          [:ul
-          (for [[label text icon] [[:general (t :settings-page/tab-general) (svg/adjustments 16)]
-                                   [:editor (t :settings-page/tab-editor) (svg/icon-editor 16)]
-                                   [:shortcuts (t :settings-page/tab-shortcuts) (svg/icon-cmd 18)]
-                                   [:git (t :settings-page/tab-version-control) svg/git]
-                                   [:advanced (t :settings-page/tab-advanced) (svg/icon-cli 16)]]]
+          (for [[label text icon] [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
+                                   [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+                                   [:shortcuts (t :settings-page/tab-shortcuts) (ui/icon "command" {:style {:font-size 20}})]
+                                   [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
+                                   [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
 
             [:li
              {:class    (util/classnames [{:active (= label @*active)}])
               :on-click #(reset! *active label)}
 
              [:a.flex.items-center
-              [[:i.flex.items-center icon] [:strong text]]]])]]
+              icon
+              [:strong text]]])]]
 
         [:article
 

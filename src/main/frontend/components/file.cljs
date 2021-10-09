@@ -29,13 +29,16 @@
      [:h1.title
       (tongue :all-files)]
      (when-let [current-repo (state/sub :git/current-repo)]
-       (let [files (db/get-files current-repo)]
+       (let [files (db/get-files current-repo)
+             mobile? (util/mobile?)]
          [:table.table-auto
           [:thead
            [:tr
             [:th (tongue :file/name)]
-            [:th (tongue :file/last-modified-at)]
-            [:th ""]]]
+            (when-not mobile?
+              [:th (tongue :file/last-modified-at)])
+            (when-not mobile?
+              [:th ""])]]
           [:tbody
            (for [[file modified-at] files]
              (let [file-id file]
@@ -46,16 +49,18 @@
                               (rfe/href :file {:path file-id}))]
                    [:a {:href href}
                     file])]
-                [:td [:span.text-gray-500.text-sm
-                      (if (zero? modified-at)
-                        (tongue :file/no-data)
-                        (date/get-date-time-string
-                         (t/to-default-time-zone (tc/to-date-time modified-at))))]]
+                (when-not mobile?
+                  [:td [:span.text-gray-500.text-sm
+                       (if (zero? modified-at)
+                         (tongue :file/no-data)
+                         (date/get-date-time-string
+                          (t/to-default-time-zone (tc/to-date-time modified-at))))]])
 
-                [:td [:a.text-sm
-                      {:on-click (fn [e]
-                                   (export-handler/download-file! file))}
-                      [:span (tongue :download)]]]]))]]))]))
+                (when-not mobile?
+                  [:td [:a.text-sm
+                       {:on-click (fn [e]
+                                    (export-handler/download-file! file))}
+                       [:span (tongue :download)]]])]))]]))]))
 
 (rum/defcs file < rum/reactive
   {:did-mount (fn [state]

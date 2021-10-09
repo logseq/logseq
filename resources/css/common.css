@@ -4,10 +4,12 @@
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
   --ls-font-family: 'Inter';
-  --ls-main-content-max-width: 740px;
+  --ls-main-content-max-width: 820px;
   --ls-main-content-max-width-wide: 100%;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
+  --ls-left-sidebar-width: 240px;
+  --ls-left-sidebar-nav-btn-size: 38px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1064,7 +1066,6 @@ mark {
 /* block references */
 
 .block-ref {
-  padding: 2px 5px;
   display: inline;
 }
 
@@ -1118,6 +1119,10 @@ a.tooltip-priority {
 
 .katex * {
   border-color: var(--ls-primary-text-color);
+}
+
+#help-latex .katex-html {
+  text-align: right;
 }
 
 a.page-op {

@@ -11,8 +11,8 @@
 
   transition: top 0.3s;
 
-  > button {
-    padding: 5px;
+  button {
+    padding: 10px;
   }
 }
 

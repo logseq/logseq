@@ -26,7 +26,8 @@
             [rum.core :as rum]
             ["semver" :as semver]
             [clojure.string :as string]
-            [frontend.modules.instrumentation.posthog :as posthog]))
+            [frontend.modules.instrumentation.posthog :as posthog]
+            [frontend.mobile.util :as mobile-util]))
 
 ;; TODO: should we move all events here?
 
@@ -80,7 +81,9 @@
 
 (defn ask-permission
   [repo]
-  (when-not (util/electron?)
+  (when
+      (and (not (util/electron?))
+           (not (mobile-util/is-native-platform?)))
     (fn [close-fn]
       [:div
        [:p

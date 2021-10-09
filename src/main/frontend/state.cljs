@@ -61,7 +61,7 @@
       :ui/fullscreen? false
       :ui/settings-open? false
       :ui/sidebar-open? false
-      :ui/left-sidebar-open? false
+      :ui/left-sidebar-open? (boolean (storage/get "ls-left-sidebar-open?"))
       :ui/theme (or (storage/get :ui/theme) "dark")
       :ui/system-theme? ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
       :ui/wide-mode? false
@@ -100,8 +100,11 @@
       :editor/block-dom-id nil
       :editor/set-timestamp-block nil
       :editor/last-input-time nil
-      :editor/new-block-toggle? document-mode?
+      :editor/document-mode? document-mode?
       :editor/args nil
+      :editor/on-paste? false
+      :editor/recent-pages nil
+
       :db/last-transact-time {}
       :db/last-persist-transact-ids {}
       ;; whether database is persisted
@@ -125,6 +128,7 @@
       :preferred-language (storage/get :preferred-language)
 
       ;; electron
+      :electron/auto-updater-downloaded false
       :electron/updater-pending? false
       :electron/updater {}
       :electron/user-cfgs nil
@@ -167,7 +171,11 @@
 
       :view/components {}
 
-      :debug/write-acks {}})))
+      :debug/write-acks {}
+
+      :encryption/graph-parsing? false
+
+      :favorites/dragging nil})))
 
 
 (defn sub
@@ -299,7 +307,11 @@
 
 (defn sub-graph-config
   []
-  (:graph/settings (get (sub-config) (get-current-repo))))
+  (get (sub-config) (get-current-repo)))
+
+(defn sub-graph-config-settings
+  []
+  (:graph/settings (sub-graph-config)))
 
 ;; Enable by default
 (defn show-brackets?
@@ -734,7 +746,6 @@
     (update-state! :sidebar/blocks (fn [blocks]
                                      (->> (remove #(= (second %) db-id) blocks)
                                           (cons [repo db-id block-type block-data])
-                                        ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
     (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
@@ -1109,6 +1120,7 @@
 
 (defn set-left-sidebar-open!
   [value]
+  (storage/set "ls-left-sidebar-open?" (boolean value))
   (set-state! :ui/left-sidebar-open? value))
 
 (defn set-developer-mode!
@@ -1124,26 +1136,28 @@
   []
   (get @state :notification/contents))
 
-(defn get-new-block-toggle?
+(defn document-mode?
   []
-  (get @state :editor/new-block-toggle?))
+  (get @state :document/mode?))
 
-(defn toggle-new-block-shortcut!
+(defn doc-mode-enter-for-new-line?
   []
-  (update-state! :editor/new-block-toggle? not))
+  (and (document-mode?)
+       (not (:shortcut/doc-mode-enter-for-new-block? (sub-graph-config)))))
 
 (defn toggle-document-mode!
   []
-  (let [mode (get @state :document/mode?)]
+  (let [mode (document-mode?)]
     (set-state! :document/mode? (not mode))
-    (storage/set :document/mode? (not mode)))
-  (toggle-new-block-shortcut!))
+    (storage/set :document/mode? (not mode))))
 
 (defn enable-tooltip?
   []
-  (get (get (sub-config) (get-current-repo))
-       :ui/enable-tooltip?
-       true))
+  (if (util/mobile?)
+    false
+    (get (get (sub-config) (get-current-repo))
+        :ui/enable-tooltip?
+        true)))
 
 (defn show-command-doc?
   []
@@ -1491,3 +1505,7 @@
 
 (defn remove-watch-state [key]
   (remove-watch state key))
+
+(defn get-git-auto-commit-enabled?
+  []
+  (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))

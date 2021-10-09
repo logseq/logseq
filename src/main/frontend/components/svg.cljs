@@ -399,7 +399,7 @@
 (rum/defc logo
   [dark?]
   [:svg
-   {:fill (if dark? "currentColor" "#002B36"), :view-box "0 0 21 21", :height "21", :width "21"}
+   {:fill "currentColor", :view-box "0 0 21 21", :height "21", :width "21"}
    [:ellipse
     {:transform
          "matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 2.59206)"
@@ -531,18 +531,6 @@
 
 (def online
   (hero-icon "M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"))
-
-(rum/defc filter-icon
-  [class]
-  [:svg
-   {:stroke   "currentColor"
-    :fill     "currentColor"
-    :view-box "0 0 16.06 16.06"
-    :width    "16"
-    :height   "16"
-    :class    class}
-   [:path
-    {:d "M.53.53h15l-5 7v8h-5v-8z" :stroke-width "1.06" :stroke-linejoin "round"}]])
 
 (def collapse-right
   (hero-icon "M4 6h16M4 12h16m-7 6h7"))
@@ -751,6 +739,15 @@
     [:path {:d "M4 16v2a2 2 0 0 0 2 2h2"}]
     [:path {:d "M16 4h2a2 2 0 0 1 2 2v2"}]
     [:path {:d "M16 20h2a2 2 0 0 0 2 -2v-2"}]]))
+
+(defn help-circle
+  ([] (help-circle 16))
+  ([size]
+   [:svg.icon {:width size :height size :viewBox "0 0 24 24" :stroke-width "2" :stroke "currentColor" :fill "none" :stroke-linecap "round" :stroke-linejoin "round"}
+    [:path {:stroke "none" :d "M0 0h24v24H0z" :fill "none"}]
+    [:circle {:cx "12" :cy "12" :r "9"}]
+    [:line {:x1 "12" :y1 "17" :x2 "12" :y2 "17.01"}]
+    [:path {:d "M12 13.5a1.5 1.5 0 0 1 1 -1.5a2.6 2.6 0 1 0 -3 -4"}]]))
 
 (def arrow-expand
   (hero-icon "M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"))
