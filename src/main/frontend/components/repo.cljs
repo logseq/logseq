@@ -238,17 +238,20 @@
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
-             (reset! toggle-dropdown-f toggle-fn)
-             [:span#repo-switch.block.pr-2.whitespace-nowrap
-              [:span
-               (let [repo-name (get-repo-name current-repo)
-                     repo-name (if (or (util/electron?)
-                                       (mobile-util/is-native-platform?))
-                                 (last
-                                  (string/split repo-name #"/"))
-                                 repo-name)]
-                 [:span#repo-name.font-medium {:title repo-name} repo-name])
-               [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]])
+             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click toggle-fn}
+              (ui/icon "database mr-3" {:style {:font-size 20}
+                                        :id "database-icon"})
+              [:div.graphs
+               [:span#repo-switch.block.pr-2.whitespace-nowrap
+                [:span
+                 (let [repo-name (get-repo-name current-repo)
+                       repo-name (if (or (util/electron?)
+                                         (mobile-util/is-native-platform?))
+                                   (last
+                                    (string/split repo-name #"/"))
+                                   repo-name)]
+                   [:span#repo-name.font-medium {:title repo-name} repo-name])
+                 [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]])
            links
            (cond->
             {:modal-class (util/hiccup->class

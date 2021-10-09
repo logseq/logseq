@@ -178,20 +178,12 @@
     (let [active? (fn [route] (= route (get-in route-match [:data :name])))
           page-active? (fn [page]
                          (= page (get-in route-match [:parameters :path :name])))
-          left-sidebar? (state/sub :ui/left-sidebar-open?)
-          toggle-dropdown-f (atom nil)]
+          left-sidebar? (state/sub :ui/left-sidebar-open?)]
       (when left-sidebar?
         [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
          [:div.flex.flex-col.pb-4.wrap
           [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.ignore-outside-event
-            {:on-mouse-down (fn [e]
-                              (util/stop e)
-                              (when-let [f @toggle-dropdown-f]
-                                (f)))}
-            (ui/icon "database mr-3" {:style {:font-size 20}})
-            [:div.graphs
-             (repo/repos-dropdown toggle-dropdown-f)]]
+           (repo/repos-dropdown)
            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-journals)}
             (ui/icon "calendar mr-3" {:style {:font-size 20}})
             [:span.flex-1 "Journals"]]
