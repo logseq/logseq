@@ -2390,7 +2390,7 @@
                       ;;      (cursor/line-end-pos input))
                       ;;     (cursor/move-cursor-to-line-end (inc (:end thing-at-point))))
                       )
-                      
+
                       :else
                       ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
                       (do (insert "\n:: ")
@@ -3085,13 +3085,16 @@
 (defn shortcut-left-right [direction]
   (fn [e]
     (when-not (auto-complete?)
-      (util/stop e)
       (cond
         (state/editing?)
-        (keydown-arrow-handler direction)
+        (do
+          (util/stop e)
+          (keydown-arrow-handler direction))
 
         (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
-        (open-selected-block! direction e)
+        (do
+          (util/stop e)
+          (open-selected-block! direction e))
 
         :else
         nil))))
