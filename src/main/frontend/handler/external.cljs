@@ -11,7 +11,8 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
             [frontend.handler.page :as page]
-            [frontend.handler.editor :as editor]))
+            [frontend.handler.editor :as editor]
+            [frontend.util :as util]))
 
 (defn index-files!
   [repo files finish-handler]
