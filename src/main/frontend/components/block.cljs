@@ -1335,7 +1335,7 @@
                (seq children)
                (not collapsed?))
       (let [doc-mode? (state/sub :document/mode?)]
-        [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
+        [:div.block-children {:style {:margin-left (if doc-mode? 18 29)
                                       :display (if collapsed? "none" "")}}
          (for [child children]
            (when (map? child)
@@ -1383,11 +1383,8 @@
               :margin-top 0
               :float "left"}}
 
-     [:a.block-control.opacity-50.hover:opacity-100
+     [:a.block-control
       {:id (str "control-" uuid)
-       :style {:width 14
-               :height 16
-               :margin-right 2}
        :on-click (fn [e]
                    (util/stop e)
                    (when-not (and (not collapsed?) (not has-child?))
@@ -1894,7 +1891,7 @@
         (let [block-refs-count (count (:block/_refs block))]
           (when (and block-refs-count (> block-refs-count 0))
             [:div
-             [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
+             [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
               {:title "Open block references"
                :style {:margin-top -1}
                :on-click (fn []
