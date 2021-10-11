@@ -2614,10 +2614,11 @@
 
         ["Custom" "query" _options result content]
         (try
-          (let [query (->> (reader/read-string content)
-                           (string/trim))]
-            (when-not (string/blank? query)
-              (custom-query config query)))
+          (let [query (reader/read-string content)
+                query (if (string? query)
+                        (string/trim query)
+                        query)]
+            (custom-query config query))
           (catch js/Error e
             (println "read-string error:")
             (js/console.error e)
