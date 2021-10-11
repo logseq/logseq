@@ -503,8 +503,6 @@ a[data-ref="card"], .page-reference[data-ref="card"] {
 }
 
 .cards-title {
-    background: var(--ls-page-properties-background-color);
-    border-radius: 4px;
     padding: 4px 0;
 }
 
