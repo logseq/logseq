@@ -17,6 +17,17 @@
 
 (rum/defcontext *tongue-context*)
 
+;; FIXME: reactive
+(defonce t
+  (let [preferred-language (keyword (state/sub :preferred-language))
+        set-preferred-language state/set-preferred-language!
+        all-dicts (deep-merge dicts/dicts shortcut-dict/dict)
+        t (partial (dicts/translate all-dicts) preferred-language)]
+    (if (nil? preferred-language)
+      (set-preferred-language (fetch-local-language))
+      :ok)
+    t))
+
 (rum/defc tongue-provider [children]
   (let [preferred-language (keyword (state/sub :preferred-language))
         set-preferred-language state/set-preferred-language!

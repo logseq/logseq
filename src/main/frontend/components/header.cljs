@@ -3,6 +3,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.page :as page]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
@@ -79,7 +80,7 @@
   (let [projects (state/sub [:me :projects])
         developer-mode? (state/sub [:ui/developer-mode?])
         logged? (state/logged?)
-        page-menu (page/page-menu t)
+        page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
                            (concat page-menu [{:hr true}]))]
     (ui/dropdown-with-links
