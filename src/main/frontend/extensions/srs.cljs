@@ -206,7 +206,6 @@
   "Clear block's collapsed property if exists"
   [blocks]
   (let [result (map (fn [block] (assoc-in block [:block/properties :collapsed] false)) blocks)]
-    (def result result)
     result))
 
 ;;; ================================================================
@@ -220,11 +219,10 @@
     (let [blocks (-> (db/get-block-and-children (state/get-current-repo) (:block/uuid block))
                      clear-collapsed-property)
           cloze? (has-cloze? blocks)]
-      (def blocks blocks)
       (case phase
         1
         (let [blocks-count (count blocks)]
-          {:value [block] :next-phase (if (> blocks-count 1) 2 3)})
+          {:value [block] :next-phase (if (or (> blocks-count 1) (nil? cloze?)) 2 3)})
         2
         {:value blocks :next-phase (if cloze? 3 1)}
         3
@@ -258,26 +256,27 @@
                                query
                                [query]))]
           (when-let [query** (query-dsl/query-wrapper query* true)]
-            (react/react-query repo
-                               {:query query**}
-                               (when sort-by
-                                 {:transform-fn sort-by}))))))))
+            (let [result (react/react-query repo
+                                            {:query query**}
+                                            (when sort-by
+                                              {:transform-fn sort-by}))]
+              (when result
+                (flatten (util/react result))))))))))
 
 (defn- query-scheduled
   "Return blocks scheduled to 'time' or before"
   [repo blocks time]
-  (let [filtered-result (->>
-                         (flatten blocks)
-                         (filterv (fn [b]
-                                    (let [props (:block/properties b)
-                                          next-sched (get props card-next-schedule-property)
-                                          next-sched* (tc/from-string next-sched)
-                                          repeats (get props card-repeats-property)]
-                                      (or (nil? repeats)
-                                          (< repeats 1)
-                                          (nil? next-sched)
-                                          (nil? next-sched*)
-                                          (t/before? next-sched* time))))))]
+  (let [filtered-result (filterv (fn [b]
+                                   (let [props (:block/properties b)
+                                         next-sched (get props card-next-schedule-property)
+                                         next-sched* (tc/from-string next-sched)
+                                         repeats (get props card-repeats-property)]
+                                     (or (nil? repeats)
+                                         (< repeats 1)
+                                         (nil? next-sched)
+                                         (nil? next-sched*)
+                                         (t/before? next-sched* time))))
+                                 blocks)]
     {:total (count blocks)
      :result filtered-result}))
 
@@ -400,7 +399,6 @@
 (rum/defcs view
   < rum/reactive
   (rum/local 1 ::phase)
-  (rum/local 0 ::card-index)
   (rum/local {} ::review-records)
   {:will-mount (fn [state]
                  (state/set-state! :srs/mode? true)
@@ -411,15 +409,11 @@
   [state blocks {preview? :preview?
                  modal? :modal?
                  global? :global?
-                 cb :callback}]
+                 cb :callback}
+   card-index]
   (let [cards (map ->card blocks)
         review-records (::review-records state)
-        card-index (::card-index state)
-        idx (if (and global?
-                     (>= (inc @card-index) (count blocks)))
-              (dec @card-index)
-              @card-index)
-        card (util/nth-safe cards idx)]
+        card (util/nth-safe cards @card-index)]
     (if-not card
       review-finished
       (let [phase (::phase state)
@@ -499,8 +493,8 @@
 
 (rum/defc view-modal <
   (shortcut/mixin :shortcut.handler/cards)
-  [blocks option]
-  (view blocks option))
+  [blocks option card-index]
+  (view blocks option card-index))
 
 (defn preview
   [blocks]
@@ -515,7 +509,8 @@
 
 (rum/defcs cloze-macro-show < rum/reactive
   {:init (fn [state]
-           (let [shown? (atom (:show-cloze? config))]
+           (let [config (first (:rum/args state))
+                 shown? (atom (:show-cloze? config))]
              (assoc state :shown? shown?)))}
   [state config options]
   (let [shown?* (:shown? state)
@@ -529,26 +524,38 @@
 
 (component-macro/register cloze-macro-name cloze-macro-show)
 
+(def cards-total (atom 0))
+
 (defn get-srs-cards-total
   []
   (let [repo (state/get-current-repo)
         query-string ""
-        *query-result (query repo query-string)]
-    (when *query-result
-      (let [blocks (rum/react *query-result)
-            {:keys [result]} (query-scheduled repo blocks (tl/local-now))]
-        (count result)))))
+        blocks (query repo query-string)]
+    (when (seq blocks)
+      (let [{:keys [result]} (query-scheduled repo blocks (tl/local-now))
+            count (count result)]
+        (reset! cards-total count)
+        count))))
 
 ;;; register cards macro
 (rum/defcs cards
   < rum/reactive
-  (rum/local false ::need-requery)
+  {:will-mount (fn [state]
+                 (let [[config options] (:rum/args state)
+                       repo (state/get-current-repo)
+                       query-string (string/join ", " (:arguments options))
+                       blocks (query repo query-string)]
+                   (assoc state
+                          :query-string query-string
+                          :query-result blocks)))}
+  (rum/local 0 ::card-index)
   [state config options]
   (let [repo (state/get-current-repo)
-        query-string (string/join ", " (:arguments options))]
-    (if-let [*query-result (query repo query-string)]
-      (let [blocks (rum/react *query-result)
-            {:keys [total result]} (query-scheduled repo blocks (tl/local-now))
+        query-string (:query-string state)
+        card-index (::card-index state)
+        query-result (:query-result state)]
+    (if (seq query-result)
+      (let [{:keys [total result]} (query-scheduled repo query-result (tl/local-now))
             review-cards result
             query-string (if (string/blank? query-string) "All" query-string)
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
@@ -567,28 +574,26 @@
                       ;; :class "tippy-hover"
                       :interactive true}
                      [:div.opacity-60.text-sm
-                      filtered-total
+                      (let [idx (- filtered-total @card-index)]
+                        (max idx 0))
                       [:span "/"]
                       total])
 
-           (when-not modal?
-             (ui/tippy
-              {:html [:div.text-sm "Click to preview all cards"]
-               :delay [1000, 100]
-               :class "tippy-hover"
-               :interactive true
-               :disabled false}
-              [:a.opacity-60.hover:opacity-100.svg-small.inline.ml-3.font-bold
-               {:on-click (fn [_]
-                            (let [all-blocks (flatten @(query (state/get-current-repo) query-string))]
-                              (when (> (count all-blocks) 0)
-                                (let [review-cards all-blocks]
-                                  (state/set-modal! #(view-modal
-                                                      review-cards
-                                                      {:preview? true
-                                                       :callback (fn [_]
-                                                                   (swap! (::need-requery state) not))}))))))}
-               "A"]))]]
+           (ui/tippy
+            {:html [:div.text-sm "Click to preview all cards"]
+             :delay [1000, 100]
+             :class "tippy-hover"
+             :interactive true
+             :disabled false}
+            [:a.opacity-60.hover:opacity-100.svg-small.inline.ml-3.font-bold
+             {:on-click (fn [_]
+                          (let [blocks query-result]
+                            (when (> (count blocks) 0)
+                              (state/set-modal! #(view-modal
+                                                  blocks
+                                                  {:preview? true}
+                                                  card-index)))))}
+             "A"])]]
          (if (seq review-cards)
            [:div (when-not modal?
                    {:on-click (fn []
@@ -599,8 +604,8 @@
                                                      (fn [review-records]
                                                        (operation-card-info-summary!
                                                         review-records review-cards card-query-block)
-                                                       (swap! (::need-requery state) not)
-                                                       (persist-var/persist-save of-matrix))})))})
+                                                       (persist-var/persist-save of-matrix))}
+                                                    card-index)))})
             (let [view-fn (if modal? view-modal view)]
               (view-fn review-cards
                        (merge config
@@ -608,29 +613,25 @@
                                (fn [review-records]
                                  (operation-card-info-summary!
                                   review-records review-cards card-query-block)
-                                 (swap! (::need-requery state) not)
-                                 (persist-var/persist-save of-matrix))})))]
+                                 (persist-var/persist-save of-matrix))})
+                       card-index))]
            review-finished)])
 
-      (let [result (query (state/get-current-repo) "")]
-        (if (or
-             (nil? result)
-             (and result (empty? @result)))
-          [:div.ls-card
-           [:h1.title "Time to create your first card!"]
+      (if (zero? @cards-total)
+        [:div.ls-card
+         [:h1.title "Time to create your first card!"]
 
-           [:div
-            [:p "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."]
-            [:img.my-4 {:src "https://logseq.github.io/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
-            [:p "You can "
-             [:a {:href "https://logseq.github.io/#/page/cards" :target "_blank"}
-              "click this link"]
-             " to check the documentation."]]]
-
-          [:div.opacity-60.custom-query-title.ls-card
-           [:div.w-full.flex-1
-            [:code.p-1 (str "Cards: " query-string)]]
-           [:div.mt-2.ml-2.font-medium "No matched cards"]])))))
+         [:div
+          [:p "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."]
+          [:img.my-4 {:src "https://logseq.github.io/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
+          [:p "You can "
+           [:a {:href "https://logseq.github.io/#/page/cards" :target "_blank"}
+            "click this link"]
+           " to check the documentation."]]]
+        [:div.opacity-60.custom-query-title.ls-card
+         [:div.w-full.flex-1
+          [:code.p-1 (str "Cards: " query-string)]]
+         [:div.mt-2.ml-2.font-medium "No matched cards"]]))))
 
 (rum/defc global-cards
   []
