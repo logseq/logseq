@@ -19,7 +19,7 @@
            end (string/index-of
                 content right (if (= left right) pos (inc (- pos (count right)))))
            end* (+ (count right) end)]
-       (when (and start end)
+       (when (and start end (not (zero? start)))
          (let [thing (subs content (+ start (count left)) end)]
            (when (every?
                   false?
@@ -157,5 +157,3 @@
 (defn admonition&src-at-point [& [input]]
   (or (org-admonition&src-at-point input)
       (markdown-src-at-point input)))
-
-
