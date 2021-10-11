@@ -23,13 +23,15 @@
                      (let [title (:title file)
                            journal? (date/valid-journal-title? title)]
                        (when-let [text (:text file)]
-                         (let [path (str (if journal?
+                         (let [title (if journal?
+                                       (date/journal-title->default title)
+                                       (string/replace title "/" "-"))
+                               title (util/page-name-sanity title)
+                               path (str (if journal?
                                            (config/get-journals-directory)
                                            (config/get-pages-directory))
                                          "/"
-                                         (if journal?
-                                           (date/journal-title->default title)
-                                           (string/replace title "/" "-"))
+                                         title
                                          ".md")]
                            {:file/path path
                             :file/content text}))))
