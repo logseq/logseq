@@ -489,6 +489,7 @@
     :ui/toggle-document-mode
     :ui/toggle-brackets
     :ui/toggle-theme
+    :ui/toggle-left-sidebar
     :ui/toggle-right-sidebar
     :ui/toggle-settings
     :ui/toggle-contents]
