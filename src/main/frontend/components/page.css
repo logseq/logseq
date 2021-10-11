@@ -72,3 +72,7 @@
     .bullet-container.cursor) {
   cursor: e-resize;
 }
+
+.add-button-link {
+    margin-left: 8px;
+}
