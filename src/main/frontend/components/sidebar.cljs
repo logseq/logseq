@@ -171,18 +171,15 @@
            (page-name name)]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
-  {:will-mount (fn [state]
-                 (assoc state :cards-total (atom nil)))
-   :did-mount (fn [state]
-                (let [cards-total (:cards-total state)]
-                  (js/setTimeout
-                   (fn []
-                     (let [total (srs/get-srs-cards-total)]
-                       (reset! cards-total total)))
-                   200)
-                  state))}
+  {:did-mount (fn [state]
+                (js/setTimeout
+                 (fn []
+                   (let [total (srs/get-srs-cards-total)]
+                     (state/set-state! :srs/cards-due-count total)))
+                 200)
+                state)}
   [state]
-  (let [num (util/react (:cards-total state))]
+  (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
      (ui/icon "infinity mr-3" {:style {:font-size 20}})
      [:span.flex-1 "Flashcards"]

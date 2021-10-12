@@ -176,7 +176,9 @@
 
       :favorites/dragging nil
 
-      :srs/mode? false})))
+      :srs/mode? false
+
+      :srs/cards-due-count nil})))
 
 
 (defn sub

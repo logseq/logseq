@@ -33,6 +33,8 @@
 
 ;; TODO: simplify state
 
+(defonce global-cards-mode? (atom false))
+
 (def card-hash-tag "card")
 
 (def card-last-interval-property        :card-last-interval)
@@ -382,6 +384,14 @@
              :disabled false}
             (svg/info)))
 
+(defn- dec-cards-due-count!
+  []
+  (state/update-state! :srs/cards-due-count
+                       (fn [n]
+                         (if (> n 0)
+                           (dec n)
+                           n))))
+
 (defn- score-and-next-card [score card *card-index cards *phase *review-records cb]
   (operation-score! card score)
   (swap! *review-records #(update % score (fn [ov] (conj ov card))))
@@ -392,7 +402,9 @@
         (cb @*review-records)))
     (do
       (swap! *card-index inc)
-      (reset! *phase 1))))
+      (reset! *phase 1)))
+  (when @global-cards-mode?
+    (dec-cards-due-count!)))
 
 (defn- skip-card [card *card-index cards *phase *review-records cb]
   (swap! *review-records #(update % "skip" (fn [ov] (conj ov card))))
@@ -642,7 +654,13 @@
           [:code.p-1 (str "Cards: " query-string)]]
          [:div.mt-2.ml-2.font-medium "No matched cards"]]))))
 
-(rum/defc global-cards
+(rum/defc global-cards <
+  {:will-mount (fn [state]
+                 (reset! global-cards-mode? true)
+                 state)
+   :will-unmount (fn [state]
+                   (reset! global-cards-mode? false)
+                   state)}
   []
   (cards {:modal? true
           :global? true} {}))
