@@ -216,11 +216,14 @@
                   sorted-children)))))))))
 
 (defn save-node
-  [node]
-  {:pre [(tree/satisfied-inode? node)]}
-  (ds/auto-transact!
-    [db (ds/new-outliner-txs-state)] {:outliner-op :save-node}
-    (tree/-save node db)))
+  ([node]
+   (save-node node nil))
+  ([node {:keys [txs-state]}]
+   (if txs-state
+     (tree/-save node txs-state)
+     (ds/auto-transact!
+      [db (ds/new-outliner-txs-state)] {:outliner-op :save-node}
+      (tree/-save node db)))))
 
 (defn insert-node-as-first-child
   "Insert a node as first child."
@@ -282,13 +285,15 @@
 (defn insert-node
   ([new-node target-node sibling?]
    (insert-node new-node target-node sibling? nil))
-  ([new-node target-node sibling? {:keys [blocks-atom skip-transact?]
+  ([new-node target-node sibling? {:keys [blocks-atom skip-transact? txs-state]
                                    :or {skip-transact? false}}]
-   (ds/auto-transact!
-    [txs-state (ds/new-outliner-txs-state)]
-    {:outliner-op :insert-node
-     :skip-transact? skip-transact?}
-    (insert-node-aux new-node target-node sibling? txs-state blocks-atom))))
+   (if txs-state
+     (insert-node-aux new-node target-node sibling? txs-state blocks-atom)
+     (ds/auto-transact!
+      [txs-state (ds/new-outliner-txs-state)]
+      {:outliner-op :insert-node
+       :skip-transact? skip-transact?}
+      (insert-node-aux new-node target-node sibling? txs-state blocks-atom)))))
 
 (defn- walk-&-insert-nodes
   [loc target-node sibling? transact]

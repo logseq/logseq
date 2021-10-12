@@ -49,7 +49,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             ["/frontend/utils" :as utils]
-            [frontend.mobile.util :as mobile]))
+            [frontend.mobile.util :as mobile]
+            [frontend.modules.outliner.datascript :as ds]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -467,13 +468,17 @@
 
                    :else
                    (not has-children?))]
-    (let [*blocks (atom [current-node])]
-      (when-not skip-save-current-block?
-        (outliner-core/save-node current-node))
-      (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
-                                                                 :skip-transact? false})
-      {:blocks @*blocks
-       :sibling? sibling?})))
+    (ds/auto-transact!
+     [txs-state (ds/new-outliner-txs-state)]
+     {:outliner-op :save-and-insert-node
+      :skip-transact? false}
+     (let [*blocks (atom [current-node])]
+       (when-not skip-save-current-block?
+         (outliner-core/save-node current-node {:txs-state txs-state}))
+       (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
+                                                                  :txs-state txs-state})
+       {:blocks @*blocks
+        :sibling? sibling?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
