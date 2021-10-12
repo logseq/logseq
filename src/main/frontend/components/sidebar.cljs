@@ -140,12 +140,14 @@
       (rfe/push-state :page {:name "Favorites"})
       (util/stop e))}
 
-   (let [favorites (:favorites (state/sub-graph-config))]
+   (let [favorites (->> (:favorites (state/sub-graph-config))
+                        (remove string/blank?))]
      (when (seq favorites)
        [:ul.favorites
         (for [name favorites]
           (when-not (string/blank? name)
-            (favorite-item t name)))]))))
+            (when (db/entity [:block/name (string/lower-case name)])
+                (favorite-item t name))))]))))
 
 (rum/defc recent-pages
   < rum/reactive db-mixins/query
@@ -158,11 +160,13 @@
 
    {:class "recent"}
 
-   (let [pages (db/sub-key-value :recent/pages)]
+   (let [pages (->> (db/sub-key-value :recent/pages)
+                    (remove string/blank?))]
      [:ul
       (for [name pages]
-        [:li {:key name}
-         (page-name name)])])))
+        (when (db/entity [:block/name (string/lower-case name)])
+          [:li {:key name}
+           (page-name name)]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:will-mount (fn [state]

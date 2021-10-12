@@ -30,8 +30,8 @@
   }
 
   &-container {
+    @apply p-4 sm:px-8;
     font-size: 1em;
-    padding: 1rem;
   }
 }
 
