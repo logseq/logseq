@@ -350,6 +350,7 @@
    (sub-key-value (state/get-current-repo) key))
   ([repo-url key]
    (when (conn/get-conn repo-url)
-     (-> (q repo-url [:kv key] {} key key)
-         react
-         key))))
+     (let [m (some-> (q repo-url [:kv key] {} key key) react)]
+       (if-let [result (get m key)]
+         result
+         m)))))
