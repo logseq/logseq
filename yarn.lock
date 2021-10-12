@@ -1028,7 +1028,7 @@
     debug "^3.1.0"
     lodash.once "^4.1.1"
 
-"@electron/get@^1.13.0":
+"@electron/get@^1.0.1":
   version "1.13.0"
   resolved "https://registry.yarnpkg.com/@electron/get/-/get-1.13.0.tgz#95c6bcaff4f9a505ea46792424f451efea89228c"
   integrity sha512-+SjZhRuRo+STTO1Fdhzqnv9D2ZhjxXP6egsJ9kiO8dtP68cDx7dFCwWi64dlMQV7sWcfW1OYCW4wviEBzmRsfQ==
@@ -3804,12 +3804,12 @@ electron-to-chromium@^1.3.723:
   resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.3.739.tgz#f07756aa92cabd5a6eec6f491525a64fe62f98b9"
   integrity sha512-+LPJVRsN7hGZ9EIUUiWCpO7l4E3qBYHNadazlucBfsXBbccDFNKUBAgzE68FnkWGJPwD/AfKhSzL+G+Iqb8A4A==
 
-electron@^15.1.2:
-  version "15.1.2"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-15.1.2.tgz#be1e362ab7307e38155709b0862e6a87f5e748b3"
-  integrity sha512-cU5x1ZvhwcTtzClJrsxqbvCocs40uhuXcdXbXFMpe6XnbnjruTbwrB2V0OxN01pStDrYihnfKo2yhfEvhO3zmw==
+electron@^13.4.0:
+  version "13.5.2"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-13.5.2.tgz#5c5826e58a5e12bb5ca8047b789d07b45260ecbc"
+  integrity sha512-CPakwDpy5m8dL0383F5uJboQcVtn9bT/+6/wdDKo8LuTUO9aER1TF41v7feZgZW2c+UwoGPWa814ElSQ3qta2A==
   dependencies:
-    "@electron/get" "^1.13.0"
+    "@electron/get" "^1.0.1"
     "@types/node" "^14.6.2"
     extract-zip "^1.0.3"
 
