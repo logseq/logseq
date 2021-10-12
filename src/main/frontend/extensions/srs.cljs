@@ -247,21 +247,29 @@
 (defn- query
   "Use same syntax as frontend.db.query-dsl.
   Add an extra condition: block's :block/refs contains `#card or [[card]]'"
-  [repo query-string]
-  (when (string? query-string)
-    (let [query-string (template/resolve-dynamic-template! query-string)]
-      (let [{:keys [query sort-by] :as result} (query-dsl/parse repo query-string)]
-        (let [query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
-                             (if (coll? (first query))
-                               query
-                               [query]))]
-          (when-let [query** (query-dsl/query-wrapper query* true)]
-            (let [result (react/react-query repo
-                                            {:query query**}
-                                            (when sort-by
-                                              {:transform-fn sort-by}))]
-              (when result
-                (flatten (util/react result))))))))))
+  ([repo query-string]
+   (query repo query-string {}))
+  ([repo query-string {:keys [disable-reactive? use-cache?]
+                       :or {use-cache? true}}]
+   (when (string? query-string)
+     (let [query-string (template/resolve-dynamic-template! query-string)]
+       (let [{:keys [query sort-by] :as result} (query-dsl/parse repo query-string)]
+         (let [query* (concat [['?b :block/refs [:block/name card-hash-tag]]]
+                              (if (coll? (first query))
+                                query
+                                [query]))]
+           (when-let [query (query-dsl/query-wrapper query* true)]
+             (let [result (react/react-query repo
+                                             {:query query}
+                                             (merge
+                                              {:use-cache? use-cache?}
+                                              (cond->
+                                                (when sort-by
+                                                  {:transform-fn sort-by})
+                                                disable-reactive?
+                                                (assoc :disable-reactive? true))))]
+               (when result
+                 (flatten (util/react result)))))))))))
 
 (defn- query-scheduled
   "Return blocks scheduled to 'time' or before"
@@ -530,7 +538,8 @@
   []
   (let [repo (state/get-current-repo)
         query-string ""
-        blocks (query repo query-string)]
+        blocks (query repo query-string {:use-cache? false
+                                         :disable-reactive? true})]
     (when (seq blocks)
       (let [{:keys [result]} (query-scheduled repo blocks (tl/local-now))
             count (count result)]

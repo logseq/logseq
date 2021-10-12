@@ -13,6 +13,7 @@
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
+            [frontend.db.react :as db-react]
             [frontend.components.svg :as svg]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.editor :as editor-handler]
@@ -163,14 +164,24 @@
         [:li {:key name}
          (page-name name)])])))
 
-(rum/defc flashcards < rum/reactive db-mixins/query
-  []
-  (let [num (srs/get-srs-cards-total)]
+(rum/defcs flashcards < db-mixins/query rum/reactive
+  {:will-mount (fn [state]
+                 (assoc state :cards-total (atom nil)))
+   :did-mount (fn [state]
+                (let [cards-total (:cards-total state)]
+                  (js/setTimeout
+                   (fn []
+                     (let [total (srs/get-srs-cards-total)]
+                       (reset! cards-total total)))
+                   200)
+                  state))}
+  [state]
+  (let [num (util/react (:cards-total state))]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
      (ui/icon "infinity mr-3" {:style {:font-size 20}})
      [:span.flex-1 "Flashcards"]
      (when (and num (not (zero? num)))
-       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full num])]))
+       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
 (rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn]

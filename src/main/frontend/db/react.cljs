@@ -135,9 +135,10 @@
   (conj (vec inputs) rules/rules))
 
 (defn q
-  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn]
+  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
            :or {use-cache? true
-                transform-fn identity}} query & inputs]
+                transform-fn identity}
+           :as opts} query & inputs]
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))]
     (when-let [conn (conn/get-conn repo)]
@@ -166,7 +167,9 @@
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
-            (add-q! k query inputs result-atom transform-fn query-fn inputs-fn)))))))
+            (if-not disable-reactive?
+              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn)
+              result-atom)))))))
 
 
 
