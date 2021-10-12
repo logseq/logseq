@@ -160,7 +160,7 @@
 
 (defn edit-config-edn []
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div.text-sm
+    [:div
      [:a.text-xs {:href     (rfe/href :file {:path (config/get-config-path)})
                   :on-click #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))}
       (t :settings-page/edit-config-edn)]]))
@@ -246,27 +246,10 @@
           (ipc/ipc "userAppCfgs" :auto-update (not enabled?)))
         true)]]]))
 
-(rum/defcs current-graph
+(rum/defcs graph-config
   [state t]
-
   (when-let [current-repo (state/sub :git/current-repo)]
-    (let [repo-list (state/sub [:me :repos])]
-
-      [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start.sm:grid-rows-1
-       [:label.block.text-sm.font-medium.leading-5.opacity-70.sm:col-span-1
-        {:for "input_current_graph"}
-        (t :settings-page/current-graph)]
-       [:div.mt-1.sm:mt-0.sm:col-span-4
-        [:div.max-w-lg.rounded-md
-         [:select#input_current_graph.form-select.is-small
-          {:value     current-repo
-           :disabled  true
-           :on-change #()}
-          (for [it repo-list]
-            (when-let [url (and (not= (:url it) "local") (:url it))]
-              [:option {:key url :value url} (util/node-path.basename url)]))]
-
-         [:div.inline-flex.items-center.pl-5 (edit-config-edn)]]]])))
+    (edit-config-edn)))
 
 (defn language-row [t preferred-language]
   [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start
@@ -605,7 +588,6 @@
            :general
            [:div.panel-wrap.is-general
             (version-row t version)
-            (current-graph t)
             (language-row t preferred-language)
             (theme-modes-row t switch-theme system-theme? dark?)]
 
@@ -624,7 +606,8 @@
             (enable-all-pages-public-row t enable-all-pages-public?)
             (encryption-row t enable-encryption?)
             (zotero-settings-row t)
-            (auto-push-row t current-repo enable-git-auto-push?)]
+            (auto-push-row t current-repo enable-git-auto-push?)
+            (graph-config t)]
 
            :shortcuts
            [:div.panel-wrap

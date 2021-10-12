@@ -212,7 +212,7 @@
         :content/open-in-sidebar "Open in sidebar"
         :content/copy-as-json "Copy as JSON"
         :content/click-to-edit "Click to edit"
-        :settings-page/edit-config-edn "Edit config.edn for current repo"
+        :settings-page/edit-config-edn "Edit config.edn for current graph"
         :settings-page/show-brackets "Show brackets"
         :settings-page/spell-checker "Spell checker"
         :settings-page/auto-updater "Auto updater"
