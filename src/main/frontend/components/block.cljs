@@ -61,7 +61,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [shadow.loader :as loader]
-            [frontend.components.query-table :as query-table]))
+            [frontend.components.query-table :as query-table]
+            [frontend.mixins :as mixins]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -1414,7 +1415,8 @@
          bullet
 
          (or
-          (and empty-content? (not edit?)
+          (and empty-content?
+               (not edit?)
                (not (:block/top? block))
                (not (:block/bottom? block))
                (not (util/react *control-show?)))
@@ -1834,6 +1836,22 @@
                 (rum/with-key (block-child block)
                   (str uuid "-" idx)))))])]]]))
 
+(rum/defc block-refs-count < rum/reactive
+  [block]
+  (let [block-refs-count (model/get-block-refs-count (:block/uuid block))]
+    (when (and block-refs-count (> block-refs-count 0))
+      [:div
+       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
+        {:title "Open block references"
+         :style {:margin-top -1}
+         :on-click (fn []
+                     (state/sidebar-add-block!
+                      (state/get-current-repo)
+                      (:db/id block)
+                      :block-ref
+                      {:block block}))}
+        block-refs-count]])))
+
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid title body meta content page format repo children marker properties pre-block? idx] :as block} edit-input-id block-id slide? heading-level edit?]
   (let [editor-box (get config :editor-box)
@@ -1888,19 +1906,7 @@
                          [:a.fade-link
                           summary]]))))
 
-        (let [block-refs-count (count (:block/_refs block))]
-          (when (and block-refs-count (> block-refs-count 0))
-            [:div
-             [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
-              {:title "Open block references"
-               :style {:margin-top -1}
-               :on-click (fn []
-                           (state/sidebar-add-block!
-                            (state/get-current-repo)
-                            (:db/id block)
-                            :block-ref
-                            {:block block}))}
-              block-refs-count]]))]])))
+        (block-refs-count block)]])))
 
 (defn non-dragging?
   [e]

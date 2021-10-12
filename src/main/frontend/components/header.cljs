@@ -28,9 +28,7 @@
   []
   [:a.button
    {:href     (rfe/href :home)
-    :on-click (fn []
-                (util/scroll-to-top)
-                (state/set-journals-length! 2))}
+    :on-click route-handler/go-to-journals!}
    (ui/icon "home" {:style {:fontSize 20}})])
 
 (rum/defc login

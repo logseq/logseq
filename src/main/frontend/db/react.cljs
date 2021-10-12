@@ -250,14 +250,17 @@
 
                              (apply concat
                                (for [{:block/keys [refs]} blocks]
-                                 (mapcat (fn [ref]
-                                           (when-let [block (if (and (map? ref) (:block/name ref))
-                                                              (db-utils/entity [:block/name (:block/name ref)])
-                                                              (db-utils/entity ref))]
-                                             [[:page/blocks (:db/id (:block/page block))]
-                                              ;; [:block/refed-blocks (:db/id block)]
-                                              ]))
-                                         refs))))
+                                 (map (fn [ref]
+                                        (cond
+                                          (and (map? ref) (:block/name ref))
+                                          [:page/blocks (:db/id (db-utils/entity [:block/name (:block/name ref)]))]
+
+                                          (and (vector? ref) (= (first ref) :block/uuid))
+                                          [:block/refs-count (second ref)]
+
+                                          :else
+                                          nil))
+                                   refs))))
                             (distinct))
               refed-pages (map
                            (fn [[k page-id]]
@@ -301,9 +304,10 @@
               (let [new-result (->
                                 (cond
                                   query-fn
-                                  (profile
-                                   "Query:"
-                                   (doall (query-fn db)))
+                                  (let [result (query-fn db)]
+                                    (if (coll? result)
+                                      (doall result)
+                                      result))
 
                                   inputs-fn
                                   (let [inputs (inputs-fn)]

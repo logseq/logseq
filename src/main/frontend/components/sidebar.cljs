@@ -163,7 +163,7 @@
         [:li {:key name}
          (page-name name)])])))
 
-(rum/defc flashcards < rum/reactive
+(rum/defc flashcards < rum/reactive db-mixins/query
   []
   (let [num (srs/get-srs-cards-total)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
@@ -184,7 +184,7 @@
          [:div.flex.flex-col.pb-4.wrap
           [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
            (repo/repos-dropdown)
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-journals)}
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click route-handler/go-to-journals!}
             (ui/icon "calendar mr-3" {:style {:font-size 20}})
             [:span.flex-1 "Journals"]]
 
