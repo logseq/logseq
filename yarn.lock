@@ -3804,10 +3804,10 @@ electron-to-chromium@^1.3.723:
   resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.3.739.tgz#f07756aa92cabd5a6eec6f491525a64fe62f98b9"
   integrity sha512-+LPJVRsN7hGZ9EIUUiWCpO7l4E3qBYHNadazlucBfsXBbccDFNKUBAgzE68FnkWGJPwD/AfKhSzL+G+Iqb8A4A==
 
-electron@^15.1.1:
-  version "15.1.1"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-15.1.1.tgz#cd3eaaaf62aa30c0f2d28ba28c5b62bd5ee2c325"
-  integrity sha512-ogVGNWL38KegiqAhUdgjWoKPOufTqDb+cNIqQF/WpVxgauNjzXEk/RNEk7qlw946B/g2dHpzpHeUhi+D/4EcIg==
+electron@^15.1.2:
+  version "15.1.2"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-15.1.2.tgz#be1e362ab7307e38155709b0862e6a87f5e748b3"
+  integrity sha512-cU5x1ZvhwcTtzClJrsxqbvCocs40uhuXcdXbXFMpe6XnbnjruTbwrB2V0OxN01pStDrYihnfKo2yhfEvhO3zmw==
   dependencies:
     "@electron/get" "^1.13.0"
     "@types/node" "^14.6.2"
@@ -6382,10 +6382,10 @@ mkdirp@^1.0.3:
   resolved "https://registry.yarnpkg.com/mkdirp/-/mkdirp-1.0.4.tgz#3eb5ed62622756d79a5f0e2a221dfebad75c2f7e"
   integrity sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==
 
-mldoc@1.1.0:
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.1.0.tgz#301905c749abbe187ba763ee4c0c62fdee7fd258"
-  integrity sha512-qraKzm3/DaPuzJzPn9qGf5jkNSI+7lW8foTPNN+vKETsx4I+h6Ng9gNFmSTSc94PIaeVoM5KWCqdT/LAWc+V9w==
+mldoc@1.1.1:
+  version "1.1.1"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.1.1.tgz#53ab6319c151782dfb1567cc65046e20c09edd8b"
+  integrity sha512-dEBmO3AQ7WwclNbsw0CvHk6BAbJrWvhUijKRwlXT7wOfWQsnY3t8l76DqcWWXdT0hVOXD93rcm+4GvHvCdYfzg==
   dependencies:
     yargs "^12.0.2"
 
