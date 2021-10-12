@@ -328,6 +328,7 @@
 (defn favorited?
   [page-name]
   (let [favorites (->> (:favorites (state/get-config))
+                       (filter string?)
                        (map string/lower-case)
                        (set))]
     (contains? favorites page-name)))

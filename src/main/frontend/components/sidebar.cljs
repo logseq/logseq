@@ -141,7 +141,8 @@
       (util/stop e))}
 
    (let [favorites (->> (:favorites (state/sub-graph-config))
-                        (remove string/blank?))]
+                        (remove string/blank?)
+                        (filter string?))]
      (when (seq favorites)
        [:ul.favorites
         (for [name favorites]
@@ -161,7 +162,8 @@
    {:class "recent"}
 
    (let [pages (->> (db/sub-key-value :recent/pages)
-                    (remove string/blank?))]
+                    (remove string/blank?)
+                    (filter string?))]
      [:ul
       (for [name pages]
         (when (db/entity [:block/name (string/lower-case name)])
