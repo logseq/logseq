@@ -2,7 +2,7 @@
   (:require [clojure.string :as s]
             [clojure.set :as set]
             [clojure.walk :as w]
-            [rum.core :refer [use-state use-effect!]]
+            [rum.core :refer [use-state use-effect!] :as rum]
             [cljs-bean.core :as bean]))
 
 ;; copy from https://github.com/priornix/antizer/blob/35ba264cf48b84e6597743e28b3570d8aa473e74/src/antizer/core.cljs
@@ -89,3 +89,13 @@
   "(use-atom my-atom [:path :to :data])"
   [a path]
   (use-atom-fn a #(get-in % path) #(assoc-in %1 path %2)))
+
+(defn use-mounted
+  []
+  (let [*mounted (rum/use-ref false)]
+    (use-effect!
+      (fn []
+         (rum/set-ref! *mounted true)
+         #(rum/set-ref! *mounted false))
+       [])
+    #(rum/deref *mounted)))

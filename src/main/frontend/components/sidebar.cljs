@@ -442,6 +442,7 @@
         white? (= "white" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
+        right-sidebar-blocks (state/sub :sidebar/blocks)
         route-name (get-in route-match [:data :name])
         global-graph-pages? (= :graph route-name)
         logged? (:name me)
@@ -459,6 +460,7 @@
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
         :sidebar-open? sidebar-open?
+        :sidebar-blocks-len (count right-sidebar-blocks)
         :system-theme? system-theme?
         :on-click      (fn [e]
                          (editor-handler/unhighlight-blocks!)
