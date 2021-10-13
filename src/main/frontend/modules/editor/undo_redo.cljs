@@ -148,5 +148,4 @@
                   :editor-cursor (:editor-cursor tx-meta)
                   :outliner-op (:outliner-op tx-meta)
                   :other-meta (:other-meta tx-meta)}]
-      (println "tx-meta: " tx-meta)
       (push-undo entity))))

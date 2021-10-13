@@ -12,6 +12,7 @@
             [frontend.db.model :as db-model]
             [frontend.util.property :as property]
             [clojure.zip :as zip]
+            [clojure.walk :as walk]
             [datascript.core :as d]))
 (set! *warn-on-infer* false)
 
@@ -666,7 +667,7 @@ return [2 3]
          (when *debug*
            (validate-struct struct)
            (validate-no-left-conflict page-name))
-         (outliner-core/insert-nodes new-nodes-tree* target-node sibling?))))))
+         (outliner-core/insert-nodes new-nodes-tree* target-node sibling? {:skip-undo? skip-undo?}))))))
 
 (defn insert-node-yjs [struct new-node target-uuid sibling?]
   (insert-nodes-yjs struct [new-node] target-uuid sibling?))
@@ -758,27 +759,30 @@ return [2 3]
     (dissoc-contents ids (contentmap))))
 
 
-(defn delete-nodes-op [start-node end-node block-ids]
-  (let [start-block (:data start-node)
-        end-block (:data end-node)]
-    (when-some [page-name (or (:block/name start-block)
-                              (:block/name (db/entity (:db/id (:block/page start-block)))))]
-      (when-some [start-uuid (:block/uuid start-block)]
-        (when-some [end-uuid (:block/uuid end-block)]
-          (let [struct (structarray page-name)
-                start-pos (find-pos struct (str start-uuid))
-                end-pos (find-pos struct (str end-uuid))
-                [start-pos end-pos start-node end-node]
-                (if (< (compare start-pos end-pos) 0)
-                  [start-pos end-pos start-node end-node]
-                  [end-pos start-pos end-node start-node])]
-            (delete-nodes-yjs struct start-pos end-pos block-ids)
-            (distinct-struct struct (atom #{}))
-            (merge-doc @doc-remote @doc-local)
-            (when *debug*
-              (validate-struct struct)
-              (validate-no-left-conflict page-name))
-            (outliner-core/delete-nodes start-node end-node block-ids)))))))
+(defn delete-nodes-op
+  ([start-node end-node block-ids]
+   (delete-nodes-op start-node end-node block-ids {:skip-undo? true}))
+  ([start-node end-node block-ids {:keys [skip-undo?]}]
+   (let [start-block (:data start-node)
+         end-block (:data end-node)]
+     (when-some [page-name (or (:block/name start-block)
+                               (:block/name (db/entity (:db/id (:block/page start-block)))))]
+       (when-some [start-uuid (:block/uuid start-block)]
+         (when-some [end-uuid (:block/uuid end-block)]
+           (let [struct (structarray page-name)
+                 start-pos (find-pos struct (str start-uuid))
+                 end-pos (find-pos struct (str end-uuid))
+                 [start-pos end-pos start-node end-node]
+                 (if (< (compare start-pos end-pos) 0)
+                   [start-pos end-pos start-node end-node]
+                   [end-pos start-pos end-node start-node])]
+             (delete-nodes-yjs struct start-pos end-pos block-ids)
+             (distinct-struct struct (atom #{}))
+             (merge-doc @doc-remote @doc-local)
+             (when *debug*
+               (validate-struct struct)
+               (validate-no-left-conflict page-name))
+             (outliner-core/delete-nodes start-node end-node block-ids {:skip-undo? true}))))))))
 
 (defn- delete-node-struct-yjs [struct id children?]
   (let [pos (find-pos struct id)
@@ -1104,7 +1108,48 @@ return [2 3]
         children? (get-in txn-meta [:other-meta :children?])]
     (delete-node-op node children? {:skip-undo? true})))
 
+
+(defn undo-insert-nodes [page-name txn-meta]
+  {:pre [(= :insert-nodes (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [tree (get-in txn-meta [:other-meta :tree])
+        block-ids (mapv (fn [block] [:block/uuid (:block/uuid block)])
+                        (flatten tree))]
+    (when-some [start-node (and (first tree)
+                                (outliner-core/block
+                                 (db/pull [:block/uuid (:block/uuid (first tree))])))]
+      (let [last-node (last tree)
+            end-node* (if (sequential? last-node)
+                        (last (butlast tree))
+                        last-node)]
+        (when-some [end-node (and end-node*
+                                  (outliner-core/block
+                                   (db/pull [:block/uuid (:block/uuid end-node*)])))]
+          (if (= start-node end-node)
+            (delete-node-op start-node true {:skip-undo? true})
+            (delete-nodes-op start-node end-node block-ids {:skip-undo? true})))))))
+
+(defn redo-insert-nodes [page-name txn-meta]
+  {:pre [(= :insert-nodes (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [target-id (get-in txn-meta [:other-meta :target-id])
+        target-node (outliner-core/block (db/pull [:block/uuid target-id]))
+        tree (get-in txn-meta [:other-meta :tree])
+        content-tree (walk/postwalk (fn [e]
+                                      (if (map? e)
+                                        (:block/content e)
+                                        e)) tree)
+        page-block (db/pull (:db/id (db/get-page page-name)))
+        node-tree (content-tree->node-tree content-tree :markdown page-block)
+        sibling? (get-in txn-meta [:other-meta :sibling?])
+        struct (structarray page-name)]
+    (when (find-pos struct (str target-id))
+      (insert-nodes-op node-tree target-node sibling?))))
+
+
 (defn undo-op [page-name txn-meta]
+  (def bbb [page-name txn-meta])
+  (println "[UNDO]" page-name (:outliner-op txn-meta))
   (case (:outliner-op txn-meta)
     :insert-node
     (undo-insert-node page-name txn-meta)
@@ -1112,9 +1157,12 @@ return [2 3]
     (undo-delete-node page-name txn-meta)
     :save-node
     (undo-save-node page-name txn-meta)
-    (println "[UNDO]" page-name (:outliner-op txn-meta))))
+    :insert-nodes
+    (undo-insert-nodes page-name txn-meta)
+    (println "unsupport" (:outliner-op txn-meta))))
 
 (defn redo-op [page-name txn-meta]
+  (println "[REDO]" page-name (:outliner-op txn-meta))
   (case (:outliner-op txn-meta)
     :insert-node
     (redo-insert-node page-name txn-meta)
@@ -1122,7 +1170,9 @@ return [2 3]
     (redo-delete-node page-name txn-meta)
     :save-node
     (redo-save-node page-name txn-meta)
-    (println "[REDO]" page-name (:outliner-op txn-meta))))
+    :insert-nodes
+    (redo-insert-nodes page-name txn-meta)
+    (println "unsupport" (:outliner-op txn-meta))))
 
 (defn undo []
   (let [[e prev-e] (undo-redo/pop-undo)]

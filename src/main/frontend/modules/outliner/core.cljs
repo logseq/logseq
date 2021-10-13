@@ -224,6 +224,18 @@
       (tree/vec-tree->block-tree)
       (tree/block-tree-keep-props [:block/uuid :block/content])))
 
+(defn- node-tree->content-tree [tree]
+  (->
+   (loop [loc (zip/vector-zip tree)]
+     (if (zip/end? loc)
+       (zip/root loc)
+       (cond
+         (map? (zip/node loc))
+         (recur (zip/next (zip/replace loc (:data (zip/node loc)))))
+         :else
+         (recur (zip/next loc)))))
+   (tree/block-tree-keep-props [:block/uuid :block/content])))
+
 (defn save-node
   ([node]
    (save-node node nil))
@@ -369,12 +381,16 @@
                                          :or {skip-undo? false}}]
    {:pre [(> (count new-nodes-tree) 0)]}
    (let [page-name (get-page-name target-node)
-         target-id (tree/-get-id target-node)]
+         target-id (tree/-get-id target-node)
+         tree (node-tree->content-tree new-nodes-tree)]
      (ds/auto-transact!
-      [txs-state (ds/new-outliner-txs-state)] {:outliner-op :insert-nodes
-                                               :other-meta {:new-nodes-tree new-nodes-tree
-                                                            :target-id target-id
-                                                            :sibling? sibling?}}
+      [txs-state (ds/new-outliner-txs-state)]
+      {:outliner-op :insert-nodes
+       :skip-undo? skip-undo?
+       :other-meta {:page-name page-name
+                    :tree tree
+                    :target-id target-id
+                    :sibling? sibling?}}
       (let [loc (zip/vector-zip new-nodes-tree)]
         ;; TODO: validate new-nodes-tree structure
         (let [updated-nodes (walk-&-insert-nodes loc target-node sibling? txs-state)
@@ -496,54 +512,59 @@
     block-ids: block ids between the start node and end node, including all the
   children.
   "
-  [start-node end-node block-ids]
-  {:pre [(tree/satisfied-inode? start-node)
-         (tree/satisfied-inode? end-node)]}
-  (let [page-name (get-page-name start-node)
-        start-id (tree/-get-id start-node)
-        end-id (tree/-get-id end-node)]
-    (ds/auto-transact!
-     [txs-state (ds/new-outliner-txs-state)]
-     {:outliner-op :delete-nodes
-      :other-meta {:page-name page-name
-                   :start-id start-id
-                   :end-id end-id
-                   :block-ids block-ids}}
-     (let [end-node-parents (->>
-                             (db/get-block-parents
-                              (state/get-current-repo)
-                              (tree/-get-id end-node)
-                              1000)
-                             (map :block/uuid)
-                             (set))
-           self-block? (contains? end-node-parents (tree/-get-id start-node))]
-       (if (or (= start-node end-node)
-               self-block?)
-         (delete-node start-node true)
-         (let [sibling? (= (tree/-get-parent-id start-node)
-                           (tree/-get-parent-id end-node))
-               right-node (tree/-get-right end-node)]
-           (when (tree/satisfied-inode? right-node)
-             (let [left-node-id (if sibling?
-                                  (tree/-get-id (tree/-get-left start-node))
-                                  (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
-                                        parents (->>
-                                                 (db/get-block-parents
-                                                  (state/get-current-repo)
-                                                  (tree/-get-id start-node)
-                                                  1000)
-                                                 (map :block/uuid)
-                                                 (set))
-                                        result (first (set/intersection (set end-node-left-nodes) parents))]
-                                    (when-not result
-                                      (util/pprint {:parents parents
-                                                    :end-node-left-nodes end-node-left-nodes}))
-                                    result))]
-               (assert left-node-id "Can't find the left-node-id")
-               (let [new-right-node (tree/-set-left-id right-node left-node-id)]
-                 (tree/-save new-right-node txs-state))))
-           (let [txs (db-outliner/del-blocks block-ids)]
-             (ds/add-txs txs-state txs))))))))
+  ([start-node end-node block-ids]
+   (delete-nodes start-node end-node block-ids nil))
+  ([start-node end-node block-ids {:keys [skip-undo?]
+                                   :or {skip-undo? false}}]
+   {:pre [(tree/satisfied-inode? start-node)
+          (tree/satisfied-inode? end-node)]}
+   (let [page-name (get-page-name start-node)
+         start-id (tree/-get-id start-node)
+         end-id (tree/-get-id end-node)]
+     (ds/auto-transact!
+      [txs-state (ds/new-outliner-txs-state)]
+      {:outliner-op :delete-nodes
+       :skip-undo? skip-undo?
+       :other-meta {:page-name page-name
+                    :start-id start-id
+                    :end-id end-id
+                    :block-ids block-ids}}
+      (let [end-node-parents (->>
+                              (db/get-block-parents
+                               (state/get-current-repo)
+                               (tree/-get-id end-node)
+                               1000)
+                              (map :block/uuid)
+                              (set))
+            self-block? (contains? end-node-parents (tree/-get-id start-node))]
+        (if (or (= start-node end-node)
+                self-block?)
+          (delete-node start-node true)
+          (let [sibling? (= (tree/-get-parent-id start-node)
+                            (tree/-get-parent-id end-node))
+                right-node (tree/-get-right end-node)]
+            (println "DEL: 111 " end-node (db/get-page-blocks-no-cache page-name))
+            (when (tree/satisfied-inode? right-node)
+              (let [left-node-id (if sibling?
+                                   (tree/-get-id (tree/-get-left start-node))
+                                   (let [end-node-left-nodes (get-left-nodes end-node (count block-ids))
+                                         parents (->>
+                                                  (db/get-block-parents
+                                                   (state/get-current-repo)
+                                                   (tree/-get-id start-node)
+                                                   1000)
+                                                  (map :block/uuid)
+                                                  (set))
+                                         result (first (set/intersection (set end-node-left-nodes) parents))]
+                                     (when-not result
+                                       (util/pprint {:parents parents
+                                                     :end-node-left-nodes end-node-left-nodes}))
+                                     result))]
+                (assert left-node-id "Can't find the left-node-id")
+                (let [new-right-node (tree/-set-left-id right-node left-node-id)]
+                  (tree/-save new-right-node txs-state))))
+            (let [txs (db-outliner/del-blocks block-ids)]
+              (ds/add-txs txs-state txs)))))))))
 
 (defn first-child?
   [node]
