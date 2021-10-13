@@ -33,8 +33,7 @@
      (ui-handler/add-style-if-exists!)
      (pdf/reset-current-pdf!)
      (ui-handler/add-style-if-exists!)
-     (plugin-handler/hook-plugin-app :current-graph-changed {})
-     (js/setTimeout #(ui-handler/exec-js-if-exists-&-allowed!) 3000))
+     (plugin-handler/hook-plugin-app :current-graph-changed {}))
    [current-repo])
 
   (rum/use-effect!
