@@ -108,23 +108,21 @@
 (def *js-execed (atom #{}))
 
 (defn exec-js-if-exists-&-allowed!
-  []
+  [t]
   (when-let [href (or
                      (state/get-custom-js-link)
                      (config/get-custom-js-path))]
     (let [k (str "ls-js-allowed-" href)
           execed #(swap! *js-execed conj href)
           execed? (contains? @*js-execed href)
-          ask-allow #(let [r (js/confirm "Found the custom.js file, is it allowed to execute?
-          (If you don't understand the content of this file, it is recommended
-          not to allow execution, which has certain security risks.)")]
+          ask-allow #(let [r (js/confirm (t :plugin/custom-js-alert))]
                        (if r
                          (storage/set k (js/Date.now))
                          (storage/set k false))
                        r)
           allowed! (storage/get k)
           should-ask? (or (nil? allowed!)
-                          (> (- (js/Date.now) allowed!) 604800))]
+                          (> (- (js/Date.now) allowed!) 604800000))]
       (when (and (not execed?)
                  (not= false allowed!))
         (if (string/starts-with? href "http")
@@ -132,7 +130,7 @@
                     (ask-allow))
             (load href #(do (js/console.log "[custom js]" href) (execed))))
           (util/p-handle
-            (fs/read-file "" href)
+            (fs/read-file (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo))) href)
             #(when-let [scripts (and % (string/trim %))]
                (when-not (string/blank? scripts)
                  (if (or (not should-ask?) (ask-allow))
