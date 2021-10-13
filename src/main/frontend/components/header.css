@@ -5,6 +5,7 @@
   padding-right: 0.5rem;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex: 0 0 auto;
   position: sticky;
   position: -webkit-sticky;
@@ -13,6 +14,12 @@
   right: 0;
   user-select: none;
   line-height: 1;
+
+  > .l {
+    width: var(--ls-left-sidebar-width);
+    height: 100%;
+    align-items: center;
+  }
 
   .it svg {
     transform: scale(0.8);
@@ -69,9 +76,9 @@
 }
 
 .is-electron.is-mac .cp__header {
+  > .l {
     padding-left: 78px;
-    transition: all 0.25s;
-    -webkit-transition: all 0.25s;
+  }
 }
 
 .cp__header .navigation svg {
