@@ -178,66 +178,67 @@
                              (when (and (util/electron?)
                                         (or (.. target -classList (contains "cp__header"))))
                                (js/window.apis.toggleMaxOrMinActiveWindow))))}
-       (left-menu-button {:on-click (fn []
-                                      (open-fn)
-                                      (state/set-left-sidebar-open!
-                                       (not (:ui/left-sidebar-open? @state/state))))})
+       [:div.l.flex
+        (left-menu-button {:on-click (fn []
+                                       (open-fn)
+                                       (state/set-left-sidebar-open!
+                                         (not (:ui/left-sidebar-open? @state/state))))})
 
-       (when current-repo
-         (ui/tippy
-          {:html [:div.text-sm.font-medium
-                  "Shortcut: "
-                  ;; TODO: Pull from config so it displays custom shortcut, not just the default
-                  [:code (util/->platform-shortcut "Ctrl + k")]]
-           :interactive true
-           :delay [2000, 0]
-           :arrow true}
-          [:a.button#search-button
-           {:on-click #(state/pub-event! [:go/search])}
-           (ui/icon "search" {:style {:fontSize 20}})]))
+        (when current-repo
+          (ui/tippy
+            {:html        [:div.text-sm.font-medium
+                           "Shortcut: "
+                           ;; TODO: Pull from config so it displays custom shortcut, not just the default
+                           [:code (util/->platform-shortcut "Ctrl + k")]]
+             :interactive true
+             :delay       2000
+             :position    "right"
+             :arrow       true}
+            [:a.button#search-button
+             {:on-click #(state/pub-event! [:go/search])}
+             (ui/icon "search" {:style {:fontSize 20}})]))]
 
-       [:div.flex-1.flex] ;; Spacer in the middle ------------------------------
+       [:div.r.flex
+        (when (and
+                (not (mobile-util/is-native-platform?))
+                (not (util/electron?)))
+          (login logged?))
 
-       (when (and
-              (not (mobile-util/is-native-platform?))
-              (not (util/electron?)))
-         (login logged?))
+        (when plugin-handler/lsp-enabled?
+          (plugins/hook-ui-items :toolbar))
 
-       (when plugin-handler/lsp-enabled?
-         (plugins/hook-ui-items :toolbar))
+        (when (not= (state/get-current-route) :home)
+          (home-button))
 
-       (when (not= (state/get-current-route) :home)
-         (home-button))
+        (when (util/electron?) (back-and-forward))
 
-       (when (util/electron?) (back-and-forward))
+        (new-block-mode)
 
-       (new-block-mode)
+        (when refreshing?
+          [:div {:class "animate-spin-reverse"}
+           svg/refresh])
 
-       (when refreshing?
-         [:div {:class "animate-spin-reverse"}
-          svg/refresh])
+        (repo/sync-status current-repo)
 
-       (repo/sync-status current-repo)
+        (when show-open-folder?
+          [:a.text-sm.font-medium.button
+           {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
+           [:div.flex.flex-row.text-center.open-button__inner.items-center
+            [:span.inline-block.open-button__icon-wrapper svg/folder-add]
+            (when-not config/mobile?
+              [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
+               (t :open)])]])
 
-       (when show-open-folder?
-         [:a.text-sm.font-medium.button
-          {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
-          [:div.flex.flex-row.text-center.open-button__inner.items-center
-           [:span.inline-block.open-button__icon-wrapper svg/folder-add]
-           (when-not config/mobile?
-             [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
-              (t :open)])]])
+        (when config/publishing?
+          [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
+           (t :graph)])
 
-       (when config/publishing?
-         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
-          (t :graph)])
+        (dropdown-menu {:me           me
+                        :t            t
+                        :current-repo current-repo
+                        :default-home default-home})
 
-       (dropdown-menu {:me me
-                       :t t
-                       :current-repo current-repo
-                       :default-home default-home})
+        (when (not (state/sub :ui/sidebar-open?))
+          (sidebar/toggle))
 
-       (when (not (state/sub :ui/sidebar-open?))
-         (sidebar/toggle))
-
-       (updater-tips-new-version t)])))
+        (updater-tips-new-version t)]])))
