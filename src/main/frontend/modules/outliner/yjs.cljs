@@ -761,7 +761,7 @@ return [2 3]
 
 (defn delete-nodes-op
   ([start-node end-node block-ids]
-   (delete-nodes-op start-node end-node block-ids {:skip-undo? true}))
+   (delete-nodes-op start-node end-node block-ids {:skip-undo? false}))
   ([start-node end-node block-ids {:keys [skip-undo?]}]
    (let [start-block (:data start-node)
          end-block (:data end-node)]
@@ -782,7 +782,7 @@ return [2 3]
              (when *debug*
                (validate-struct struct)
                (validate-no-left-conflict page-name))
-             (outliner-core/delete-nodes start-node end-node block-ids {:skip-undo? true}))))))))
+             (outliner-core/delete-nodes start-node end-node block-ids {:skip-undo? skip-undo?}))))))))
 
 (defn- delete-node-struct-yjs [struct id children?]
   (let [pos (find-pos struct id)
@@ -1146,6 +1146,34 @@ return [2 3]
     (when (find-pos struct (str target-id))
       (insert-nodes-op node-tree target-node sibling?))))
 
+(defn undo-delete-nodes [page-name txn-meta]
+  {:pre [(= :delete-nodes (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [tree-list (get-in txn-meta [:other-meta :tree])
+        page-block (db/pull (:db/id (db/get-page page-name)))
+        struct (structarray page-name)]
+    (doseq [{left-id :left-id
+             sibling? :sibling?
+             tree :tree} tree-list]
+      (let [target-node (outliner-core/block (db/pull [:block/uuid left-id]))
+            node-tree (content-tree->node-tree
+                       (block-tree->content-tree tree :markdown)
+                       :markdown page-block)]
+        (when (find-pos struct (str left-id))
+          (insert-nodes-op node-tree target-node sibling? {:skip-undo? true}))))))
+
+(defn redo-delete-nodes [page-name txn-meta]
+  {:pre [(= :delete-nodes (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [start-id (get-in txn-meta [:other-meta :start-id])
+        end-id (get-in txn-meta [:other-meta :end-id])
+        tree-list (tree/range-uuids->block-tree start-id end-id)
+        block-ids (mapv (fn [block] [:block/uuid (:block/uuid block)])
+                        (mapcat (fn [{tree :tree}] (flatten tree)) tree-list))
+        start-node (outliner-core/block (db/pull [:block/uuid start-id]))
+        end-node (outliner-core/block (db/pull [:block/uuid end-id]))]
+    (delete-nodes-op start-node end-node block-ids {:skip-undo? true})))
+
 
 (defn undo-op [page-name txn-meta]
   (def bbb [page-name txn-meta])
@@ -1159,6 +1187,8 @@ return [2 3]
     (undo-save-node page-name txn-meta)
     :insert-nodes
     (undo-insert-nodes page-name txn-meta)
+    :delete-nodes
+    (undo-delete-nodes page-name txn-meta)
     (println "unsupport" (:outliner-op txn-meta))))
 
 (defn redo-op [page-name txn-meta]
@@ -1172,6 +1202,8 @@ return [2 3]
     (redo-save-node page-name txn-meta)
     :insert-nodes
     (redo-insert-nodes page-name txn-meta)
+    :delete-nodes
+    (redo-delete-nodes page-name txn-meta)
     (println "unsupport" (:outliner-op txn-meta))))
 
 (defn undo []

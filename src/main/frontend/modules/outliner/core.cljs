@@ -520,7 +520,13 @@
           (tree/satisfied-inode? end-node)]}
    (let [page-name (get-page-name start-node)
          start-id (tree/-get-id start-node)
-         end-id (tree/-get-id end-node)]
+         end-id (tree/-get-id end-node)
+         tree (->> (tree/range-uuids->block-tree start-id end-id)
+                  (mapv (fn [item]
+                          (assoc item :tree
+                                 (tree/block-tree-keep-props
+                                  (:tree item)
+                                  [:block/uuid :block/content])))))]
      (ds/auto-transact!
       [txs-state (ds/new-outliner-txs-state)]
       {:outliner-op :delete-nodes
@@ -528,7 +534,8 @@
        :other-meta {:page-name page-name
                     :start-id start-id
                     :end-id end-id
-                    :block-ids block-ids}}
+                    ;; tree: [{:left-id xx :sibling? xx :tree block-tree}]
+                    :tree tree}}
       (let [end-node-parents (->>
                               (db/get-block-parents
                                (state/get-current-repo)
@@ -543,7 +550,6 @@
           (let [sibling? (= (tree/-get-parent-id start-node)
                             (tree/-get-parent-id end-node))
                 right-node (tree/-get-right end-node)]
-            (println "DEL: 111 " end-node (db/get-page-blocks-no-cache page-name))
             (when (tree/satisfied-inode? right-node)
               (let [left-node-id (if sibling?
                                    (tree/-get-id (tree/-get-left start-node))

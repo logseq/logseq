@@ -1,6 +1,9 @@
 (ns frontend.modules.outliner.tree
   (:require [frontend.db :as db]
             [frontend.util :as util]
+            [frontend.state :as state]
+            [frontend.db.outliner :as db-outliner]
+            [frontend.db.conn :as conn]
             [clojure.zip :as zip]))
 
 (defprotocol INode
@@ -115,6 +118,72 @@
             (recur (zip/next (zip/replace loc (select-keys block props)))))
           :else
           (recur (zip/next loc)))))))
+
+(defn- get-left [id]
+  (:block/uuid (:block/left (db/entity [:block/uuid id]))))
+
+(defn- get-parent [id]
+  (:block/uuid (:block/parent (db/entity [:block/uuid id]))))
+
+(defn- get-right [id]
+  (let [left-id id
+        parent-id (:block/uuid (:block/parent (db/entity [:block/uuid id])))]
+    (:block/uuid
+     (db-outliner/get-by-parent-&-left
+      (conn/get-conn false)
+      [:block/uuid parent-id]
+      [:block/uuid left-id]))))
+
+(defn- get-next-upper-level-id [id]
+  (when-some [parent-id (:block/uuid (:block/parent (db/entity [:block/uuid id])))]
+    (if-some [next (get-right parent-id)]
+      next
+      (get-next-upper-level-id parent-id))))
+
+(defn- get-right-or-next-upper-level-id [id]
+  (or (get-right id) (get-next-upper-level-id id)))
+
+(defn range-uuids->block-tree [start-uuid end-uuid]
+  "return [{:left-id left-id :sibling? bool :tree block-tree}]"
+  (let [current-repo (state/get-current-repo)]
+    (if (= start-uuid end-uuid)
+      (->
+       (db/get-block-and-children current-repo start-uuid)
+       (blocks->vec-tree start-uuid)
+       (vec-tree->block-tree))
+      (loop [uuid start-uuid result [] new-tree? true]
+        (let [blocks (->
+                        (db/get-block-and-children current-repo uuid)
+                        (blocks->vec-tree uuid)
+                        (vec-tree->block-tree))]
+          (if new-tree?
+            (let [parent-id (get-parent uuid)
+                  left-id (get-left uuid)
+                  sibling? (not= parent-id left-id)
+                  item {:left-id left-id :sibling? sibling? :tree []}
+                  tree (transient [])]
+              (doseq [b blocks] (conj! tree b))
+              (let [item (assoc item :tree (persistent! tree))
+                    result (conj result item)]
+                (if (not= uuid end-uuid)
+                  (if-some [right-id (get-right uuid)]
+                    (recur right-id result false)
+                    (if-some [next-upper-id (get-next-upper-level-id uuid)]
+                      (recur next-upper-id result true)
+                      result))
+                  result)))
+            (let [last-item (last result)
+                  tree (transient (:tree last-item))]
+              (doseq [b blocks] (conj! tree b))
+              (let [last-item (assoc last-item :tree (persistent! tree))
+                    result (conj (vec (butlast result)) last-item)]
+                (if (not= uuid end-uuid)
+                  (if-some [right-id (get-right uuid)]
+                    (recur right-id result false)
+                    (if-some [next-upper-id (get-next-upper-level-id uuid)]
+                      (recur next-upper-id result true)
+                      result))
+                  result)))))))))
 
 (defn- sort-blocks-aux
   [parents parent-groups]
