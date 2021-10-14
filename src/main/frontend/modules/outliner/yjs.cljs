@@ -948,7 +948,7 @@ return [2 3]
                 (.insert target-child-array 0 (clj->js insert-items))))))))))
 
 (defn move-subtree-across-pages-op
-  [root-page-name target-page-name root target-node sibling?]
+  [root-page-name target-page-name root target-node sibling? {:keys [skip-undo?]}]
   (let [target-block (:data target-node)
         root-struct (structarray root-page-name)
         root-id (str (:block/uuid (:data root)))
@@ -970,30 +970,36 @@ return [2 3]
           (validate-struct target-struct)
           (validate-no-left-conflict root-page-name)
           (validate-no-left-conflict target-page-name))
-        (outliner-core/move-subtree root target-node sibling?)))))
+        (outliner-core/move-subtree root target-node sibling? {:skip-undo? skip-undo?})))))
 
-(defn move-subtree-same-page-op [root target-node sibling?]
-  (when-some [page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))]
-    (let [struct (structarray page-name)
-          root-id (str (:block/uuid (:data root)))
-          target-id (str (:block/uuid (:data target-node)))]
-      (move-subtree-same-page-yjs struct root-id target-id sibling?)
-      (merge-doc @doc-remote @doc-local)
-      (when *debug*
-        (validate-struct struct)
-        (validate-no-left-conflict page-name))
-      (outliner-core/move-subtree root target-node sibling?))))
+(defn move-subtree-same-page-op
+  ([root target-node sibling?]
+   (move-subtree-same-page-op root target-node sibling? {:skip-undo? false}))
+  ([root target-node sibling? {:keys [skip-undo?]}]
+   (when-some [page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))]
+     (let [struct (structarray page-name)
+           root-id (str (:block/uuid (:data root)))
+           target-id (str (:block/uuid (:data target-node)))]
+       (move-subtree-same-page-yjs struct root-id target-id sibling?)
+       (merge-doc @doc-remote @doc-local)
+       (when *debug*
+         (validate-struct struct)
+         (validate-no-left-conflict page-name))
+       (outliner-core/move-subtree root target-node sibling? {:skip-undo? skip-undo?})))))
 
-(defn move-subtree-op [root target-node sibling?]
-  (let [target-block (:data target-node)
-        root-page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))
-        target-page-name
-        (or (:block/name target-block)   ; maybe page-block
-            (:block/name (db/entity (:db/id (:block/page target-block)))))]
-    (if (= root-page-name target-page-name)
-      (move-subtree-same-page-op root target-node sibling?)
-      (move-subtree-across-pages-op
-       root-page-name target-page-name root target-node sibling?))))
+(defn move-subtree-op
+  ([root target-node sibling?]
+   (move-subtree-op root target-node sibling? {:skip-undo? false}))
+  ([root target-node sibling? {:keys [skip-undo?]}]
+   (let [target-block (:data target-node)
+         root-page-name (:block/name (db/entity (:db/id (:block/page (:data root)))))
+         target-page-name
+         (or (:block/name target-block)   ; maybe page-block
+             (:block/name (db/entity (:db/id (:block/page target-block)))))]
+     (if (= root-page-name target-page-name)
+       (move-subtree-same-page-op root target-node sibling? {:skip-undo? skip-undo?})
+       (move-subtree-across-pages-op
+        root-page-name target-page-name root target-node sibling? {:skip-undo? skip-undo?})))))
 
 ;;; TODO
 ;; (defn move-node-op [node up?]
@@ -1177,7 +1183,7 @@ return [2 3]
         end-node (outliner-core/block (db/pull [:block/uuid end-id]))]
     (delete-nodes-op start-node end-node block-ids {:skip-undo? true})))
 
-(defn- undo-indent-outdent-nodes [page-name txn-meta]
+(defn undo-indent-outdent-nodes [page-name txn-meta]
   {:pre [(= :indent-outdent-nodes (:outliner-op txn-meta))
          (= page-name (get-in txn-meta [:other-meta :page-name]))]}
   (let [indent? (get-in txn-meta [:other-meta :indent?])
@@ -1185,7 +1191,7 @@ return [2 3]
         nodes (mapv (fn [id] (outliner-core/block (db/pull [:block/uuid id]))) node-ids)]
     (indent-outdent-nodes-op nodes (not indent?) {:skip-undo? true})))
 
-(defn- redo-indent-outdent-nodes [page-name txn-meta]
+(defn redo-indent-outdent-nodes [page-name txn-meta]
   {:pre [(= :indent-outdent-nodes (:outliner-op txn-meta))
          (= page-name (get-in txn-meta [:other-meta :page-name]))]}
   (let [indent? (get-in txn-meta [:other-meta :indent?])
@@ -1193,6 +1199,38 @@ return [2 3]
         nodes (mapv (fn [id] (outliner-core/block (db/pull [:block/uuid id]))) node-ids)]
     (indent-outdent-nodes-op nodes indent? {:skip-undo? true})))
 
+(defn undo-move-subtree [_page-name txn-meta]
+  {:pre [(= :move-subtree (:outliner-op txn-meta))
+         ;; (= page-name (get-in txn-meta [:other-meta :page-name]))
+         ]}
+  (let [from-page-name (get-in txn-meta [:other-meta :from-page-name])
+        target-page-name (get-in txn-meta [:other-meta :target-page-name])
+        root-id (get-in txn-meta [:other-meta :root-id])
+        root (outliner-core/block (db/pull [:block/uuid root-id]))
+        origin-parent-id (get-in txn-meta [:other-meta :origin-parent-id])
+        origin-left-id (get-in txn-meta [:other-meta :origin-left-id])
+        origin-target-node (outliner-core/block (db/pull [:block/uuid origin-left-id]))
+        sibling? (not= origin-left-id origin-parent-id)
+        struct (structarray from-page-name)]
+    (ensure-page-sync target-page-name)
+    (when (find-pos struct (str origin-left-id))
+      (move-subtree-op root origin-target-node sibling? {:skip-undo? true}))))
+
+(defn redo-move-subtree [_page-name txn-meta]
+  {:pre [(= :move-subtree (:outliner-op txn-meta))
+         ;; (= page-name (get-in txn-meta [:other-meta :page-name]))
+         ]}
+  (let [from-page-name (get-in txn-meta [:other-meta :from-page-name])
+        target-page-name (get-in txn-meta [:other-meta :target-page-name])
+        root-id (get-in txn-meta [:other-meta :root-id])
+        root (outliner-core/block (db/pull [:block/uuid root-id]))
+        sibling? (get-in txn-meta [:other-meta :sibling?])
+        target-id (get-in txn-meta [:other-meta :target-id])
+        target-node (outliner-core/block (db/pull [:block/uuid target-id]))]
+    (ensure-page-sync target-page-name)
+    (let [struct (structarray target-page-name)]
+      (when (find-pos struct (str target-id))
+        (move-subtree-op root target-node sibling? {:skip-undo? true})))))
 
 (defn undo-op [page-name txn-meta]
   (def bbb [page-name txn-meta])
@@ -1210,6 +1248,8 @@ return [2 3]
     (undo-delete-nodes page-name txn-meta)
     :indent-outdent-nodes
     (undo-indent-outdent-nodes page-name txn-meta)
+    :move-subtree
+    (undo-move-subtree page-name txn-meta)
     (println "unsupport" (:outliner-op txn-meta))))
 
 (defn redo-op [page-name txn-meta]
@@ -1227,6 +1267,8 @@ return [2 3]
     (redo-delete-nodes page-name txn-meta)
     :indent-outdent-nodes
     (redo-indent-outdent-nodes page-name txn-meta)
+    :move-subtree
+    (redo-move-subtree page-name txn-meta)
     (println "unsupport" (:outliner-op txn-meta))))
 
 (defn undo []
