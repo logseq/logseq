@@ -902,17 +902,20 @@ return [2 3]
        (outdent-item struct id)))
    ids))
 
-(defn indent-outdent-nodes-op [nodes indent?]
-  (when-some [page-name
-              (:block/name (db/entity (:db/id (:block/page (:data (first nodes))))))]
-    (let [ids (mapv (fn [node] (str (:block/uuid (:data node)))) nodes)
-          struct (structarray page-name)]
-      (indent-outdent-nodes-yjs struct ids indent?)
-      (merge-doc @doc-remote @doc-local)
-      (when *debug*
-        (validate-struct struct)
-        (validate-no-left-conflict page-name))
-      (outliner-core/indent-outdent-nodes nodes indent?))))
+(defn indent-outdent-nodes-op
+  ([nodes indent?]
+   (indent-outdent-nodes-op nodes indent? {:skip-undo? false}))
+  ([nodes indent? {:keys [skip-undo?]}]
+   (when-some [page-name
+               (:block/name (db/entity (:db/id (:block/page (:data (first nodes))))))]
+     (let [ids (mapv (fn [node] (str (:block/uuid (:data node)))) nodes)
+           struct (structarray page-name)]
+       (indent-outdent-nodes-yjs struct ids indent?)
+       (merge-doc @doc-remote @doc-local)
+       (when *debug*
+         (validate-struct struct)
+         (validate-no-left-conflict page-name))
+       (outliner-core/indent-outdent-nodes nodes indent? {:skip-undo? skip-undo?})))))
 
 (defn move-subtree-same-page-yjs [struct root-id target-id sibling?]
   (when (find-pos struct target-id)
@@ -1174,6 +1177,22 @@ return [2 3]
         end-node (outliner-core/block (db/pull [:block/uuid end-id]))]
     (delete-nodes-op start-node end-node block-ids {:skip-undo? true})))
 
+(defn- undo-indent-outdent-nodes [page-name txn-meta]
+  {:pre [(= :indent-outdent-nodes (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [indent? (get-in txn-meta [:other-meta :indent?])
+        node-ids (get-in txn-meta [:other-meta :node-ids])
+        nodes (mapv (fn [id] (outliner-core/block (db/pull [:block/uuid id]))) node-ids)]
+    (indent-outdent-nodes-op nodes (not indent?) {:skip-undo? true})))
+
+(defn- redo-indent-outdent-nodes [page-name txn-meta]
+  {:pre [(= :indent-outdent-nodes (:outliner-op txn-meta))
+         (= page-name (get-in txn-meta [:other-meta :page-name]))]}
+  (let [indent? (get-in txn-meta [:other-meta :indent?])
+        node-ids (get-in txn-meta [:other-meta :node-ids])
+        nodes (mapv (fn [id] (outliner-core/block (db/pull [:block/uuid id]))) node-ids)]
+    (indent-outdent-nodes-op nodes indent? {:skip-undo? true})))
+
 
 (defn undo-op [page-name txn-meta]
   (def bbb [page-name txn-meta])
@@ -1189,6 +1208,8 @@ return [2 3]
     (undo-insert-nodes page-name txn-meta)
     :delete-nodes
     (undo-delete-nodes page-name txn-meta)
+    :indent-outdent-nodes
+    (undo-indent-outdent-nodes page-name txn-meta)
     (println "unsupport" (:outliner-op txn-meta))))
 
 (defn redo-op [page-name txn-meta]
@@ -1204,6 +1225,8 @@ return [2 3]
     (redo-insert-nodes page-name txn-meta)
     :delete-nodes
     (redo-delete-nodes page-name txn-meta)
+    :indent-outdent-nodes
+    (redo-indent-outdent-nodes page-name txn-meta)
     (println "unsupport" (:outliner-op txn-meta))))
 
 (defn undo []
