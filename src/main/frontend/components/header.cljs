@@ -142,7 +142,7 @@
         _ (rum/use-effect!
             (fn []
               (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
-                (let [callback (fn [_ & args]
+                (let [callback (fn [_ args]
                                  (js/console.debug "[new-version downloaded] args:" args)
                                  (let [args (bean/->clj args)]
                                    (set-downloaded args)
