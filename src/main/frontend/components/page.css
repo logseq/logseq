@@ -29,40 +29,123 @@
   }
 }
 
+.cp__all_pages {
+  table {
+    margin: 0;
+
+    th {
+      padding: 4px 5px;
+
+      a {
+        font-weight: bold;
+      }
+
+      &.backlinks {
+        width: 120px;
+      }
+
+      &.created-at, &.updated-at {
+        min-width: 150px;
+      }
+    }
+
+    td {
+      padding: 0;
+
+      &:nth-child(1) {
+        cursor: pointer;
+      }
+
+      > span {
+        @apply text-gray-500 text-sm;
+
+        padding: 6px 8px;
+      }
+    }
+
+    .selector {
+      width: 40px;
+
+      input {
+        cursor: pointer;
+      }
+
+      label {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+        padding: 10px 0;
+        cursor: pointer;
+      }
+    }
+  }
+
+  .actions {
+    position: sticky;
+    background-color: var(--ls-primary-background-color);
+    top: -1px;
+    padding-bottom: 10px;
+
+    i.ti {
+      font-size: 16px;
+      margin-right: 2px;
+      display: inline-block;
+      position: relative;
+      bottom: -1px;
+    }
+
+    .l {
+      button {
+        opacity: .5;
+        pointer-events: none;
+      }
+    }
+
+    &.has-selected {
+      .l {
+        button {
+          opacity: 1;
+          pointer-events: unset;
+        }
+      }
+    }
+  }
+}
+
 .cp__vertical-menu-button {
-    opacity: 60%;
-    display: block;
+  opacity: 60%;
+  display: block;
 }
 
 .cp__vertical-menu-button:hover {
-    opacity: 1;
+  opacity: 1;
 }
 
 .cp__vertical-menu-button svg {
-    width: 20px;
-    height: 20px;
+  width: 20px;
+  height: 20px;
 }
 
 .graph-filters {
-    width: 200px;
-    background: var(--ls-secondary-background-color);
+  width: 200px;
+  background: var(--ls-secondary-background-color);
 }
 
 .graph-filters ul {
-    margin-left: 0;
+  margin-left: 0;
 }
 
 .graph-filters li {
-    list-style: none;
-    margin: 0;
+  list-style: none;
+  margin: 0;
 }
 
 .graph-layout {
-    background: var(--ls-secondary-background-color);
+  background: var(--ls-secondary-background-color);
 }
 
 .search-filter-close svg {
-    transform: scale(0.7);
+  transform: scale(0.7);
 }
 
 /* Change to another cursor style if Shift key is active */
@@ -74,5 +157,5 @@
 }
 
 .add-button-link {
-    margin-left: 8px;
+  margin-left: 8px;
 }

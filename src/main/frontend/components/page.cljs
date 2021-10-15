@@ -52,7 +52,7 @@
 
 (defn- open-first-block!
   [state]
-  (let [[_ blocks _ sidebar? preview?](:rum/args state)]
+  (let [[_ blocks _ sidebar? preview?] (:rum/args state)]
     (when (or sidebar?
               preview?
               (not (contains? #{:home :all-journals} (state/get-current-route))))
@@ -435,7 +435,7 @@
                       s1 (if (> c1 1) "s" "")
                       ;; c2 (count (:links graph))
                       ;; s2 (if (> c2 1) "s" "")
-                      ]
+]
                   ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
                   (util/format "%d page%s" c1 s1)
                   )]
@@ -625,9 +625,26 @@
                   by-item)]
     (sort-by by-item comp pages)))
 
+(rum/defc checkbox-opt
+  [key checked opts]
+
+  (let [*input (rum/create-ref)
+        indeterminate? (boolean (:indeterminate opts))]
+
+    (rum/use-effect!
+      #(set! (.-indeterminate (rum/deref *input)) indeterminate?)
+      [indeterminate?])
+
+    [:label {:for key}
+     [:input (merge {:type    "checkbox"
+                     :checked (boolean checked)
+                     :ref *input
+                     :id      key} opts)]]))
+
 (rum/defc sortable-title
   [title key by-item desc?]
   [:th
+   {:class [(name key)]}
    [:a {:on-click (fn []
                     (reset! by-item key)
                     (swap! desc? not))}
@@ -638,6 +655,9 @@
         (if @desc? (svg/caret-down) (svg/caret-up))])]]])
 
 (rum/defcs all-pages < rum/reactive
+  (rum/local nil ::pages)
+  (rum/local nil ::results)
+  (rum/local {} ::checks)
   (rum/local :block/updated-at ::sort-by-item)
   (rum/local true ::desc?)
   ;; {:did-mount (fn [state]
@@ -648,48 +668,111 @@
   (let [current-repo (state/sub :git/current-repo)
         *sort-by-item (get state ::sort-by-item)
         *desc? (get state ::desc?)
+        *results (get state ::results)
+        *checks (get state ::checks)
+        *pages (get state ::pages)
+
+        *indeterminate (rum/derived-atom
+                         [*checks] ::indeterminate
+                         (fn [checks]
+                           (when-let [checks (vals checks)]
+                             (if (every? true? checks)
+                               1 (if (some true? checks) -1 0)))))
+
         mobile? (util/mobile?)]
     (rum/with-context [[t] i18n/*tongue-context*]
-      [:div.flex-1
+      [:div.flex-1.cp__all_pages
        [:h1.title (t :all-pages)]
-       [:a.ml-1.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
-        [:span
-         (ui/icon "files")
-         [:span.ml-1 (t :all-files)]]]
+
        (when current-repo
-         (let [pages (->> (page-handler/get-all-pages current-repo)
-                         (map (fn [page] (assoc page :block/backlinks (count (:block/_refs (db/entity (:db/id page)))))))
-                         (sort-pages-by @*sort-by-item @*desc?))]
-           [:table.table-auto
-            [:thead
-             [:tr
-              (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
-              (when-not mobile?
-                (sortable-title (t :page/backlinks) :block/backlinks  *sort-by-item *desc?))
-              (when-not mobile?
-                (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?))
-              (when-not mobile?
-                (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?))]]
-            [:tbody
-             (for [{:block/keys [name created-at updated-at backlinks] :as page} pages]
-               [:tr {:key name}
-                [:td [:a {:on-click (fn [e]
-                                      (let [repo (state/get-current-repo)]
-                                        (when (gobj/get e "shiftKey")
-                                          (state/sidebar-add-block!
+
+         ;; all pages
+         (if (nil? @*pages)
+           (let [pages (->> (page-handler/get-all-pages current-repo)
+                            (map-indexed (fn [idx page] (assoc page
+                                                               :block/backlinks (count (:block/_refs (db/entity (:db/id page))))
+                                                               :block/idx idx)))
+                            (vec))]
+             (reset! *pages pages)))
+
+         ;; filter results
+         (when-let [pages @*pages]
+           (let [pages (->> pages
+                            (sort-pages-by @*sort-by-item @*desc?))]
+             (doseq [{:block/keys [idx]} pages]
+               (if-not (contains? @*checks idx)
+                 (swap! *checks assoc idx false)))
+             (reset! *results pages)))
+
+         [[:div.actions.flex.justify-between
+           {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
+                                                        (not= 0 @*indeterminate))}])}
+           [:div.l
+            (ui/button
+              [(ui/icon "trash") "Delete"]
+              :on-click (fn []
+                          (js/console.log @*checks)
+                          (let [selected (filter (fn [[_ v]] v) @*checks)
+                                selected (and (seq selected)
+                                              (into #{} (for [[k _] selected] k)))]
+                            (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
+                              (notification/show!
+                                (str (for [p pages]
+                                       (:block/name p)))
+                                :success))))
+              :small? true)]
+
+           [:a.ml-1.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
+            [:span
+             (ui/icon "files")
+             [:span.ml-1 (t :all-files)]]]]
+
+          [:table.table-auto
+           [:thead
+            [:tr
+             [:th.selector
+              (checkbox-opt "all-pages-select-all"
+                            (= 1 @*indeterminate)
+                            {:on-change     (fn []
+                                              (let [indeterminate? (= -1 @*indeterminate)
+                                                    all? (= 1 @*indeterminate)]
+                                                (doseq [idx (range (count @*results))]
+                                                  (swap! *checks assoc idx (or indeterminate? (not all?))))))
+                             :indeterminate (= -1 @*indeterminate)})]
+
+             (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
+             (when-not mobile?
+               [(sortable-title (t :page/backlinks) :block/backlinks *sort-by-item *desc?)
+                (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?)
+                (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?)])]]
+           [:tbody
+            (for [{:block/keys [idx name created-at updated-at backlinks] :as page} @*results]
+              [:tr {:key name}
+               [:td.selector
+                (checkbox-opt (str "label-" idx)
+                              (get @*checks idx)
+                              {:on-change (fn []
+                                            (swap! *checks update idx not))})]
+
+               [:td [:a {:on-click (fn [e]
+                                     (let [repo (state/get-current-repo)]
+                                       (when (gobj/get e "shiftKey")
+                                         (state/sidebar-add-block!
                                            repo
                                            (:db/id page)
                                            :page
                                            {:page (:block/name page)}))))
-                          :href (rfe/href :page {:name (:block/name page)})}
-                      (block/page-cp {} page)]]
-                (when-not mobile?
-                  [:td [:span.text-gray-500.text-sm backlinks]])
-                (when-not mobile?
-                  [:td [:span.text-gray-500.text-sm (if created-at
-                                                     (date/int->local-time-2 created-at)
-                                                     "Unknown")]])
-                (when-not mobile?
-                  [:td [:span.text-gray-500.text-sm (if updated-at
-                                                     (date/int->local-time-2 updated-at)
-                                                     "Unknown")]])])]]))])))
+                         :href     (rfe/href :page {:name (:block/name page)})}
+                     (block/page-cp {} page)]]
+
+               (when-not mobile?
+                 [:td [:span backlinks]])
+
+               (when-not mobile?
+                 [:td [:span (if created-at
+                               (date/int->local-time-2 created-at)
+                               "Unknown")]])
+               (when-not mobile?
+                 [:td [:span (if updated-at
+                               (date/int->local-time-2 updated-at)
+                               "Unknown")]])])]]])])))
