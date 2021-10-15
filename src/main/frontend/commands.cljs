@@ -10,7 +10,6 @@
             [frontend.extensions.video.youtube :as youtube]
             [frontend.search :as search]
             [frontend.state :as state]
-            [frontend.text :as text]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.marker :as marker]
@@ -337,7 +336,7 @@
    {:keys [last-pattern postfix-fn backward-pos forward-pos
            end-pattern]
     :or {last-pattern slash}
-    :as option}]
+    :as _option}]
   (when-let [input (gdom/getElement id)]
     (let [edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
@@ -385,7 +384,7 @@
 (defn simple-insert!
   [id value
    {:keys [backward-pos forward-pos check-fn]
-    :as option}]
+    :as _option}]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
@@ -405,7 +404,7 @@
 (defn insert-before!
   [id value
    {:keys [backward-pos forward-pos check-fn]
-    :as option}]
+    :as _option}]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
@@ -425,7 +424,7 @@
 (defn simple-replace!
   [id value selected
    {:keys [backward-pos forward-pos check-fn]
-    :as option}]
+    :as _option}]
   (let [selected? (not (string/blank? selected))
         input (gdom/getElement id)
         edit-content (gobj/get input "value")
@@ -483,14 +482,8 @@
 
 (defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]
-    (let [last-pattern (:last-pattern option)
-          type (:type option)
+    (let [type (:type option)
           input (gdom/getElement input-id)
-          content (gobj/get input "value")
-          pos (cursor/pos input)
-          pos (if last-pattern
-                (string/last-index-of content last-pattern pos)
-                pos)
           beginning-of-line? (or (cursor/beginning-of-line? input)
                                  (= 1 (:pos @*angle-bracket-caret-pos)))
           value (if (and (contains? #{"block" "properties"} type)
@@ -546,7 +539,7 @@
                                                (count prefix))))))
 
 (defn compute-pos-delta-when-change-marker
-  [current-input edit-content new-value marker pos]
+  [edit-content marker pos]
   (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
                             (string/trim))
         old-marker (if old-marker old-marker "")
@@ -576,11 +569,11 @@
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)
         (let [new-pos (compute-pos-delta-when-change-marker
-                       current-input edit-content new-value marker (dec slash-pos))]
+                       edit-content marker (dec slash-pos))]
           ;; TODO: any performance issue?
           (js/setTimeout #(cursor/move-cursor-to current-input new-pos) 10))))))
 
-(defmethod handle-step :editor/set-priority [[_ priority] format]
+(defmethod handle-step :editor/set-priority [[_ priority] _format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
@@ -625,7 +618,7 @@
 (defmethod handle-step :editor/search-page-hashtag [[_]]
   (state/set-editor-show-page-search-hashtag! true))
 
-(defmethod handle-step :editor/search-block [[_ type]]
+(defmethod handle-step :editor/search-block [[_ _type]]
   (state/set-editor-show-block-search! true))
 
 (defmethod handle-step :editor/search-template [[_]]
@@ -659,7 +652,7 @@
       (restore-state false))
     (state/set-editor-show-date-picker! true)))
 
-(defmethod handle-step :editor/click-hidden-file-input [[_ input-id]]
+(defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
     (.click input-file)))
 
@@ -672,7 +665,7 @@
     (handle-step step format)))
 
 (defn exec-plugin-simple-command!
-  [pid {:keys [key label block-id] :as cmd} action]
+  [pid {:keys [block-id] :as cmd} action]
   (let [format (and block-id (:block/format (db-util/pull [:block/uuid block-id])))
         inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))
