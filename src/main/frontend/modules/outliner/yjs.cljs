@@ -316,7 +316,7 @@ return [2 3]
           new-content (.toString (.get content-map id)) ;TODO orgmode
           updated-block (content->block new-content format {:block/page (:block/page block)
                                                             :block/file (:block/file block)})]
-      (outliner-core/save-node (outliner-core/block updated-block))
+      (outliner-core/save-node (outliner-core/block updated-block) {:skip-undo? true})
       (db/refresh! (state/get-current-repo) {:key :block/change :data [updated-block]}))))
 
 
@@ -409,13 +409,13 @@ return [2 3]
                                    :block/uuid (uuid id)} )
         new-node (outliner-core/block new-block)
         sibling? (not= parent-id left-id)]
-    (outliner-core/insert-node new-node target-node sibling?)
+    (outliner-core/insert-node new-node target-node sibling? {:skip-undo? true})
     (db/refresh! (state/get-current-repo) {:key :block/insert :data [new-block]})))
 
 (defn- delete-node [id]
   (println "[YJS] delete-node" id)
   (when-some [block (db-model/query-block-by-uuid id)]
-    (outliner-core/delete-node (outliner-core/block block) false)
+    (outliner-core/delete-node (outliner-core/block block) false {:skip-undo? true})
     (db/refresh! (state/get-current-repo)  {:key :block/change :data [block]})))
 
 (defn- observe-struct-fn-aux-insert-ids [ids page-name contentmap]
@@ -1009,6 +1009,8 @@ return [2 3]
 ;;;;;;;;;;;;;;;
 ;; undo/redo ;;
 ;;;;;;;;;;;;;;;
+
+;;; TODO undo/redo-move-node
 
 (defn- block-tree->content-tree [tree format]
   (let [loc (zip/vector-zip tree)]
