@@ -35,9 +35,21 @@
 
     th {
       padding: 4px 5px;
+      text-align: center;
+      user-select: none;
 
       a {
         font-weight: bold;
+
+        > span {
+          justify-content: center;
+        }
+      }
+
+      &.name {
+        a > span {
+          justify-content: left;
+        }
       }
 
       &.backlinks {
@@ -45,12 +57,17 @@
       }
 
       &.created-at, &.updated-at {
-        min-width: 150px;
+        width: 150px;
       }
     }
 
     td {
-      padding: 0;
+      text-align: center;
+      padding: 3px;
+
+      &.name {
+        text-align: left;
+      }
 
       &:nth-child(1) {
         cursor: pointer;
@@ -85,6 +102,8 @@
     background-color: var(--ls-primary-background-color);
     top: -1px;
     padding-bottom: 10px;
+    display: flex;
+    align-items: center;
 
     i.ti {
       font-size: 16px;
@@ -98,6 +117,17 @@
       button {
         opacity: .5;
         pointer-events: none;
+      }
+    }
+
+    .r {
+      font-size: 14px;
+
+      > div {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 5px;
       }
     }
 

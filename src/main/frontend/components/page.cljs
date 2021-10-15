@@ -632,8 +632,8 @@
         indeterminate? (boolean (:indeterminate opts))]
 
     (rum/use-effect!
-      #(set! (.-indeterminate (rum/deref *input)) indeterminate?)
-      [indeterminate?])
+     #(set! (.-indeterminate (rum/deref *input)) indeterminate?)
+     [indeterminate?])
 
     [:label {:for key}
      [:input (merge {:type    "checkbox"
@@ -648,7 +648,7 @@
    [:a {:on-click (fn []
                     (reset! by-item key)
                     (swap! desc? not))}
-    [:div.flex.items-center
+    [:span.flex.items-center
      [:span.mr-1 title]
      (when (= @by-item key)
        [:span
@@ -660,6 +660,8 @@
   (rum/local {} ::checks)
   (rum/local :block/updated-at ::sort-by-item)
   (rum/local true ::desc?)
+  (rum/local false ::journals)
+  (rum/local nil ::filter-fn)
   ;; {:did-mount (fn [state]
   ;;               (let [current-repo (state/sub :git/current-repo)]
   ;;                 (js/setTimeout #(db/remove-orphaned-pages! current-repo) 0))
@@ -667,19 +669,22 @@
   [state]
   (let [current-repo (state/sub :git/current-repo)
         *sort-by-item (get state ::sort-by-item)
-        *desc? (get state ::desc?)
-        *results (get state ::results)
-        *checks (get state ::checks)
-        *pages (get state ::pages)
+        *desc? (::desc? state)
+        *journal? (::journals state)
+        *results (::results state)
+        *checks (::checks state)
+        *pages (::pages state)
+        *filter-fn (::filter-fn state)
 
         *indeterminate (rum/derived-atom
-                         [*checks] ::indeterminate
-                         (fn [checks]
-                           (when-let [checks (vals checks)]
-                             (if (every? true? checks)
-                               1 (if (some true? checks) -1 0)))))
+                        [*checks] ::indeterminate
+                        (fn [checks]
+                          (when-let [checks (vals checks)]
+                            (if (every? true? checks)
+                              1 (if (some true? checks) -1 0)))))
 
         mobile? (util/mobile?)]
+
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1.cp__all_pages
        [:h1.title (t :all-pages)]
@@ -691,17 +696,21 @@
            (let [pages (->> (page-handler/get-all-pages current-repo)
                             (map-indexed (fn [idx page] (assoc page
                                                                :block/backlinks (count (:block/_refs (db/entity (:db/id page))))
-                                                               :block/idx idx)))
-                            (vec))]
+                                                               :block/idx idx))))]
+             (reset! *filter-fn
+                     (memoize (fn [sort-by-item desc? journal?]
+                                (->> pages
+                                     (filter #(or (boolean journal?)
+                                                  (= false (boolean (:block/journal? %)))))
+                                     (sort-pages-by sort-by-item desc?)))))
              (reset! *pages pages)))
 
          ;; filter results
-         (when-let [pages @*pages]
-           (let [pages (->> pages
-                            (sort-pages-by @*sort-by-item @*desc?))]
-             (doseq [{:block/keys [idx]} pages]
-               (if-not (contains? @*checks idx)
-                 (swap! *checks assoc idx false)))
+         (when @*filter-fn
+           (let [pages (->> (@*filter-fn @*sort-by-item @*desc? @*journal?)
+                            (take 20))]
+             (reset! *checks (into {} (for [{:block/keys [idx]} pages]
+                                        [idx (boolean (get @*checks idx))])))
              (reset! *results pages)))
 
          [[:div.actions.flex.justify-between
@@ -709,23 +718,33 @@
                                                         (not= 0 @*indeterminate))}])}
            [:div.l
             (ui/button
-              [(ui/icon "trash") "Delete"]
-              :on-click (fn []
-                          (js/console.log @*checks)
-                          (let [selected (filter (fn [[_ v]] v) @*checks)
-                                selected (and (seq selected)
-                                              (into #{} (for [[k _] selected] k)))]
-                            (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
-                              (notification/show!
-                                (str (for [p pages]
-                                       (:block/name p)))
-                                :success))))
-              :small? true)]
+             [(ui/icon "trash") "Delete"]
+             :on-click (fn []
+                         (let [selected (filter (fn [[_ v]] v) @*checks)
+                               selected (and (seq selected)
+                                             (into #{} (for [[k _] selected] k)))]
+                           (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
+                             (notification/show!
+                              (str (for [p pages]
+                                     (:block/name p)))
+                              :success))))
+             :small? true)]
 
-           [:a.ml-1.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
-            [:span
-             (ui/icon "files")
-             [:span.ml-1 (t :all-files)]]]]
+           [:div.r.flex.items-center
+
+            [:div
+
+             (ui/tippy
+               {:html [:small "show journals?"]
+                :arrow true}
+               (ui/toggle @*journal?
+                          #(reset! *journal? (not @*journal?))
+                          true))]
+
+            [:a.ml-1.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
+             [:span
+              (ui/icon "files")
+              [:span.ml-1 (t :all-files)]]]]]
 
           [:table.table-auto
            [:thead
@@ -736,7 +755,7 @@
                             {:on-change     (fn []
                                               (let [indeterminate? (= -1 @*indeterminate)
                                                     all? (= 1 @*indeterminate)]
-                                                (doseq [idx (range (count @*results))]
+                                                (doseq [{:block/keys [idx]} @*results]
                                                   (swap! *checks assoc idx (or indeterminate? (not all?))))))
                              :indeterminate (= -1 @*indeterminate)})]
 
@@ -754,25 +773,25 @@
                               {:on-change (fn []
                                             (swap! *checks update idx not))})]
 
-               [:td [:a {:on-click (fn [e]
+               [:td.name [:a {:on-click (fn [e]
                                      (let [repo (state/get-current-repo)]
                                        (when (gobj/get e "shiftKey")
                                          (state/sidebar-add-block!
-                                           repo
-                                           (:db/id page)
-                                           :page
-                                           {:page (:block/name page)}))))
+                                          repo
+                                          (:db/id page)
+                                          :page
+                                          {:page (:block/name page)}))))
                          :href     (rfe/href :page {:name (:block/name page)})}
                      (block/page-cp {} page)]]
 
                (when-not mobile?
-                 [:td [:span backlinks]])
+                 [:td.backlinks [:span backlinks]])
 
                (when-not mobile?
-                 [:td [:span (if created-at
+                 [:td.created-at [:span (if created-at
                                (date/int->local-time-2 created-at)
                                "Unknown")]])
                (when-not mobile?
-                 [:td [:span (if updated-at
+                 [:td.updated-at [:span (if updated-at
                                (date/int->local-time-2 updated-at)
                                "Unknown")]])])]]])])))
