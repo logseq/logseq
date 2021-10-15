@@ -833,7 +833,7 @@
           [new-content marker] (marker/cycle-marker content format (state/get-preferred-workflow))
           new-content (string/triml new-content)]
       (let [new-pos (commands/compute-pos-delta-when-change-marker
-                     current-input content new-content marker (cursor/pos current-input))]
+                     content marker (cursor/pos current-input))]
         (state/set-edit-content! edit-input-id new-content)
         (cursor/move-cursor-to current-input new-pos)))))
 
