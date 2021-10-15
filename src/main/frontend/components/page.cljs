@@ -340,7 +340,7 @@
                (let [config {:id "block-parent"
                              :block? true}]
                  [:div.mb-4
-                  (block/block-parents config repo block-id format {})]))
+                  (block/block-parents config repo block-id {})]))
 
              ;; blocks
              (let [page (if block?
