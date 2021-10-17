@@ -337,13 +337,14 @@
     value))
 
 (defn wrap-parse-block
-  [{:block/keys [content format parent left page uuid pre-block? level] :as block}]
+  [{:block/keys [content format left page uuid level] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         properties (:block/properties block)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
                   content)
+        content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
@@ -417,9 +418,8 @@
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [{:block/keys [uuid file page format repo content properties]} block
+   (let [{:block/keys [uuid page format repo content properties]} block
          repo (or repo (state/get-current-repo))
-         e (db/entity repo [:block/uuid uuid])
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
          block-id (when (map? properties) (get properties :id))
@@ -838,7 +838,7 @@
         (cursor/move-cursor-to current-input new-pos)))))
 
 (defn set-marker
-  [{:block/keys [uuid marker content format properties] :as block} new-marker]
+  [{:block/keys [marker content] :as block} new-marker]
   (let [new-content (->
                      (if marker
                        (string/replace-first content (re-pattern (str "^" marker)) new-marker)

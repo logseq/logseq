@@ -708,7 +708,7 @@
 (defn- parse-block
   ([block]
    (parse-block block nil))
-  ([{:block/keys [uuid content meta file page parent left format] :as block} {:keys [with-id?]
+  ([{:block/keys [uuid content page format] :as block} {:keys [with-id?]
                                                                               :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
