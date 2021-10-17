@@ -23,17 +23,17 @@
                  (if (zero? minutes) "" (str minutes "m")))))
 
 (defn clock-in
-  [format content]
+  [content]
   (drawer/insert-drawer
-   format content "logbook"
+   content "logbook"
    (util/format "CLOCK: [%s]"
                 (date/get-date-time-string-3))))
 
 (defn clock-out
-  [format content]
+  [content]
   (try
     (or
-     (when-let [clock-in-log (last (last (drawer/get-drawer-ast format content "logbook")))]
+     (when-let [clock-in-log (last (last (drawer/get-drawer-ast content "logbook")))]
        (let [clock-in-log (string/trim clock-in-log)]
          (when (string/starts-with? clock-in-log "CLOCK:")
            (let [clock-start (subs clock-in-log 8 (- (count clock-in-log) 1))
@@ -50,7 +50,7 @@
               (str clock-in-log "\n")
               (str clock-out-log "\n"))))))
      content)
-    (catch js/Error e
+    (catch js/Error _error
       content)))
 
 (defn clock-summary

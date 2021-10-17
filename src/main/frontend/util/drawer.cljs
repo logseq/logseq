@@ -2,7 +2,8 @@
   (:require [clojure.string :as string]
             [frontend.util :as util]
             [frontend.util.property :as property]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [frontend.state :as state]))
 
 (defn drawer-start
   [typ]
@@ -21,17 +22,19 @@
      (string/join "\n" [(drawer-start typ) drawer-end]))))
 
 (defn get-drawer-ast
-  [format content typ]
-  (let [ast (mldoc/->edn content (mldoc/default-config format))
+  [content typ]
+  (let [format (state/get-preferred-format)
+        ast (mldoc/->edn content (mldoc/default-config format))
         typ-drawer (ffirst (filter (fn [x]
                                      (mldoc/typ-drawer? x typ)) ast))]
     typ-drawer))
 
 (defn insert-drawer
-  [format content typ value]
+  [content typ value]
   (when (string? content)
     (try
-      (let [ast (mldoc/->edn content (mldoc/default-config format))
+      (let [format (state/get-preferred-format)
+            ast (mldoc/->edn content (mldoc/default-config format))
             has-properties? (some (fn [x] (mldoc/properties? x)) ast)
             has-typ-drawer? (some (fn [x] (mldoc/typ-drawer? x typ)) ast)
             lines (string/split-lines content)
@@ -123,7 +126,7 @@
 
 (defn with-logbook
   [block content]
-  (let [new-clocks (last (get-drawer-ast (:block/format block) content "logbook"))
+  (let [new-clocks (last (get-drawer-ast content "logbook"))
         logbook (get-logbook (:block/body block))]
     (if logbook
       (let [content (remove-logbook content)
@@ -133,6 +136,6 @@
                         (remove string/blank?)
                         (string/join "\n"))]
         (if (:block/title block)
-          (insert-drawer (:block/format block) content "LOGBOOK" clocks)
+          (insert-drawer content "LOGBOOK" clocks)
           content))
       content)))
