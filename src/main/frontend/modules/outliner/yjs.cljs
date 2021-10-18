@@ -520,7 +520,8 @@ return [2 3]
                    format
                    page-block)]
     (when-not (empty? node-tree)
-      (outliner-core/insert-nodes node-tree (outliner-core/block page-block) false)
+      (outliner-core/insert-nodes
+       node-tree (outliner-core/block page-block) false {:skip-undo? true})
       (let [new-block-uuids (mapv (fn [n] (:block/uuid (:data n))) (flatten node-tree))
             new-blocks (db/pull-many (state/get-current-repo) '[*] (map (fn [id] [:block/uuid id]) new-block-uuids))]
         new-blocks))))
@@ -529,8 +530,9 @@ return [2 3]
   (let [contentmap (contentmap)
         struct (structarray page-name)]
     (remove-all-blocks-in-page page-blocks page-name)
-    (when-some [new-blocks (insert-doc-contents page-name)]
-      (db/refresh! (state/get-current-repo) {:key :block/insert :data new-blocks}))))
+    (if-some [new-blocks (insert-doc-contents page-name)]
+      (db/refresh! (state/get-current-repo) {:key :block/insert :data new-blocks})
+      (println "[YJS] insert-doc-contents empty, page-name: " page-name))))
 
 (defn start-sync-page [page-name]
   (let [page-blocks (db/get-page-blocks-no-cache page-name)]
