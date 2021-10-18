@@ -1,5 +1,6 @@
 (ns frontend.util.thingatpt
   (:require [clojure.string :as string]
+            [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.util.property :as property-util]
             [frontend.util.cursor :as cursor]
@@ -157,3 +158,16 @@
 (defn admonition&src-at-point [& [input]]
   (or (org-admonition&src-at-point input)
       (markdown-src-at-point input)))
+
+(def default-settings
+  {:admonition&src?  true
+   :markup?          false
+   :block-ref?       true
+   :page-ref?        true
+   :properties?      true
+   :list?            true})
+
+(defn get-setting [setting]
+  (get-in (state/get-config) [:dwim/settings setting] default-settings))
+
+
