@@ -9,6 +9,7 @@
             [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
@@ -520,6 +521,10 @@
         (settings-modal)
         (command-palette/command-palette-modal)
         (custom-context-menu)
+        (plugins/custom-js-installer {:t t
+                                      :current-repo current-repo
+                                      :nfs-granted? granted?
+                                      :db-restoring? db-restoring?})
         [:a#download.hidden]
         (when
          (and (not config/mobile?)

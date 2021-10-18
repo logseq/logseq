@@ -32,6 +32,7 @@
    (fn []
      (ui-handler/add-style-if-exists!)
      (pdf/reset-current-pdf!)
+     (ui-handler/add-style-if-exists!)
      (plugin-handler/hook-plugin-app :current-graph-changed {}))
    [current-repo])
 

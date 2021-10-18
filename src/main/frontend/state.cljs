@@ -252,6 +252,10 @@
   []
   (:custom-css-url (get-config)))
 
+(defn get-custom-js-link
+  []
+  (:custom-js-url (get-config)))
+
 (defn get-default-journal-template
   []
   (when-let [template (get-in (get-config) [:default-templates :journals])]

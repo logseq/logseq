@@ -337,6 +337,7 @@
         :plugin/contribute "✨ Write and submit new plugin"
         :plugin/marketplace-tips "If the plugin doesn't work correctly when first installed, try to restart Logseq."
         :plugin/up-to-date "It's up to date"
+        :plugin/custom-js-alert "Found the custom.js file, is it allowed to execute? (If you don't understand the content of this file, it is recommended not to allow execution, which has certain security risks.)"
 
         :pdf/copy-ref "Copy ref"
         :pdf/copy-text "Copy text"
@@ -1044,6 +1045,7 @@
            :plugin/marketplace-tips "如果首次从市场安装或更新的插件，遇到非预期工作情况，可以尝试重启应用。"
            :plugin/unpacked-tips "用于开发目的或者从本地磁盘载入可信的社区插件。"
            :plugin/up-to-date "已经是最新了"
+           :plugin/custom-js-alert "发现 custom.js 自定义脚本，是否允许执行? (如果您对该文件的内容不了解 或 来源不可靠，建议不要允许执行)"
 
            :pdf/copy-ref "复制引用"
            :pdf/copy-text "复制文本"
