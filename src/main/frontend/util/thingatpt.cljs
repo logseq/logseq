@@ -167,6 +167,7 @@
    :list?            true})
 
 (defn get-setting [setting]
-  (get-in (state/get-config) [:dwim/settings setting] default-settings))
-
-
+  (let [value (get-in (state/get-config) [:dwim/settings setting])]
+    (if (some? value)
+      value
+      (get default-settings setting))))
