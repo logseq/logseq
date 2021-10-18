@@ -2326,12 +2326,18 @@
               has-right? (-> (tree/-get-right current-node)
                              (tree/satisfied-inode?))
               thing-at-point ;intern is not supported in cljs, need a more elegant solution
-              (or (thingatpt/admonition&src-at-point input)
-                  (thingatpt/markup-at-point input)
-                  (thingatpt/block-ref-at-point input)
-                  (thingatpt/page-ref-at-point input)
-                  (thingatpt/properties-at-point input)
-                  (thingatpt/list-item-at-point input))]
+              (or (when (thingatpt/get-setting :admonition&src?)
+                    (thingatpt/admonition&src-at-point input))
+                  (when (thingatpt/get-setting :markup?)
+                    (thingatpt/markup-at-point input))
+                  (when (thingatpt/get-setting :block-ref?)
+                    (thingatpt/block-ref-at-point input))
+                  (when (thingatpt/get-setting :page-ref?)
+                    (thingatpt/page-ref-at-point input))
+                  (when (thingatpt/get-setting :properties?)
+                    (thingatpt/properties-at-point input))
+                  (when (thingatpt/get-setting :list?)
+                    (thingatpt/list-item-at-point input)))]
           (cond
             thing-at-point
             (case (:type thing-at-point)
