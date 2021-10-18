@@ -437,8 +437,7 @@
                       ;; s2 (if (> c2 1) "s" "")
 ]
                   ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
-                  (util/format "%d page%s" c1 s1)
-                  )]
+                  (util/format "%d page%s" c1 s1))]
                [:div.p-6
                 ;; [:div.flex.items-center.justify-between.mb-2
                 ;;  [:span "Layout"]
@@ -656,24 +655,29 @@
 
 (rum/defcs all-pages < rum/reactive
   (rum/local nil ::pages)
+  (rum/local nil ::results-all)
   (rum/local nil ::results)
   (rum/local {} ::checks)
   (rum/local :block/updated-at ::sort-by-item)
   (rum/local true ::desc?)
   (rum/local false ::journals)
   (rum/local nil ::filter-fn)
+  (rum/local 1 ::current-page)
   ;; {:did-mount (fn [state]
   ;;               (let [current-repo (state/sub :git/current-repo)]
   ;;                 (js/setTimeout #(db/remove-orphaned-pages! current-repo) 0))
   ;;               state)}
   [state]
   (let [current-repo (state/sub :git/current-repo)
+        per-page-num 40
         *sort-by-item (get state ::sort-by-item)
         *desc? (::desc? state)
         *journal? (::journals state)
         *results (::results state)
+        *results-all (::results-all state)
         *checks (::checks state)
         *pages (::pages state)
+        *current-page (::current-page state)
         *filter-fn (::filter-fn state)
 
         *indeterminate (rum/derived-atom
@@ -683,11 +687,20 @@
                             (if (every? true? checks)
                               1 (if (some true? checks) -1 0)))))
 
-        mobile? (util/mobile?)]
+        mobile? (util/mobile?)
+        total-pages (if-not @*results-all 0
+                            (js/Math.ceil (/ (count @*results-all) per-page-num)))
+        to-page (fn [page]
+                  (when (> total-pages 1)
+                    (if (and (> page 0)
+                             (<= page total-pages))
+                      (reset! *current-page page)
+                      (reset! *current-page 1))
+                    (js/setTimeout #(util/scroll-to-top))))]
 
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1.cp__all_pages
-       [:h1.title (t :all-pages)]
+       [:h1.title (t :all-pages) [:sup (count @*results-all)]]
 
        (when current-repo
 
@@ -707,8 +720,10 @@
 
          ;; filter results
          (when @*filter-fn
-           (let [pages (->> (@*filter-fn @*sort-by-item @*desc? @*journal?)
-                            (take 20))]
+           (let [pages (@*filter-fn @*sort-by-item @*desc? @*journal?)
+                 _ (reset! *results-all pages)
+                 pages (take per-page-num (drop (* per-page-num (dec @*current-page)) pages))]
+
              (reset! *checks (into {} (for [{:block/keys [idx]} pages]
                                         [idx (boolean (get @*checks idx))])))
              (reset! *results pages)))
@@ -716,7 +731,7 @@
          [[:div.actions.flex.justify-between
            {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
                                                         (not= 0 @*indeterminate))}])}
-           [:div.l
+           [:div.l.flex.items-center
             (ui/button
              [(ui/icon "trash") "Delete"]
              :on-click (fn []
@@ -731,9 +746,7 @@
              :small? true)]
 
            [:div.r.flex.items-center
-
-            [:div
-
+            [:div.pl-2
              (ui/tippy
                {:html [:small "show journals?"]
                 :arrow true}
@@ -741,10 +754,20 @@
                           #(reset! *journal? (not @*journal?))
                           true))]
 
-            [:a.ml-1.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
+            [:a.ml-1.pr-2.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
              [:span
               (ui/icon "files")
-              [:span.ml-1 (t :all-files)]]]]]
+              [:span.ml-1 (t :all-files)]]]
+
+            [:div.paginates
+             [:span.flex.items-center.opacity-60.text-sm
+              [:span.pr-1 " Total " [:strong.px-1 total-pages]]
+              [:span.pr-1 " current" [:strong.px-1 @*current-page]]]
+             [:span.flex.items-center
+              {:class (util/classnames [{:is-first (= 1 @*current-page)
+                                         :is-last  (= @*current-page total-pages)}])}
+              [:a.py-4 {:on-click #(to-page (dec @*current-page))} (ui/icon "caret-left") " Prev"]
+              [:a.py-4.pl-2 {:on-click #(to-page (inc @*current-page))} "Next " (ui/icon "caret-right")]]]]]
 
           [:table.table-auto
            [:thead
@@ -774,24 +797,24 @@
                                             (swap! *checks update idx not))})]
 
                [:td.name [:a {:on-click (fn [e]
-                                     (let [repo (state/get-current-repo)]
-                                       (when (gobj/get e "shiftKey")
-                                         (state/sidebar-add-block!
-                                          repo
-                                          (:db/id page)
-                                          :page
-                                          {:page (:block/name page)}))))
-                         :href     (rfe/href :page {:name (:block/name page)})}
-                     (block/page-cp {} page)]]
+                                          (let [repo (state/get-current-repo)]
+                                            (when (gobj/get e "shiftKey")
+                                              (state/sidebar-add-block!
+                                               repo
+                                               (:db/id page)
+                                               :page
+                                               {:page (:block/name page)}))))
+                              :href     (rfe/href :page {:name (:block/name page)})}
+                          (block/page-cp {} page)]]
 
                (when-not mobile?
                  [:td.backlinks [:span backlinks]])
 
                (when-not mobile?
                  [:td.created-at [:span (if created-at
-                               (date/int->local-time-2 created-at)
-                               "Unknown")]])
+                                          (date/int->local-time-2 created-at)
+                                          "Unknown")]])
                (when-not mobile?
                  [:td.updated-at [:span (if updated-at
-                               (date/int->local-time-2 updated-at)
-                               "Unknown")]])])]]])])))
+                                          (date/int->local-time-2 updated-at)
+                                          "Unknown")]])])]]])])))

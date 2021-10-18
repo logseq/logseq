@@ -140,6 +140,33 @@
       }
     }
   }
+
+  .paginates {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 5px;
+
+    > span {
+      color: var(--ls-primary-text-color);
+
+      &:last-child {
+        a {
+          user-select: none;
+
+          &:active {
+            opacity: .6;
+          }
+        }
+      }
+
+      &.is-first > a:first-child,
+      &.is-last > a:last-child {
+        pointer-events: none;
+        opacity: .3;
+      }
+    }
+  }
 }
 
 .cp__vertical-menu-button {
