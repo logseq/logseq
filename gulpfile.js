@@ -49,13 +49,18 @@ const common = {
     return gulp.watch(resourceFilePath, { ignoreInitial: true }, common.syncResourceFile)
   },
 
-
-  syncStatic() {
-      return gulp.src(outputFilePath).pipe(gulp.dest(publicStaticPath))
+  syncStatic () {
+    return gulp.src([
+      outputFilePath,
+      '!' + path.join(outputPath, 'node_modules/**')
+    ]).pipe(gulp.dest(publicStaticPath))
   },
 
-  keeypSyncStatic() {
-      return gulp.watch(outputFilePath, { ignoreInitial: true }, common.syncStatic)
+  keepSyncStatic () {
+    return gulp.watch([
+      path.join(outputPath, 'js/**'),
+      path.join(outputPath, 'css/**')
+    ], { ignoreInitial: true }, common.syncStatic)
   }
 }
 
@@ -109,5 +114,5 @@ exports.electronMaker = async () => {
 }
 
 exports.clean = common.clean
-exports.watch = gulp.series(common.syncResourceFile, common.syncStatic, gulp.parallel(common.keepSyncResourceFile, css.watchCSS, common.keeypSyncStatic))
+exports.watch = gulp.series(common.syncResourceFile, common.syncStatic, gulp.parallel(common.keepSyncResourceFile, css.watchCSS, common.keepSyncStatic))
 exports.build = gulp.series(common.clean, common.syncResourceFile, css.buildCSS)
