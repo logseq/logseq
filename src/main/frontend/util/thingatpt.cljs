@@ -1,6 +1,5 @@
 (ns frontend.util.thingatpt
   (:require [clojure.string :as string]
-            [frontend.handler.config :as config-handler]
             [frontend.state :as state]
             [frontend.util.property :as property-util]
             [frontend.util.cursor :as cursor]
@@ -20,7 +19,7 @@
            end (string/index-of
                 content right (if (= left right) pos (inc (- pos (count right)))))
            end* (+ (count right) end)]
-       (when (and start end (not (zero? start)))
+       (when (and start end (not= start pos))
          (let [thing (subs content (+ start (count left)) end)]
            (when (every?
                   false?
