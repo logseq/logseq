@@ -32,6 +32,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.text :as text]
+            [frontend.search :as search]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.object :as gobj]
@@ -655,6 +656,7 @@
 
 (rum/defcs all-pages < rum/reactive
   (rum/local nil ::pages)
+  (rum/local nil ::search-key)
   (rum/local nil ::results-all)
   (rum/local nil ::results)
   (rum/local {} ::checks)
@@ -679,6 +681,8 @@
         *pages (::pages state)
         *current-page (::current-page state)
         *filter-fn (::filter-fn state)
+        *search-key (::search-key state)
+        *search-input (rum/create-ref)
 
         *indeterminate (rum/derived-atom
                         [*checks] ::indeterminate
@@ -696,7 +700,15 @@
                              (<= page total-pages))
                       (reset! *current-page page)
                       (reset! *current-page 1))
-                    (js/setTimeout #(util/scroll-to-top))))]
+                    (js/setTimeout #(util/scroll-to-top))))
+
+        search-key (fn [key]
+                     (when-let [key (and key (string/trim key))]
+                       (if (and (> (count key) 2)
+                                (not (string/blank? key))
+                                (seq @*results))
+                         (reset! *search-key key)
+                         (reset! *search-key nil))))]
 
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1.cp__all_pages
@@ -721,7 +733,16 @@
          ;; filter results
          (when @*filter-fn
            (let [pages (@*filter-fn @*sort-by-item @*desc? @*journal?)
+
+                 ;; search key
+                 pages (if-not (string/blank? @*search-key)
+                         (search/fuzzy-search pages @*search-key
+                                              :limit 20
+                                              :extract-fn :block/name)
+                         pages)
+
                  _ (reset! *results-all pages)
+
                  pages (take per-page-num (drop (* per-page-num (dec @*current-page)) pages))]
 
              (reset! *checks (into {} (for [{:block/keys [idx]} pages]
@@ -732,27 +753,52 @@
            {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
                                                         (not= 0 @*indeterminate))}])}
            [:div.l.flex.items-center
-            (ui/button
-             [(ui/icon "trash") "Delete"]
-             :on-click (fn []
-                         (let [selected (filter (fn [[_ v]] v) @*checks)
-                               selected (and (seq selected)
-                                             (into #{} (for [[k _] selected] k)))]
-                           (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
-                             (notification/show!
-                              (str (for [p pages]
-                                     (:block/name p)))
-                              :success))))
-             :small? true)]
+            [:div.actions-wrap
+             (ui/button
+              [(ui/icon "trash") "Delete"]
+              :on-click (fn []
+                          (let [selected (filter (fn [[_ v]] v) @*checks)
+                                selected (and (seq selected)
+                                              (into #{} (for [[k _] selected] k)))]
+                            (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
+                              (notification/show!
+                               (str (for [p pages]
+                                      (:block/name p)))
+                               :success))))
+              :small? true)]
+
+            [:div.search-wrap.flex.items-center
+             (let [search-fn (fn []
+                               (let [^js input (rum/deref *search-input)]
+                                 (search-key (.-value input))))
+                   reset-fn (fn []
+                              (let [^js input (rum/deref *search-input)]
+                                (set! (.-value input) "")
+                                (reset! *search-key nil)))]
+
+               [(ui/button (ui/icon "search")
+                           :on-click search-fn
+                           :small? true)
+                [:input.form-input {:placeholder "Search page name"
+                                    :on-key-up     (fn [^js e]
+                                                     (cond
+                                                       (= 13 (.-keyCode e)) (search-fn)
+                                                       (= 27 (.-keyCode e)) (reset-fn)))
+                                    :ref           *search-input
+                                    :default-value ""}]
+
+                (when (not (string/blank? @*search-key))
+                  [:a.cancel {:on-click reset-fn}
+                   (ui/icon "x")])])]]
 
            [:div.r.flex.items-center
             [:div.pl-2
              (ui/tippy
-               {:html [:small "show journals?"]
-                :arrow true}
-               (ui/toggle @*journal?
-                          #(reset! *journal? (not @*journal?))
-                          true))]
+              {:html [:small "show journals?"]
+               :arrow true}
+              (ui/toggle @*journal?
+                         #(reset! *journal? (not @*journal?))
+                         true))]
 
             [:a.ml-1.pr-2.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
              [:span

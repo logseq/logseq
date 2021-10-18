@@ -105,6 +105,10 @@
     display: flex;
     align-items: center;
 
+    .ui__button {
+      margin: 0;
+    }
+
     i.ti {
       font-size: 16px;
       margin-right: 2px;
@@ -114,9 +118,11 @@
     }
 
     .l {
-      button {
-        opacity: .5;
-        pointer-events: none;
+      .actions-wrap {
+        button {
+          opacity: .5;
+          pointer-events: none;
+        }
       }
     }
 
@@ -136,6 +142,35 @@
         button {
           opacity: 1;
           pointer-events: unset;
+        }
+      }
+    }
+
+    .search-wrap {
+      margin-left: 5px;
+      position: relative;
+
+      .ui__button {
+        background-color: transparent;
+        color: var(--ls-primary-text-color);
+        outline: none;
+        border: none;
+        position: absolute;
+      }
+
+      .form-input {
+        padding: 3px;
+        padding-left: 30px;
+        padding-right: 8px;
+      }
+
+      .cancel {
+        opacity: .3;
+        position: absolute;
+        right: 5px;
+        top: 2px;
+        &:hover {
+          opacity: .6;
         }
       }
     }
