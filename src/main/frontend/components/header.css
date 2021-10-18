@@ -19,6 +19,7 @@
     width: var(--ls-left-sidebar-width);
     height: 100%;
     align-items: center;
+    transition: padding-left .2s;
   }
 
   .it svg {
@@ -88,7 +89,7 @@
   transform: scale(0.7);
 }
 
-.is-electron.is-mac.is-fullscreen .cp__header {
+.is-electron.is-mac.is-fullscreen .cp__header > .l {
   padding-left: 0;
 }
 
