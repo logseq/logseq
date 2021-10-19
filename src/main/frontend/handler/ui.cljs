@@ -40,12 +40,12 @@
         data (if sidebar-open? {:blocks (:sidebar/blocks @state/state)
                                 :collapsed (:ui/sidebar-collapsed-blocks @state/state)
                                 :open? true} {:open? false})]
-    (storage/set "ls-right-sidebar-state" (prn-str data))))
+    (storage/set "ls-right-sidebar-state" data)))
 
 (defn restore-right-sidebar-state!
   []
   (when-let [data' (storage/get "ls-right-sidebar-state")]
-    (let [{:keys [open? collapsed blocks]} (edn/read-string data')]
+    (let [{:keys [open? collapsed blocks]} data']
       (when open?
         (state/set-state! :ui/sidebar-open? open?)
         (state/set-state! :sidebar/blocks blocks)
