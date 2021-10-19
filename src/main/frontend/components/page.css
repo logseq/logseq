@@ -30,7 +30,7 @@
 }
 
 .cp__all_pages {
-  table {
+  &_table {
     margin: 0;
 
     th {

@@ -37,6 +37,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
+            [medley.core :as medley]
             [rum.core :as rum]))
 
 (defn- get-page-name
@@ -654,6 +655,49 @@
        [:span
         (if @desc? (svg/caret-down) (svg/caret-up))])]]])
 
+(defn batch-delete-dialog
+  [pages refresh-fn]
+  (fn [close-fn]
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
+
+      [:div
+       [:div.sm:flex.items-center
+        [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
+         [:span.text-red-600.text-xl
+          (ui/icon "alert-triangle")]]
+        [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
+         [:h3#modal-headline.text-lg.leading-6.font-medium
+          (t :page/delete-confirmation)]]]
+
+       [:table.table-auto.cp__all_pages_table.mt-4
+        [:tbody
+         (for [[n {:block/keys [idx name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
+           [:tr {:key name}
+            [:td.n.w-10 [:span.opacity-70 (str (inc n) ". ")]]
+            [:td.name [:a {:href     (rfe/href :page {:name (:block/name page)})}
+                       (block/page-cp {} page)]]
+            [:td.backlinks [:span backlinks]]
+            [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]]
+            [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]]])]]
+
+       [:div.pt-6.flex.justify-end
+
+        [:span.pr-2
+         (ui/button
+           (t :cancel)
+           :intent "logseq"
+           :on-click close-fn)]
+
+        (ui/button
+         (t :yes)
+         :on-click (fn []
+                     (close-fn)
+                     (doseq [page-name (map :block/name pages)]
+                       (page-handler/delete! page-name #()))
+                     (notification/show! (str (t :tips/all-done) "!") :success)
+                     (js/setTimeout #(refresh-fn) 200)))]])))
+
 (rum/defcs all-pages < rum/reactive
   (rum/local nil ::pages)
   (rum/local nil ::search-key)
@@ -708,11 +752,13 @@
                                 (not (string/blank? key))
                                 (seq @*results))
                          (reset! *search-key key)
-                         (reset! *search-key nil))))]
+                         (reset! *search-key nil))))
+
+        refresh-pages #(reset! *pages nil)]
 
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1.cp__all_pages
-       [:h1.title (t :all-pages) [:sup (count @*results-all)]]
+       [:h1.title (t :all-pages)]
 
        (when current-repo
 
@@ -755,16 +801,15 @@
            [:div.l.flex.items-center
             [:div.actions-wrap
              (ui/button
-              [(ui/icon "trash") "Delete"]
+              [(ui/icon "trash") (t :delete)]
               :on-click (fn []
                           (let [selected (filter (fn [[_ v]] v) @*checks)
                                 selected (and (seq selected)
                                               (into #{} (for [[k _] selected] k)))]
                             (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
-                              (notification/show!
-                               (str (for [p pages]
-                                      (:block/name p)))
-                               :success))))
+                              (state/set-modal! (batch-delete-dialog pages #(do
+                                                                              (reset! *checks nil)
+                                                                              (refresh-pages)))))))
               :small? true)]
 
             [:div.search-wrap.flex.items-center
@@ -779,7 +824,7 @@
                [(ui/button (ui/icon "search")
                            :on-click search-fn
                            :small? true)
-                [:input.form-input {:placeholder "Search page name"
+                [:input.form-input {:placeholder   (t :search/page-names)
                                     :on-key-up     (fn [^js e]
                                                      (cond
                                                        (= 13 (.-keyCode e)) (search-fn)
@@ -794,8 +839,8 @@
            [:div.r.flex.items-center
             [:div.pl-2
              (ui/tippy
-              {:html [:small "show journals?"]
-               :arrow true}
+               {:html  [:small (str (t :page/show-journals) " ?")]
+                :arrow true}
               (ui/toggle @*journal?
                          #(reset! *journal? (not @*journal?))
                          true))]
@@ -807,15 +852,16 @@
 
             [:div.paginates
              [:span.flex.items-center.opacity-60.text-sm
-              [:span.pr-1 " Total " [:strong.px-1 total-pages]]
-              [:span.pr-1 " current" [:strong.px-1 @*current-page]]]
+              ;;[:span.pr-1 " Total " [:strong.px-1 total-pages]]
+              ;;[:span.pr-1 " current" [:strong.px-1 @*current-page]]
+              [:span.pr-1 (t :paginates/simple total-pages @*current-page)]]
              [:span.flex.items-center
               {:class (util/classnames [{:is-first (= 1 @*current-page)
                                          :is-last  (= @*current-page total-pages)}])}
-              [:a.py-4 {:on-click #(to-page (dec @*current-page))} (ui/icon "caret-left") " Prev"]
-              [:a.py-4.pl-2 {:on-click #(to-page (inc @*current-page))} "Next " (ui/icon "caret-right")]]]]]
+              [:a.py-4 {:on-click #(to-page (dec @*current-page))} (ui/icon "caret-left") (str " " (t :paginates/prev))]
+              [:a.py-4.pl-2 {:on-click #(to-page (inc @*current-page))} (str (t :paginates/next) " ") (ui/icon "caret-right")]]]]]
 
-          [:table.table-auto
+          [:table.table-auto.cp__all_pages_table
            [:thead
             [:tr
              [:th.selector
@@ -833,6 +879,7 @@
                [(sortable-title (t :page/backlinks) :block/backlinks *sort-by-item *desc?)
                 (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?)
                 (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?)])]]
+
            [:tbody
             (for [{:block/keys [idx name created-at updated-at backlinks] :as page} @*results]
               [:tr {:key name}
@@ -863,4 +910,12 @@
                (when-not mobile?
                  [:td.updated-at [:span (if updated-at
                                           (date/int->local-time-2 updated-at)
-                                          "Unknown")]])])]]])])))
+                                          "Unknown")]])])]]
+
+          [:div.paginates
+           [:span]
+           [:span.flex.items-center
+            {:class (util/classnames [{:is-first (= 1 @*current-page)
+                                       :is-last  (= @*current-page total-pages)}])}
+            [:a.py-4.text-sm {:on-click #(to-page (dec @*current-page))} (ui/icon "caret-left") (str " " (t :paginates/prev))]
+            [:a.py-4.pl-2.text-sm {:on-click #(to-page (inc @*current-page))} (str (t :paginates/next) " ") (ui/icon "caret-right")]]]])])))
