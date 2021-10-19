@@ -9,10 +9,12 @@
             [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
+            [frontend.db.react :as db-react]
             [frontend.components.svg :as svg]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.editor :as editor-handler]
@@ -139,12 +141,15 @@
       (rfe/push-state :page {:name "Favorites"})
       (util/stop e))}
 
-   (let [favorites (:favorites (state/sub-graph-config))]
+   (let [favorites (->> (:favorites (state/sub-graph-config))
+                        (remove string/blank?)
+                        (filter string?))]
      (when (seq favorites)
        [:ul.favorites
         (for [name favorites]
           (when-not (string/blank? name)
-            (favorite-item t name)))]))))
+            (when (db/entity [:block/name (string/lower-case name)])
+                (favorite-item t name))))]))))
 
 (rum/defc recent-pages
   < rum/reactive db-mixins/query
@@ -157,20 +162,30 @@
 
    {:class "recent"}
 
-   (let [pages (db/sub-key-value :recent/pages)]
+   (let [pages (->> (db/sub-key-value :recent/pages)
+                    (remove string/blank?)
+                    (filter string?))]
      [:ul
       (for [name pages]
-        [:li {:key name}
-         (page-name name)])])))
+        (when (db/entity [:block/name (string/lower-case name)])
+          [:li {:key name}
+           (page-name name)]))])))
 
-(rum/defc flashcards < rum/reactive
-  []
-  (let [num (srs/get-srs-cards-total)]
+(rum/defcs flashcards < db-mixins/query rum/reactive
+  {:did-mount (fn [state]
+                (js/setTimeout
+                 (fn []
+                   (let [total (srs/get-srs-cards-total)]
+                     (state/set-state! :srs/cards-due-count total)))
+                 200)
+                state)}
+  [state]
+  (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
      (ui/icon "infinity mr-3" {:style {:font-size 20}})
      [:span.flex-1 "Flashcards"]
      (when (and num (not (zero? num)))
-       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full num])]))
+       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
 (rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn]
@@ -184,7 +199,7 @@
          [:div.flex.flex-col.pb-4.wrap
           [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
            (repo/repos-dropdown)
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-journals)}
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click route-handler/go-to-journals!}
             (ui/icon "calendar mr-3" {:style {:font-size 20}})
             [:span.flex-1 "Journals"]]
 
@@ -508,6 +523,10 @@
         (settings-modal)
         (command-palette/command-palette-modal)
         (custom-context-menu)
+        (plugins/custom-js-installer {:t t
+                                      :current-repo current-repo
+                                      :nfs-granted? granted?
+                                      :db-restoring? db-restoring?})
         [:a#download.hidden]
         (when
          (and (not config/mobile?)

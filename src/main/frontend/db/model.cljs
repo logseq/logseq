@@ -449,6 +449,17 @@
             (recur sibling (rest next-siblings) (conj result sibling))
             result))))))
 
+(defn get-block-refs-count
+  [block-id]
+  (when-let [repo-url (state/get-current-repo)]
+    (when block-id
+      (some->
+      (react/q repo-url [:block/refs-count block-id]
+        {:query-fn (fn [db]
+                     (count (:block/_refs (db-utils/entity repo-url [:block/uuid block-id]))))}
+        nil)
+      react))))
+
 (defn get-page-blocks
   ([page]
    (get-page-blocks (state/get-current-repo) page nil))
@@ -456,7 +467,7 @@
    (get-page-blocks repo-url page nil))
   ([repo-url page {:keys [use-cache? pull-keys]
                    :or {use-cache? true
-                        pull-keys block-attrs}}]
+                        pull-keys '[*]}}]
    (let [page (string/lower-case (string/trim page))
          page-entity (or (db-utils/entity repo-url [:block/name page])
                          (db-utils/entity repo-url [:block/original-name page]))

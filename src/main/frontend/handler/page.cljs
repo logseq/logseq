@@ -325,6 +325,14 @@
           (p/let [_ (rename-file-aux! repo old-path new-path)]
             (println "Renamed " old-path " to " new-path)))))))
 
+(defn favorited?
+  [page-name]
+  (let [favorites (->> (:favorites (state/get-config))
+                       (filter string?)
+                       (map string/lower-case)
+                       (set))]
+    (contains? favorites page-name)))
+
 (defn favorite-page!
   [page-name]
   (when-not (string/blank? page-name)
@@ -445,8 +453,9 @@
 
       (repo-handler/push-if-auto-enabled! repo)
 
-      (p/let [_ (unfavorite-page! old-name)]
-        (favorite-page! new-name))
+      (when (favorited? old-name)
+        (p/let [_ (unfavorite-page! old-name)]
+          (favorite-page! new-name)))
 
       (ui-handler/re-render-root!))))
 

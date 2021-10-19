@@ -49,7 +49,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             ["/frontend/utils" :as utils]
-            [frontend.mobile.util :as mobile]))
+            [frontend.mobile.util :as mobile]
+            [frontend.modules.outliner.datascript :as ds]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -467,13 +468,17 @@
 
                    :else
                    (not has-children?))]
-    (let [*blocks (atom [current-node])]
-      (when-not skip-save-current-block?
-        (outliner-core/save-node current-node))
-      (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
-                                                                 :skip-transact? false})
-      {:blocks @*blocks
-       :sibling? sibling?})))
+    (ds/auto-transact!
+     [txs-state (ds/new-outliner-txs-state)]
+     {:outliner-op :save-and-insert-node
+      :skip-transact? false}
+     (let [*blocks (atom [current-node])]
+       (when-not skip-save-current-block?
+         (outliner-core/save-node current-node {:txs-state txs-state}))
+       (outliner-core/insert-node new-node current-node sibling? {:blocks-atom *blocks
+                                                                  :txs-state txs-state})
+       {:blocks @*blocks
+        :sibling? sibling?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -2321,12 +2326,18 @@
               has-right? (-> (tree/-get-right current-node)
                              (tree/satisfied-inode?))
               thing-at-point ;intern is not supported in cljs, need a more elegant solution
-              (or (thingatpt/admonition&src-at-point input)
-                  (thingatpt/markup-at-point input)
-                  (thingatpt/block-ref-at-point input)
-                  (thingatpt/page-ref-at-point input)
-                  (thingatpt/properties-at-point input)
-                  (thingatpt/list-item-at-point input))]
+              (or (when (thingatpt/get-setting :admonition&src?)
+                    (thingatpt/admonition&src-at-point input))
+                  (when (thingatpt/get-setting :markup?)
+                    (thingatpt/markup-at-point input))
+                  (when (thingatpt/get-setting :block-ref?)
+                    (thingatpt/block-ref-at-point input))
+                  (when (thingatpt/get-setting :page-ref?)
+                    (thingatpt/page-ref-at-point input))
+                  (when (thingatpt/get-setting :properties?)
+                    (thingatpt/properties-at-point input))
+                  (when (thingatpt/get-setting :list?)
+                    (thingatpt/list-item-at-point input)))]
           (cond
             thing-at-point
             (case (:type thing-at-point)
@@ -2374,12 +2385,12 @@
                       (cursor/move-cursor-to-line-end input))
 
                     ;; when cursor in empty property key
-                    ;; (and property-key (= property-key ""))
-                    ;; (do (delete-and-update
-                    ;;      input
-                    ;;      (cursor/line-beginning-pos input)
-                    ;;      (cursor/line-end-pos input))
-                    ;;     (cursor/move-cursor-to-line-end (inc (:end thing-at-point))))
+                    (and property-key (= property-key ""))
+                    (do (delete-and-update
+                         input
+                         (cursor/line-beginning-pos input)
+                         (inc (cursor/line-end-pos input)))
+                        (cursor/move-cursor-to-line-end input))
                     :else
                     ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
                     (do

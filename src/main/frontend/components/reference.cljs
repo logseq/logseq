@@ -66,7 +66,7 @@
          [page (map #(block-with-ref-level % 1) blocks)])
     page-blocks))
 
-(rum/defcs references < rum/reactive
+(rum/defcs references < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
                  filters (when page-name

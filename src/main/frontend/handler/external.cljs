@@ -27,7 +27,8 @@
                          (let [title (if journal?
                                        (date/journal-title->default title)
                                        (string/replace title "/" "-"))
-                               title (util/page-name-sanity title)
+                               title (-> (util/page-name-sanity title)
+                                         (string/replace "\n" " "))
                                path (str (if journal?
                                            (config/get-journals-directory)
                                            (config/get-pages-directory))
