@@ -2531,7 +2531,8 @@
         (when (or (not= name "logbook")
                   (and
                    (= name "logbook")
-                   (state/enable-timetracking?)))
+                   (state/enable-timetracking?)
+                   (:drawer/logbook (state/get-config))))
           [:div.flex.flex-col
            [:div.text-sm.mt-1.flex.flex-row
             [:div.drawer {:data-drawer-name name}
