@@ -131,10 +131,10 @@
   [:div.flex.flex-row
    [:a.it.navigation.nav-left.button
     {:title "Go Back" :on-click #(js/window.history.back)}
-    svg/arrow-narrow-left]
+    (ui/icon "arrow-left")]
    [:a.it.navigation.nav-right.button
     {:title "Go Forward" :on-click #(js/window.history.forward)}
-    svg/arrow-narrow-right]])
+    (ui/icon "arrow-right")]])
 
 (rum/defc updater-tips-new-version
   [t]
