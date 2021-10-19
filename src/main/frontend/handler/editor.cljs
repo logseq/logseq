@@ -296,7 +296,7 @@
                        (nil? (db/entity x)))) refs))
 
 (defn- with-marker-time
-  [content block new-marker old-marker]
+  [content block format new-marker old-marker]
   (if (and (state/enable-timetracking?) new-marker)
     (try
       (let [logbook-exists? (and (:block/body block) (drawer/get-logbook (:block/body block)))
@@ -309,14 +309,14 @@
                               (and (= old-marker "later") (= new-marker "now"))
                               (and (= old-marker new-marker "now") (not logbook-exists?))
                               (and (= old-marker new-marker "doing") (not logbook-exists?)))
-                          (clock/clock-in content)
+                          (clock/clock-in format content)
 
                           (or
                            (and (= old-marker "doing") (= new-marker "todo"))
                            (and (= old-marker "now") (= new-marker "later"))
                            (and (contains? #{"now" "doing"} old-marker)
                                 (= new-marker "done")))
-                          (clock/clock-out content)
+                          (clock/clock-out format content)
 
                           :else
                           content)]
@@ -330,7 +330,7 @@
   (if (and (state/enable-timetracking?)
            (not= (:block/content block) value))
     (let [new-marker (first (util/safe-re-find marker/bare-marker-pattern (or value "")))
-          new-value (with-marker-time value block
+          new-value (with-marker-time value block (:block/format block)
                       new-marker
                       (:block/marker block))]
       new-value)
@@ -796,9 +796,9 @@
                                      (string/replace content old new))
                                    content))
           content (string/replace-first content "DOING" "TODO")
-          content (clock/clock-out content)
+          content (clock/clock-out format content)
           content (drawer/insert-drawer
-                   content "logbook"
+                   format content "logbook"
                    (util/format (str (if (= :org format) "-" "*")
                                      " State \"DONE\" from \"%s\" [%s]")
                                 marker
