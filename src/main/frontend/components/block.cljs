@@ -2532,7 +2532,10 @@
                   (and
                    (= name "logbook")
                    (state/enable-timetracking?)
-                   (:drawer/logbook (state/get-config))))
+                   (or  (when (get (state/get-config) :logbook/enabled-in-timestamped-blocks true)
+                          (or (:block/scheduled (:block config))
+                              (:block/deadline (:block config))))
+                        (:logbook/enabled-in-all-blocks (state/get-config)))))
           [:div.flex.flex-col
            [:div.text-sm.mt-1.flex.flex-row
             [:div.drawer {:data-drawer-name name}
