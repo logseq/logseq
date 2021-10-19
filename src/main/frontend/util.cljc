@@ -548,6 +548,11 @@
      (subs s (+ first-index (count pattern)) (count s))]
     [s ""]))
 
+(defn safe-lower-case
+  [s]
+  (if (string? s)
+    (string/lower-case s) s))
+
 (defn split-first [pattern s]
   (when-let [first-index (string/index-of s pattern)]
     [(subs s 0 first-index)
