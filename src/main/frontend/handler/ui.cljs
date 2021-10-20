@@ -12,7 +12,9 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [rum.core :as rum]))
+            [frontend.storage :as storage]
+            [rum.core :as rum]
+            [clojure.edn :as edn]))
 
 ;; sidebars
 (defn close-left-sidebar!
@@ -36,6 +38,23 @@
 (defn toggle-right-sidebar!
   []
   (state/toggle-sidebar-open?!))
+
+(defn persist-right-sidebar-state!
+  []
+  (let [sidebar-open? (:ui/sidebar-open? @state/state)
+        data (if sidebar-open? {:blocks (:sidebar/blocks @state/state)
+                                :collapsed (:ui/sidebar-collapsed-blocks @state/state)
+                                :open? true} {:open? false})]
+    (storage/set "ls-right-sidebar-state" data)))
+
+(defn restore-right-sidebar-state!
+  []
+  (when-let [data' (storage/get "ls-right-sidebar-state")]
+    (let [{:keys [open? collapsed blocks]} data']
+      (when open?
+        (state/set-state! :ui/sidebar-open? open?)
+        (state/set-state! :sidebar/blocks blocks)
+        (state/set-state! :ui/sidebar-collapsed-blocks collapsed)))))
 
 (defn toggle-contents!
   []
