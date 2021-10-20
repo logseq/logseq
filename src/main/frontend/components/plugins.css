@@ -290,7 +290,7 @@
   }
 }
 
-.lsp-iframe-sandbox, .lsp-shadow-sandbox {
+.lsp-iframe-sandbox, .lsp-shadow-sandbox, .lsp-ui-float {
   height: 100%;
   width: 100%;
   position: absolute;
@@ -366,6 +366,15 @@
         }
       }
     }
+  }
+}
+
+.lsp-ui-float-container {
+  top: 40%;
+  left: 30%;
+
+  .draggable-handle {
+    background-color: deepskyblue !important;
   }
 }
 

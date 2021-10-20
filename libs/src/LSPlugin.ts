@@ -31,6 +31,7 @@ export type UIBaseOptions = {
   key?: string
   replace?: boolean
   template: string
+  attrs?: Record<string, string>
 }
 
 export type UIPathIdentity = {
@@ -51,7 +52,7 @@ export type UISlotOptions = UIBaseOptions & UISlotIdentity
 
 export type UIPathOptions = UIBaseOptions & UIPathIdentity
 
-export type UIOptions = UIPathOptions | UISlotOptions
+export type UIOptions = UIBaseOptions | UIPathOptions | UISlotOptions
 
 export interface LSPluginPkgConfig {
   id: PluginLocalIdentity

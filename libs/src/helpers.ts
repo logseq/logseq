@@ -232,29 +232,31 @@ export function setupInjectedStyle (
 export function setupInjectedUI (
   this: PluginLocal,
   ui: UIOptions,
-  attrs: Record<string, any>
+  attrs: Record<string, any>,
+  initialCallback?: (e: { el: HTMLElement, float: boolean }) => void
 ) {
+  let slot: string = ''
+  let selector: string
+  let float: boolean
+
   const pl = this
-  let slot = ''
-  let selector = ''
+  const id = `${ui.key}-${slot}-${pl.id}`
+  const key = `${ui.key}-${pl.id}`
 
   if ('slot' in ui) {
     slot = ui.slot
     selector = `#${slot}`
-  } else {
+  } else if ('path' in ui) {
     selector = ui.path
+  } else {
+    float = true
   }
 
-  const target = selector && document.querySelector(selector)
+  const target = float ? document.body : (selector && document.querySelector(selector))
   if (!target) {
     console.error(`${this.debugTag} can not resolve selector target ${selector}`)
     return
   }
-
-  const id = `${ui.key}-${slot}-${pl.id}`
-  const key = `${ui.key}-${pl.id}`
-
-  let el = document.querySelector(`#${id}`) as HTMLElement
 
   if (ui.template) {
     // safe template
@@ -266,8 +268,11 @@ export function setupInjectedUI (
       })
   }
 
-  if (el) {
-    el.innerHTML = ui.template
+  let el = document.querySelector(`#${id}`) as HTMLElement
+  let content = float ? el?.querySelector('.ls-ui-float-content') : el
+
+  if (content) {
+    content.innerHTML = ui.template
     return
   }
 
@@ -275,12 +280,30 @@ export function setupInjectedUI (
   el.id = id
   el.dataset.injectedUi = key || ''
 
-  // TODO: Support more
-  el.innerHTML = ui.template
+  if (float) {
+    content = document.createElement('div')
+    content.classList.add('ls-ui-float-content')
+    el.appendChild(content)
+  } else {
+    content = el
+  }
+
+  // TODO: enhance template
+  content.innerHTML = ui.template
 
   attrs && Object.entries(attrs).forEach(([k, v]) => {
     el.setAttribute(k, v)
   })
+
+  let disposeFloat: () => void
+
+  if (float) {
+    el.setAttribute('draggable', 'true')
+    el.setAttribute('resizable', 'true')
+    el.classList.add('lsp-ui-float-container', 'visible')
+    disposeFloat = (pl._setupDraggableContainer(el, key),
+      pl._setupResizableContainer(el, key))
+  }
 
   target.appendChild(el);
 
@@ -297,7 +320,11 @@ export function setupInjectedUI (
     }, false)
   })
 
+  // callback
+  initialCallback?.({ el, float })
+
   return () => {
+    disposeFloat?.()
     target!.removeChild(el)
   }
 }

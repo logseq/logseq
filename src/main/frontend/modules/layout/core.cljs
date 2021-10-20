@@ -1,16 +1,41 @@
-(ns frontend.modules.layout.utils
+(ns frontend.modules.layout.core
   (:require [cljs-bean.core :as bean]
             [frontend.util :as frontend-utils]))
+
+(defonce *movable-containers (atom {}))
 
 (defn- calc-layout-data
   [^js cnt ^js evt]
   (.toJSON (.getBoundingClientRect cnt)))
 
+(defn ^:export move-container-to-top
+  [identity]
+  (when-let [^js/HTMLElement container (and (> (count @*movable-containers) 1)
+                                            (get @*movable-containers identity))]
+    (let [zdx (->> @*movable-containers
+                   (map (fn [[_ ^js el]]
+                          (let [^js c (js/getComputedStyle el)
+                                v1 (.-visibility c)
+                                v2 (.-display c)]
+                            (when-let [z (and (= "visible" v1)
+                                              (not= "none" v2)
+                                              (.-zIndex c))]
+                              z))))
+                   (remove nil?))
+          zdx (bean/->js zdx)
+          zdx (and zdx (js/Math.max.apply nil zdx))]
+
+      (set! (.. container -style -zIndex) (inc zdx)))))
+
 (defn ^:export setup-draggable-container!
   [^js/HTMLElement el callback]
   (when-let [^js/HTMLElement handle (.querySelector el ".draggable-handle")]
     (let [^js cls (.-classList el)
+          ^js ds (.-dataset el)
+          identity (.-identity ds)
           ing? "is-dragging"]
+
+      ;; draggable
       (-> (js/interact handle)
           (.draggable
             (bean/->js
@@ -34,12 +59,20 @@
           (.on "dragstart" (fn [] (.add cls ing?)))
           (.on "dragend" (fn [e]
                            (.remove cls ing?)
-                           (callback (bean/->js (calc-layout-data el e)))))))))
+                           (callback (bean/->js (calc-layout-data el e))))))
+      ;; manager
+      (swap! *movable-containers assoc identity el)
+
+      #(swap! *movable-containers dissoc identity el))))
 
 (defn ^:export setup-resizable-container!
   [^js/HTMLElement el callback]
   (let [^js cls (.-classList el)
+        ^js ds (.-dataset el)
+        identity (.-identity ds)
         ing? "is-resizing"]
+
+    ;; resizable
     (-> (js/interact el)
         (.resizable
           (bean/->js
@@ -56,4 +89,8 @@
 
                          ;; update container size
                          (set! (.. el -style -width) (str w "px"))
-                         (set! (.. el -style -height) (str h "px"))))}})))))
+                         (set! (.. el -style -height) (str h "px"))))}})))
+    ;; manager
+    (swap! *movable-containers assoc identity el)
+
+    #(swap! *movable-containers dissoc identity el)))

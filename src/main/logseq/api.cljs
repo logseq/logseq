@@ -33,7 +33,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [sci.core :as sci]
-            [frontend.modules.layout.utils]))
+            [frontend.modules.layout.core]))
 
 ;; helpers
 (defn- normalize-keyword-for-json

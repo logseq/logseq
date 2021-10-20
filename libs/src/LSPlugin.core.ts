@@ -30,7 +30,6 @@ import {
   UIOptions
 } from './LSPlugin'
 import { snakeCase } from 'snake-case'
-import DOMPurify from 'dompurify'
 
 const debug = Debug('LSPlugin:core')
 const DIR_PLUGINS = 'plugins'
@@ -195,11 +194,13 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
     Object.entries(attrs).forEach(([k, v]) => {
       el?.setAttribute(k, v)
       if (k === 'draggable' && v) {
-        pluginLocal._setupDraggableContainer(el)
+        pluginLocal._dispose(
+          pluginLocal._setupDraggableContainer(el))
       }
 
       if (k === 'resizable' && v) {
-        pluginLocal._setupResizableContainer(el)
+        pluginLocal._dispose(
+          pluginLocal._setupResizableContainer(el))
       }
     })
   })
@@ -262,10 +263,14 @@ function initProviderHandlers (pluginLocal: PluginLocal) {
 
       pluginLocal._dispose(
         setupInjectedUI.call(pluginLocal,
-          ui, {
+          ui, Object.assign({
             'data-ref': pluginLocal.id
-          })
-      )
+          }, ui.attrs || {}),
+          ({ el, float }) => {
+            if (!float) return
+            const identity = el.dataset.identity
+            pluginLocal.layoutCore.move_container_to_top(identity)
+          }))
     })
   })
 }
@@ -570,35 +575,46 @@ class PluginLocal
     this.settings.set('layout', layouts)
   }
 
-  _setupDraggableContainer (el: HTMLElement) {
+  _setupDraggableContainer (el: HTMLElement, key?: string): () => void {
     const ds = el.dataset
     if (ds.inited_draggable) return
+    if (!ds.identity) {
+      ds.identity = 'dd-' + genID()
+    }
     const handle = document.createElement('div')
     handle.classList.add('draggable-handle')
     el.prepend(handle)
 
-    // @ts-ignore
-    const layoutUtils = window.frontend.modules.layout.utils
-    layoutUtils.setup_draggable_container_BANG_(el,
-      this._persistMainUILayoutData.bind(this))
+    // move to top
+    el.addEventListener('mousedown', () => {
+      this.layoutCore.move_container_to_top(ds.identity)
+    }, true)
+
+    const dispose = this.layoutCore.setup_draggable_container_BANG_(el,
+      !key ? this._persistMainUILayoutData.bind(this) : () => {})
 
     ds.inited_draggable = 'true'
+
+    return dispose
   }
 
-  _setupResizableContainer (el: HTMLElement) {
+  _setupResizableContainer (el: HTMLElement, key?: string): () => void {
     const ds = el.dataset
     if (ds.inited_resizable) return
-
+    if (!ds.identity) {
+      ds.identity = 'dd-' + genID()
+    }
     const handle = document.createElement('div')
     handle.classList.add('resizable-handle')
     el.prepend(handle)
 
     // @ts-ignore
-    const layoutUtils = window.frontend.modules.layout.utils
-    layoutUtils.setup_resizable_container_BANG_(el,
-      this._persistMainUILayoutData.bind(this))
+    const layoutCore = window.frontend.modules.layout.core
+    const dispose = layoutCore.setup_resizable_container_BANG_(el,
+      !key ? this._persistMainUILayoutData.bind(this) : () => {})
 
     ds.inited_resizable = 'true'
+    return dispose
   }
 
   async load (readyIndicator?: DeferredActor) {
@@ -741,6 +757,11 @@ class PluginLocal
     } else {
       actor?.promise.then(callback)
     }
+  }
+
+  get layoutCore (): any {
+    // @ts-ignore
+    return window.frontend.modules.layout.core
   }
 
   get isInstalledInDotRoot () {
