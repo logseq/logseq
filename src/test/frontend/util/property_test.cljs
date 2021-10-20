@@ -141,11 +141,11 @@
     "title:: a/b/c\ntags:: d,e\n")
   (are [x y] (= (property/build-properties-str :org x) y)
     {:title "a"}
-    ":PROPERTIES:\n:title: a\n:END:\n"
+    ":PROPERTIES:\n:title: a\n:END:"
     {:title "a/b/c"}
-    ":PROPERTIES:\n:title: a/b/c\n:END:\n"
+    ":PROPERTIES:\n:title: a/b/c\n:END:"
     {:title "a/b/c" :tags "d,e"}
-    ":PROPERTIES:\n:title: a/b/c\n:tags: d,e\n:END:\n"))
+    ":PROPERTIES:\n:title: a/b/c\n:tags: d,e\n:END:"))
 
 (deftest test-with-built-in-properties
   (let [content "#+BEGIN_QUERY\n{:title      \"cool NEXT\"\n    :query      [:find (pull ?h [*])\n                 :in $ ?start ?next\n                 :where\n                 [?h :block/marker ?marker]\n                 [(contains? #{\"NOW\" \"LATER\" \"TODO\"} ?marker)]\n                 [?h :block/ref-pages ?p]\n                 [?p :block/journal? true]\n                 [?p :block/journal-day ?d]\n                 [(> ?d ?start)]\n                 [(< ?d ?next)]]\n    :inputs     [:today :7d-after]\n    :collapsed? false}\n#+END_QUERY"]
