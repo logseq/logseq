@@ -4,6 +4,7 @@
             [cljs-bean.core :as bean]
             [frontend.context.i18n :as i18n]
             [frontend.ui :as ui]
+            [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [electron.ipc :as ipc]
@@ -418,3 +419,13 @@
         (if market?
           (marketplace-plugins)
           (installed-plugins))]])))
+
+(rum/defc custom-js-installer
+  [{:keys [t current-repo db-restoring? nfs-granted?] :as props}]
+  (rum/use-effect!
+    (fn []
+      (when (and (not db-restoring?)
+                 (or (not util/nfs?) nfs-granted?))
+        (ui-handler/exec-js-if-exists-&-allowed! t)))
+    [current-repo db-restoring? nfs-granted?])
+  nil)

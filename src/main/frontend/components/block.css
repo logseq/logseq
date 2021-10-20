@@ -90,7 +90,6 @@
 }
 
 .open-block-ref-link {
-  @apply opacity-30 hover:opacity-100;
   background-color: var(--ls-page-properties-background-color);
   padding: 1px 4px;
   border-radius: 2px;
@@ -140,19 +139,21 @@
   }
 }
 
-.block-control,
-.block-control:hover {
+.block-control, .block-control:hover {
+  @apply: opacity-50.hover:opacity-100;
   text-decoration: none;
   cursor: pointer;
   font-size: 14px;
-  min-width: 10px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 2px;
   color: initial;
   user-select: none;
 
   .control-hide {
     display: none;
   }
-}
+ }
 
 .block-ref {
   border-bottom: 0.5px solid;
@@ -397,8 +398,8 @@
 
 .bullet-container {
   display: flex;
-  height: 12px;
-  width: 12px;
+  height: 16px;
+  width: 16px;
   border-radius: 50%;
   justify-content: center;
   align-items: center;
@@ -421,7 +422,11 @@
 }
 
 a:hover > .bullet-container .bullet {
-  transform: scale(1.2);
+  transform: scale(1.4);
+}
+
+a:hover > .bullet-container {
+    background-color: var(--ls-block-bullet-border-color, #ced9e0);
 }
 
 .doc-mode {
@@ -498,9 +503,7 @@ a[data-ref="card"], .page-reference[data-ref="card"] {
 }
 
 .cards-title {
-    background: var(--ls-page-properties-background-color);
-    border-radius: 4px;
-    padding: 2px 8px;
+    padding: 4px 0;
 }
 
 span.cloze {

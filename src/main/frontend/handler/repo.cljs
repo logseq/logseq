@@ -66,6 +66,24 @@
       (when-not file-exists?
         (file-handler/reset-file! repo-url path default-content)))))
 
+(defn create-favorites-file
+  [repo-url]
+  (spec/validate :repos/url repo-url)
+  (let [repo-dir (config/get-repo-dir repo-url)
+        format (state/get-preferred-format)
+        path (str (state/get-pages-directory)
+                  "/favorites."
+                  (config/get-file-extension format))
+        file-path (str "/" path)
+        default-content (case (name format)
+                          "org" (rc/inline "favorites.org")
+                          "markdown" (rc/inline "favorites.md")
+                          "")]
+    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
+            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
+      (when-not file-exists?
+        (file-handler/reset-file! repo-url path default-content)))))
+
 (defn create-custom-theme
   [repo-url]
   (spec/validate :repos/url repo-url)
@@ -88,49 +106,45 @@
             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
       (file-handler/reset-file! repo-url path content))))
 
-(defn create-today-journal-if-not-exists
-  ([repo-url]
-   (create-today-journal-if-not-exists repo-url nil))
-  ([repo-url {:keys [content write-file?]
-              :or {write-file? true}}]
-   (spec/validate :repos/url repo-url)
-   (when (state/enable-journals? repo-url)
-     (let [repo-dir (config/get-repo-dir repo-url)
-           format (state/get-preferred-format repo-url)
-           title (date/today)
-           file-name (date/journal-title->default title)
-           default-content (util/default-content-with-title format)
-           template (state/get-default-journal-template)
-           template (when (and template
-                             (not (string/blank? template)))
-                      template)
-           content (cond
-                     content
-                     content
+(defn- create-today-journal-if-not-exists
+  [repo-url {:keys [content]}]
+  (spec/validate :repos/url repo-url)
+  (when (state/enable-journals? repo-url)
+    (let [repo-dir (config/get-repo-dir repo-url)
+          format (state/get-preferred-format repo-url)
+          title (date/today)
+          file-name (date/journal-title->default title)
+          default-content (util/default-content-with-title format)
+          template (state/get-default-journal-template)
+          template (when (and template
+                              (not (string/blank? template)))
+                     template)
+          content (cond
+                    content
+                    content
 
-                     template
-                     (str default-content template)
+                    template
+                    (str default-content template)
 
-                     :else
-                     default-content)
-           path (str (config/get-journals-directory) "/" file-name "."
-                     (config/get-file-extension format))
-           file-path (str "/" path)
-           page-exists? (db/entity repo-url [:block/name (string/lower-case title)])
-           empty-blocks? (db/page-empty? repo-url (string/lower-case title))]
-       (when (or empty-blocks? (not page-exists?))
-         (p/let [_ (nfs/check-directory-permission! repo-url)
-                 _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
-                 file-exists? (fs/file-exists? repo-dir file-path)]
-           (when-not file-exists?
-             (p/let [_ (file-handler/reset-file! repo-url path content)]
-               (if write-file?
-                 (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
-                   (when-not (state/editing?)
-                     (ui-handler/re-render-root!))
-                   (git-handler/git-add repo-url path))
-                 (when-not (state/editing?)
-                   (ui-handler/re-render-root!)))))))))))
+                    :else
+                    default-content)
+          path (str (config/get-journals-directory) "/" file-name "."
+                    (config/get-file-extension format))
+          file-path (str "/" path)
+          page-exists? (db/entity repo-url [:block/name (string/lower-case title)])
+          empty-blocks? (db/page-empty? repo-url (string/lower-case title))]
+      (when (or empty-blocks? (not page-exists?))
+        (p/let [_ (nfs/check-directory-permission! repo-url)
+                _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+                file-exists? (fs/file-exists? repo-dir file-path)]
+          (when-not file-exists?
+            (p/let [_ (file-handler/reset-file! repo-url path content)]
+              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
+                (when-not (state/editing?)
+                  (ui-handler/re-render-root!))
+                (git-handler/git-add repo-url path))))
+          (when-not (state/editing?)
+            (ui-handler/re-render-root!)))))))
 
 (defn create-default-files!
   ([repo-url]
@@ -145,6 +159,7 @@
        ;; TODO: move to frontend.handler.file
        (create-config-file-if-not-exists repo-url)
        (create-contents-file repo-url)
+       (create-favorites-file repo-url)
        (create-custom-theme repo-url)
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
@@ -554,6 +569,7 @@
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (create-config-file-if-not-exists repo)
              (create-contents-file repo)
+             (create-favorites-file repo)
              (create-custom-theme repo)
              (state/set-db-restoring! false)
              (ui-handler/re-render-root!)))

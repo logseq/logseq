@@ -20,7 +20,7 @@
   [:div.filters
    [:div.sm:flex.sm:items-start
     [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
-     (svg/filter-icon)]
+     (ui/icon "filter" {:style {:fontSize 20}})]
     [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
      [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
      [:span.text-xs
@@ -66,7 +66,7 @@
          [page (map #(block-with-ref-level % 1) blocks)])
     page-blocks))
 
-(rum/defcs references < rum/reactive
+(rum/defcs references < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
                  filters (when page-name
@@ -127,18 +127,23 @@
             (when (or (> n-ref 0)
                       (seq filter-state))
               (ui/foldable
-               [:div.flex.flex-row.flex-1.justify-between
+               [:div.flex.flex-row.flex-1.justify-between.items-center
                 [:h2.font-bold.opacity-50 (let []
                                             (str n-ref " Linked Reference"
                                                  (when (> n-ref 1) "s")))]
                 [:a.opacity-50.hover:opacity-100.filter
                  {:title "Filter"
                   :on-click #(state/set-modal! (filter-dialog filters-atom references page-name))}
-                 (svg/filter-icon (cond
-                                    (empty? filter-state) nil
-                                    (every? true? (vals filter-state)) "text-green-400"
-                                    (every? false? (vals filter-state)) "text-red-400"
-                                    :else "text-yellow-400"))]]
+                 (ui/icon "filter" {:class (cond
+                                             (empty? filter-state)
+                                             ""
+                                             (every? true? (vals filter-state))
+                                             "text-green-400"
+                                             (every? false? (vals filter-state))
+                                             "text-red-400"
+                                             :else
+                                             "text-yellow-400")
+                                    :style {:fontSize 24}})]]
 
                (fn []
                  [:div.references-blocks

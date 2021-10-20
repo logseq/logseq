@@ -16,10 +16,6 @@ function getFilePathFromClipboard () {
   }
 }
 
-function isClipboardHasImage () {
-  return !clipboard.readImage().isEmpty()
-}
-
 contextBridge.exposeInMainWorld('apis', {
   doAction: async (arg) => {
     return await ipcRenderer.invoke('main', arg)
@@ -119,7 +115,7 @@ contextBridge.exposeInMainWorld('apis', {
 
     await fs.promises.mkdir(assetsRoot, { recursive: true })
 
-    from = decodeURIComponent(from || getFilePathFromClipboard())
+    from = from && decodeURIComponent(from || getFilePathFromClipboard())
 
     if (from) {
       // console.debug('copy file: ', from, dest)
@@ -155,7 +151,6 @@ contextBridge.exposeInMainWorld('apis', {
   },
 
   getFilePathFromClipboard,
-  isClipboardHasImage,
 
   setZoomFactor (factor) {
     webFrame.setZoomFactor(factor)

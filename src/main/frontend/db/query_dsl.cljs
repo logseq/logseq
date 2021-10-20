@@ -144,7 +144,7 @@
 (defn build-query
   ([repo e env]
    (build-query repo e (assoc env :vars (atom {})) 0))
-  ([repo e {:keys [sort-by blocks? counter current-filter vars] :as env} level]
+  ([repo e {:keys [sort-by blocks? sample counter current-filter vars] :as env} level]
    ;; TODO: replace with multi-methods for extensibility.
    (let [fe (first e)
          page-ref? (text/page-ref? e)]
@@ -365,6 +365,12 @@
        (= 'all-page-tags fe)
        [['?e :block/tags '?p]]
 
+       (= 'sample fe)
+       (when-let [num (second e)]
+         (when (integer? num)
+           (reset! sample num))
+         nil)
+
        :else
        nil))))
 
@@ -417,9 +423,11 @@
             (str form)
             (let [sort-by (atom nil)
                   blocks? (atom nil)
+                  sample (atom nil)
                   result (when form (build-query repo form {:sort-by sort-by
                                                             :blocks? blocks?
-                                                            :counter counter}))]
+                                                            :counter counter
+                                                            :sample sample}))]
               (cond
                 (and (nil? result) (string? form))
                 form
@@ -429,18 +437,19 @@
 
                 :else
                 (let [result (when (seq result)
-                              (let [key (if (coll? (first result))
-                                          (keyword (ffirst result))
-                                          (keyword (first result)))
-                                    result (case key
-                                             :and
-                                             (rest result)
+                               (let [key (if (coll? (first result))
+                                           (keyword (ffirst result))
+                                           (keyword (first result)))
+                                     result (case key
+                                              :and
+                                              (rest result)
 
-                                             result)]
-                                (add-bindings! result)))]
-                 {:query result
-                  :sort-by @sort-by
-                  :blocks? (boolean @blocks?)})))))
+                                              result)]
+                                 (add-bindings! result)))]
+                  {:query result
+                   :sort-by @sort-by
+                   :blocks? (boolean @blocks?)
+                   :sample sample})))))
         (catch js/Error e
           (log/error :query-dsl/parse-error e))))))
 
@@ -449,26 +458,32 @@
   (when (string? query-string)
     (let [query-string (template/resolve-dynamic-template! query-string)]
       (when-not (string/blank? query-string)
-        (let [{:keys [query sort-by blocks?] :as result} (parse repo query-string)]
+        (let [{:keys [query sort-by blocks? sample] :as result} (parse repo query-string)
+              query (if (string? query) (string/trim query) query)]
           (if (and (string? result) (not (string/includes? result " ")))
             (if (= "\"" (first result) (last result))
               (subs result 1 (dec (count result)))
               result)
             (when-let [query (query-wrapper query blocks?)]
-              (react/react-query repo
-                                 {:query query
-                                  :query-string query-string}
-                                 (cond->
-                                   {:use-cache? false}
-                                   sort-by
-                                   (assoc :transform-fn sort-by))))))))))
+              (let [sort-by (or sort-by identity)
+                    random-samples (if @sample
+                                     (fn [col]
+                                       (take @sample (shuffle col)))
+                                     identity)
+                    transform-fn (comp sort-by random-samples)]
+                (react/react-query repo
+                                   {:query query
+                                    :query-string query-string}
+                                   {:use-cache? false
+                                    :transform-fn transform-fn})))))))))
 
 (defn custom-query
   [repo query-m query-opts]
   (when (seq (:query query-m))
     (let [query-string (pr-str (:query query-m))
           query-string (template/resolve-dynamic-template! query-string)
-          {:keys [query sort-by blocks?]} (parse repo query-string)]
+          {:keys [query sort-by blocks?]} (parse repo query-string)
+          query (if (string? query) (string/trim query) query)]
       (when query
         (when-let [query (query-wrapper query blocks?)]
           (react/react-query repo

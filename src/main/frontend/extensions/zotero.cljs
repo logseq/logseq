@@ -197,7 +197,7 @@
      [:div.row
       [:label.title
        {:for "zotero_attachments_block_text"}
-       "Attachtment under block of:"]
+       "Attachment under block of:"]
       [:div.mt-1.sm:mt-0.sm:col-span-2
        [:div.max-w-lg.rounded-md
         [:input.form-input.block

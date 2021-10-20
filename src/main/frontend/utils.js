@@ -1,3 +1,5 @@
+import path from 'path'
+
 if (typeof window === 'undefined') {
   global.window = {}
 }
@@ -266,3 +268,14 @@ export const writeClipboard = (text, isHtml) => {
     }
   })
 }
+
+export const toPosixPath = (input) => {
+  return input && input.replace(/\\+/g, '/')
+}
+
+export const nodePath = Object.assign({}, path, {
+  basename (input) {
+    input = toPosixPath(input)
+    return path.basename(input)
+  }
+})

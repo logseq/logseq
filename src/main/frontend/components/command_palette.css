@@ -11,8 +11,8 @@
 
     width: 80vw;
 
-    @screen sm {
-      width: 760px;
+    @screen lg {
+      width: 820px;
     }
 
     .menu-link {

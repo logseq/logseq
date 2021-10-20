@@ -4,6 +4,7 @@
   #?(:cljs (:require
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
+            [frontend.mobile.util :refer [is-native-platform?]]
             [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
@@ -15,7 +16,6 @@
             [goog.object :as gobj]
             [goog.string :as gstring]
             [goog.userAgent]
-            ["path" :as nodePath]
             [promesa.core :as p]))
   (:require
    [clojure.core.async :as async]
@@ -33,7 +33,7 @@
      (-pr-writer [sym writer _]
        (-write writer (str "\"" (.toString sym) "\"")))))
 
-#?(:cljs (defonce ^js node-path nodePath))
+#?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defn app-scroll-container-node []
            (gdom/getElement "main-container")))
 
@@ -70,6 +70,10 @@
      (when (and js/window (gobj/get js/window "navigator"))
        (let [ua (string/lower-case js/navigator.userAgent)]
          (string/includes? ua " electron")))))
+
+#?(:cljs
+   (def nfs? (and (not (electron?))
+                  (not (is-native-platform?)))))
 
 #?(:cljs
    (defn file-protocol?
@@ -544,6 +548,11 @@
      (subs s (+ first-index (count pattern)) (count s))]
     [s ""]))
 
+(defn safe-lower-case
+  [s]
+  (if (string? s)
+    (string/lower-case s) s))
+
 (defn split-first [pattern s]
   (when-let [first-index (string/index-of s pattern)]
     [(subs s 0 first-index)
@@ -636,6 +645,13 @@
            end   (or (string/index-of val \newline start)
                      (count val))]
        (.setRangeText input "" start end))))
+
+#?(:cljs
+   (defn insert-at-current-position!
+     [input text]
+     (let [start (.-selectionStart input)
+           end   (.-selectionEnd input)]
+       (.setRangeText input text start end "end"))))
 
 ;; copied from re_com
 #?(:cljs
@@ -1372,7 +1388,7 @@
      (let [path (string/lower-case path)]
        (not
         (some #(string/ends-with? path %)
-              [".md" ".markdown" ".org" ".edn" ".css" ".png" ".jpg" ".jpeg"]))))))
+              [".md" ".markdown" ".org" ".edn" ".js" ".css" ".png" ".jpg" ".jpeg"]))))))
 
 (defn wrapped-by-quotes?
   [v]

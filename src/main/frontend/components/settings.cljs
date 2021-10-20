@@ -160,7 +160,7 @@
 
 (defn edit-config-edn []
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div.text-sm
+    [:div
      [:a.text-xs {:href     (rfe/href :file {:path (config/get-config-path)})
                   :on-click #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))}
       (t :settings-page/edit-config-edn)]]))
@@ -246,27 +246,10 @@
           (ipc/ipc "userAppCfgs" :auto-update (not enabled?)))
         true)]]]))
 
-(rum/defcs current-graph
+(rum/defcs graph-config
   [state t]
-
   (when-let [current-repo (state/sub :git/current-repo)]
-    (let [repo-list (state/sub [:me :repos])]
-
-      [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start.sm:grid-rows-1
-       [:label.block.text-sm.font-medium.leading-5.opacity-70.sm:col-span-1
-        {:for "input_current_graph"}
-        (t :settings-page/current-graph)]
-       [:div.mt-1.sm:mt-0.sm:col-span-4
-        [:div.max-w-lg.rounded-md
-         [:select#input_current_graph.form-select.is-small
-          {:value     current-repo
-           :disabled  true
-           :on-change #()}
-          (for [it repo-list]
-            (when-let [url (and (not= (:url it) "local") (:url it))]
-              [:option {:key url :value url} (util/node-path.basename url)]))]
-
-         [:div.inline-flex.items-center.pl-5 (edit-config-edn)]]]])))
+    (edit-config-edn)))
 
 (defn language-row [t preferred-language]
   [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start
@@ -584,18 +567,19 @@
 
         [:aside.md:w-64
          [:ul
-          (for [[label text icon] [[:general (t :settings-page/tab-general) (svg/adjustments 16)]
-                                   [:editor (t :settings-page/tab-editor) (svg/icon-editor 16)]
-                                   [:shortcuts (t :settings-page/tab-shortcuts) (svg/icon-cmd 18)]
-                                   [:git (t :settings-page/tab-version-control) svg/git]
-                                   [:advanced (t :settings-page/tab-advanced) (svg/icon-cli 16)]]]
+          (for [[label text icon] [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
+                                   [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+                                   [:shortcuts (t :settings-page/tab-shortcuts) (ui/icon "command" {:style {:font-size 20}})]
+                                   [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
+                                   [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
 
             [:li
              {:class    (util/classnames [{:active (= label @*active)}])
               :on-click #(reset! *active label)}
 
              [:a.flex.items-center
-              [[:i.flex.items-center icon] [:strong text]]]])]]
+              icon
+              [:strong text]]])]]
 
         [:article
 
@@ -604,7 +588,6 @@
            :general
            [:div.panel-wrap.is-general
             (version-row t version)
-            (current-graph t)
             (language-row t preferred-language)
             (theme-modes-row t switch-theme system-theme? dark?)]
 
@@ -623,7 +606,8 @@
             (enable-all-pages-public-row t enable-all-pages-public?)
             (encryption-row t enable-encryption?)
             (zotero-settings-row t)
-            (auto-push-row t current-repo enable-git-auto-push?)]
+            (auto-push-row t current-repo enable-git-auto-push?)
+            (graph-config t)]
 
            :shortcuts
            [:div.panel-wrap

@@ -4,10 +4,13 @@
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
   --ls-font-family: 'Inter';
-  --ls-main-content-max-width: 740px;
+  --ls-main-content-max-width: 810px;
   --ls-main-content-max-width-wide: 100%;
+  --ls-scrollbar-width: 6px;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
+  --ls-left-sidebar-width: 240px;
+  --ls-left-sidebar-nav-btn-size: 38px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -811,10 +814,6 @@ li p:last-child,
   padding-top: 42.86%;
 }
 
-.footdef {
-  margin: 1rem 0;
-}
-
 .admonitionblock {
   margin: 2rem 0;
 }
@@ -1117,6 +1116,10 @@ a.tooltip-priority {
 
 .katex * {
   border-color: var(--ls-primary-text-color);
+}
+
+#help-latex .katex-html {
+  text-align: right;
 }
 
 a.page-op {

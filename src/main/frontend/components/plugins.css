@@ -307,10 +307,10 @@
 
 .ui-items-container {
   &[data-type=toolbar] {
-    @apply flex items-center mt-1;
+    @apply flex items-center;
 
     > .injected-ui-item-toolbar {
-      @apply opacity-70 hover:opacity-100 transition-opacity;
+      @apply hover:opacity-100 transition-opacity;
     }
   }
 

@@ -19,6 +19,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
+            [frontend.handler.config :as config-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -46,8 +47,11 @@
 
 (defn get-page-file-path
   ([] (get-page-file-path (state/get-current-page)))
-  ([page-name] (when-let [page (db/entity [:block/name page-name])]
-                 (:file/path (:block/file page)))))
+  ([page-name]
+   (when page-name
+     (let [page-name (string/lower-case page-name)]
+       (when-let [page (db/entity [:block/name page-name])]
+        (:file/path (:block/file page)))))))
 
 (defn- build-title [page]
   (let [original-name (:block/original-name page)]
@@ -154,7 +158,6 @@
                                       (str (name key) ":: " value))
                      :block/format format
                      :block/properties {key value}
-                     :block/file (:block/file page)
                      :block/pre-block? true}]
           (outliner-core/insert-node (outliner-core/block block)
                                      (outliner-core/block page)
@@ -204,32 +207,6 @@
        (p/catch (fn [err]
                   (js/console.error "error: " err)))))))
 
-(defn delete!
-  [page-name ok-handler]
-  (when page-name
-    (when-let [repo (state/get-current-repo)]
-      (let [page-name (string/lower-case page-name)
-            blocks (db/get-page-blocks page-name)
-            tx-data (mapv
-                     (fn [block]
-                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                     blocks)]
-        (db/transact! tx-data)
-
-        (delete-file! repo page-name)
-
-        ;; if other page alias this pagename,
-        ;; then just remove some attrs of this entity instead of retractEntity
-        (if (model/get-alias-source-page (state/get-current-repo) page-name)
-          (when-let [id (:db/id (db/entity [:block/name page-name]))]
-            (let [txs (mapv (fn [attribute]
-                              [:db/retract id attribute])
-                            db-schema/retract-page-attributes)]
-              (db/transact! txs)))
-          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
-
-        (ok-handler)))))
-
 (defn- compute-new-file-path
   [old-path new-page-name]
   (let [result (string/split old-path "/")
@@ -273,16 +250,20 @@
 ;; 3. what if there's a tag `#foobar` and we want to replace `#foo` with `#something`?
 (defn- replace-old-page!
   [s old-name new-name]
-  (let [get-tag-pattern (fn [s] (if (string/includes? s " ")
-                                 (str "#[[" s "]]")
-                                 (str "#" s)))
-        old-tag-pattern (get-tag-pattern old-name)
-        new-tag-pattern (get-tag-pattern new-name)]
-    (let [pattern "[[%s/"]
-     (-> s
-         (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
-         (string/replace (util/format pattern old-name) (util/format pattern new-name))
-         (string/replace old-tag-pattern new-tag-pattern)))))
+  (let [get-tag (fn [s]
+                  (if (string/includes? s " ")
+                    (str "#[[" s "]]")
+                    (str "#" s)))
+        old-tag-pattern (let [old-tag (get-tag old-name)]
+                          (re-pattern (str "(?i)" old-tag)))
+        old-ref-pattern (re-pattern (util/format "(?i)\\[\\[%s\\]\\]" old-name))
+        namespace-prefix-pattern "[[%s/"
+        old-namespace-pattern (re-pattern (str "(?i)"
+                                               (util/format "\\[\\[%s/" old-name)))]
+    (-> s
+        (string/replace old-ref-pattern (util/format "[[%s]]" new-name))
+        (string/replace old-namespace-pattern (util/format namespace-prefix-pattern new-name))
+        (string/replace old-tag-pattern (get-tag new-name)))))
 
 (defn- walk-replace-old-page!
   [form old-name new-name]
@@ -343,6 +324,61 @@
         (when (and old-path new-path)
           (p/let [_ (rename-file-aux! repo old-path new-path)]
             (println "Renamed " old-path " to " new-path)))))))
+
+(defn favorited?
+  [page-name]
+  (let [favorites (->> (:favorites (state/get-config))
+                       (filter string?)
+                       (map string/lower-case)
+                       (set))]
+    (contains? favorites page-name)))
+
+(defn favorite-page!
+  [page-name]
+  (when-not (string/blank? page-name)
+    (let [favorites (->
+                     (cons
+                      page-name
+                      (or (:favorites (state/get-config)) []))
+                     (distinct)
+                     (vec))]
+      (config-handler/set-config! :favorites favorites))))
+
+(defn unfavorite-page!
+  [page-name]
+  (when-not (string/blank? page-name)
+    (let [favorites (->> (:favorites (state/get-config))
+                         (remove #(= (string/lower-case %) (string/lower-case page-name)))
+                         (vec))]
+      (config-handler/set-config! :favorites favorites))))
+
+(defn delete!
+  [page-name ok-handler]
+  (when page-name
+    (when-let [repo (state/get-current-repo)]
+      (let [page-name (string/lower-case page-name)
+            blocks (db/get-page-blocks page-name)
+            tx-data (mapv
+                     (fn [block]
+                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                     blocks)]
+        (db/transact! tx-data)
+
+        (delete-file! repo page-name)
+
+        ;; if other page alias this pagename,
+        ;; then just remove some attrs of this entity instead of retractEntity
+        (if (model/get-alias-source-page (state/get-current-repo) page-name)
+          (when-let [id (:db/id (db/entity [:block/name page-name]))]
+            (let [txs (mapv (fn [attribute]
+                              [:db/retract id attribute])
+                            db-schema/retract-page-attributes)]
+              (db/transact! txs)))
+          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
+
+        (unfavorite-page! page-name)
+
+        (ok-handler)))))
 
 (defn- rename-page-aux [old-name new-name]
   (when-let [repo (state/get-current-repo)]
@@ -417,6 +453,10 @@
 
       (repo-handler/push-if-auto-enabled! repo)
 
+      (when (favorited? old-name)
+        (p/let [_ (unfavorite-page! old-name)]
+          (favorite-page! new-name)))
+
       (ui-handler/re-render-root!))))
 
 (defn rename!
@@ -438,14 +478,27 @@
         :else
         (rename-page-aux old-name new-name)))))
 
-(defn handle-add-page-to-contents!
-  [page-name]
-  (let [content (str "[[" page-name "]]")]
-    (editor-handler/api-insert-new-block!
-     content
-     {:page "Contents"})
-    (notification/show! (util/format "Added to %s!" (state/get-favorites-name)) :success)
-    (editor-handler/clear-when-saved!)))
+(defn- split-col-by-element
+  [col element]
+  (let [col (vec col)
+        idx (.indexOf col element)]
+    [(subvec col 0 (inc idx))
+     (subvec col (inc idx))]))
+
+(defn reorder-favorites!
+  [{:keys [to up?]}]
+  (let [favorites (:favorites (state/get-config))
+        from (get @state/state :favorites/dragging)]
+    (when (and from to (not= from to))
+      (let [[prev next] (split-col-by-element favorites to)
+            [prev next] (mapv #(remove (fn [e] (= from e)) %) [prev next])
+            favorites (->>
+                       (if up?
+                         (concat (drop-last prev) [from (last prev)] next)
+                         (concat prev [from] next))
+                       (remove nil?)
+                       (distinct))]
+        (config-handler/set-config! :favorites favorites)))))
 
 (defn has-more-journals?
   []
@@ -463,10 +516,7 @@
 
 (defn get-page-ref-text
   [page]
-  (let [edit-block-file-path (some-> (state/get-edit-block)
-                                     (get-in [:block/file :db/id])
-                                     db/entity
-                                     :file/path)
+  (let [edit-block-file-path (model/get-block-file-path (state/get-edit-block))
         page-name (string/lower-case page)]
     (if (and edit-block-file-path
              (state/org-mode-file-link? (state/get-current-repo)))
@@ -493,7 +543,7 @@
   [repo page]
   (let [pages (or (db/get-key-value repo :recent/pages)
                   '())
-        new-pages (take 10 (distinct (cons page pages)))]
+        new-pages (take 15 (distinct (cons page pages)))]
     (db/set-key-value repo :recent/pages new-pages)))
 
 (defn template-exists?
@@ -604,28 +654,33 @@
     (when (state/enable-journals? repo)
       (state/set-today! (date/today))
       (when (or (db/cloned? repo)
-                (and (or (config/local-db? repo)
-                         (= "local" repo))
-                     ;; config file exists
-                     (let [path (config/get-config-path)]
-                       (db/get-file path))))
+                (or (config/local-db? repo)
+                    (= "local" repo)))
         (let [title (date/today)
               today-page (string/lower-case title)
-              template (state/get-default-journal-template)]
-          (when (db/page-empty? repo today-page)
-            (create! title {:redirect? false
-                            :split-namespace? false
-                            :create-first-block? (not template)
-                            :journal? true})
-            (when template
-              (let [page (db/pull [:block/name today-page])]
-                (editor-handler/insert-template!
-                 nil
-                 template
-                 {:get-pos-fn (fn []
-                                [page false false false])
-                  :page-block page})
-                (ui-handler/re-render-root!)))))))))
+              template (state/get-default-journal-template)
+              format (state/get-preferred-format repo)
+              file-name (date/journal-title->default title)
+              path (str (config/get-journals-directory) "/" file-name "."
+                        (config/get-file-extension format))
+              file-path (str "/" path)
+              repo-dir (config/get-repo-dir repo)]
+          (p/let [file-exists? (fs/file-exists? repo-dir file-path)]
+            (when (and (db/page-empty? repo today-page)
+                       (not file-exists?))
+              (create! title {:redirect? false
+                              :split-namespace? false
+                              :create-first-block? (not template)
+                              :journal? true})
+              (when template
+                (let [page (db/pull [:block/name today-page])]
+                  (editor-handler/insert-template!
+                   nil
+                   template
+                   {:get-pos-fn (fn []
+                                  [page false false false])
+                    :page-block page})
+                  (ui-handler/re-render-root!))))))))))
 
 (defn open-today-in-sidebar
   []

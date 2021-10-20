@@ -8,6 +8,7 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -75,7 +76,12 @@
   [repo uuid format content q search-mode]
   [:div [
          (when (not= search-mode :page)
-           [:div {:class "mb-1" :key "parents"} (block/block-parents {:id "block-search-block-parent" :block? true} repo (clojure.core/uuid uuid) format)])
+           [:div {:class "mb-1" :key "parents"} (block/block-parents {:id "block-search-block-parent"
+                                                                      :block? true
+                                                                      :search? true}
+                                                                     repo
+                                                                     (clojure.core/uuid uuid)
+                                                                     {:indent? false})])
          [:div {:class "font-medium" :key "content"} (highlight-exact-query content q)]]])
 
 (rum/defc highlight-fuzzy
@@ -195,7 +201,8 @@
                               (route/redirect! {:to :page
                                                 :path-params {:name page}
                                                 :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))))
-                        nil))
+                        nil)
+                      (state/close-modal!))
          :on-shift-chosen (fn [{:keys [type data alias]}]
                             (search-handler/add-search-to-recent! repo search-q)
                             (case type
@@ -224,9 +231,11 @@
                               (route/redirect! {:to :file
                                                 :path-params {:path data}})
 
-                              nil))
+                              nil)
+                            (state/close-modal!))
          :item-render (fn [{:keys [type data alias]}]
-                        (let [search-mode (state/get-search-mode)]
+                        (let [search-mode (state/get-search-mode)
+                              data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
                           [:div {:class "py-2"} (case type
                                                   :graph-add-filter
                                                   [:b search-q]
@@ -284,11 +293,10 @@
                                  "Tip: " [:code (util/->platform-shortcut "Ctrl+Shift+p")] " to open the commands palette"]
                           :interactive     true
                           :arrow true}
-                         [:a.inline-block
-                          {:style {:margin-top 1
-                                   :margin-left 12}
+                         [:a.inline-block.fade-link
+                          {:style {:margin-left 12}
                            :on-click #(state/toggle! :ui/command-palette-open?)}
-                          (svg/icon-cmd 20)])])]
+                          (ui/icon "command" {:style {:font-size 20}})])])]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
                     (remove nil?)
@@ -350,11 +358,8 @@
         blocks-count (or (db/blocks-count) 0)
         search-mode (state/sub :search/mode)
         timeout (cond
-                  (util/electron?)
-                  180
-
                   (> blocks-count 2000)
-                  500
+                  400
 
                   :else
                   300)

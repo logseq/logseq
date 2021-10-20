@@ -111,10 +111,11 @@
                (emit "completed" nil))))))))
 
 (defn- new-version-downloaded-cb
-  [_ & args]
-  (.info logger "[update-downloaded]" args)
-  (when-let [web-contents (and @*win (. @*win -webContents))]
-    (.send web-contents "auto-updater-downloaded" (bean/->js args))))
+  [_ notes name date url]
+  (.info logger "[update-downloaded]" name notes date url)
+  (when-let [web-contents (and @*win (. ^js @*win -webContents))]
+    (.send web-contents "auto-updater-downloaded"
+           (bean/->js {:notes notes :name name :date date :url url}))))
 
 (defn init-auto-updater
   [repo]

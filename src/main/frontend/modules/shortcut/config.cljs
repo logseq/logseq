@@ -12,7 +12,8 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
-            [frontend.util :refer [mac?] :as util]))
+            [frontend.util :refer [mac?] :as util]
+            [frontend.commands :as commands]))
 
 ;; TODO: how to extend this for plugins usage? An atom?
 (def default-config
@@ -42,11 +43,11 @@
    ^{:before m/prevent-default-behavior}
    {:pdf/previous-page
     {:desc    "Previous page of current pdf doc"
-     :binding "ctrl+p"
+     :binding "alt+p"
      :fn      pdf-utils/prev-page}
     :pdf/next-page
     {:desc    "Next page of current pdf doc"
-     :binding "ctrl+n"
+     :binding "alt+n"
      :fn      pdf-utils/next-page}}
 
    :shortcut.handler/auto-complete
@@ -141,7 +142,7 @@
      :fn      editor-handler/strike-through-format!}
     :editor/move-block-up
     {:desc    "Move block up"
-     :binding (if mac? "mod+shift+up"  "alt+shift+up")
+     :binding (if mac? "mod+shift+up" "alt+shift+up")
      :fn      (editor-handler/move-up-down true)}
     :editor/move-block-down
     {:desc    "Move block down"
@@ -184,13 +185,17 @@
      :binding (if mac? false "alt+w")
      :fn      editor-handler/backward-kill-word}
     :editor/replace-block-reference-at-point
-    {:desc "Replace block reference with its content at point"
+    {:desc    "Replace block reference with its content at point"
      :binding "mod+shift+r"
-     :fn editor-handler/replace-block-reference-with-content-at-point}
+     :fn      editor-handler/replace-block-reference-with-content-at-point}
     :editor/paste-text-in-one-block-at-point
-    {:desc "Paste text into one block at point"
+    {:desc    "Paste text into one block at point"
      :binding "mod+shift+v"
-     :fn editor-handler/paste-text-in-one-block-at-point}}
+     :fn      editor-handler/paste-text-in-one-block-at-point}
+    :editor/insert-youtube-timestamp
+    {:desc    "Insert youtube timestamp"
+     :binding "mod+shift+y"
+     :fn      commands/insert-youtube-timestamp}}
 
    :shortcut.handler/editor-global
    ^{:before m/enable-when-not-component-editing!}
@@ -322,12 +327,12 @@
    ;; always overrides the copy due to "mod+c mod+s"
    {:misc/copy
     {:binding "mod+c"
-     :fn     (fn [] (js/document.execCommand "copy"))}
+     :fn      (fn [] (js/document.execCommand "copy"))}
 
     :command-palette/toggle
-    {:desc "Toggle command palette"
+    {:desc    "Toggle command palette"
      :binding "mod+shift+p"
-     :fn  (fn [] (state/toggle! :ui/command-palette-open?))}}
+     :fn      (fn [] (state/toggle! :ui/command-palette-open?))}}
 
    :shortcut.handler/global-non-editing-only
    ^{:before m/enable-when-not-editing-mode!}
@@ -339,6 +344,10 @@
     {:desc    "Go to home"
      :binding "g h"
      :fn      #(route-handler/redirect! {:to :home})}
+    :go/keyboard-shortcuts
+    {:desc    "Go to keyboard shortcuts"
+     :binding "g s"
+     :fn      #(route-handler/redirect! {:to :shortcut-setting})}
     :ui/toggle-document-mode
     {:desc    "Toggle document mode"
      :binding "t d"
@@ -351,6 +360,10 @@
     {:desc    "Toggle right sidebar"
      :binding "t r"
      :fn      ui-handler/toggle-right-sidebar!}
+    :ui/toggle-left-sidebar
+    {:desc    "Toggle left sidebar"
+     :binding "t l"
+     :fn      ui-handler/toggle-left-sidebar!}
     :ui/toggle-help
     {:desc    "Toggle help"
      :binding "shift+/"
@@ -369,11 +382,11 @@
      :fn      ui-handler/toggle-wide-mode!}
     :ui/select-theme-color
     {:desc    "Select available theme colors"
-     :binding    "t i"
+     :binding "t i"
      :fn      plugin-handler/show-themes-modal!}
     :ui/goto-plugins
     {:desc    "Go to plugins dashboard"
-     :binding    "t p"
+     :binding "t p"
      :fn      plugin-handler/goto-plugins-dashboard!}
     :editor/toggle-open-blocks
     {:desc    "Toggle open blocks (collapse or expand all blocks)"
@@ -476,6 +489,7 @@
     :ui/toggle-document-mode
     :ui/toggle-brackets
     :ui/toggle-theme
+    :ui/toggle-left-sidebar
     :ui/toggle-right-sidebar
     :ui/toggle-settings
     :ui/toggle-contents]
@@ -489,6 +503,7 @@
     :sidebar/clear
     :sidebar/open-today-page
     :search/re-index
+    :editor/insert-youtube-timestamp
     :auto-complete/prev
     :auto-complete/next
     :auto-complete/complete

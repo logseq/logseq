@@ -48,9 +48,7 @@
   (when page-name
     (if block?
       (db/get-block-and-children repo block-id)
-      (do
-        (page-handler/add-page-to-recent! repo page-original-name)
-        (db/get-page-blocks repo page-name)))))
+      (db/get-page-blocks repo page-name))))
 
 (defn- open-first-block!
   [state]
@@ -172,48 +170,6 @@
                                   :page page} query)
              (str repo "-custom-query-" (:query query))))]))))
 
-(defn- delete-page!
-  [page-name]
-  (page-handler/delete! page-name
-                        (fn []
-                          (notification/show! (str "Page " page-name " was deleted successfully!")
-                                              :success)))
-  (state/close-modal!)
-  (route-handler/redirect-to-home!))
-
-(defn delete-page-dialog
-  [page-name]
-  (fn [close-fn]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div
-       [:div.sm:flex.sm:items-start
-        [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
-         [:svg.h-6.w-6.text-red-600
-          {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-          [:path
-           {:d
-            "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            :stroke-width "2"
-            :stroke-linejoin "round"
-            :stroke-linecap "round"}]]]
-        [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-         [:h3#modal-headline.text-lg.leading-6.font-medium
-          (t :page/delete-confirmation)]]]
-
-       [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-        [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type "button"
-           :class "ui__modal-enter"
-           :on-click (fn []
-                       (delete-page! page-name))}
-          (t :yes)]]
-        [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type "button"
-           :on-click close-fn}
-          (t :cancel)]]]])))
-
 (rum/defcs rename-page-dialog-inner <
   (shortcut/disable-all-shortcuts)
   (rum/local "" ::input)
@@ -269,88 +225,57 @@
               original-name]])]
          {:default-collapsed? false})]])))
 
-(defn page-menu
-  [repo t page page-name page-original-name title journal? public? developer-mode?]
-  (let [contents? (= (string/lower-case (str page-name)) "contents")
-        links (fn [] (->>
-                     [(when-not contents?
-                        {:title   (t :page/add-to-favorites)
-                         :options {:on-click (fn [] (page-handler/handle-add-page-to-contents! page-original-name))}})
-
-                      {:title "Go to presentation mode"
-                       :options {:on-click (fn []
-                                             (state/sidebar-add-block!
-                                              repo
-                                              (:db/id page)
-                                              :page-presentation
-                                              {:page page}))}}
-                      (when (and (not contents?)
-                                 (not journal?))
-                        {:title   (t :page/rename)
-                         :options {:on-click #(state/set-modal! (rename-page-dialog title page-name))}})
-
-                      (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
-                        [{:title   (t :page/open-in-finder)
-                          :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-                         {:title   (t :page/open-with-default-app)
-                          :options {:on-click #(js/window.apis.openPath file-path)}}])
-
-                      (when-not contents?
-                        {:title   (t :page/delete)
-                         :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
-
-                      (when (state/get-current-page)
-                        {:title   (t :export)
-                         :options {:on-click #(state/set-modal!
-                                               (fn []
-                                                 (export/export-blocks [(:block/uuid page)])))}})
-
-                      (when (util/electron?)
-                        {:title   (t (if public? :page/make-private :page/make-public))
-                         :options {:on-click
-                                   (fn []
-                                     (page-handler/update-public-attribute!
-                                      page-name
-                                      (if public? false true))
-                                     (state/close-modal!))}})
-
-                      (when (util/electron?)
-                        {:title   (t :page/version-history)
-                         :options {:on-click
-                                   (fn []
-                                     (shell/get-file-latest-git-log page 100))}})
-
-                      (when plugin-handler/lsp-enabled?
-                        (for [[_ {:keys [key label] :as cmd} action pid] (state/get-plugins-commands-with-type :page-menu-item)]
-                          {:title label
-                           :options {:on-click #(commands/exec-plugin-simple-command!
-                                                 pid (assoc cmd :page (state/get-current-page)) action)}}))
-
-                      (when developer-mode?
-                        {:title   "(Dev) Show page data"
-                         :options {:on-click (fn []
-                                               (let [page-data (with-out-str (pprint/pprint (db/pull (:db/id page))))]
-                                                 (println page-data)
-                                                 (notification/show!
-                                                  [:div
-                                                   [:pre.code page-data]
-                                                   [:br]
-                                                   (ui/button "Copy to clipboard"
-                                                     :on-click #(.writeText js/navigator.clipboard page-data))]
-                                                  :success
-                                                  false)))}})]
-                     (flatten)
-                     (remove nil?)))]
-    (ui/dropdown-with-links
-     (fn [{:keys [toggle-fn]}]
-       [:a.cp__vertical-menu-button
-        {:title    "More options"
-         :on-click toggle-fn}
-        (svg/vertical-dots nil)])
-     links
-     {:modal-class (util/hiccup->class
-                    "origin-top-right.absolute.right-0.top-10.mt-2.rounded-md.shadow-lg.whitespace-nowrap.dropdown-overflow-auto.page-drop-options")
-      :z-index     1})))
+(rum/defcs page-title <
+  {:will-update (fn [state]
+                  (assoc state ::title-value (atom (second (:rum/args state)))))}
+  (rum/local false ::edit?)
+  [state page-name title format fmt-journal?]
+  (when title
+    (let [*title-value (get state ::title-value)
+          *edit? (get state ::edit?)
+          repo (state/get-current-repo)
+          title (if (and (string/includes? title "[[")
+                         (string/includes? title "]]"))
+                  (let [ast (mldoc/->edn title (mldoc/default-config format))]
+                    (block/markup-element-cp {} (ffirst ast)))
+                  title)
+          hls-file? (pdf-assets/hls-file? title)
+          title (if hls-file?
+                  (pdf-assets/human-hls-filename-display title)
+                  (if fmt-journal? (date/journal-title->custom-format title) title))]
+      (if @*edit?
+        [:h1.title {:style {:margin-left -2}}
+         [:input.w-full
+          {:type          "text"
+           :auto-focus    true
+           :style         {:outline "none"
+                           :font-weight 600}
+           :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+           :default-value         @*title-value
+           :on-change     (fn [e]
+                            (let [value (util/evalue e)]
+                              (when-not (string/blank? value)
+                                (reset! *title-value value))))
+           :on-blur       (fn [e]
+                            (page-handler/rename! (or title page-name) @*title-value)
+                            (reset! *edit? false)
+                            (reset! *title-value ""))}]]
+        [:a.page-title {:on-mouse-down (fn [e]
+                                         (when (util/right-click? e)
+                                           (state/set-state! :page-title/context {:page page-name})))
+                        :on-click (fn [e]
+                                    (.preventDefault e)
+                                    (if (gobj/get e "shiftKey")
+                                      (when-let [page (db/pull repo '[*] [:block/name page-name])]
+                                        (state/sidebar-add-block!
+                                         repo
+                                         (:db/id page)
+                                         :page
+                                         {:page page}))
+                                      (when (and (not hls-file?) (not fmt-journal?))
+                                        (reset! *edit? true))))}
+         [:h1.title {:style {:margin-left -2}}
+          title]]))))
 
 ;; A page is just a logical block
 (rum/defcs page < rum/reactive
@@ -396,49 +321,26 @@
                       {:data-page-tags (text/build-data-value page-names)})
                     {})
 
-             {:class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+                  {:key path-page-name
+                   :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
            [:div.relative
             (when (and (not sidebar?)
                        (not block?))
               [:div.flex.flex-row.space-between
                [:div.flex-1.flex-row
-                [:a.page-title {:on-click (fn [e]
-                                            (.preventDefault e)
-                                            (when (gobj/get e "shiftKey")
-                                              (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                                                (state/sidebar-add-block!
-                                                 repo
-                                                 (:db/id page)
-                                                 :page
-                                                 {:page page}))))}
-                 [:h1.title {:style {:margin-left -2}}
-                  (let [title (if page-original-name
-                                (if (and (string/includes? page-original-name "[[")
-                                         (string/includes? page-original-name "]]"))
-                                  (let [ast (mldoc/->edn page-original-name (mldoc/default-config format))]
-                                    (block/markup-element-cp {} (ffirst ast)))
-                                  page-original-name)
-                                (or
-                                  page-name
-                                  path-page-name))]
-                    (if (pdf-assets/hls-file? title)
-                      (pdf-assets/human-hls-filename-display title)
-                      (if fmt-journal? (date/journal-title->custom-format title) title)))]]]
+                (page-title page-name title format fmt-journal?)]
                (when (not config/publishing?)
                  [:div.flex.flex-row
                   (when plugin-handler/lsp-enabled?
                     (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                    (plugins/hook-ui-items :pagebar))
-
-                  (page-menu repo t page page-name page-original-name title
-                             journal? public? developer-mode?)])])
+                    (plugins/hook-ui-items :pagebar))])])
             [:div
              (when (and block? (not sidebar?))
                (let [config {:id "block-parent"
                              :block? true}]
                  [:div.mb-4
-                  (block/block-parents config repo block-id format true)]))
+                  (block/block-parents config repo block-id {})]))
 
              ;; blocks
              (let [page (if block?
@@ -750,6 +652,10 @@
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1
        [:h1.title (t :all-pages)]
+       [:a.ml-1.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
+        [:span
+         (ui/icon "files")
+         [:span.ml-1 (t :all-files)]]]
        (when current-repo
          (let [pages (->> (page-handler/get-all-pages current-repo)
                          (map (fn [page] (assoc page :block/backlinks (count (:block/_refs (db/entity (:db/id page)))))))

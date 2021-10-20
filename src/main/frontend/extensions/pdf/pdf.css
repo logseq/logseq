@@ -673,10 +673,19 @@ body.is-pdf-active {
 
   #sidebar-nav-wrapper {
     border: none !important;
+    display: none;
   }
 
   #head {
     padding-left: 0;
+  }
+
+  #main-content.is-left-sidebar-open {
+    padding-left: unset;
+  }
+
+ .ls-left-sidebar-open .cp__header {
+    margin-left: unset;
   }
 }
 

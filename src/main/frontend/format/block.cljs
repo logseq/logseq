@@ -624,7 +624,7 @@
                            :pre-block? true
                            :unordered true}
                           (block-keywordize)))
-                       (select-keys first-block [:block/file :block/format :block/page]))
+                       (select-keys first-block [:block/format :block/page]))
                       blocks)
                      blocks)
             blocks (map (fn [block] (dissoc block :block/anchor)) blocks)]
@@ -708,7 +708,7 @@
 (defn- parse-block
   ([block]
    (parse-block block nil))
-  ([{:block/keys [uuid content meta file page parent left format] :as block} {:keys [with-id?]
+  ([{:block/keys [uuid content page format] :as block} {:keys [with-id?]
                                                                               :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)

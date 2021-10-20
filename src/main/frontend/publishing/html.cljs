@@ -17,6 +17,7 @@
             {:content
              "minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no",
              :name "viewport"}]
+           [:link {:type "text/css", :href "static/css/tabler-icons.min.css", :rel "stylesheet"}]
            [:link {:type "text/css", :href "static/css/style.css", :rel "stylesheet"}]
            [:link {:type "text/css", :href "static/css/custom.css", :rel "stylesheet"}]
            [:link
@@ -85,4 +86,5 @@
             ;; TODO: should make this configurable
            [:script {:src "static/js/highlight.min.js"}]
            [:script {:src "static/js/interact.min.js"}]
+           [:script {:src "static/js/code-editor.js"}]
            [:script {:src "static/js/main.js"}]]))))
