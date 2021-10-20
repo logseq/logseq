@@ -240,7 +240,9 @@
            result (cond
                     (and org? (not has-properties?))
                     (let [properties (build-properties-str format {key value})]
-                      (string/join "\n" (concat [title] scheduled deadline [properties] body-without-timestamps)))
+                      (if title
+                        (string/join "\n" (concat [title] scheduled deadline [properties] body-without-timestamps))
+                        (str properties content)))
 
                     (and has-properties? (>= start-idx 0) (> end-idx 0) (> end-idx start-idx))
                     (let [exists? (atom false)
