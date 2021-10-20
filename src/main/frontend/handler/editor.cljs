@@ -2314,6 +2314,54 @@
 
 (declare delete-and-update)
 
+(defn- dwim-in-properties
+  [state]
+  (when-not (auto-complete?)
+    (let [{:keys [block]} (get-state)]
+      (when block
+        (let [input (state/get-input)
+              content (gobj/get input "value")
+              format (:block/format (:block (get-state)))
+              property-key (:raw-content (thingatpt/property-key-at-point input))
+              org? (= format :org)
+              move-to-pos (if org? 2 3)]
+          (if org?
+            (cond
+              (and property-key (not= property-key ""))
+              (case property-key
+                ;; When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
+                "PROPERTIES"
+                (do (cursor/move-cursor-to-line-end input)
+                    (insert "\n:: ")
+                    (cursor/move-cursor-backward input move-to-pos))
+                ;; When cursor in "END", new block (respect the previous enter behavior)
+                "END"
+                (do
+                  (cursor/move-cursor-to-end input)
+                  (insert-new-block! state))
+                ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
+                (if (property/property-key-exist? format content property-key)
+                  (notification/show!
+                   [:p.content
+                    (util/format "Property key \"%s\" already exists!" property-key)]
+                   :error)
+                  (cursor/move-cursor-to-end input)))
+
+              ;; when cursor in empty property key
+              (and property-key (= property-key ""))
+              (do (delete-and-update
+                   input
+                   (cursor/line-beginning-pos input)
+                   (inc (cursor/line-end-pos input)))
+                  (property/goto-properties-end format input)
+                  (cursor/move-cursor-to-line-end input))
+              :else
+              ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
+              (do
+                (insert "\n:: ")
+                (cursor/move-cursor-backward input move-to-pos)))
+            (insert "\n")))))))
+
 (defn- keydown-new-block
   [state]
   (when-not (auto-complete?)
@@ -2364,39 +2412,7 @@
                   (do (cursor/move-cursor-to-line-end input)
                       (insert (str "\n" indent next-bullet " " checkbox)))))
               "properties-drawer"
-              (let [property-key (:raw-content (thingatpt/property-key-at-point input))
-                    org? (= (:block/format block) :org)
-                    move-to-pos (if org? 2 3)]
-                (if org?
-                  (cond
-                    (and property-key (not= property-key ""))
-                    (case property-key
-                      ;; When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
-                      "PROPERTIES"
-                      (do (cursor/move-cursor-to-line-end input)
-                          (insert "\n:: ")
-                          (cursor/move-cursor-backward input move-to-pos))
-                      ;; When cursor in "END", new block (respect the previous enter behavior)
-                      "END"
-                      (do
-                        (cursor/move-cursor-to-end input)
-                        (insert-new-block! state))
-                      ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
-                      (cursor/move-cursor-to-line-end input))
-
-                    ;; when cursor in empty property key
-                    (and property-key (= property-key ""))
-                    (do (delete-and-update
-                         input
-                         (cursor/line-beginning-pos input)
-                         (inc (cursor/line-end-pos input)))
-                        (cursor/move-cursor-to-line-end input))
-                    :else
-                    ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
-                    (do
-                      (insert "\n:: ")
-                      (cursor/move-cursor-backward input move-to-pos)))
-                  (insert "\n"))))
+              (dwim-in-properties state))
 
             (and
              (string/blank? content)

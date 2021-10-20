@@ -15,6 +15,7 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.marker :as marker]
             [frontend.util.priority :as priority]
+            [frontend.util.property :as property]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -187,12 +188,9 @@
 
 (defn ->properties
   []
-  (let [template (util/format
-                  ":PROPERTIES:\n:: \n:END:\n")
-        backward-pos 9]
-    [[:editor/input template {:type "properties"
-                              :last-pattern angle-bracket
-                              :backward-pos backward-pos}]]))
+  [[:editor/clear-current-bracket]
+   [:editor/insert-properties]
+   [:editor/move-cursor-to-properties]])
 
 ;; https://orgmode.org/manual/Structure-Templates.html
 (defn block-commands-map
@@ -534,6 +532,19 @@
                                                new-value
                                                (count prefix))))))
 
+(defmethod handle-step :editor/clear-current-bracket [[_ space?]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [edit-content (gobj/get current-input "value")
+            current-pos (cursor/pos current-input)
+            prefix (subs edit-content 0 current-pos)
+            prefix (util/replace-last angle-bracket prefix "" (boolean space?))
+            new-value (str prefix
+                           (subs edit-content current-pos))]
+        (state/set-block-content-and-last-pos! input-id
+                                               new-value
+                                               (count prefix))))))
+
 (defn compute-pos-delta-when-change-marker
   [current-input edit-content new-value marker pos]
   (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
@@ -577,6 +588,22 @@
             new-priority (util/format "[#%s]" priority)
             new-value (string/trim (priority/add-or-update-priority edit-content format new-priority))]
         (state/set-edit-content! input-id new-value)))))
+
+(defmethod handle-step :editor/insert-properties [[_ _] _format]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+        (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+              edit-content (gobj/get current-input "value")
+              new-value (property/insert-property format edit-content "" "")]
+          (state/set-edit-content! input-id new-value)))))
+
+(defmethod handle-step :editor/move-cursor-to-properties [[_]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+            edit-content (gobj/get current-input "value")]
+        (property/goto-properties-end format current-input)
+        (cursor/move-cursor-backward current-input 3)))))
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]
