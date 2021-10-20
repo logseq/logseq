@@ -21,19 +21,19 @@
             [promesa.core :as p]))
 
 (defn- get-page-content
-  [page]
+  [repo page]
   (outliner-file/tree->file-content
    (outliner-tree/blocks->vec-tree
-    (db/get-page-blocks-no-cache page) page) {:init-level 1}))
+    (db/get-page-blocks-no-cache repo page) page) {:init-level 1}))
 
 (defn- get-page-content-debug
-  [page]
+  [repo page]
   (outliner-file/tree->file-content
    (outliner-tree/blocks->vec-tree
-    (db/get-page-blocks-no-cache page) page) {:init-level 1
+    (db/get-page-blocks-no-cache repo page) page) {:init-level 1
                                               :heading-to-list? true}))
 (defn- get-file-content
-  [file-path]
+  [repo file-path]
   (if-let [page-name
            (ffirst (d/q '[:find ?pn
                           :in $ ?path
@@ -41,15 +41,15 @@
                           [?p :block/file ?f]
                           [?p :block/name ?pn]
                           [?f :file/path ?path]]
-                        (db/get-conn) file-path))]
-    (get-page-content page-name)
+                        (db/get-conn repo) file-path))]
+    (get-page-content repo page-name)
     (ffirst
      (d/q '[:find ?content
             :in $ ?path
             :where
             [?f :file/path ?path]
             [?f :file/content ?content]]
-          (db/get-conn) file-path))))
+          (db/get-conn repo) file-path))))
 
 (defn- get-blocks-contents
   [repo root-block-uuid]
@@ -78,14 +78,15 @@
 
 (defn download-file!
   [file-path]
-  (when-let [content (get-file-content file-path)]
-    (let [data (js/Blob. ["\ufeff" (array content)] ; prepend BOM
-                         (clj->js {:type "text/plain;charset=utf-8,"}))]
-      (let [anchor (gdom/getElement "download")
-            url (js/window.URL.createObjectURL data)]
-        (.setAttribute anchor "href" url)
-        (.setAttribute anchor "download" file-path)
-        (.click anchor)))))
+  (when-let [repo (state/get-current-repo)]
+    (when-let [content (get-file-content repo file-path)]
+      (let [data (js/Blob. ["\ufeff" (array content)] ; prepend BOM
+                           (clj->js {:type "text/plain;charset=utf-8,"}))]
+        (let [anchor (gdom/getElement "download")
+              url (js/window.URL.createObjectURL data)]
+          (.setAttribute anchor "href" url)
+          (.setAttribute anchor "download" file-path)
+          (.click anchor))))))
 
 (defn export-repo-as-html!
   [repo]
@@ -235,9 +236,9 @@
     (persistent! result)))
 
 (declare get-page-page&block-refs)
-(defn- get-block-page&block-refs [block-uuid embed-pages embed-blocks block-refs]
+(defn get-block-page&block-refs [repo block-uuid embed-pages embed-blocks block-refs]
   (let [block (db/entity [:block/uuid (uuid block-uuid)])
-        block-content (get-blocks-contents (state/get-current-repo) (:block/uuid block))
+        block-content (get-blocks-contents repo (:block/uuid block))
         format (:block/format block)
         ast (mldoc/->edn block-content (mldoc/default-config format))
         embed-pages-new  (get-embed-pages-from-ast ast)
@@ -253,7 +254,7 @@
         (->>
          (mapv (fn [page-name]
                  (let [{:keys [embed-pages embed-blocks block-refs]}
-                       (get-page-page&block-refs page-name embed-pages* embed-blocks* block-refs*)]
+                       (get-page-page&block-refs repo page-name embed-pages* embed-blocks* block-refs*)]
                    [embed-pages embed-blocks block-refs])) embed-pages-diff)
          (apply mapv vector) ; [[1 2 3] [4 5 6] [7 8 9]] -> [[1 4 7] [2 5 8] [3 6 9]]
          (mapv #(apply s/union %)))
@@ -261,7 +262,7 @@
         (->>
          (mapv (fn [block-uuid]
                  (let [{:keys [embed-pages embed-blocks block-refs]}
-                       (get-block-page&block-refs block-uuid embed-pages* embed-blocks* block-refs*)]
+                       (get-block-page&block-refs repo block-uuid embed-pages* embed-blocks* block-refs*)]
                    [embed-pages embed-blocks block-refs])) (s/union embed-blocks-diff block-refs-diff))
          (apply mapv vector)
          (mapv #(apply s/union %)))]
@@ -269,19 +270,19 @@
      :embed-blocks (s/union embed-blocks-1 embed-blocks-2 embed-blocks*)
      :block-refs (s/union block-refs-1 block-refs-2 block-refs*)}))
 
-(defn- get-blocks-page&block-refs [block-uuids embed-pages embed-blocks block-refs]
+(defn get-blocks-page&block-refs [repo block-uuids embed-pages embed-blocks block-refs]
   (let [[embed-pages embed-blocks block-refs]
         (reduce (fn [[embed-pages embed-blocks block-refs] block-uuid]
-                  (let [result (get-block-page&block-refs block-uuid embed-pages embed-blocks block-refs)]
+                  (let [result (get-block-page&block-refs repo block-uuid embed-pages embed-blocks block-refs)]
                     [(:embed-pages result) (:embed-blocks result) (:block-refs result)]))
                 [embed-pages embed-blocks block-refs] block-uuids)]
     {:embed-pages embed-pages
      :embed-blocks embed-blocks
      :block-refs block-refs}))
 
-(defn- get-page-page&block-refs [page-name embed-pages embed-blocks block-refs]
+(defn get-page-page&block-refs [repo page-name embed-pages embed-blocks block-refs]
   (let [page-name* (string/lower-case page-name)
-        page-content (get-page-content page-name*)
+        page-content (get-page-content repo page-name*)
         format (:block/format (db/entity [:block/name page-name*]))
         ast (mldoc/->edn page-content (mldoc/default-config format))
         embed-pages-new (get-embed-pages-from-ast ast)
@@ -297,7 +298,7 @@
         (->>
          (mapv (fn [page-name]
                  (let [{:keys [embed-pages embed-blocks block-refs]}
-                       (get-page-page&block-refs page-name embed-pages* embed-blocks* block-refs*)]
+                       (get-page-page&block-refs repo page-name embed-pages* embed-blocks* block-refs*)]
                    [embed-pages embed-blocks block-refs])) embed-pages-diff)
          (apply mapv vector)
          (mapv #(apply s/union %)))
@@ -305,7 +306,7 @@
         (->>
          (mapv (fn [block-uuid]
                  (let [{:keys [embed-pages embed-blocks block-refs]}
-                       (get-block-page&block-refs block-uuid embed-pages* embed-blocks* block-refs*)]
+                       (get-block-page&block-refs repo block-uuid embed-pages* embed-blocks* block-refs*)]
                    [embed-pages embed-blocks block-refs])) (s/union embed-blocks-diff block-refs-diff))
          (apply mapv vector)
          (mapv #(apply s/union %)))]
@@ -324,7 +325,7 @@
               (s/union embed-blocks block-refs))
 
         embed-pages-and-contents
-        (mapv (fn [page-name] [page-name (get-page-content page-name)]) embed-pages)]
+        (mapv (fn [page-name] [page-name (get-page-content repo page-name)]) embed-pages)]
     {:embed_blocks embed-blocks-and-contents
      :embed_pages embed-pages-and-contents}))
 
@@ -337,7 +338,7 @@
                                           (js/JSON.stringify
                                            (clj->js (get-export-references
                                                      repo
-                                                     (get-page-page&block-refs (first names) #{} #{} #{})))))])))))
+                                                     (get-page-page&block-refs repo (first names) #{} #{} #{})))))])))))
 
 (defn- export-files-as-opml [repo files]
   (->> files
@@ -352,7 +353,7 @@
                                           (js/JSON.stringify
                                            (clj->js (get-export-references
                                                      repo
-                                                     (get-page-page&block-refs (first names) #{} #{} #{})))))]))))))
+                                                     (get-page-page&block-refs repo (first names) #{} #{} #{})))))]))))))
 
 ;; (defn- export-files-as-opml2
 ;;   [repo files]
@@ -377,9 +378,7 @@
 (defn export-blocks-as-aux
   [repo root-block-uuids auxf]
   {:pre [(> (count root-block-uuids) 0)]}
-  (let [;; get-page&block-refs-by-query-aux (get-embed-and-refs-blocks-pages-aux)
-        ;; f #(get-page&block-refs-by-query repo % get-page&block-refs-by-query-aux {:is-block? true})
-        f #(get-export-references (state/get-current-repo) (get-blocks-page&block-refs % #{} #{} #{}))
+  (let [f #(get-export-references repo (get-blocks-page&block-refs repo % #{} #{} #{}))
         root-blocks (mapv #(db/entity [:block/uuid %]) root-block-uuids)
         blocks (mapcat #(db/get-block-and-children repo %) root-block-uuids)
         refs (f (mapv #(str (:block/uuid %)) blocks))
@@ -437,26 +436,26 @@
                                               [?e2 :block/original-name ?n2]] conn path)
                                 :format (f/get-format path)})))))
 
+
 (defn export-repo-as-markdown!
   [repo]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [files (get-file-contents-with-suffix repo)]
-      (let [heading-to-list? (state/export-heading-to-list?)
-            files
-            (export-files-as-markdown repo files heading-to-list?)
-            zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
-        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-          (when-let [anchor (gdom/getElement "export-as-markdown")]
-            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-            (.setAttribute anchor "download" (.-name zipfile))
-            (.click anchor)))))))
+  (when-let [files (get-file-contents-with-suffix repo)]
+    (let [heading-to-list? (state/export-heading-to-list?)
+          files
+          (export-files-as-markdown repo files heading-to-list?)
+          zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
+      (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+        (when-let [anchor (gdom/getElement "export-as-markdown")]
+          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+          (.setAttribute anchor "download" (.-name zipfile))
+          (.click anchor))))))
 
 (defn export-page-as-markdown!
   [page-name]
   (when-let [repo (state/get-current-repo)]
     (when-let [file (db/get-page-file page-name)]
       (when-let [path (:file/path file)]
-        (when-let [content (get-page-content page-name)]
+        (when-let [content (get-page-content repo page-name)]
           (let [names [page-name]
                 format (f/get-format path)
                 files [{:path path :content content :names names :format format}]]
@@ -487,7 +486,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [file (db/get-page-file page-name)]
       (when-let [path (:file/path file)]
-        (when-let [content (get-page-content page-name)]
+        (when-let [content (get-page-content repo page-name)]
           (let [names [page-name]
                 format (f/get-format path)
                 files [{:path path :content content :names names :format format}]]
@@ -506,7 +505,7 @@
   (when-let [repo (state/get-current-repo)]
     (when-let [file (db/get-page-file page-name)]
       (when-let [path (:file/path file)]
-        (when-let [content (get-page-content page-name)]
+        (when-let [content (get-page-content repo page-name)]
           (let [names [page-name]
                 format (f/get-format path)
                 files [{:path path :content content :names names :format format}]]
