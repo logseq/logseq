@@ -24,6 +24,11 @@
   []
   (redirect! {:to :home}))
 
+(defn redirect-to-page!
+  [page-name]
+  (redirect! {:to :page
+              :path-params {:name page-name}}))
+
 (defn get-title
   [name path-params]
   (case name
@@ -110,7 +115,7 @@
 
 (defn go-to-journals!
   []
-  (state/set-journals-length! 2)
+  (state/set-journals-length! 1)
   (let [route (if (state/custom-home-page?)
                 :all-journals
                 :home)]

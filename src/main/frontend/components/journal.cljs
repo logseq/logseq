@@ -66,6 +66,9 @@
       (ui/foldable
        [:a.initial-color.title.journal-title
         {:href     (rfe/href :page {:name page})
+         :on-mouse-down (fn [e]
+                          (when (util/right-click? e)
+                            (state/set-state! :page-title/context {:page page})))
          :on-click (fn [e]
                      (when (gobj/get e "shiftKey")
                        (when-let [page page-entity]

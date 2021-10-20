@@ -61,7 +61,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [shadow.loader :as loader]
-            [frontend.components.query-table :as query-table]))
+            [frontend.components.query-table :as query-table]
+            [frontend.mixins :as mixins]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -375,8 +376,7 @@
       (fn [e]
         (util/stop e)
         (when redirect-page-name
-          (page-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name)
-          (js/setTimeout #(model/refresh-recent-pages) 300))
+          (page-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name))
         (let [create-first-block! (fn []
                                     (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
                                       (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
@@ -1086,13 +1086,15 @@
       (cond
         (= name "query")
         [:div.dsl-query
-         (let [query (string/join ", " arguments)]
-           (custom-query (assoc config :dsl-query? true)
-                         {:title (ui/tippy {:html commands/query-doc
-                                            :interactive true}
-                                  [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
-                                   (str "Query: " query)])
-                          :query query}))]
+         (let [query (->> (string/join ", " arguments)
+                          (string/trim))]
+           (when-not (string/blank? query)
+             (custom-query (assoc config :dsl-query? true)
+                           {:title (ui/tippy {:html commands/query-doc
+                                              :interactive true}
+                                             [:span.font-medium.px-2.py-1.query-title.text-sm.rounded-md.shadow-xs
+                                              (str "Query: " query)])
+                            :query query})))]
 
         (= name "function")
         (or
@@ -1334,7 +1336,7 @@
                (seq children)
                (not collapsed?))
       (let [doc-mode? (state/sub :document/mode?)]
-        [:div.block-children {:style {:margin-left (if doc-mode? 12 21)
+        [:div.block-children {:style {:margin-left (if doc-mode? 18 29)
                                       :display (if collapsed? "none" "")}}
          (for [child children]
            (when (map? child)
@@ -1365,7 +1367,8 @@
         has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
                     (not (:pre-block? block))
-                    (or has-children-blocks? (seq body)))
+                    (or has-children-blocks?
+                        (and (seq (:block/title block)) (seq body))))
         control-show? (and
                        (or (and (seq (:block/title block))
                                 (seq body))
@@ -1381,11 +1384,8 @@
               :margin-top 0
               :float "left"}}
 
-     [:a.block-control.opacity-50.hover:opacity-100
+     [:a.block-control
       {:id (str "control-" uuid)
-       :style {:width 14
-               :height 16
-               :margin-right 2}
        :on-click (fn [e]
                    (util/stop e)
                    (when-not (and (not collapsed?) (not has-child?))
@@ -1415,7 +1415,8 @@
          bullet
 
          (or
-          (and empty-content? (not edit?)
+          (and empty-content?
+               (not edit?)
                (not (:block/top? block))
                (not (:block/bottom? block))
                (not (util/react *control-show?)))
@@ -1835,6 +1836,22 @@
                 (rum/with-key (block-child block)
                   (str uuid "-" idx)))))])]]]))
 
+(rum/defc block-refs-count < rum/reactive
+  [block]
+  (let [block-refs-count (model/get-block-refs-count (:block/uuid block))]
+    (when (and block-refs-count (> block-refs-count 0))
+      [:div
+       [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
+        {:title "Open block references"
+         :style {:margin-top -1}
+         :on-click (fn []
+                     (state/sidebar-add-block!
+                      (state/get-current-repo)
+                      (:db/id block)
+                      :block-ref
+                      {:block block}))}
+        block-refs-count]])))
+
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid title body meta content page format repo children marker properties pre-block? idx] :as block} edit-input-id block-id slide? heading-level edit?]
   (let [editor-box (get config :editor-box)
@@ -1889,19 +1906,7 @@
                          [:a.fade-link
                           summary]]))))
 
-        (let [block-refs-count (count (:block/_refs (db/entity (:db/id block))))]
-          (when (and block-refs-count (> block-refs-count 0))
-            [:div
-             [:a.open-block-ref-link.bg-base-2.text-sm.ml-2
-              {:title "Open block references"
-               :style {:margin-top -1}
-               :on-click (fn []
-                           (state/sidebar-add-block!
-                            (state/get-current-repo)
-                            (:db/id block)
-                            :block-ref
-                            {:block block}))}
-              block-refs-count]]))]])))
+        (block-refs-count block)]])))
 
 (defn non-dragging?
   [e]
@@ -2084,7 +2089,8 @@
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/properties
                                         :block/parent :block/left
-                                        :block/children :block/content]
+                                        :block/children :block/content
+                                        :block/_refs]
                           config-compare-keys [:show-cloze?]]
                       (or
                        (not= (select-keys (second (:rum/args old-state)) compare-keys)
@@ -2313,7 +2319,8 @@
         repo (state/get-current-repo)
         result-atom (atom nil)
         query-atom (if (:dsl-query? config)
-                     (let [result (query-dsl/query (state/get-current-repo) (:query query))]
+                     (let [q (:query query)
+                           result (query-dsl/query (state/get-current-repo) q)]
                        (cond
                          (and (util/electron?) (string? result)) ; full-text search
                          (if (string/blank? result)
@@ -2353,37 +2360,42 @@
     [:p "Query failed: "]
     [:pre (str q)]]
    (let [dsl-query? (:dsl-query? config)
-         query-atom (:query-atom state)]
-     (let [current-block-uuid (or (:block/uuid (:block config))
-                                  (:block/uuid config))
-           current-block (db/entity [:block/uuid current-block-uuid])
-           ;; exclude the current one, otherwise it'll loop forever
-           remove-blocks (if current-block-uuid [current-block-uuid] nil)
-           query-result (and query-atom (rum/react query-atom))
-           table? (or (get-in current-block [:block/properties :query-table])
-                      (and (string? query) (string/ends-with? (string/trim query) "table")))
-           transformed-query-result (when query-result
-                                      (db/custom-query-result-transform query-result remove-blocks q))
-           not-grouped-by-page? (or table?
-                                    (boolean (:result-transform q))
-                                    (and (string? query) (string/includes? query "(by-page false)")))
-           result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
-                    (db-utils/group-by-page transformed-query-result)
-                    transformed-query-result)
-           _ (when-let [query-result (:query-result config)]
-               (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
-                 (reset! query-result result)))
-           view-f (and view (sci/eval-string (pr-str view)))
-           only-blocks? (:block/uuid (first result))
-           blocks-grouped-by-page? (and (seq result)
-                                        (not not-grouped-by-page?)
-                                        (coll? (first result))
-                                        (:block/name (ffirst result))
-                                        (:block/uuid (first (second (first result))))
-                                        true)
-           built-in? (built-in-custom-query? title)
-           page-list? (and (seq result)
-                           (:block/name (first result)))]
+         query-atom (:query-atom state)
+         current-block-uuid (or (:block/uuid (:block config))
+                                (:block/uuid config))
+         current-block (db/entity [:block/uuid current-block-uuid])
+         ;; exclude the current one, otherwise it'll loop forever
+         remove-blocks (if current-block-uuid [current-block-uuid] nil)
+         query-result (and query-atom (rum/react query-atom))
+         table? (or (get-in current-block [:block/properties :query-table])
+                    (and (string? query) (string/ends-with? (string/trim query) "table")))
+         transformed-query-result (when query-result
+                                    (db/custom-query-result-transform query-result remove-blocks q))
+         not-grouped-by-page? (or table?
+                                  (boolean (:result-transform q))
+                                  (and (string? query) (string/includes? query "(by-page false)")))
+         result (if (and (:block/uuid (first transformed-query-result)) (not not-grouped-by-page?))
+                  (db-utils/group-by-page transformed-query-result)
+                  transformed-query-result)
+         _ (when-let [query-result (:query-result config)]
+             (let [result (remove (fn [b] (some? (get-in b [:block/properties :template]))) result)]
+               (reset! query-result result)))
+         view-f (and view (sci/eval-string (pr-str view)))
+         only-blocks? (:block/uuid (first result))
+         blocks-grouped-by-page? (and (seq result)
+                                      (not not-grouped-by-page?)
+                                      (coll? (first result))
+                                      (:block/name (ffirst result))
+                                      (:block/uuid (first (second (first result))))
+                                      true)
+         built-in? (built-in-custom-query? title)
+         page-list? (and (seq result)
+                         (:block/name (first result)))
+         nested-query? (:custom-query? config)]
+     (if nested-query?
+       [:code (if dsl-query?
+                (util/format "{{query %s}}" query)
+                "{{query hidden}}")]
        [:div.custom-query.mt-4 (get config :attr {})
         (when-not (and built-in? (empty? result))
           (ui/foldable
@@ -2608,7 +2620,10 @@
 
         ["Custom" "query" _options result content]
         (try
-          (let [query (reader/read-string content)]
+          (let [query (reader/read-string content)
+                query (if (string? query)
+                        (string/trim query)
+                        query)]
             (custom-query config query))
           (catch js/Error e
             (println "read-string error:")
@@ -2777,11 +2792,7 @@
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:class (when doc-mode? "document-mode")
-        :style {:margin-left (cond
-                               sidebar?
-                               0
-                               :else
-                               -10)}}
+        :style {:margin-left (if sidebar? 0 -10)}}
        (lazy-blocks config blocks)])))
 
 ;; headers to hiccup

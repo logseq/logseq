@@ -47,8 +47,11 @@
 
 (defn get-page-file-path
   ([] (get-page-file-path (state/get-current-page)))
-  ([page-name] (when-let [page (db/entity [:block/name page-name])]
-                 (:file/path (:block/file page)))))
+  ([page-name]
+   (when page-name
+     (let [page-name (string/lower-case page-name)]
+       (when-let [page (db/entity [:block/name page-name])]
+        (:file/path (:block/file page)))))))
 
 (defn- build-title [page]
   (let [original-name (:block/original-name page)]
@@ -155,7 +158,6 @@
                                       (str (name key) ":: " value))
                      :block/format format
                      :block/properties {key value}
-                     :block/file (:block/file page)
                      :block/pre-block? true}]
           (outliner-core/insert-node (outliner-core/block block)
                                      (outliner-core/block page)
@@ -323,6 +325,14 @@
           (p/let [_ (rename-file-aux! repo old-path new-path)]
             (println "Renamed " old-path " to " new-path)))))))
 
+(defn favorited?
+  [page-name]
+  (let [favorites (->> (:favorites (state/get-config))
+                       (filter string?)
+                       (map string/lower-case)
+                       (set))]
+    (contains? favorites page-name)))
+
 (defn favorite-page!
   [page-name]
   (when-not (string/blank? page-name)
@@ -443,8 +453,9 @@
 
       (repo-handler/push-if-auto-enabled! repo)
 
-      (p/let [_ (unfavorite-page! old-name)]
-        (favorite-page! new-name))
+      (when (favorited? old-name)
+        (p/let [_ (unfavorite-page! old-name)]
+          (favorite-page! new-name)))
 
       (ui-handler/re-render-root!))))
 
@@ -505,10 +516,7 @@
 
 (defn get-page-ref-text
   [page]
-  (let [edit-block-file-path (some-> (state/get-edit-block)
-                                     (get-in [:block/file :db/id])
-                                     db/entity
-                                     :file/path)
+  (let [edit-block-file-path (model/get-block-file-path (state/get-edit-block))
         page-name (string/lower-case page)]
     (if (and edit-block-file-path
              (state/org-mode-file-link? (state/get-current-repo)))
@@ -535,7 +543,7 @@
   [repo page]
   (let [pages (or (db/get-key-value repo :recent/pages)
                   '())
-        new-pages (take 10 (distinct (cons page pages)))]
+        new-pages (take 15 (distinct (cons page pages)))]
     (db/set-key-value repo :recent/pages new-pages)))
 
 (defn template-exists?
@@ -650,21 +658,29 @@
                     (= "local" repo)))
         (let [title (date/today)
               today-page (string/lower-case title)
-              template (state/get-default-journal-template)]
-          (when (db/page-empty? repo today-page)
-            (create! title {:redirect? false
-                            :split-namespace? false
-                            :create-first-block? (not template)
-                            :journal? true})
-            (when template
-              (let [page (db/pull [:block/name today-page])]
-                (editor-handler/insert-template!
-                 nil
-                 template
-                 {:get-pos-fn (fn []
-                                [page false false false])
-                  :page-block page})
-                (ui-handler/re-render-root!)))))))))
+              template (state/get-default-journal-template)
+              format (state/get-preferred-format repo)
+              file-name (date/journal-title->default title)
+              path (str (config/get-journals-directory) "/" file-name "."
+                        (config/get-file-extension format))
+              file-path (str "/" path)
+              repo-dir (config/get-repo-dir repo)]
+          (p/let [file-exists? (fs/file-exists? repo-dir file-path)]
+            (when (and (db/page-empty? repo today-page)
+                       (not file-exists?))
+              (create! title {:redirect? false
+                              :split-namespace? false
+                              :create-first-block? (not template)
+                              :journal? true})
+              (when template
+                (let [page (db/pull [:block/name today-page])]
+                  (editor-handler/insert-template!
+                   nil
+                   template
+                   {:get-pos-fn (fn []
+                                  [page false false false])
+                    :page-block page})
+                  (ui-handler/re-render-root!))))))))))
 
 (defn open-today-in-sidebar
   []

@@ -493,7 +493,8 @@
           pos (if last-pattern
                 (string/last-index-of content last-pattern pos)
                 pos)
-          beginning-of-line? (text/beginning-of-line content pos)
+          beginning-of-line? (or (cursor/beginning-of-line? input)
+                                 (= 1 (:pos @*angle-bracket-caret-pos)))
           value (if (and (contains? #{"block" "properties"} type)
                          (not beginning-of-line?))
                   (str "\n" value)

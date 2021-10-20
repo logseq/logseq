@@ -891,6 +891,10 @@
             }
           }
 
+          if (parent && parent.classList.contains('pdfViewer')) {
+            parent = parent.parentElement
+          }
+
           parent.scrollTop = offsetY
         }
 

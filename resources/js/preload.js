@@ -115,7 +115,7 @@ contextBridge.exposeInMainWorld('apis', {
 
     await fs.promises.mkdir(assetsRoot, { recursive: true })
 
-    from = decodeURIComponent(from || getFilePathFromClipboard())
+    from = from && decodeURIComponent(from || getFilePathFromClipboard())
 
     if (from) {
       // console.debug('copy file: ', from, dest)

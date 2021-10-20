@@ -14,10 +14,19 @@
   (let [lines (string/split-lines content)]
     (string/join (str "\n" spaces-tabs) lines)))
 
+(defn- allowed-block-as-title?
+  "Allowed to be in the first line of a block (a.k.a block title)"
+  [title body]
+  (and (not (seq title))
+       (contains?
+        #{"Quote" "Table" "Drawer" "Property_Drawer" "Footnote_Definition" "Custom" "Export" "Src" "Example"}
+        (ffirst body))))
+
 (defn transform-content
   [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
   (let [content (or content "")
         heading-with-title? (seq title)
+        allowed-block-as-title? (allowed-block-as-title? title body)
         first-block? (= left page)
         pre-block? (and first-block? pre-block?)
         markdown? (= format :markdown)
@@ -60,7 +69,7 @@
                               markdown-top-heading?
                               ""
 
-                              heading-with-title?
+                              (or heading-with-title? allowed-block-as-title?)
                               " "
 
                               (string/blank? new-content)
@@ -125,15 +134,9 @@
       (let [file-path (config/get-file-path repo path)
             page-blocks (db/get-page-blocks-no-cache (:block/name page))
             file {:file/path file-path}
-            tx (->>
-                (concat
-                 [{:file/path file-path}
-                  {:block/name (:block/name page)
-                   :block/file file}]
-                 (map (fn [block] {:db/id (:db/id block)
-                                  :block/file file})
-                   page-blocks))
-                (remove nil?))]
+            tx [{:file/path file-path}
+                {:block/name (:block/name page)
+                 :block/file file}]]
         (db/transact! tx)
         (when ok-handler (ok-handler))))))
 

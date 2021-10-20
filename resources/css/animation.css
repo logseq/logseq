@@ -39,33 +39,9 @@
   -moz-animation-fill-mode: forwards;
   animation-fill-mode: forwards;
 
-  -webkit-animation-duration: 2s;
-  -moz-animation-duration: 2s;
-  animation-duration: 2s;
-}
-
-.fade-in.one {
-  -webkit-animation-delay: 0.5s;
-  -moz-animation-delay: 0.5s;
-  animation-delay: 0.5s;
-}
-
-.fade-in.two {
-  -webkit-animation-delay: 1s;
-  -moz-animation-delay: 1s;
-  animation-delay: 1s;
-}
-
-.fade-in.three {
-  -webkit-animation-delay: 1.5s;
-  -moz-animation-delay: 1.5s;
-  animation-delay: 1.5s;
-}
-
-.fade-in.four {
-  -webkit-animation-delay: 2s;
-  -moz-animation-delay: 2s;
-  animation-delay: 2s;
+  -webkit-animation-duration: 1s;
+  -moz-animation-duration: 1s;
+  animation-duration: 1s;
 }
 
 /* page transition */

@@ -103,7 +103,6 @@
       :editor/document-mode? document-mode?
       :editor/args nil
       :editor/on-paste? false
-      :editor/recent-pages nil
 
       :db/last-transact-time {}
       :db/last-persist-transact-ids {}
@@ -175,7 +174,11 @@
 
       :encryption/graph-parsing? false
 
-      :favorites/dragging nil})))
+      :favorites/dragging nil
+
+      :srs/mode? false
+
+      :srs/cards-due-count nil})))
 
 
 (defn sub
@@ -248,6 +251,10 @@
 (defn get-custom-css-link
   []
   (:custom-css-url (get-config)))
+
+(defn get-custom-js-link
+  []
+  (:custom-js-url (get-config)))
 
 (defn get-default-journal-template
   []

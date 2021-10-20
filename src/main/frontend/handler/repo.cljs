@@ -106,49 +106,45 @@
             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-path content)]
       (file-handler/reset-file! repo-url path content))))
 
-(defn create-today-journal-if-not-exists
-  ([repo-url]
-   (create-today-journal-if-not-exists repo-url nil))
-  ([repo-url {:keys [content write-file?]
-              :or {write-file? true}}]
-   (spec/validate :repos/url repo-url)
-   (when (state/enable-journals? repo-url)
-     (let [repo-dir (config/get-repo-dir repo-url)
-           format (state/get-preferred-format repo-url)
-           title (date/today)
-           file-name (date/journal-title->default title)
-           default-content (util/default-content-with-title format)
-           template (state/get-default-journal-template)
-           template (when (and template
-                             (not (string/blank? template)))
-                      template)
-           content (cond
-                     content
-                     content
+(defn- create-today-journal-if-not-exists
+  [repo-url {:keys [content]}]
+  (spec/validate :repos/url repo-url)
+  (when (state/enable-journals? repo-url)
+    (let [repo-dir (config/get-repo-dir repo-url)
+          format (state/get-preferred-format repo-url)
+          title (date/today)
+          file-name (date/journal-title->default title)
+          default-content (util/default-content-with-title format)
+          template (state/get-default-journal-template)
+          template (when (and template
+                              (not (string/blank? template)))
+                     template)
+          content (cond
+                    content
+                    content
 
-                     template
-                     (str default-content template)
+                    template
+                    (str default-content template)
 
-                     :else
-                     default-content)
-           path (str (config/get-journals-directory) "/" file-name "."
-                     (config/get-file-extension format))
-           file-path (str "/" path)
-           page-exists? (db/entity repo-url [:block/name (string/lower-case title)])
-           empty-blocks? (db/page-empty? repo-url (string/lower-case title))]
-       (when (or empty-blocks? (not page-exists?))
-         (p/let [_ (nfs/check-directory-permission! repo-url)
-                 _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
-                 file-exists? (fs/file-exists? repo-dir file-path)]
-           (when-not file-exists?
-             (p/let [_ (file-handler/reset-file! repo-url path content)]
-               (if write-file?
-                 (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
-                   (when-not (state/editing?)
-                     (ui-handler/re-render-root!))
-                   (git-handler/git-add repo-url path))
-                 (when-not (state/editing?)
-                   (ui-handler/re-render-root!)))))))))))
+                    :else
+                    default-content)
+          path (str (config/get-journals-directory) "/" file-name "."
+                    (config/get-file-extension format))
+          file-path (str "/" path)
+          page-exists? (db/entity repo-url [:block/name (string/lower-case title)])
+          empty-blocks? (db/page-empty? repo-url (string/lower-case title))]
+      (when (or empty-blocks? (not page-exists?))
+        (p/let [_ (nfs/check-directory-permission! repo-url)
+                _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+                file-exists? (fs/file-exists? repo-dir file-path)]
+          (when-not file-exists?
+            (p/let [_ (file-handler/reset-file! repo-url path content)]
+              (p/let [_ (fs/create-if-not-exists repo-url repo-dir file-path content)]
+                (when-not (state/editing?)
+                  (ui-handler/re-render-root!))
+                (git-handler/git-add repo-url path))))
+          (when-not (state/editing?)
+            (ui-handler/re-render-root!)))))))
 
 (defn create-default-files!
   ([repo-url]

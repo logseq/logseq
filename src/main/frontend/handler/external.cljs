@@ -11,7 +11,8 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.format.block :as block]
             [frontend.handler.page :as page]
-            [frontend.handler.editor :as editor]))
+            [frontend.handler.editor :as editor]
+            [frontend.util :as util]))
 
 (defn index-files!
   [repo files finish-handler]
@@ -23,13 +24,16 @@
                      (let [title (:title file)
                            journal? (date/valid-journal-title? title)]
                        (when-let [text (:text file)]
-                         (let [path (str (if journal?
+                         (let [title (if journal?
+                                       (date/journal-title->default title)
+                                       (string/replace title "/" "-"))
+                               title (-> (util/page-name-sanity title)
+                                         (string/replace "\n" " "))
+                               path (str (if journal?
                                            (config/get-journals-directory)
                                            (config/get-pages-directory))
                                          "/"
-                                         (if journal?
-                                           (date/journal-title->default title)
-                                           (string/replace title "/" "-"))
+                                         title
                                          ".md")]
                            {:file/path path
                             :file/content text}))))

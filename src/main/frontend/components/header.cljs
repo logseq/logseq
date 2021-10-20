@@ -3,6 +3,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.page :as page]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
@@ -27,9 +28,7 @@
   []
   [:a.button
    {:href     (rfe/href :home)
-    :on-click (fn []
-                (util/scroll-to-top)
-                (state/set-journals-length! 2))}
+    :on-click route-handler/go-to-journals!}
    (ui/icon "home" {:style {:fontSize 20}})])
 
 (rum/defc login
@@ -71,7 +70,7 @@
 
       [:a#left-menu.cp__header-left-menu.button
        {:on-click on-click
-        :style {:margin-left 10}}
+        :style {:margin-left 12}}
        (ui/icon "menu-2" {:style {:fontSize 20}})])))
 
 (rum/defc dropdown-menu < rum/reactive
@@ -79,7 +78,7 @@
   (let [projects (state/sub [:me :projects])
         developer-mode? (state/sub [:ui/developer-mode?])
         logged? (state/logged?)
-        page-menu (page/page-menu t)
+        page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
                            (concat page-menu [{:hr true}]))]
     (ui/dropdown-with-links
@@ -128,7 +127,7 @@
      )))
 
 (rum/defc back-and-forward
-  [electron-mac?]
+  []
   [:div.flex.flex-row
    [:a.it.navigation.nav-left.button
     {:title "Go Back" :on-click #(js/window.history.back)}
@@ -143,7 +142,7 @@
         _ (rum/use-effect!
             (fn []
               (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
-                (let [callback (fn [_ & args]
+                (let [callback (fn [_ args]
                                  (js/console.debug "[new-version downloaded] args:" args)
                                  (let [args (bean/->clj args)]
                                    (set-downloaded args)
@@ -166,7 +165,6 @@
         repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
-        electron-not-mac? (and (util/electron?) (not electron-mac?))
         show-open-folder? (and (or (nfs/supported?)
                                    (mobile-util/is-native-platform?))
                                (empty? repos)
@@ -180,67 +178,67 @@
                              (when (and (util/electron?)
                                         (or (.. target -classList (contains "cp__header"))))
                                (js/window.apis.toggleMaxOrMinActiveWindow))))}
-       (left-menu-button {:on-click (fn []
-                                      (open-fn)
-                                      (state/set-left-sidebar-open!
-                                        (not (:ui/left-sidebar-open? @state/state))))})
+       [:div.l.flex
+        (left-menu-button {:on-click (fn []
+                                       (open-fn)
+                                       (state/set-left-sidebar-open!
+                                         (not (:ui/left-sidebar-open? @state/state))))})
 
+        (when current-repo
+          (ui/tippy
+            {:html        [:div.text-sm.font-medium
+                           "Shortcut: "
+                           ;; TODO: Pull from config so it displays custom shortcut, not just the default
+                           [:code (util/->platform-shortcut "Ctrl + k")]]
+             :interactive true
+             :delay       2000
+             :position    "right"
+             :arrow       true}
+            [:a.button#search-button
+             {:on-click #(state/pub-event! [:go/search])}
+             (ui/icon "search" {:style {:fontSize 20}})]))]
 
-       (when current-repo
-         (ui/tippy
-          {:html [:div.text-sm.font-medium
-                  "Shortcut: "
-                  ;; TODO: Pull from config so it displays custom shortcut, not just the default
-                  [:code (util/->platform-shortcut "Ctrl + k")]]
-           :interactive true
-           :delay [2000, 0]
-           :arrow true}
-          [:a.button#search-button
-           {:on-click #(state/pub-event! [:go/search])}
-           (ui/icon "search" {:style {:fontSize 20}})]))
+       [:div.r.flex
+        (when (and
+                (not (mobile-util/is-native-platform?))
+                (not (util/electron?)))
+          (login logged?))
 
-       [:div.flex-1.flex] ;; Spacer in the middle ------------------------------
+        (when plugin-handler/lsp-enabled?
+          (plugins/hook-ui-items :toolbar))
 
-       (when (and
-              (not (mobile-util/is-native-platform?))
-              (not (util/electron?)))
-         (login logged?))
+        (when (not= (state/get-current-route) :home)
+          (home-button))
 
-       (when plugin-handler/lsp-enabled?
-         (plugins/hook-ui-items :toolbar))
+        (when (util/electron?) (back-and-forward))
 
-       (when (not= (state/get-current-route) :home)
-         (home-button))
+        (new-block-mode)
 
-       (when electron-mac? (back-and-forward electron-mac?))
+        (when refreshing?
+          [:div {:class "animate-spin-reverse"}
+           svg/refresh])
 
-       (new-block-mode)
+        (repo/sync-status current-repo)
 
-       (when refreshing?
-         [:div {:class "animate-spin-reverse"}
-          svg/refresh])
+        (when show-open-folder?
+          [:a.text-sm.font-medium.button
+           {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
+           [:div.flex.flex-row.text-center.open-button__inner.items-center
+            [:span.inline-block.open-button__icon-wrapper svg/folder-add]
+            (when-not config/mobile?
+              [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
+               (t :open)])]])
 
-       (repo/sync-status current-repo)
+        (when config/publishing?
+          [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
+           (t :graph)])
 
-       (when show-open-folder?
-         [:a.text-sm.font-medium.button
-          {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
-          [:div.flex.flex-row.text-center.open-button__inner.items-center
-           [:span.inline-block.open-button__icon-wrapper svg/folder-add]
-           (when-not config/mobile?
-             [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
-              (t :open)])]])
+        (dropdown-menu {:me           me
+                        :t            t
+                        :current-repo current-repo
+                        :default-home default-home})
 
-       (when config/publishing?
-         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}
-          (t :graph)])
+        (when (not (state/sub :ui/sidebar-open?))
+          (sidebar/toggle))
 
-       (dropdown-menu {:me me
-                       :t t
-                       :current-repo current-repo
-                       :default-home default-home})
-
-       (when (not (state/sub :ui/sidebar-open?))
-         (sidebar/toggle))
-
-       (updater-tips-new-version t)])))
+        (updater-tips-new-version t)]])))

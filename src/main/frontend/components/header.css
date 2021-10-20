@@ -5,8 +5,8 @@
   padding-right: 0.5rem;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex: 0 0 auto;
-  background-color: var(--ls-primary-background-color, #fff);
   position: sticky;
   position: -webkit-sticky;
   top: 0;
@@ -15,16 +15,15 @@
   user-select: none;
   line-height: 1;
 
-  .it svg {
-    transform: scale(0.8);
+  > .l {
+    width: var(--ls-left-sidebar-width);
+    height: 100%;
+    align-items: center;
+    transition: padding-left .2s;
   }
 
-  .repos {
-    .dropdown-wrapper {
-      left: unset;
-      right: -46px;
-      min-width: 14rem;
-    }
+  .it svg {
+    transform: scale(0.8);
   }
 
   a.button {
@@ -53,7 +52,9 @@
 
     > p {
       margin: 0;
-      padding: 0 0 6px 0;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
     }
 
     a {
@@ -62,8 +63,9 @@
 
     a.restart {
       position: relative;
-      top: 3px;
       cursor: pointer !important;
+      display: flex;
+      align-items: center;
 
       svg {
         color: currentColor !important;
@@ -78,14 +80,16 @@
 }
 
 .is-electron.is-mac .cp__header {
-  padding-left: 78px;
+  > .l {
+    padding-left: 78px;
+  }
 }
 
 .cp__header .navigation svg {
   transform: scale(0.7);
 }
 
-.is-electron.is-mac.is-fullscreen .cp__header {
+.is-electron.is-mac.is-fullscreen .cp__header > .l {
   padding-left: 0;
 }
 

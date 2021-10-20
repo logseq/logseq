@@ -4,8 +4,9 @@
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
   --ls-font-family: 'Inter';
-  --ls-main-content-max-width: 820px;
+  --ls-main-content-max-width: 810px;
   --ls-main-content-max-width-wide: 100%;
+  --ls-scrollbar-width: 6px;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
   --ls-left-sidebar-width: 240px;
@@ -811,10 +812,6 @@ li p:last-child,
 
 .aspect-ratio-21\/9 {
   padding-top: 42.86%;
-}
-
-.footdef {
-  margin: 1rem 0;
 }
 
 .admonitionblock {

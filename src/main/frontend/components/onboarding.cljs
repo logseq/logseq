@@ -5,7 +5,8 @@
             [frontend.handler.route :as route-handler]
             [frontend.util :as util]
             [rum.core :as rum]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.ui :as ui]))
 
 (rum/defc intro
   []
@@ -182,14 +183,14 @@
     [:div.help.cp__sidebar-help-docs
      (let [discord-with-icon [:div.flex-row.inline-flex.items-center
                               [:span.mr-1 (t :help/community)]
-                              svg/discord]
+                              (ui/icon "brand-discord" {:style {:font-size 20}})]
            list
            [{:title "Usage"
              :children [[[:a
                           {:on-click (fn [] (route-handler/redirect! {:to :shortcut-setting}))}
                           [:div.flex-row.inline-flex.items-center
                            [:span.mr-1 (t :help/shortcuts)]
-                           (svg/icon-cmd 18)]]]
+                           (ui/icon "command" {:style {:font-size 20}})]]]
                         [(t :help/docs) "https://logseq.github.io/"]
                         ["FAQ" "https://logseq.github.io/#/page/faq"]]}
 

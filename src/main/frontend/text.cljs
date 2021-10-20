@@ -256,28 +256,3 @@
                             (not (string/starts-with? (string/lower-case line) key)))
                           lines)]
     (string/join "\n" new-lines)))
-
-(defn beginning-of-line
-  [content pos]
-  (or (zero? pos)
-      (when-let [pre-char (subs content (dec pos) pos)]
-        (println "pre-char: " pre-char)
-        (= pre-char \newline))))
-
-(defn end-of-line
-  [content pos]
-  (or (= pos (count content))
-      (when-let [next-char (subs content pos (inc pos))]
-        (= next-char \newline))))
-
-(defn goto-end-of-line
-  [content pos]
-  (when-not (end-of-line content pos)
-    (or (string/index-of content \newline pos)
-        (count content))))
-
-(defn goto-beginning-of-line
-  [content pos]
-  (when-not (beginning-of-line content pos)
-    (or (string/last-index-of content \newline pos)
-        0)))

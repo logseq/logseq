@@ -9,10 +9,12 @@
             [frontend.components.settings :as settings]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
+            [frontend.db.react :as db-react]
             [frontend.components.svg :as svg]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.editor :as editor-handler]
@@ -27,7 +29,8 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]
-            [frontend.extensions.srs :as srs]))
+            [frontend.extensions.srs :as srs]
+            [frontend.extensions.pdf.assets :as pdf-assets]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -93,7 +96,7 @@
                             {:page page-entity}))
                          (route-handler/redirect! {:to :page
                                                    :path-params {:name name}}))))}
-     original-name]))
+     (pdf-assets/fix-local-asset-filename original-name)]))
 
 (rum/defcs favorite-item <
   (rum/local nil ::up?)
@@ -138,17 +141,19 @@
       (rfe/push-state :page {:name "Favorites"})
       (util/stop e))}
 
-   (let [favorites (:favorites (state/sub-graph-config))]
+   (let [favorites (->> (:favorites (state/sub-graph-config))
+                        (remove string/blank?)
+                        (filter string?))]
      (when (seq favorites)
        [:ul.favorites
         (for [name favorites]
           (when-not (string/blank? name)
-            (favorite-item t name)))]))))
+            (when (db/entity [:block/name (string/lower-case name)])
+                (favorite-item t name))))]))))
 
 (rum/defc recent-pages
   < rum/reactive db-mixins/query
   [t]
-
   (nav-content-item
    [:a.flex.items-center.text-sm.font-medium.rounded-md
     (ui/icon "history mr-1" {:style {:font-size 18}})
@@ -157,20 +162,30 @@
 
    {:class "recent"}
 
-   (let [pages (state/sub :editor/recent-pages)]
+   (let [pages (->> (db/sub-key-value :recent/pages)
+                    (remove string/blank?)
+                    (filter string?))]
      [:ul
       (for [name pages]
-        [:li {:key name}
-         (page-name name)])])))
+        (when (db/entity [:block/name (string/lower-case name)])
+          [:li {:key name}
+           (page-name name)]))])))
 
-(rum/defc flashcards < rum/reactive
-  []
-  (let [num (srs/get-srs-cards-total)]
+(rum/defcs flashcards < db-mixins/query rum/reactive
+  {:did-mount (fn [state]
+                (js/setTimeout
+                 (fn []
+                   (let [total (srs/get-srs-cards-total)]
+                     (state/set-state! :srs/cards-due-count total)))
+                 200)
+                state)}
+  [state]
+  (let [num (state/sub :srs/cards-due-count)]
     [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
      (ui/icon "infinity mr-3" {:style {:font-size 20}})
      [:span.flex-1 "Flashcards"]
      (when (and num (not (zero? num)))
-       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full num])]))
+       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
 (rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn]
@@ -178,19 +193,13 @@
     (let [active? (fn [route] (= route (get-in route-match [:data :name])))
           page-active? (fn [page]
                          (= page (get-in route-match [:parameters :path :name])))
-          left-sidebar? (state/sub :ui/left-sidebar-open?)
-          white? (= "white" (state/sub :ui/theme))]
+          left-sidebar? (state/sub :ui/left-sidebar-open?)]
       (when left-sidebar?
         [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
-         [:div.flex.flex-col.pb-4 {:style {:padding-top "0.75rem"}}
-          (when-not (util/mobile?)
-            [:div.flex.items-center.flex-shrink-0.px-4.mb-5
-             [:a.mr-3 {:href (rfe/href :home)}
-              (svg/logo (not white?))]
-             [:div.repos
-              (repo/repos-dropdown nil nil)]])
+         [:div.flex.flex-col.pb-4.wrap
           [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-journals)}
+           (repo/repos-dropdown)
+           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click route-handler/go-to-journals!}
             (ui/icon "calendar mr-3" {:style {:font-size 20}})
             [:span.flex-1 "Journals"]]
 
@@ -223,17 +232,9 @@
      :style {:max-width "86vw"}}
     (when @open?
       [:div.absolute.top-0.right-0.p-1
-       [:button#close-left-bar.close-panel-btn.flex.items-center.justify-center.h-12.w-12.rounded-full.focus:outline-none.focus:bg-gray-600
+       [:a.button
         {:on-click close-fn}
-        [:svg.h-6.w-6
-         {:viewBox "0 0 24 24", :fill "none", :stroke "currentColor"}
-         [:path
-          {:d "M6 18L18 6M6 6l12 12"
-           :stroke-width "2"
-           :stroke-linejoin "round"
-           :stroke-linecap "round"}]]]])
-    [:div.flex-shrink-0.flex.items-center.px-4.h-16.head-wrap
-     (repo/repos-dropdown nil close-fn)]
+        (ui/icon "x" {:style {:font-size 24}})]])
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 
@@ -520,6 +521,10 @@
         (settings-modal)
         (command-palette/command-palette-modal)
         (custom-context-menu)
+        (plugins/custom-js-installer {:t t
+                                      :current-repo current-repo
+                                      :nfs-granted? granted?
+                                      :db-restoring? db-restoring?})
         [:a#download.hidden]
         (when
          (and (not config/mobile?)
