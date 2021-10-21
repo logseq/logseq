@@ -1177,13 +1177,17 @@
                                            (uuid id)) blocks))
                          (remove nil?))
           blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
-          blocks* (flatten
-                   (mapv (fn [b] (if (:collapsed (:block/properties b))
-                                   (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
-                                   [b])) blocks))
+          page-id (:db/id (:block/page (first blocks)))
+          blocks*
+          (->> blocks
+               ;; filter out blocks not belong to page with 'page-id'
+               (remove (fn [block] (some-> (:db/id (:block/page block)) (not= page-id))))
+               ;; expand collapsed blocks
+               (mapv (fn [b] (if (:collapsed (:block/properties b))
+                           (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
+                           [b])) )
+               (flatten))
           block-ids* (mapv :block/uuid blocks*)
-          unordered? (:block/unordered (first blocks*))
-          format (:block/format (first blocks*))
           level-blocks-map (blocks-with-level blocks*)
           level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
           level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
