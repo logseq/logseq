@@ -795,6 +795,7 @@
                            (reduce (fn [content [old new]]
                                      (string/replace content old new))
                                    content))
+          _ (println content)
           content (string/replace-first
                    content marker
                    (case marker
@@ -802,7 +803,9 @@
                      "TODO"
                      
                      "NOW"
-                     "LATER"))
+                     "LATER"
+
+                     marker))
           content (clock/clock-out format content)
           content (drawer/insert-drawer
                    format content "logbook"
