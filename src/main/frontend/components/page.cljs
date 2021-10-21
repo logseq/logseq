@@ -637,10 +637,11 @@
      [indeterminate?])
 
     [:label {:for key}
-     [:input (merge {:type    "checkbox"
-                     :checked (boolean checked)
-                     :ref *input
-                     :id      key} opts)]]))
+     [:input.form-checkbox
+      (merge {:type    "checkbox"
+              :checked (boolean checked)
+              :ref *input
+              :id      key} opts)]]))
 
 (rum/defc sortable-title
   [title key by-item desc?]
@@ -844,12 +845,12 @@
 
            [:div.r.flex.items-center
             [:a.ml-1.pr-2.opacity-70.hover:opacity-100
-             {:on-click #(when (js/confirm (str (t :remove-orphan-files) "?"))
+             {:on-click #(when (js/confirm (str (t :remove-orphaned-pages) "?"))
                            (model/remove-orphaned-pages! (state/get-current-repo))
                            (refresh-pages))}
              [:span
               (ui/icon "file-x")
-              [:span.ml-1 (t :remove-orphan-files)]]]
+              [:span.ml-1 (t :remove-orphaned-pages)]]]
 
             [:a.ml-1.pr-2.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
              [:span
