@@ -812,10 +812,11 @@
                                                                               (refresh-pages)))))))
               :small? true)]
 
-            [:div.search-wrap.flex.items-center
+            [:div.search-wrap.flex.items-center.pl-2
              (let [search-fn (fn []
                                (let [^js input (rum/deref *search-input)]
-                                 (search-key (.-value input))))
+                                 (search-key (.-value input))
+                                 (reset! *current-page 1)))
                    reset-fn (fn []
                               (let [^js input (rum/deref *search-input)]
                                 (set! (.-value input) "")
@@ -826,9 +827,12 @@
                            :small? true)
                 [:input.form-input {:placeholder   (t :search/page-names)
                                     :on-key-up     (fn [^js e]
-                                                     (cond
-                                                       (= 13 (.-keyCode e)) (search-fn)
-                                                       (= 27 (.-keyCode e)) (reset-fn)))
+                                                     (let [^js target (.-target e)]
+                                                       (if (string/blank? (.-value target))
+                                                         (reset! *search-key nil)
+                                                         (cond
+                                                           (= 13 (.-keyCode e)) (search-fn)
+                                                           (= 27 (.-keyCode e)) (reset-fn)))))
                                     :ref           *search-input
                                     :default-value ""}]
 
@@ -837,13 +841,14 @@
                    (ui/icon "x")])])]]
 
            [:div.r.flex.items-center
-            [:div.pl-2
+            [:div
              (ui/tippy
                {:html  [:small (str (t :page/show-journals) " ?")]
                 :arrow true}
-              (ui/toggle @*journal?
-                         #(reset! *journal? (not @*journal?))
-                         true))]
+              [:a.button.journal
+               {:class    (util/classnames [{:active (boolean @*journal?)}])
+                :on-click #(reset! *journal? (not @*journal?))}
+               (ui/icon "calendar")])]
 
             [:a.ml-1.pr-2.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
              [:span
@@ -852,13 +857,12 @@
 
             [:div.paginates
              [:span.flex.items-center.opacity-60.text-sm
-              ;;[:span.pr-1 " Total " [:strong.px-1 total-pages]]
-              ;;[:span.pr-1 " current" [:strong.px-1 @*current-page]]
-              [:span.pr-1 (t :paginates/simple total-pages @*current-page)]]
+              [:span.pr-1 (t :paginates/pages (count @*results-all))]]
              [:span.flex.items-center
               {:class (util/classnames [{:is-first (= 1 @*current-page)
                                          :is-last  (= @*current-page total-pages)}])}
-              [:a.py-4 {:on-click #(to-page (dec @*current-page))} (ui/icon "caret-left") (str " " (t :paginates/prev))]
+              [:a.py-4.pr-2 {:on-click #(to-page (dec @*current-page))} (ui/icon "caret-left") (str " " (t :paginates/prev))]
+              [:span.opacity-30 (str @*current-page "/" total-pages)]
               [:a.py-4.pl-2 {:on-click #(to-page (inc @*current-page))} (str (t :paginates/next) " ") (ui/icon "caret-right")]]]]]
 
           [:table.table-auto.cp__all_pages_table

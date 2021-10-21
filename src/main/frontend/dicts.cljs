@@ -348,7 +348,7 @@
         :updater/new-version-install "A new version has been downloaded. Restart the application to apply the updates."
         :updater/quit-and-install "Restart to install"
 
-        :paginates/simple "Total {1} current {2}"
+        :paginates/pages "Total {1} pages"
         :paginates/prev "Prev"
         :paginates/next "Next"
 
@@ -1066,7 +1066,7 @@
            :updater/new-version-install "新版本已经准备就绪，重启应用即可更新。"
            :updater/quit-and-install "现在安装"
 
-           :paginates/simple "共计 {1} 页，第{2}页"
+           :paginates/pages "共计 {1} 页面"
            :paginates/prev "上一页"
            :paginates/next "下一页"
 

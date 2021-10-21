@@ -111,7 +111,6 @@
 
     i.ti {
       font-size: 16px;
-      margin-right: 2px;
       display: inline-block;
       position: relative;
       bottom: -1px;
@@ -128,6 +127,16 @@
 
     .r {
       font-size: 14px;
+
+      a.journal {
+        color: var(--ls-primary-text-color);
+        opacity: .3;
+
+        &.active {
+          opacity: 1;
+          color: var(--ls-link-ref-text-color);
+        }
+      }
 
       > div {
         display: flex;
