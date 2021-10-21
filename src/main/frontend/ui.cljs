@@ -596,7 +596,7 @@
          (cond->
           {:style    {:width       14
                       :height      16
-                      :margin-left -24}}
+                      :margin-left -30}}
            (not title-trigger?)
            (assoc :on-mouse-down on-mouse-down))
          [:span {:class (if @control? "control-show" "control-hide")}
