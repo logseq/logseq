@@ -30,7 +30,7 @@
                  (if (zero? hours) "" (str hours "h"))
                  (if (zero? minutes) "" (str minutes "m")))))
 
-(def- support-seconds?
+(def support-seconds?
   (get (state/get-config)
        [:logbook/settings :with-second-support?] true))
 
