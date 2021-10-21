@@ -1884,8 +1884,7 @@
 
         (when (and (state/enable-timetracking?)
                    (or (= (:block/marker block) "DONE")
-                       (and (:block/repeated? block)
-                            (= (:block/marker block) "TODO"))))
+                       (contains? #{"TODO" "LATER"} (:block/marker block))))
           (let [summary (clock/clock-summary body true)]
             (when (and summary
                        (not= summary "0m")
