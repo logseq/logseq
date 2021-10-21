@@ -754,7 +754,9 @@
                          (reset! *search-key key)
                          (reset! *search-key nil))))
 
-        refresh-pages #(reset! *pages nil)]
+        refresh-pages #(do
+                         (reset! *pages nil)
+                         (reset! *current-page 1))]
 
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.flex-1.cp__all_pages
@@ -841,19 +843,27 @@
                    (ui/icon "x")])])]]
 
            [:div.r.flex.items-center
-            [:div
-             (ui/tippy
-               {:html  [:small (str (t :page/show-journals) " ?")]
-                :arrow true}
-              [:a.button.journal
-               {:class    (util/classnames [{:active (boolean @*journal?)}])
-                :on-click #(reset! *journal? (not @*journal?))}
-               (ui/icon "calendar")])]
+            [:a.ml-1.pr-2.opacity-70.hover:opacity-100
+             {:on-click #(when (js/confirm (str (t :remove-orphan-files) "?"))
+                           (model/remove-orphaned-pages! (state/get-current-repo))
+                           (refresh-pages))}
+             [:span
+              (ui/icon "file-x")
+              [:span.ml-1 (t :remove-orphan-files)]]]
 
             [:a.ml-1.pr-2.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
              [:span
               (ui/icon "files")
               [:span.ml-1 (t :all-files)]]]
+
+            [:div
+             (ui/tippy
+               {:html  [:small (str (t :page/show-journals) " ?")]
+                :arrow true}
+               [:a.button.journal
+                {:class    (util/classnames [{:active (boolean @*journal?)}])
+                 :on-click #(reset! *journal? (not @*journal?))}
+                (ui/icon "calendar")])]
 
             [:div.paginates
              [:span.flex.items-center.opacity-60.text-sm
