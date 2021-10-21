@@ -82,12 +82,9 @@
 
 (defn clock-summary
   [body string?]
-  (println "body: " body)
   (when-let [logbook (drawer/get-logbook body)]
-    (println "logbook: " logbook)
     (when-let [logbook-lines (last logbook)]
       (when-let [clock-lines (filter #(string/starts-with? % "CLOCK:") logbook-lines)]
-        (println "clock-lines: " clock-lines)
         (let [times (map #(string/trim (last (string/split % "=>"))) clock-lines)
               hours-coll (map #(int (first (string/split % ":"))) times)
               minutes-coll (map #(int (second (string/split % ":"))) times)
