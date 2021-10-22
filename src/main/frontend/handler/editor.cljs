@@ -795,7 +795,16 @@
                            (reduce (fn [content [old new]]
                                      (string/replace content old new))
                                    content))
-          content (string/replace-first content "DOING" "TODO")
+          content (string/replace-first
+                   content marker
+                   (case marker
+                     "DOING"
+                     "TODO"
+                     
+                     "NOW"
+                     "LATER"
+
+                     marker))
           content (clock/clock-out format content)
           content (drawer/insert-drawer
                    format content "logbook"

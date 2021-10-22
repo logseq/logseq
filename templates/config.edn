@@ -1,4 +1,4 @@
-{;; Currently, we support either "Markdown" or "Org".
+{ ;; Currently, we support either "Markdown" or "Org".
  ;; This can overwrite your global preference so that
  ;; maybe your personal preferred format is Org but you'd
  ;; need to use Markdown for some projects.
@@ -107,34 +107,34 @@
  ;; the "NEXT" query asks the future tasks.
  :default-queries
  {:journals
-  [{:title            "🔨 NOW"
-    :query            [:find (pull ?h [*])
-                       :in $ ?start ?today
-                       :where
-                       [?h :block/marker ?marker]
-                       [(contains? #{"NOW" "DOING"} ?marker)]
-                       [?h :block/page ?p]
-                       [?p :block/journal? true]
-                       [?p :block/journal-day ?d]
-                       [(>= ?d ?start)]
-                       [(<= ?d ?today)]]
-    :inputs           [:14d :today]
+  [{:title "🔨 NOW"
+    :query [:find (pull ?h [*])
+            :in $ ?start ?today
+            :where
+            [?h :block/marker ?marker]
+            [(contains? #{"NOW" "DOING"} ?marker)]
+            [?h :block/page ?p]
+            [?p :block/journal? true]
+            [?p :block/journal-day ?d]
+            [(>= ?d ?start)]
+            [(<= ?d ?today)]]
+    :inputs [:14d :today]
     :result-transform (fn [result]
                         (sort-by (fn [h]
                                    (get h :block/priority "Z")) result))
-    :collapsed?       false}
-   {:title      "📅 NEXT"
-    :query      [:find (pull ?h [*])
-                 :in $ ?start ?next
-                 :where
-                 [?h :block/marker ?marker]
-                 [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-                 [?h :block/ref-pages ?p]
-                 [?p :block/journal? true]
-                 [?p :block/journal-day ?d]
-                 [(> ?d ?start)]
-                 [(< ?d ?next)]]
-    :inputs     [:today :7d-after]
+    :collapsed? false}
+   {:title "📅 NEXT"
+    :query [:find (pull ?h [*])
+            :in $ ?start ?next
+            :where
+            [?h :block/marker ?marker]
+            [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
+            [?h :block/ref-pages ?p]
+            [?p :block/journal? true]
+            [?p :block/journal-day ?d]
+            [(> ?d ?start)]
+            [(< ?d ?next)]]
+    :inputs [:today :7d-after]
     :collapsed? false}]}
 
  ;; Add your own commands to speedup.
@@ -175,4 +175,11 @@
  ;; hide specific properties for blocks
  ;; E.g. #{:created-at :updated-at}
  ;; :block-hidden-properties #{}
+
+ ;; logbook setup
+ ;; :logbook/settings
+ ;; {:with-second-support? false ;limit logbook to minutes, seconds will be eliminated
+ ;;  :enabled-in-all-blocks true ;display logbook in all blocks after timetracking
+ ;;  :enabled-in-timestamped-blocks false ;don't display logbook at all
+ ;; }
  }
