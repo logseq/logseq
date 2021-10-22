@@ -5,6 +5,7 @@
   padding-right: 0.5rem;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex: 0 0 auto;
   position: sticky;
   position: -webkit-sticky;
@@ -14,12 +15,33 @@
   user-select: none;
   line-height: 1;
 
+  > .l {
+    width: var(--ls-left-sidebar-width);
+    height: 100%;
+    align-items: center;
+    transition: padding-left .2s;
+  }
+
+  > .r {
+    align-items: center;
+  }
+
   .it svg {
     transform: scale(0.8);
   }
 
   a.button {
     margin: 0 4px;
+    height: 30px;
+    min-width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: .5;
+
+    .ti {
+      font-size: 20px;
+    }
   }
 
   svg.warning {
@@ -44,7 +66,9 @@
 
     > p {
       margin: 0;
-      padding: 0 0 6px 0;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
     }
 
     a {
@@ -53,8 +77,9 @@
 
     a.restart {
       position: relative;
-      top: 3px;
       cursor: pointer !important;
+      display: flex;
+      align-items: center;
 
       svg {
         color: currentColor !important;
@@ -69,16 +94,16 @@
 }
 
 .is-electron.is-mac .cp__header {
+  > .l {
     padding-left: 78px;
-    transition: all 0.25s;
-    -webkit-transition: all 0.25s;
+  }
 }
 
 .cp__header .navigation svg {
   transform: scale(0.7);
 }
 
-.is-electron.is-mac.is-fullscreen .cp__header {
+.is-electron.is-mac.is-fullscreen .cp__header > .l {
   padding-left: 0;
 }
 
@@ -131,11 +156,11 @@ a.button {
   opacity: 0.6;
   display: block;
   border-radius: 4px;
-}
 
-a.button:hover {
-  opacity: 1;
-  background: var(--ls-tertiary-background-color);
+  &:hover, &.active {
+    opacity: 1;
+    background: var(--ls-tertiary-background-color);
+  }
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {

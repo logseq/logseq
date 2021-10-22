@@ -19,7 +19,7 @@
            end (string/index-of
                 content right (if (= left right) pos (inc (- pos (count right)))))
            end* (+ (count right) end)]
-       (when (and start end (not (zero? start)))
+       (when (and start end (not= start pos))
          (let [thing (subs content (+ start (count left)) end)]
            (when (every?
                   false?
@@ -157,3 +157,17 @@
 (defn admonition&src-at-point [& [input]]
   (or (org-admonition&src-at-point input)
       (markdown-src-at-point input)))
+
+(def default-settings
+  {:admonition&src?  true
+   :markup?          false
+   :block-ref?       true
+   :page-ref?        true
+   :properties?      true
+   :list?            true})
+
+(defn get-setting [setting]
+  (let [value (get-in (state/get-config) [:dwim/settings setting])]
+    (if (some? value)
+      value
+      (get default-settings setting))))

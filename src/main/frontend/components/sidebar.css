@@ -11,13 +11,10 @@
 }
 
 .is-electron.is-mac .cp__sidebar-left-layout {
-  transition: all 0.25s;
-  -webkit-transition: all 0.25s;
 }
 
 #app-container {
   flex: 0 0 100%;
-  transition: all 200ms ease-in 0s;
 }
 
 #main-container {
@@ -43,8 +40,6 @@
   position: absolute;
   z-index: 11;
   opacity: 0;
-  transition: all 0.25s;
-  -webkit-transition: all 0.25s;
   background-color: #002b36;
 
   .enter {
@@ -74,7 +69,10 @@
 }
 
 .left-sidebar-inner {
+  position: relative;
   height: 100%;
+  z-index: 1;
+  overflow: auto;
 
   > .wrap {
     padding-top: 60px;
@@ -203,6 +201,18 @@
 
   transition: transform .25s;
   transform: translateX(-100%);
+  overflow: hidden;
+
+  &:before {
+    content: " ";
+    height: 3rem;
+    width: calc(var(--ls-left-sidebar-width) - var(--ls-scrollbar-width));
+    background-color: var(--ls-secondary-background-color);
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 2;
+  }
 
   &.is-open {
     transform: translateX(0);

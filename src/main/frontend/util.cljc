@@ -4,6 +4,7 @@
   #?(:cljs (:require
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
+            [frontend.mobile.util :refer [is-native-platform?]]
             [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
@@ -69,6 +70,10 @@
      (when (and js/window (gobj/get js/window "navigator"))
        (let [ua (string/lower-case js/navigator.userAgent)]
          (string/includes? ua " electron")))))
+
+#?(:cljs
+   (def nfs? (and (not (electron?))
+                  (not (is-native-platform?)))))
 
 #?(:cljs
    (defn file-protocol?
@@ -542,6 +547,11 @@
     [(subs s 0 first-index)
      (subs s (+ first-index (count pattern)) (count s))]
     [s ""]))
+
+(defn safe-lower-case
+  [s]
+  (if (string? s)
+    (string/lower-case s) s))
 
 (defn split-first [pattern s]
   (when-let [first-index (string/index-of s pattern)]
@@ -1378,7 +1388,7 @@
      (let [path (string/lower-case path)]
        (not
         (some #(string/ends-with? path %)
-              [".md" ".markdown" ".org" ".edn" ".css" ".png" ".jpg" ".jpeg"]))))))
+              [".md" ".markdown" ".org" ".edn" ".js" ".css" ".png" ".jpg" ".jpeg"]))))))
 
 (defn wrapped-by-quotes?
   [v]

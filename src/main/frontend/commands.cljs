@@ -10,11 +10,11 @@
             [frontend.extensions.video.youtube :as youtube]
             [frontend.search :as search]
             [frontend.state :as state]
-            [frontend.text :as text]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.marker :as marker]
             [frontend.util.priority :as priority]
+            [frontend.util.property :as property]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -187,12 +187,9 @@
 
 (defn ->properties
   []
-  (let [template (util/format
-                  ":PROPERTIES:\n:: \n:END:\n")
-        backward-pos 9]
-    [[:editor/input template {:type "properties"
-                              :last-pattern angle-bracket
-                              :backward-pos backward-pos}]]))
+  [[:editor/clear-current-bracket]
+   [:editor/insert-properties]
+   [:editor/move-cursor-to-properties]])
 
 ;; https://orgmode.org/manual/Structure-Templates.html
 (defn block-commands-map
@@ -339,7 +336,7 @@
    {:keys [last-pattern postfix-fn backward-pos forward-pos
            end-pattern]
     :or {last-pattern slash}
-    :as option}]
+    :as _option}]
   (when-let [input (gdom/getElement id)]
     (let [edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
@@ -387,7 +384,7 @@
 (defn simple-insert!
   [id value
    {:keys [backward-pos forward-pos check-fn]
-    :as option}]
+    :as _option}]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
@@ -407,7 +404,7 @@
 (defn insert-before!
   [id value
    {:keys [backward-pos forward-pos check-fn]
-    :as option}]
+    :as _option}]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
@@ -427,7 +424,7 @@
 (defn simple-replace!
   [id value selected
    {:keys [backward-pos forward-pos check-fn]
-    :as option}]
+    :as _option}]
   (let [selected? (not (string/blank? selected))
         input (gdom/getElement id)
         edit-content (gobj/get input "value")
@@ -485,14 +482,8 @@
 
 (defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]
-    (let [last-pattern (:last-pattern option)
-          type (:type option)
+    (let [type (:type option)
           input (gdom/getElement input-id)
-          content (gobj/get input "value")
-          pos (cursor/pos input)
-          pos (if last-pattern
-                (string/last-index-of content last-pattern pos)
-                pos)
           beginning-of-line? (or (cursor/beginning-of-line? input)
                                  (= 1 (:pos @*angle-bracket-caret-pos)))
           value (if (and (contains? #{"block" "properties"} type)
@@ -534,8 +525,21 @@
                                                new-value
                                                (count prefix))))))
 
+(defmethod handle-step :editor/clear-current-bracket [[_ space?]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [edit-content (gobj/get current-input "value")
+            current-pos (cursor/pos current-input)
+            prefix (subs edit-content 0 current-pos)
+            prefix (util/replace-last angle-bracket prefix "" (boolean space?))
+            new-value (str prefix
+                           (subs edit-content current-pos))]
+        (state/set-block-content-and-last-pos! input-id
+                                               new-value
+                                               (count prefix))))))
+
 (defn compute-pos-delta-when-change-marker
-  [current-input edit-content new-value marker pos]
+  [edit-content marker pos]
   (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
                             (string/trim))
         old-marker (if old-marker old-marker "")
@@ -565,11 +569,11 @@
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)
         (let [new-pos (compute-pos-delta-when-change-marker
-                       current-input edit-content new-value marker (dec slash-pos))]
+                       edit-content marker (dec slash-pos))]
           ;; TODO: any performance issue?
           (js/setTimeout #(cursor/move-cursor-to current-input new-pos) 10))))))
 
-(defmethod handle-step :editor/set-priority [[_ priority] format]
+(defmethod handle-step :editor/set-priority [[_ priority] _format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
@@ -577,6 +581,22 @@
             new-priority (util/format "[#%s]" priority)
             new-value (string/trim (priority/add-or-update-priority edit-content format new-priority))]
         (state/set-edit-content! input-id new-value)))))
+
+(defmethod handle-step :editor/insert-properties [[_ _] _format]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+        (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+              edit-content (gobj/get current-input "value")
+              new-value (property/insert-property format edit-content "" "")]
+          (state/set-edit-content! input-id new-value)))))
+
+(defmethod handle-step :editor/move-cursor-to-properties [[_]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+            edit-content (gobj/get current-input "value")]
+        (property/goto-properties-end format current-input)
+        (cursor/move-cursor-backward current-input 3)))))
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]
@@ -598,7 +618,7 @@
 (defmethod handle-step :editor/search-page-hashtag [[_]]
   (state/set-editor-show-page-search-hashtag! true))
 
-(defmethod handle-step :editor/search-block [[_ type]]
+(defmethod handle-step :editor/search-block [[_ _type]]
   (state/set-editor-show-block-search! true))
 
 (defmethod handle-step :editor/search-template [[_]]
@@ -632,7 +652,7 @@
       (restore-state false))
     (state/set-editor-show-date-picker! true)))
 
-(defmethod handle-step :editor/click-hidden-file-input [[_ input-id]]
+(defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
     (.click input-file)))
 
@@ -645,7 +665,7 @@
     (handle-step step format)))
 
 (defn exec-plugin-simple-command!
-  [pid {:keys [key label block-id] :as cmd} action]
+  [pid {:keys [block-id] :as cmd} action]
   (let [format (and block-id (:block/format (db-util/pull [:block/uuid block-id])))
         inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))

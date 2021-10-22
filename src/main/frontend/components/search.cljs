@@ -80,7 +80,7 @@
                                                                       :block? true
                                                                       :search? true}
                                                                      repo
-                                                                     (clojure.core/uuid uuid) format
+                                                                     (clojure.core/uuid uuid)
                                                                      {:indent? false})])
          [:div {:class "font-medium" :key "content"} (highlight-exact-query content q)]]])
 

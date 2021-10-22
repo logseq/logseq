@@ -78,8 +78,7 @@
              format (:block/format block)]
          [[:div.ml-2.mt-1
            (block/block-parents {:id     "block-parent"
-                                 :block? true} repo block-id format
-                                {})]
+                                 :block? true} repo block-id {})]
           [:div.ml-2
            (block-cp repo idx block)]])])
 
@@ -88,8 +87,7 @@
       (let [block-id (:block/uuid block-data)
             format (:block/format block-data)]
         [(block/block-parents {:id     "block-parent"
-                               :block? true} repo block-id format
-                              {})
+                               :block? true} repo block-id {})
          [:div.ml-2
           (block-cp repo idx block-data)]]))
 
