@@ -1944,7 +1944,6 @@
                            (for [{:block/keys [uuid title name] :as block} parents]
                              (when-not name ; not page
                                [block
-                                (rfe/href :page {:name uuid})
                                 (->elem :span (map-inline config title))])))
             breadcrumb (->> (into [] parents-props)
                             (concat [page-name-props])
