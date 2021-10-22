@@ -33,8 +33,7 @@
   a.button {
     margin: 0 4px;
     height: 30px;
-    width: 30px;
-    padding: 0;
+    min-width: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
