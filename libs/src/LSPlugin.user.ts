@@ -219,6 +219,12 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   ) {
     super()
 
+    _caller.on('sys:ui:visible', (payload) => {
+      if (payload?.toggle) {
+        this.toggleMainUI()
+      }
+    })
+
     _caller.on('settings:changed', (payload) => {
       const b = Object.assign({}, this.settings)
       const a = Object.assign(this._baseInfo.settings, payload)
@@ -340,7 +346,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   }
 
   get isMainUIVisible (): boolean {
-    const state = this._ui.get(0)
+    const state = this._ui.get(KEY_MAIN_UI)
     return Boolean(state && state.visible)
   }
 

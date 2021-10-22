@@ -60,6 +60,7 @@ class LSPluginCaller extends EventEmitter {
     }
   }
 
+  // run in sandbox
   async connectToParent (userModel = {}) {
     if (this._connected) return
 
@@ -72,7 +73,14 @@ class LSPluginCaller extends EventEmitter {
     const readyDeferred = deferred(1000 * 5)
 
     const model: any = this._extendUserModel({
-      [LSPMSG_READY]: async () => {
+      [LSPMSG_READY]: async (baseInfo) => {
+        // dynamically setup common msg handler
+        model[LSPMSGFn(baseInfo?.pid)] = ({ type, payload }: { type: string, payload: any }) => {
+          debug(`[call from host (_call)] ${this._debugTag}`, type, payload)
+          // host._call without async
+          caller.emit(type, payload)
+        }
+
         await readyDeferred.resolve()
       },
 
@@ -87,7 +95,7 @@ class LSPluginCaller extends EventEmitter {
       },
 
       [LSPMSG]: async ({ ns, type, payload }: any) => {
-        debug(`[call from host] ${this._debugTag}`, ns, type, payload)
+        debug(`[call from host (async)] ${this._debugTag}`, ns, type, payload)
 
         if (ns && ns.startsWith('hook')) {
           caller.emit(`${ns}:${type}`, payload)
@@ -187,6 +195,7 @@ class LSPluginCaller extends EventEmitter {
     return this._callUserModel?.call(this, type, payload)
   }
 
+  // run in host
   async _setupIframeSandbox () {
     const pl = this._pluginLocal!
     const id = pl.id

@@ -198,7 +198,7 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
           pluginLocal._setupDraggableContainer(el, {
             title: pluginLocal.options.name,
             close: () => {
-              pluginLocal.emit(_('visible'), { toggle: true })
+              pluginLocal.caller.call('sys:ui:visible', { toggle: true })
             }
           }))
       }
@@ -689,7 +689,7 @@ class PluginLocal
       await this._caller.connectToChild()
 
       const readyFn = () => {
-        this._caller?.callUserModel(LSPMSG_READY)
+        this._caller?.callUserModel(LSPMSG_READY, { pid: this.id })
       }
 
       if (readyIndicator) {

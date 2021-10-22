@@ -234,7 +234,7 @@ const injectedUIEffects = new Map<string, () => void>()
 export function setupInjectedUI (
   this: PluginLocal,
   ui: UIOptions,
-  attrs: Record<string, any>,
+  attrs: Record<string, string>,
   initialCallback?: (e: { el: HTMLElement, float: boolean }) => void
 ) {
   let slot: string = ''
