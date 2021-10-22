@@ -795,7 +795,6 @@
                            (reduce (fn [content [old new]]
                                      (string/replace content old new))
                                    content))
-          _ (println content)
           content (string/replace-first
                    content marker
                    (case marker
