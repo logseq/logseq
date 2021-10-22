@@ -22,12 +22,26 @@
     transition: padding-left .2s;
   }
 
+  > .r {
+    align-items: center;
+  }
+
   .it svg {
     transform: scale(0.8);
   }
 
   a.button {
     margin: 0 4px;
+    height: 30px;
+    min-width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: .5;
+
+    .ti {
+      font-size: 20px;
+    }
   }
 
   svg.warning {
@@ -142,11 +156,11 @@ a.button {
   opacity: 0.6;
   display: block;
   border-radius: 4px;
-}
 
-a.button:hover {
-  opacity: 1;
-  background: var(--ls-tertiary-background-color);
+  &:hover, &.active {
+    opacity: 1;
+    background: var(--ls-tertiary-background-color);
+  }
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {

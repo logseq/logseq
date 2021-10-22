@@ -86,7 +86,7 @@
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
                      (util/stop e)
-                     (let [name (string/lower-case name)]
+                     (let [name (util/safe-lower-case name)]
                        (if (gobj/get e "shiftKey")
                          (when-let [page-entity (db/entity [:block/name name])]
                            (state/sidebar-add-block!
@@ -148,7 +148,7 @@
        [:ul.favorites
         (for [name favorites]
           (when-not (string/blank? name)
-            (when (db/entity [:block/name (string/lower-case name)])
+            (when (db/entity [:block/name (util/safe-lower-case name)])
                 (favorite-item t name))))]))))
 
 (rum/defc recent-pages
@@ -167,7 +167,7 @@
                     (filter string?))]
      [:ul
       (for [name pages]
-        (when (db/entity [:block/name (string/lower-case name)])
+        (when (db/entity [:block/name (util/safe-lower-case name)])
           [:li {:key name}
            (page-name name)]))])))
 
@@ -295,7 +295,7 @@
     (let [page (:page default-home)
           page (when (and (string? page)
                           (not (string/blank? page)))
-                 (db/entity [:block/name (string/lower-case page)]))]
+                 (db/entity [:block/name (util/safe-lower-case page)]))]
       (if page
         default-home
         (dissoc default-home :page)))))
@@ -313,7 +313,7 @@
                (when-let [pages (->> (seq sidebar)
                                      (remove string/blank?))]
                  (doseq [page pages]
-                   (let [page (string/lower-case page)
+                   (let [page (util/safe-lower-case page)
                          [db-id block-type] (if (= page "contents")
                                               ["contents" :contents]
                                               [page :page])]
@@ -457,6 +457,7 @@
         white? (= "white" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
+        right-sidebar-blocks (state/sub :sidebar/blocks)
         route-name (get-in route-match [:data :name])
         global-graph-pages? (= :graph route-name)
         logged? (:name me)
@@ -474,6 +475,7 @@
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
         :sidebar-open? sidebar-open?
+        :sidebar-blocks-len (count right-sidebar-blocks)
         :system-theme? system-theme?
         :on-click      (fn [e]
                          (editor-handler/unhighlight-blocks!)

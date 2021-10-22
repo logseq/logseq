@@ -131,10 +131,10 @@
   [:div.flex.flex-row
    [:a.it.navigation.nav-left.button
     {:title "Go Back" :on-click #(js/window.history.back)}
-    svg/arrow-narrow-left]
+    (ui/icon "arrow-left")]
    [:a.it.navigation.nav-right.button
     {:title "Go Forward" :on-click #(js/window.history.forward)}
-    svg/arrow-narrow-right]])
+    (ui/icon "arrow-right")]])
 
 (rum/defc updater-tips-new-version
   [t]
@@ -224,7 +224,7 @@
           [:a.text-sm.font-medium.button
            {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
            [:div.flex.flex-row.text-center.open-button__inner.items-center
-            [:span.inline-block.open-button__icon-wrapper svg/folder-add]
+            (ui/icon "folder-plus")
             (when-not config/mobile?
               [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
                (t :open)])]])

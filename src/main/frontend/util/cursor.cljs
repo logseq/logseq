@@ -121,9 +121,19 @@
   [input]
   (move-cursor-to input (line-beginning-pos input)))
 
+(defn move-cursor-to-beginning
+  [input]
+  (move-cursor-to input 0))
+
 (defn move-cursor-to-end
   [input]
   (let [pos (count (gobj/get input "value"))]
+    (move-cursor-to input pos)))
+
+(defn move-cursor-to-thing
+  [input thing from]
+  (let [[content _pos] (get-input-content&pos input)
+        pos (string/index-of content thing from)]
     (move-cursor-to input pos)))
 
 (defn move-cursor-forward-by-word

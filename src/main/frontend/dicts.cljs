@@ -82,6 +82,7 @@
         :more "More"
         :search/result-for "Search result for "
         :search/items "items"
+        :search/page-names "Search page names"
         :help/context-menu "Block context menu"
         :help/fold-unfold "Fold/unfold blocks (when not in edit mode)"
         :help/markdown-syntax "Markdown syntax"
@@ -284,6 +285,7 @@
         :all-graphs "All graphs"
         :all-pages "All pages"
         :all-files "All files"
+        :remove-orphaned-pages "Remove orphaned pages"
         :all-journals "All journals"
         :my-publishing "My publishing"
         :settings "Settings"
@@ -346,6 +348,12 @@
 
         :updater/new-version-install "A new version has been downloaded. Restart the application to apply the updates."
         :updater/quit-and-install "Restart to install"
+
+        :paginates/pages "Total {1} pages"
+        :paginates/prev "Prev"
+        :paginates/next "Next"
+
+        :tips/all-done "All Done"
 
         :command-palette/prompt "Type a command"}
 
@@ -809,6 +817,7 @@
            :more "更多"
            :search/result-for "更多搜索结果 "
            :search/items "条目"
+           :search/page-names "搜索页面名称"
            :help/context-menu "右键菜单"
            :help/fold-unfold "折叠/展开方块(不在编辑模式中)"
            :help/markdown-syntax "Markdown 语法"
@@ -910,6 +919,9 @@
            :file/file "文件："
            :file/last-modified-at "最后更改于"
            :file/no-data "没有数据"
+           :page/created-at "创建日期"
+           :page/updated-at "更新日期"
+           :page/backlinks "双向链接"
            :file/format-not-supported "格式 .{1} 目前不支持."
            :editor/block-search "搜索块"
            :editor/image-uploading "上传中"
@@ -994,6 +1006,7 @@
            :all-graphs "所有库"
            :all-pages "所有页面"
            :all-files "所有文件"
+           :remove-orphaned-pages "删除空页面"
            :my-publishing "我的发布"
            :settings "设置"
            :plugins "插件"
@@ -1054,6 +1067,12 @@
 
            :updater/new-version-install "新版本已经准备就绪，重启应用即可更新。"
            :updater/quit-and-install "现在安装"
+
+           :paginates/pages "共计 {1} 页面"
+           :paginates/prev "上一页"
+           :paginates/next "下一页"
+
+           :tips/all-done "处理完成"
 
            :command-palette/prompt "输入指令"}
 

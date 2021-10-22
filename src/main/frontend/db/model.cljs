@@ -14,7 +14,8 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [medley.core :as medley]
-            [frontend.db.rules :refer [rules]]))
+            [frontend.db.rules :refer [rules]]
+            [frontend.db.default :as default-db]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; correponding handlers.
@@ -1355,3 +1356,29 @@
    (filter :block/file)
    (sort-by :block/updated-at >)
    (take 200)))
+
+(defn remove-orphaned-pages!
+  [repo]
+  (let [all-pages (get-pages repo)
+        built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
+        orphaned-pages (->>
+                        (map
+                          (fn [page]
+                            (let [name (string/lower-case page)]
+                              (when-let [page (db-utils/entity [:block/name name])]
+                                (and
+                                 (zero? (count (:block/_refs page)))
+                                 (or
+                                  (page-empty? repo (:db/id page))
+                                  (let [first-child (first (:block/_left page))
+                                        children (:block/_page page)]
+                                    (and
+                                     first-child
+                                     (= 1 (count children))
+                                     (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
+                                 (not (contains? built-in-pages name))
+                                 page))))
+                          all-pages)
+                        (remove false?))
+        transaction (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
+    (db-utils/transact! transaction)))

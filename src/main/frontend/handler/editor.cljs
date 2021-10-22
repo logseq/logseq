@@ -337,13 +337,14 @@
     value))
 
 (defn wrap-parse-block
-  [{:block/keys [content format parent left page uuid pre-block? level] :as block}]
+  [{:block/keys [content format left page uuid level] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         properties (:block/properties block)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
                   content)
+        content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)
         ast (mldoc/->edn (string/trim content) (mldoc/default-config format))
@@ -417,9 +418,8 @@
   ([block value
     {:keys [force?]
      :as opts}]
-   (let [{:block/keys [uuid file page format repo content properties]} block
+   (let [{:block/keys [uuid page format repo content properties]} block
          repo (or repo (state/get-current-repo))
-         e (db/entity repo [:block/uuid uuid])
          format (or format (state/get-preferred-format))
          page (db/entity repo (:db/id page))
          block-id (when (map? properties) (get properties :id))
@@ -833,12 +833,12 @@
           [new-content marker] (marker/cycle-marker content format (state/get-preferred-workflow))
           new-content (string/triml new-content)]
       (let [new-pos (commands/compute-pos-delta-when-change-marker
-                     current-input content new-content marker (cursor/pos current-input))]
+                     content marker (cursor/pos current-input))]
         (state/set-edit-content! edit-input-id new-content)
         (cursor/move-cursor-to current-input new-pos)))))
 
 (defn set-marker
-  [{:block/keys [uuid marker content format properties] :as block} new-marker]
+  [{:block/keys [marker content] :as block} new-marker]
   (let [new-content (->
                      (if marker
                        (string/replace-first content (re-pattern (str "^" marker)) new-marker)
@@ -1177,13 +1177,17 @@
                                            (uuid id)) blocks))
                          (remove nil?))
           blocks (db-utils/pull-many repo '[*] (mapv (fn [id] [:block/uuid id]) block-ids))
-          blocks* (flatten
-                   (mapv (fn [b] (if (:collapsed (:block/properties b))
-                                   (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
-                                   [b])) blocks))
+          page-id (:db/id (:block/page (first blocks)))
+          blocks*
+          (->> blocks
+               ;; filter out blocks not belong to page with 'page-id'
+               (remove (fn [block] (some-> (:db/id (:block/page block)) (not= page-id))))
+               ;; expand collapsed blocks
+               (mapv (fn [b] (if (:collapsed (:block/properties b))
+                           (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
+                           [b])) )
+               (flatten))
           block-ids* (mapv :block/uuid blocks*)
-          unordered? (:block/unordered (first blocks*))
-          format (:block/format (first blocks*))
           level-blocks-map (blocks-with-level blocks*)
           level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
           level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
@@ -2314,6 +2318,54 @@
 
 (declare delete-and-update)
 
+(defn- dwim-in-properties
+  [state]
+  (when-not (auto-complete?)
+    (let [{:keys [block]} (get-state)]
+      (when block
+        (let [input (state/get-input)
+              content (gobj/get input "value")
+              format (:block/format (:block (get-state)))
+              property-key (:raw-content (thingatpt/property-key-at-point input))
+              org? (= format :org)
+              move-to-pos (if org? 2 3)]
+          (if org?
+            (cond
+              (and property-key (not= property-key ""))
+              (case property-key
+                ;; When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
+                "PROPERTIES"
+                (do (cursor/move-cursor-to-line-end input)
+                    (insert "\n:: ")
+                    (cursor/move-cursor-backward input move-to-pos))
+                ;; When cursor in "END", new block (respect the previous enter behavior)
+                "END"
+                (do
+                  (cursor/move-cursor-to-end input)
+                  (insert-new-block! state))
+                ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
+                (if (property/property-key-exist? format content property-key)
+                  (notification/show!
+                   [:p.content
+                    (util/format "Property key \"%s\" already exists!" property-key)]
+                   :error)
+                  (cursor/move-cursor-to-end input)))
+
+              ;; when cursor in empty property key
+              (and property-key (= property-key ""))
+              (do (delete-and-update
+                   input
+                   (cursor/line-beginning-pos input)
+                   (inc (cursor/line-end-pos input)))
+                  (property/goto-properties-end format input)
+                  (cursor/move-cursor-to-line-end input))
+              :else
+              ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
+              (do
+                (insert "\n:: ")
+                (cursor/move-cursor-backward input move-to-pos)))
+            (insert "\n")))))))
+
 (defn- keydown-new-block
   [state]
   (when-not (auto-complete?)
@@ -2364,39 +2416,7 @@
                   (do (cursor/move-cursor-to-line-end input)
                       (insert (str "\n" indent next-bullet " " checkbox)))))
               "properties-drawer"
-              (let [property-key (:raw-content (thingatpt/property-key-at-point input))
-                    org? (= (:block/format block) :org)
-                    move-to-pos (if org? 2 3)]
-                (if org?
-                  (cond
-                    (and property-key (not= property-key ""))
-                    (case property-key
-                      ;; When cursor in "PROPERTIES", add :|: in a new line and move cursor to |
-                      "PROPERTIES"
-                      (do (cursor/move-cursor-to-line-end input)
-                          (insert "\n:: ")
-                          (cursor/move-cursor-backward input move-to-pos))
-                      ;; When cursor in "END", new block (respect the previous enter behavior)
-                      "END"
-                      (do
-                        (cursor/move-cursor-to-end input)
-                        (insert-new-block! state))
-                      ;; cursor in other positions of :ke|y: or ke|y::, move to line end for inserting value.
-                      (cursor/move-cursor-to-line-end input))
-
-                    ;; when cursor in empty property key
-                    (and property-key (= property-key ""))
-                    (do (delete-and-update
-                         input
-                         (cursor/line-beginning-pos input)
-                         (inc (cursor/line-end-pos input)))
-                        (cursor/move-cursor-to-line-end input))
-                    :else
-                    ;;When cursor in other place of PROPERTIES drawer, add :|: in a new line and move cursor to |
-                    (do
-                      (insert "\n:: ")
-                      (cursor/move-cursor-backward input move-to-pos)))
-                  (insert "\n"))))
+              (dwim-in-properties state))
 
             (and
              (string/blank? content)
