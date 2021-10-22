@@ -23,9 +23,11 @@
                               z))))
                    (remove nil?))
           zdx (bean/->js zdx)
-          zdx (and zdx (js/Math.max.apply nil zdx))]
+          zdx (and zdx (js/Math.max.apply nil zdx))
+          zdx' (frontend-utils/safe-parse-int (.. container -style -zIndex))]
 
-      (set! (.. container -style -zIndex) (inc zdx)))))
+      (when (or (nil? zdx') (not= zdx zdx'))
+        (set! (.. container -style -zIndex) (inc zdx))))))
 
 (defn ^:export setup-draggable-container!
   [^js/HTMLElement el callback]

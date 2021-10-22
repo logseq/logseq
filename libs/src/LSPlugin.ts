@@ -30,7 +30,7 @@ export type UIContainerAttrs = {
 export type UIBaseOptions = {
   key?: string
   replace?: boolean
-  template: string
+  template: string | null
   attrs?: Record<string, string>
 }
 

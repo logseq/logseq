@@ -229,6 +229,8 @@ export function setupInjectedStyle (
   }
 }
 
+const injectedUIEffects = new Map<string, () => void>()
+
 export function setupInjectedUI (
   this: PluginLocal,
   ui: UIOptions,
@@ -266,6 +268,9 @@ export function setupInjectedUI (
         ALLOW_UNKNOWN_PROTOCOLS: true,
         ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling']
       })
+  } else { // remove ui
+    injectedUIEffects.get(key)?.call(null)
+    return
   }
 
   let el = document.querySelector(`#${id}`) as HTMLElement
@@ -295,13 +300,14 @@ export function setupInjectedUI (
     el.setAttribute(k, v)
   })
 
+  let teardownUI: () => void
   let disposeFloat: () => void
 
   if (float) {
     el.setAttribute('draggable', 'true')
     el.setAttribute('resizable', 'true')
     el.classList.add('lsp-ui-float-container', 'visible')
-    disposeFloat = (pl._setupDraggableContainer(el, key),
+    disposeFloat = (pl._setupDraggableContainer(el, { key, close: () => teardownUI(), title: attrs?.title }),
       pl._setupResizableContainer(el, key))
   }
 
@@ -323,10 +329,14 @@ export function setupInjectedUI (
   // callback
   initialCallback?.({ el, float })
 
-  return () => {
+  teardownUI = () => {
     disposeFloat?.()
+    injectedUIEffects.delete(key)
     target!.removeChild(el)
   }
+
+  injectedUIEffects.set(key, teardownUI)
+  return teardownUI
 }
 
 export function transformableEvent (target: HTMLElement, e: Event) {

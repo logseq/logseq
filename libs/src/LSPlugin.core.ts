@@ -195,7 +195,12 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
       el?.setAttribute(k, v)
       if (k === 'draggable' && v) {
         pluginLocal._dispose(
-          pluginLocal._setupDraggableContainer(el))
+          pluginLocal._setupDraggableContainer(el, {
+            title: pluginLocal.options.name,
+            close: () => {
+              pluginLocal.emit(_('visible'), { toggle: true })
+            }
+          }))
       }
 
       if (k === 'resizable' && v) {
@@ -575,25 +580,60 @@ class PluginLocal
     this.settings.set('layout', layouts)
   }
 
-  _setupDraggableContainer (el: HTMLElement, key?: string): () => void {
+  _setupDraggableContainer (
+    el: HTMLElement,
+    opts: Partial<{ key: string, title: string, close: () => void }> = {}): () => void {
     const ds = el.dataset
     if (ds.inited_draggable) return
     if (!ds.identity) {
       ds.identity = 'dd-' + genID()
     }
+    const isInjectedUI = !!opts.key
     const handle = document.createElement('div')
     handle.classList.add('draggable-handle')
+
+    handle.innerHTML = `
+      <div class="th">
+        <div class="l"><h3>${opts.title || ''}</h3></div>
+        <div class="r">
+          <a class="button x"><i class="ti ti-x"></i></a>
+        </div>
+      </div>
+    `
+
+    handle.querySelector('.x')
+      .addEventListener('click', (e) => {
+        opts?.close?.()
+        e.stopPropagation()
+      }, false)
+
+    handle.addEventListener('mousedown', (e) => {
+      const target = e.target as HTMLElement
+      if (target?.closest('.r')) {
+        e.stopPropagation()
+        e.preventDefault()
+        return
+      }
+    }, false)
+
     el.prepend(handle)
 
     // move to top
-    el.addEventListener('mousedown', () => {
+    el.addEventListener('mousedown', (e) => {
       this.layoutCore.move_container_to_top(ds.identity)
     }, true)
 
+    const setTitle = (title) => {
+      handle.querySelector('h3').textContent = title
+    }
     const dispose = this.layoutCore.setup_draggable_container_BANG_(el,
-      !key ? this._persistMainUILayoutData.bind(this) : () => {})
+      !isInjectedUI ? this._persistMainUILayoutData.bind(this) : () => {})
 
     ds.inited_draggable = 'true'
+
+    if (opts.title) {
+      setTitle(opts.title)
+    }
 
     return dispose
   }
