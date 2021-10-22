@@ -1938,7 +1938,6 @@
     (when show?
       (let [page-name-props (when show-page?
                               [:page
-                               (rfe/href :page {:name page-name})
                                (or page-original-name page-name)])
             parents-props (doall
                            (for [{:block/keys [uuid title name] :as block} parents]
