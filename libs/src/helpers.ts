@@ -278,6 +278,11 @@ export function setupInjectedUI (
 
   if (content) {
     content.innerHTML = ui.template
+
+    // update attributes
+    attrs && Object.entries(attrs).forEach(([k, v]) => {
+      el.setAttribute(k, v)
+    })
     return
   }
 
