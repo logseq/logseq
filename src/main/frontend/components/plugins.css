@@ -328,8 +328,6 @@
       > .draggable-handle {
         display: block;
         height: var(--ls-draggable-handle-height);
-        background-color: var(--ls-secondary-background-color);
-        color: var(--ls-primary-text-color);
         cursor: move;
         user-select: none;
         position: absolute;
@@ -344,6 +342,8 @@
           height: var(--ls-draggable-handle-height);
           user-select: none;
           position: relative;
+          background-color: var(--ls-secondary-background-color);
+          color: var(--ls-primary-text-color);
 
           > .l {
             flex-basis: 80%;
