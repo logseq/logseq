@@ -545,9 +545,13 @@
         old-marker (if old-marker old-marker "")
         pos-delta (- (count marker)
                      (count old-marker))
-        pos-delta (if (string/blank? old-marker)
-                    (inc pos-delta)
-                    pos-delta)]
+        pos-delta (cond (string/blank? old-marker)
+                        (inc pos-delta)
+                        (string/blank? marker)
+                        (dec pos-delta)
+
+                        :else
+                        pos-delta)]
     (+ pos pos-delta)))
 
 (defmethod handle-step :editor/set-marker [[_ marker] format]
