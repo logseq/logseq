@@ -100,10 +100,15 @@
   .actions {
     position: sticky;
     background-color: var(--ls-primary-background-color);
+    white-space: nowrap;
     top: -1px;
     padding-bottom: 10px;
-    display: flex;
-    align-items: center;
+
+    @screen md {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
 
     .ui__button {
       margin: 0;

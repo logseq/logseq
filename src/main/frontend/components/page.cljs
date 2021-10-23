@@ -798,7 +798,7 @@
                                         [idx (boolean (get @*checks idx))])))
              (reset! *results pages)))
 
-         [[:div.actions.flex.justify-between
+         [[:div.actions
            {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
                                                         (not= 0 @*indeterminate))}])}
            [:div.l.flex.items-center
@@ -843,7 +843,7 @@
                   [:a.cancel {:on-click reset-fn}
                    (ui/icon "x")])])]]
 
-           [:div.r.flex.items-center
+           [:div.r.flex.items-center.justify-between
             [:a.ml-1.pr-2.opacity-70.hover:opacity-100
              {:on-click #(when (js/confirm (str (t :remove-orphaned-pages) "?"))
                            (model/remove-orphaned-pages! (state/get-current-repo))
