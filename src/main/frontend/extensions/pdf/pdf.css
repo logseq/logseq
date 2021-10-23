@@ -676,16 +676,12 @@ body.is-pdf-active {
     display: none;
   }
 
-  #head {
+  #head > .l {
     padding-left: 0;
   }
 
   #main-content.is-left-sidebar-open {
     padding-left: unset;
-  }
-
- .ls-left-sidebar-open .cp__header {
-    margin-left: unset;
   }
 }
 
