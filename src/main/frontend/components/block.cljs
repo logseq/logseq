@@ -350,8 +350,7 @@
     [:span.timestamp (cond-> {:active (str active)}
                        class
                        (assoc :class class))
-     prefix
-     (timestamp-to-string t)]))
+     prefix (timestamp-to-string t)]))
 
 (defn range [{:keys [start stop]} stopped?]
   [:div {:class "timestamp-range"
@@ -1695,8 +1694,9 @@
                         (state/set-editor-show-date-picker! true)
                         (state/set-timestamp-block! {:block block
                                                      :typ typ
-                                                     :show? show?}))))}
-       (repeated/timestamp->text ast)]]
+                                                     :show? show?}))))} 
+        [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]
+        ]]
      (when (true? @show?)
        (let [ts (repeated/timestamp->map ast)]
          [:div.my-4
