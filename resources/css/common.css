@@ -1122,10 +1122,8 @@ a.tooltip-priority {
   text-align: right;
 }
 
-a.page-op {
-    svg {
-        transform: scale(0.9);
-    }
+a.page-op svg {
+  transform: scale(0.9);
 }
 
 .search-more {
