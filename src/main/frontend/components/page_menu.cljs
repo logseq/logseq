@@ -91,12 +91,6 @@
                                   :page-presentation
                                   {:page page}))}}
 
-          (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
-            [{:title   (t :page/open-in-finder)
-              :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
-             {:title   (t :page/open-with-default-app)
-              :options {:on-click #(js/window.apis.openPath file-path)}}])
-
           (when-not contents?
             {:title   (t :page/delete)
              :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
