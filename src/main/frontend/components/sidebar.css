@@ -68,6 +68,15 @@
   }
 }
 
+.ls-mobile-left-sidebar {
+  position: relative;
+  z-index: -1;
+
+  &.is-left-sidebar-open {
+    z-index: var(--ls-z-index-level-3);
+  }
+}
+
 .left-sidebar-inner {
   position: relative;
   height: 100%;
