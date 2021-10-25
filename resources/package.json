@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "main": "electron.js",
   "author": "Logseq",
   "description": "A privacy-first, open-source platform for knowledge management and collaboration.",

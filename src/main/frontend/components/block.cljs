@@ -1875,8 +1875,7 @@
 
         (when (and (state/enable-timetracking?)
                    (or (= (:block/marker block) "DONE")
-                       (and (:block/repeated? block)
-                            (= (:block/marker block) "TODO"))))
+                       (contains? #{"TODO" "LATER"} (:block/marker block))))
           (let [summary (clock/clock-summary body true)]
             (when (and summary
                        (not= summary "0m")
@@ -1939,13 +1938,11 @@
     (when show?
       (let [page-name-props (when show-page?
                               [:page
-                               (rfe/href :page {:name page-name})
                                (or page-original-name page-name)])
             parents-props (doall
                            (for [{:block/keys [uuid title name] :as block} parents]
                              (when-not name ; not page
                                [block
-                                (rfe/href :page {:name uuid})
                                 (->elem :span (map-inline config title))])))
             breadcrumb (->> (into [] parents-props)
                             (concat [page-name-props])
@@ -2522,10 +2519,11 @@
                   (and
                    (= name "logbook")
                    (state/enable-timetracking?)
-                   (or  (when (get (state/get-config) :logbook/enabled-in-timestamped-blocks true)
+                   (or  (get (state/get-config) [:logbook/settings :enabled-in-all-blocks])
+                        (when (get (state/get-config)
+                                   [:logbook/settings :enabled-in-timestamped-blocks] true)
                           (or (:block/scheduled (:block config))
-                              (:block/deadline (:block config))))
-                        (:logbook/enabled-in-all-blocks (state/get-config)))))
+                              (:block/deadline (:block config)))))))
           [:div.flex.flex-col
            [:div.text-sm.mt-1.flex.flex-row
             [:div.drawer {:data-drawer-name name}
