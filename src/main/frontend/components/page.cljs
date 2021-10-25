@@ -657,7 +657,8 @@
         (if @desc? (svg/caret-down) (svg/caret-up))])]]])
 
 (defn batch-delete-dialog
-  [pages refresh-fn]
+  [pages orphaned-pages? refresh-fn]
+  (js/console.log pages)
   (fn [close-fn]
     (rum/with-context
       [[t] i18n/*tongue-context*]
@@ -669,26 +670,36 @@
           (ui/icon "alert-triangle")]]
         [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
          [:h3#modal-headline.text-lg.leading-6.font-medium
-          (t :page/delete-confirmation)]]]
+          (if orphaned-pages?
+            (str (t :remove-orphaned-pages) "?")
+            (t :page/delete-confirmation))]]]
 
        [:table.table-auto.cp__all_pages_table.mt-4
+        [:thead
+         [:tr.opacity-70
+          [:th [:span "#"]]
+          [:th [:span (t :block/name)]]
+          [:th [:span (t :page/backlinks)]]
+          (when-not orphaned-pages? [:th [:span (t :page/created-at)]])
+          (when-not orphaned-pages? [:th [:span (t :page/updated-at)]])]]
+
         [:tbody
          (for [[n {:block/keys [idx name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
            [:tr {:key name}
             [:td.n.w-10 [:span.opacity-70 (str (inc n) ". ")]]
             [:td.name [:a {:href     (rfe/href :page {:name (:block/name page)})}
                        (block/page-cp {} page)]]
-            [:td.backlinks [:span backlinks]]
-            [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]]
-            [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]]])]]
+            [:td.backlinks [:span (or backlinks "0")]]
+            (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
+            (when-not orphaned-pages? [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]])])]]
 
        [:div.pt-6.flex.justify-end
 
         [:span.pr-2
          (ui/button
-           (t :cancel)
-           :intent "logseq"
-           :on-click close-fn)]
+          (t :cancel)
+          :intent "logseq"
+          :on-click close-fn)]
 
         (ui/button
          (t :yes)
@@ -810,9 +821,9 @@
                                 selected (and (seq selected)
                                               (into #{} (for [[k _] selected] k)))]
                             (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
-                              (state/set-modal! (batch-delete-dialog pages #(do
-                                                                              (reset! *checks nil)
-                                                                              (refresh-pages)))))))
+                              (state/set-modal! (batch-delete-dialog pages false #(do
+                                                                                    (reset! *checks nil)
+                                                                                    (refresh-pages)))))))
               :small? true)]
 
             [:div.search-wrap.flex.items-center.pl-2
@@ -845,9 +856,12 @@
 
            [:div.r.flex.items-center.justify-between
             [:a.ml-1.pr-2.opacity-70.hover:opacity-100
-             {:on-click #(when (js/confirm (str (t :remove-orphaned-pages) "?"))
-                           (model/remove-orphaned-pages! (state/get-current-repo))
-                           (refresh-pages))}
+             {:on-click (fn [] (state/set-modal!
+                                (batch-delete-dialog
+                                 (model/get-orphaned-pages (state/get-current-repo)) true
+                                 #(do
+                                    (reset! *checks nil)
+                                    (refresh-pages)))))}
              [:span
               (ui/icon "file-x")
               [:span.ml-1 (t :remove-orphaned-pages)]]]
@@ -859,12 +873,12 @@
 
             [:div
              (ui/tippy
-               {:html  [:small (str (t :page/show-journals) " ?")]
-                :arrow true}
-               [:a.button.journal
-                {:class    (util/classnames [{:active (boolean @*journal?)}])
-                 :on-click #(reset! *journal? (not @*journal?))}
-                (ui/icon "calendar")])]
+              {:html  [:small (str (t :page/show-journals) " ?")]
+               :arrow true}
+              [:a.button.journal
+               {:class    (util/classnames [{:active (boolean @*journal?)}])
+                :on-click #(reset! *journal? (not @*journal?))}
+               (ui/icon "calendar")])]
 
             [:div.paginates
              [:span.flex.items-center.opacity-60.text-sm
