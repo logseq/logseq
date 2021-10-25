@@ -658,7 +658,6 @@
 
 (defn batch-delete-dialog
   [pages orphaned-pages? refresh-fn]
-  (js/console.log pages)
   (fn [close-fn]
     (rum/with-context
       [[t] i18n/*tongue-context*]
