@@ -223,8 +223,9 @@
           (recent-pages t)]]))))
 
 (rum/defc sidebar-mobile-sidebar < rum/reactive
-  [{:keys [open? close-fn route-match]}]
-  [:div.md:hidden
+  [{:keys [open? left-sidebar-open? close-fn route-match]}]
+  [:div.md:hidden.ls-mobile-left-sidebar
+   {:class (if left-sidebar-open? "is-left-sidebar-open" "")}
    [:div.fixed.inset-0.z-30.bg-gray-600.pointer-events-none.ease-linear.duration-300
     {:class (if @open?
               "opacity-75 pointer-events-auto"
@@ -490,9 +491,10 @@
         {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?}])}
 
         (sidebar-mobile-sidebar
-         {:open?       open?
-          :close-fn    close-fn
-          :route-match route-match})
+          {:open?       open?
+           :left-sidebar-open? left-sidebar-open?
+           :close-fn    close-fn
+           :route-match route-match})
 
         [:div.#app-container.h-screen.flex
          [:div.flex-1.h-full.flex.flex-col#left-container.relative
