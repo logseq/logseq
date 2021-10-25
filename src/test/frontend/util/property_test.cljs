@@ -2,6 +2,21 @@
   (:require [cljs.test :refer [are deftest testing]]
             [frontend.util.property :as property]))
 
+(deftest test-remove-empty-properties
+  (testing "remove properties if it is empty. Available in orgmode"
+    (are [x y] (= (property/remove-empty-properties x) y)
+      "* TODO properties demo\nabcd"
+      "* TODO properties demo\nabcd"
+      
+      "* TODO properties demo\n:PROPERTIES:\n:END:\nabcd"
+      "* TODO properties demo\nabcd"
+
+      "* TODO properties demo\n:PROPERTIES:\n:END:\n\n\nabcd"
+      "* TODO properties demo\nabcd"
+
+      "* TODO properties demo\n:PROPERTIES:\n\n:END:\n\n\nabcd"
+      "* TODO properties demo\nabcd")))
+
 (deftest remove-id-property
   (testing "org"
     (are [x y] (= (property/remove-id-property :org x) y)
@@ -55,6 +70,14 @@
       (property/remove-properties :markdown "** hello\nx:: y\n\na:: b\n")
       "** hello\n\na:: b")))
 
+(deftest test-get-property-keys
+  (are [x y] (= x y)
+    (property/get-property-keys :org "hello\n:PROPERTIES:\n:x1: y1\n:x2: y2\n:END:\n")
+    ["X1" "X2"]
+    
+    (property/get-property-keys :org "hello\n:PROPERTIES:\n:END:\n")
+    nil))
+
 (deftest test-insert-property
   (are [x y] (= x y)
     (property/insert-property :org "hello" "a" "b")
@@ -68,12 +91,27 @@
 
     (property/insert-property :org "hello\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
     "hello\n:PROPERTIES:\n:a: b\n:c: d\n:END:\nworld"
-
+    
     (property/insert-property :org "#+BEGIN_QUOTE
  hello world
   #+END_QUOTE" "c" "d")
     ":PROPERTIES:\n:c: d\n:END:\n#+BEGIN_QUOTE\n hello world\n  #+END_QUOTE"
 
+    (property/insert-property :org "hello
+DEADLINE: <2021-10-25 Mon>
+SCHEDULED: <2021-10-25 Mon>" "a" "b")
+    "hello\nSCHEDULED: <2021-10-25 Mon>\nDEADLINE: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:"
+    
+    (property/insert-property :org "hello
+DEADLINE: <2021-10-25 Mon>
+SCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:\n" "c" "d")
+    "hello\nDEADLINE: <2021-10-25 Mon>\nSCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:c: d\n:END:"
+
+    (property/insert-property :org "hello
+DEADLINE: <2021-10-25 Mon>
+SCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:END:\nworld\n" "c" "d")
+    "hello\nDEADLINE: <2021-10-25 Mon>\nSCHEDULED: <2021-10-25 Mon>\n:PROPERTIES:\n:a: b\n:c: d\n:END:\nworld"
+    
     (property/insert-property :markdown "hello\na:: b\nworld\n" "c" "d")
     "hello\na:: b\nc:: d\nworld"
 
