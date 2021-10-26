@@ -519,7 +519,8 @@
   (let [edit-block-file-path (model/get-block-file-path (state/get-edit-block))
         page-name (string/lower-case page)]
     (if (and edit-block-file-path
-             (state/org-mode-file-link? (state/get-current-repo)))
+             (and (= :org (state/get-preferred-format))
+                  (state/org-mode-file-link? (state/get-current-repo))))
       (if-let [ref-file-path (:file/path (db/get-page-file page-name))]
         (util/format "[[file:%s][%s]]"
                      (util/get-relative-path edit-block-file-path ref-file-path)

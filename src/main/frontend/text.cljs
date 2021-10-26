@@ -8,7 +8,7 @@
 
 (def page-ref-re #"\[\[(.*?)\]\]")
 (def org-page-ref-re
-  (if (and (state/get-preferred-format)
+  (if (and (= :org (state/get-preferred-format))
            (:org-mode/insert-file-link? (state/get-config)))
     #"\[\[file:.+\]\[(.+?)\]\]"
     page-ref-re))
