@@ -57,7 +57,7 @@
           [:div.mt-2.mb-4.relative.rounded-md.shadow-sm.max-w-xs
            [:input#branch.form-input.block.w-full.sm:text-sm.sm:leading-5
             {:value @branch
-             :placeholder "e.g. master"
+             :placeholder "e.g. main"
              :on-change (fn [e]
                           (reset! branch (util/evalue e)))}]]]]
 
