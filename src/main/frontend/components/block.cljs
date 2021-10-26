@@ -1870,7 +1870,7 @@
            {:on-mouse-down (fn [e]
                              (util/stop e)
                              (when-let [block (:embed-parent config)]
-                               (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
+                               (editor-handler/edit-block! block :max (:block/uuid block))))}
            svg/edit])
 
         (when (and (state/enable-timetracking?)

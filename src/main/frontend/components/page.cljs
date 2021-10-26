@@ -62,7 +62,7 @@
         (when (and (= (count blocks) 1)
                    (string/blank? (:block/content block))
                    (not preview?))
-          (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))))
+          (editor-handler/edit-block! block :max (:block/uuid block))))))
   state)
 
 (rum/defc page-blocks-inner <
@@ -96,7 +96,7 @@
       [:span.bullet]]]
     [:div.flex.flex-1 {:on-click (fn []
                                    (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name)]
-                                     (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
+                                     (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
      [:span.opacity-50
       "Click here to edit..."]]]])
 
@@ -115,7 +115,7 @@
           {:on-mouse-out (fn [] (reset! show? false))
            :on-click (fn []
                        (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
-                         (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
+                         (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
           svg/plus-circle]
 
          [:span])]]]))
