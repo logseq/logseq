@@ -76,7 +76,10 @@
     ["X1" "X2"]
     
     (property/get-property-keys :org "hello\n:PROPERTIES:\n:END:\n")
-    nil))
+    nil
+
+    (property/get-property-keys :markdown "hello\nx1:: y1\nx2:: y2\nabc")
+    ["X1" "X2"]))
 
 (deftest test-insert-property
   (are [x y] (= x y)

@@ -1,33 +1,37 @@
 (ns frontend.text
   (:require [frontend.config :as config]
             [frontend.util :as util]
+            [frontend.state :as state]
             [clojure.string :as string]
             [clojure.set :as set]
             [medley.core :as medley]))
 
+(def page-ref-re #"\[\[(.*?)\]\]")
+(def org-page-ref-re
+  (if (and (state/get-preferred-format)
+           (:org-mode/insert-file-link? (state/get-config)))
+    #"\[\[file:.+\]\[(.+?)\]\]"
+    page-ref-re))
+
 (defn page-ref?
   [s]
-  (and
-   (string? s)
-   (string/starts-with? s "[[")
-   (string/ends-with? s "]]")))
+  (and (not (string/blank? s))
+       (or (re-matches org-page-ref-re s)
+           (re-matches page-ref-re s))))
 
 (defn block-ref?
   [s]
-  (and
-   (string? s)
-   (string/starts-with? s "((")
-   (string/ends-with? s "))")))
+  (and (not (string/blank? s))
+       (string/starts-with? s "((")
+       (string/ends-with? s "))")))
 
 (defn extract-page-name-from-ref
   [ref]
   (when-not (string/blank? ref)
-    (if-let [matches (or (re-matches #"\[\[file:.+\]\[(.+)\]\]" ref)
-                         (re-matches #"\[\[(.+)\]\]" ref))]
+    (if-let [matches (or (re-matches org-page-ref-re ref)
+                         (re-matches page-ref-re ref))]
       (string/trim (last matches))
       ref)))
-
-(defonce page-ref-re #"\[\[(.*?)\]\]")
 
 (defonce page-ref-re-2 #"(\[\[.*?\]\])")
 
@@ -39,7 +43,7 @@
   [s]
   (when (string? s)
     (if (page-ref? s)
-      (subs s 2 (- (count s) 2))
+      (extract-page-name-from-ref s)
       s)))
 
 (defn block-ref-un-brackets!
@@ -77,7 +81,7 @@
              (cond
                (and not-matched-s (= s "]]"))
                (let [s' (str not-matched-s s)]
-                 (if (ref-matched? s')
+                 (if (page-ref? s')
                    [(conj acc s') nil]
                    [acc s']))
 
