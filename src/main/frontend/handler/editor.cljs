@@ -2777,7 +2777,7 @@
               (commands/handle-step [:editor/search-block :reference])
               (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
             :else
-            nil))
+            (reset! commands/*show-commands false)))
 
         (or
          (surround-by? input "#" " ")
