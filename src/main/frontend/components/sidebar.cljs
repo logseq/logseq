@@ -51,7 +51,7 @@
 
   [:div.nav-content-item.is-expand
    {:class class}
-   [:div.hd.items-center.mb-2
+   [:div.hd.items-center.mb-1
     {:on-click (fn [^js/MouseEvent e]
                  (let [^js target (.-target e)
                        ^js parent (.closest target ".nav-content-item")]
@@ -138,7 +138,7 @@
   (nav-content-item
    [:a.flex.items-center.text-sm.font-medium.rounded-md
     (ui/icon "star mr-1" {:style {:font-size 18}})
-    [:span.flex-1.uppercase {:style {:padding-top 2}}
+    [:span.flex-1.ml-1 {:style {:padding-top 2}}
      (t :left-side-bar/nav-favorites)]]
 
    {:class "favorites"
@@ -151,7 +151,7 @@
                         (remove string/blank?)
                         (filter string?))]
      (when (seq favorites)
-       [:ul.favorites
+       [:ul.favorites.text-sm
         (for [name favorites]
           (when-not (string/blank? name)
             (when-let [entity (db/entity [:block/name (util/safe-lower-case name)])]
@@ -163,8 +163,8 @@
   [t]
   (nav-content-item
    [:a.flex.items-center.text-sm.font-medium.rounded-md
-    (ui/icon "history mr-1" {:style {:font-size 18}})
-    [:span.flex-1.uppercase {:style {:padding-top 2}}
+    (ui/icon "history mr-2" {:style {:font-size 18}})
+    [:span.flex-1 {:style {:padding-top 2}}
      (t :left-side-bar/nav-recent-pages)]]
 
    {:class "recent"}
@@ -172,7 +172,7 @@
    (let [pages (->> (db/sub-key-value :recent/pages)
                     (remove string/blank?)
                     (filter string?))]
-     [:ul
+     [:ul.text-sm
       (for [name pages]
         (when-let [entity (db/entity [:block/name (util/safe-lower-case name)])]
           [:li.recent-item {:key name}
@@ -212,28 +212,39 @@
            (repo/repos-dropdown)
 
            [:div.nav-header
-            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click route-handler/go-to-journals!}
-             (ui/icon "calendar mr-3" {:style {:font-size 20}})
-             [:span.flex-1 "Journals"]]
+            (when true
+             [:div.journals-nav
+              [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+               {:on-click route-handler/go-to-journals!}
+               (ui/icon "calendar mr-3" {:style {:font-size 20}})
+               [:span.flex-1 "Journals"]]])
 
-            (flashcards)
+            [:div.flashcards-nav
+             (flashcards)]
 
-            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :graph)}
-             (ui/icon "hierarchy mr-3" {:style {:font-size 20}})
-             [:span.flex-1 "Graph view"]]
+            [:div.graph-view-nav
+             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+              {:href (rfe/href :graph)}
+              (ui/icon "hierarchy mr-3" {:style {:font-size 20}})
+              [:span.flex-1 "Graph view"]]]
 
-            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-pages)}
-             (ui/icon "files mr-3" {:style {:font-size 20}})
-             [:span.flex-1 "All pages"]]
-
-            (when-not config/publishing?
-              [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:go/search])}
-               (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
-               [:span.flex-1 "New page"]])]]
+            [:div.all-pages-nav
+             [:a.all-pages-nav.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+              {:href (rfe/href :all-pages)}
+              (ui/icon "files mr-3" {:style {:font-size 20}})
+              [:span.flex-1 "All pages"]]]]]
 
           (favorites t)
 
-          (recent-pages t)]]))))
+          (recent-pages t)
+
+          [:div.flex-column-spacer] ;; Push following objects to the bottom
+
+          [:nav.px-2.space-y-1 {:aria-label "Sidebar"}
+           (when-not config/publishing?
+             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:go/search])}
+              (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+              [:span.flex-1 "New page"]])]]]))))
 
 (rum/defc sidebar-mobile-sidebar < rum/reactive
   [{:keys [open? left-sidebar-open? close-fn route-match]}]
