@@ -458,11 +458,13 @@ class PluginLocal
       this._options[k] = pkg[k]
     })
 
-    const validateMain = (main) => main && /\.(js|html)$/.test(main)
+    const validateEntry = (main) => main && /\.(js|html)$/.test(main)
 
     // Entry from main
-    if (validateMain(pkg.main)) { // Theme has no main
-      this._options.entry = this._resolveResourceFullUrl(pkg.main, localRoot)
+    const entry = logseq.entry || logseq.main || pkg.main
+    if (validateEntry(entry)) { // Theme has no main
+      this._options.entry = this._resolveResourceFullUrl(entry, localRoot)
+      this._options.devEntry = logseq.devEntry
 
       if (logseq.mode) {
         this._options.mode = logseq.mode
