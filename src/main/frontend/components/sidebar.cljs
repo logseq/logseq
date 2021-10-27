@@ -51,7 +51,7 @@
 
   [:div.nav-content-item.is-expand
    {:class class}
-   [:div.hd.items-center.mb-1
+   [:div.header.items-center.mb-1
     {:on-click (fn [^js/MouseEvent e]
                  (let [^js target (.-target e)
                        ^js parent (.closest target ".nav-content-item")]

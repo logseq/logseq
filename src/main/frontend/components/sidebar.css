@@ -102,7 +102,7 @@
   .nav-content-item {
     padding: 32px 0 0 0;
 
-    > .hd {
+    > .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -184,7 +184,7 @@
     }
 
     &.is-expand {
-      > .hd > span > a {
+      > .header > span > a {
         &:last-child {
           transform: translateY(2px) translateX(-3px);
         }
