@@ -99,10 +99,11 @@
      (pdf-assets/fix-local-asset-filename original-name)]))
 
 (defn get-page-emoji [page-entity]
-  (let [default-emoji "◦"]
+  (let [default-emoji "◦"
+        from-properties (get-in (into {} page-entity) [:block/properties :emoji])]
     (or
-     (get-in (into {} page-entity) [:block/properties :emoji])
-     default-emoji)))
+     (when (not= from-properties "") from-properties)
+     default-emoji))) ;; Fall back to default if emoji is undefined or empty
 
 (rum/defcs favorite-item <
   (rum/local nil ::up?)
@@ -208,7 +209,7 @@
                                    [".favorites" ".recent" ".dropdown-wrapper" ".nav-header"])
                          (close-modal-fn)))}
          [:div.flex.flex-col.pb-4.wrap
-          [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
+          [:nav.px-2.space-y-1 {:aria-label "Sidebar"}
            (repo/repos-dropdown)
 
            [:div.nav-header
