@@ -82,7 +82,7 @@
     (< delta 14)))
 
 (rum/defc page-name
-  [name]
+  [name emoji]
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
                      (let [name (util/safe-lower-case name)]
@@ -95,12 +95,19 @@
                             {:page page-entity}))
                          (route-handler/redirect! {:to :page
                                                    :path-params {:name name}}))))}
+     [:span.page-emoji emoji]
      (pdf-assets/fix-local-asset-filename original-name)]))
+
+(defn get-page-emoji [page-entity]
+  (let [default-emoji "◦"]
+    (or
+     (get-in (into {} page-entity) [:block/properties :emoji])
+     default-emoji)))
 
 (rum/defcs favorite-item <
   (rum/local nil ::up?)
   (rum/local nil ::dragging-over)
-  [state t name]
+  [state t name emoji]
   (let [up? (get state ::up?)
         dragging-over (get state ::dragging-over)
         target (state/sub :favorites/dragging)]
@@ -124,7 +131,7 @@
                                                    :up? (move-up? e)})
                  (reset! up? nil)
                  (reset! dragging-over nil))}
-     (page-name name)]))
+     (page-name name emoji)]))
 
 (rum/defc favorites < rum/reactive
   [t]
@@ -147,8 +154,9 @@
        [:ul.favorites
         (for [name favorites]
           (when-not (string/blank? name)
-            (when (db/entity [:block/name (util/safe-lower-case name)])
-                (favorite-item t name))))]))))
+            (when-let [entity (db/entity [:block/name (util/safe-lower-case name)])]
+              (let [emoji (get-page-emoji entity)]
+                (favorite-item t name emoji)))))]))))
 
 (rum/defc recent-pages
   < rum/reactive db-mixins/query
@@ -166,9 +174,9 @@
                     (filter string?))]
      [:ul
       (for [name pages]
-        (when (db/entity [:block/name (util/safe-lower-case name)])
-          [:li {:key name}
-           (page-name name)]))])))
+        (when-let [entity (db/entity [:block/name (util/safe-lower-case name)])]
+          [:li.recent-item {:key name}
+           (page-name name (get-page-emoji entity))]))]))) ;; TODO: pass in the real emoji
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
