@@ -138,8 +138,9 @@
   []
   (when (and (config/demo-graph?)
              (not config/publishing?))
-    (ui/admonition
-     :warning
-     [:p (util/format
-          "Feel free to edit anything in this demo graph, no change will be saved at this moment. If you do want to persist your work, click the \"Open\" button to open a local directory%s."
-          (if (util/electron?) "" " or connect Logseq to GitHub"))])))
+    [:div.flex.flex-row.admonitionblock.align-items
+     [:div.flex.flex-col.justify-center
+      (ui/icon "alert-triangle" {:style {:fontSize 20
+                                         :color "red"}})]
+     [:div.ml-1
+      [:p "(Demo graph) Changes will not be saved until you open a local folder"]]]))

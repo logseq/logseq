@@ -56,8 +56,6 @@
                                   data-page-tags
                                   (assoc :data-page-tags data-page-tags))
 
-       (widgets/demo-graph-alert)
-
        (ui/foldable
         [:a.initial-color.title.journal-title
          {:href     (rfe/href :page {:name page})
