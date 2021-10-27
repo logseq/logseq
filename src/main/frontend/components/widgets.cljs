@@ -136,7 +136,8 @@
 
 (rum/defc demo-graph-alert
   []
-  (when (config/demo-graph?)
+  (when (and (config/demo-graph?)
+             (not config/publishing?))
     (ui/admonition
      :warning
      [:p (util/format
