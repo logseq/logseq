@@ -23,7 +23,7 @@
 
 (defn- markdown-link?
   [link]
-  (let [matches (re-matches org-link-re link)]
+  (let [matches (re-matches markdown-link-re link)]
     (when matches
       {:type "markdown-link"
        :url (nth matches 2)
