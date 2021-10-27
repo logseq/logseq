@@ -184,8 +184,7 @@
 
                         :page
                         (let [data (or alias data)]
-                          (route/redirect! {:to :page
-                                            :path-params {:name data}}))
+                          (route/redirect-to-page! data))
 
                         :file
                         (route/redirect! {:to :file
@@ -195,12 +194,9 @@
                         (let [block-uuid (uuid (:block/uuid data))
                               collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)]
                           (if collapsed?
-                            (route/redirect! {:to :page
-                                              :path-params {:name (str block-uuid)}})
+                            (route/redirect-to-page! (str block-uuid))
                             (let [page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
-                              (route/redirect! {:to :page
-                                                :path-params {:name page}
-                                                :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))))
+                              (route/redirect-to-page! page  (str "ls-block-" (:block/uuid data))))))
                         nil)
                       (state/close-modal!))
          :on-shift-chosen (fn [{:keys [type data alias]}]
@@ -308,8 +304,7 @@
       {:on-chosen (fn [{:keys [type data]}]
                     (case type
                       :page
-                      (route/redirect! {:to :page
-                                        :path-params {:name data}})
+                      (route/redirect-to-page! data)
                       :search
                       (let [q data]
                         (state/set-q! q)

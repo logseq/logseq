@@ -118,8 +118,7 @@
            (outliner-file/sync-to-file page))
 
          (when redirect?
-           (route-handler/redirect! {:to          :page
-                                     :path-params {:name page}}))
+           (route-handler/redirect-to-page! page))
          page)))))
 
 (defn page-add-property!
