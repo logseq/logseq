@@ -117,10 +117,13 @@
   (let [result (.showOpenDialogSync dialog (bean/->js
                                              {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
         path (first result)]
-    (.. ^js window -webContents
-        (send "open-dir-confirmed"
-              (bean/->js {:opened? true})))
-    (get-files path)))
+    (if path
+      (do
+        (.. ^js window -webContents
+           (send "open-dir-confirmed"
+                 (bean/->js {:opened? true})))
+        (get-files path))
+      (throw (js/Error "path empty")))))
 
 (defmethod handle :getFiles [window [_ path]]
   (get-files path))
