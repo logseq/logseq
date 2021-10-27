@@ -38,7 +38,8 @@
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
             [medley.core :as medley]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.components.widgets :as widgets]))
 
 (defn- get-page-name
   [state]
@@ -325,6 +326,8 @@
 
                   {:key path-page-name
                    :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
+
+           (widgets/demo-graph-alert)
 
            [:div.relative
             (when (and (not sidebar?)

@@ -12,7 +12,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.config :as config]))
 
 (rum/defc choose-preferred-format
   []
@@ -132,3 +133,12 @@
                              (interpose [:b.mt-10.mb-5.opacity-50 "OR"]))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.p-8.flex.flex-col available-graph])))
+
+(rum/defc demo-graph-alert
+  []
+  (when (config/demo-graph?)
+    (ui/admonition
+     :warning
+     [:p (util/format
+          "Feel free to edit anything in this demo graph, no change will be saved at this moment. If you do want to persist your work, click the \"Open\" button to open a local directory%s."
+          (if (util/electron?) "" " or connect Logseq to GitHub"))])))
