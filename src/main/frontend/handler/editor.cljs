@@ -2772,19 +2772,6 @@
           (state/set-last-pos! (cursor/pos input))
           (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
-        (let [sym ":"]
-          (and
-           (= key sym)
-           (>= (count value) 1)
-           (> pos 0)
-           (= (nth value (dec pos)) " ")
-           (cursor/textarea-cursor-first-row? input)
-           (= :org (state/get-preferred-format))))
-        (do
-          (commands/handle-step [:editor/search-page-hashtag])
-          (state/set-last-pos! (cursor/pos input))
-          (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
-
         (let [sym "$"]
           (and (= key sym)
                (>= (count value) 1)
