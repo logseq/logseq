@@ -27,7 +27,9 @@
             ["semver" :as semver]
             [clojure.string :as string]
             [frontend.modules.instrumentation.posthog :as posthog]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.encrypt :as encrypt]
+            [promesa.core :as p]))
 
 ;; TODO: should we move all events here?
 
@@ -170,7 +172,8 @@
       (state/set-modal! #(diff/local-file repo path disk-content db-content)))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (state/set-modal! #(git-component/file-specific-version path hash content)))
+  (p/let [content (when content (encrypt/decrypt content))]
+    (state/set-modal! #(git-component/file-specific-version path hash content))))
 
 (defmethod handle :after-db-restore [[_ repos]]
   (mapv (fn [{url :url} repo]

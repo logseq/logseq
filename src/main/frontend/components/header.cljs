@@ -22,7 +22,8 @@
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.components.widgets :as widgets]))
 
 (rum/defc home-button
   []
@@ -197,6 +198,8 @@
             [:a.button#search-button
              {:on-click #(state/pub-event! [:go/search])}
              (ui/icon "search" {:style {:fontSize 20}})]))]
+
+       (widgets/demo-graph-alert)
 
        [:div.r.flex
         (when (and

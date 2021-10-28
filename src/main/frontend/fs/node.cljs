@@ -69,7 +69,8 @@
           (when (util/electron?)
             (debug/set-ack-step! path :saved-successfully)
             (debug/ack-file-write! path))
-          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
+          (let [disk-content (encrypt/decrypt disk-content)]
+            (state/pub-event! [:file/not-matched-from-disk path disk-content content])))
 
         :else
         (->
