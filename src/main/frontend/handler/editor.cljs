@@ -1635,8 +1635,8 @@
   (zipmap (vals autopair-map)
           (keys autopair-map)))
 
-(defonce autopair-when-selected
-  #{"^" "_" "=" "+" "/"})
+(def autopair-when-selected
+  #{"*" "^" "_" "=" "+" "/"})
 
 (def delete-map
   (assoc autopair-map
