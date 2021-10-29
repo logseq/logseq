@@ -1315,7 +1315,7 @@
        :block
        block)
       (util/stop e))
-    (route-handler/redirect-to-page! (str uuid))))
+    (route-handler/redirect-to-page! uuid)))
 
 (rum/defc block-children < rum/reactive
   [config children collapsed? *ref-collapsed?]
@@ -1918,7 +1918,7 @@
                 (:db/id block)
                 :block-ref
                 {:block block}))
-             (route-handler/redirect-to-page! (str (:block/uuid block)))))}
+             (route-handler/redirect-to-page! (:block/uuid block))))}
      label]))
 
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])

@@ -1273,7 +1273,7 @@
                           db/entity
                           :block/uuid)]
       (let [pos (state/get-edit-pos)]
-        (route-handler/redirect-to-page! (str id))
+        (route-handler/redirect-to-page! id)
         (edit-block! {:block/uuid id} pos nil id)))
     (js/window.history.forward)))
 
@@ -1291,7 +1291,7 @@
                        (nil? (:block/name block-parent))
                        (:block/uuid block-parent))]
             (do
-              (route-handler/redirect-to-page! (str id))
+              (route-handler/redirect-to-page! id)
 
               (edit-block! {:block/uuid block-id} :max block-id))
             (let [page-id (some-> (db/entity [:block/uuid block-id])

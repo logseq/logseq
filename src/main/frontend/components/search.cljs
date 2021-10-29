@@ -194,7 +194,7 @@
                         (let [block-uuid (uuid (:block/uuid data))
                               collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)]
                           (if collapsed?
-                            (route/redirect-to-page! (str block-uuid))
+                            (route/redirect-to-page! block-uuid)
                             (let [page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
                               (route/redirect-to-page! page  (str "ls-block-" (:block/uuid data))))))
                         nil)

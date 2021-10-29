@@ -26,11 +26,17 @@
 
 (defn redirect-to-page!
   ([page-name]
-   (redirect-to-page! page-name false))
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}}))
   ([page-name anchor]
    (redirect! {:to :page
-               :path-params {:name page-name}
-               :query-params {:anchor anchor}})))
+               :path-params {:name (str page-name)}
+               :query-params {:anchor anchor}}))
+  ([page-name anchor push]
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}
+               :query-params {:anchor anchor}
+               :push push})))
 
 (defn get-title
   [name path-params]
