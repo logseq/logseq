@@ -44,7 +44,7 @@
   [content]
   (if (contains-properties? content)
     (string/replace content
-                    (re-pattern ":PROPERTIES:\n:END:\n*")
+                    (re-pattern ":PROPERTIES:\n*:END:\n*")
                     "")
     content))
 
