@@ -2844,7 +2844,7 @@
                          (not= (util/nth-safe value current-pos) "]")))
             (state/set-editor-show-page-search-hashtag! false)))
 
-        (when (and @*show-commands (not= key-code 220)) ; not /   TODO: generalize this!!!!!!
+        (when (and @*show-commands (not= key-code 192)) ; not /   TODO: is this the .charCodeAt or the event code?
           (let [matched-commands (get-matched-commands input)]
             (if (seq matched-commands)
               (do
