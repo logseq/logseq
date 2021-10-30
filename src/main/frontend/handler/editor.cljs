@@ -2009,14 +2009,15 @@
   (let [input           (state/get-input)
         pos             (cursor/pos input)
         last-input-char (util/nth-safe (.-value input) (dec pos))]
-    (case last-input-char
-      "/"
+
       ;; TODO: is it cross-browser compatible?
       ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
+    (if (= last-input-char commands/command-menu-trigger) ;"/"
       (when (seq (get-matched-commands input))
         (reset! commands/*slash-caret-pos (cursor/get-caret-pos input))
-        (reset! commands/*show-commands true))
-      "<"
+        (reset! commands/*show-commands true)))
+
+    (if (= last-input-char commands/angle-bracket)
       (when (seq (get-matched-block-commands input))
         (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
         (reset! commands/*show-block-commands true))
@@ -2836,8 +2837,8 @@
         (when (and (= "〈" c)
                    (= "《" (util/nth-safe value (dec (dec current-pos))))
                    (> current-pos 0))
-          (commands/handle-step [:editor/input "<" {:last-pattern "《〈"
-                                                    :backward-pos 0}])
+          (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"}
+                                                    :backward-pos 0])
           (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
           (reset! commands/*show-block-commands true))
 
