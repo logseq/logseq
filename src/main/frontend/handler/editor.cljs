@@ -1481,10 +1481,6 @@
              (util/format "[[%s][%s]]" url file-name))
       nil)))
 
-(defn- get-asset-link
-  [url]
-  (str "/" url))
-
 (defn ensure-assets-dir!
   [repo]
   (let [repo-dir (config/get-repo-dir repo)
@@ -1878,8 +1874,7 @@
                               blocks-dom-nodes))]
                 (state/set-selection-blocks! blocks)))))))))
 
-(defn- get-link
-  [format link label]
+(defn- get-link [format link label]
   (let [link (or link "")
         label (or label "")]
     (case (keyword format)
@@ -1895,27 +1890,27 @@
       :markdown (util/format "![%s](%s)" label link)
       :org (util/format "[[%s]]"))))
 
-(defn handle-command-input
-  [command id format m pos]
+(defn handle-command-input [command id format m pos]
+  ;; TODO: Add error handling for when user doesn't provide a required field.
+  ;; (The current behavior is to just revert back to the editor.)
   (case command
-    :link
-    (let [{:keys [link label]} m]
-      (if (and (string/blank? link)
-               (string/blank? label))
-        nil
-        (insert-command! id
-                         (get-link format link label)
-                         format
-                         {:last-pattern (str commands/command-menu-trigger "link")})))
-    :image-link
-    (let [{:keys [link label]} m]
-      (if (and (string/blank? link)
-               (string/blank? label))
-        nil
-        (insert-command! id
-                         (get-image-link format link label)
-                         format
-                         {:last-pattern (str commands/command-menu-trigger "link")})))
+
+    :link (let [{:keys [link label]} m]
+            (when-not (or (string/blank? link) (string/blank? label))
+              (insert-command!
+               id
+               (get-link format link label)
+               format
+               {:last-pattern (str commands/command-menu-trigger "link")})))
+
+    :image-link (let [{:keys [link label]} m]
+                  (when (not (string/blank? link))
+                    (insert-command!
+                     id
+                     (get-image-link format link label)
+                     format
+                     {:last-pattern (str commands/command-menu-trigger "link")})))
+
     nil)
 
   (state/set-editor-show-input! nil)
@@ -2012,7 +2007,7 @@
 
       ;; TODO: is it cross-browser compatible?
       ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
-    (if (= last-input-char commands/command-menu-trigger) ;"/"
+    (if (= last-input-char commands/command-menu-trigger)
       (when (seq (get-matched-commands input))
         (reset! commands/*slash-caret-pos (cursor/get-caret-pos input))
         (reset! commands/*show-commands true)))
@@ -2849,7 +2844,7 @@
                          (not= (util/nth-safe value current-pos) "]")))
             (state/set-editor-show-page-search-hashtag! false)))
 
-        (when (and @*show-commands (not= key-code 191)) ; not /
+        (when (and @*show-commands (not= key-code 220)) ; not /   TODO: generalize this!!!!!!
           (let [matched-commands (get-matched-commands input)]
             (if (seq matched-commands)
               (do

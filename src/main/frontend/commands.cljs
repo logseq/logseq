@@ -23,7 +23,7 @@
 
 (defonce *show-commands (atom false))
 (defonce *slash-caret-pos (atom nil))
-(defonce command-menu-trigger "/")
+(defonce command-menu-trigger "\\")
 (defonce *show-block-commands (atom false))
 (defonce angle-bracket "<")
 (defonce *angle-bracket-caret-pos (atom nil))
@@ -238,7 +238,7 @@
        ["Underline" [[:editor/input "<ins></ins>"
                       {:last-pattern command-menu-trigger
                        :backward-pos 6}]] "Create a underline text decoration"])
-     ["Template" [[:editor/input "/" nil]
+     ["Template" [[:editor/input command-menu-trigger nil]
                   [:editor/search-template]] "Insert a created template here"]
      (cond
        (and (util/electron?) (config/local-db? (state/get-current-repo)))
