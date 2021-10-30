@@ -1598,7 +1598,7 @@
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)
                   format
-                  {:last-pattern (if drop-or-paste? "" commands/slash)
+                  {:last-pattern (if drop-or-paste? "" commands/command-menu-trigger)
                    :restore?     true})))))
           (p/finally
             (fn []
@@ -1615,7 +1615,7 @@
             (insert-command! id
                              (get-asset-file-link format signed-url file-name true)
                              format
-                             {:last-pattern (if drop-or-paste? "" commands/slash)
+                             {:last-pattern (if drop-or-paste? "" commands/command-menu-trigger)
                               :restore?     true})
 
             (reset! *asset-uploading? false)
@@ -1906,7 +1906,7 @@
         (insert-command! id
                          (get-link format link label)
                          format
-                         {:last-pattern (str commands/slash "link")})))
+                         {:last-pattern (str commands/command-menu-trigger "link")})))
     :image-link
     (let [{:keys [link label]} m]
       (if (and (string/blank? link)
@@ -1915,7 +1915,7 @@
         (insert-command! id
                          (get-image-link format link label)
                          format
-                         {:last-pattern (str commands/slash "link")})))
+                         {:last-pattern (str commands/command-menu-trigger "link")})))
     nil)
 
   (state/set-editor-show-input! nil)
@@ -2644,7 +2644,7 @@
         (delete-block! repo e false))
 
       (and (> current-pos 1)
-           (= (util/nth-safe value (dec current-pos)) commands/slash))
+           (= (util/nth-safe value (dec current-pos)) commands/command-menu-trigger))
       (do
         (util/stop e)
         (reset! *slash-caret-pos nil)
