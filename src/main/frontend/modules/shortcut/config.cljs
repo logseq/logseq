@@ -236,11 +236,11 @@
     :editor/move-selected-blocks-up
     {:desc    "Move selected blocks up"
      :binding "shift+k"
-     :fn      (editor-handler/move-selected-blocks-up-down true)}
+     :fn      (editor-handler/move-selected-blocks-up-down :up)}
     :editor/move-selected-blocks-down
     {:desc    "Move selected blocks down"
      :binding "shift+j"
-     :fn      (editor-handler/move-selected-blocks-up-down false)}
+     :fn      (editor-handler/move-selected-blocks-up-down :down)}
     :editor/expand-block-children
     {:desc    "Expand"
      :binding "mod+down"

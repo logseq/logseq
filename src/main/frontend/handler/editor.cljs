@@ -1842,9 +1842,10 @@
        (.focus input))))))
 
 (defn move-selected-blocks-up-down
-  [up?]
+  [direction]
   (fn [e]
-    (let [blocks (if up?
+    (let [up? (= :up direction)
+          blocks (if up?
                    (state/get-selection-blocks)
                    (reverse (state/get-selection-blocks)))]
       (for [selected-block blocks]
