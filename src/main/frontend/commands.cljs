@@ -23,7 +23,6 @@
 
 (defonce *show-commands (atom false))
 (defonce *slash-caret-pos (atom nil))
-(defonce command-menu-trigger "\\")
 (defonce *show-block-commands (atom false))
 (defonce angle-bracket "<")
 (defonce *angle-bracket-caret-pos (atom nil))
@@ -48,26 +47,29 @@
      "Queries documentation"]
     "."]])
 
-(def link-steps [[:editor/input (str command-menu-trigger "link")]
-                 [:editor/show-input [{:command :link
-                                       :id :link
-                                       :placeholder "Link"
-                                       :autoFocus true}
-                                      {:command :link
-                                       :id :label
-                                       :placeholder "Label"}]]])
+(defn link-steps []
+  [[:editor/input (str (state/get-editor-command-trigger) "link")]
+   [:editor/show-input [{:command :link
+                         :id :link
+                         :placeholder "Link"
+                         :autoFocus true}
+                        {:command :link
+                         :id :label
+                         :placeholder "Label"}]]])
 
-(def image-link-steps [[:editor/input (str command-menu-trigger "link")]
-                       [:editor/show-input [{:command :image-link
-                                             :id :link
-                                             :placeholder "Link"
-                                             :autoFocus true}
-                                            {:command :image-link
-                                             :id :label
-                                             :placeholder "Label"}]]])
+(defn image-link-steps []
+  [[:editor/input (str (state/get-editor-command-trigger) "link")]
+   [:editor/show-input [{:command :image-link
+                         :id :link
+                         :placeholder "Link"
+                         :autoFocus true}
+                        {:command :image-link
+                         :id :label
+                         :placeholder "Label"}]]])
 
-(def zotero-steps [[:editor/input (str command-menu-trigger "zotero")]
-                   [:editor/show-zotero]])
+(defn zotero-steps []
+  [[:editor/input (str (state/get-editor-command-trigger) "zotero")]
+   [:editor/show-zotero]])
 
 (def *extend-slash-commands (atom []))
 
@@ -90,19 +92,19 @@
   [type]
   (let [template (util/format "@@%s: @@"
                               type)]
-    [[:editor/input template {:last-pattern command-menu-trigger
+    [[:editor/input template {:last-pattern (state/get-editor-command-trigger)
                               :backward-pos 2}]]))
 
 (defn embed-page
   []
   (conj
-   [[:editor/input "{{embed [[]]}}" {:last-pattern command-menu-trigger
+   [[:editor/input "{{embed [[]]}}" {:last-pattern (state/get-editor-command-trigger)
                                      :backward-pos 4}]]
    [:editor/search-page :embed]))
 
 (defn embed-block
   []
-  [[:editor/input "{{embed (())}}" {:last-pattern command-menu-trigger
+  [[:editor/input "{{embed (())}}" {:last-pattern (state/get-editor-command-trigger)
                                     :backward-pos 4}]
    [:editor/search-block :embed]])
 
@@ -232,13 +234,13 @@
      ["Block reference" [[:editor/input "(())" {:backward-pos 2}]
                          [:editor/search-block :reference]] "Create a backlink to a block"]
      ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
-     ["Link" link-steps "Create a HTTP link"]
-     ["Image link" image-link-steps "Create a HTTP link to a image"]
+     ["Link" (link-steps) "Create a HTTP link"]
+     ["Image link" (image-link-steps) "Create a HTTP link to a image"]
      (when (state/markdown?)
        ["Underline" [[:editor/input "<ins></ins>"
-                      {:last-pattern command-menu-trigger
+                      {:last-pattern (state/get-editor-command-trigger)
                        :backward-pos 6}]] "Create a underline text decoration"])
-     ["Template" [[:editor/input command-menu-trigger nil]
+     ["Template" [[:editor/input (state/get-editor-command-trigger) nil]
                   [:editor/search-template]] "Insert a created template here"]
      (cond
        (and (util/electron?) (config/local-db? (state/get-current-repo)))
@@ -277,7 +279,7 @@
     ;; advanced
 
     [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] query-doc]
-     ["Zotero" zotero-steps "Import Zotero journal article"]
+     ["Zotero" (zotero-steps) "Import Zotero journal article"]
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
@@ -290,19 +292,19 @@
                  text)) "Draw a graph with Excalidraw"]
 
      (when (util/zh-CN-supported?)
-       ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern command-menu-trigger
+       ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern (state/get-editor-command-trigger)
                                                                 :backward-pos 2}]]])
      ["Embed HTML " (->inline "html")]
 
-     ["Embed Youtube video" [[:editor/input "{{youtube }}" {:last-pattern command-menu-trigger
+     ["Embed Youtube video" [[:editor/input "{{youtube }}" {:last-pattern (state/get-editor-command-trigger)
                                                             :backward-pos 2}]]]
 
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
-     ["Embed Vimeo video" [[:editor/input "{{vimeo }}" {:last-pattern command-menu-trigger
+     ["Embed Vimeo video" [[:editor/input "{{vimeo }}" {:last-pattern (state/get-editor-command-trigger)
                                                         :backward-pos 2}]]]
 
-     ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-menu-trigger
+     ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern (state/get-editor-command-trigger)
                                                           :backward-pos 2}]]]]
 
     @*extend-slash-commands
@@ -333,12 +335,11 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos forward-pos
-           end-pattern]
-    :or {last-pattern command-menu-trigger}
+   {:keys [last-pattern postfix-fn backward-pos forward-pos end-pattern]
     :as _option}]
   (when-let [input (gdom/getElement id)]
-    (let [edit-content (gobj/get input "value")
+    (let [last-pattern (or last-pattern (state/get-editor-command-trigger))
+          edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
           current-pos (or
                        (when (and end-pattern (string? end-pattern))
@@ -470,7 +471,7 @@
 (defn get-command-input
   [edit-content]
   (when-not (string/blank? edit-content)
-    (let [result (last (util/split-last command-menu-trigger edit-content))]
+    (let [result (last (util/split-last (state/get-editor-command-trigger) edit-content))]
       (if (string/blank? result)
         nil
         result))))
@@ -518,7 +519,7 @@
       (let [edit-content (gobj/get current-input "value")
             current-pos (cursor/pos current-input)
             prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last command-menu-trigger prefix "" (boolean space?))
+            prefix (util/replace-last (state/get-editor-command-trigger) prefix "" (boolean space?))
             new-value (str prefix
                            (subs edit-content current-pos))]
         (state/set-block-content-and-last-pos! input-id

@@ -1594,7 +1594,7 @@
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)
                   format
-                  {:last-pattern (if drop-or-paste? "" commands/command-menu-trigger)
+                  {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))
                    :restore?     true})))))
           (p/finally
             (fn []
@@ -1611,7 +1611,7 @@
             (insert-command! id
                              (get-asset-file-link format signed-url file-name true)
                              format
-                             {:last-pattern (if drop-or-paste? "" commands/command-menu-trigger)
+                             {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))
                               :restore?     true})
 
             (reset! *asset-uploading? false)
@@ -1748,7 +1748,7 @@
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
       (when (> pos 0)
         (or
-         (and (= commands/command-menu-trigger (util/nth-safe edit-content (dec pos)))
+         (and (= (state/get-editor-command-trigger) (util/nth-safe edit-content (dec pos)))
               @commands/*initial-commands)
          (and last-command
               (commands/get-matched-commands last-command)))))
@@ -1901,7 +1901,7 @@
                id
                (get-link format link label)
                format
-               {:last-pattern (str commands/command-menu-trigger "link")})))
+               {:last-pattern (str (state/get-editor-command-trigger) "link")})))
 
     :image-link (let [{:keys [link label]} m]
                   (when (not (string/blank? link))
@@ -1909,7 +1909,7 @@
                      id
                      (get-image-link format link label)
                      format
-                     {:last-pattern (str commands/command-menu-trigger "link")})))
+                     {:last-pattern (str (state/get-editor-command-trigger) "link")})))
 
     nil)
 
@@ -2007,7 +2007,7 @@
 
       ;; TODO: is it cross-browser compatible?
       ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
-    (if (= last-input-char commands/command-menu-trigger)
+    (if (= last-input-char (state/get-editor-command-trigger))
       (when (seq (get-matched-commands input))
         (reset! commands/*slash-caret-pos (cursor/get-caret-pos input))
         (reset! commands/*show-commands true)))
@@ -2640,7 +2640,7 @@
         (delete-block! repo e false))
 
       (and (> current-pos 1)
-           (= (util/nth-safe value (dec current-pos)) commands/command-menu-trigger))
+           (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
       (do
         (util/stop e)
         (reset! *slash-caret-pos nil)
@@ -2844,7 +2844,7 @@
                          (not= (util/nth-safe value current-pos) "]")))
             (state/set-editor-show-page-search-hashtag! false)))
 
-        (when (and @*show-commands (not= key-code 192)) ; not /   TODO: is this the .charCodeAt or the event code?
+        (when (and @*show-commands (not= key-code 191)) ; not /   TODO: is this the .charCodeAt or the event code?
           (let [matched-commands (get-matched-commands input)]
             (if (seq matched-commands)
               (do

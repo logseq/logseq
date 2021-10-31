@@ -278,6 +278,7 @@
                           (.focus input)))}
       "/"]]]])
 
+;; TODO: `Warning: Each child in a list should have a unique "key" prop.`
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
   (mixins/event-mixin
