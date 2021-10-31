@@ -115,7 +115,7 @@
 
 (defn go-to-journals!
   []
-  (state/set-journals-length! 1)
+  (state/set-journals-length! 3)
   (let [route (if (state/custom-home-page?)
                 :all-journals
                 :home)]
