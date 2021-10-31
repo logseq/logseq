@@ -233,6 +233,14 @@
     {:desc    "Delete selected blocks"
      :binding ["backspace" "delete"]
      :fn      editor-handler/delete-selection}
+    :editor/move-selected-blocks-up
+    {:desc    "Move selected blocks up"
+     :binding "shift+k"
+     :fn      (editor-handler/move-selected-blocks-up-down true)}
+    :editor/move-selected-blocks-down
+    {:desc    "Move selected blocks down"
+     :binding "shift+j"
+     :fn      (editor-handler/move-selected-blocks-up-down false)}
     :editor/expand-block-children
     {:desc    "Expand"
      :binding "mod+down"
@@ -478,6 +486,8 @@
     :editor/select-all-blocks
     :editor/select-block-up
     :editor/select-block-down
+    :editor/move-selected-blocks-up
+    :editor/move-selected-blocks-down
     :editor/delete-selection]
 
    :shortcut.category/toggle
