@@ -278,7 +278,6 @@
                           (.focus input)))}
       "/"]]]])
 
-;; TODO: `Warning: Each child in a list should have a unique "key" prop.`
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
   (mixins/event-mixin
@@ -305,7 +304,7 @@
         (let [command (:command (first input-option))]
           [:div.p-2.rounded-md.shadow-lg
            (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
-             [:div.my-3
+             [:div.my-3 {:key id}
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
