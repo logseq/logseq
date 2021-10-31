@@ -2832,8 +2832,8 @@
         (when (and (= "〈" c)
                    (= "《" (util/nth-safe value (dec (dec current-pos))))
                    (> current-pos 0))
-          (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"}
-                                                    :backward-pos 0])
+          (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
+                                                                       :backward-pos 0}])
           (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
           (reset! commands/*show-block-commands true))
 
