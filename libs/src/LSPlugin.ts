@@ -31,6 +31,7 @@ export type UIBaseOptions = {
   key?: string
   replace?: boolean
   template: string | null
+  style?: CSS.Properties
   attrs?: Record<string, string>
 }
 

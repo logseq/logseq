@@ -43,8 +43,7 @@
             (bean/->js
               {:listeners
                {:move (fn [^js/MouseEvent e]
-                        (let [^js/HTMLElement target (.-target e)
-                              ^js dset (.-dataset target)
+                        (let [^js dset (.-dataset el)
                               dx (.-dx e)
                               dy (.-dy e)
                               dx' (frontend-utils/safe-parse-float (.-dx dset))
@@ -56,8 +55,8 @@
                           (set! (.. el -style -transform) (str "translate(" x "px, " y "px)"))
 
                           ;; cache dx dy
-                          (set! (.. target -dataset -dx) x)
-                          (set! (.. target -dataset -dy) y)))}}))
+                          (set! (.. el -dataset -dx) x)
+                          (set! (.. el -dataset -dy) y)))}}))
           (.on "dragstart" (fn [] (.add cls ing?)))
           (.on "dragend" (fn [e]
                            (.remove cls ing?)
@@ -79,19 +78,36 @@
         (.resizable
           (bean/->js
             {:edges
-             {:left false :top false :bottom true :right true}
+             {:left true :top true :bottom true :right true}
 
              :listeners
              {:start (fn [] (.add cls ing?))
               :end   (fn [e] (.remove cls ing?) (callback (bean/->js (calc-layout-data el e))))
               :move  (fn [^js/MouseEvent e]
-                       (let [^js/HTMLElement target (.-target e)
+                       (let [^js dset (.-dataset el)
                              w (.. e -rect -width)
-                             h (.. e -rect -height)]
+                             h (.. e -rect -height)
+
+                             ;; update position from top/left
+                             dx (.. e -deltaRect -left)
+                             dy (.. e -deltaRect -top)
+
+                             dx' (frontend-utils/safe-parse-float (.-dx dset))
+                             dy' (frontend-utils/safe-parse-float (.-dy dset))
+
+                             x (+ dx (if dx' dx' 0))
+                             y (+ dy (if dy' dy' 0))]
+
+                         ;; update container position
+                         (set! (.. el -style -transform) (str "translate(" x "px, " y "px)"))
 
                          ;; update container size
                          (set! (.. el -style -width) (str w "px"))
-                         (set! (.. el -style -height) (str h "px"))))}})))
+                         (set! (.. el -style -height) (str h "px"))
+
+                         (set! (. dset -dx) x)
+                         (set! (. dset -dy) y)))}})))
+
     ;; manager
     (swap! *movable-containers assoc identity el)
 

@@ -283,6 +283,17 @@ export function setupInjectedUI (
     attrs && Object.entries(attrs).forEach(([k, v]) => {
       el.setAttribute(k, v)
     })
+
+    let positionDirty = el.dataset.dx != null
+    ui.style && Object.entries(ui.style).forEach(([k, v]) => {
+      if (positionDirty && [
+        'left', 'top', 'bottom', 'right', 'width', 'height'].includes(k)
+      ) {
+        return
+      }
+
+      el.style[k] = v
+    })
     return
   }
 
@@ -303,6 +314,10 @@ export function setupInjectedUI (
 
   attrs && Object.entries(attrs).forEach(([k, v]) => {
     el.setAttribute(k, v)
+  })
+
+  ui.style && Object.entries(ui.style).forEach(([k, v]) => {
+    el.style[k] = v
   })
 
   let teardownUI: () => void
