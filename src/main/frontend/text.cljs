@@ -8,13 +8,18 @@
 (def page-ref-re-0 #"\[\[(.*)\]\]")
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
 
+(defn get-file-basename
+  [path]
+  (when-not (string/blank? path)
+    (-> (util/node-path.basename path)
+        (string/split #"\.")
+        first)))
+
 (defn get-page-name
   [s]
   (and (not (string/blank? s))
        (or (when-let [[_ path _label] (re-matches org-page-ref-re s)]
-             (-> (util/node-path.basename path)
-                 (string/split #"\.")
-                 first))
+             (get-file-basename path))
            (-> (re-matches page-ref-re-0 s)
                second))))
 
