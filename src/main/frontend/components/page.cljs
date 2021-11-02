@@ -19,6 +19,7 @@
             [frontend.extensions.graph :as graph]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.format.mldoc :as mldoc]
+            [frontend.format.block :as format-block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.editor :as editor-handler]
@@ -300,9 +301,8 @@
                           (db/entity repo))
                      (do
                        (when-not (db/entity repo [:block/name page-name])
-                         (db/transact! repo [{:block/name page-name
-                                              :block/original-name path-page-name
-                                              :block/uuid (db/new-block-id)}]))
+                         (let [m (format-block/page-name->map path-page-name true)]
+                           (db/transact! repo [m])))
                        (db/pull [:block/name page-name])))
               {:keys [title emoji] :as properties} (:block/properties page)
               page-name (:block/name page)

@@ -7,6 +7,7 @@
             [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.journal :as journal-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -351,6 +352,18 @@
     {:desc    "Go to keyboard shortcuts"
      :binding "g s"
      :fn      #(route-handler/redirect! {:to :shortcut-setting})}
+    :go/tomorrow
+    {:desc    "Go to tomorrow"
+     :binding "g t"
+     :fn      journal-handler/go-to-tomorrow!}
+    :go/next-journal
+    {:desc    "Go to next journal"
+     :binding "g n"
+     :fn      journal-handler/go-to-next-journal!}
+    :go/prev-journal
+    {:desc    "Go to previous journal"
+     :binding "g p"
+     :fn      journal-handler/go-to-prev-journal!}
     :ui/toggle-document-mode
     {:desc    "Toggle document mode"
      :binding "t d"
@@ -509,6 +522,9 @@
    ^{:doc "Others"}
    [:go/home
     :go/journals
+    :go/tomorrow
+    :go/next-journal
+    :go/prev-journal
     :command/run
     :command-palette/toggle
     :sidebar/clear
