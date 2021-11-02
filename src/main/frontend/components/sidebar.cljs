@@ -93,8 +93,7 @@
                             (:db/id page-entity)
                             :page
                             {:page page-entity}))
-                         (route-handler/redirect! {:to :page
-                                                   :path-params {:name name}}))))}
+                         (route-handler/redirect-to-page! name))))}
      (pdf-assets/fix-local-asset-filename original-name)]))
 
 (rum/defcs favorite-item <
@@ -350,8 +349,7 @@
               (= :home (state/get-current-route))
               (not (state/route-has-p?))
               (:page default-home))
-         (route-handler/redirect! {:to :page
-                                   :path-params {:name (:page default-home)}})
+         (route-handler/redirect-to-page! (:page default-home))
 
          (and config/publishing?
               (not default-home)

@@ -346,7 +346,7 @@
     :go/home
     {:desc    "Go to home"
      :binding "g h"
-     :fn      #(route-handler/redirect! {:to :home})}
+     :fn      #(route-handler/redirect-to-home!)}
     :go/keyboard-shortcuts
     {:desc    "Go to keyboard shortcuts"
      :binding "g s"

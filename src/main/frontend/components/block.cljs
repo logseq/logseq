@@ -389,8 +389,7 @@
                  {:page page-entity})))
             (do
               (create-first-block!)
-              (route-handler/redirect! {:to :page
-                                        :path-params {:name redirect-page-name}}))))
+              (route-handler/redirect-to-page! redirect-page-name))))
         (when (and contents-page?
                    (util/mobile?)
                    (state/get-left-sidebar-open?))
@@ -673,8 +672,7 @@
                       [:annotation true] (pdf-assets/open-block-ref! block)
 
                       ;; default open block page
-                      :else (route-handler/redirect! {:to          :page
-                                                      :path-params {:name id}}))))))}
+                      :else (route-handler/redirect-to-page! id))))))}
 
            (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
              (ui/tippy {:html        (fn []
@@ -1317,8 +1315,7 @@
        :block
        block)
       (util/stop e))
-    (route-handler/redirect! {:to :page
-                              :path-params {:name (str uuid)}})))
+    (route-handler/redirect-to-page! uuid)))
 
 (rum/defc block-children < rum/reactive
   [config children collapsed? *ref-collapsed?]
@@ -1870,7 +1867,7 @@
            {:on-mouse-down (fn [e]
                              (util/stop e)
                              (when-let [block (:embed-parent config)]
-                               (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
+                               (editor-handler/edit-block! block :max (:block/uuid block))))}
            svg/edit])
 
         (when (and (state/enable-timetracking?)
@@ -1921,8 +1918,7 @@
                 (:db/id block)
                 :block-ref
                 {:block block}))
-             (route-handler/redirect! {:to :page
-                                       :path-params {:name (str (:block/uuid block))}})))}
+             (route-handler/redirect-to-page! (:block/uuid block))))}
      label]))
 
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])

@@ -131,10 +131,12 @@
     (move-cursor-to input pos)))
 
 (defn move-cursor-to-thing
-  [input thing from]
-  (let [[content _pos] (get-input-content&pos input)
-        pos (string/index-of content thing from)]
-    (move-cursor-to input pos)))
+  ([input thing]
+   (move-cursor-to-thing input thing (pos input)))
+  ([input thing from]
+   (let [[content _pos] (get-input-content&pos input)
+         pos (string/index-of content thing from)]
+     (move-cursor-to input pos))))
 
 (defn move-cursor-forward-by-word
   [input]

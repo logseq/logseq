@@ -656,7 +656,7 @@
         (rebuild-index! repo))
       (js/setTimeout
        (fn []
-         (route-handler/redirect! {:to :home}))
+         (route-handler/redirect-to-home!))
        500))))
 
 (defn git-commit-and-push!
