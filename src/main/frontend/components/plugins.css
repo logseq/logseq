@@ -377,9 +377,8 @@
       .ls-ui-float-content {
         height: calc(100% - var(--ls-draggable-handle-height));
         width: 100%;
-        position: absolute;
-        top: var(--ls-draggable-handle-height);
-        left: 0;
+        margin-top: var(--ls-draggable-handle-height);
+        overflow: auto;
       }
 
       &.is-dragging {
@@ -423,6 +422,10 @@
   left: 30%;
 
   .draggable-handle {
+  }
+
+  &.visible {
+    height: unset;
   }
 }
 
