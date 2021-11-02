@@ -5,6 +5,19 @@
             [clojure.set :as set]
             [medley.core :as medley]))
 
+(def page-ref-re-0 #"\[\[(.*)\]\]")
+(def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
+
+(defn get-page-name
+  [s]
+  (and (not (string/blank? s))
+       (or (when-let [[_ path _label] (re-matches org-page-ref-re s)]
+             (-> (util/node-path.basename path)
+                 (string/split #"\.")
+                 first))
+           (-> (re-matches page-ref-re-0 s)
+               second))))
+
 (defn page-ref?
   [s]
   (and
@@ -12,12 +25,16 @@
    (string/starts-with? s "[[")
    (string/ends-with? s "]]")))
 
+(def block-ref-re #"\(\(([a-zA-z0-9]{8}-[a-zA-z0-9]{4}-[a-zA-z0-9]{4}-[a-zA-z0-9]{4}-[a-zA-z0-9]{12})\)\)")
+
+(defn get-block-ref
+  [s]
+  (and (not (string/blank? s))
+       (second (re-matches block-ref-re s))))
+
 (defn block-ref?
   [s]
-  (and
-   (string? s)
-   (string/starts-with? s "((")
-   (string/ends-with? s "))")))
+  (boolean (get-block-ref s)))
 
 (defn extract-page-name-from-ref
   [ref]
