@@ -101,10 +101,10 @@
       "Click here to edit..."]]]])
 
 (rum/defc add-button
-  [page-name]
+  [args]
   [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
    {:on-click (fn []
-                (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
+                (when-let [block (editor-handler/api-insert-new-block! "" args)]
                   (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
    [:div.flex.flex-row
     [:div.block {:style {:height      20
@@ -143,9 +143,11 @@
               hiccup (block/->hiccup page-blocks hiccup-config {})]
           [:div
            (page-blocks-inner page-name page-blocks hiccup sidebar? preview?)
-           (when (and (not block?)
-                      (not config/publishing?))
-             (add-button page-name))])))))
+           (when-not config/publishing?
+             (let [args (if block-id
+                          {:block-uuid block-id}
+                          {:page page-name})]
+               (add-button args)))])))))
 
 (defn contents-page
   [page]

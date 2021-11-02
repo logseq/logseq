@@ -658,10 +658,9 @@
    (state/set-editor-op! nil)))
 
 (defn api-insert-new-block!
-  [content {:keys [page block-uuid sibling? before? properties custom-uuid re-render-root?]
+  [content {:keys [page block-uuid sibling? before? properties custom-uuid]
             :or {sibling? false
-                 before? false
-                 re-render-root? true}}]
+                 before? false}}]
   (when (or page block-uuid)
     (let [before? (if page false before?)
           sibling? (if before? true (if page false sibling?))
@@ -714,7 +713,7 @@
 
           (when block-m
             (outliner-insert-block! {:skip-save-current-block? true} block-m new-block sibling?)
-            (when re-render-root? (ui-handler/re-render-root!))
+            (db/refresh! (state/get-current-repo) {:key :block/insert :data [block-m new-block]})
             new-block))))))
 
 (defn insert-first-page-block-if-not-exists!
