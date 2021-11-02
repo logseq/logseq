@@ -169,8 +169,7 @@
        {:style {:z-index (if (or (= state "exiting")
                                  (= state "exited"))
                            -1
-                           99)
-                :top     "3.2em"}}
+                           99)}}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
                   "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
