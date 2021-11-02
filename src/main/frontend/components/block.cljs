@@ -464,8 +464,10 @@
     (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
           page-name (string/lower-case page-name-in-block)
           page-entity (db/entity [:block/name page-name])
-          redirect-page-name (or redirect-page-name
-                                 (model/get-redirect-page-name page-name (:block/alias? config)))
+          redirect-page-name (or (and (= :org (state/get-preferred-format))
+                                      (:org-mode/insert-file-link? (state/get-config))
+                                      redirect-page-name)
+                              (model/get-redirect-page-name page-name (:block/alias? config)))
           inner (page-inner config
                             page-name-in-block
                             page-name
