@@ -458,12 +458,15 @@
       children)))
 
 (rum/defc page-cp
-  [{:keys [html-export? label children contents-page? preview?] :as config} page]
+  [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
           page-name (string/lower-case page-name-in-block)
           page-entity (db/entity [:block/name page-name])
-          redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
+          redirect-page-name (or (and (= :org (state/get-preferred-format))
+                                      (:org-mode/insert-file-link? (state/get-config))
+                                      redirect-page-name)
+                              (model/get-redirect-page-name page-name (:block/alias? config)))
           inner (page-inner config
                             page-name-in-block
                             page-name
@@ -948,6 +951,9 @@
 
               :else
               (let [label-text (get-label-text label)
+                    redirect-page-name (-> (second url)
+                                           text/get-file-basename)
+                    config (assoc config :redirect-page-name redirect-page-name)
                     page (if (string/blank? label-text)
                            {:block/name (db/get-file-page (string/replace href "file:" ""))}
                            (get-page label))]
@@ -1187,7 +1193,7 @@
 
             (and (string/starts-with? a "[[")
                  (string/ends-with? a "]]"))
-            (let [page-name (text/extract-page-name-from-ref a)]
+            (let [page-name (text/get-page-name a)]
               (when-not (string/blank? page-name)
                 (page-embed config page-name)))
 
