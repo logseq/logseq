@@ -795,7 +795,7 @@
                    (case marker
                      "DOING"
                      "TODO"
-                     
+
                      "NOW"
                      "LATER"
 
@@ -1274,7 +1274,7 @@
                           :block/uuid)]
       (let [pos (state/get-edit-pos)]
         (route-handler/redirect-to-page! id)
-        (edit-block! {:block/uuid id} pos nil id)))
+        (edit-block! {:block/uuid id} pos id)))
     (js/window.history.forward)))
 
 (defn zoom-out!
@@ -1522,7 +1522,7 @@
     (cond
       (util/electron?)
       (str "assets://" repo-dir path)
-      
+
       (mobile/is-native-platform?)
       (mobile/convert-file-src
        (str "file://" repo-dir path))

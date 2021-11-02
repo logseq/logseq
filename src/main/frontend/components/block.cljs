@@ -562,7 +562,7 @@
 (defn- edit-parent-block [e config]
   (when-not (state/editing?)
     (.stopPropagation e)
-    (editor-handler/edit-block! config :max (:block/format config) (:block/uuid config))))
+    (editor-handler/edit-block! config :max (:block/uuid config))))
 
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
@@ -1697,7 +1697,7 @@
                         (state/set-editor-show-date-picker! true)
                         (state/set-timestamp-block! {:block block
                                                      :typ typ
-                                                     :show? show?}))))} 
+                                                     :show? show?}))))}
         [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]
         ]]
      (when (true? @show?)

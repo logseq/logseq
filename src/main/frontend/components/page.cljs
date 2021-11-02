@@ -102,11 +102,10 @@
 
 (rum/defc add-button
   [page-name]
-
   [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
    {:on-click (fn []
                 (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
-                  (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
+                  (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
    [:div.flex.flex-row
     [:div.block {:style {:height      20
                          :width       20
