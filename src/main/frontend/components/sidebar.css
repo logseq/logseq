@@ -109,8 +109,6 @@
       user-select: none;
       cursor: pointer;
       padding: 4px 18px;
-      padding-top: 4px;
-      margin: -4px 0;
 
       > span {
         > a {
