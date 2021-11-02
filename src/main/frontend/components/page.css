@@ -263,5 +263,26 @@
 }
 
 .add-button-link {
-  margin-left: 8px;
+  opacity: 0;
+  margin-left: 10px;
+  color: var(--ls-primary-text-color);
+  transform: scale(.8);
+
+  &:hover {
+    color: var(--ls-primary-text-color);
+    opacity: .6 !important;
+    transform: scale(.9);
+  }
+
+  &:active {
+    opacity: .8 !important;
+  }
+
+  &-wrap {
+    cursor: pointer;
+
+    &:hover .add-button-link {
+      opacity: .3;
+    }
+  }
 }
