@@ -850,6 +850,32 @@ h1.title {
   font-weight: 600;
 }
 
+.title .page-emoji {
+  margin-right: 12px;
+}
+
+.left-sidebar-inner .recent .page-emoji,
+.left-sidebar-inner .favorites .page-emoji {
+  margin-right: 8px;
+  width: 1.1em;
+  text-align: center;
+  display: inline-block;
+  color: #aaa;
+}
+
+.favorites li.favorite-item,
+.recent    li.recent-item {
+  margin: 0.1rem 0;
+}
+
+.left-sidebar-inner > .wrap {
+  height: 100%;
+}
+
+.left-sidebar-inner .flex-column-spacer {
+  flex: 1 1 0%;
+}
+
 .block-highlight,
 .content .selected {
   transition: background-color 0.15s;
