@@ -15,6 +15,9 @@
             [frontend.util :refer [mac?] :as util]
             [frontend.commands :as commands]))
 
+;; Note – when you change this file, you will need to do a hard reset.
+;; The commands are registered when the Clojurescript code runs for the first time.
+
 ;; TODO: how to extend this for plugins usage? An atom?
 (def default-config
   {:shortcut.handler/date-picker
@@ -376,6 +379,14 @@
     {:desc    "Toggle Favorites in sidebar"
      :binding "t f"
      :fn      ui-handler/toggle-contents!}
+    :editor/open-file-in-default-app
+    {:desc    "Open file in default app"
+     :binding "o f"
+     :fn      page-handler/open-file-in-default-app}
+    :editor/open-file-in-directory
+    {:desc    "Open file in parent directory"
+     :binding "o d"
+     :fn      page-handler/open-file-in-directory}
     :ui/toggle-wide-mode
     {:desc    "Toggle wide mode"
      :binding "t w"

@@ -238,7 +238,7 @@
                                         images (to-array images)
                                         images (if-not (= (count images) 1)
                                                  (let [^js _image (.closest (.-target e) ".asset-container")
-                                                       image (js/image.querySelector "img")]
+                                                       image (. _image querySelector "img")]
                                                    (cons image (remove #(= image %) images)))
                                                  images)
                                         images (for [^js it images] {:src (.-src it)

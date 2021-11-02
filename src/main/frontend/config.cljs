@@ -294,6 +294,11 @@
   (string/includes? path (str (get-journals-directory) "/")))
 
 (defonce local-repo "local")
+
+(defn demo-graph?
+  []
+  (= (state/get-current-repo) local-repo))
+
 (defonce local-assets-dir "assets")
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")

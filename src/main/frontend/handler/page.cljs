@@ -689,3 +689,11 @@
      (:db/id page)
      :page
      page)))
+
+(defn open-file-in-default-app []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (js/window.apis.openPath file-path)))
+
+(defn open-file-in-directory []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (js/window.apis.showItemInFolder file-path)))

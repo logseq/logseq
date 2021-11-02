@@ -91,6 +91,10 @@
                                   :page-presentation
                                   {:page page}))}}
 
+          ;; TODO: In the future, we'd like to extract file-related actions
+          ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
+          ;; this one. However this component doesn't yet exist. PRs are welcome!
+          ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
           (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
             [{:title   (t :page/open-in-finder)
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
@@ -137,8 +141,9 @@
                                       [:div
                                        [:pre.code page-data]
                                        [:br]
-                                       (ui/button "Copy to clipboard"
-                                         :on-click #(.writeText js/navigator.clipboard page-data))]
+                                       (ui/button
+                                        "Copy to clipboard"
+                                        :on-click #(.writeText js/navigator.clipboard page-data))]
                                       :success
                                       false)))}})]
          (flatten)
