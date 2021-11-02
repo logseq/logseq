@@ -85,7 +85,6 @@
   [name]
   (let [original-name (db-model/get-page-original-name name)]
     [:a {:on-click (fn [e]
-                     (util/stop e)
                      (let [name (util/safe-lower-case name)]
                        (if (gobj/get e "shiftKey")
                          (when-let [page-entity (db/entity [:block/name name])]
@@ -196,30 +195,42 @@
           left-sidebar? (state/sub :ui/left-sidebar-open?)]
       (when left-sidebar?
         [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
+         {:on-click #(when-let [^js target (and (util/mobile?) (.-target %))]
+                       (when (some (fn [sel] (boolean (.closest target sel)))
+                                   [".favorites" ".recent" ".dropdown-wrapper" ".nav-header"])
+                         (close-modal-fn)))}
          [:div.flex.flex-col.pb-4.wrap
           [:nav.flex-1.px-2.space-y-1 {:aria-label "Sidebar"}
            (repo/repos-dropdown)
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click route-handler/go-to-journals!}
-            (ui/icon "calendar mr-3" {:style {:font-size 20}})
-            [:span.flex-1 "Journals"]]
 
-           (flashcards)
+           [:div.nav-header
+            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click route-handler/go-to-journals!}
+             (ui/icon "calendar mr-3" {:style {:font-size 20}})
+             [:span.flex-1 "Journals"]]
 
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :graph)}
-            (ui/icon "hierarchy mr-3" {:style {:font-size 20}})
-            [:span.flex-1 "Graph view"]]
+            (flashcards)
 
-           [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-pages)}
-            (ui/icon "files mr-3" {:style {:font-size 20}})
-            [:span.flex-1 "All pages"]]]
+            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :graph)}
+             (ui/icon "hierarchy mr-3" {:style {:font-size 20}})
+             [:span.flex-1 "Graph view"]]
+
+            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:href (rfe/href :all-pages)}
+             (ui/icon "files mr-3" {:style {:font-size 20}})
+             [:span.flex-1 "All pages"]]
+
+            (when-not config/publishing?
+              [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:go/search])}
+               (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
+               [:span.flex-1 "New page"]])]]
 
           (favorites t)
 
           (recent-pages t)]]))))
 
 (rum/defc sidebar-mobile-sidebar < rum/reactive
-  [{:keys [open? close-fn route-match]}]
-  [:div.md:hidden
+  [{:keys [open? left-sidebar-open? close-fn route-match]}]
+  [:div.md:hidden.ls-mobile-left-sidebar
+   {:class (if left-sidebar-open? "is-left-sidebar-open" "")}
    [:div.fixed.inset-0.z-30.bg-gray-600.pointer-events-none.ease-linear.duration-300
     {:class (if @open?
               "opacity-75 pointer-events-auto"
@@ -231,7 +242,7 @@
               "-translate-x-full")
      :style {:max-width "86vw"}}
     (when @open?
-      [:div.absolute.top-0.right-0.p-1
+      [:div.absolute.top-0.right-0.p-1.z-10
        [:a.button
         {:on-click close-fn}
         (ui/icon "x" {:style {:font-size 24}})]])
@@ -485,9 +496,10 @@
         {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?}])}
 
         (sidebar-mobile-sidebar
-         {:open?       open?
-          :close-fn    close-fn
-          :route-match route-match})
+          {:open?       open?
+           :left-sidebar-open? left-sidebar-open?
+           :close-fn    close-fn
+           :route-match route-match})
 
         [:div.#app-container.h-screen.flex
          [:div.flex-1.h-full.flex.flex-col#left-container.relative

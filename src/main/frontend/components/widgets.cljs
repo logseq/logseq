@@ -12,7 +12,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.config :as config]))
 
 (rum/defc choose-preferred-format
   []
@@ -57,7 +58,7 @@
           [:div.mt-2.mb-4.relative.rounded-md.shadow-sm.max-w-xs
            [:input#branch.form-input.block.w-full.sm:text-sm.sm:leading-5
             {:value @branch
-             :placeholder "e.g. master"
+             :placeholder "e.g. main"
              :on-change (fn [e]
                           (reset! branch (util/evalue e)))}]]]]
 
@@ -132,3 +133,14 @@
                              (interpose [:b.mt-10.mb-5.opacity-50 "OR"]))]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.p-8.flex.flex-col available-graph])))
+
+(rum/defc demo-graph-alert
+  []
+  (when (and (config/demo-graph?)
+             (not config/publishing?))
+    [:div.flex.flex-row.admonitionblock.align-items
+     [:div.flex.flex-col.justify-center
+      (ui/icon "alert-triangle" {:style {:fontSize 20
+                                         :color "red"}})]
+     [:div.ml-1
+      [:p "(Demo graph) Changes will not be saved until you open a local folder"]]]))

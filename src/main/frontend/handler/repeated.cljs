@@ -59,7 +59,7 @@
                                 ""
                                 (str " " repeater)))
                          repeater)]
-     (util/format "<%s%s>"
+     (util/format "%s%s"
                   (tf/unparse custom-formatter start-time)
                   (if (string/blank? time-repeater)
                     ""

@@ -1,13 +1,3 @@
-.add-button-link:hover {
-  svg.add-button > .circle {
-    opacity: 1;
-  }
-
-  svg.add-button {
-    opacity: 1;
-  }
-}
-
 svg.add-button {
   display: block;
   width: 20px;

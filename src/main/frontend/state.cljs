@@ -414,7 +414,7 @@
 
 (defn add-repo!
   [repo]
-  (when repo
+  (when (not (string/blank? repo))
     (update-state! [:me :repos]
                    (fn [repos]
                      (->> (conj repos repo)
