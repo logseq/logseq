@@ -1187,8 +1187,7 @@
 
             (and (string/starts-with? a "[[")
                  (string/ends-with? a "]]"))
-            (let [page-name (text/get-page-name a)]
-              (println "embed reference: " page-name)
+            (let [page-name (text/extract-page-name-from-ref a)]
               (when-not (string/blank? page-name)
                 (page-embed config page-name)))
 
