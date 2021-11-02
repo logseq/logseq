@@ -17,7 +17,7 @@
 
 (defn get-page-name
   [s]
-  (and (not (string/blank? s))
+  (and (string? s)
        (or (when-let [[_ path _label] (re-matches org-page-ref-re s)]
              (get-file-basename path))
            (-> (re-matches page-ref-re-0 s)
@@ -34,7 +34,7 @@
 
 (defn get-block-ref
   [s]
-  (and (not (string/blank? s))
+  (and (string? s)
        (second (re-matches block-ref-re s))))
 
 (defn block-ref?
