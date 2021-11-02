@@ -55,7 +55,7 @@
   (when-let [page-ref (thing-at-point ["[[" "]]"] input)]
     (assoc page-ref
            :type "page-ref"
-           :link (text/extract-page-name-from-ref
+           :link (text/get-page-name
                   (:full-content page-ref)))))
 
 (defn embed-macro-at-point [& [input]]

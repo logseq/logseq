@@ -118,8 +118,7 @@
            (outliner-file/sync-to-file page))
 
          (when redirect?
-           (route-handler/redirect! {:to          :page
-                                     :path-params {:name page}}))
+           (route-handler/redirect-to-page! page))
          page)))))
 
 (defn page-add-property!
@@ -690,3 +689,11 @@
      (:db/id page)
      :page
      page)))
+
+(defn open-file-in-default-app []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (js/window.apis.openPath file-path)))
+
+(defn open-file-in-directory []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (js/window.apis.showItemInFolder file-path)))

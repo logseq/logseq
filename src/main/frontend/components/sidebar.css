@@ -102,13 +102,13 @@
   .nav-content-item {
     padding: 32px 0 0 0;
 
-    > .hd {
+    > .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       user-select: none;
       cursor: pointer;
-      padding: 0 18px;
+      padding: 4px 18px;
 
       > span {
         > a {
@@ -124,12 +124,18 @@
           &:last-child {
             transform: translateY(-6px) translateX(2px) rotate(90deg);
             transform-origin: center center;
-            transition: .25s transform;
+            transition: .15s transform;
           }
         }
       }
 
       &:hover {
+        background-color: var(--ls-tertiary-background-color);
+
+        * {
+          opacity: 1 !important;
+        }
+
         > span {
           > a {
             display: block;
@@ -176,7 +182,7 @@
     }
 
     &.is-expand {
-      > .hd > span > a {
+      > .header > span > a {
         &:last-child {
           transform: translateY(2px) translateX(-3px);
         }
@@ -366,7 +372,7 @@
   }
 
   .add-button-link {
-    transform: translateX(9px);
+    transform: translateX(10px) scale(.8);
   }
 }
 
