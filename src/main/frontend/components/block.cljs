@@ -238,7 +238,7 @@
                                         images (to-array images)
                                         images (if-not (= (count images) 1)
                                                  (let [^js _image (.closest (.-target e) ".asset-container")
-                                                       image (js/image.querySelector "img")]
+                                                       image (. _image querySelector "img")]
                                                    (cons image (remove #(= image %) images)))
                                                  images)
                                         images (for [^js it images] {:src (.-src it)
@@ -389,8 +389,7 @@
                  {:page page-entity})))
             (do
               (create-first-block!)
-              (route-handler/redirect! {:to :page
-                                        :path-params {:name redirect-page-name}}))))
+              (route-handler/redirect-to-page! redirect-page-name))))
         (when (and contents-page?
                    (util/mobile?)
                    (state/get-left-sidebar-open?))
@@ -459,12 +458,15 @@
       children)))
 
 (rum/defc page-cp
-  [{:keys [html-export? label children contents-page? preview?] :as config} page]
+  [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
           page-name (string/lower-case page-name-in-block)
           page-entity (db/entity [:block/name page-name])
-          redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
+          redirect-page-name (or (and (= :org (state/get-preferred-format))
+                                      (:org-mode/insert-file-link? (state/get-config))
+                                      redirect-page-name)
+                              (model/get-redirect-page-name page-name (:block/alias? config)))
           inner (page-inner config
                             page-name-in-block
                             page-name
@@ -673,8 +675,7 @@
                       [:annotation true] (pdf-assets/open-block-ref! block)
 
                       ;; default open block page
-                      :else (route-handler/redirect! {:to          :page
-                                                      :path-params {:name id}}))))))}
+                      :else (route-handler/redirect-to-page! id))))))}
 
            (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
              (ui/tippy {:html        (fn []
@@ -950,6 +951,9 @@
 
               :else
               (let [label-text (get-label-text label)
+                    redirect-page-name (-> (second url)
+                                           text/get-file-basename)
+                    config (assoc config :redirect-page-name redirect-page-name)
                     page (if (string/blank? label-text)
                            {:block/name (db/get-file-page (string/replace href "file:" ""))}
                            (get-page label))]
@@ -1189,7 +1193,7 @@
 
             (and (string/starts-with? a "[[")
                  (string/ends-with? a "]]"))
-            (let [page-name (text/extract-page-name-from-ref a)]
+            (let [page-name (text/get-page-name a)]
               (when-not (string/blank? page-name)
                 (page-embed config page-name)))
 
@@ -1317,8 +1321,7 @@
        :block
        block)
       (util/stop e))
-    (route-handler/redirect! {:to :page
-                              :path-params {:name (str uuid)}})))
+    (route-handler/redirect-to-page! uuid)))
 
 (rum/defc block-children < rum/reactive
   [config children collapsed? *ref-collapsed?]
@@ -1870,7 +1873,7 @@
            {:on-mouse-down (fn [e]
                              (util/stop e)
                              (when-let [block (:embed-parent config)]
-                               (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
+                               (editor-handler/edit-block! block :max (:block/uuid block))))}
            svg/edit])
 
         (when (and (state/enable-timetracking?)
@@ -1921,8 +1924,7 @@
                 (:db/id block)
                 :block-ref
                 {:block block}))
-             (route-handler/redirect! {:to :page
-                                       :path-params {:name (str (:block/uuid block))}})))}
+             (route-handler/redirect-to-page! (:block/uuid block))))}
      label]))
 
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])

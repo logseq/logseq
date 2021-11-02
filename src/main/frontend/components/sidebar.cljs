@@ -93,8 +93,7 @@
                             (:db/id page-entity)
                             :page
                             {:page page-entity}))
-                         (route-handler/redirect! {:to :page
-                                                   :path-params {:name name}}))))}
+                         (route-handler/redirect-to-page! name))))}
      [:span.page-emoji emoji]
      (pdf-assets/fix-local-asset-filename original-name)]))
 
@@ -370,8 +369,7 @@
               (= :home (state/get-current-route))
               (not (state/route-has-p?))
               (:page default-home))
-         (route-handler/redirect! {:to :page
-                                   :path-params {:name (:page default-home)}})
+         (route-handler/redirect-to-page! (:page default-home))
 
          (and config/publishing?
               (not default-home)

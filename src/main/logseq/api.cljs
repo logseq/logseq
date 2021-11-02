@@ -352,7 +352,7 @@
   (fn [block-uuid {:keys [pos] :or {pos :max} :as opts}]
     (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
       (when-let [block (db-model/query-block-by-uuid block-uuid)]
-        (editor-handler/edit-block! block pos nil block-uuid)))))
+        (editor-handler/edit-block! block pos block-uuid)))))
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]

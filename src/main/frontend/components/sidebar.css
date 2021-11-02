@@ -374,7 +374,7 @@
   }
 
   .add-button-link {
-    transform: translateX(9px);
+    transform: translateX(10px) scale(.8);
   }
 }
 

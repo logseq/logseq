@@ -542,7 +542,6 @@
   [edit-content marker pos]
   (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
                             (string/trim))
-        old-marker (if old-marker old-marker "")
         pos-delta (- (count marker)
                      (count old-marker))
         pos-delta (cond (string/blank? old-marker)
@@ -552,7 +551,7 @@
 
                         :else
                         pos-delta)]
-    (+ pos pos-delta)))
+    (max (+ pos pos-delta) 0)))
 
 (defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]

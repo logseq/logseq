@@ -527,7 +527,7 @@
      (state/sub :editor/show-input)
      (animated-modal "input" (input id
                                     (fn [command m pos]
-                                      (editor-handler/handle-command-input command id format m pos)))
+                                      (editor-handler/handle-command-input command id format m)))
                      true (util/react *slash-caret-pos))
 
      (state/sub :editor/show-zotero)

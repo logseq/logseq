@@ -62,7 +62,7 @@
         (when (and (= (count blocks) 1)
                    (string/blank? (:block/content block))
                    (not preview?))
-          (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))))
+          (editor-handler/edit-block! block :max (:block/uuid block))))))
   state)
 
 (rum/defc page-blocks-inner <
@@ -96,29 +96,23 @@
       [:span.bullet]]]
     [:div.flex.flex-1 {:on-click (fn []
                                    (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name)]
-                                     (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
+                                     (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 100)))}
      [:span.opacity-50
       "Click here to edit..."]]]])
 
-(rum/defcs add-button < rum/reactive
-  (rum/local false ::show?)
-  [state page-name]
-  (let [show? (::show? state)]
-    [:div.flex-1.flex-col.rounded-sm.add-button
-     [:div.flex.flex-row
-      [:div.block {:style {:height      24
-                           :width       24
-                           :margin-left 2}
-                   :on-mouse-over (fn [] (reset! show? true))}
-       (if (and (not (state/sub [:editor/block])) @show?)
-         [:a.add-button-link.block
-          {:on-mouse-out (fn [] (reset! show? false))
-           :on-click (fn []
-                       (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
-                         (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
-          svg/plus-circle]
+(rum/defc add-button
+  [page-name]
 
-         [:span])]]]))
+  [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
+   {:on-click (fn []
+                (when-let [block (editor-handler/api-insert-new-block! "" {:page page-name})]
+                  (js/setTimeout #(editor-handler/edit-block! block :max nil (:block/uuid block)) 100)))}
+   [:div.flex.flex-row
+    [:div.block {:style {:height      20
+                         :width       20
+                         :margin-left 2}}
+     [:a.add-button-link.block
+      (ui/icon "circle-plus")]]]])
 
 (rum/defc page-blocks-cp < rum/reactive
   db-mixins/query
