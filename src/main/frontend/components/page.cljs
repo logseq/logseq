@@ -225,7 +225,7 @@
 
 (rum/defcs page-title <
   {:will-update (fn [state]
-                  (assoc state ::title-value (atom (second (:rum/args state)))))}
+                  (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   (rum/local false ::edit?)
   [state page-name emoji title format fmt-journal?]
   (when title
