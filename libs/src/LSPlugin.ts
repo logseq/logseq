@@ -33,6 +33,7 @@ export type UIBaseOptions = {
   template: string | null
   style?: CSS.Properties
   attrs?: Record<string, string>
+  close?: 'outside'
 }
 
 export type UIPathIdentity = {

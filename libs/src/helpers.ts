@@ -326,6 +326,7 @@ export function setupInjectedUI (
   if (float) {
     el.setAttribute('draggable', 'true')
     el.setAttribute('resizable', 'true')
+    ui.close && (el.dataset.close = ui.close)
     el.classList.add('lsp-ui-float-container', 'visible')
     disposeFloat = (pl._setupDraggableContainer(el, { key, close: () => teardownUI(), title: attrs?.title }),
       pl._setupResizableContainer(el, key))

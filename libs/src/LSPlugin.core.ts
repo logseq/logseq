@@ -637,7 +637,26 @@ class PluginLocal
       setTitle(opts.title)
     }
 
-    return dispose
+    // click outside
+    let removeOutsideListener = null
+    if (ds.close === 'outside') {
+      const handler = (e) => {
+        const target = e.target
+        if (!el.contains(target)) {
+          opts.close()
+        }
+      }
+
+      document.addEventListener('click', handler, false)
+      removeOutsideListener = () => {
+        document.removeEventListener('click', handler)
+      }
+    }
+
+    return () => {
+      dispose()
+      removeOutsideListener?.()
+    }
   }
 
   _setupResizableContainer (el: HTMLElement, key?: string): () => void {
