@@ -18,15 +18,15 @@
   [repo files finish-handler]
   (let [titles (->> files
                     (map :title)
-                    (map :text)
                     (remove nil?))
         files (map (fn [file]
                      (let [title (:title file)
                            journal? (date/valid-journal-title? title)]
                        (when-let [text (:text file)]
-                         (let [title (if journal?
-                                       (date/journal-title->default title)
-                                       (string/replace title "/" "-"))
+                         (let [title (or
+                                      (when journal?
+                                        (date/journal-title->default title))
+                                      (string/replace title "/" "-"))
                                title (-> (util/page-name-sanity title)
                                          (string/replace "\n" " "))
                                path (str (if journal?
@@ -48,10 +48,11 @@
     (let [journal-pages-tx (let [titles (filter date/valid-journal-title? titles)]
                              (map
                               (fn [title]
-                                (let [page-name (string/lower-case title)]
+                                (let [day (date/journal-title->int title)
+                                      page-name (string/lower-case (date/int->journal-title day))]
                                   {:block/name page-name
                                    :block/journal? true
-                                   :block/journal-day (date/journal-title->int title)}))
+                                   :block/journal-day day}))
                               titles))]
       (when (seq journal-pages-tx)
         (db/transact! repo journal-pages-tx)))))
