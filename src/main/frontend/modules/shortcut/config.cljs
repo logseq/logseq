@@ -144,14 +144,6 @@
     {:desc    "Strikethrough"
      :binding "mod+shift+s"
      :fn      editor-handler/strike-through-format!}
-    :editor/move-block-up
-    {:desc    "Move block up"
-     :binding (if mac? "mod+shift+up" "alt+shift+up")
-     :fn      (editor-handler/move-up-down true)}
-    :editor/move-block-down
-    {:desc    "Move block down"
-     :binding (if mac? "mod+shift+down" "alt+shift+down")
-     :fn      (editor-handler/move-up-down false)}
     :editor/clear-block
     {:desc    "Delete entire block content"
      :binding (if mac? "ctrl+l" "alt+l")
@@ -219,6 +211,14 @@
     {:desc    "Move cursor right / Open selected block at end"
      :binding "right"
      :fn      (editor-handler/shortcut-left-right :right)}
+    :editor/move-block-up
+    {:desc    "Move block up"
+     :binding (if mac? "mod+shift+up" "alt+shift+up")
+     :fn      (editor-handler/move-up-down true)}
+    :editor/move-block-down
+    {:desc    "Move block down"
+     :binding (if mac? "mod+shift+down" "alt+shift+down")
+     :fn      (editor-handler/move-up-down false)}
     ;; FIXME
     ;; add open edit in non-selection mode
     :editor/open-edit

@@ -280,6 +280,7 @@
         [target-node sibling?] (if (seq children)
                                  [(last children) true]
                                  [target-node false])]
+    (prn {:target-node target-node})
     (insert-node-aux node target-node sibling? txs-state)))
 
 (defn insert-node
@@ -411,6 +412,47 @@
               (when-let [down-node-right (tree/-get-right down-node)]
                 (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id up-node))]
                   (tree/-save down-node-right txs-state))))))))))
+
+(defn move-nodes
+  "Move nodes up/down."
+  [nodes up?]
+  (ds/auto-transact!
+    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :move-nodes}
+    (let [first-node (first nodes)
+          last-node (last nodes)
+          left (tree/-get-left first-node)
+          move-to-another-parent? (if up?
+                                    (= left (tree/-get-parent first-node))
+                                    (and (tree/-get-parent last-node)
+                                         (nil? (tree/-get-right last-node))))
+          [up-node down-node] (if up?
+                                [left last-node]
+                                (let [down-node (if move-to-another-parent?
+                                                  (tree/-get-right (tree/-get-parent last-node))
+                                                  (tree/-get-right last-node))]
+                                  [first-node down-node]))]
+      (when (and up-node down-node)
+        (cond
+          (and move-to-another-parent? up?)
+          (when-let [target (tree/-get-left up-node)]
+            (when (and (not (:block/name (:data target))) ; page root block
+                       (not (= target
+                               (when-let [parent (tree/-get-parent first-node)]
+                                 (tree/-get-parent parent)))))
+              (insert-node-as-last-child txs-state first-node target)
+              (let [parent-id (tree/-get-id target)]
+                (doseq [node (rest nodes)]
+                  (let [node (tree/-set-parent-id node parent-id)]
+                    (tree/-save node txs-state))))
+              (when-let [down-node-right (tree/-get-right down-node)]
+                (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id (tree/-get-parent first-node)))]
+                  (tree/-save down-node-right txs-state)))))
+
+          move-to-another-parent?       ; down?
+          nil
+
+          :else                       ; sibling
+          nil)))))
 
 (defn delete-node
   "Delete node from the tree."
