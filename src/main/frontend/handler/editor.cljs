@@ -1812,21 +1812,40 @@
   (-> (map :block/content block-children)
       string/join))
 
+(defn- reorder-selected-blocks
+  [blocks]
+  (let [repo (state/get-current-repo)
+        lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
+                                           [:block/uuid (medley/uuid id)])) blocks)
+                         (remove nil?))
+        blocks (db/pull-many repo '[*] lookup-refs)]
+    (reorder-blocks blocks)))
+
 (defn move-up-down
   [up?]
-  (fn [_event]
-    (when-let [block-id (:block/uuid (state/get-edit-block))]
-      (when-let [block (db/pull [:block/uuid block-id])]
-        (outliner-core/move-node (outliner-core/block block) up?)
-        (when-let [repo (state/get-current-repo)]
-          (let [opts {:key :block/change
-                      :data [block]}]
-            (db/refresh! repo opts)))
-        (when-let [block-node (util/get-first-block-by-id block-id)]
-          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})
-          (when-let [input-id (state/get-edit-input-id)]
-            (when-let [input (gdom/getElement input-id)]
-              (.focus input))))))))
+  (fn [event]
+    (util/stop event)
+    (when-let [repo (state/get-current-repo)]
+      (if-let [block-id (:block/uuid (state/get-edit-block))]
+       (when-let [block (db/pull [:block/uuid block-id])]
+         (outliner-core/move-node (outliner-core/block block) up?)
+         (let [opts {:key :block/change
+                     :data [block]}]
+           (db/refresh! repo opts))
+         (when-let [block-node (util/get-first-block-by-id block-id)]
+           (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})
+           (when-let [input-id (state/get-edit-input-id)]
+             (when-let [input (gdom/getElement input-id)]
+               (.focus input)))))
+       (let [blocks (-> (state/get-selection-blocks)
+                        reorder-selected-blocks)
+             blocks (filter #(= (:block/parent %) (:block/parent (first blocks))) blocks)]
+         (prn {:blocks (map :block/content blocks)})
+         (outliner-core/move-nodes (mapv outliner-core/block blocks) up?)
+         (when-let [repo (state/get-current-repo)]
+           (let [opts {:key :block/change
+                       :data [blocks]}]
+             (db/refresh! repo opts))))))))
 
 ;; selections
 (defn on-tab
@@ -1834,33 +1853,26 @@
   [direction]
   (when-let [repo (state/get-current-repo)]
     (let [blocks-dom-nodes (state/get-selection-blocks)
-          blocks (seq blocks-dom-nodes)]
-      (cond
-        (seq blocks)
-        (do
-          (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                                    [:block/uuid (medley/uuid id)])) blocks)
-                                 (remove nil?))
-                blocks (db/pull-many repo '[*] lookup-refs)
-                blocks (reorder-blocks blocks)
-                end-node (get-top-level-end-node blocks)
-                end-node-parent (tree/-get-parent end-node)
-                top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
-                                                 (get-in % [:block/parent :db/id])) blocks)
-                                     (map outliner-core/block))]
-            (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
-            (let [opts {:key :block/change
-                        :data blocks}]
-              (db/refresh! repo opts)
-              (let [blocks (doall
-                            (map
-                              (fn [block]
-                                (when-let [id (gobj/get block "id")]
-                                  (when-let [block (gdom/getElement id)]
-                                    (dom/add-class! block "selected noselect")
-                                    block)))
-                              blocks-dom-nodes))]
-                (state/set-selection-blocks! blocks)))))))))
+          blocks (seq (reorder-selected-blocks blocks-dom-nodes))]
+      (when (seq blocks)
+        (let [end-node (get-top-level-end-node blocks)
+              end-node-parent (tree/-get-parent end-node)
+              top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
+                                               (get-in % [:block/parent :db/id])) blocks)
+                                   (map outliner-core/block))]
+          (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+          (let [opts {:key :block/change
+                      :data blocks}]
+            (db/refresh! repo opts)
+            (let [blocks (doall
+                          (map
+                            (fn [block]
+                              (when-let [id (gobj/get block "id")]
+                                (when-let [block (gdom/getElement id)]
+                                  (dom/add-class! block "selected noselect")
+                                  block)))
+                            blocks-dom-nodes))]
+              (state/set-selection-blocks! blocks))))))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
