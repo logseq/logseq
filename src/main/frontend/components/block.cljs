@@ -34,7 +34,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.page :as page-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repeated :as repeated]
@@ -374,7 +374,7 @@
       (fn [e]
         (util/stop e)
         (when redirect-page-name
-          (page-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name))
+          (recent-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name))
         (let [create-first-block! (fn []
                                     (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
                                       (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
