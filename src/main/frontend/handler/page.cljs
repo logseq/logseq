@@ -20,6 +20,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -458,6 +459,8 @@
         (p/let [_ (unfavorite-page! old-name)]
           (favorite-page! new-name)))
 
+      (recent-handler/update-or-add-renamed-page repo old-name new-name)
+
       (ui-handler/re-render-root!))))
 
 (defn rename!
@@ -539,13 +542,6 @@
 (defn init-commands!
   []
   (commands/init-commands! get-page-ref-text))
-
-(defn add-page-to-recent!
-  [repo page]
-  (let [pages (or (db/get-key-value repo :recent/pages)
-                  '())
-        new-pages (take 15 (distinct (cons page pages)))]
-    (db/set-key-value repo :recent/pages new-pages)))
 
 (defn template-exists?
   [title]
