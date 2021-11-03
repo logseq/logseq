@@ -257,7 +257,12 @@
            :on-blur       (fn [e]
                             (page-handler/rename! (or title page-name) @*title-value)
                             (reset! *edit? false)
-                            (reset! *title-value ""))}]]
+                            (reset! *title-value ""))
+           :on-key-down   (fn [e]
+                            (when (= (gobj/get e "key") "Enter")
+                              (page-handler/rename! (or title page-name) @*title-value)
+                              (reset! *edit? false)
+                              (reset! *title-value "")))}]]
         [:a.page-title {:on-mouse-down (fn [e]
                                          (when (util/right-click? e)
                                            (state/set-state! :page-title/context {:page page-name})))
