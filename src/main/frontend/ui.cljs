@@ -9,6 +9,9 @@
             [frontend.state :as state]
             [frontend.ui.date-picker]
             [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
+            [frontend.handler.plugin :as plugin-handler]
+            [cljs-bean.core :as bean]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -28,7 +31,21 @@
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 
-(rum/defc ls-textarea < rum/reactive
+(rum/defc ls-textarea
+  < rum/reactive
+  {:did-mount (fn [state]
+                (let [^js el (rum/dom-node state)]
+                  (. el addEventListener "mouseup"
+                     #(let [start (.-selectionStart el)
+                            end (.-selectionEnd el)]
+                        (when-let [e (and (not= start end)
+                                          {:caret (cursor/get-caret-pos el)
+                                           :start start :end end
+                                           :text  (. (.-value el) substring start end)
+                                           :point {:x (.-x %) :y (.-y %)}})]
+
+                          (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))))))
+                state)}
   [{:keys [on-change] :as props}]
   (let [skip-composition? (or
                            (state/sub :editor/show-page-search?)

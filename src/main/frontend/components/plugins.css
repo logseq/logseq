@@ -381,6 +381,10 @@
         overflow: auto;
       }
 
+      .ls-ui-float-content {
+        user-select: text;
+      }
+
       &.is-dragging {
         /*height: var(--ls-draggable-handle-height) !important;*/
         overflow: hidden;

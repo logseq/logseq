@@ -375,6 +375,9 @@ export interface IEditorProxy extends Record<string, any> {
     pageName: BlockPageName,
     blockId: BlockIdentity
   ) => void
+
+  // events
+  onInputSelectionEnd: IUserHook<{ caret: any, point: { x: number, y: number }, start: number, end: number, text: string }>
 }
 
 /**
