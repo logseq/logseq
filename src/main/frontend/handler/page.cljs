@@ -378,7 +378,8 @@
 
         (unfavorite-page! page-name)
 
-        (ok-handler)))))
+        (ok-handler)
+        (ui-handler/re-render-root!)))))
 
 (defn- rename-page-aux [old-name new-name]
   (when-let [repo (state/get-current-repo)]

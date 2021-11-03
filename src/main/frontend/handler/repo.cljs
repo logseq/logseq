@@ -154,13 +154,12 @@
    (let [repo-dir (config/get-repo-dir repo-url)]
      (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
              _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))
-             _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))]
-       (file-handler/create-metadata-file repo-url encrypted?)
-       ;; TODO: move to frontend.handler.file
-       (create-config-file-if-not-exists repo-url)
-       (create-contents-file repo-url)
-       (create-favorites-file repo-url)
-       (create-custom-theme repo-url)
+             _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+             _ (file-handler/create-metadata-file repo-url encrypted?)
+             _ (create-config-file-if-not-exists repo-url)
+             _ (create-contents-file repo-url)
+             _ (create-favorites-file repo-url)
+             _ (create-custom-theme repo-url)]
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
 (defn- remove-non-exists-refs!

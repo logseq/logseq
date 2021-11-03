@@ -19,6 +19,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -163,7 +164,8 @@
   (page-handler/rename! old-title new-title))
 
 (defmethod handle :page/create-today-journal [[_ repo]]
-  (page-handler/create-today-journal!))
+  (p/let [_ (page-handler/create-today-journal!)]
+    (ui-handler/re-render-root!)))
 
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (state/clear-edit!)
