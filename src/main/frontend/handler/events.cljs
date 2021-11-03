@@ -192,6 +192,9 @@
                false))))
         repos))
 
+(defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
+  (notification/show! content status clear?))
+
 (defmethod handle :command/run [_]
   (when (util/electron?)
     (state/set-modal! shell/shell)))
