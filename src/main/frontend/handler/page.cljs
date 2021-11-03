@@ -382,6 +382,8 @@
 (defn- rename-page-aux [old-name new-name]
   (when-let [repo (state/get-current-repo)]
     (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
+      (rename-namespace-pages! repo old-name new-name)
+
       (let [old-original-name   (:block/original-name page)
             file                (:block/file page)
             journal?            (:block/journal? page)
@@ -439,7 +441,7 @@
 
         (outliner-file/sync-to-file page))
 
-      (rename-namespace-pages! repo old-name new-name)
+
 
       ;; TODO: update browser history, remove the current one
 
