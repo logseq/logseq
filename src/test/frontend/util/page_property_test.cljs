@@ -5,6 +5,9 @@
 (deftest test-insert-property
   (testing "add org page property"
     (are [x y] (= x y)
+      (property/insert-property :org "" :title "title")
+      "#+title: title"
+
       (property/insert-property :org "hello" :title "title")
       "#+title: title\nhello"
 
@@ -28,6 +31,9 @@
 
   (testing "add markdown page property"
     (are [x y] (= x y)
+      (property/insert-property :markdown "" :title "title")
+      "title:: title"
+
       (property/insert-property :markdown "hello" :title "title")
       "title:: title\nhello"
 
@@ -52,6 +58,10 @@
 (deftest test-insert-properties
   (testing "add org page properties"
     (are [x y] (= x y)
+
+      (property/insert-properties :org "" {:title "title"})
+      "#+title: title"
+
       (property/insert-properties :org "hello" {:title "title"})
       "#+title: title\nhello"
 
@@ -74,6 +84,9 @@
 
   (testing "add markdown page properties"
     (are [x y] (= x y)
+      (property/insert-properties :markdown "" {:title "title"})
+      "title:: title"
+
       (property/insert-properties :markdown "hello" {:title "title"})
       "title:: title\nhello"
 
