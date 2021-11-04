@@ -2370,7 +2370,7 @@
                    [:p.content
                     (util/format "Property key \"%s\" already exists!" property-key)]
                    :error)
-                  (cursor/move-cursor-to-end input)))
+                  (cursor/move-cursor-to-line-end input)))
 
               ;; when cursor in empty property key
               (and property-key (= property-key ""))
