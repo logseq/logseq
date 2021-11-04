@@ -400,8 +400,7 @@
                     (tree/-save down-node-right txs-state)))))
 
             (and move-to-another-parent? (not up?))
-            (when down-node
-              (insert-node-as-first-child txs-state node down-node))
+            (insert-node-as-first-child txs-state node down-node)
 
             :else
             ;; swap up-node and down-node
@@ -449,10 +448,33 @@
                   (tree/-save down-node-right txs-state)))))
 
           move-to-another-parent?       ; down?
-          nil
+          (do
+            (insert-node-as-first-child txs-state first-node down-node)
+            (let [parent-id (tree/-get-id down-node)]
+              (doseq [node (rest nodes)]
+                (let [node (tree/-set-parent-id node parent-id)]
+                  (tree/-save node txs-state))))
+            (when-let [down-node-down (tree/-get-down down-node)]
+              (let [down-node-down (tree/-set-left-id down-node-down (tree/-get-id last-node))]
+                (tree/-save down-node-down txs-state))))
 
-          :else                       ; sibling
-          nil)))))
+          up?                           ; sibling
+          (let [first-node (tree/-set-left-id first-node (tree/-get-left-id left))
+                left (tree/-set-left-id left (tree/-get-id last-node))]
+            (tree/-save first-node txs-state)
+            (tree/-save left txs-state)
+            (when-let [down-node-right (tree/-get-right down-node)]
+              (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id left))]
+                (tree/-save down-node-right txs-state))))
+
+          :else                       ; down && sibling
+          (let [first-node (tree/-set-left-id first-node (tree/-get-id down-node))
+                down-node (tree/-set-left-id down-node (tree/-get-id left))]
+            (tree/-save first-node txs-state)
+            (tree/-save down-node txs-state)
+            (when-let [down-node-right (tree/-get-right down-node)]
+              (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id last-node))]
+                (tree/-save down-node-right txs-state)))))))))
 
 (defn delete-node
   "Delete node from the tree."
