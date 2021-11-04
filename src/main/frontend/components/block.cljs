@@ -678,15 +678,14 @@
                       :else (route-handler/redirect-to-page! id))))))}
 
            (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
-             (ui/tippy {:html        (fn []
-                                       [:div.tippy-wrapper.overflow-y-auto.p-4
-                                        {:style {:width      735
-                                                 :text-align "left"
-                                                 :max-height 600}}
-                                        [(block-parents config repo block-id {:indent? true})
-                                         (blocks-container
-                                          (db/get-block-and-children repo block-id)
-                                          (assoc config :id (str id) :preview? true))]])
+             (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
+                                      {:style {:width      735
+                                               :text-align "left"
+                                               :max-height 600}}
+                                      [(block-parents config repo block-id {:indent? true})
+                                       (blocks-container
+                                        (db/get-block-and-children repo block-id)
+                                        (assoc config :id (str id) :preview? true))]]
                         :interactive true
                         :delay       [1000, 100]} inner)
              inner)])
