@@ -32,7 +32,8 @@
                                          (str elem "\n*")))
                            ""))
                         content before)]
-      (string/join "\n" (concat before [other])))))
+      (string/join "\n" (remove #(= "" %)
+                                (concat before [other]))))))
 
 (defn insert-property
   [format content key value]
@@ -62,7 +63,8 @@
        format
        (if (key-exists? key)
          (string/replace content old-property-str new-property-str)
-         (string/join "\n" [new-property-str content]))))))
+         (string/join "\n" (remove #(= "" %)
+                            [new-property-str content])))))))
 
 (defn insert-properties
   [format content kvs]
