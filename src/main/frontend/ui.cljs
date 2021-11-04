@@ -310,7 +310,7 @@
                                         keystroke e.key]
                                     (swap! active-keystroke handler keystroke))
                                   (when (contains? heads (keyword (util/safe-lower-case e.key)))
-                                    (set-global-active-keystroke (str/join  "+" @active-keystroke))))
+                                    (set-global-active-keystroke (str/join "+" @active-keystroke))))
         keydown-handler (partial handle-global-keystroke true)
         keyup-handler (partial handle-global-keystroke false)
         clear-all #(do (set-global-active-keystroke "")
