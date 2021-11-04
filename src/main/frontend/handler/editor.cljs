@@ -75,10 +75,17 @@
            :edit-id edit-id
            :input input})))))
 
+(defn- format-new-selection
+  [{:keys [selection-start selection-end format value edit-id input]}]
+  (let [selected (subs value selection-start selection-end)]
+    [(+ selection-start (count (take-while #(= " " %) selected)))
+     (- selection-end (count (take-while #(= " " %) (reverse selected))))]))
+
 (defn- format-text!
   [pattern-fn]
   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format value edit-id input]} m
+          [selection-start selection-end] (format-new-selection m)
           empty-selection? (= selection-start selection-end)
           pattern (pattern-fn format)
           pattern-count (count pattern)
@@ -92,7 +99,8 @@
                     (subs value (+ selection-end pattern-count))
                     (subs value selection-end))
           inner-value (cond-> (subs value selection-start selection-end)
-                        (not already-wrapped?) (#(str pattern % pattern)))
+                        (not already-wrapped?)
+                        (#(str pattern % pattern)))
           new-value (str prefix inner-value postfix)]
       (state/set-edit-content! edit-id new-value)
       (cond
