@@ -1,12 +1,14 @@
 (ns frontend.handler.editor
-  (:require [cljs.core.match :refer [match]]
+  (:require ["/frontend/utils" :as utils]
+            [cljs.core.match :refer [match]]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [clojure.zip :as zip]
             [dommy.core :as dom]
             [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos *show-block-commands *show-commands *slash-caret-pos]]
+             :refer [*angle-bracket-caret-pos *show-block-commands
+                     *show-commands *slash-caret-pos]]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -18,19 +20,19 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
-            [frontend.util.clock :as clock]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.export :as export]
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.export :as export]
-            [frontend.util.drawer :as drawer]
             [frontend.image :as image]
+            [frontend.mobile.util :as mobile]
             [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.datascript :as ds]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -38,8 +40,11 @@
             [frontend.text :as text]
             [frontend.utf8 :as utf8]
             [frontend.util :as util :refer [profile]]
+            [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]
+            [frontend.util.drawer :as drawer]
             [frontend.util.marker :as marker]
+            [frontend.util.page-property :as page-property]
             [frontend.util.property :as property]
             [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
@@ -47,10 +52,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [promesa.core :as p]
-            ["/frontend/utils" :as utils]
-            [frontend.mobile.util :as mobile]
-            [frontend.modules.outliner.datascript :as ds]))
+            [promesa.core :as p]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -745,7 +747,7 @@
   ([title format page properties]
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
-         content (property/insert-properties format "" ps)
+         content (page-property/insert-properties format "" ps)
          refs (block/get-page-refs-from-properties properties)]
      {:block/pre-block? true
       :block/uuid (db/new-block-id)

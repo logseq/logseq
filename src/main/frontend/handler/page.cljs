@@ -28,6 +28,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.property :as property]
+            [frontend.util.page-property :as page-property]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -100,7 +101,7 @@
              pages    (map (fn [page]
                              (-> (block/page-name->map page true)
                                  (assoc :block/format format)))
-                        pages)
+                           pages)
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
@@ -122,52 +123,7 @@
            (route-handler/redirect-to-page! page))
          page)))))
 
-(defn page-add-property!
-  [page-name key value]
-  (when-let [page (db/pull [:block/name (string/lower-case page-name)])]
-    (let [repo (state/get-current-repo)
-          key (keyword key)
-          pre-block (db/get-pre-block repo (:db/id page))
-          format (state/get-preferred-format)
-          page-id {:db/id (:db/id page)}
-          org? (= format :org)
-          value (if (contains? #{:filters} key) (pr-str value) value)]
-      (if pre-block
-        (let [properties (:block/properties pre-block)
-              new-properties (assoc properties key value)
-              content (:block/content pre-block)
-              front-matter? (property/front-matter? content)
-              new-content (property/insert-property format content key value front-matter?)
-              block {:db/id (:db/id pre-block)
-                     :block/properties new-properties
-                     :block/content new-content
-                     :block/page page-id}
-              tx [(assoc page-id :block/properties new-properties)
-                  block]]
-          ;; (util/pprint tx)
-          (db/transact! tx)
-          (db/refresh! repo {:key :block/change
-                             :data [block]}))
-        (let [block {:block/uuid (db/new-block-id)
-                     :block/left page-id
-                     :block/parent page-id
-                     :block/page page-id
-                     :block/title []
-                     :block/content (if org?
-                                      (str "#+" (string/upper-case (name key)) ": " value)
-                                      (str (name key) ":: " value))
-                     :block/format format
-                     :block/properties {key value}
-                     :block/pre-block? true}]
-          (outliner-core/insert-node (outliner-core/block block)
-                                     (outliner-core/block page)
-                                     false)
-          (db/transact! [(assoc page-id :block/properties {key value})])
-          (db/refresh! repo {:key :block/change
-                             :data [block]})
-          (ui-handler/re-render-root!)
-          ))
-      (outliner-file/sync-to-file page-id))))
+
 
 (defn get-plugins
   [blocks]
@@ -410,7 +366,7 @@
         (d/transact! (db/get-conn repo false) page-txs)
 
         (when (not= (util/page-name-sanity new-name) new-name)
-          (page-add-property! new-name :title new-name))
+          (page-property/add-property! new-name :title new-name))
 
         (when (and file (not journal?))
           (rename-file! file new-name (fn [] nil)))
@@ -517,7 +473,7 @@
 
 (defn update-public-attribute!
   [page-name value]
-  (page-add-property! page-name :public value))
+  (page-property/add-property! page-name :public value))
 
 (defn get-page-ref-text
   [page]
@@ -578,7 +534,7 @@
 
 (defn save-filter!
   [page-name filter-state]
-  (page-add-property! page-name :filters filter-state))
+  (page-property/add-property! page-name :filters filter-state))
 
 (defn page-exists?
   [page-name]
