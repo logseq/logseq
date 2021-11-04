@@ -18,7 +18,8 @@
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-tweet-embed" :as react-tweet-embed]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.string :as str]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -303,11 +304,13 @@
 
 (defn setup-active-keystroke! []
   (let [active-keystroke (atom #{})
+        heads #{:shift :alt :meta :control}
         handle-global-keystroke (fn [down? e]
                                   (let [handler (if down? conj disj)
                                         keystroke e.key]
                                     (swap! active-keystroke handler keystroke))
-                                  (set-global-active-keystroke (apply str (interpose "+" (vec @active-keystroke)))))
+                                  (when (contains? heads (keyword (util/safe-lower-case e.key)))
+                                    (set-global-active-keystroke (str/join  "+" @active-keystroke))))
         keydown-handler (partial handle-global-keystroke true)
         keyup-handler (partial handle-global-keystroke false)
         clear-all #(do (set-global-active-keystroke "")
