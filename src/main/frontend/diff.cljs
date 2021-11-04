@@ -30,6 +30,20 @@
       (nth result 0))
     text))
 
+(def inline-special-chars
+  #{\* \_ \/ \` \+ \^ \~ \$})
+
+(defn- get-current-line-by-pos
+  [s pos]
+  (let [lines (string/split-lines s)
+        result (reduce (fn [acc line]
+                         (let [new-pos (+ acc (count line))]
+                           (if (>= new-pos pos)
+                             (reduced line)
+                             (inc new-pos)))) 0 lines)]
+    (when (string? result)
+      result)))
+
 ;; (find-position "** hello _w_" "hello w")
 (defn find-position
   [markup text]
@@ -53,10 +67,22 @@
 
                       :else
                       (recur r1 t2 (inc i1) i2))))]
-        (if (and (= (util/nth-safe markup pos)
-                    (util/nth-safe markup (inc pos))
-                    "]"))
+        (cond
+          (and (= (util/nth-safe markup pos)
+                  (util/nth-safe markup (inc pos))
+                  "]"))
           (+ pos 2)
+
+          (contains? inline-special-chars (util/nth-safe markup pos))
+          (let [matched (->> (take-while inline-special-chars (util/safe-subs markup pos))
+                             (apply str))
+                current-line (get-current-line-by-pos markup pos)
+                matched? (and current-line (string/includes? current-line (string/reverse matched)))]
+            (if matched?
+              (+ pos (count matched))
+              pos))
+
+          :else
           pos))
       (catch js/Error e
         (log/error :diff/find-position {:error e})
