@@ -696,13 +696,3 @@
 (defn open-file-in-directory []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]
     (js/window.apis.showItemInFolder file-path)))
-
-;; Commander
-(defonce *slash-commander-watcher? (atom false))
-
-(when-not @*slash-commander-watcher?
-  (add-watch commands/*show-commands :slash-commander-watcher
-             (fn [_ _ old-state new-state]
-               (when (and (not old-state) new-state)
-                 (init-commands!))))
-  (reset! *slash-commander-watcher? true))
