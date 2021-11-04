@@ -2118,18 +2118,15 @@
         data-refs-self (build-refs-data-value refs)
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])]
-    [:div.ls-block.flex.flex-col.rounded-sm
+    [:div.ls-block
      (cond->
       {:id block-id
        :data-refs data-refs
        :data-refs-self data-refs-self
-       :style {:position "relative"}
        :class (str uuid
                    (when (and collapsed? has-child?) " collapsed")
                    (when pre-block? " pre-block"))
-       :blockid (str uuid)
-       :repo repo
-       :haschild (str has-child?)}
+       :blockid (str uuid)}
 
        level
        (assoc :level level)

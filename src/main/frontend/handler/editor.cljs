@@ -952,7 +952,14 @@
   (if (<= (count blocks) 1)
     blocks
     (let [[f s & _others] blocks]
-      (if (= (:block/left s) {:db/id (:db/id f)})
+      (if (or (= (:block/left s) {:db/id (:db/id f)})
+              (and
+               (let [parents (db/get-block-parents (state/get-current-repo)
+                                                   (:block/uuid f)
+                                                   100)]
+                 (some #(= (:block/left s) {:db/id (:db/id %)})
+                       parents))
+               (not= (:block/left f) {:db/id (:db/id s)})))
         blocks
         (reverse blocks)))))
 
@@ -1813,6 +1820,20 @@
         blocks (db/pull-many repo '[*] lookup-refs)]
     (reorder-blocks blocks)))
 
+(defn- rehighlight-selected-nodes
+  ([]
+   (rehighlight-selected-nodes (state/get-selection-blocks)))
+  ([blocks]
+   (let [blocks (doall
+                 (map
+                   (fn [block]
+                     (when-let [id (gobj/get block "id")]
+                       (when-let [block (gdom/getElement id)]
+                         (dom/add-class! block "selected noselect")
+                         block)))
+                   blocks))]
+     (state/set-selection-blocks! blocks))))
+
 (defn move-up-down
   [up?]
   (fn [event]
@@ -1825,6 +1846,7 @@
                                      :data blocks}]
                            (outliner-core/move-nodes nodes up?)
                            (db/refresh! repo opts)
+                           (rehighlight-selected-nodes)
                            (let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                              (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))]
         (if edit-block-id
@@ -1856,15 +1878,7 @@
           (let [opts {:key :block/change
                       :data blocks}]
             (db/refresh! repo opts)
-            (let [blocks (doall
-                          (map
-                            (fn [block]
-                              (when-let [id (gobj/get block "id")]
-                                (when-let [block (gdom/getElement id)]
-                                  (dom/add-class! block "selected noselect")
-                                  block)))
-                            blocks-dom-nodes))]
-              (state/set-selection-blocks! blocks))))))))
+            (rehighlight-selected-nodes)))))))
 
 (defn- get-link [format link label]
   (let [link (or link "")
