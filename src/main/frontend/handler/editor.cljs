@@ -952,13 +952,7 @@
   (if (<= (count blocks) 1)
     blocks
     (let [[f s & _others] blocks]
-      (if (or
-           (= (:block/left s) {:db/id (:db/id f)})
-           (let [parents (db/get-block-parents (state/get-current-repo)
-                                               (:block/uuid f)
-                                               100)]
-             (some #(= (:block/left s) {:db/id (:db/id %)})
-                   parents)))
+      (if (= (:block/left s) {:db/id (:db/id f)})
         blocks
         (reverse blocks)))))
 
@@ -1824,26 +1818,26 @@
   (fn [event]
     (util/stop event)
     (when-let [repo (state/get-current-repo)]
-      (if-let [block-id (:block/uuid (state/get-edit-block))]
-       (when-let [block (db/pull [:block/uuid block-id])]
-         (outliner-core/move-node (outliner-core/block block) up?)
-         (let [opts {:key :block/change
-                     :data [block]}]
-           (db/refresh! repo opts))
-         (when-let [block-node (util/get-first-block-by-id block-id)]
-           (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})
-           (when-let [input-id (state/get-edit-input-id)]
-             (when-let [input (gdom/getElement input-id)]
-               (.focus input)))))
-       (let [blocks (-> (state/get-selection-blocks)
-                        reorder-selected-blocks)
-             blocks (filter #(= (:block/parent %) (:block/parent (first blocks))) blocks)]
-         (prn {:blocks (map :block/content blocks)})
-         (outliner-core/move-nodes (mapv outliner-core/block blocks) up?)
-         (when-let [repo (state/get-current-repo)]
-           (let [opts {:key :block/change
-                       :data [blocks]}]
-             (db/refresh! repo opts))))))))
+      (let [edit-block-id (:block/uuid (state/get-edit-block))
+            move-nodes (fn [blocks]
+                         (let [nodes (mapv outliner-core/block blocks)
+                               opts {:key :block/change
+                                     :data blocks}]
+                           (outliner-core/move-nodes nodes up?)
+                           (db/refresh! repo opts)
+                           (let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+                             (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))]
+        (if edit-block-id
+          (when-let [block (db/pull [:block/uuid edit-block-id])]
+            (let [blocks [block]]
+              (move-nodes blocks))
+            (when-let [input-id (state/get-edit-input-id)]
+              (when-let [input (gdom/getElement input-id)]
+                (.focus input))))
+          (let [blocks (-> (state/get-selection-blocks)
+                           reorder-selected-blocks)
+                blocks (filter #(= (:block/parent %) (:block/parent (first blocks))) blocks)]
+            (move-nodes blocks)))))))
 
 ;; selections
 (defn on-tab
