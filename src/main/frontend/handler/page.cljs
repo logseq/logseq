@@ -575,6 +575,9 @@
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
+              chosen (if (string/starts-with? chosen "New page: ")
+                       (subs chosen 10)
+                       chosen)
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
                        chosen)
@@ -593,7 +596,10 @@
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
-        (let [page-ref-text (get-page-ref-text chosen)]
+        (let [chosen (if (string/starts-with? chosen "New page: ")
+                       (subs chosen 10)
+                       chosen)
+              page-ref-text (get-page-ref-text chosen)]
           (editor-handler/insert-command! id
                                           page-ref-text
                                           format
