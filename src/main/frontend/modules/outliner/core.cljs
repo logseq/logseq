@@ -16,7 +16,7 @@
 
 (defn block
   [m]
-  (assert (map? m) (util/format "block data must be map,got: %s %s" (type m) m))
+  (assert (map? m) (util/format "block data must be map, got: %s %s" (type m) m))
   (->Block m))
 
 (defn get-data
@@ -280,7 +280,6 @@
         [target-node sibling?] (if (seq children)
                                  [(last children) true]
                                  [target-node false])]
-    (prn {:target-node target-node})
     (insert-node-aux node target-node sibling? txs-state)))
 
 (defn insert-node
@@ -368,49 +367,6 @@
            (tree/-save updated-node txs-state))
          (and sibling? (some? down-node)) ;; unchanged
          nil)))))
-
-(defn move-node
-  [node up?]
-  {:pre [(tree/satisfied-inode? node)]}
-  (ds/auto-transact!
-    [txs-state (ds/new-outliner-txs-state)] {:outliner-op :move-node}
-    (let [left (tree/-get-left node)
-          move-to-another-parent? (if up?
-                                    (= left (tree/-get-parent node))
-                                    (and (tree/-get-parent node)
-                                         (nil? (tree/-get-right node))))
-          [up-node down-node] (if up?
-                                [left node]
-                                (let [down-node (if move-to-another-parent?
-                                                  (tree/-get-right (tree/-get-parent node))
-                                                  (tree/-get-right node))]
-                                  [node down-node]))]
-      (when (and up-node down-node)
-        (let [up-node-left (tree/-get-left-id up-node)]
-          (cond
-            (and move-to-another-parent? up?)
-            (when-let [target-node (tree/-get-left up-node)]
-              (when (and (not (:block/name (:data target-node))) ; page root block
-                         (not (= target-node
-                                 (when-let [parent (tree/-get-parent node)]
-                                   (tree/-get-parent parent)))))
-                (insert-node-as-last-child txs-state down-node target-node)
-                (when-let [down-node-right (tree/-get-right down-node)]
-                  (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id (tree/-get-parent node)))]
-                    (tree/-save down-node-right txs-state)))))
-
-            (and move-to-another-parent? (not up?))
-            (insert-node-as-first-child txs-state node down-node)
-
-            :else
-            ;; swap up-node and down-node
-            (let [down-node (tree/-set-left-id down-node up-node-left)
-                  up-node (tree/-set-left-id up-node (tree/-get-id down-node))]
-              (tree/-save down-node txs-state)
-              (tree/-save up-node txs-state)
-              (when-let [down-node-right (tree/-get-right down-node)]
-                (let [down-node-right (tree/-set-left-id down-node-right (tree/-get-id up-node))]
-                  (tree/-save down-node-right txs-state))))))))))
 
 (defn move-nodes
   "Move nodes up/down."
