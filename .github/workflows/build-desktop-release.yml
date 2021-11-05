@@ -289,6 +289,7 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          DEBUG: electron-rebuild
 
       - name: Change DMG Name
         run: mv static/out/make/*.dmg static/out/make/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
