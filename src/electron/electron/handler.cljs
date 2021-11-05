@@ -202,6 +202,9 @@
 (defmethod handle :getDirname [_]
   js/__dirname)
 
+(defmethod handle :getAppBaseInfo [^js win [_ opts]]
+  {:isFullScreen (.isFullScreen win)})
+
 (defmethod handle :setCurrentGraph [_ [_ path]]
   (let [path (when path (string/replace path "logseq_local_" ""))]
     (swap! state/state assoc :graph/current path)

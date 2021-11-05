@@ -2517,9 +2517,9 @@
                   (and
                    (= name "logbook")
                    (state/enable-timetracking?)
-                   (or  (get (state/get-config) [:logbook/settings :enabled-in-all-blocks])
-                        (when (get (state/get-config)
-                                   [:logbook/settings :enabled-in-timestamped-blocks] true)
+                   (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
+                        (when (get-in (state/get-config)
+                                      [:logbook/settings :enabled-in-timestamped-blocks] true)
                           (or (:block/scheduled (:block config))
                               (:block/deadline (:block config)))))))
           [:div.flex.flex-col
