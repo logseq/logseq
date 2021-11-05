@@ -1,4 +1,4 @@
-(ns frontend.format.page-test
+(ns frontend.handler.page-test
   (:require [frontend.handler.page :as handler-page]
             [cljs.test :refer [deftest are testing run-tests]]))
 
