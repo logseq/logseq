@@ -276,12 +276,12 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
 
-      - name: Cache Node Modules
-        uses: actions/cache@v2
-        with:
-          path: |
-            **/node_modules
-          key: ${{ runner.os }}-node-modules
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       **/node_modules
+      #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
         run: yarn install && yarn electron:make-macos-arm64
