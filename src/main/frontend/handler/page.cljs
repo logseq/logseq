@@ -228,16 +228,14 @@
 
 (defn- replace-tag-ref!
   [content old-name new-name]
-  (let [old-tag (str " #" old-name)
-                new-tag (if (re-find #"[\s\t]+" new-name)
-                            (util/format " #[[%s]]" new-name)
-                          (str " #" new-name))]
-    (string/replace content old-tag new-tag)))
+  (let [old-tag (util/format "#%s" old-name)
+        new-tag (if (re-find #"[\s\t]+" new-name)
+                  (util/format "#[[%s]]" new-name)
+                  (str "#" new-name))]
+    (-> (string/replace content (re-pattern (str "^" old-tag "\\b")) new-tag)
+        (string/replace (re-pattern (str " " old-tag " ")) (str " " new-tag " "))
+        (string/replace (re-pattern (str " " old-tag "$")) (str " " new-tag)))))
 
-;; FIXME: not safe
-;; 1. normal pages [[foo]]
-;; 2. namespace pages [[foo/bar]]
-;; 3. what if there's a tag `#foobar` and we want to replace `#foo` with `#something`?
 (defn- replace-old-page!
   [content old-name new-name]
   (when (and (string? content) (string? old-name) (string? new-name))
