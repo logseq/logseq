@@ -23,6 +23,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.handler.command-palette :as palette-handler]
             [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -228,10 +229,12 @@
                               (rest %)) actions)]))))
 
 (def ^:export register_plugin_simple_command
-  (fn [pid ^js cmd-action]
+  (fn [pid ^js cmd-action palette?]
     (when-let [[cmd action] (bean/->clj cmd-action)]
-      (plugin-handler/register-plugin-simple-command
-        pid cmd (assoc action 0 (keyword (first action)))))))
+      (let [action (assoc action 0 (keyword (first action)))]
+        (plugin-handler/register-plugin-simple-command pid cmd action)
+        (when-let [palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
+          (palette-handler/register palette-cmd))))))
 
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]

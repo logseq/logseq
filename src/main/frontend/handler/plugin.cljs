@@ -188,6 +188,15 @@
   [pid]
   (swap! state/state md/dissoc-in [:plugin/installed-commands (keyword pid)]))
 
+(defn simple-cmd->palette-cmd
+  [pid {:keys [key label type desc] :as cmd} action]
+  (let [palette-cmd {:id     (keyword (str "plugin:" pid "/" type))
+                     :desc   (str pid ": " (or desc label))
+                     :action (fn []
+                               (state/pub-event!
+                                 [:exec-plugin-cmd {:type type :pid pid :cmd cmd :action action}]))}]
+    palette-cmd))
+
 (defn register-plugin-simple-command
   ;; action => [:action-key :event-key]
   [pid {:keys [key label type] :as cmd} action]

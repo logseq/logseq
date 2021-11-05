@@ -2,6 +2,7 @@ import EventEmitter from 'eventemitter3'
 import * as CSS from 'csstype'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
+import { LSPluginUser } from './LSPlugin.user'
 
 export type PluginLocalIdentity = string
 
@@ -184,6 +185,18 @@ export interface IAppProxy {
   getUserInfo: () => Promise<AppUserInfo | null>
 
   getUserConfigs: () => Promise<AppUserConfigs>
+
+  // commands
+  registerSimpleCommand: (
+    this: LSPluginUser,
+    type: string,
+    opts: {
+      key: string,
+      label: string,
+      desc?: string,
+      palette?: boolean
+    },
+    action: BlockCommandCallback) => void
 
   // native
   relaunch: () => Promise<void>

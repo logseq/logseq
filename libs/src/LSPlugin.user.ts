@@ -39,7 +39,9 @@ function registerSimpleCommand (
   type: string,
   opts: {
     key: string,
-    label: string
+    label: string,
+    desc?: string,
+    palette?: boolean
   },
   action: BlockCommandCallback
 ) {
@@ -47,18 +49,19 @@ function registerSimpleCommand (
     return false
   }
 
-  const { key, label } = opts
+  const { key, label, desc, palette } = opts
   const eventKey = `SimpleCommandHook${key}${++registeredCmdUid}`
 
   this.Editor['on' + eventKey](action)
 
   this.caller?.call(`api:call`, {
     method: 'register-plugin-simple-command',
-    args: [this.baseInfo.id, [{ key, label, type }, ['editor/hook', eventKey]]]
+    args: [this.baseInfo.id, [{ key, label, type, desc }, ['editor/hook', eventKey]], palette]
   })
 }
 
 const app: Partial<IAppProxy> = {
+  registerSimpleCommand,
   registerUIItem (
     type: 'toolbar' | 'pagebar',
     opts: { key: string, template: string }

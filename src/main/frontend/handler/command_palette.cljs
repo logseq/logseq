@@ -12,10 +12,11 @@
                             ;; action fn expects zero number of arities
                             (fn [action] (zero? (.-length action)))))
 (s/def :command/shortcut string?)
+(s/def :command/tag vector?)
 
 (s/def :command/command
   (s/keys :req-un [:command/id :command/desc :command/action]
-          :opt-un [:command/shortcut]))
+          :opt-un [:command/shortcut :command/tag]))
 
 (defn global-shortcut-commands []
   (->> [:shortcut.handler/editor-global

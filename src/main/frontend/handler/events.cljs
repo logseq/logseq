@@ -20,6 +20,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.commands :as commands]
             [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -206,6 +207,9 @@
 
 (defmethod handle :instrument [[_ {:keys [type payload]}]]
   (posthog/capture type payload))
+
+(defmethod handle :exec-plugin-cmd [[_ {:keys [type pid cmd action]}]]
+  (commands/exec-plugin-simple-command! pid cmd action))
 
 (defn run!
   []
