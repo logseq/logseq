@@ -56,9 +56,10 @@
 (defn- open-first-block!
   [state]
   (let [[_ blocks _ sidebar? preview?] (:rum/args state)]
-    (when (or sidebar?
-              preview?
-              (not (contains? #{:home :all-journals} (state/get-current-route))))
+    (when (and
+           (or preview?
+               (not (contains? #{:home :all-journals} (state/get-current-route))))
+           (not sidebar?))
       (let [block (first blocks)]
         (when (and (= (count blocks) 1)
                    (string/blank? (:block/content block))
