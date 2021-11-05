@@ -42,7 +42,9 @@
   state)
 
 (rum/defc latex < rum/reactive
-  {:did-mount load-and-render!
+  {:did-mount (fn [state]
+                (js/setTimeout #(load-and-render! state) 0)
+                state)
    :did-update load-and-render!}
   [id s block? display?]
   (let [loading? (rum/react *loading?)]

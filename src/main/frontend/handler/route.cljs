@@ -25,9 +25,18 @@
   (redirect! {:to :home}))
 
 (defn redirect-to-page!
-  [page-name]
-  (redirect! {:to :page
-              :path-params {:name page-name}}))
+  ([page-name]
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}}))
+  ([page-name anchor]
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}
+               :query-params {:anchor anchor}}))
+  ([page-name anchor push]
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}
+               :query-params {:anchor anchor}
+               :push push})))
 
 (defn get-title
   [name path-params]
@@ -148,7 +157,6 @@
       :file
       (when-let [path (get-in (state/get-route-match) [:path-params :path])]
         (when-let [page (db/get-file-page path)]
-          (redirect! {:to :page
-                      :path-params {:name page}})))
+          (redirect-to-page! page)))
 
       nil)))

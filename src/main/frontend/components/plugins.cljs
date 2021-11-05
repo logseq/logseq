@@ -12,6 +12,7 @@
             [frontend.components.svg :as svg]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.handler.page :as page-handler]
             [clojure.string :as string]))
 
 (rum/defcs installed-themes
@@ -248,7 +249,8 @@
 
             (ui/toggle (not disabled)
                        (fn []
-                         (js-invoke js/LSPluginCore (if disabled "enable" "disable") id))
+                         (js-invoke js/LSPluginCore (if disabled "enable" "disable") id)
+                         (page-handler/init-commands!))
                        true)]])]])))
 
 (rum/defcs marketplace-plugins

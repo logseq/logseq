@@ -34,7 +34,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.page :as page-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repeated :as repeated]
@@ -238,7 +238,7 @@
                                         images (to-array images)
                                         images (if-not (= (count images) 1)
                                                  (let [^js _image (.closest (.-target e) ".asset-container")
-                                                       image (js/image.querySelector "img")]
+                                                       image (. _image querySelector "img")]
                                                    (cons image (remove #(= image %) images)))
                                                  images)
                                         images (for [^js it images] {:src (.-src it)
@@ -374,7 +374,7 @@
       (fn [e]
         (util/stop e)
         (when redirect-page-name
-          (page-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name))
+          (recent-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name))
         (let [create-first-block! (fn []
                                     (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
                                       (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
@@ -389,8 +389,7 @@
                  {:page page-entity})))
             (do
               (create-first-block!)
-              (route-handler/redirect! {:to :page
-                                        :path-params {:name redirect-page-name}}))))
+              (route-handler/redirect-to-page! redirect-page-name))))
         (when (and contents-page?
                    (util/mobile?)
                    (state/get-left-sidebar-open?))
@@ -459,12 +458,15 @@
       children)))
 
 (rum/defc page-cp
-  [{:keys [html-export? label children contents-page? preview?] :as config} page]
+  [{:keys [html-export? redirect-page-name label children contents-page? preview?] :as config} page]
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (util/remove-boundary-slashes page-name-in-block)
           page-name (string/lower-case page-name-in-block)
           page-entity (db/entity [:block/name page-name])
-          redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
+          redirect-page-name (or (and (= :org (state/get-preferred-format))
+                                      (:org-mode/insert-file-link? (state/get-config))
+                                      redirect-page-name)
+                              (model/get-redirect-page-name page-name (:block/alias? config)))
           inner (page-inner config
                             page-name-in-block
                             page-name
@@ -560,7 +562,7 @@
 (defn- edit-parent-block [e config]
   (when-not (state/editing?)
     (.stopPropagation e)
-    (editor-handler/edit-block! config :max (:block/format config) (:block/uuid config))))
+    (editor-handler/edit-block! config :max (:block/uuid config))))
 
 (rum/defc block-embed < rum/reactive db-mixins/query
   [config id]
@@ -673,19 +675,17 @@
                       [:annotation true] (pdf-assets/open-block-ref! block)
 
                       ;; default open block page
-                      :else (route-handler/redirect! {:to          :page
-                                                      :path-params {:name id}}))))))}
+                      :else (route-handler/redirect-to-page! id))))))}
 
            (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
-             (ui/tippy {:html        (fn []
-                                       [:div.tippy-wrapper.overflow-y-auto.p-4
-                                        {:style {:width      735
-                                                 :text-align "left"
-                                                 :max-height 600}}
-                                        [(block-parents config repo block-id {:indent? true})
-                                         (blocks-container
-                                          (db/get-block-and-children repo block-id)
-                                          (assoc config :id (str id) :preview? true))]])
+             (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
+                                      {:style {:width      735
+                                               :text-align "left"
+                                               :max-height 600}}
+                                      [(block-parents config repo block-id {:indent? true})
+                                       (blocks-container
+                                        (db/get-block-and-children repo block-id)
+                                        (assoc config :id (str id) :preview? true))]]
                         :interactive true
                         :delay       [1000, 100]} inner)
              inner)])
@@ -950,6 +950,9 @@
 
               :else
               (let [label-text (get-label-text label)
+                    redirect-page-name (-> (second url)
+                                           text/get-file-basename)
+                    config (assoc config :redirect-page-name redirect-page-name)
                     page (if (string/blank? label-text)
                            {:block/name (db/get-file-page (string/replace href "file:" ""))}
                            (get-page label))]
@@ -1189,7 +1192,7 @@
 
             (and (string/starts-with? a "[[")
                  (string/ends-with? a "]]"))
-            (let [page-name (text/extract-page-name-from-ref a)]
+            (let [page-name (text/get-page-name a)]
               (when-not (string/blank? page-name)
                 (page-embed config page-name)))
 
@@ -1317,8 +1320,7 @@
        :block
        block)
       (util/stop e))
-    (route-handler/redirect! {:to :page
-                              :path-params {:name (str uuid)}})))
+    (route-handler/redirect-to-page! uuid)))
 
 (rum/defc block-children < rum/reactive
   [config children collapsed? *ref-collapsed?]
@@ -1694,7 +1696,7 @@
                         (state/set-editor-show-date-picker! true)
                         (state/set-timestamp-block! {:block block
                                                      :typ typ
-                                                     :show? show?}))))} 
+                                                     :show? show?}))))}
         [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]
         ]]
      (when (true? @show?)
@@ -1870,7 +1872,7 @@
            {:on-mouse-down (fn [e]
                              (util/stop e)
                              (when-let [block (:embed-parent config)]
-                               (editor-handler/edit-block! block :max (:block/format block) (:block/uuid block))))}
+                               (editor-handler/edit-block! block :max (:block/uuid block))))}
            svg/edit])
 
         (when (and (state/enable-timetracking?)
@@ -1921,8 +1923,7 @@
                 (:db/id block)
                 :block-ref
                 {:block block}))
-             (route-handler/redirect! {:to :page
-                                       :path-params {:name (str (:block/uuid block))}})))}
+             (route-handler/redirect-to-page! (:block/uuid block))))}
      label]))
 
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
@@ -2116,18 +2117,15 @@
         data-refs-self (build-refs-data-value refs)
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])]
-    [:div.ls-block.flex.flex-col.rounded-sm
+    [:div.ls-block
      (cond->
       {:id block-id
        :data-refs data-refs
        :data-refs-self data-refs-self
-       :style {:position "relative"}
        :class (str uuid
                    (when (and collapsed? has-child?) " collapsed")
                    (when pre-block? " pre-block"))
-       :blockid (str uuid)
-       :repo repo
-       :haschild (str has-child?)}
+       :blockid (str uuid)}
 
        level
        (assoc :level level)
@@ -2519,9 +2517,9 @@
                   (and
                    (= name "logbook")
                    (state/enable-timetracking?)
-                   (or  (get (state/get-config) [:logbook/settings :enabled-in-all-blocks])
-                        (when (get (state/get-config)
-                                   [:logbook/settings :enabled-in-timestamped-blocks] true)
+                   (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
+                        (when (get-in (state/get-config)
+                                      [:logbook/settings :enabled-in-timestamped-blocks] true)
                           (or (:block/scheduled (:block config))
                               (:block/deadline (:block config)))))))
           [:div.flex.flex-col

@@ -88,9 +88,6 @@
              (ok-handler repo path result))
            result)
          (p/catch (fn [error]
-                    (state/pub-event! [:instrument {:type :debug/write-failed
-                                                    :payload {:step :ipc-write-file
-                                                              :error error}}])
                     (if error-handler
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))

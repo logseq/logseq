@@ -229,7 +229,9 @@
                             (util/concat-without-nil
                              (mapcat
                               (fn [block]
-                                (when-let [page-id (:db/id (:block/page block))]
+                                (when-let [page-id (or (:db/id (:block/page block))
+                                                       (and (int? (:block/page block))
+                                                            (:block/page block)))]
                                   [[:blocks (:block/uuid block)]
                                    [:page/blocks page-id]
                                    [:page/ref-pages page-id]]))

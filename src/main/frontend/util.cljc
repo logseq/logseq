@@ -606,18 +606,20 @@
 
 ;; Add documentation
 (defn replace-first [pattern s new-value]
-  (when-let [first-index (string/index-of s pattern)]
-    (str new-value (subs s (+ first-index (count pattern))))))
+  (if-let [first-index (string/index-of s pattern)]
+    (str new-value (subs s (+ first-index (count pattern))))
+    s))
 
 (defn replace-last
   ([pattern s new-value]
    (replace-last pattern s new-value true))
   ([pattern s new-value space?]
-   (when-let [last-index (string/last-index-of s pattern)]
+   (if-let [last-index (string/last-index-of s pattern)]
      (let [prefix (subs s 0 last-index)]
        (if space?
          (concat-without-spaces prefix new-value)
-         (str prefix new-value))))))
+         (str prefix new-value)))
+     s)))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs

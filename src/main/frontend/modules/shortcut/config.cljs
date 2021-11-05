@@ -7,6 +7,7 @@
             [frontend.handler.history :as history]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.journal :as journal-handler]
             [frontend.handler.search :as search-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.plugin :as plugin-handler]
@@ -14,6 +15,9 @@
             [frontend.state :as state]
             [frontend.util :refer [mac?] :as util]
             [frontend.commands :as commands]))
+
+;; Note – when you change this file, you will need to do a hard reset.
+;; The commands are registered when the Clojurescript code runs for the first time.
 
 ;; TODO: how to extend this for plugins usage? An atom?
 (def default-config
@@ -140,14 +144,6 @@
     {:desc    "Strikethrough"
      :binding "mod+shift+s"
      :fn      editor-handler/strike-through-format!}
-    :editor/move-block-up
-    {:desc    "Move block up"
-     :binding (if mac? "mod+shift+up" "alt+shift+up")
-     :fn      (editor-handler/move-up-down true)}
-    :editor/move-block-down
-    {:desc    "Move block down"
-     :binding (if mac? "mod+shift+down" "alt+shift+down")
-     :fn      (editor-handler/move-up-down false)}
     :editor/clear-block
     {:desc    "Delete entire block content"
      :binding (if mac? "ctrl+l" "alt+l")
@@ -215,6 +211,14 @@
     {:desc    "Move cursor right / Open selected block at end"
      :binding "right"
      :fn      (editor-handler/shortcut-left-right :right)}
+    :editor/move-block-up
+    {:desc    "Move block up"
+     :binding (if mac? "mod+shift+up" "alt+shift+up")
+     :fn      (editor-handler/move-up-down true)}
+    :editor/move-block-down
+    {:desc    "Move block down"
+     :binding (if mac? "mod+shift+down" "alt+shift+down")
+     :fn      (editor-handler/move-up-down false)}
     ;; FIXME
     ;; add open edit in non-selection mode
     :editor/open-edit
@@ -343,11 +347,23 @@
     :go/home
     {:desc    "Go to home"
      :binding "g h"
-     :fn      #(route-handler/redirect! {:to :home})}
+     :fn      #(route-handler/redirect-to-home!)}
     :go/keyboard-shortcuts
     {:desc    "Go to keyboard shortcuts"
      :binding "g s"
      :fn      #(route-handler/redirect! {:to :shortcut-setting})}
+    :go/tomorrow
+    {:desc    "Go to tomorrow"
+     :binding "g t"
+     :fn      journal-handler/go-to-tomorrow!}
+    :go/next-journal
+    {:desc    "Go to next journal"
+     :binding "g n"
+     :fn      journal-handler/go-to-next-journal!}
+    :go/prev-journal
+    {:desc    "Go to previous journal"
+     :binding "g p"
+     :fn      journal-handler/go-to-prev-journal!}
     :ui/toggle-document-mode
     {:desc    "Toggle document mode"
      :binding "t d"
@@ -376,6 +392,14 @@
     {:desc    "Toggle Favorites in sidebar"
      :binding "t f"
      :fn      ui-handler/toggle-contents!}
+    :editor/open-file-in-default-app
+    {:desc    "Open file in default app"
+     :binding "o f"
+     :fn      page-handler/open-file-in-default-app}
+    :editor/open-file-in-directory
+    {:desc    "Open file in parent directory"
+     :binding "o d"
+     :fn      page-handler/open-file-in-directory}
     :ui/toggle-wide-mode
     {:desc    "Toggle wide mode"
      :binding "t w"
@@ -498,6 +522,9 @@
    ^{:doc "Others"}
    [:go/home
     :go/journals
+    :go/tomorrow
+    :go/next-journal
+    :go/prev-journal
     :command/run
     :command-palette/toggle
     :sidebar/clear

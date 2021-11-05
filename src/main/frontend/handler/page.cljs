@@ -20,6 +20,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
             [frontend.handler.config :as config-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -27,6 +28,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.property :as property]
+            [frontend.util.page-property :as page-property]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -99,7 +101,7 @@
              pages    (map (fn [page]
                              (-> (block/page-name->map page true)
                                  (assoc :block/format format)))
-                        pages)
+                           pages)
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
@@ -118,56 +120,10 @@
            (outliner-file/sync-to-file page))
 
          (when redirect?
-           (route-handler/redirect! {:to          :page
-                                     :path-params {:name page}}))
+           (route-handler/redirect-to-page! page))
          page)))))
 
-(defn page-add-property!
-  [page-name key value]
-  (when-let [page (db/pull [:block/name (string/lower-case page-name)])]
-    (let [repo (state/get-current-repo)
-          key (keyword key)
-          pre-block (db/get-pre-block repo (:db/id page))
-          format (state/get-preferred-format)
-          page-id {:db/id (:db/id page)}
-          org? (= format :org)
-          value (if (contains? #{:filters} key) (pr-str value) value)]
-      (if pre-block
-        (let [properties (:block/properties pre-block)
-              new-properties (assoc properties key value)
-              content (:block/content pre-block)
-              front-matter? (property/front-matter? content)
-              new-content (property/insert-property format content key value front-matter?)
-              block {:db/id (:db/id pre-block)
-                     :block/properties new-properties
-                     :block/content new-content
-                     :block/page page-id}
-              tx [(assoc page-id :block/properties new-properties)
-                  block]]
-          ;; (util/pprint tx)
-          (db/transact! tx)
-          (db/refresh! repo {:key :block/change
-                             :data [block]}))
-        (let [block {:block/uuid (db/new-block-id)
-                     :block/left page-id
-                     :block/parent page-id
-                     :block/page page-id
-                     :block/title []
-                     :block/content (if org?
-                                      (str "#+" (string/upper-case (name key)) ": " value)
-                                      (str (name key) ":: " value))
-                     :block/format format
-                     :block/properties {key value}
-                     :block/pre-block? true}]
-          (outliner-core/insert-node (outliner-core/block block)
-                                     (outliner-core/block page)
-                                     false)
-          (db/transact! [(assoc page-id :block/properties {key value})])
-          (db/refresh! repo {:key :block/change
-                             :data [block]})
-          (ui-handler/re-render-root!)
-          ))
-      (outliner-file/sync-to-file page-id))))
+
 
 (defn get-plugins
   [blocks]
@@ -378,11 +334,14 @@
 
         (unfavorite-page! page-name)
 
-        (ok-handler)))))
+        (ok-handler)
+        (ui-handler/re-render-root!)))))
 
 (defn- rename-page-aux [old-name new-name]
   (when-let [repo (state/get-current-repo)]
     (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
+      (rename-namespace-pages! repo old-name new-name)
+
       (let [old-original-name   (:block/original-name page)
             file                (:block/file page)
             journal?            (:block/journal? page)
@@ -407,7 +366,7 @@
         (d/transact! (db/get-conn repo false) page-txs)
 
         (when (not= (util/page-name-sanity new-name) new-name)
-          (page-add-property! new-name :title new-name))
+          (page-property/add-property! new-name :title new-name))
 
         (when (and file (not journal?))
           (rename-file! file new-name (fn [] nil)))
@@ -440,7 +399,7 @@
 
         (outliner-file/sync-to-file page))
 
-      (rename-namespace-pages! repo old-name new-name)
+
 
       ;; TODO: update browser history, remove the current one
 
@@ -456,6 +415,8 @@
       (when (favorited? old-name)
         (p/let [_ (unfavorite-page! old-name)]
           (favorite-page! new-name)))
+
+      (recent-handler/update-or-add-renamed-page repo old-name new-name)
 
       (ui-handler/re-render-root!))))
 
@@ -512,7 +473,7 @@
 
 (defn update-public-attribute!
   [page-name value]
-  (page-add-property! page-name :public value))
+  (page-property/add-property! page-name :public value))
 
 (defn get-page-ref-text
   [page]
@@ -538,13 +499,6 @@
 (defn init-commands!
   []
   (commands/init-commands! get-page-ref-text))
-
-(defn add-page-to-recent!
-  [repo page]
-  (let [pages (or (db/get-key-value repo :recent/pages)
-                  '())
-        new-pages (take 15 (distinct (cons page pages)))]
-    (db/set-key-value repo :recent/pages new-pages)))
 
 (defn template-exists?
   [title]
@@ -580,7 +534,7 @@
 
 (defn save-filter!
   [page-name filter-state]
-  (page-add-property! page-name :filters filter-state))
+  (page-property/add-property! page-name :filters filter-state))
 
 (defn page-exists?
   [page-name]
@@ -621,6 +575,9 @@
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
+              chosen (if (string/starts-with? chosen "New page: ")
+                       (subs chosen 10)
+                       chosen)
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
                        chosen)
@@ -639,7 +596,10 @@
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
-        (let [page-ref-text (get-page-ref-text chosen)]
+        (let [chosen (if (string/starts-with? chosen "New page: ")
+                       (subs chosen 10)
+                       chosen)
+              page-ref-text (get-page-ref-text chosen)]
           (editor-handler/insert-command! id
                                           page-ref-text
                                           format
@@ -690,3 +650,11 @@
      (:db/id page)
      :page
      page)))
+
+(defn open-file-in-default-app []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (js/window.apis.openPath file-path)))
+
+(defn open-file-in-directory []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (js/window.apis.showItemInFolder file-path)))
