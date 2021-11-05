@@ -319,7 +319,10 @@
                                             (destroy-window! win)
                                             (reset! *win nil))
                                           (do (.preventDefault ^js/Event e)
-                                              (.hide win))))))))
+                                              (if (and mac? (.isFullScreen win))
+                                                (do (.once win "leave-full-screen" #(.hide win))
+                                                    (.setFullScreen win false))
+                                                (.hide win)))))))))
                (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
                (.on app "activate" #(if @*win (.show win)))))))))
 
