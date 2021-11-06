@@ -1673,9 +1673,9 @@
                    state)}
   [state block typ ast]
   (let [show? (get state ::show?)]
-    [:div.flex.flex-col
-     [:div.text-sm.mt-1.flex.flex-row
-      [:div.opacity-50.font-medium
+    [:div.flex.flex-col.timestamp
+     [:div.text-sm.mb-1.flex.flex-row
+      [:div.opacity-50.font-medium.timestamp-label
        (str typ ": ")]
       [:a.opacity-80.hover:opacity-100
        {:on-click (fn []
@@ -2395,8 +2395,8 @@
         (when-not (and built-in? (empty? result))
           (ui/foldable
            [:div.custom-query-title
-            title
-            [:span.opacity-60.text-sm.ml-2
+            [:span.title-text title]
+            [:span.opacity-60.text-sm.ml-2.results-count
              (str (count transformed-query-result) " results")]]
            [:div
             (when current-block
