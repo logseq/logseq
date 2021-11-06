@@ -16,6 +16,7 @@
   "config": {
     "forge": "./forge.config.js"
   },
+  "engines" : { "node" : "16.x" },
   "dependencies": {
     "better-sqlite3": "7.4.3",
     "chokidar": "^3.5.1",
@@ -39,6 +40,7 @@
     "@electron-forge/maker-zip": "^6.0.0-beta.57",
     "electron": "13.4.0",
     "electron-builder": "^22.11.7",
-    "electron-forge-maker-appimage": "trusktr/electron-forge-maker-appimage#patch-1"
+    "electron-forge-maker-appimage": "trusktr/electron-forge-maker-appimage#patch-1",
+    "electron-rebuild": "2.3.2"
   }
 }

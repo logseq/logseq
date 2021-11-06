@@ -268,7 +268,7 @@ jobs:
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
         with:
-          node-version: 16.11.1
+          node-version: 16
 
       - name: Signing By Apple Developer ID
         uses: apple-actions/import-codesign-certs@v1
@@ -289,7 +289,6 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          DEBUG: electron-rebuild
 
       - name: Change DMG Name
         run: mv static/out/make/*.dmg static/out/make/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
