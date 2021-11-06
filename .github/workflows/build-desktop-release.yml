@@ -312,7 +312,8 @@ jobs:
           path: static/out/make/zip/darwin/arm64/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
 
   release:
-    needs: [ build-macos, build-linux, build-windows, build-macos-arm64 ]
+    # needs: [ build-macos, build-linux, build-windows, build-macos-arm64 ]
+    needs: [ build-macos, build-linux, build-windows]
     runs-on: ubuntu-18.04
 
     steps:
@@ -328,17 +329,17 @@ jobs:
           name: Logseq-x64.zip
           path: ./
 
-      - name: Download The MacOS ARM64 DMG Artifact
-        uses: actions/download-artifact@v1
-        with:
-          name: Logseq-arm64.dmg
-          path: ./
+      # - name: Download The MacOS ARM64 DMG Artifact
+      #   uses: actions/download-artifact@v1
+      #   with:
+      #     name: Logseq-arm64.dmg
+      #     path: ./
 
-      - name: Download The MacOS ARM64 ZIP Artifact
-        uses: actions/download-artifact@v1
-        with:
-          name: Logseq-arm64.zip
-          path: ./
+      # - name: Download The MacOS ARM64 ZIP Artifact
+      #   uses: actions/download-artifact@v1
+      #   with:
+      #     name: Logseq-arm64.zip
+      #     path: ./
 
       - name: Download The Linux Artifact In Zip format
         uses: actions/download-artifact@v1
@@ -394,27 +395,27 @@ jobs:
           asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
           asset_content_type: application/x-apple-diskimage
 
-      - name: Upload MacOS ARM64 ZIP Artifact
-        id: upload-macos-arm64-zip-artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
-          asset_name: logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
-          asset_content_type: application/zip
+      # - name: Upload MacOS ARM64 ZIP Artifact
+      #   id: upload-macos-arm64-zip-artifact
+      #   uses: actions/upload-release-asset@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     upload_url: ${{ steps.create_release.outputs.upload_url }}
+      #     asset_path: ./logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+      #     asset_name: logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+      #     asset_content_type: application/zip
 
-      - name: Upload MacOS ARM64 DMG Artifact
-        id: upload-macos-arm64-dmg-artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
-          asset_name: logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
-          asset_content_type: application/x-apple-diskimage
+      # - name: Upload MacOS ARM64 DMG Artifact
+      #   id: upload-macos-arm64-dmg-artifact
+      #   uses: actions/upload-release-asset@v1
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   with:
+      #     upload_url: ${{ steps.create_release.outputs.upload_url }}
+      #     asset_path: ./logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
+      #     asset_name: logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
+      #     asset_content_type: application/x-apple-diskimage
 
       - name: Upload Linux Artifact With Zip format
         id: upload-linux-artifact-with-zip-format
