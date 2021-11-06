@@ -268,7 +268,7 @@ jobs:
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
         with:
-          node-version: 17
+          node-version: 16
 
       - name: Signing By Apple Developer ID
         uses: apple-actions/import-codesign-certs@v1
