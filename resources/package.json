@@ -16,7 +16,6 @@
   "config": {
     "forge": "./forge.config.js"
   },
-  "engines" : { "node" : "16.x" },
   "dependencies": {
     "better-sqlite3": "7.4.3",
     "chokidar": "^3.5.1",
