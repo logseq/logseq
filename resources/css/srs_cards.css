@@ -1,0 +1,120 @@
+
+/******************************************************************************/
+/** Spaced repetition: card ***************************************************/
+/******************************************************************************/
+
+div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 > .block-content-wrapper,
+div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 > .editor-wrapper {
+  font-weight: bold;
+  margin-left: -5px;
+}
+
+div[data-refs-self*='"card"'] .tag {
+}
+
+div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 {
+  margin-left: 0;
+}
+
+div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 .bullet-container {
+  opacity: 0.5;
+  display: none;
+}
+
+div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 .block-control {
+  margin-left: 12px;
+}
+
+div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 .block-control svg {}
+
+div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 .control-hide {
+  display: block;
+}
+
+div[data-refs-self*='"card"'] {
+  margin-bottom: 8px;
+  background: var(--color-level-1);
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-radius: 4px;
+  margin-left: 12px;
+  border: 1px solid var(--color-level-3);
+}
+
+html[data-theme='light'] #right-sidebar div[data-refs-self*='"card"'] {
+  background-color: rgba(255, 254, 253) !important;
+}
+
+html[data-theme='dark'] #right-sidebar div[data-refs-self*='"card"'] {
+  background-color: var(--color-level-2);
+}
+
+div[data-refs-self*='"card"'] > * {
+  margin-left: -9px;
+}
+
+div[data-refs-self*='"card"'] .block-children .bullet-container {
+  opacity: 0.3;
+  display: none;
+}
+
+div[data-refs-self*='"card"'] .block-children {
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+div[data-refs-self*='"card"'] .block-children > * {
+  margin-left: 0;
+  margin-left: -18px;
+  margin-left: -12px;
+}
+
+div[data-refs-self*='"card"'] .block-properties,
+div[data-refs-self*='"card"'] .block-properties .page-property-key {
+  border: none;
+  color: #999;
+  padding: 0;
+  margin: 0;
+}
+
+
+/******************************************************************************/
+/** Spaced repetition: Review *************************************************/
+/******************************************************************************/
+
+.cards-review {
+  margin-left: -28px;
+}
+
+.cards-title {
+  border: 1px solid var(--color-level-3);
+  border-radius: 8px 8px 0 0;
+  color: #999;
+  background: var(--color-level-1);
+  font-weight: 500;
+  padding-left: 4px;
+}
+
+#preview-all-cards {
+  display: none;
+}
+
+.cards-title .tippy-hover {
+  display: none;
+}
+
+.ls-card {
+  border: 1px solid var(--color-level-3);
+  border-top: none;
+  padding: 8px 12px 0 12px;
+  margin-top: -8px;
+  border-radius: 0 0 8px 8px;
+}
+
+.ls-card div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 .block-control {
+  display: none;
+}
+
+div[data-refs-self*='"card"'] {
+  padding-left: 8px;
+}

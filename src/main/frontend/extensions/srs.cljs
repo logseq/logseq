@@ -505,9 +505,7 @@
                                    :class (util/hiccup->class "opacity-60.hover:opacity-100")
                                    :small? true
                                    :on-click #(operation-reset! card))))]
-           [:div.my-4
-            (ui/button "Review cards"
-                       :small? true)])]))))
+           [:div.my-3 (ui/button "Review cards" :small? true)])]))))
 
 (rum/defc view-modal <
   (shortcut/mixin :shortcut.handler/cards)
