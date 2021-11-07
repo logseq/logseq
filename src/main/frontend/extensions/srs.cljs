@@ -580,11 +580,9 @@
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
             filtered-total (count result)
             modal? (:modal? config)]
-        [:div.flex-1 {:style (when modal? {:height "100%"})}
+        [:div.flex-1.cards-review {:style (when modal? {:height "100%"})}
          [:div.flex.flex-row.items-center.justify-between.cards-title
-          [:div
-           [:span.text-sm [:span.font-bold "🗂️"]
-            (str ": " query-string)]]
+          [:code.text-sm.opacity-50 query-string]
 
           [:div.flex.flex-row.items-center
 
@@ -592,7 +590,7 @@
            (ui/tippy {:html [:div.text-sm "overdue/total"]
                       ;; :class "tippy-hover"
                       :interactive true}
-                     [:div.opacity-60.text-sm
+                     [:div.opacity-60.text-sm.mr-3
                       (let [idx (- filtered-total @card-index)]
                         (max idx 0))
                       [:span "/"]
@@ -604,8 +602,9 @@
              :class "tippy-hover"
              :interactive true
              :disabled false}
-            [:a.opacity-60.hover:opacity-100.svg-small.inline.ml-3.font-bold
-             {:on-click (fn [_]
+            [:a.opacity-60.hover:opacity-100.svg-small.inline.mr-3.font-bold
+             {:id "preview-all-cards"
+              :on-click (fn [_]
                           (let [blocks query-result]
                             (when (> (count blocks) 0)
                               (state/set-modal! #(view-modal
