@@ -11,7 +11,6 @@
     "electron:make": "electron-forge make",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
-    "rebuild:better-sqlite3": "electron-rebuild -v 13 -f -w better-sqlite3",
     "postinstall": "install-app-deps"
   },
   "config": {
@@ -38,9 +37,9 @@
     "@electron-forge/maker-rpm": "^6.0.0-beta.57",
     "@electron-forge/maker-squirrel": "^6.0.0-beta.57",
     "@electron-forge/maker-zip": "^6.0.0-beta.57",
-    "electron": "^13.4.0",
+    "electron": "13.4.0",
     "electron-builder": "^22.11.7",
     "electron-forge-maker-appimage": "trusktr/electron-forge-maker-appimage#patch-1",
-    "electron-rebuild": "^2.3.5"
+    "electron-rebuild": "2.3.2"
   }
 }

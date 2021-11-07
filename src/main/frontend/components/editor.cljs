@@ -107,7 +107,21 @@
                  (when (> (count edit-content) current-pos)
                    (util/safe-subs edit-content pos current-pos)))
               matched-pages (when-not (string/blank? q)
-                              (editor-handler/get-matched-pages q))]
+                              (editor-handler/get-matched-pages q))
+              matched-pages (cond
+                              (contains? (set (map string/lower-case matched-pages)) q)
+                              matched-pages
+
+                              (empty? matched-pages)
+                              matched-pages
+
+                              :else
+                              (->>
+                               (cons (first matched-pages)
+                                     (cons
+                                      (str "New page: " q)
+                                      (rest matched-pages)))
+                               (remove nil?)))]
           (ui/auto-complete
            matched-pages
            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
@@ -304,7 +318,7 @@
         (let [command (:command (first input-option))]
           [:div.p-2.rounded-md.shadow-lg
            (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
-             [:div.my-3
+             [:div.my-3 {:key id}
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->

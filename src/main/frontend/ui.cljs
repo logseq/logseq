@@ -10,15 +10,18 @@
             [frontend.ui.date-picker]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [promesa.core :as p]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
+            [electron.ipc :as ipc]
             ["react-resize-context" :as Resize]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-tweet-embed" :as react-tweet-embed]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.string :as str]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -242,7 +245,7 @@
 
 (defn inject-document-devices-envs!
   []
-  (let [cl (.-classList js/document.documentElement)]
+  (let [^js cl (.-classList js/document.documentElement)]
     (when util/mac? (.add cl "is-mac"))
     (when util/win32? (.add cl "is-win32"))
     (when (util/electron?) (.add cl "is-electron"))
@@ -250,7 +253,9 @@
     (when (util/mobile?) (.add cl "is-mobile"))
     (when (util/safari?) (.add cl "is-safari"))
     (when (util/electron?)
-      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")))))
+      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen"))
+      (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
+                                           (and isFullScreen (.add cl "is-fullscreen")))))))
 
 (defn inject-dynamic-style-node!
   []
@@ -303,11 +308,13 @@
 
 (defn setup-active-keystroke! []
   (let [active-keystroke (atom #{})
+        heads #{:shift :alt :meta :control}
         handle-global-keystroke (fn [down? e]
                                   (let [handler (if down? conj disj)
                                         keystroke e.key]
                                     (swap! active-keystroke handler keystroke))
-                                  (set-global-active-keystroke (apply str (interpose "+" (vec @active-keystroke)))))
+                                  (when (contains? heads (keyword (util/safe-lower-case e.key)))
+                                    (set-global-active-keystroke (str/join "+" @active-keystroke))))
         keydown-handler (partial handle-global-keystroke true)
         keyup-handler (partial handle-global-keystroke false)
         clear-all #(do (set-global-active-keystroke "")

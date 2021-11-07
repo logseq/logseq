@@ -6,7 +6,8 @@
             [clojure.walk :as walk]
             [clojure.string :as string]
             [frontend.util :as util]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [frontend.date :as date]))
 
 (defonce all-refed-uids (atom #{}))
 (defonce uid->uuid (atom {}))
@@ -107,7 +108,10 @@
         initial-level 1
         text (when (seq children)
                (when-let [text (children->text children (dec initial-level))]
-                 (let [front-matter (util/format "---\ntitle: %s\n---\n\n" title)]
+                 (let [journal? (date/valid-journal-title? title)
+                       front-matter (if journal?
+                                      ""
+                                      (util/format "---\ntitle: %s\n---\n\n" title))]
                    (str front-matter (transform text)))))]
     (when (and (not (string/blank? title))
                text)

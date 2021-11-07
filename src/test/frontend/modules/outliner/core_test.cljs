@@ -291,7 +291,7 @@
   "
   (build-db-records node-tree)
   (let [node (build-block 9 2 6)]
-    (outliner-core/move-node node true)
+    (outliner-core/move-nodes [node] true)
     (let [children-of-2 (->> (build-block 2)
                           (tree/-get-children)
                           (mapv #(-> % :data :block/uuid)))]

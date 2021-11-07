@@ -349,6 +349,15 @@
 
      (get-in @state [:me :preferred_format] "markdown")))))
 
+;; TODO: consider adding a pane in Settings to set this through the GUI (rather
+;; than having to go through the config.edn file)
+(defn get-editor-command-trigger
+  ([] (get-editor-command-trigger (get-current-repo)))
+  ([repo-url]
+   (or
+    (:editor/command-trigger (get-config repo-url)) ;; Get from user config
+    "/"))) ;; Set the default
+
 (defn markdown?
   []
   (= (keyword (get-preferred-format))
@@ -1163,8 +1172,8 @@
   (if (util/mobile?)
     false
     (get (get (sub-config) (get-current-repo))
-        :ui/enable-tooltip?
-        true)))
+         :ui/enable-tooltip?
+         true)))
 
 (defn show-command-doc?
   []

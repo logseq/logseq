@@ -56,9 +56,10 @@
 (defn- open-first-block!
   [state]
   (let [[_ blocks _ sidebar? preview?] (:rum/args state)]
-    (when (or sidebar?
-              preview?
-              (not (contains? #{:home :all-journals} (state/get-current-route))))
+    (when (and
+           (or preview?
+               (not (contains? #{:home :all-journals} (state/get-current-route))))
+           (not sidebar?))
       (let [block (first blocks)]
         (when (and (= (count blocks) 1)
                    (string/blank? (:block/content block))
@@ -225,7 +226,7 @@
 
 (rum/defcs page-title <
   {:will-update (fn [state]
-                  (assoc state ::title-value (atom (second (:rum/args state)))))}
+                  (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   (rum/local false ::edit?)
   [state page-name emoji title format fmt-journal?]
   (when title
@@ -240,24 +241,37 @@
           hls-file? (pdf-assets/hls-file? title)
           title (if hls-file?
                   (pdf-assets/human-hls-filename-display title)
-                  (if fmt-journal? (date/journal-title->custom-format title) title))]
+                  (if fmt-journal? (date/journal-title->custom-format title) title))
+          confirm-fn (ui/make-confirm-modal
+                      {:title         (str "Do you really want to change the page name?")
+                       :on-confirm    (fn [_e {:keys [close-fn]}]
+                                        (close-fn)
+                                        (page-handler/rename! (or title page-name) @*title-value)
+                                        (reset! *edit? false)
+                                        (reset! *title-value ""))})]
       (if @*edit?
-        [:h1.title {:style {:margin-left -2}}
-         [:input.w-full
-          {:type          "text"
-           :auto-focus    true
-           :style         {:outline "none"
-                           :font-weight 600}
-           :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
-           :default-value         @*title-value
-           :on-change     (fn [e]
-                            (let [value (util/evalue e)]
-                              (when-not (string/blank? value)
-                                (reset! *title-value value))))
-           :on-blur       (fn [e]
-                            (page-handler/rename! (or title page-name) @*title-value)
-                            (reset! *edit? false)
-                            (reset! *title-value ""))}]]
+        (let [old-name (or title page-name)]
+          [:h1.title {:style {:margin-left -2}}
+           [:input.w-full
+            {:type          "text"
+             :auto-focus    true
+             :style         {:outline "none"
+                             :font-weight 600}
+             :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
+             :default-value @*title-value
+             :on-change     (fn [e]
+                              (let [value (util/evalue e)]
+                                (when-not (string/blank? value)
+                                  (reset! *title-value value))))
+             :on-blur       (fn [e]
+                              (when (not= old-name @*title-value)
+                                (state/set-modal! confirm-fn))
+                              (util/stop e))
+             :on-key-down   (fn [e]
+                              (when (= (gobj/get e "key") "Enter")
+                                (when (not= old-name @*title-value)
+                                  (state/set-modal! confirm-fn))
+                                (util/stop e)))}]])
         [:a.page-title {:on-mouse-down (fn [e]
                                          (when (util/right-click? e)
                                            (state/set-state! :page-title/context {:page page-name})))

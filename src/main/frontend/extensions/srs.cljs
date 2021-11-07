@@ -433,7 +433,7 @@
    card-index]
   (let [cards (map ->card blocks)
         review-records (::review-records state)
-        card (util/nth-safe cards @card-index)]
+        card (when card-index (util/nth-safe cards @card-index))]
     (if-not card
       review-finished
       (let [phase (::phase state)
@@ -516,7 +516,7 @@
 
 (defn preview
   [blocks]
-  (state/set-modal! #(view blocks {:preview? true})))
+  (state/set-modal! #(view blocks {:preview? true} (atom 0))))
 
 
 ;;; ================================================================

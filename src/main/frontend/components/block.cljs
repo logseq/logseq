@@ -34,7 +34,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.page :as page-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.repeated :as repeated]
@@ -374,7 +374,7 @@
       (fn [e]
         (util/stop e)
         (when redirect-page-name
-          (page-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name))
+          (recent-handler/add-page-to-recent! (state/get-current-repo) redirect-page-name))
         (let [create-first-block! (fn []
                                     (when-not (editor-handler/add-default-title-property-if-needed! redirect-page-name)
                                       (editor-handler/insert-first-page-block-if-not-exists! redirect-page-name)))]
@@ -678,15 +678,14 @@
                       :else (route-handler/redirect-to-page! id))))))}
 
            (if (and (not (util/mobile?)) (not (:preview? config)) (nil? block-type))
-             (ui/tippy {:html        (fn []
-                                       [:div.tippy-wrapper.overflow-y-auto.p-4
-                                        {:style {:width      735
-                                                 :text-align "left"
-                                                 :max-height 600}}
-                                        [(block-parents config repo block-id {:indent? true})
-                                         (blocks-container
-                                          (db/get-block-and-children repo block-id)
-                                          (assoc config :id (str id) :preview? true))]])
+             (ui/tippy {:html        [:div.tippy-wrapper.overflow-y-auto.p-4
+                                      {:style {:width      735
+                                               :text-align "left"
+                                               :max-height 600}}
+                                      [(block-parents config repo block-id {:indent? true})
+                                       (blocks-container
+                                        (db/get-block-and-children repo block-id)
+                                        (assoc config :id (str id) :preview? true))]]
                         :interactive true
                         :delay       [1000, 100]} inner)
              inner)])
@@ -2118,18 +2117,15 @@
         data-refs-self (build-refs-data-value refs)
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
         edit? (state/sub [:editor/editing? edit-input-id])]
-    [:div.ls-block.flex.flex-col.rounded-sm
+    [:div.ls-block
      (cond->
       {:id block-id
        :data-refs data-refs
        :data-refs-self data-refs-self
-       :style {:position "relative"}
        :class (str uuid
                    (when (and collapsed? has-child?) " collapsed")
                    (when pre-block? " pre-block"))
-       :blockid (str uuid)
-       :repo repo
-       :haschild (str has-child?)}
+       :blockid (str uuid)}
 
        level
        (assoc :level level)
@@ -2521,9 +2517,9 @@
                   (and
                    (= name "logbook")
                    (state/enable-timetracking?)
-                   (or  (get (state/get-config) [:logbook/settings :enabled-in-all-blocks])
-                        (when (get (state/get-config)
-                                   [:logbook/settings :enabled-in-timestamped-blocks] true)
+                   (or  (get-in (state/get-config) [:logbook/settings :enabled-in-all-blocks])
+                        (when (get-in (state/get-config)
+                                      [:logbook/settings :enabled-in-timestamped-blocks] true)
                           (or (:block/scheduled (:block config))
                               (:block/deadline (:block config)))))))
           [:div.flex.flex-col

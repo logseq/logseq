@@ -1,12 +1,14 @@
 (ns frontend.handler.editor
-  (:require [cljs.core.match :refer [match]]
+  (:require ["/frontend/utils" :as utils]
+            [cljs.core.match :refer [match]]
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.walk :as w]
             [clojure.zip :as zip]
             [dommy.core :as dom]
             [frontend.commands :as commands
-             :refer [*angle-bracket-caret-pos *show-block-commands *show-commands *slash-caret-pos]]
+             :refer [*angle-bracket-caret-pos *show-block-commands
+                     *show-commands *slash-caret-pos]]
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
@@ -18,19 +20,19 @@
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
             [frontend.fs :as fs]
-            [frontend.util.clock :as clock]
             [frontend.handler.block :as block-handler]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.export :as export]
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.export :as export]
-            [frontend.util.drawer :as drawer]
             [frontend.image :as image]
+            [frontend.mobile.util :as mobile]
             [frontend.modules.outliner.core :as outliner-core]
+            [frontend.modules.outliner.datascript :as ds]
             [frontend.modules.outliner.tree :as tree]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -38,8 +40,11 @@
             [frontend.text :as text]
             [frontend.utf8 :as utf8]
             [frontend.util :as util :refer [profile]]
+            [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]
+            [frontend.util.drawer :as drawer]
             [frontend.util.marker :as marker]
+            [frontend.util.page-property :as page-property]
             [frontend.util.property :as property]
             [frontend.util.thingatpt :as thingatpt]
             [goog.dom :as gdom]
@@ -47,10 +52,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [promesa.core :as p]
-            ["/frontend/utils" :as utils]
-            [frontend.mobile.util :as mobile]
-            [frontend.modules.outliner.datascript :as ds]))
+            [promesa.core :as p]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -73,10 +75,17 @@
            :edit-id edit-id
            :input input})))))
 
+(defn- format-new-selection
+  [{:keys [selection-start selection-end format value edit-id input]}]
+  (let [selected (subs value selection-start selection-end)]
+    [(+ selection-start (count (take-while #(= " " %) selected)))
+     (- selection-end (count (take-while #(= " " %) (reverse selected))))]))
+
 (defn- format-text!
   [pattern-fn]
   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format value edit-id input]} m
+          [selection-start selection-end] (format-new-selection m)
           empty-selection? (= selection-start selection-end)
           pattern (pattern-fn format)
           pattern-count (count pattern)
@@ -90,7 +99,8 @@
                     (subs value (+ selection-end pattern-count))
                     (subs value selection-end))
           inner-value (cond-> (subs value selection-start selection-end)
-                        (not already-wrapped?) (#(str pattern % pattern)))
+                        (not already-wrapped?)
+                        (#(str pattern % pattern)))
           new-value (str prefix inner-value postfix)]
       (state/set-edit-content! edit-id new-value)
       (cond
@@ -745,7 +755,7 @@
   ([title format page properties]
    (let [p (common-handler/get-page-default-properties title)
          ps (merge p properties)
-         content (property/insert-properties format "" ps)
+         content (page-property/insert-properties format "" ps)
          refs (block/get-page-refs-from-properties properties)]
      {:block/pre-block? true
       :block/uuid (db/new-block-id)
@@ -952,13 +962,14 @@
   (if (<= (count blocks) 1)
     blocks
     (let [[f s & _others] blocks]
-      (if (or
-           (= (:block/left s) {:db/id (:db/id f)})
-           (let [parents (db/get-block-parents (state/get-current-repo)
-                                               (:block/uuid f)
-                                               100)]
-             (some #(= (:block/left s) {:db/id (:db/id %)})
-                   parents)))
+      (if (or (= (:block/left s) {:db/id (:db/id f)})
+              (and
+               (let [parents (db/get-block-parents (state/get-current-repo)
+                                                   (:block/uuid f)
+                                                   100)]
+                 (some #(= (:block/left s) {:db/id (:db/id %)})
+                       parents))
+               (not= (:block/left f) {:db/id (:db/id s)})))
         blocks
         (reverse blocks)))))
 
@@ -1467,10 +1478,6 @@
              (util/format "[[%s][%s]]" url file-name))
       nil)))
 
-(defn- get-asset-link
-  [url]
-  (str "/" url))
-
 (defn ensure-assets-dir!
   [repo]
   (let [repo-dir (config/get-repo-dir repo)
@@ -1582,7 +1589,7 @@
                                        (if file (.-name file) (if image? "image" "asset"))
                                        image?)
                   format
-                  {:last-pattern (if drop-or-paste? "" commands/slash)
+                  {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))
                    :restore?     true})))))
           (p/finally
             (fn []
@@ -1599,7 +1606,7 @@
             (insert-command! id
                              (get-asset-file-link format signed-url file-name true)
                              format
-                             {:last-pattern (if drop-or-paste? "" commands/slash)
+                             {:last-pattern (if drop-or-paste? "" (state/get-editor-command-trigger))
                               :restore?     true})
 
             (reset! *asset-uploading? false)
@@ -1738,7 +1745,7 @@
           last-command (and last-slash-caret-pos (subs edit-content last-slash-caret-pos pos))]
       (when (> pos 0)
         (or
-         (and (= \/ (util/nth-safe edit-content (dec pos)))
+         (and (= (state/get-editor-command-trigger) (util/nth-safe edit-content (dec pos)))
               @commands/*initial-commands)
          (and last-command
               (commands/get-matched-commands last-command)))))
@@ -1814,21 +1821,55 @@
   (-> (map :block/content block-children)
       string/join))
 
+(defn- reorder-selected-blocks
+  [blocks]
+  (let [repo (state/get-current-repo)
+        lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
+                                           [:block/uuid (medley/uuid id)])) blocks)
+                         (remove nil?))
+        blocks (db/pull-many repo '[*] lookup-refs)]
+    (reorder-blocks blocks)))
+
+(defn- rehighlight-selected-nodes
+  ([]
+   (rehighlight-selected-nodes (state/get-selection-blocks)))
+  ([blocks]
+   (let [blocks (doall
+                 (map
+                   (fn [block]
+                     (when-let [id (gobj/get block "id")]
+                       (when-let [block (gdom/getElement id)]
+                         (dom/add-class! block "selected noselect")
+                         block)))
+                   blocks))]
+     (state/set-selection-blocks! blocks))))
+
 (defn move-up-down
   [up?]
-  (fn [_event]
-    (when-let [block-id (:block/uuid (state/get-edit-block))]
-      (when-let [block (db/pull [:block/uuid block-id])]
-        (outliner-core/move-node (outliner-core/block block) up?)
-        (when-let [repo (state/get-current-repo)]
-          (let [opts {:key :block/change
-                      :data [block]}]
-            (db/refresh! repo opts)))
-        (when-let [block-node (util/get-first-block-by-id block-id)]
-          (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"})
-          (when-let [input-id (state/get-edit-input-id)]
-            (when-let [input (gdom/getElement input-id)]
-              (.focus input))))))))
+  (fn [event]
+    (util/stop event)
+    (when-let [repo (state/get-current-repo)]
+      (let [edit-block-id (:block/uuid (state/get-edit-block))
+            move-nodes (fn [blocks]
+                         (let [nodes (mapv outliner-core/block blocks)
+                               opts {:key :block/change
+                                     :data blocks}]
+                           (outliner-core/move-nodes nodes up?)
+                           (db/refresh! repo opts)
+                           (rehighlight-selected-nodes)
+                           (let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
+                             (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))))]
+        (if edit-block-id
+          (when-let [block (db/pull [:block/uuid edit-block-id])]
+            (let [blocks [block]]
+              (move-nodes blocks))
+            (when-let [input-id (state/get-edit-input-id)]
+              (when-let [input (gdom/getElement input-id)]
+                (.focus input))))
+          (let [blocks (-> (state/get-selection-blocks)
+                           reorder-selected-blocks)
+                blocks (filter #(= (:block/parent %) (:block/parent (first blocks))) blocks)]
+            (move-nodes blocks)))))))
 
 ;; selections
 (defn on-tab
@@ -1836,36 +1877,20 @@
   [direction]
   (when-let [repo (state/get-current-repo)]
     (let [blocks-dom-nodes (state/get-selection-blocks)
-          blocks (seq blocks-dom-nodes)]
-      (cond
-        (seq blocks)
-        (do
-          (let [lookup-refs (->> (map (fn [block] (when-let [id (dom/attr block "blockid")]
-                                                    [:block/uuid (medley/uuid id)])) blocks)
-                                 (remove nil?))
-                blocks (db/pull-many repo '[*] lookup-refs)
-                blocks (reorder-blocks blocks)
-                end-node (get-top-level-end-node blocks)
-                end-node-parent (tree/-get-parent end-node)
-                top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
-                                                 (get-in % [:block/parent :db/id])) blocks)
-                                     (map outliner-core/block))]
-            (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
-            (let [opts {:key :block/change
-                        :data blocks}]
-              (db/refresh! repo opts)
-              (let [blocks (doall
-                            (map
-                              (fn [block]
-                                (when-let [id (gobj/get block "id")]
-                                  (when-let [block (gdom/getElement id)]
-                                    (dom/add-class! block "selected noselect")
-                                    block)))
-                              blocks-dom-nodes))]
-                (state/set-selection-blocks! blocks)))))))))
+          blocks (seq (reorder-selected-blocks blocks-dom-nodes))]
+      (when (seq blocks)
+        (let [end-node (get-top-level-end-node blocks)
+              end-node-parent (tree/-get-parent end-node)
+              top-level-nodes (->> (filter #(= (get-in end-node-parent [:data :db/id])
+                                               (get-in % [:block/parent :db/id])) blocks)
+                                   (map outliner-core/block))]
+          (outliner-core/indent-outdent-nodes top-level-nodes (= direction :right))
+          (let [opts {:key :block/change
+                      :data blocks}]
+            (db/refresh! repo opts)
+            (rehighlight-selected-nodes)))))))
 
-(defn- get-link
-  [format link label]
+(defn- get-link [format link label]
   (let [link (or link "")
         label (or label "")]
     (case (keyword format)
@@ -1881,27 +1906,27 @@
       :markdown (util/format "![%s](%s)" label link)
       :org (util/format "[[%s]]"))))
 
-(defn handle-command-input
-  [command id format m]
+(defn handle-command-input [command id format m]
+  ;; TODO: Add error handling for when user doesn't provide a required field.
+  ;; (The current behavior is to just revert back to the editor.)
   (case command
-    :link
-    (let [{:keys [link label]} m]
-      (if (and (string/blank? link)
-               (string/blank? label))
-        nil
-        (insert-command! id
-                         (get-link format link label)
-                         format
-                         {:last-pattern (str commands/slash "link")})))
-    :image-link
-    (let [{:keys [link label]} m]
-      (if (and (string/blank? link)
-               (string/blank? label))
-        nil
-        (insert-command! id
-                         (get-image-link format link label)
-                         format
-                         {:last-pattern (str commands/slash "link")})))
+
+    :link (let [{:keys [link label]} m]
+            (when-not (or (string/blank? link) (string/blank? label))
+              (insert-command!
+               id
+               (get-link format link label)
+               format
+               {:last-pattern (str (state/get-editor-command-trigger) "link")})))
+
+    :image-link (let [{:keys [link label]} m]
+                  (when (not (string/blank? link))
+                    (insert-command!
+                     id
+                     (get-image-link format link label)
+                     format
+                     {:last-pattern (str (state/get-editor-command-trigger) "link")})))
+
     nil)
 
   (state/set-editor-show-input! nil)
@@ -1995,14 +2020,15 @@
   (let [input           (state/get-input)
         pos             (cursor/pos input)
         last-input-char (util/nth-safe (.-value input) (dec pos))]
-    (case last-input-char
-      "/"
+
       ;; TODO: is it cross-browser compatible?
       ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
+    (if (= last-input-char (state/get-editor-command-trigger))
       (when (seq (get-matched-commands input))
         (reset! commands/*slash-caret-pos (cursor/get-caret-pos input))
-        (reset! commands/*show-commands true))
-      "<"
+        (reset! commands/*show-commands true)))
+
+    (if (= last-input-char commands/angle-bracket)
       (when (seq (get-matched-block-commands input))
         (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
         (reset! commands/*show-block-commands true))
@@ -2344,7 +2370,7 @@
                    [:p.content
                     (util/format "Property key \"%s\" already exists!" property-key)]
                    :error)
-                  (cursor/move-cursor-to-end input)))
+                  (cursor/move-cursor-to-line-end input)))
 
               ;; when cursor in empty property key
               (and property-key (= property-key ""))
@@ -2629,7 +2655,7 @@
         (delete-block! repo false))
 
       (and (> current-pos 1)
-           (= (util/nth-safe value (dec current-pos)) commands/slash))
+           (= (util/nth-safe value (dec current-pos)) (state/get-editor-command-trigger)))
       (do
         (util/stop e)
         (reset! *slash-caret-pos nil)
@@ -2821,8 +2847,8 @@
         (when (and (= "〈" c)
                    (= "《" (util/nth-safe value (dec (dec current-pos))))
                    (> current-pos 0))
-          (commands/handle-step [:editor/input "<" {:last-pattern "《〈"
-                                                    :backward-pos 0}])
+          (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
+                                                                       :backward-pos 0}])
           (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
           (reset! commands/*show-block-commands true))
 
@@ -2833,7 +2859,7 @@
                          (not= (util/nth-safe value current-pos) "]")))
             (state/set-editor-show-page-search-hashtag! false)))
 
-        (when (and @*show-commands (not= key-code 191)) ; not /
+        (when (and @*show-commands (not= k (state/get-editor-command-trigger)))
           (let [matched-commands (get-matched-commands input)]
             (if (seq matched-commands)
               (do
