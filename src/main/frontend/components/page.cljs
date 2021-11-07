@@ -228,7 +228,7 @@
   {:will-update (fn [state]
                   (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   (rum/local false ::edit?)
-  [state page-name emoji title format fmt-journal?]
+  [state page-name icon title format fmt-journal?]
   (when title
     (let [*title-value (get state ::title-value)
           *edit? (get state ::edit?)
@@ -287,7 +287,7 @@
                                       (when (and (not hls-file?) (not fmt-journal?))
                                         (reset! *edit? true))))}
          [:h1.title {:style {:margin-left -2}}
-          (when (not= emoji "") [:span.page-emoji emoji])
+          (when (not= icon "") [:span.page-icon icon])
           title]]))))
 
 ;; A page is just a logical block
@@ -318,11 +318,11 @@
                          (let [m (format-block/page-name->map path-page-name true)]
                            (db/transact! repo [m])))
                        (db/pull [:block/name page-name])))
-              {:keys [title emoji] :as properties} (:block/properties page)
+              {:keys [title icon] :as properties} (:block/properties page)
               page-name (:block/name page)
               page-original-name (:block/original-name page)
               title (or title page-original-name page-name)
-              emoji (or emoji "")
+              icon (or icon "")
               today? (and
                       journal?
                       (= page-name (string/lower-case (date/journal-name))))
@@ -342,7 +342,7 @@
                        (not block?))
               [:div.flex.flex-row.space-between
                [:div.flex-1.flex-row
-                (page-title page-name emoji title format fmt-journal?)]
+                (page-title page-name icon title format fmt-journal?)]
                (when (not config/publishing?)
                  [:div.flex.flex-row
                   (when plugin-handler/lsp-enabled?

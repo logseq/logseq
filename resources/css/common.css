@@ -850,12 +850,12 @@ h1.title {
   font-weight: 600;
 }
 
-.title .page-emoji {
+.title .page-icon {
   margin-right: 12px;
 }
 
-.left-sidebar-inner .recent .page-emoji,
-.left-sidebar-inner .favorites .page-emoji {
+.left-sidebar-inner .recent .page-icon,
+.left-sidebar-inner .favorites .page-icon {
   margin-right: 8px;
   width: 1.1em;
   text-align: center;
