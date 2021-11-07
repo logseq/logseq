@@ -1,6 +1,46 @@
+/******************************************************************************/
+/** Review widget *************************************************************/
+/******************************************************************************/
+
+.cards-review {
+  margin-left: -28px;
+}
+
+.cards-title {
+  border: 1px solid var(--color-level-3);
+  border-radius: 8px 8px 0 0;
+  color: #999;
+  background: var(--color-level-1);
+  font-weight: 500;
+  padding-left: 4px;
+}
+
+#preview-all-cards {
+  display: none;
+}
+
+.cards-title .tippy-hover {
+  display: none;
+}
+
+.ls-card {
+  border: 1px solid var(--color-level-3);
+  border-top: none;
+  padding: 8px 12px 0 12px;
+  margin-top: -8px;
+  border-radius: 0 0 8px 8px;
+}
+
+.ls-card div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 .block-control {
+  display: none;
+}
+
+div[data-refs-self*='"card"'] {
+  padding-left: 8px;
+}
 
 /******************************************************************************/
-/** Spaced repetition: card ***************************************************/
+/** Card blocks ***************************************************************/
 /******************************************************************************/
 
 div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 > .block-content-wrapper,
@@ -75,46 +115,4 @@ div[data-refs-self*='"card"'] .block-properties .page-property-key {
   color: #999;
   padding: 0;
   margin: 0;
-}
-
-
-/******************************************************************************/
-/** Spaced repetition: Review *************************************************/
-/******************************************************************************/
-
-.cards-review {
-  margin-left: -28px;
-}
-
-.cards-title {
-  border: 1px solid var(--color-level-3);
-  border-radius: 8px 8px 0 0;
-  color: #999;
-  background: var(--color-level-1);
-  font-weight: 500;
-  padding-left: 4px;
-}
-
-#preview-all-cards {
-  display: none;
-}
-
-.cards-title .tippy-hover {
-  display: none;
-}
-
-.ls-card {
-  border: 1px solid var(--color-level-3);
-  border-top: none;
-  padding: 8px 12px 0 12px;
-  margin-top: -8px;
-  border-radius: 0 0 8px 8px;
-}
-
-.ls-card div[data-refs-self*='"card"'] > .flex.flex-row.pr-2 .block-control {
-  display: none;
-}
-
-div[data-refs-self*='"card"'] {
-  padding-left: 8px;
 }
