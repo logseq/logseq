@@ -18,7 +18,7 @@
 
 (defn hls-file?
   [filename]
-  (and filename (string/starts-with? filename "hls__")))
+  (and filename (string? filename) (string/starts-with? filename "hls__")))
 
 (defn inflate-asset
   [full-path]
