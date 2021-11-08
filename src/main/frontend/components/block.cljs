@@ -920,11 +920,8 @@
 
         :else
         (let [href (string-of-url url)
-              protocol (or
-                        (and (= "Complex" (first url))
-                             (:protocol (second url)))
-                        (and (= "File" (first url))
-                             "file"))]
+              [protocol path] (or (and (= "Complex" (first url)) url)
+                                  (and (= "File" (first url)) ["file" (second url)]))]
           (cond
             (and (= (get-in config [:block :block/format]) :org)
                  (= "Complex" (first url))
@@ -949,10 +946,9 @@
               (asset-reference config label href)
 
               :else
-              (let [label-text (get-label-text label)
-                    redirect-page-name (-> (second url)
-                                           text/get-file-basename)
+              (let [redirect-page-name (when (string? path) (text/get-file-basename path))
                     config (assoc config :redirect-page-name redirect-page-name)
+                    label-text (get-label-text label)
                     page (if (string/blank? label-text)
                            {:block/name (db/get-file-page (string/replace href "file:" ""))}
                            (get-page label))]
@@ -1173,7 +1169,6 @@
                     :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
                     :width width
                     :height (max 500 height)}])))))
-
 
         (contains? #{"tweet" "twitter"} name)
         (when-let [url (first arguments)]

@@ -7,6 +7,7 @@
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
+(def markdown-page-ref-re #"\[(.*)\]\(file:.*\)")
 
 (defn get-file-basename
   [path]
@@ -16,7 +17,9 @@
 (defn get-page-name
   [s]
   (and (string? s)
-       (or (when-let [[_ path _label] (re-matches org-page-ref-re s)]
+       (or (when-let [[_ label _path] (re-matches markdown-page-ref-re s)]
+             (string/trim label))
+           (when-let [[_ path _label] (re-matches org-page-ref-re s)]
              (get-file-basename path))
            (-> (re-matches page-ref-re-0 s)
                second))))
