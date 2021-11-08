@@ -11,9 +11,7 @@
 (defn get-file-basename
   [path]
   (when-not (string/blank? path)
-    (-> (util/node-path.basename path)
-        (string/split #"\.")
-        first)))
+    (util/node-path.name path)))
 
 (defn get-page-name
   [s]
