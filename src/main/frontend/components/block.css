@@ -91,11 +91,6 @@
   &-fallback-ui {
     padding:10px 15px;
     border-color: var(--ls-secondary-border-color);
-
-    pre {
-      font-size: 13px;
-      margin: 0;
-    }
   }
 }
 
