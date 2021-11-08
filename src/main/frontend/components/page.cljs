@@ -199,7 +199,7 @@
                                         :markdown
                                         (string/replace title #"^#+\s+" "")
                                         :org
-                                        (string/replace title #"^*+\s+" "")
+                                        (string/replace title #"^\*+\s+" "")
                                         title)
                                 ast (mldoc/->edn title (mldoc/default-config format))]
                             (block/markup-element-cp {} (ffirst ast)))
