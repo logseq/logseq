@@ -13,9 +13,11 @@
             [frontend.handler.plugin :as plugin-handler]
             [cljs-bean.core :as bean]
             [goog.dom :as gdom]
+            [promesa.core :as p]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
+            [electron.ipc :as ipc]
             ["react-resize-context" :as Resize]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
@@ -260,7 +262,7 @@
 
 (defn inject-document-devices-envs!
   []
-  (let [cl (.-classList js/document.documentElement)]
+  (let [^js cl (.-classList js/document.documentElement)]
     (when util/mac? (.add cl "is-mac"))
     (when util/win32? (.add cl "is-win32"))
     (when (util/electron?) (.add cl "is-electron"))
@@ -268,7 +270,9 @@
     (when (util/mobile?) (.add cl "is-mobile"))
     (when (util/safari?) (.add cl "is-safari"))
     (when (util/electron?)
-      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")))))
+      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen"))
+      (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
+                                           (and isFullScreen (.add cl "is-fullscreen")))))))
 
 (defn inject-dynamic-style-node!
   []
