@@ -1845,6 +1845,19 @@
                       {:block block}))}
         block-refs-count]])))
 
+(rum/defc block-content-fallback
+  [edit-input-id block]
+
+  (let [content (:block/content block)]
+    [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
+     {:on-click #(state/set-editing! edit-input-id content block "")}
+     [:div.flex.justify-between.items-center.px-1
+      [:h5.text-red-600.pb-1 "Block Render Error:"]
+      [:a.text-xs.opacity-50.hover:opacity-80
+       {:href "https://github.com/logseq/logseq/issues"
+        :target "_blank"} "report issue"]]
+     [:pre content]]))
+
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid body format] :as block} edit-input-id block-id heading-level edit?]
   (let [editor-box (get config :editor-box)
@@ -1864,7 +1877,9 @@
                    config)]
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
-        (block-content config block edit-input-id block-id slide?)]
+        (ui/catch-error
+          (block-content-fallback edit-input-id block)
+          (block-content config block edit-input-id block-id slide?))]
        [:div.flex.flex-row
         (when (and (:embed? config)
                    (:embed-parent config))
