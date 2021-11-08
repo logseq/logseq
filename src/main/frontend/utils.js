@@ -1,4 +1,4 @@
-import path from 'path/path.js'
+import path from 'path'
 
 if (typeof window === 'undefined') {
   global.window = {}
