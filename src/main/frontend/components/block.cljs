@@ -1856,7 +1856,7 @@
       [:a.text-xs.opacity-50.hover:opacity-80
        {:href "https://github.com/logseq/logseq/issues"
         :target "_blank"} "report issue"]]
-     [:pre content]]))
+     [:pre.m-0.text-sm content]]))
 
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid body format] :as block} edit-input-id block-id heading-level edit?]
