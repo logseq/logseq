@@ -190,7 +190,7 @@
 
 (defn simple-cmd->palette-cmd
   [pid {:keys [key label type desc] :as cmd} action]
-  (let [palette-cmd {:id     (keyword (str "plugin:" pid "/" type))
+  (let [palette-cmd {:id     (keyword (str "plugin." pid "/" type))
                      :desc   (str pid ": " (or desc label))
                      :action (fn []
                                (state/pub-event!
@@ -349,7 +349,7 @@
             clear-commands! (fn [pid]
                               ;; commands
                               (unregister-plugin-slash-command pid)
-                              (unregister-plugin-simple-command pid)
+                              (invoke-exported-api "unregister_plugin_simple_command" pid)
                               (unregister-plugin-ui-items pid))
 
             _ (doto js/LSPluginCore

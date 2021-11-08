@@ -236,6 +236,15 @@
         (when-let [palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
           (palette-handler/register palette-cmd))))))
 
+(defn ^:export unregister_plugin_simple_command
+  [pid]
+  (plugin-handler/unregister-plugin-simple-command pid)
+  (let [palette-matched (->> (palette-handler/get-commands)
+                             (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
+    (when (seq palette-matched)
+      (doseq [cmd palette-matched]
+        (palette-handler/unregister (:id cmd))))))
+
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]
     (when-let [opts (bean/->clj opts)]
