@@ -920,11 +920,8 @@
 
         :else
         (let [href (string-of-url url)
-              protocol (or
-                        (and (= "Complex" (first url))
-                             (:protocol (second url)))
-                        (and (= "File" (first url))
-                             "file"))]
+              [protocol path] (or (and (= "Complex" (first url)) url)
+                                  (and (= "File" (first url)) ["file" (second url)]))]
           (cond
             (and (= (get-in config [:block :block/format]) :org)
                  (= "Complex" (first url))
@@ -949,10 +946,9 @@
               (asset-reference config label href)
 
               :else
-              (let [label-text (get-label-text label)
-                    redirect-page-name (-> (second url)
-                                           text/get-file-basename)
+              (let [redirect-page-name (when (string? path) (text/get-file-basename path))
                     config (assoc config :redirect-page-name redirect-page-name)
+                    label-text (get-label-text label)
                     page (if (string/blank? label-text)
                            {:block/name (db/get-file-page (string/replace href "file:" ""))}
                            (get-page label))]
@@ -1173,7 +1169,6 @@
                     :src (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1")
                     :width width
                     :height (max 500 height)}])))))
-
 
         (contains? #{"tweet" "twitter"} name)
         (when-let [url (first arguments)]
@@ -1678,9 +1673,9 @@
                    state)}
   [state block typ ast]
   (let [show? (get state ::show?)]
-    [:div.flex.flex-col
-     [:div.text-sm.mt-1.flex.flex-row
-      [:div.opacity-50.font-medium
+    [:div.flex.flex-col.timestamp
+     [:div.text-sm.mb-1.flex.flex-row
+      [:div.opacity-50.font-medium.timestamp-label
        (str typ ": ")]
       [:a.opacity-80.hover:opacity-100
        {:on-click (fn []
@@ -1845,6 +1840,19 @@
                       {:block block}))}
         block-refs-count]])))
 
+(rum/defc block-content-fallback
+  [edit-input-id block]
+
+  (let [content (:block/content block)]
+    [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
+     {:on-click #(state/set-editing! edit-input-id content block "")}
+     [:div.flex.justify-between.items-center.px-1
+      [:h5.text-red-600.pb-1 "Block Render Error:"]
+      [:a.text-xs.opacity-50.hover:opacity-80
+       {:href "https://github.com/logseq/logseq/issues"
+        :target "_blank"} "report issue"]]
+     [:pre.m-0.text-sm content]]))
+
 (rum/defc block-content-or-editor < rum/reactive
   [config {:block/keys [uuid body format] :as block} edit-input-id block-id heading-level edit?]
   (let [editor-box (get config :editor-box)
@@ -1864,7 +1872,9 @@
                    config)]
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
-        (block-content config block edit-input-id block-id slide?)]
+        (ui/catch-error
+          (block-content-fallback edit-input-id block)
+          (block-content config block edit-input-id block-id slide?))]
        [:div.flex.flex-row
         (when (and (:embed? config)
                    (:embed-parent config))
@@ -2385,8 +2395,8 @@
         (when-not (and built-in? (empty? result))
           (ui/foldable
            [:div.custom-query-title
-            title
-            [:span.opacity-60.text-sm.ml-2
+            [:span.title-text title]
+            [:span.opacity-60.text-sm.ml-2.results-count
              (str (count transformed-query-result) " results")]]
            [:div
             (when current-block
