@@ -6,6 +6,7 @@
 }
 
 .cards-title {
+  border-radius: 4px;
   background: var(--color-level-1);
   padding: 4px 6px;
 }
