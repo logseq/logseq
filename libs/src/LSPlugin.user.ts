@@ -92,6 +92,18 @@ const app: Partial<IAppProxy> = {
       type, {
         key, label
       }, action)
+  },
+
+  setFullScreen (flag) {
+    const sf = (...args) => this._callWin('setFullScreen', ...args)
+
+    if (flag === 'toggle') {
+      this._callWin('isFullScreen').then(r => {
+        r ? sf() : sf(true)
+      })
+    } else {
+      flag ? sf(true) : sf()
+    }
   }
 }
 
@@ -419,6 +431,16 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
           })
         }
       }
+    })
+  }
+
+  /**
+   * @param args
+   */
+  _callWin (...args) {
+    return this._caller.callAsync(`api:call`, {
+      method: '_callMainWin',
+      args: args
     })
   }
 

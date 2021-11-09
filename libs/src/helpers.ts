@@ -169,7 +169,8 @@ export function invokeHostExportedApi (
   method: string,
   ...args: Array<any>
 ) {
-  method = method?.replace(/^[_$]+/, '')
+  method = method?.startsWith('_call') ? method :
+    method?.replace(/^[_$]+/, '')
   const method1 = snakeCase(method)
 
   // @ts-ignore
@@ -330,7 +331,7 @@ export function setupInjectedUI (
     el.classList.add('lsp-ui-float-container', 'visible')
     disposeFloat = (
       pl._setupResizableContainer(el, key),
-      pl._setupDraggableContainer(el, { key, close: () => teardownUI(), title: attrs?.title }))
+        pl._setupDraggableContainer(el, { key, close: () => teardownUI(), title: attrs?.title }))
   }
 
   target.appendChild(el);

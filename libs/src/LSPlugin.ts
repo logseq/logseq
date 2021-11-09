@@ -213,6 +213,7 @@ export interface IAppProxy {
   // ui
   showMsg: (content: string, status?: 'success' | 'warning' | string) => void
   setZoomFactor: (factor: number) => void
+  setFullScreen: (flag: boolean | 'toggle') => void
 
   registerUIItem: (
     type: 'toolbar' | 'pagebar',

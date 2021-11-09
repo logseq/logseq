@@ -172,6 +172,7 @@
   [^js win]
   (let [toggle-win-channel "toggle-max-or-min-active-win"
         call-app-channel "call-application"
+        call-win-channel "call-main-win"
         export-publish-assets "export-publish-assets"
         quit-dirty-state "set-quit-dirty-state"
         web-contents (. win -webContents)]
@@ -197,6 +198,13 @@
                (fn [_ type & args]
                  (try
                    (js-invoke app type args)
+                   (catch js/Error e
+                     (js/console.error e)))))
+
+      (.handle call-win-channel
+               (fn [_ type & args]
+                 (try
+                   (js-invoke @*win type args)
                    (catch js/Error e
                      (js/console.error e))))))
 
@@ -244,7 +252,8 @@
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
          (.removeHandler ipcMain quit-dirty-state)
-         (.removeHandler ipcMain call-app-channel))))
+         (.removeHandler ipcMain call-app-channel)
+         (.removeHandler ipcMain call-win-channel))))
 
 (defn- destroy-window!
   [^js win]
