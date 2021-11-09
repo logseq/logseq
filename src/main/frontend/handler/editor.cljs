@@ -151,11 +151,12 @@
   [block-id]
   (when block-id
     (when-let [block (db/pull [:block/uuid block-id])]
-      (state/sidebar-add-block!
-       (state/get-current-repo)
-       (:db/id block)
-       :block
-       block))))
+      (let [page? (nil? (:block/page block))]
+        (state/sidebar-add-block!
+          (state/get-current-repo)
+          (:db/id block)
+          (if page? :page :block)
+          block)))))
 
 (defn reset-cursor-range!
   [node]

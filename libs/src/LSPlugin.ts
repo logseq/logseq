@@ -390,6 +390,8 @@ export interface IEditorProxy extends Record<string, any> {
     blockId: BlockIdentity
   ) => void
 
+  openInRightSidebar: (uuid: BlockUUID) => void
+
   // events
   onInputSelectionEnd: IUserHook<{ caret: any, point: { x: number, y: number }, start: number, end: number, text: string }>
 }

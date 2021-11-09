@@ -362,6 +362,10 @@
 (def ^:export rename_page
   page-handler/rename!)
 
+(defn ^:export open_in_right_sidebar
+  [block-uuid]
+  (editor-handler/open-block-in-sidebar! (medley/uuid block-uuid)))
+
 (def ^:export edit_block
   (fn [block-uuid {:keys [pos] :or {pos :max} :as opts}]
     (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
