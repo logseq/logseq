@@ -946,7 +946,7 @@
               (asset-reference config label href)
 
               :else
-              (let [redirect-page-name (when (string? path) (text/get-file-basename path))
+              (let [redirect-page-name (when (string? path) (text/get-page-name path))
                     config (assoc config :redirect-page-name redirect-page-name)
                     label-text (get-label-text label)
                     page (if (string/blank? label-text)
