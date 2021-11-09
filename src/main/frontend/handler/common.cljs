@@ -117,21 +117,25 @@
         (println error-message-or-handler))
       {})))
 
+(defn read-config
+  [content]
+  (safe-read-string content
+                    (fn [_e]
+                      (notification/show!
+                       [:div {:style {:z-index 999}}
+                        [:h1
+                         "Invalid configuration."]
+                        [:p "You can send the file \"config.edn\" to "
+                         [:code
+                          "help@logseq.com"]
+                         [:span ", we'll repair and send it back to you."]]]
+                       :error
+                       false))))
+
 (defn reset-config!
   [repo-url content]
   (when-let [content (or content (get-config repo-url))]
-    (let [config (safe-read-string content
-                                   (fn [e]
-                                     (notification/show!
-                                      [:div {:style {:z-index 999}}
-                                       [:h1
-                                        (str "Invalid configuration, error: " (ex-message e))]
-                                       [:p "You can send the file \"config.edn\" to "
-                                        [:code
-                                         "help@logseq.com"]
-                                        [:span ", we'll repair and send it back to you."]]]
-                                      :error
-                                      false)))]
+    (let [config (read-config content)]
       (state/set-config! repo-url config)
       config)))
 

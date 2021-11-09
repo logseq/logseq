@@ -283,9 +283,9 @@
   (when (= :repos (state/get-current-route))
     (route-handler/redirect-to-home!))
   (let [config (or (state/get-config repo-url)
-                   (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
-                           :file/content
-                           (common-handler/safe-read-string "Parsing config file failed: ")))
+                   (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
+                                        :file/content)]
+                     (common-handler/read-config content)))
         relate-path-fn (fn [m k]
                          (some-> (get m k)
                                  (string/replace (str (config/get-local-dir repo-url) "/") "")))
