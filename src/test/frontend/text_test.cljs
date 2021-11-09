@@ -2,6 +2,27 @@
   (:require [cljs.test :refer [are deftest testing]]
             [frontend.text :as text]))
 
+(deftest test-get-page-name
+  []
+  (are [x y] (= (text/get-page-name x) y)
+    "[[page]]" "page"
+    "[[another page]]" "another page"
+    "[single bracket]" nil
+    "no brackets" nil
+
+    "[[file:./page.org][page]]" "page"
+    "[[file:./pages/page.org][page]]" "page"
+
+    "[[file:./namespace.page.org][namespace/page]]" "namespace/page"
+    "[[file:./pages/namespace.page.org][namespace/page]]" "namespace/page"
+    "[[file:./pages/namespace.page.org][please don't change me]]" "namespace/page"
+
+    "[page](file:./page.md)" "page"
+    "[page](file:.pages/page.md)" "page"
+
+    "[logseq/page](file:./logseq.page.md)" "logseq/page"
+    "[logseq/page](file:./pages/logseq.page.md)" "logseq/page"))
+
 (deftest page-ref?
   []
   (are [x y] (= (text/page-ref? x) y)

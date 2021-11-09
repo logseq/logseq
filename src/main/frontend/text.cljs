@@ -20,7 +20,8 @@
        (or (when-let [[_ label _path] (re-matches markdown-page-ref-re s)]
              (string/trim label))
            (when-let [[_ path _label] (re-matches org-page-ref-re s)]
-             (get-file-basename path))
+             (-> (get-file-basename path)
+                 (string/replace "." "/")))
            (-> (re-matches page-ref-re-0 s)
                second))))
 
