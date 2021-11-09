@@ -8,8 +8,9 @@
   [content old-name new-name]
   (let [[original-old-name original-new-name] (map string/trim [old-name new-name])
         [old-ref new-ref] (map #(util/format "[[%s]]" %) [old-name new-name])
-        [old-name new-name] (map #(when (string/includes? % "/")
-                                    (string/replace % "/" "."))
+        [old-name new-name] (map #(if (string/includes? % "/")
+                                    (string/replace % "/" ".")
+                                    %)
                                  [original-old-name original-new-name])
         old-org-ref (re-find
                      (re-pattern
@@ -43,6 +44,9 @@
 
     ["bla [[logseq/foo]] bla" "logseq/foo" "logseq/bar"] "bla [[logseq/bar]] bla"
 
+    ["bla [[file:./foo.org][foo]] bla" "foo" "bar"]
+    "bla [[file:./bar.org][bar]] bla"
+    
     ["bla [[file:./logseq.foo.org][logseq/foo]] bla" "logseq/foo" "logseq/bar"]
     "bla [[file:./logseq.bar.org][logseq/bar]] bla"
 

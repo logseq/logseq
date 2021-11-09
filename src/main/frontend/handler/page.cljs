@@ -204,8 +204,9 @@
   [content old-name new-name]
   (let [[original-old-name original-new-name] (map string/trim [old-name new-name])
         [old-ref new-ref] (map #(util/format "[[%s]]" %) [old-name new-name])
-        [old-name new-name] (map #(when (string/includes? % "/")
-                                    (string/replace % "/" "."))
+        [old-name new-name] (map #(if (string/includes? % "/")
+                                    (string/replace % "/" ".")
+                                    %)
                                  [original-old-name original-new-name])
         old-org-ref (and (= :org (state/get-preferred-format))
                          (:org-mode/insert-file-link? (state/get-config))
