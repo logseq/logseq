@@ -341,10 +341,11 @@
     (some-> (if-let [page (db-model/get-page name)]
               page
               (let [properties (bean/->clj properties)
-                    {:keys [redirect createFirstBlock format]} (bean/->clj opts)
+                    {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)
                     name (page-handler/create!
                            name
                            {:redirect?           (if (boolean? redirect) redirect true)
+                            :journal?            journal
                             :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
                             :format              format
                             :properties          properties})]

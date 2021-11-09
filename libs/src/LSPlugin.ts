@@ -348,7 +348,7 @@ export interface IEditorProxy extends Record<string, any> {
   createPage: (
     pageName: BlockPageName,
     properties?: {},
-    opts?: Partial<{ redirect: boolean, createFirstBlock: boolean, format: BlockEntity['format'] }>
+    opts?: Partial<{ redirect: boolean, createFirstBlock: boolean, format: BlockEntity['format'], journal: boolean }>
   ) => Promise<PageEntity | null>
 
   deletePage: (
