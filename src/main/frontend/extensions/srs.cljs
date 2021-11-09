@@ -444,13 +444,14 @@
          {:class (when (or preview? modal?)
                    (util/hiccup->class ".flex.flex-col.resize.overflow-y-auto"))}
          (let [repo (state/get-current-repo)]
-           [:div.my-2.opacity-70.hover:opacity-100
+           [:div {:style {:margin-top 20}}
             (component-block/block-parents {} repo root-block-id {})])
          (component-block/blocks-container
           blocks
           (merge (show-cycle-config card @phase)
                  {:id (str root-block-id)
-                  :editor-box editor/box}))
+                  :editor-box editor/box
+                  :review-cards? true}))
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             [:div.flex-1
@@ -578,9 +579,12 @@
             card-query-block (db/entity [:block/uuid (:block/uuid config)])
             filtered-total (count result)
             modal? (:modal? config)]
-        [:div.flex-1.cards-review {:style (when modal? {:height "100%"})}
+        [:div.flex-1.cards-review {:style (when modal? {:height "100%"})
+                                   :class (if (:global? config) "" "shadow-xl")}
          [:div.flex.flex-row.items-center.justify-between.cards-title
-          [:code.text-sm.opacity-50 query-string]
+          [:div.flex.flex-row.items-center
+           (ui/icon "infinity" {:style {:font-size 20}})
+           [:div.ml-1.text-sm.font-medium query-string]]
 
           [:div.flex.flex-row.items-center
 
@@ -600,7 +604,7 @@
              :class "tippy-hover"
              :interactive true
              :disabled false}
-            [:a.opacity-60.hover:opacity-100.svg-small.inline.mr-3.font-bold
+            [:a.opacity-60.hover:opacity-100.svg-small.inline.font-bold
              {:id "preview-all-cards"
               :on-click (fn [_]
                           (let [blocks query-result]
@@ -611,17 +615,18 @@
                                                   card-index)))))}
              "A"])]]
          (if (seq review-cards)
-           [:div (when-not modal?
-                   {:on-click (fn []
-                                (state/set-modal! #(view-modal
-                                                    review-cards
-                                                    {:modal? true
-                                                     :callback
-                                                     (fn [review-records]
-                                                       (operation-card-info-summary!
-                                                        review-records review-cards card-query-block)
-                                                       (persist-var/persist-save of-matrix))}
-                                                    card-index)))})
+           [:div.px-1
+            (when-not modal?
+              {:on-click (fn []
+                           (state/set-modal! #(view-modal
+                                               review-cards
+                                               {:modal? true
+                                                :callback
+                                                (fn [review-records]
+                                                  (operation-card-info-summary!
+                                                   review-records review-cards card-query-block)
+                                                  (persist-var/persist-save of-matrix))}
+                                               card-index)))})
             (let [view-fn (if modal? view-modal view)]
               (view-fn review-cards
                        (merge config

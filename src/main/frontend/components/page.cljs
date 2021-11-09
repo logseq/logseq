@@ -71,7 +71,7 @@
   {:did-mount open-first-block!
    :did-update open-first-block!}
   [page-name page-blocks hiccup sidebar? preview?]
-  [:div.page-blocks-inner
+  [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
    (rum/with-key
      (content/content page-name
                       {:hiccup   hiccup

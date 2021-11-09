@@ -1962,8 +1962,7 @@
                             (interpose (breadcrumb-separator)))]
         [:div.block-parents.flex-row.flex-1
          {:class (when (seq breadcrumb)
-                   (str (util/hiccup->class ".opacity-70.hover:opacity-100")
-                        (when-not (:search? config)
+                   (str (when-not (:search? config)
                           " my-2")
                         (when indent?
                           " ml-4")))}
@@ -2126,7 +2125,9 @@
         data-refs (build-refs-data-value children-refs)
         data-refs-self (build-refs-data-value refs)
         edit-input-id (str "edit-block-" blocks-container-id "-" uuid)
-        edit? (state/sub [:editor/editing? edit-input-id])]
+        edit? (state/sub [:editor/editing? edit-input-id])
+        card? (string/includes? data-refs-self "\"card\"")
+        review-cards? (:review-cards? config)]
     [:div.ls-block
      (cond->
       {:id block-id
@@ -2134,7 +2135,8 @@
        :data-refs-self data-refs-self
        :class (str uuid
                    (when (and collapsed? has-child?) " collapsed")
-                   (when pre-block? " pre-block"))
+                   (when pre-block? " pre-block")
+                   (when (and card? (not review-cards?)) " shadow-xl"))
        :blockid (str uuid)}
 
        level
@@ -2792,7 +2794,8 @@
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:class (when doc-mode? "document-mode")
-        :style {:margin-left (if sidebar? 0 -10)}}
+        ;; :style {:margin-left (if sidebar? 0 -10)}
+        }
        (lazy-blocks config blocks)])))
 
 ;; headers to hiccup

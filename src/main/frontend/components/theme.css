@@ -66,12 +66,6 @@ html[data-theme='light'] {
     a {
       color: var(--ls-primary-text-color);
     }
-
-    .block-parents {
-      a {
-        color: var(--ls-link-ref-text-color);
-      }
-    }
   }
 
   a.right-sidebar-button {
