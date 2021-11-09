@@ -169,46 +169,6 @@
                                   :page page} query)
              (str repo "-custom-query-" (:query query))))]))))
 
-(rum/defcs rename-page-dialog-inner <
-  (shortcut/disable-all-shortcuts)
-  (rum/local "" ::input)
-  [state title page-name close-fn]
-  (let [input (get state ::input)]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      [:div
-       [:div.sm:flex.sm:items-start
-        [:div.mt-3.text-center.sm:mt-0.sm:text-left
-         [:h3#modal-headline.text-lg.leading-6.font-medium
-          (t :page/rename-to title)]]]
-
-       [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
-        {:auto-focus true
-         :default-value title
-         :on-change (fn [e]
-                      (reset! input (util/evalue e)))}]
-
-       [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-        [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type "button"
-           :class "ui__modal-enter"
-           :on-click (fn []
-                       (let [value (string/trim @input)]
-                         (when-not (string/blank? value)
-                           (page-handler/rename! (or title page-name) value)
-                           (state/close-modal!))))}
-          (t :submit)]]
-        [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type "button"
-           :on-click close-fn}
-          (t :cancel)]]]])))
-
-(defn rename-page-dialog
-  [title page-name]
-  (fn [close-fn]
-    (rename-page-dialog-inner title page-name close-fn)))
-
 (defn tagged-pages
   [repo tag]
   (let [pages (db/get-tag-pages repo tag)]
@@ -228,16 +188,22 @@
   {:will-update (fn [state]
                   (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   (rum/local false ::edit?)
-  [state page-name emoji title format fmt-journal?]
+  [state page-name icon title format fmt-journal?]
   (when title
     (let [*title-value (get state ::title-value)
           *edit? (get state ::edit?)
           repo (state/get-current-repo)
-          title (if (and (string/includes? title "[[")
-                         (string/includes? title "]]"))
-                  (let [ast (mldoc/->edn title (mldoc/default-config format))]
-                    (block/markup-element-cp {} (ffirst ast)))
-                  title)
+          title-element (if (and (string/includes? title "[[")
+                                 (string/includes? title "]]"))
+                          (let [title (case format
+                                        :markdown
+                                        (string/replace title #"^#+\s+" "")
+                                        :org
+                                        (string/replace title #"^\*+\s+" "")
+                                        title)
+                                ast (mldoc/->edn title (mldoc/default-config format))]
+                            (block/markup-element-cp {} (ffirst ast)))
+                          title)
           hls-file? (pdf-assets/hls-file? title)
           title (if hls-file?
                   (pdf-assets/human-hls-filename-display title)
@@ -287,7 +253,7 @@
                                       (when (and (not hls-file?) (not fmt-journal?))
                                         (reset! *edit? true))))}
          [:h1.title {:style {:margin-left -2}}
-          (when (not= emoji "") [:span.page-emoji emoji])
+          (when (not= icon "") [:span.page-icon icon])
           title]]))))
 
 ;; A page is just a logical block
@@ -318,11 +284,11 @@
                          (let [m (format-block/page-name->map path-page-name true)]
                            (db/transact! repo [m])))
                        (db/pull [:block/name page-name])))
-              {:keys [title emoji] :as properties} (:block/properties page)
+              {:keys [title icon] :as properties} (:block/properties page)
               page-name (:block/name page)
               page-original-name (:block/original-name page)
               title (or title page-original-name page-name)
-              emoji (or emoji "")
+              icon (or icon "")
               today? (and
                       journal?
                       (= page-name (string/lower-case (date/journal-name))))
@@ -342,7 +308,7 @@
                        (not block?))
               [:div.flex.flex-row.space-between
                [:div.flex-1.flex-row
-                (page-title page-name emoji title format fmt-journal?)]
+                (page-title page-name icon title format fmt-journal?)]
                (when (not config/publishing?)
                  [:div.flex.flex-row
                   (when plugin-handler/lsp-enabled?

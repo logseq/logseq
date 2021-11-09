@@ -200,26 +200,48 @@
      (p/catch (fn [error]
                 (println "file rename failed: " error))))))
 
-;; FIXME: not safe
-;; 1. normal pages [[foo]]
-;; 2. namespace pages [[foo/bar]]
-;; 3. what if there's a tag `#foobar` and we want to replace `#foo` with `#something`?
+(defn- replace-page-ref!
+  [content old-name new-name]
+  (let [[original-old-name original-new-name] (map string/trim [old-name new-name])
+        [old-ref new-ref] (map #(util/format "[[%s]]" %) [old-name new-name])
+        [old-name new-name] (map #(when (string/includes? % "/")
+                                    (string/replace % "/" "."))
+                                 [original-old-name original-new-name])
+        old-org-ref (and (= :org (state/get-preferred-format))
+                         (:org-mode/insert-file-link? (state/get-config))
+                         (re-find
+                          (re-pattern
+                           (util/format
+                            "\\[\\[file:\\./.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
+                          content))]
+    (-> (if old-org-ref
+            (let [[old-full-ref old-label] old-org-ref
+                  new-label (if (= old-label original-old-name)
+                                original-new-name
+                              old-label)
+                  new-full-ref (-> (string/replace old-full-ref old-name new-name)
+                                   (string/replace (str "[" old-label "]")
+                                                   (str "[" new-label "]")))]
+              (string/replace content old-full-ref new-full-ref))
+          content)
+        (string/replace old-ref new-ref))))
+
+(defn- replace-tag-ref!
+  [content old-name new-name]
+  (let [old-tag (util/format "#%s" old-name)
+        new-tag (if (re-find #"[\s\t]+" new-name)
+                  (util/format "#[[%s]]" new-name)
+                  (str "#" new-name))]
+    (-> (string/replace content (re-pattern (str "^" old-tag "\\b")) new-tag)
+        (string/replace (re-pattern (str " " old-tag " ")) (str " " new-tag " "))
+        (string/replace (re-pattern (str " " old-tag "$")) (str " " new-tag)))))
+
 (defn- replace-old-page!
-  [s old-name new-name]
-  (let [get-tag (fn [s]
-                  (if (string/includes? s " ")
-                    (str "#[[" s "]]")
-                    (str "#" s)))
-        old-tag-pattern (let [old-tag (get-tag old-name)]
-                          (re-pattern (str "(?i)" old-tag)))
-        old-ref-pattern (re-pattern (util/format "(?i)\\[\\[%s\\]\\]" old-name))
-        namespace-prefix-pattern "[[%s/"
-        old-namespace-pattern (re-pattern (str "(?i)"
-                                               (util/format "\\[\\[%s/" old-name)))]
-    (-> s
-        (string/replace old-ref-pattern (util/format "[[%s]]" new-name))
-        (string/replace old-namespace-pattern (util/format namespace-prefix-pattern new-name))
-        (string/replace old-tag-pattern (get-tag new-name)))))
+  [content old-name new-name]
+  (when (and (string? content) (string? old-name) (string? new-name))
+    (-> content
+        (replace-page-ref! old-name new-name)
+        (replace-tag-ref! old-name new-name))))
 
 (defn- walk-replace-old-page!
   [form old-name new-name]

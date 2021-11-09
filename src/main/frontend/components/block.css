@@ -87,6 +87,11 @@
     left: 50%;
     transform: translate(-50%);
   }
+
+  &-fallback-ui {
+    padding:10px 15px;
+    border-color: var(--ls-secondary-border-color);
+  }
 }
 
 .open-block-ref-link {
