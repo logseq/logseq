@@ -264,7 +264,6 @@
 
 .add-button-link {
   opacity: 0;
-  margin-left: 10px;
   color: var(--ls-primary-text-color);
   transform: scale(.8);
 
@@ -285,4 +284,8 @@
       opacity: .3;
     }
   }
+}
+
+.cp__right-sidebar .add-button-link {
+    margin-left: 21px;
 }

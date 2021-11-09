@@ -370,10 +370,6 @@
       }
     }
   }
-
-  .add-button-link {
-    transform: translateX(10px) scale(.8);
-  }
 }
 
 .cp__sidebar-main-content[data-is-full-width='true'] {

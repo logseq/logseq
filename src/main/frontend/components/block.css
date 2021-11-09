@@ -509,10 +509,6 @@ a[data-ref="card"], .page-reference[data-ref="card"] {
     display: none;
 }
 
-.cards-title {
-    padding: 4px 0;
-}
-
 span.cloze {
     color: var(--ls-cloze-text-color);
 }
@@ -529,7 +525,6 @@ span.cloze-revealed {
 
 .block-parents a {
   color: var(--ls-primary-text-color);
-  opacity: 0.8;
 }
 
 .block-parents a:hover {
