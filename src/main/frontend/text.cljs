@@ -53,10 +53,7 @@
 
 (defn page-ref-un-brackets!
   [s]
-  (when (string? s)
-    (if (page-ref? s)
-      (subs s 2 (- (count s) 2))
-      s)))
+  (or (get-page-name s) s))
 
 (defn block-ref-un-brackets!
   [s]

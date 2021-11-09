@@ -10,6 +10,9 @@
     "[single bracket]" nil
     "no brackets" nil
 
+    "[[another page]]" "another page"
+    "[[nested [[page]]]]" "nested [[page]]"
+
     "[[file:./page.org][page]]" "page"
     "[[file:./pages/page.org][page]]" "page"
 
