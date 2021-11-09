@@ -55,8 +55,6 @@
 
                   (and
                    (= typ "Search")
-                   (string? (second (:url (second block))))
-                   (text/page-ref? (second (:url (second block))))
                    (text/page-ref-un-brackets! (second (:url (second block)))))
 
                   (and
@@ -88,35 +86,17 @@
                     (= "Macro" (first block)))
                (let [{:keys [name arguments]} (second block)]
                  (let [argument (string/join ", " arguments)]
-                   (when (and (= name "embed")
-                              (string? argument)
-                              (text/page-ref? argument))
+                   (when (= name "embed")
                      (text/page-ref-un-brackets! argument))))
 
                (and (vector? block)
                     (= "Tag" (first block)))
                (let [text (get-tag block)]
-                 (when (and
-                        (string? text)
-                        (text/page-ref? text))
-                   (text/page-ref-un-brackets! text)))
+                 (text/page-ref-un-brackets! text))
 
                :else
                nil)]
-    (cond
-      (and
-       (string? page)
-       (not (string/blank? page))
-       (text/block-ref? page))
-      (text/block-ref-un-brackets! page)
-
-      (and
-       (string? page)
-       (not (string/blank? page)))
-      (string/trim page)
-
-      :else
-      nil)))
+    (text/block-ref-un-brackets! page)))
 
 (defn get-block-reference
   [block]
@@ -146,8 +126,7 @@
                         (if (= "id" (:protocol (second (:url (second block)))))
                           (:link (second (:url (second block))))
                           (let [id (second (:url (second block)))]
-                            (when (text/block-ref? id)
-                             (text/block-ref-un-brackets! id))))
+                            (text/block-ref-un-brackets! id)))
 
                         :else
                         nil)]
