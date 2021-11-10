@@ -69,12 +69,21 @@
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
 
+(defn writable?
+  [path]
+  (assert (string? path))
+  (try
+    (fs/accessSync path (aget fs "W_OK"))
+    (catch js/Error _e
+      false)))
+
 (defmethod handle :writeFile [_window [_ path content]]
   (try
     (let [^js Buf (.-Buffer buffer)
           ^js content (if (instance? js/ArrayBuffer content)
                         (.from Buf content) content)]
-
+      (when-not (writable? path)
+        (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path))
     (catch js/Error e
