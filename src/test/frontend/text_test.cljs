@@ -125,4 +125,16 @@
                         "<2021-08-25 Wed>")
     "LATER hello world\nSCHEDULED: <2021-08-25 Wed>\nfoo:: bar\ntest"))
 
+(deftest get-string-all-indexes
+  []
+  (are [x y] (= x y)
+    (text/get-string-all-indexes "[[hello]] [[world]]" "[[")
+    [0 10]
+
+    (text/get-string-all-indexes "abc abc ab" "ab")
+    [0 4 8]
+
+    (text/get-string-all-indexes "abc abc ab" "ab")
+    [0 3]))
+
 #_(cljs.test/test-ns 'frontend.text-test)

@@ -220,8 +220,8 @@
   ([block pos id]
    (edit-block! block pos id nil))
   ([block pos id {:keys [custom-content tail-len move-cursor?]
-                         :or {tail-len 0
-                              move-cursor? true}}]
+                  :or {tail-len 0
+                       move-cursor? true}}]
    (when-not config/publishing?
      (when-let [block-id (:block/uuid block)]
        (let [block (or (db/pull [:block/uuid block-id]) block)
@@ -512,12 +512,12 @@
         blocks-container-id (when-let [id (:id config)]
                               (and (util/uuid-string? id) (medley/uuid id)))
         new-last-block (let [first-block-id {:db/id (:db/id first-block)}]
-                           (assoc last-block
-                                  :block/left first-block-id
-                                  :block/parent (if child?
-                                                  first-block-id
-                                                  ;; sibling
-                                                  (:block/parent first-block))))
+                         (assoc last-block
+                                :block/left first-block-id
+                                :block/parent (if child?
+                                                first-block-id
+                                                ;; sibling
+                                                (:block/parent first-block))))
         blocks [first-block new-last-block]
         blocks-atom (if blocks-container-id
                       (db/get-block-blocks-cache-atom repo blocks-container-id)
@@ -599,16 +599,16 @@
                                  :data [current-block next-block]}]
                        (db/refresh! repo opts)))]
     (if (or (:ref? config)
-              (not sibling?)
-              zooming?)
-        (refresh-fn)
-        (do
-          (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
-          (state/add-tx! refresh-fn)))
-      ;; WORKAROUND: The block won't refresh itself even if the content is empty.
-      (when block-self?
-        (gobj/set input "value" ""))
-      (profile "ok handler" (ok-handler next-block))))
+            (not sibling?)
+            zooming?)
+      (refresh-fn)
+      (do
+        (profile "update cache " (update-cache-for-block-insert! repo config block blocks))
+        (state/add-tx! refresh-fn)))
+    ;; WORKAROUND: The block won't refresh itself even if the content is empty.
+    (when block-self?
+      (gobj/set input "value" ""))
+    (profile "ok handler" (ok-handler next-block))))
 
 (defn clear-when-saved!
   []
@@ -703,23 +703,23 @@
                             (wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               [block-m sibling?] (cond
-                                     before?
-                                     (let [block (db/pull (:db/id (:block/left block)))
-                                           sibling? (if (:block/name block) false sibling?)]
-                                       [block sibling?])
+                                   before?
+                                   (let [block (db/pull (:db/id (:block/left block)))
+                                         sibling? (if (:block/name block) false sibling?)]
+                                     [block sibling?])
 
-                                     sibling?
-                                     [(db/pull (:db/id block)) sibling?]
+                                   sibling?
+                                   [(db/pull (:db/id block)) sibling?]
 
-                                     last-block
-                                     [last-block true]
+                                   last-block
+                                   [last-block true]
 
-                                     block
-                                     [(db/pull (:db/id block)) sibling?]
+                                   block
+                                   [(db/pull (:db/id block)) sibling?]
 
-                                     ;; FIXME: assert
-                                     :else
-                                     nil)]
+                                   ;; FIXME: assert
+                                   :else
+                                   nil)]
 
           (when block-m
             (outliner-insert-block! {:skip-save-current-block? true} block-m new-block sibling?)
@@ -1194,8 +1194,8 @@
                (remove (fn [block] (some-> (:db/id (:block/page block)) (not= page-id))))
                ;; expand collapsed blocks
                (mapv (fn [b] (if (:collapsed (:block/properties b))
-                           (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
-                           [b])) )
+                               (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
+                               [b])) )
                (flatten))
           block-ids* (mapv :block/uuid blocks*)
           level-blocks-map (blocks-with-level blocks*)
@@ -1509,15 +1509,15 @@
                                  (subs file-name last-dot-index)])
                               ["" ""])
             filename (str (gen-filename index file-base) ext)
-              filename (str path "/" filename)]
+            filename (str path "/" filename)]
                                         ;(js/console.debug "Write asset #" dir filename file)
         (if (util/electron?)
           (let [from (.-path file)
                 from (if (string/blank? from) nil from)]
             (p/then (js/window.apis.copyFileToAssets dir filename from)
                     #(p/resolved [filename (if (string? %) (js/File. #js[] %) file) (.join util/node-path dir filename)])))
-            (p/then (fs/write-file! repo dir filename (.stream file) nil)
-                    #(p/resolved [filename file]))))))))
+          (p/then (fs/write-file! repo dir filename (.stream file) nil)
+                  #(p/resolved [filename file]))))))))
 
 (defonce *assets-url-cache (atom {}))
 
@@ -1665,11 +1665,11 @@
     (when value
       (when-not (string/blank? selected) (reset! *selected-text selected))
       (let [[prefix _pos] (commands/simple-replace! input-id value selected
-                                                   {:backward-pos (count postfix)
-                                                    :check-fn (fn [new-value prefix-pos]
-                                                                (when (>= prefix-pos 0)
-                                                                  [(subs new-value prefix-pos (+ prefix-pos 2))
-                                                                   (+ prefix-pos 2)]))})]
+                                                    {:backward-pos (count postfix)
+                                                     :check-fn (fn [new-value prefix-pos]
+                                                                 (when (>= prefix-pos 0)
+                                                                   [(subs new-value prefix-pos (+ prefix-pos 2))
+                                                                    (+ prefix-pos 2)]))})]
         (case prefix
           "[["
           (do
@@ -1684,26 +1684,19 @@
           nil)))))
 
 (defn surround-by?
-  [input before after]
+  [input before end]
   (when input
     (let [value (gobj/get input "value")
-          pos (cursor/pos input)
-          start-pos (if (= :start before) 0 (- pos (count before)))
-          end-pos (if (= :end after) (count value) (+ pos (count after)))]
-      (when (>= (count value) end-pos)
-        (= (cond
-             (and (= :end after) (= :start before))
-             ""
+          pos (cursor/pos input)]
+      (text/surround-by? value pos before end))))
 
-             (= :end after)
-             before
-
-             (= :start before)
-             after
-
-             :else
-             (str before after))
-           (subs value start-pos end-pos))))))
+(defn wrapped-by?
+  [input before end]
+  (when input
+    (let [value (gobj/get input "value")
+          pos (dec (cursor/pos input))]
+      (when (>= pos 0)
+        (text/wrapped-by? value pos before end)))))
 
 (defn get-matched-pages
   [q]
@@ -1952,7 +1945,8 @@
   (when (and input
              (or (state/get-editor-show-page-search?)
                  (state/get-editor-show-page-search-hashtag?)
-                 (state/get-editor-show-block-search?)))
+                 (state/get-editor-show-block-search?))
+             (not (wrapped-by? input "[[" "]]")))
     (when (get-search-q)
       (let [value (gobj/get input "value")
             pos (:editor/last-saved-cursor @state/state)
@@ -2021,8 +2015,8 @@
         pos             (cursor/pos input)
         last-input-char (util/nth-safe (.-value input) (dec pos))]
 
-      ;; TODO: is it cross-browser compatible?
-      ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
+    ;; TODO: is it cross-browser compatible?
+    ;; (not= (gobj/get native-e "inputType") "insertFromPaste")
     (if (= last-input-char (state/get-editor-command-trigger))
       (when (seq (get-matched-commands input))
         (reset! commands/*slash-caret-pos (cursor/get-caret-pos input))
@@ -2830,43 +2824,65 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))]
       (when-not (state/get-editor-show-input)
-        (when (and (= "【" c (util/nth-safe value (dec (dec current-pos))))
-                   (> current-pos 0))
-          (commands/handle-step [:editor/input "[[]]" {:last-pattern "【【"
-                                                       :backward-pos 2}])
-          (commands/handle-step [:editor/search-page])
-          (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+        (cond
+          (and (= "【" c (util/nth-safe value (dec (dec current-pos))))
+               (> current-pos 0))
 
-        (when (and (= "（" c (util/nth-safe value (dec (dec current-pos))))
-                   (> current-pos 0))
-          (commands/handle-step [:editor/input "(())" {:last-pattern "（（"
-                                                       :backward-pos 2}])
-          (commands/handle-step [:editor/search-block :reference])
-          (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+          (do
+            (commands/handle-step [:editor/input "[[]]" {:last-pattern "【【"
+                                                         :backward-pos 2}])
+            (commands/handle-step [:editor/search-page])
+            (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
-        (when (and (= "〈" c)
-                   (= "《" (util/nth-safe value (dec (dec current-pos))))
-                   (> current-pos 0))
-          (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
-                                                                       :backward-pos 0}])
-          (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
-          (reset! commands/*show-block-commands true))
+          (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
+               (not (:editor/show-page-search? @state/state))
+               (not (:editor/show-page-search-hashtag? @state/state))
+               (wrapped-by? input "[[" "]]"))
+          (let [orig-pos (cursor/get-caret-pos input)
+                value (gobj/get input "value")
+                square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) "[[")
+                pos (+ square-pos 2)
+                _ (state/set-last-pos! pos)
+                pos (assoc orig-pos :pos pos)
+                command-step (if (= \# (util/nth-safe value (dec square-pos)))
+                               :editor/search-page-hashtag
+                               :editor/search-page)]
+            (commands/handle-step [command-step])
+            (reset! commands/*slash-caret-pos pos))
 
-        (when (= c " ")
-          (when (or (= (util/nth-safe value (dec (dec current-pos))) "#")
-                    (not (state/get-editor-show-page-search?))
-                    (and (state/get-editor-show-page-search?)
-                         (not= (util/nth-safe value current-pos) "]")))
-            (state/set-editor-show-page-search-hashtag! false)))
+          (and (= "（" c (util/nth-safe value (dec (dec current-pos))))
+               (> current-pos 0))
+          (do
+            (commands/handle-step [:editor/input "(())" {:last-pattern "（（"
+                                                         :backward-pos 2}])
+            (commands/handle-step [:editor/search-block :reference])
+            (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
-        (when (and @*show-commands (not= k (state/get-editor-command-trigger)))
+          (and (= "〈" c)
+               (= "《" (util/nth-safe value (dec (dec current-pos))))
+               (> current-pos 0))
+          (do
+            (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
+                                                                         :backward-pos 0}])
+            (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
+            (reset! commands/*show-block-commands true))
+
+          (and (= c " ")
+               (or (= (util/nth-safe value (dec (dec current-pos))) "#")
+                   (not (state/get-editor-show-page-search?))
+                   (and (state/get-editor-show-page-search?)
+                        (not= (util/nth-safe value current-pos) "]"))))
+          (state/set-editor-show-page-search-hashtag! false)
+
+          (and @*show-commands (not= k (state/get-editor-command-trigger)))
           (let [matched-commands (get-matched-commands input)]
             (if (seq matched-commands)
               (do
                 (reset! *show-commands true)
                 (reset! commands/*matched-commands matched-commands))
-              (reset! *show-commands false))))
-        (when (and @*show-block-commands (not= key-code 188)) ; not <
+              (reset! *show-commands false)))
+
+          (and @*show-block-commands (not= key-code 188)) ; not <
           (let [matched-block-commands (get-matched-block-commands input)]
             (if (seq matched-block-commands)
               (cond
@@ -2880,9 +2896,13 @@
 
                 :else
                 (reset! commands/*matched-block-commands matched-block-commands))
-              (reset! *show-block-commands false))))
-        (when (nil? @search-timeout)
-          (close-autocomplete-if-outside input))))))
+              (reset! *show-block-commands false)))
+
+          (nil? @search-timeout)
+          (close-autocomplete-if-outside input)
+
+          :else
+          nil)))))
 
 (defn editor-on-click!
   [id]

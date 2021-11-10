@@ -346,10 +346,10 @@
                          (when-let [i (string/index-of (util/safe-subs edit-content current-pos) end-pattern)]
                            (+ current-pos i)))
                        current-pos)
-          prefix (subs edit-content 0 current-pos)
-          space? (when (and last-pattern prefix)
-                   (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
-                             (util/safe-subs prefix 0 last-index))]
+          orig-prefix (subs edit-content 0 current-pos)
+          space? (when (and last-pattern orig-prefix)
+                   (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
+                             (util/safe-subs orig-prefix 0 last-index))]
                      (not
                       (or
                        (and s
@@ -362,9 +362,9 @@
                    space?)
           prefix (if (string/blank? last-pattern)
                    (if space?
-                     (util/concat-without-spaces prefix value)
-                     (str prefix value))
-                   (util/replace-last last-pattern prefix value space?))
+                     (util/concat-without-spaces orig-prefix value)
+                     (str orig-prefix value))
+                   (util/replace-last last-pattern orig-prefix value space?))
           postfix (subs edit-content current-pos)
           postfix (if postfix-fn (postfix-fn postfix) postfix)
           new-value (cond
@@ -373,14 +373,14 @@
 
                       :else
                       (str prefix postfix))
-          new-pos (- (+ (count prefix)
-                        (or forward-pos 0))
+          new-pos (- (count prefix)
                      (or backward-pos 0))]
       (state/set-block-content-and-last-pos! id new-value new-pos)
       (cursor/move-cursor-to input
-                             (if (or backward-pos forward-pos)
+                             (if (and (or backward-pos forward-pos)
+                                      (not= end-pattern "]]"))
                                new-pos
-                               (+ new-pos 1))))))
+                               (inc new-pos))))))
 
 (defn simple-insert!
   [id value

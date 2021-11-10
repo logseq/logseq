@@ -269,3 +269,61 @@
                             (not (string/starts-with? (string/lower-case line) key)))
                           lines)]
     (string/join "\n" new-lines)))
+
+(defn get-current-line-by-pos
+  [s pos]
+  (let [lines (string/split-lines s)
+        result (reduce (fn [acc line]
+                         (let [new-pos (+ acc (count line))]
+                           (if (>= new-pos pos)
+                             (reduced line)
+                             (inc new-pos)))) 0 lines)]
+    (when (string? result)
+      result)))
+
+(defn get-string-all-indexes
+  "Get all indexes of `value` in the string `s`."
+  [s value]
+  (loop [acc []
+         i 0]
+    (if-let [i (string/index-of s value i)]
+      (recur (conj acc i) (+ i (count value)))
+      acc)))
+
+(defn surround-by?
+  "`pos` must be surrounded by `before` and `and` in string `value`, e.g. ((|))"
+  [value pos before end]
+  (let [start-pos (if (= :start before) 0 (- pos (count before)))
+        end-pos (if (= :end end) (count value) (+ pos (count end)))]
+    (when (>= (count value) end-pos)
+      (= (cond
+           (and (= :end end) (= :start before))
+           ""
+
+           (= :end end)
+           before
+
+           (= :start before)
+           end
+
+           :else
+           (str before end))
+         (subs value start-pos end-pos)))))
+
+(defn wrapped-by?
+  "`pos` must be wrapped by `before` and `and` in string `value`, e.g. ((a|b))"
+  [value pos before end]
+  (let [before-matches (->> (get-string-all-indexes value before)
+                            (map (fn [i] [i :before])))
+        end-matches (->> (get-string-all-indexes value end)
+                         (map (fn [i] [i :end])))
+        indexes (sort-by first (concat before-matches end-matches [[pos :between]]))
+        ks (map second indexes)
+        q [:before :between :end]]
+    (true?
+     (reduce (fn [acc k]
+               (if (= q (conj acc k))
+                 (reduced true)
+                 (vec (take-last 2 (conj acc k)))))
+             []
+             ks))))

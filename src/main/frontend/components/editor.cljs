@@ -105,11 +105,12 @@
                  (when (state/sub :editor/show-page-search-hashtag?)
                    (util/safe-subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
-                   (util/safe-subs edit-content pos current-pos)))
+                   (util/safe-subs edit-content pos current-pos))
+                 "")
               matched-pages (when-not (string/blank? q)
                               (editor-handler/get-matched-pages q))
               matched-pages (cond
-                              (contains? (set (map string/lower-case matched-pages)) q)
+                              (contains? (set (map string/lower-case matched-pages)) (string/trim q))
                               matched-pages
 
                               (empty? matched-pages)

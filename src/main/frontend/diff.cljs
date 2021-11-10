@@ -5,7 +5,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [cljs-bean.core :as bean]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.text :as text]))
 
 ;; TODO: replace with diff-match-patch
 (defn diff
@@ -32,17 +33,6 @@
 
 (def inline-special-chars
   #{\* \_ \/ \` \+ \^ \~ \$})
-
-(defn- get-current-line-by-pos
-  [s pos]
-  (let [lines (string/split-lines s)
-        result (reduce (fn [acc line]
-                         (let [new-pos (+ acc (count line))]
-                           (if (>= new-pos pos)
-                             (reduced line)
-                             (inc new-pos)))) 0 lines)]
-    (when (string? result)
-      result)))
 
 (defn- markdown-link?
   [markup current-line pos]
@@ -75,7 +65,7 @@
 
                       :else
                       (recur r1 t2 (inc i1) i2))))
-            current-line (get-current-line-by-pos markup pos)]
+            current-line (text/get-current-line-by-pos markup pos)]
         (cond
           (and (= (util/nth-safe markup pos)
                   (util/nth-safe markup (inc pos))
