@@ -134,7 +134,7 @@
     (text/get-string-all-indexes "abc abc ab" "ab")
     [0 4 8]
 
-    (text/get-string-all-indexes "abc abc ab" "ab")
-    [0 3]))
+    (text/get-string-all-indexes "a.c a.c ab" "a.")
+    [0 4]))
 
 #_(cljs.test/test-ns 'frontend.text-test)
