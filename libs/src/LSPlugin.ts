@@ -211,7 +211,7 @@ export interface IAppProxy {
   replaceState: (k: string, params?: Record<string, any>, query?: Record<string, any>) => void
 
   // ui
-  showMsg: (content: string, status?: 'success' | 'warning' | string) => void
+  showMsg: (content: string, status?: 'success' | 'warning' | 'error' | string) => void
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
 
