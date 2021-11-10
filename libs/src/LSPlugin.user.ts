@@ -12,7 +12,7 @@ import {
   ThemeOptions,
   UIOptions, IHookEvent, BlockIdentity,
   BlockPageName,
-  UIContainerAttrs
+  UIContainerAttrs, SimpleCommandCallback
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -30,7 +30,7 @@ const PROXY_CONTINUE = Symbol.for('proxy-continue')
 const debug = Debug('LSPlugin:user')
 
 /**
- * @param type
+ * @param type (key of group commands)
  * @param opts
  * @param action
  */
@@ -43,7 +43,7 @@ function registerSimpleCommand (
     desc?: string,
     palette?: boolean
   },
-  action: BlockCommandCallback
+  action: SimpleCommandCallback
 ) {
   if (typeof action !== 'function') {
     return false
@@ -62,6 +62,20 @@ function registerSimpleCommand (
 
 const app: Partial<IAppProxy> = {
   registerSimpleCommand,
+
+  registerPaletteCommand (
+    opts: { key: string; label: string },
+    action: SimpleCommandCallback) {
+
+    const { key, label } = opts
+    const group = 'global-palette-command'
+
+    return registerSimpleCommand.call(
+      this, group,
+      { key, label, palette: true },
+      action)
+  },
+
   registerUIItem (
     type: 'toolbar' | 'pagebar',
     opts: { key: string, template: string }

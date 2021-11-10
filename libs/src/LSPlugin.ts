@@ -2,7 +2,6 @@ import EventEmitter from 'eventemitter3'
 import * as CSS from 'csstype'
 import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginFileStorage } from './modules/LSPlugin.Storage'
-import { LSPluginUser } from './LSPlugin.user'
 
 export type PluginLocalIdentity = string
 
@@ -34,7 +33,7 @@ export type UIBaseOptions = {
   template: string | null
   style?: CSS.Properties
   attrs?: Record<string, string>
-  close?: 'outside'
+  close?: 'outside' | string
 }
 
 export type UIPathIdentity = {
@@ -175,6 +174,7 @@ export type SlashCommandActionCmd =
   | 'editor/clear-current-slash'
   | 'editor/restore-saved-cursor'
 export type SlashCommandAction = [cmd: SlashCommandActionCmd, ...args: any]
+export type SimpleCommandCallback = (e: IHookEvent) => void
 export type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
 export type BlockCursorPosition = { left: number, top: number, height: number, pos: number, rect: DOMRect }
 
@@ -188,7 +188,6 @@ export interface IAppProxy {
 
   // commands
   registerSimpleCommand: (
-    this: LSPluginUser,
     type: string,
     opts: {
       key: string,
@@ -196,7 +195,14 @@ export interface IAppProxy {
       desc?: string,
       palette?: boolean
     },
-    action: BlockCommandCallback) => void
+    action: SimpleCommandCallback) => void
+
+  registerPaletteCommand: (
+    opts: {
+      key: string,
+      label: string,
+    },
+    action: SimpleCommandCallback) => void
 
   // native
   relaunch: () => Promise<void>

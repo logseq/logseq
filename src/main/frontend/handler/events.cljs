@@ -208,7 +208,7 @@
 (defmethod handle :instrument [[_ {:keys [type payload]}]]
   (posthog/capture type payload))
 
-(defmethod handle :exec-plugin-cmd [[_ {:keys [type pid cmd action]}]]
+(defmethod handle :exec-plugin-cmd [[_ {:keys [type key pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
 
 (defn run!

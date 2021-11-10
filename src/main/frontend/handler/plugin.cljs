@@ -190,11 +190,11 @@
 
 (defn simple-cmd->palette-cmd
   [pid {:keys [key label type desc] :as cmd} action]
-  (let [palette-cmd {:id     (keyword (str "plugin." pid "/" type))
+  (let [palette-cmd {:id     (keyword (str "plugin." pid "/" key))
                      :desc   (or desc label)
                      :action (fn []
                                (state/pub-event!
-                                 [:exec-plugin-cmd {:type type :pid pid :cmd cmd :action action}]))}]
+                                 [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}]))}]
     palette-cmd))
 
 (defn register-plugin-simple-command
