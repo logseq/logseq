@@ -406,6 +406,18 @@
 
       (ui-handler/re-render-root!))))
 
+(defn- rename-nested-pages
+  [old-ns-name new-ns-name]
+  (when-let [nested-pages (db/get-nested-pages
+                           (state/get-current-repo)
+                           (string/lower-case old-ns-name))]
+    (doseq [page nested-pages]
+      (let [[_page-id old-page-name] page
+            new-page-name (string/replace old-page-name
+                                          (re-pattern (util/format "(?i)\\[\\[%s\\]\\]" old-ns-name))
+                                          (util/format "[[%s]]" new-ns-name))]
+        (rename-page-aux old-page-name new-page-name)))))
+
 (defn- rename-namespace-pages!
   [repo old-name new-name]
   (let [pages (db/get-namespace-pages repo old-name)]
@@ -432,11 +444,11 @@
         (db/pull [:block/name (string/lower-case new-name)])
         (notification/show! "Page already exists!" :error)
 
-        namespace
-        (rename-namespace-pages! repo old-name new-name)
-
         :else
-        (rename-page-aux old-name new-name))
+        (do (if namespace
+              (rename-namespace-pages! repo old-name new-name)
+              (rename-page-aux old-name new-name))
+            (rename-nested-pages old-name new-name)))
       (cond
         (string/blank? new-name)
         (notification/show! "Please use a valid name, empty name is not allowed!" :error)

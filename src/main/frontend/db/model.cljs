@@ -572,6 +572,19 @@
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 
+(defn get-nested-pages
+  [repo page-name]
+  (when-let [conn (conn/get-conn repo)]
+    (let [nested-page-name (->> (string/trim page-name)
+                                (util/format "[[%s]]"))]
+      (d/q '[:find ?e ?n
+             :in $ ?x
+             :where
+             [?e :block/name ?n]
+             [(clojure.string/includes? ?n ?x)]]
+           conn
+           nested-page-name))))
+
 (defn block-and-children-transform
   [result repo-url block-uuid]
   (some->> result
