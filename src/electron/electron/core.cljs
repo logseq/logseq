@@ -51,7 +51,7 @@
                                           {:plugins                 true ; pdf
                                            :nodeIntegration         false
                                            :nodeIntegrationInWorker false
-                                           :webSecurity             false
+                                           :webSecurity             (not dev?)
                                            :contextIsolation        true
                                            :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                                            ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
