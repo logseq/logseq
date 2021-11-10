@@ -266,43 +266,8 @@
 
 (defn- build-new-namespace-page-title
   [old-page-title old-name new-name]
-  (string/replace-first old-page-title old-name new-name))
-
-(defn- get-new-file-path
-  [old-path old-name new-name]
-  (let [path-old-name (string/replace old-name "/" ".")
-        path-new-name (string/replace new-name "/" ".")
-        [search replace] (cond
-                           (string/includes? old-path (str "." path-old-name "."))
-                           [(str "." path-old-name ".") (str "." path-new-name ".")]
-
-                           (string/includes? old-path (str "/" path-old-name "."))
-                           [(str "/" path-old-name ".") (str "/" path-new-name ".")]
-
-                           :else
-                           [(str path-old-name ".") (str path-new-name ".")])]
-    (string/replace-first old-path search replace)))
-
-(defn- rename-namespace-pages!
-  [repo old-name new-name]
-  (let [pages (db/get-namespace-pages repo old-name)]
-    (doseq [{:block/keys [name original-name file] :as page} pages]
-      (let [old-page-title (or original-name name)
-            new-page-title (build-new-namespace-page-title old-page-title old-name new-name)
-            page-tx {:db/id (:db/id page)
-                     :block/original-name new-page-title
-                     :block/name (string/lower-case new-page-title)}
-            old-path (:file/path file)
-            new-path (when old-path
-                       (get-new-file-path old-path old-name new-name))
-            file-tx (when file
-                      {:db/id (:db/id file)
-                       :file/path new-path})
-            txs (->> [file-tx page-tx] (remove nil?))]
-        (db/transact! repo txs)
-        (when (and old-path new-path)
-          (p/let [_ (rename-file-aux! repo old-path new-path)]
-            (println "Renamed " old-path " to " new-path)))))))
+  (string/replace-first old-page-title
+                        (re-pattern (str "(?i)" old-name)) new-name))
 
 (defn favorited?
   [page-name]
@@ -363,8 +328,6 @@
 (defn- rename-page-aux [old-name new-name]
   (when-let [repo (state/get-current-repo)]
     (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
-      (rename-namespace-pages! repo old-name new-name)
-
       (let [old-original-name   (:block/original-name page)
             file                (:block/file page)
             journal?            (:block/journal? page)
@@ -443,24 +406,43 @@
 
       (ui-handler/re-render-root!))))
 
+(defn- rename-namespace-pages!
+  [repo old-name new-name]
+  (let [pages (db/get-namespace-pages repo old-name)]
+    (doseq [{:block/keys [name original-name] :as page} pages]
+      (let [old-page-title (or original-name name)
+            new-page-title (build-new-namespace-page-title old-page-title old-name new-name)]
+        (when (and old-page-title new-page-title)
+          (p/let [_ (rename-page-aux old-page-title new-page-title)]
+            (println "Renamed " old-page-title " to " new-page-title)))))))
+
 (defn rename!
   [old-name new-name]
-  (let [old-name      (string/trim old-name)
+  (let [repo          (state/get-current-repo)
+        old-name      (string/trim old-name)
         new-name      (string/trim new-name)
+        namespace     (or (string/includes? old-name "/")
+                          (db/get-namespace-pages repo old-name))
         name-changed? (not= old-name new-name)]
-    (when (and old-name
-               new-name
-               (not (string/blank? new-name))
-               name-changed?)
+    (if (and old-name
+             new-name
+             (not (string/blank? new-name))
+             name-changed?)
       (cond
-        (= (string/lower-case old-name) (string/lower-case new-name))
-        (rename-page-aux old-name new-name)
-
         (db/pull [:block/name (string/lower-case new-name)])
         (notification/show! "Page already exists!" :error)
 
+        namespace
+        (rename-namespace-pages! repo old-name new-name)
+
         :else
-        (rename-page-aux old-name new-name)))))
+        (rename-page-aux old-name new-name))
+      (cond
+        (string/blank? new-name)
+        (notification/show! "Please use a valid name, empty name is not allowed!" :error)
+
+        (not name-changed?)
+        (notification/show! "Cannot rename to page with same same!" :error)))))
 
 (defn- split-col-by-element
   [col element]
