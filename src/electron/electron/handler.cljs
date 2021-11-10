@@ -82,7 +82,7 @@
     (let [^js Buf (.-Buffer buffer)
           ^js content (if (instance? js/ArrayBuffer content)
                         (.from Buf content) content)]
-      (when-not (writable? path)
+      (when (and (fs/existsSync path) (not (writable? path)))
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path))
