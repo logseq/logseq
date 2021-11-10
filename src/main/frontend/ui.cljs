@@ -21,7 +21,8 @@
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-tweet-embed" :as react-tweet-embed]
             [rum.core :as rum]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [frontend.db-mixins :as db-mixins]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -575,7 +576,7 @@
    {:class (if collapsed? "rotating-arrow collapsed" "rotating-arrow not-collapsed")}
    (svg/caret-right)])
 
-(rum/defcs foldable <
+(rum/defcs foldable < db-mixins/query rum/reactive
   (rum/local false ::control?)
   (rum/local false ::collapsed?)
   {:will-mount (fn [state]

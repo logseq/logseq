@@ -962,6 +962,43 @@
                                   [k blocks]))))]
          result)))))
 
+(defn get-page-referenced-blocks-ids
+  "Faster and can be used for pagination later."
+  ([page]
+   (get-page-referenced-blocks-ids (state/get-current-repo) page))
+  ([repo page]
+   (when repo
+     (when-let [conn (conn/get-conn repo)]
+       (let [page-id (:db/id (db-utils/entity [:block/name page]))
+             pages (page-alias-set repo page)
+             aliases (set/difference pages #{page-id})
+             query-result (if (seq aliases)
+                            (let [rules '[[(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
+                                           [?block :block/page ?alias]
+                                           [(contains? ?aliases ?alias)]]
+                                          [(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
+                                           [?block :block/refs ?ref-page]
+                                           [(contains? ?pages ?ref-page)]]]]
+                              (d/q
+                                '[:find ?block
+                                  :in $ % ?pages ?aliases ?block-attrs
+                                  :where
+                                  (find-blocks ?block ?ref-page ?pages ?alias ?aliases)]
+                                conn
+                                rules
+                                pages
+                                aliases
+                                block-attrs))
+                            (d/q
+                              '[:find ?ref-block
+                                :in $ ?page ?block-attrs
+                                :where
+                                [?ref-block :block/refs ?page]]
+                              conn
+                              page-id
+                              block-attrs))]
+         query-result)))))
+
 (defn get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
@@ -1038,6 +1075,27 @@
             react
             (sort-by-left-recursive)
             db-utils/group-by-page)))))
+
+(defn get-block-referenced-blocks-ids
+  [block-uuid]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [conn (conn/get-conn repo)]
+      (let [block (db-utils/entity [:block/uuid block-uuid])]
+        (->> (react/q repo [:ref-ids (:db/id block)] {}
+               '[:find ?ref-block
+                 :in $ ?block-uuid ?block-attrs
+                 :where
+                 [?block :block/uuid ?block-uuid]
+                 [?ref-block :block/refs ?block]]
+               block-uuid
+               block-attrs)
+             react)))))
+
+(defn get-referenced-blocks-ids
+  [page-name-or-block-uuid]
+  (if (uuid? page-name-or-block-uuid)
+    (get-block-referenced-blocks-ids page-name-or-block-uuid)
+    (get-page-referenced-blocks-ids page-name-or-block-uuid)))
 
 (defn get-matched-blocks
   [match-fn limit]
