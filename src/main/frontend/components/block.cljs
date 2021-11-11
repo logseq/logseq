@@ -2005,6 +2005,7 @@
 
 (defn- block-drop
   [event uuid block *move-to]
+  (util/stop event)
   (when-not (dnd-same-block? uuid)
     (dnd/move-block event @*dragging-block
                     block
