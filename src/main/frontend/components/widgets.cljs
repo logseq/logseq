@@ -138,9 +138,6 @@
   []
   (when (and (config/demo-graph?)
              (not config/publishing?))
-    [:div.flex.flex-row.admonitionblock.align-items
-     [:div.flex.flex-col.justify-center
-      (ui/icon "alert-triangle" {:style {:fontSize 20
-                                         :color "red"}})]
-     [:div.ml-1
-      [:p "(Demo graph) Changes will not be saved until you open a local folder"]]]))
+    (ui/admonition
+     :warning
+     [:p "This is a demo graph, changes will not be saved until you open a local folder."])))

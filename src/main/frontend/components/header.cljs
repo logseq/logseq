@@ -199,8 +199,6 @@
              {:on-click #(state/pub-event! [:go/search])}
              (ui/icon "search" {:style {:fontSize 20}})]))]
 
-       (widgets/demo-graph-alert)
-
        [:div.r.flex
         (when (and
                 (not (mobile-util/is-native-platform?))
