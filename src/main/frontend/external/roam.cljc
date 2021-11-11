@@ -1,6 +1,7 @@
 (ns frontend.external.roam
   (:require #?(:cljs [cljs-bean.core :as bean]
                :clj [cheshire.core :as json])
+            #?(:cljs ["/frontend/utils" :as utils])
             [frontend.external.protocol :as protocol]
             [medley.core :as medley]
             [clojure.walk :as walk]
@@ -44,12 +45,7 @@
 
 (defn- fenced-code-transform
   [text]
-  (string/replace text
-                  #"```([a-z]*\n[\s\S]*?\n*)```"
-                  (fn [[_ match]]
-                    (str "```"
-                         (str match "\n")
-                         "```"))))
+  (string/replace text #"```" "\n```"))
 
 (defn load-all-refed-uids!
   [data]
