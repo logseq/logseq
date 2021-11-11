@@ -4,13 +4,13 @@
   #?(:cljs (:require
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
-            [frontend.mobile.util :refer [is-native-platform?]]
             [camel-snake-kebab.core :as csk]
             [camel-snake-kebab.extras :as cske]
             [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [dommy.core :as d]
+            [frontend.mobile.util :refer [is-native-platform?]]
             [frontend.react-impls :as react-impls]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -620,6 +620,12 @@
          (concat-without-spaces prefix new-value)
          (str prefix new-value)))
      s)))
+
+(defn replace-ignore-case [s old-value new-value]
+  (string/replace s (re-pattern (str "(?i)" old-value)) new-value))
+
+(defn replace-first-ignore-case [s old-value new-value]
+  (string/replace-first s (re-pattern (str "(?i)" old-value)) new-value))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs

@@ -233,9 +233,9 @@
         new-tag (if (re-find #"[\s\t]+" new-name)
                   (util/format "#[[%s]]" new-name)
                   (str "#" new-name))]
-    (-> (string/replace content (re-pattern (str "^" old-tag "\\b")) new-tag)
-        (string/replace (re-pattern (str " " old-tag " ")) (str " " new-tag " "))
-        (string/replace (re-pattern (str " " old-tag "$")) (str " " new-tag)))))
+    (-> (util/replace-ignore-case content (str "^" old-tag "\\b") new-tag)
+        (util/replace-ignore-case (str " " old-tag " ") (str " " new-tag " "))
+        (util/replace-ignore-case (str " " old-tag "$") (str " " new-tag)))))
 
 (defn- replace-old-page!
   [content old-name new-name]
@@ -263,10 +263,6 @@
                      :else
                      f))
                  form))
-
-(defn- build-new-namespace-page-title
-  [old-page-title old-name new-name]
-  (string/replace-first old-page-title old-name new-name))
 
 (defn favorited?
   [page-name]
@@ -412,9 +408,10 @@
                            (string/lower-case old-ns-name))]
     (doseq [page nested-pages]
       (let [[_page-id old-page-name] page
-            new-page-name (string/replace old-page-name
-                                          (re-pattern (util/format "(?i)\\[\\[%s\\]\\]" old-ns-name))
-                                          (util/format "[[%s]]" new-ns-name))]
+            new-page-name (util/replace-ignore-case
+                           old-page-name
+                           (util/format "\\[\\[%s\\]\\]" old-ns-name)
+                           (util/format "[[%s]]" new-ns-name))]
         (rename-page-aux old-page-name new-page-name)))))
 
 (defn- rename-namespace-pages!
@@ -422,7 +419,7 @@
   (let [pages (db/get-namespace-pages repo old-name)]
     (doseq [{:block/keys [name original-name] :as page} pages]
       (let [old-page-title (or original-name name)
-            new-page-title (build-new-namespace-page-title old-page-title old-name new-name)]
+            new-page-title (util/replace-first-ignore-case old-page-title old-name new-name)]
         (when (and old-page-title new-page-title)
           (p/let [_ (rename-page-aux old-page-title new-page-title)]
             (println "Renamed " old-page-title " to " new-page-title)))))))
