@@ -1939,13 +1939,19 @@
 (rum/defc breadcrumb-separator [] [:span.mx-2.opacity-50 "➤"])
 
 (defn block-parents
-  [config repo block-id {:keys [show-page? indent?]
-                                :or {show-page? true}}]
-  (let [parents (db/get-block-parents repo block-id 3)
+  [config repo block-id {:keys [show-page? indent? level-limit]
+                         :or {show-page? true
+                              level-limit 3}}]
+  (let [parents (db/get-block-parents repo block-id (inc level-limit))
         page (db/get-block-page repo block-id)
         page-name (:block/name page)
         page-original-name (:block/original-name page)
-        show? (or (seq parents) show-page? page-name)]
+        show? (or (seq parents) show-page? page-name)
+        parents (if (= page-name (:block/name (first parents)))
+                  (rest parents)
+                  parents)
+        more? (> (count parents) level-limit)
+        parents (if more? (take-last level-limit parents) parents)]
     (when show?
       (let [page-name-props (when show-page?
                               [:page
@@ -1956,9 +1962,12 @@
                                [block
                                 (->elem :span (map-inline config title))])))
             breadcrumb (->> (into [] parents-props)
-                            (concat [page-name-props])
+                            (concat [page-name-props] (when more? [:more]))
                             (filterv identity)
-                            (map (fn [[block label]] (breadcrumb-fragment config block label)))
+                            (map (fn [x] (if (vector? x)
+                                          (let [[block label] x]
+                                            (breadcrumb-fragment config block label))
+                                          [:span.opacity-70 "⋯"])))
                             (interpose (breadcrumb-separator)))]
         [:div.block-parents.flex-row.flex-1
          {:class (when (seq breadcrumb)

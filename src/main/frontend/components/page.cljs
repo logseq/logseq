@@ -330,7 +330,7 @@
                (let [config {:id "block-parent"
                              :block? true}]
                  [:div.mb-4
-                  (block/block-parents config repo block-id {})]))
+                  (block/block-parents config repo block-id {:level-limit 3})]))
 
              ;; blocks
              (let [page (if block?
