@@ -249,27 +249,28 @@
 (defn alter-files-handler!
   [repo files {:keys [finish-handler chan]} file->content]
   (let [write-file-f (fn [[path content]]
-                       (let [original-content (get file->content path)]
-                         (-> (p/let [_ (or
-                                        (util/electron?)
-                                        (nfs/check-directory-permission! repo))]
-                               (debug/set-ack-step! path :write-file)
-                               (fs/write-file! repo (config/get-repo-dir repo) path content
-                                               {:old-content original-content}))
-                             (p/catch (fn [error]
-                                        (state/pub-event! [:notification/show
-                                                           {:content (str "Failed to save the file " path ". Error: "
-                                                                          (str error))
-                                                            :status :error
-                                                            :clear? false}])
-                                        (state/pub-event! [:instrument {:type :write-file/failed
-                                                                        :payload {:path path
-                                                                                  :content-length (count content)
-                                                                                  :error-str (str error)
-                                                                                  :error error}}])
-                                        (log/error :write-file/failed {:path path
-                                                                       :content content
-                                                                       :error error}))))))
+                       (when path
+                         (let [original-content (get file->content path)]
+                          (-> (p/let [_ (or
+                                         (util/electron?)
+                                         (nfs/check-directory-permission! repo))]
+                                (debug/set-ack-step! path :write-file)
+                                (fs/write-file! repo (config/get-repo-dir repo) path content
+                                                {:old-content original-content}))
+                              (p/catch (fn [error]
+                                         (state/pub-event! [:notification/show
+                                                            {:content (str "Failed to save the file " path ". Error: "
+                                                                           (str error))
+                                                             :status :error
+                                                             :clear? false}])
+                                         (state/pub-event! [:instrument {:type :write-file/failed
+                                                                         :payload {:path path
+                                                                                   :content-length (count content)
+                                                                                   :error-str (str error)
+                                                                                   :error error}}])
+                                         (log/error :write-file/failed {:path path
+                                                                        :content content
+                                                                        :error error})))))))
         finish-handler (fn []
                          (when finish-handler
                            (finish-handler))

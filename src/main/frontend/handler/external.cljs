@@ -40,7 +40,8 @@
                    files)
         files (remove nil? files)]
     (repo-handler/parse-files-and-load-to-db! repo files nil)
-    (let [files (map (fn [{:file/keys [path content]}] [path content]) files)]
+    (let [files (->> (map (fn [{:file/keys [path content]}] (when path [path content])) files)
+                     (remove nil?))]
       (file-handler/alter-files repo files {:add-history? false
                                             :update-db? false
                                             :update-status? false
