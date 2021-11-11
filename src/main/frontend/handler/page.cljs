@@ -454,10 +454,7 @@
           (rename-nested-pages old-name new-name))
       (cond
         (string/blank? new-name)
-        (notification/show! "Please use a valid name, empty name is not allowed!" :error)
-
-        (not name-changed?)
-        (notification/show! "Cannot rename to page with same name!" :error)))))
+        (notification/show! "Please use a valid name, empty name is not allowed!" :error)))))
 
 (defn- split-col-by-element
   [col element]
