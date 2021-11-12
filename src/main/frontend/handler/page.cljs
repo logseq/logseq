@@ -460,7 +460,7 @@
           (rename-nested-pages old-name new-name)
 
           ;; Redirect to the new page
-          (route-handler/redirect-to-page! 
+          (route-handler/redirect! 
            {:to          :page
             :push        false
             :path-params {:name (string/lower-case new-name)}}))
