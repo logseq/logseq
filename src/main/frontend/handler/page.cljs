@@ -381,14 +381,7 @@
 
         (outliner-file/sync-to-file page))
 
-
-
       ;; TODO: update browser history, remove the current one
-
-      ;; Redirect to the new page
-      (route-handler/redirect! {:to          :page
-                                :push        false
-                                :path-params {:name (string/lower-case new-name)}})
 
       (notification/show! "Page renamed successfully!" :success)
 
@@ -464,7 +457,13 @@
 
             :else
             (rename-page-aux old-name new-name))
-          (rename-nested-pages old-name new-name))
+          (rename-nested-pages old-name new-name)
+
+          ;; Redirect to the new page
+          (route-handler/redirect-to-page! 
+           {:to          :page
+            :push        false
+            :path-params {:name (string/lower-case new-name)}}))
       (cond
         (string/blank? new-name)
         (notification/show! "Please use a valid name, empty name is not allowed!" :error)))))
