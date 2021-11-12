@@ -216,16 +216,17 @@
                             "\\[\\[file:\\./.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
                           content))]
     (-> (if old-org-ref
-            (let [[old-full-ref old-label] old-org-ref
-                  new-label (if (= old-label original-old-name)
-                                original-new-name
-                              old-label)
-                  new-full-ref (-> (string/replace old-full-ref old-name new-name)
-                                   (string/replace (str "[" old-label "]")
-                                                   (str "[" new-label "]")))]
-              (string/replace content old-full-ref new-full-ref))
+          (let [[old-full-ref old-label] old-org-ref
+                new-label (if (= old-label original-old-name)
+                            original-new-name
+                            old-label)
+                new-full-ref (-> (util/replace-ignore-case old-full-ref old-name new-name "[]")
+                                 (util/replace-ignore-case (str "[" old-label "]")
+                                                           (str "[" new-label "]")
+                                                           "[]"))]
+            (util/replace-ignore-case content old-full-ref new-full-ref "[]"))
           content)
-        (string/replace old-ref new-ref))))
+        (util/replace-ignore-case old-ref new-ref "[]"))))
 
 (defn- replace-tag-ref!
   [content old-name new-name]
@@ -233,9 +234,9 @@
         new-tag (if (re-find #"[\s\t]+" new-name)
                   (util/format "#[[%s]]" new-name)
                   (str "#" new-name))]
-    (-> (util/replace-ignore-case content (str "^" old-tag "\\b") new-tag)
-        (util/replace-ignore-case (str " " old-tag " ") (str " " new-tag " "))
-        (util/replace-ignore-case (str " " old-tag "$") (str " " new-tag)))))
+    (-> (util/replace-ignore-case content (str "^" old-tag "\\b") new-tag "[]")
+        (util/replace-ignore-case (str " " old-tag " ") (str " " new-tag " ") "[]")
+        (util/replace-ignore-case (str " " old-tag "$") (str " " new-tag) "[]"))))
 
 (defn- replace-old-page!
   [content old-name new-name]
@@ -403,23 +404,38 @@
 
 (defn- rename-nested-pages
   [old-ns-name new-ns-name]
-  (when-let [nested-pages (db/get-nested-pages
-                           (state/get-current-repo)
-                           (string/lower-case old-ns-name))]
-    (doseq [page nested-pages]
-      (let [[_page-id old-page-name] page
-            new-page-name (util/replace-ignore-case
-                           old-page-name
-                           (util/format "\\[\\[%s\\]\\]" old-ns-name)
-                           (util/format "[[%s]]" new-ns-name))]
-        (rename-page-aux old-page-name new-page-name)))))
+  (let [repo            (state/get-current-repo)
+        nested-page-str (util/format "[[%s]]" (string/lower-case old-ns-name))
+        ns-prefix       (util/format "[[%s/" (string/lower-case old-ns-name))
+        nested-pages    (db/get-pages-by-subname repo nested-page-str)
+        nested-pages-ns (db/get-pages-by-subname repo ns-prefix)]
+    (when nested-pages
+      ;; rename page "[[obsidian]] is a tool" to "[[logseq]] is a tool"
+      (doseq [page nested-pages]
+        (let [[_page-id old-page-name] page
+              new-page-name (util/replace-ignore-case
+                             old-page-name
+                             (util/format "[[%s]]" old-ns-name)
+                             (util/format "[[%s]]" new-ns-name)
+                             "[]")]
+          (rename-page-aux old-page-name new-page-name))))
+    (when nested-pages-ns
+      ;; rename page "[[obsidian/page1]] is a tool" to "[[logseq/page1]] is a tool"
+      (doseq [page nested-pages-ns]
+        (let [[_page-id old-page-name] page
+              new-page-name (util/replace-ignore-case
+                             old-page-name
+                             (util/format "[[%s/" old-ns-name)
+                             (util/format "[[%s/" new-ns-name)
+                             "[]")]
+          (rename-page-aux old-page-name new-page-name))))))
 
 (defn- rename-namespace-pages!
   [repo old-name new-name]
   (let [pages (db/get-namespace-pages repo old-name)]
     (doseq [{:block/keys [name original-name] :as page} pages]
       (let [old-page-title (or original-name name)
-            new-page-title (util/replace-first-ignore-case old-page-title old-name new-name)]
+            new-page-title (util/replace-first-ignore-case old-page-title old-name new-name "[]")]
         (when (and old-page-title new-page-title)
           (p/let [_ (rename-page-aux old-page-title new-page-title)]
             (println "Renamed " old-page-title " to " new-page-title)))))))
@@ -672,3 +688,4 @@
 (defn open-file-in-directory []
   (when-let [file-path (and (util/electron?) (get-page-file-path))]
     (js/window.apis.showItemInFolder file-path)))
+
