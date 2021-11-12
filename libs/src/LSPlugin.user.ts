@@ -61,9 +61,9 @@ function registerSimpleCommand (
 }
 
 const app: Partial<IAppProxy> = {
-  registerSimpleCommand,
+  registerCommand: registerSimpleCommand,
 
-  registerPaletteCommand (
+  registerCommandPalette (
     opts: { key: string; label: string },
     action: SimpleCommandCallback) {
 

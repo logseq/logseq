@@ -187,7 +187,7 @@ export interface IAppProxy {
   getUserConfigs: () => Promise<AppUserConfigs>
 
   // commands
-  registerSimpleCommand: (
+  registerCommand: (
     type: string,
     opts: {
       key: string,
@@ -197,7 +197,7 @@ export interface IAppProxy {
     },
     action: SimpleCommandCallback) => void
 
-  registerPaletteCommand: (
+  registerCommandPalette: (
     opts: {
       key: string,
       label: string,
