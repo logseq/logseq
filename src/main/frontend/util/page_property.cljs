@@ -24,13 +24,8 @@
                                                (string/join ", " v)
                                                v))))
           before (remove nil? (map #(build-property-fn %) [:title :alias :aliases]))
-          other (reduce (fn [content elem]
-                          (string/replace
-                           content
-                           (re-pattern (case format
-                                         :org (str "#\\+" (subs elem 2) "\n*")
-                                         (str elem "\n*")))
-                           ""))
+          other (reduce (fn [acc elem]
+                          (util/replace-ignore-case acc (str elem "\n*") "" "+[]"))
                         content before)]
       (string/join "\n" (remove #(= "" %)
                                 (concat before [other]))))))
