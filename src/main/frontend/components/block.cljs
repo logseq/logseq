@@ -1957,10 +1957,12 @@
                               [:page
                                (or page-original-name page-name)])
             parents-props (doall
-                           (for [{:block/keys [uuid title name] :as block} parents]
+                           (for [{:block/keys [uuid title body name] :as block} parents]
                              (when-not name ; not page
                                [block
-                                (->elem :span (map-inline config title))])))
+                                (if (seq title)
+                                  (->elem :span (map-inline config title))
+                                  (->elem :div (markup-elements-cp config body)))])))
             breadcrumb (->> (into [] parents-props)
                             (concat [page-name-props] (when more? [:more]))
                             (filterv identity)
