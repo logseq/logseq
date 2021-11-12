@@ -211,8 +211,14 @@
           old-name (or title page-name)
           new-page-exist? (when @*title-value
                             (db/entity [:block/name @*title-value]))
+          links-num (count
+                     (db/get-page-referenced-blocks-no-cache
+                      (:db/id
+                       (db/pull [:block/name (string/lower-case old-name)]))))
           confirm-fn (ui/make-confirm-modal
                       {:title         "Do you really want to change the page name?"
+                       :sub-title     (util/format "%s page %s (reference, embed) scattering in the graph will be updated."
+                                                  links-num (if (> links-num 1) "links" "link"))
                        :on-confirm    (fn [_e {:keys [close-fn]}]
                                         (close-fn)
                                         (page-handler/rename! (or title page-name) @*title-value)
