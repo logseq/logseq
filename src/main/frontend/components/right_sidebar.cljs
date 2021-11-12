@@ -247,7 +247,7 @@
                                        :margin-right 2}}
         (toggle)]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing {:style {:height "100vh"}}
+      [:.sidebar-item-list.flex-1.scrollbar-spacing
        (if @*anim-finished?
          (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
            (rum/with-key
