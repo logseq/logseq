@@ -2016,6 +2016,14 @@
   (reset! *move-to nil)
   (editor-handler/unhighlight-blocks!))
 
+(defn- block-drag-end
+  [event *move-to]
+  (reset! *dragging? false)
+  (reset! *dragging-block nil)
+  (reset! *drag-to-block nil)
+  (reset! *move-to nil)
+  (editor-handler/unhighlight-blocks!))
+
 (defn- block-mouse-over
   [e *control-show? block-id doc-mode?]
   (util/stop e)
@@ -2049,7 +2057,9 @@
    :on-drag-leave (fn [_event]
                     (block-drag-leave *move-to))
    :on-drop (fn [event]
-              (block-drop event uuid block *move-to))})
+              (block-drop event uuid block *move-to))
+   :on-drag-end (fn [event]
+                  (block-drag-end event *move-to))})
 
 (defn- build-refs-data-value
   [refs]
