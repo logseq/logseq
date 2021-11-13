@@ -2159,7 +2159,8 @@
                    (when (and collapsed? has-child?) " collapsed")
                    (when pre-block? " pre-block")
                    (when (and card? (not review-cards?)) " shadow-xl"))
-       :blockid (str uuid)}
+       :blockid (str uuid)
+       :haschild (str has-child?)}
 
        level
        (assoc :level level)
