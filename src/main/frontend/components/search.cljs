@@ -241,7 +241,7 @@
                                                    [:span.ml-1 (str "\"" search-q "\"")]]
 
                                                   :page
-                                                  [:span
+                                                  [:span {:data-page-ref data}
                                                    (when alias
                                                      [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " alias)])
                                                    (search-result-item "Page" (highlight-exact-query data search-q))]
@@ -252,10 +252,12 @@
                                                   :block
                                                   (let [{:block/keys [page content uuid]} data
                                                         page (or (:block/original-name page)
-                                                                 (:block/name page))
+                                                                (:block/name page))
                                                         repo (state/sub :git/current-repo)
                                                         format (db/get-page-format page)]
-                                                    (search-result-item "Block" (block-search-result-item repo uuid format content search-q search-mode)))
+                                                    [:span {:data-block-ref uuid}
+                                                      (search-result-item "Block"
+                                                        (block-search-result-item repo uuid format content search-q search-mode))])
 
                                                   nil)]))})
        (when (and has-more? (util/electron?) (not all?))
