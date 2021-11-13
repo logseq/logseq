@@ -447,18 +447,21 @@
 
 (defn get-editor-heading-class [content]
   (let [content (if content (str content) "")]
-    (cond
-      (string/includes? content "\n") "multiline-block"
-      (starts-with? content "# ") "h1"
-      (starts-with? content "## ") "h2"
-      (starts-with? content "### ") "h3"
-      (starts-with? content "#### ") "h4"
-      (starts-with? content "##### ") "h5"
-      (starts-with? content "###### ") "h6"
-      (starts-with? content "TODO ") "todo-block"
-      (starts-with? content "DOING ") "doing-block"
-      (starts-with? content "DONE ") "done-block"
-      :else "normal-block")))
+    (str
+     (if (string/includes? content "\n") "multiline-block" "uniline-block")
+     " "
+     (cond
+       (starts-with? content "# ") "h1"
+       (starts-with? content "## ") "h2"
+       (starts-with? content "### ") "h3"
+       (starts-with? content "#### ") "h4"
+       (starts-with? content "##### ") "h5"
+       (starts-with? content "###### ") "h6"
+       (starts-with? content "TODO ") "todo-block"
+       (starts-with? content "DOING ") "doing-block"
+       (starts-with? content "DONE ") "done-block"
+       (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+       :else "normal-block"))))
 
 (rum/defc mock-textarea <
   rum/static
