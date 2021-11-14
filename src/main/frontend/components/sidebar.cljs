@@ -195,13 +195,25 @@
      (when (and num (not (zero? num)))
        [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
+(defn get-default-home-if-valid
+  []
+  (when-let [default-home (state/get-default-home)]
+    (let [page (:page default-home)
+          page (when (and (string? page)
+                          (not (string/blank? page)))
+                 (db/entity [:block/name (util/safe-lower-case page)]))]
+      (if page
+        default-home
+        (dissoc default-home :page)))))
+
 (rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn]
   (rum/with-context [[t] i18n/*tongue-context*]
     (let [active? (fn [route] (= route (get-in route-match [:data :name])))
           page-active? (fn [page]
                          (= page (get-in route-match [:parameters :path :name])))
-          left-sidebar? (state/sub :ui/left-sidebar-open?)]
+          left-sidebar? (state/sub :ui/left-sidebar-open?)
+          default-home (get-default-home-if-valid)]
       (when left-sidebar?
         [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
          {:on-click #(when-let [^js target (and (util/mobile?) (.-target %))]
@@ -213,12 +225,19 @@
            (repo/repos-dropdown)
 
            [:div.nav-header
-            (when true
-             [:div.journals-nav
-              [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
-               {:on-click route-handler/go-to-journals!}
-               (ui/icon "calendar mr-3" {:style {:font-size 20}})
-               [:span.flex-1 "Journals"]]])
+
+            (if default-home
+              [:div.default-home-nav
+               [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+                {:on-click route-handler/redirect-to-home!}
+                (ui/icon "home mr-3" {:style {:font-size 20}})
+                [:span.flex-1 (:page default-home)]]]
+
+              [:div.journals-nav
+               [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+                {:on-click route-handler/go-to-journals!}
+                (ui/icon "calendar mr-3" {:style {:font-size 20}})
+                [:span.flex-1 "Journals"]]])
 
             [:div.flashcards-nav
              (flashcards)]
@@ -322,17 +341,6 @@
   []
   (when-let [user-footer (and config/publishing? (get-in (state/get-config) [:publish-common-footer]))]
     [:div.p-6 user-footer]))
-
-(defn get-default-home-if-valid
-  []
-  (when-let [default-home (state/get-default-home)]
-    (let [page (:page default-home)
-          page (when (and (string? page)
-                          (not (string/blank? page)))
-                 (db/entity [:block/name (util/safe-lower-case page)]))]
-      (if page
-        default-home
-        (dissoc default-home :page)))))
 
 (defonce sidebar-inited? (atom false))
 ;; TODO: simplify logic
