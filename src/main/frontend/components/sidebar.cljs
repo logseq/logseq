@@ -206,6 +206,14 @@
         default-home
         (dissoc default-home :page)))))
 
+(defn sidebar-item [{class :class title :title on-click-handler :on-click-handler icon :icon}]
+  [:div
+   {:class class}
+   [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+    {:on-click on-click-handler}
+    (ui/icon (str icon " mr-3") {:style {:font-size 20}})
+    [:span.flex-1 title]]])
+
 (rum/defc sidebar-nav < rum/reactive
   [route-match close-modal-fn]
   (rum/with-context [[t] i18n/*tongue-context*]
@@ -227,17 +235,16 @@
            [:div.nav-header
 
             (if default-home
-              [:div.default-home-nav
-               [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
-                {:on-click route-handler/redirect-to-home!}
-                (ui/icon "home mr-3" {:style {:font-size 20}})
-                [:span.flex-1 (:page default-home)]]]
-
-              [:div.journals-nav
-               [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
-                {:on-click route-handler/go-to-journals!}
-                (ui/icon "calendar mr-3" {:style {:font-size 20}})
-                [:span.flex-1 "Journals"]]])
+              (sidebar-item
+               {:class "home-nav"
+                :title (:page default-home)
+                :on-click-handler route-handler/redirect-to-home!
+                :icon "home"})
+              (sidebar-item
+               {:class "journals-nav"
+                :title "Journals"
+                :on-click-handler route-handler/go-to-journals!
+                :icon "calendar"}))
 
             [:div.flashcards-nav
              (flashcards)]
