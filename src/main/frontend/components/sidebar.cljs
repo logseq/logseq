@@ -206,11 +206,17 @@
         default-home
         (dissoc default-home :page)))))
 
-(defn sidebar-item [{class :class title :title on-click-handler :on-click-handler icon :icon}]
+(defn sidebar-item
+  [{on-click-handler :on-click-handler
+    class :class
+    title :title
+    icon :icon
+    href :href}]
   [:div
    {:class class}
    [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
-    {:on-click on-click-handler}
+    {:on-click on-click-handler
+     :href href}
     (ui/icon (str icon " mr-3") {:style {:font-size 20}})
     [:span.flex-1 title]]])
 
@@ -249,17 +255,17 @@
             [:div.flashcards-nav
              (flashcards)]
 
-            [:div.graph-view-nav
-             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
-              {:href (rfe/href :graph)}
-              (ui/icon "hierarchy mr-3" {:style {:font-size 20}})
-              [:span.flex-1 "Graph view"]]]
+            (sidebar-item
+             {:class "graph-view-nav"
+              :title "Graph view"
+              :href (rfe/href :graph)
+              :icon "hierarchy"})
 
-            [:div.all-pages-nav
-             [:a.all-pages-nav.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
-              {:href (rfe/href :all-pages)}
-              (ui/icon "files mr-3" {:style {:font-size 20}})
-              [:span.flex-1 "All pages"]]]]]
+            (sidebar-item
+             {:class "all-pages-nav"
+              :title "All pages"
+              :href (rfe/href :all-pages)
+              :icon "files"})]]
 
           (favorites t)
 
@@ -434,7 +440,7 @@
                   :exit 300}}
        links
         ;; (custom-context-menu-content)
-))))
+       ))))
 
 (rum/defc new-block-mode < rum/reactive
   []
@@ -533,10 +539,10 @@
         {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?}])}
 
         (sidebar-mobile-sidebar
-          {:open?       open?
-           :left-sidebar-open? left-sidebar-open?
-           :close-fn    close-fn
-           :route-match route-match})
+         {:open?       open?
+          :left-sidebar-open? left-sidebar-open?
+          :close-fn    close-fn
+          :route-match route-match})
 
         [:div.#app-container.h-screen.flex
          [:div.flex-1.h-full.flex.flex-col#left-container.relative
