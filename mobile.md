@@ -1,15 +1,37 @@
-## install list:
-* Android studio
-* SDK 30
-* other sdk tools in Android studio preference setting https://capacitorjs.com/docs/getting-started/environment-setup
-* change the server url in capacitor.config.json with your local ip:3001 (run ifconfig to check)
-* run `yarn && yarn app-watch`
-* in another console, run `npx cap open android`
-* create Android virtual device in Android studio
-* click the run button in Android stutio to run the project
-* after logseq startup in Android virtual device, repl should be able to connect
-* for browser console print and devtool remote debug, open chrome, type url chrome://inspect/#devices, you should see your device there, click inspect
+## Installation:
+* Download Android studio [^1] and SDK (newer than 30) tools
+   Notes: for M1 MacBook users.
+   - Download version **Mac with Apple Chip** 
+   - unzip it and move **Android Studio.app** file to **Applications**, or you will get the following error later.
+     ```
+     [error] Unable to launch Android Studio. Is it installed?
+        Attempted to open Android Studio at: /Applications/Android Studio.app
+        You can configure this with the CAPACITOR_ANDROID_STUDIO_PATH environment variable.
+     ```
+* In Android Studio, open **Tools** -> **SDK Manager** to install some other SDK tools [^2].
+  > In the SDK Tools tab, make sure to install at least the following:
+  >> Android SDK Build-Tools
+  >> Android SDK Command-line Tools
+  >> Android Emulator
+  >> Android SDK Platform-Tools
+* Replace the `server url` in *android/app/src/assets/capacitor.config.json* with your local-ip-address:3001 (run ifconfig to check)
+  ```json
+  "server": {
+		"url": "http://your-own-id-address:3001",
+		"cleartext": true} 
+  ```
+* Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
+* Run `npx cap open android` in another termimal.
+  Notes: for the first time after a fresh clone.
+  - Run `npx cap copy android` to copy web assets from public to *android/app/src/main/assets/public*.
+  - Run `npx cap update android` to update Android plugins.
+* In Android Studio, open **Tools** -> **AVD Manager** to create Android Virtual Device (AVD), and lanuch it in the emulator.
+* In Android Studio, open **Run** -> **Run** to run Logseq.
+* After logseq startup in Android virtual device, repl should be able to connect
+* For browser console print and devtool remote debug, open chrome, type url chrome://inspect/#devices, you should see your device there, click inspect
 
+[^1] https://developer.android.com/studio/index.html
+[^2] https://capacitorjs.com/docs/getting-started/environment-setup
 
 ## Develop without opening Android Studio
 1. brew install gradle
