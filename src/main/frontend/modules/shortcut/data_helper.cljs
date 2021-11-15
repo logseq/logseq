@@ -12,8 +12,9 @@
             [frontend.handler.common :as common-handler])
   (:import [goog.ui KeyboardShortcutHandler]))
 
-(defonce default-binding
-  (->> (vals config/default-config)
+(defn get-bindings
+  []
+  (->> (vals @config/config)
        (into {})
        (map (fn [[k {:keys [binding]}]]
               {k binding}))
@@ -26,7 +27,7 @@
 (defn shortcut-binding
   [id]
   (let [shortcut (get (state/shortcuts) id
-                      (get default-binding id))]
+                      (get (get-bindings) id))]
     (cond
       (nil? shortcut)
       (log/error :shortcut/binding-not-found {:id id})
@@ -45,7 +46,7 @@
 
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
-  (let [dict (->> (vals config/default-config)
+  (let [dict (->> (vals @config/config)
                   (apply merge)
                   (map (fn [[k _]]
                          {k {:binding (shortcut-binding k)}}))
@@ -57,7 +58,7 @@
   ([handler-id]
    (shortcut-map handler-id nil))
   ([handler-id state]
-   (let [raw       (get config/default-config handler-id)
+   (let [raw       (get @config/config handler-id)
          handler-m (->> raw
                         (map (fn [[k {:keys [fn]}]]
                                {k fn}))
@@ -77,7 +78,7 @@
     (keyword (str "command." ns) n)))
 
 (defn desc-helper []
-  (->> (vals config/default-config)
+  (->> (vals @config/config)
        (apply merge)
        (map (fn [[k {:keys [desc]}]]
               {(decorate-namespace k) desc}))
@@ -155,7 +156,7 @@
   "Given shortcut key, return handler group
   eg: :editor/new-line -> :shortcut.handler/block-editing-only"
   [k]
-  (->> config/default-config
+  (->> @config/config
        (filter (fn [[_ v]] (contains? v k)))
        (map key)
        (first)))
@@ -182,7 +183,7 @@
 
 (defn shortcut-data-by-id [id]
   (let [binding (shortcut-binding id)
-        data    (->> (vals config/default-config)
+        data    (->> (vals @config/config)
                      (into  {})
                      id)]
     (when binding
@@ -192,7 +193,7 @@
        (binding-for-display id binding)))))
 
 (defn shortcuts->commands [handler-id]
-  (let [m (get config/default-config handler-id)]
+  (let [m (get @config/config handler-id)]
     (->> m
          (map (fn [[id _]] (-> (shortcut-data-by-id id)
                                (assoc :id id)
