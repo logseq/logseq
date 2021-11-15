@@ -28,7 +28,7 @@
   conflicts.
   Example:
   (register-shortcut! :shortcut.handler/misc :foo/bar {:binding \"mod+shift+8\"
-     :fn (fn []
+     :fn (fn [_state _event]
      (js/alert \"test shortcut\"))})"
   ([handler-id id]
    (register-shortcut! handler-id id nil))
