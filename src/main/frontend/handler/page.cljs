@@ -389,8 +389,6 @@
                                 :push        false
                                 :path-params {:name (string/lower-case new-name)}})
 
-      (notification/show! "Page renamed successfully!" :success)
-
       (repo-handler/push-if-auto-enabled! repo)
 
       (when (favorited? old-name)
