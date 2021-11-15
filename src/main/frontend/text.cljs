@@ -247,11 +247,7 @@
   [p]
   (and (not (string/starts-with? p "../"))
        (not (string/starts-with? p "./"))
-       (not (string/starts-with? p "http"))
-       (not
-        (when-let [last-part (last (string/split p #"/"))]
-          ;; a file
-          (string/includes? last-part ".")))))
+       (not (re-find #"(?i)^http[s]?://" p))))
 
 (defn add-timestamp
   [content key value]
