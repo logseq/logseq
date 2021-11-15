@@ -176,7 +176,8 @@
                          (not (contains? #{"excalidraw" "edn"} ext))
                          (not (string/includes? path "/.recycle/"))
                          (zero? pending-writes))
-                      (state/pub-event! [:file/not-matched-from-disk path local-content content])
+                      (p/let [local-content (encrypt/decrypt local-content)]
+                        (state/pub-event! [:file/not-matched-from-disk path local-content content]))
                       (p/let [_ (verify-permission repo file-handle true)
                               _ (utils/writeFile file-handle content)
                               file (.getFile file-handle)]

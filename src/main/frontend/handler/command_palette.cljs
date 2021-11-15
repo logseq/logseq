@@ -12,10 +12,11 @@
                             ;; action fn expects zero number of arities
                             (fn [action] (zero? (.-length action)))))
 (s/def :command/shortcut string?)
+(s/def :command/tag vector?)
 
 (s/def :command/command
   (s/keys :req-un [:command/id :command/desc :command/action]
-          :opt-un [:command/shortcut]))
+          :opt-un [:command/shortcut :command/tag]))
 
 (defn global-shortcut-commands []
   (->> [:shortcut.handler/editor-global
@@ -31,8 +32,13 @@
   (->> (get @state/state :command-palette/commands)
        (sort-by :id)))
 
-(defn history []
-  (or (storage/get "commands-history") []))
+(defn get-commands-unique []
+  (reduce #(assoc %1 (:id %2) %2) {}
+          (get @state/state :command-palette/commands)))
+
+(defn history
+  ([] (or (storage/get "commands-history") []))
+  ([vals] (storage/set "commands-history" vals)))
 
 (defn- assoc-invokes [cmds]
   (let [invokes (->> (history)
@@ -81,6 +87,15 @@
       (log/error :command/register {:msg "Failed to register command. Command with same id already exist"
                                     :id  id})
       (state/set-state! :command-palette/commands (conj cmds command)))))
+
+(defn unregister
+  [id]
+  (let [id (keyword id)
+        cmds (get-commands-unique)]
+    (when (contains? cmds id)
+      (state/set-state! :command-palette/commands (vals (dissoc cmds id)))
+      ;; clear history
+      (history (filter #(not= (:id %) id) (history))))))
 
 (defn register-global-shortcut-commands []
   (let [cmds (global-shortcut-commands)]

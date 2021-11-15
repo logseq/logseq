@@ -69,7 +69,8 @@
           (when (util/electron?)
             (debug/set-ack-step! path :saved-successfully)
             (debug/ack-file-write! path))
-          (state/pub-event! [:file/not-matched-from-disk path disk-content content]))
+          (let [disk-content (encrypt/decrypt disk-content)]
+            (state/pub-event! [:file/not-matched-from-disk path disk-content content])))
 
         :else
         (->
@@ -87,9 +88,6 @@
              (ok-handler repo path result))
            result)
          (p/catch (fn [error]
-                    (state/pub-event! [:instrument {:type :debug/write-failed
-                                                    :payload {:step :ipc-write-file
-                                                              :error error}}])
                     (if error-handler
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))

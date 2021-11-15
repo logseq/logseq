@@ -1,5 +1,6 @@
 (ns frontend.mobile.util
-  (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]))
+  (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
+            ["@capacitor/splash-screen" :refer [SplashScreen]]))
 
 (defn platform []
   (.getPlatform Capacitor))
@@ -14,3 +15,6 @@
   (.isPluginAvailable Capacitor name))
 
 (defonce folder-picker (registerPlugin "FolderPicker"))
+
+(defn hide-splash []
+  (.hide SplashScreen))

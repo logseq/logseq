@@ -10,11 +10,11 @@
             [frontend.extensions.video.youtube :as youtube]
             [frontend.search :as search]
             [frontend.state :as state]
-            [frontend.text :as text]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.marker :as marker]
             [frontend.util.priority :as priority]
+            [frontend.util.property :as property]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [promesa.core :as p]))
@@ -23,7 +23,6 @@
 
 (defonce *show-commands (atom false))
 (defonce *slash-caret-pos (atom nil))
-(defonce slash "/")
 (defonce *show-block-commands (atom false))
 (defonce angle-bracket "<")
 (defonce *angle-bracket-caret-pos (atom nil))
@@ -48,26 +47,29 @@
      "Queries documentation"]
     "."]])
 
-(def link-steps [[:editor/input (str slash "link")]
-                 [:editor/show-input [{:command :link
-                                       :id :link
-                                       :placeholder "Link"
-                                       :autoFocus true}
-                                      {:command :link
-                                       :id :label
-                                       :placeholder "Label"}]]])
+(defn link-steps []
+  [[:editor/input (str (state/get-editor-command-trigger) "link")]
+   [:editor/show-input [{:command :link
+                         :id :link
+                         :placeholder "Link"
+                         :autoFocus true}
+                        {:command :link
+                         :id :label
+                         :placeholder "Label"}]]])
 
-(def image-link-steps [[:editor/input (str slash "link")]
-                       [:editor/show-input [{:command :image-link
-                                             :id :link
-                                             :placeholder "Link"
-                                             :autoFocus true}
-                                            {:command :image-link
-                                             :id :label
-                                             :placeholder "Label"}]]])
+(defn image-link-steps []
+  [[:editor/input (str (state/get-editor-command-trigger) "link")]
+   [:editor/show-input [{:command :image-link
+                         :id :link
+                         :placeholder "Link"
+                         :autoFocus true}
+                        {:command :image-link
+                         :id :label
+                         :placeholder "Label"}]]])
 
-(def zotero-steps [[:editor/input (str slash "zotero")]
-                   [:editor/show-zotero]])
+(defn zotero-steps []
+  [[:editor/input (str (state/get-editor-command-trigger) "zotero")]
+   [:editor/show-zotero]])
 
 (def *extend-slash-commands (atom []))
 
@@ -90,19 +92,19 @@
   [type]
   (let [template (util/format "@@%s: @@"
                               type)]
-    [[:editor/input template {:last-pattern slash
+    [[:editor/input template {:last-pattern (state/get-editor-command-trigger)
                               :backward-pos 2}]]))
 
 (defn embed-page
   []
   (conj
-   [[:editor/input "{{embed [[]]}}" {:last-pattern slash
+   [[:editor/input "{{embed [[]]}}" {:last-pattern (state/get-editor-command-trigger)
                                      :backward-pos 4}]]
    [:editor/search-page :embed]))
 
 (defn embed-block
   []
-  [[:editor/input "{{embed (())}}" {:last-pattern slash
+  [[:editor/input "{{embed (())}}" {:last-pattern (state/get-editor-command-trigger)
                                     :backward-pos 4}]
    [:editor/search-block :embed]])
 
@@ -187,12 +189,9 @@
 
 (defn ->properties
   []
-  (let [template (util/format
-                  ":PROPERTIES:\n:: \n:END:\n")
-        backward-pos 9]
-    [[:editor/input template {:type "properties"
-                              :last-pattern angle-bracket
-                              :backward-pos backward-pos}]]))
+  [[:editor/clear-current-bracket]
+   [:editor/insert-properties]
+   [:editor/move-cursor-to-properties]])
 
 ;; https://orgmode.org/manual/Structure-Templates.html
 (defn block-commands-map
@@ -235,13 +234,13 @@
      ["Block reference" [[:editor/input "(())" {:backward-pos 2}]
                          [:editor/search-block :reference]] "Create a backlink to a block"]
      ["Block embed" (embed-block) "Embed a block here" "Embed a block here"]
-     ["Link" link-steps "Create a HTTP link"]
-     ["Image link" image-link-steps "Create a HTTP link to a image"]
+     ["Link" (link-steps) "Create a HTTP link"]
+     ["Image link" (image-link-steps) "Create a HTTP link to a image"]
      (when (state/markdown?)
        ["Underline" [[:editor/input "<ins></ins>"
-                      {:last-pattern slash
+                      {:last-pattern (state/get-editor-command-trigger)
                        :backward-pos 6}]] "Create a underline text decoration"])
-     ["Template" [[:editor/input "/" nil]
+     ["Template" [[:editor/input (state/get-editor-command-trigger) nil]
                   [:editor/search-template]] "Insert a created template here"]
      (cond
        (and (util/electron?) (config/local-db? (state/get-current-repo)))
@@ -280,7 +279,7 @@
     ;; advanced
 
     [["Query" [[:editor/input "{{query }}" {:backward-pos 2}]] query-doc]
-     ["Zotero" zotero-steps "Import Zotero journal article"]
+     ["Zotero" (zotero-steps) "Import Zotero journal article"]
      ["Query table function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query table function"]
      ["Calculator" [[:editor/input "```calc\n\n```" {:backward-pos 4}]
                     [:codemirror/focus]] "Insert a calculator"]
@@ -293,19 +292,19 @@
                  text)) "Draw a graph with Excalidraw"]
 
      (when (util/zh-CN-supported?)
-       ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern slash
+       ["Embed Bilibili video" [[:editor/input "{{bilibili }}" {:last-pattern (state/get-editor-command-trigger)
                                                                 :backward-pos 2}]]])
      ["Embed HTML " (->inline "html")]
 
-     ["Embed Youtube video" [[:editor/input "{{youtube }}" {:last-pattern slash
+     ["Embed Youtube video" [[:editor/input "{{youtube }}" {:last-pattern (state/get-editor-command-trigger)
                                                             :backward-pos 2}]]]
 
      ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
 
-     ["Embed Vimeo video" [[:editor/input "{{vimeo }}" {:last-pattern slash
+     ["Embed Vimeo video" [[:editor/input "{{vimeo }}" {:last-pattern (state/get-editor-command-trigger)
                                                         :backward-pos 2}]]]
 
-     ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern slash
+     ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern (state/get-editor-command-trigger)
                                                           :backward-pos 2}]]]]
 
     @*extend-slash-commands
@@ -336,22 +335,21 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos forward-pos
-           end-pattern]
-    :or {last-pattern slash}
-    :as option}]
+   {:keys [last-pattern postfix-fn backward-pos forward-pos end-pattern]
+    :as _option}]
   (when-let [input (gdom/getElement id)]
-    (let [edit-content (gobj/get input "value")
+    (let [last-pattern (or last-pattern (state/get-editor-command-trigger))
+          edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
           current-pos (or
                        (when (and end-pattern (string? end-pattern))
                          (when-let [i (string/index-of (util/safe-subs edit-content current-pos) end-pattern)]
                            (+ current-pos i)))
                        current-pos)
-          prefix (subs edit-content 0 current-pos)
-          space? (when (and last-pattern prefix)
-                   (let [s (when-let [last-index (string/last-index-of prefix last-pattern)]
-                             (util/safe-subs prefix 0 last-index))]
+          orig-prefix (subs edit-content 0 current-pos)
+          space? (when (and last-pattern orig-prefix)
+                   (let [s (when-let [last-index (string/last-index-of orig-prefix last-pattern)]
+                             (util/safe-subs orig-prefix 0 last-index))]
                      (not
                       (or
                        (and s
@@ -364,9 +362,9 @@
                    space?)
           prefix (if (string/blank? last-pattern)
                    (if space?
-                     (util/concat-without-spaces prefix value)
-                     (str prefix value))
-                   (util/replace-last last-pattern prefix value space?))
+                     (util/concat-without-spaces orig-prefix value)
+                     (str orig-prefix value))
+                   (util/replace-last last-pattern orig-prefix value space?))
           postfix (subs edit-content current-pos)
           postfix (if postfix-fn (postfix-fn postfix) postfix)
           new-value (cond
@@ -375,19 +373,19 @@
 
                       :else
                       (str prefix postfix))
-          new-pos (- (+ (count prefix)
-                        (or forward-pos 0))
+          new-pos (- (count prefix)
                      (or backward-pos 0))]
       (state/set-block-content-and-last-pos! id new-value new-pos)
       (cursor/move-cursor-to input
-                             (if (or backward-pos forward-pos)
+                             (if (and (or backward-pos forward-pos)
+                                      (not= end-pattern "]]"))
                                new-pos
-                               (+ new-pos 1))))))
+                               (inc new-pos))))))
 
 (defn simple-insert!
   [id value
    {:keys [backward-pos forward-pos check-fn]
-    :as option}]
+    :as _option}]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
@@ -407,7 +405,7 @@
 (defn insert-before!
   [id value
    {:keys [backward-pos forward-pos check-fn]
-    :as option}]
+    :as _option}]
   (let [input (gdom/getElement id)
         edit-content (gobj/get input "value")
         current-pos (cursor/pos input)
@@ -427,7 +425,7 @@
 (defn simple-replace!
   [id value selected
    {:keys [backward-pos forward-pos check-fn]
-    :as option}]
+    :as _option}]
   (let [selected? (not (string/blank? selected))
         input (gdom/getElement id)
         edit-content (gobj/get input "value")
@@ -473,7 +471,7 @@
 (defn get-command-input
   [edit-content]
   (when-not (string/blank? edit-content)
-    (let [result (last (util/split-last slash edit-content))]
+    (let [result (last (util/split-last (state/get-editor-command-trigger) edit-content))]
       (if (string/blank? result)
         nil
         result))))
@@ -485,15 +483,10 @@
 
 (defmethod handle-step :editor/input [[_ value option]]
   (when-let [input-id (state/get-edit-input-id)]
-    (let [last-pattern (:last-pattern option)
-          type (:type option)
+    (let [type (:type option)
           input (gdom/getElement input-id)
-          content (gobj/get input "value")
-          pos (cursor/pos input)
-          pos (if last-pattern
-                (string/last-index-of content last-pattern pos)
-                pos)
-          beginning-of-line? (text/beginning-of-line content pos)
+          beginning-of-line? (or (cursor/beginning-of-line? input)
+                                 (= 1 (:pos @*angle-bracket-caret-pos)))
           value (if (and (contains? #{"block" "properties"} type)
                          (not beginning-of-line?))
                   (str "\n" value)
@@ -526,7 +519,20 @@
       (let [edit-content (gobj/get current-input "value")
             current-pos (cursor/pos current-input)
             prefix (subs edit-content 0 current-pos)
-            prefix (util/replace-last slash prefix "" (boolean space?))
+            prefix (util/replace-last (state/get-editor-command-trigger) prefix "" (boolean space?))
+            new-value (str prefix
+                           (subs edit-content current-pos))]
+        (state/set-block-content-and-last-pos! input-id
+                                               new-value
+                                               (count prefix))))))
+
+(defmethod handle-step :editor/clear-current-bracket [[_ space?]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [edit-content (gobj/get current-input "value")
+            current-pos (cursor/pos current-input)
+            prefix (subs edit-content 0 current-pos)
+            prefix (util/replace-last angle-bracket prefix "" (boolean space?))
             new-value (str prefix
                            (subs edit-content current-pos))]
         (state/set-block-content-and-last-pos! input-id
@@ -534,16 +540,19 @@
                                                (count prefix))))))
 
 (defn compute-pos-delta-when-change-marker
-  [current-input edit-content new-value marker pos]
+  [edit-content marker pos]
   (let [old-marker (some->> (first (util/safe-re-find marker/bare-marker-pattern edit-content))
                             (string/trim))
-        old-marker (if old-marker old-marker "")
         pos-delta (- (count marker)
                      (count old-marker))
-        pos-delta (if (string/blank? old-marker)
-                    (inc pos-delta)
-                    pos-delta)]
-    (+ pos pos-delta)))
+        pos-delta (cond (string/blank? old-marker)
+                        (inc pos-delta)
+                        (string/blank? marker)
+                        (dec pos-delta)
+
+                        :else
+                        pos-delta)]
+    (max (+ pos pos-delta) 0)))
 
 (defmethod handle-step :editor/set-marker [[_ marker] format]
   (when-let [input-id (state/get-edit-input-id)]
@@ -564,11 +573,11 @@
                                                  (str marker " ")))]
         (state/set-edit-content! input-id new-value)
         (let [new-pos (compute-pos-delta-when-change-marker
-                       current-input edit-content new-value marker (dec slash-pos))]
+                       edit-content marker (dec slash-pos))]
           ;; TODO: any performance issue?
           (js/setTimeout #(cursor/move-cursor-to current-input new-pos) 10))))))
 
-(defmethod handle-step :editor/set-priority [[_ priority] format]
+(defmethod handle-step :editor/set-priority [[_ priority] _format]
   (when-let [input-id (state/get-edit-input-id)]
     (when-let [current-input (gdom/getElement input-id)]
       (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
@@ -576,6 +585,22 @@
             new-priority (util/format "[#%s]" priority)
             new-value (string/trim (priority/add-or-update-priority edit-content format new-priority))]
         (state/set-edit-content! input-id new-value)))))
+
+(defmethod handle-step :editor/insert-properties [[_ _] _format]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+        (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+              edit-content (gobj/get current-input "value")
+              new-value (property/insert-property format edit-content "" "")]
+          (state/set-edit-content! input-id new-value)))))
+
+(defmethod handle-step :editor/move-cursor-to-properties [[_]]
+  (when-let [input-id (state/get-edit-input-id)]
+    (when-let [current-input (gdom/getElement input-id)]
+      (let [format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+            edit-content (gobj/get current-input "value")]
+        (property/goto-properties-end format current-input)
+        (cursor/move-cursor-backward current-input 3)))))
 
 (defmethod handle-step :editor/set-heading [[_ heading]]
   (when-let [input-id (state/get-edit-input-id)]
@@ -597,7 +622,7 @@
 (defmethod handle-step :editor/search-page-hashtag [[_]]
   (state/set-editor-show-page-search-hashtag! true))
 
-(defmethod handle-step :editor/search-block [[_ type]]
+(defmethod handle-step :editor/search-block [[_ _type]]
   (state/set-editor-show-block-search! true))
 
 (defmethod handle-step :editor/search-template [[_]]
@@ -631,7 +656,7 @@
       (restore-state false))
     (state/set-editor-show-date-picker! true)))
 
-(defmethod handle-step :editor/click-hidden-file-input [[_ input-id]]
+(defmethod handle-step :editor/click-hidden-file-input [[_ _input-id]]
   (when-let [input-file (gdom/getElement "upload-file")]
     (.click input-file)))
 
@@ -644,7 +669,7 @@
     (handle-step step format)))
 
 (defn exec-plugin-simple-command!
-  [pid {:keys [key label block-id] :as cmd} action]
+  [pid {:keys [block-id] :as cmd} action]
   (let [format (and block-id (:block/format (db-util/pull [:block/uuid block-id])))
         inputs (vector (conj action (assoc cmd :pid pid)))]
     (handle-steps inputs format)))

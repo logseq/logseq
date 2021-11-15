@@ -8,7 +8,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.string :as string]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -24,14 +25,15 @@
   [{:keys [id shortcut] :as cmd} chosen?]
   (let [first-shortcut (first (str/split shortcut #" \| "))]
     (rum/with-context [[t] i18n/*tongue-context*]
-     (let [desc (translate t cmd)]
-       [:div.inline-grid.grid-cols-4.gap-x-4.w-full
+                      (let [desc (translate t cmd)]
+                        [:div.inline-grid.grid-cols-4.gap-x-4.w-full
         {:class (when chosen? "chosen")}
         [:span.col-span-3 desc]
         [:div.col-span-1.justify-end.tip.flex
          (when (and (keyword? id) (namespace id))
            [:code.opacity-20.bg-transparent (namespace id)])
-         [:code.ml-1 first-shortcut]]]))))
+         (when-not (string/blank? first-shortcut)
+           [:code.ml-1 first-shortcut])]]))))
 
 (rum/defcs command-palette <
   (shortcut/disable-all-shortcuts)

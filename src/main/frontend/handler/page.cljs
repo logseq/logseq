@@ -19,6 +19,8 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as web-nfs]
+            [frontend.handler.config :as config-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.modules.outliner.core :as outliner-core]
             [frontend.modules.outliner.file :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -26,6 +28,7 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.property :as property]
+            [frontend.util.page-property :as page-property]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -46,8 +49,11 @@
 
 (defn get-page-file-path
   ([] (get-page-file-path (state/get-current-page)))
-  ([page-name] (when-let [page (db/entity [:block/name page-name])]
-                 (:file/path (:block/file page)))))
+  ([page-name]
+   (when page-name
+     (let [page-name (string/lower-case page-name)]
+       (when-let [page (db/entity [:block/name page-name])]
+        (:file/path (:block/file page)))))))
 
 (defn- build-title [page]
   (let [original-name (:block/original-name page)]
@@ -95,7 +101,7 @@
              pages    (map (fn [page]
                              (-> (block/page-name->map page true)
                                  (assoc :block/format format)))
-                        pages)
+                           pages)
              txs      (->> pages
                            ;; for namespace pages, only last page need properties
                            drop-last
@@ -114,57 +120,10 @@
            (outliner-file/sync-to-file page))
 
          (when redirect?
-           (route-handler/redirect! {:to          :page
-                                     :path-params {:name page}}))
+           (route-handler/redirect-to-page! page))
          page)))))
 
-(defn page-add-property!
-  [page-name key value]
-  (when-let [page (db/pull [:block/name (string/lower-case page-name)])]
-    (let [repo (state/get-current-repo)
-          key (keyword key)
-          pre-block (db/get-pre-block repo (:db/id page))
-          format (state/get-preferred-format)
-          page-id {:db/id (:db/id page)}
-          org? (= format :org)
-          value (if (contains? #{:filters} key) (pr-str value) value)]
-      (if pre-block
-        (let [properties (:block/properties pre-block)
-              new-properties (assoc properties key value)
-              content (:block/content pre-block)
-              front-matter? (property/front-matter? content)
-              new-content (property/insert-property format content key value front-matter?)
-              block {:db/id (:db/id pre-block)
-                     :block/properties new-properties
-                     :block/content new-content
-                     :block/page page-id}
-              tx [(assoc page-id :block/properties new-properties)
-                  block]]
-          ;; (util/pprint tx)
-          (db/transact! tx)
-          (db/refresh! repo {:key :block/change
-                             :data [block]}))
-        (let [block {:block/uuid (db/new-block-id)
-                     :block/left page-id
-                     :block/parent page-id
-                     :block/page page-id
-                     :block/title []
-                     :block/content (if org?
-                                      (str "#+" (string/upper-case (name key)) ": " value)
-                                      (str (name key) ":: " value))
-                     :block/format format
-                     :block/properties {key value}
-                     :block/file (:block/file page)
-                     :block/pre-block? true}]
-          (outliner-core/insert-node (outliner-core/block block)
-                                     (outliner-core/block page)
-                                     false)
-          (db/transact! [(assoc page-id :block/properties {key value})])
-          (db/refresh! repo {:key :block/change
-                             :data [block]})
-          (ui-handler/re-render-root!)
-          ))
-      (outliner-file/sync-to-file page-id))))
+
 
 (defn get-plugins
   [blocks]
@@ -204,32 +163,6 @@
        (p/catch (fn [err]
                   (js/console.error "error: " err)))))))
 
-(defn delete!
-  [page-name ok-handler]
-  (when page-name
-    (when-let [repo (state/get-current-repo)]
-      (let [page-name (string/lower-case page-name)
-            blocks (db/get-page-blocks page-name)
-            tx-data (mapv
-                     (fn [block]
-                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                     blocks)]
-        (db/transact! tx-data)
-
-        (delete-file! repo page-name)
-
-        ;; if other page alias this pagename,
-        ;; then just remove some attrs of this entity instead of retractEntity
-        (if (model/get-alias-source-page (state/get-current-repo) page-name)
-          (when-let [id (:db/id (db/entity [:block/name page-name]))]
-            (let [txs (mapv (fn [attribute]
-                              [:db/retract id attribute])
-                            db-schema/retract-page-attributes)]
-              (db/transact! txs)))
-          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
-
-        (ok-handler)))))
-
 (defn- compute-new-file-path
   [old-path new-page-name]
   (let [result (string/split old-path "/")
@@ -267,22 +200,49 @@
      (p/catch (fn [error]
                 (println "file rename failed: " error))))))
 
-;; FIXME: not safe
-;; 1. normal pages [[foo]]
-;; 2. namespace pages [[foo/bar]]
-;; 3. what if there's a tag `#foobar` and we want to replace `#foo` with `#something`?
+(defn- replace-page-ref!
+  [content old-name new-name]
+  (let [[original-old-name original-new-name] (map string/trim [old-name new-name])
+        [old-ref new-ref] (map #(util/format "[[%s]]" %) [old-name new-name])
+        [old-name new-name] (map #(if (string/includes? % "/")
+                                    (string/replace % "/" ".")
+                                    %)
+                                 [original-old-name original-new-name])
+        old-org-ref (and (= :org (state/get-preferred-format))
+                         (:org-mode/insert-file-link? (state/get-config))
+                         (re-find
+                          (re-pattern
+                           (util/format
+                            "\\[\\[file:\\./.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
+                          content))]
+    (-> (if old-org-ref
+            (let [[old-full-ref old-label] old-org-ref
+                  new-label (if (= old-label original-old-name)
+                                original-new-name
+                              old-label)
+                  new-full-ref (-> (string/replace old-full-ref old-name new-name)
+                                   (string/replace (str "[" old-label "]")
+                                                   (str "[" new-label "]")))]
+              (string/replace content old-full-ref new-full-ref))
+          content)
+        (string/replace old-ref new-ref))))
+
+(defn- replace-tag-ref!
+  [content old-name new-name]
+  (let [old-tag (util/format "#%s" old-name)
+        new-tag (if (re-find #"[\s\t]+" new-name)
+                  (util/format "#[[%s]]" new-name)
+                  (str "#" new-name))]
+    (-> (util/replace-ignore-case content (str "^" old-tag "\\b") new-tag)
+        (util/replace-ignore-case (str " " old-tag " ") (str " " new-tag " "))
+        (util/replace-ignore-case (str " " old-tag "$") (str " " new-tag)))))
+
 (defn- replace-old-page!
-  [s old-name new-name]
-  (let [get-tag-pattern (fn [s] (if (string/includes? s " ")
-                                 (str "#[[" s "]]")
-                                 (str "#" s)))
-        old-tag-pattern (get-tag-pattern old-name)
-        new-tag-pattern (get-tag-pattern new-name)]
-    (let [pattern "[[%s/"]
-     (-> s
-         (string/replace (util/format "[[%s]]" old-name) (util/format "[[%s]]" new-name))
-         (string/replace (util/format pattern old-name) (util/format pattern new-name))
-         (string/replace old-tag-pattern new-tag-pattern)))))
+  [content old-name new-name]
+  (when (and (string? content) (string? old-name) (string? new-name))
+    (-> content
+        (replace-page-ref! old-name new-name)
+        (replace-tag-ref! old-name new-name))))
 
 (defn- walk-replace-old-page!
   [form old-name new-name]
@@ -304,45 +264,61 @@
                      f))
                  form))
 
-(defn- build-new-namespace-page-title
-  [old-page-title old-name new-name]
-  (string/replace-first old-page-title old-name new-name))
+(defn favorited?
+  [page-name]
+  (let [favorites (->> (:favorites (state/get-config))
+                       (filter string?)
+                       (map string/lower-case)
+                       (set))]
+    (contains? favorites page-name)))
 
-(defn- get-new-file-path
-  [old-path old-name new-name]
-  (let [path-old-name (string/replace old-name "/" ".")
-        path-new-name (string/replace new-name "/" ".")
-        [search replace] (cond
-                           (string/includes? old-path (str "." path-old-name "."))
-                           [(str "." path-old-name ".") (str "." path-new-name ".")]
+(defn favorite-page!
+  [page-name]
+  (when-not (string/blank? page-name)
+    (let [favorites (->
+                     (cons
+                      page-name
+                      (or (:favorites (state/get-config)) []))
+                     (distinct)
+                     (vec))]
+      (config-handler/set-config! :favorites favorites))))
 
-                           (string/includes? old-path (str "/" path-old-name "."))
-                           [(str "/" path-old-name ".") (str "/" path-new-name ".")]
+(defn unfavorite-page!
+  [page-name]
+  (when-not (string/blank? page-name)
+    (let [favorites (->> (:favorites (state/get-config))
+                         (remove #(= (string/lower-case %) (string/lower-case page-name)))
+                         (vec))]
+      (config-handler/set-config! :favorites favorites))))
 
-                           :else
-                           [(str path-old-name ".") (str path-new-name ".")])]
-    (string/replace-first old-path search replace)))
+(defn delete!
+  [page-name ok-handler]
+  (when page-name
+    (when-let [repo (state/get-current-repo)]
+      (let [page-name (string/lower-case page-name)
+            blocks (db/get-page-blocks page-name)
+            tx-data (mapv
+                     (fn [block]
+                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                     blocks)]
+        (db/transact! tx-data)
 
-(defn- rename-namespace-pages!
-  [repo old-name new-name]
-  (let [pages (db/get-namespace-pages repo old-name)]
-    (doseq [{:block/keys [name original-name file] :as page} pages]
-      (let [old-page-title (or original-name name)
-            new-page-title (build-new-namespace-page-title old-page-title old-name new-name)
-            page-tx {:db/id (:db/id page)
-                     :block/original-name new-page-title
-                     :block/name (string/lower-case new-page-title)}
-            old-path (:file/path file)
-            new-path (when old-path
-                       (get-new-file-path old-path old-name new-name))
-            file-tx (when file
-                      {:db/id (:db/id file)
-                       :file/path new-path})
-            txs (->> [file-tx page-tx] (remove nil?))]
-        (db/transact! repo txs)
-        (when (and old-path new-path)
-          (p/let [_ (rename-file-aux! repo old-path new-path)]
-            (println "Renamed " old-path " to " new-path)))))))
+        (delete-file! repo page-name)
+
+        ;; if other page alias this pagename,
+        ;; then just remove some attrs of this entity instead of retractEntity
+        (if (model/get-alias-source-page (state/get-current-repo) page-name)
+          (when-let [id (:db/id (db/entity [:block/name page-name]))]
+            (let [txs (mapv (fn [attribute]
+                              [:db/retract id attribute])
+                            db-schema/retract-page-attributes)]
+              (db/transact! txs)))
+          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
+
+        (unfavorite-page! page-name)
+
+        (ok-handler)
+        (ui-handler/re-render-root!)))))
 
 (defn- rename-page-aux [old-name new-name]
   (when-let [repo (state/get-current-repo)]
@@ -371,7 +347,7 @@
         (d/transact! (db/get-conn repo false) page-txs)
 
         (when (not= (util/page-name-sanity new-name) new-name)
-          (page-add-property! new-name :title new-name))
+          (page-property/add-property! new-name :title new-name))
 
         (when (and file (not journal?))
           (rename-file! file new-name (fn [] nil)))
@@ -404,7 +380,7 @@
 
         (outliner-file/sync-to-file page))
 
-      (rename-namespace-pages! repo old-name new-name)
+
 
       ;; TODO: update browser history, remove the current one
 
@@ -413,39 +389,89 @@
                                 :push        false
                                 :path-params {:name (string/lower-case new-name)}})
 
-      (notification/show! "Page renamed successfully!" :success)
-
       (repo-handler/push-if-auto-enabled! repo)
+
+      (when (favorited? old-name)
+        (p/let [_ (unfavorite-page! old-name)]
+          (favorite-page! new-name)))
+
+      (recent-handler/update-or-add-renamed-page repo old-name new-name)
 
       (ui-handler/re-render-root!))))
 
+(defn- rename-nested-pages
+  [old-ns-name new-ns-name]
+  (when-let [nested-pages (db/get-nested-pages
+                           (state/get-current-repo)
+                           (string/lower-case old-ns-name))]
+    (doseq [page nested-pages]
+      (let [[_page-id old-page-name] page
+            new-page-name (util/replace-ignore-case
+                           old-page-name
+                           (util/format "\\[\\[%s\\]\\]" old-ns-name)
+                           (util/format "[[%s]]" new-ns-name))]
+        (rename-page-aux old-page-name new-page-name)))))
+
+(defn- rename-namespace-pages!
+  [repo old-name new-name]
+  (let [pages (db/get-namespace-pages repo old-name)]
+    (doseq [{:block/keys [name original-name] :as page} pages]
+      (let [old-page-title (or original-name name)
+            new-page-title (util/replace-first-ignore-case old-page-title old-name new-name)]
+        (when (and old-page-title new-page-title)
+          (p/let [_ (rename-page-aux old-page-title new-page-title)]
+            (println "Renamed " old-page-title " to " new-page-title)))))))
+
 (defn rename!
   [old-name new-name]
-  (let [old-name      (string/trim old-name)
+  (let [repo          (state/get-current-repo)
+        old-name      (string/trim old-name)
         new-name      (string/trim new-name)
+        namespace     (or (string/includes? old-name "/")
+                          (db/get-namespace-pages repo old-name))
         name-changed? (not= old-name new-name)]
-    (when (and old-name
-               new-name
-               (not (string/blank? new-name))
-               name-changed?)
+    (if (and old-name
+             new-name
+             (not (string/blank? new-name))
+             name-changed?)
+      (do (cond
+            (= (string/lower-case old-name) (string/lower-case new-name))
+            (rename-page-aux old-name new-name)
+
+            (db/pull [:block/name (string/lower-case new-name)])
+            (notification/show! "Page already exists!" :error)
+
+            namespace
+            (rename-namespace-pages! repo old-name new-name)
+
+            :else
+            (rename-page-aux old-name new-name))
+          (rename-nested-pages old-name new-name))
       (cond
-        (= (string/lower-case old-name) (string/lower-case new-name))
-        (rename-page-aux old-name new-name)
+        (string/blank? new-name)
+        (notification/show! "Please use a valid name, empty name is not allowed!" :error)))))
 
-        (db/pull [:block/name (string/lower-case new-name)])
-        (notification/show! "Page already exists!" :error)
+(defn- split-col-by-element
+  [col element]
+  (let [col (vec col)
+        idx (.indexOf col element)]
+    [(subvec col 0 (inc idx))
+     (subvec col (inc idx))]))
 
-        :else
-        (rename-page-aux old-name new-name)))))
-
-(defn handle-add-page-to-contents!
-  [page-name]
-  (let [content (str "[[" page-name "]]")]
-    (editor-handler/api-insert-new-block!
-     content
-     {:page "Contents"})
-    (notification/show! (util/format "Added to %s!" (state/get-favorites-name)) :success)
-    (editor-handler/clear-when-saved!)))
+(defn reorder-favorites!
+  [{:keys [to up?]}]
+  (let [favorites (:favorites (state/get-config))
+        from (get @state/state :favorites/dragging)]
+    (when (and from to (not= from to))
+      (let [[prev next] (split-col-by-element favorites to)
+            [prev next] (mapv #(remove (fn [e] (= from e)) %) [prev next])
+            favorites (->>
+                       (if up?
+                         (concat (drop-last prev) [from (last prev)] next)
+                         (concat prev [from] next))
+                       (remove nil?)
+                       (distinct))]
+        (config-handler/set-config! :favorites favorites)))))
 
 (defn has-more-journals?
   []
@@ -459,14 +485,11 @@
 
 (defn update-public-attribute!
   [page-name value]
-  (page-add-property! page-name :public value))
+  (page-property/add-property! page-name :public value))
 
 (defn get-page-ref-text
   [page]
-  (let [edit-block-file-path (some-> (state/get-edit-block)
-                                     (get-in [:block/file :db/id])
-                                     db/entity
-                                     :file/path)
+  (let [edit-block-file-path (model/get-block-file-path (state/get-edit-block))
         page-name (string/lower-case page)]
     (if (and edit-block-file-path
              (state/org-mode-file-link? (state/get-current-repo)))
@@ -489,13 +512,6 @@
   []
   (commands/init-commands! get-page-ref-text))
 
-(defn add-page-to-recent!
-  [repo page]
-  (let [pages (or (db/get-key-value repo :recent/pages)
-                  '())
-        new-pages (take 10 (distinct (cons page pages)))]
-    (db/set-key-value repo :recent/pages new-pages)))
-
 (defn template-exists?
   [title]
   (when title
@@ -513,7 +529,7 @@
 
 (defn get-all-pages
   [repo]
-  (->> (db/get-all-pages)
+  (->> (db/get-all-pages repo)
        (remove (fn [p]
                  (let [name (:block/name p)]
                    (or (util/uuid-string? name)
@@ -530,7 +546,7 @@
 
 (defn save-filter!
   [page-name filter-state]
-  (page-add-property! page-name :filters filter-state))
+  (page-property/add-property! page-name :filters filter-state))
 
 (defn page-exists?
   [page-name]
@@ -571,6 +587,9 @@
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
         (let [wrapped? (= "[[" (util/safe-subs edit-content (- pos 2) pos))
+              chosen (if (string/starts-with? chosen "New page: ")
+                       (subs chosen 10)
+                       chosen)
               chosen (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
                        (util/format "[[%s]]" chosen)
                        chosen)
@@ -589,7 +608,10 @@
                                            :forward-pos forward-pos})))
       (fn [chosen _click?]
         (state/set-editor-show-page-search! false)
-        (let [page-ref-text (get-page-ref-text chosen)]
+        (let [chosen (if (string/starts-with? chosen "New page: ")
+                       (subs chosen 10)
+                       chosen)
+              page-ref-text (get-page-ref-text chosen)]
           (editor-handler/insert-command! id
                                           page-ref-text
                                           format
@@ -608,21 +630,29 @@
                     (= "local" repo)))
         (let [title (date/today)
               today-page (string/lower-case title)
-              template (state/get-default-journal-template)]
-          (when (db/page-empty? repo today-page)
-            (create! title {:redirect? false
-                            :split-namespace? false
-                            :create-first-block? (not template)
-                            :journal? true})
-            (when template
-              (let [page (db/pull [:block/name today-page])]
-                (editor-handler/insert-template!
-                 nil
-                 template
-                 {:get-pos-fn (fn []
-                                [page false false false])
-                  :page-block page})
-                (ui-handler/re-render-root!)))))))))
+              template (state/get-default-journal-template)
+              format (state/get-preferred-format repo)
+              file-name (date/journal-title->default title)
+              path (str (config/get-journals-directory) "/" file-name "."
+                        (config/get-file-extension format))
+              file-path (str "/" path)
+              repo-dir (config/get-repo-dir repo)]
+          (p/let [file-exists? (fs/file-exists? repo-dir file-path)]
+            (when (and (db/page-empty? repo today-page)
+                       (not file-exists?))
+              (create! title {:redirect? false
+                              :split-namespace? false
+                              :create-first-block? (not template)
+                              :journal? true})
+              (when template
+                (let [page (db/pull [:block/name today-page])]
+                  (editor-handler/insert-template!
+                   nil
+                   template
+                   {:get-pos-fn (fn []
+                                  [page false false false])
+                    :page-block page})
+                  (ui-handler/re-render-root!))))))))))
 
 (defn open-today-in-sidebar
   []
@@ -632,3 +662,11 @@
      (:db/id page)
      :page
      page)))
+
+(defn open-file-in-default-app []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (js/window.apis.openPath file-path)))
+
+(defn open-file-in-directory []
+  (when-let [file-path (and (util/electron?) (get-page-file-path))]
+    (js/window.apis.showItemInFolder file-path)))

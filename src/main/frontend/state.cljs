@@ -61,7 +61,7 @@
       :ui/fullscreen? false
       :ui/settings-open? false
       :ui/sidebar-open? false
-      :ui/left-sidebar-open? false
+      :ui/left-sidebar-open? (boolean (storage/get "ls-left-sidebar-open?"))
       :ui/theme (or (storage/get :ui/theme) "dark")
       :ui/system-theme? ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
       :ui/wide-mode? false
@@ -103,6 +103,7 @@
       :editor/document-mode? document-mode?
       :editor/args nil
       :editor/on-paste? false
+
       :db/last-transact-time {}
       :db/last-persist-transact-ids {}
       ;; whether database is persisted
@@ -171,7 +172,13 @@
 
       :debug/write-acks {}
 
-      :encryption/graph-parsing? false})))
+      :encryption/graph-parsing? false
+
+      :favorites/dragging nil
+
+      :srs/mode? false
+
+      :srs/cards-due-count nil})))
 
 
 (defn sub
@@ -244,6 +251,10 @@
 (defn get-custom-css-link
   []
   (:custom-css-url (get-config)))
+
+(defn get-custom-js-link
+  []
+  (:custom-js-url (get-config)))
 
 (defn get-default-journal-template
   []
@@ -338,6 +349,15 @@
 
      (get-in @state [:me :preferred_format] "markdown")))))
 
+;; TODO: consider adding a pane in Settings to set this through the GUI (rather
+;; than having to go through the config.edn file)
+(defn get-editor-command-trigger
+  ([] (get-editor-command-trigger (get-current-repo)))
+  ([repo-url]
+   (or
+    (:editor/command-trigger (get-config repo-url)) ;; Get from user config
+    "/"))) ;; Set the default
+
 (defn markdown?
   []
   (= (keyword (get-preferred-format))
@@ -403,7 +423,7 @@
 
 (defn add-repo!
   [repo]
-  (when repo
+  (when (not (string/blank? repo))
     (update-state! [:me :repos]
                    (fn [repos]
                      (->> (conj repos repo)
@@ -742,7 +762,6 @@
     (update-state! :sidebar/blocks (fn [blocks]
                                      (->> (remove #(= (second %) db-id) blocks)
                                           (cons [repo db-id block-type block-data])
-                                        ; FIXME: No need to call `distinct`?
                                           (distinct))))
     (open-right-sidebar!)
     (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
@@ -1117,6 +1136,7 @@
 
 (defn set-left-sidebar-open!
   [value]
+  (storage/set "ls-left-sidebar-open?" (boolean value))
   (set-state! :ui/left-sidebar-open? value))
 
 (defn set-developer-mode!
@@ -1152,8 +1172,8 @@
   (if (util/mobile?)
     false
     (get (get (sub-config) (get-current-repo))
-        :ui/enable-tooltip?
-        true)))
+         :ui/enable-tooltip?
+         true)))
 
 (defn show-command-doc?
   []

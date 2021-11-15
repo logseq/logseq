@@ -58,9 +58,11 @@
         (or (false? outside?)
             (listen state js/window "mousedown"
                     (fn [e]
-                      ;; If the click target is outside of current node
-                      (when-not (dom/contains dom-node (.. e -target))
-                        (on-hide state e :click)))))
+                      (let [target (.. e -target)]
+                        ;; If the click target is outside of current node
+                        (when (and (not (dom/contains dom-node target))
+                                   (not (.contains (.-classList target) "ignore-outside-event")))
+                          (on-hide state e :click))))))
         (listen state js/window "keydown"
                 (fn [e]
                   (case (.-keyCode e)

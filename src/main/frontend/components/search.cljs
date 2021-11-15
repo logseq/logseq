@@ -8,6 +8,7 @@
             [frontend.db :as db]
             [frontend.db.model :as model]
             [frontend.handler.search :as search-handler]
+            [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [frontend.mixins :as mixins]
@@ -75,7 +76,12 @@
   [repo uuid format content q search-mode]
   [:div [
          (when (not= search-mode :page)
-           [:div {:class "mb-1" :key "parents"} (block/block-parents {:id "block-search-block-parent" :block? true} repo (clojure.core/uuid uuid) format)])
+           [:div {:class "mb-1" :key "parents"} (block/block-parents {:id "block-search-block-parent"
+                                                                      :block? true
+                                                                      :search? true}
+                                                                     repo
+                                                                     (clojure.core/uuid uuid)
+                                                                     {:indent? false})])
          [:div {:class "font-medium" :key "content"} (highlight-exact-query content q)]]])
 
 (rum/defc highlight-fuzzy
@@ -178,8 +184,7 @@
 
                         :page
                         (let [data (or alias data)]
-                          (route/redirect! {:to :page
-                                            :path-params {:name data}}))
+                          (route/redirect-to-page! data))
 
                         :file
                         (route/redirect! {:to :file
@@ -189,13 +194,11 @@
                         (let [block-uuid (uuid (:block/uuid data))
                               collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)]
                           (if collapsed?
-                            (route/redirect! {:to :page
-                                              :path-params {:name (str block-uuid)}})
+                            (route/redirect-to-page! block-uuid)
                             (let [page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
-                              (route/redirect! {:to :page
-                                                :path-params {:name page}
-                                                :query-params {:anchor (str "ls-block-" (:block/uuid data))}}))))
-                        nil))
+                              (route/redirect-to-page! page  (str "ls-block-" (:block/uuid data))))))
+                        nil)
+                      (state/close-modal!))
          :on-shift-chosen (fn [{:keys [type data alias]}]
                             (search-handler/add-search-to-recent! repo search-q)
                             (case type
@@ -224,9 +227,11 @@
                               (route/redirect! {:to :file
                                                 :path-params {:path data}})
 
-                              nil))
+                              nil)
+                            (state/close-modal!))
          :item-render (fn [{:keys [type data alias]}]
-                        (let [search-mode (state/get-search-mode)]
+                        (let [search-mode (state/get-search-mode)
+                              data (if (string? data) (pdf-assets/fix-local-asset-filename data) data)]
                           [:div {:class "py-2"} (case type
                                                   :graph-add-filter
                                                   [:b search-q]
@@ -236,7 +241,7 @@
                                                    [:span.ml-1 (str "\"" search-q "\"")]]
 
                                                   :page
-                                                  [:span
+                                                  [:span {:data-page-ref data}
                                                    (when alias
                                                      [:span.mr-2.text-sm.font-medium.mb-2 (str "Alias -> " alias)])
                                                    (search-result-item "Page" (highlight-exact-query data search-q))]
@@ -247,10 +252,12 @@
                                                   :block
                                                   (let [{:block/keys [page content uuid]} data
                                                         page (or (:block/original-name page)
-                                                                 (:block/name page))
+                                                                (:block/name page))
                                                         repo (state/sub :git/current-repo)
                                                         format (db/get-page-format page)]
-                                                    (search-result-item "Block" (block-search-result-item repo uuid format content search-q search-mode)))
+                                                    [:span {:data-block-ref uuid}
+                                                      (search-result-item "Block"
+                                                        (block-search-result-item repo uuid format content search-q search-mode))])
 
                                                   nil)]))})
        (when (and has-more? (util/electron?) (not all?))
@@ -284,11 +291,10 @@
                                  "Tip: " [:code (util/->platform-shortcut "Ctrl+Shift+p")] " to open the commands palette"]
                           :interactive     true
                           :arrow true}
-                         [:a.inline-block
-                          {:style {:margin-top 1
-                                   :margin-left 12}
+                         [:a.inline-block.fade-link
+                          {:style {:margin-left 12}
                            :on-click #(state/toggle! :ui/command-palette-open?)}
-                          (svg/icon-cmd 20)])])]
+                          (ui/icon "command" {:style {:font-size 20}})])])]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
                     (remove nil?)
@@ -300,8 +306,7 @@
       {:on-chosen (fn [{:keys [type data]}]
                     (case type
                       :page
-                      (route/redirect! {:to :page
-                                        :path-params {:name data}})
+                      (route/redirect-to-page! data)
                       :search
                       (let [q data]
                         (state/set-q! q)
@@ -350,11 +355,8 @@
         blocks-count (or (db/blocks-count) 0)
         search-mode (state/sub :search/mode)
         timeout (cond
-                  (util/electron?)
-                  180
-
                   (> blocks-count 2000)
-                  500
+                  400
 
                   :else
                   300)

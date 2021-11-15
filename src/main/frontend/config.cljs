@@ -294,10 +294,16 @@
   (string/includes? path (str (get-journals-directory) "/")))
 
 (defonce local-repo "local")
+
+(defn demo-graph?
+  []
+  (= (state/get-current-repo) local-repo))
+
 (defonce local-assets-dir "assets")
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
 (def custom-css-file "custom.css")
+(def custom-js-file "custom.js")
 (def metadata-file "metadata.edn")
 (def pages-metadata-file "pages-metadata.edn")
 
@@ -397,6 +403,14 @@
    (when repo
      (get-file-path repo
                     (str app-name "/" custom-css-file)))))
+
+(defn get-custom-js-path
+  ([]
+   (get-custom-js-path (state/get-current-repo)))
+  ([repo]
+   (when repo
+     (get-file-path repo
+                    (str app-name "/" custom-js-file)))))
 
 (defn get-block-hidden-properties
   []

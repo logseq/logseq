@@ -3,6 +3,7 @@
             [frontend.handler.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.modules.shortcut.data-helper :as dh]
+            [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.events :as events]
@@ -21,6 +22,49 @@
    KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (def key-names (js->clj KeyNames))
+
+(defn register-shortcut!
+  "Register a shortcut, notice the id need to be a namespaced keyword to avoid
+  conflicts.
+  Example:
+  (register-shortcut! :shortcut.handler/misc :foo/bar {:binding \"mod+shift+8\"
+     :fn (fn [_state _event]
+     (js/alert \"test shortcut\"))})"
+  ([handler-id id]
+   (register-shortcut! handler-id id nil))
+  ([handler-id id shortcut-map]
+   (when-let [handler (if (or (string? handler-id) (keyword? handler-id))
+                        (let [handler-id (keyword handler-id)]
+                          (-> (get @*installed handler-id)
+                              :handler))
+                        ;; handler
+                        handler-id)]
+
+     (when shortcut-map
+       (shortcut-config/add-shortcut! handler-id id shortcut-map))
+
+     (when-not (false? (dh/shortcut-binding id))
+       (doseq [k (dh/shortcut-binding id)]
+         (try
+           (log/debug :shortcut/register-shortcut {:id id :binding k})
+           (.registerShortcut handler (util/keyname id) k)
+           (catch js/Object e
+             (log/error :shortcut/register-shortcut {:id id
+                                                     :binding k
+                                                     :error e})
+             (notification/show! (str/join " " [id k (.-message e)]) :error false))))))))
+
+(defn unregister-shortcut!
+  "Unregister a shortcut.
+  Example:
+  (unregister-shortcut! :shortcut.handler/misc :foo/bar)"
+  [handler-id shortcut-id]
+  (when-let [handler (-> (get @*installed handler-id)
+                         :handler)]
+    (when shortcut-id
+      (let [k (dh/shortcut-binding shortcut-id)]
+        (.unregisterShortcut ^js handler k))
+      (shortcut-config/remove-shortcut! handler-id shortcut-id))))
 
 (defn install-shortcut!
   [handler-id {:keys [set-global-keys?
@@ -41,22 +85,14 @@
     ;; register shortcuts
     (doseq [[id _] shortcut-map]
       ;; (log/info :shortcut/install-shortcut {:id id :shortcut (dh/shortcut-binding id)})
-      (when-not (false? (dh/shortcut-binding id))
-        (doseq [k (dh/shortcut-binding id)]
-          (try
-            (log/debug :shortcut/register-shortcut {:id id :binding k})
-            (.registerShortcut handler (util/keyname id) k)
-            (catch js/Object e
-              (log/error :shortcut/register-shortcut {:id id
-                                                      :binding k
-                                                      :error e})
-              (notification/show! (str/join " " [id k (.-message e)]) :error false))))))
+      (register-shortcut! handler id))
 
     (let [f (fn [e]
-              (let [dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
+              (let [shortcut-map (dh/shortcut-map handler-id state)
+                    dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
                 ;; trigger fn
-                (dispatch-fn e)))
-          install-id (medley/random-uuid)
+                (when dispatch-fn (dispatch-fn e))))
+          install-id handler-id
           data       {install-id
                       {:group      handler-id
                        :dispatch-fn f
@@ -78,13 +114,12 @@
        (map #(install-shortcut! % {}))
        doall))
 
-(defn- uninstall-shortcut! [install-id]
-  (when-let
-      [handler (-> (get @*installed install-id)
-                   :handler)]
+(defn uninstall-shortcut!
+  [handler-id]
+  (when-let [handler (-> (get @*installed handler-id)
+                         :handler)]
     (.dispose ^js handler)
-    (swap! *installed dissoc install-id)))
-
+    (swap! *installed dissoc handler-id)))
 
 (defn- uninstall-shortcut-aux!
   [state handler-id]

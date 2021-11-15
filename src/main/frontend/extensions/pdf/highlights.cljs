@@ -1084,8 +1084,8 @@
        (if (or (= status-doc :loading)
                (nil? initial-hls))
 
-         [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-md
-          "Downloading PDF file " url]
+         [:div.flex.justify-center.items-center.h-screen.text-gray-500.text-lg
+          svg/loading]
 
          [(rum/with-key (pdf-viewer
                           url initial-hls
