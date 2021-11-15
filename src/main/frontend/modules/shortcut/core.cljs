@@ -128,6 +128,10 @@
      (js/setTimeout #(install-shortcut! handler-id {:state state}) 20)
      state)
 
+   :did-remount (fn [old-state new-state]
+                  (uninstall-shortcut! handler-id)
+                  (install-shortcut! handler-id {:state new-state})
+                  new-state)
    :will-unmount
    (fn [state]
      (uninstall-shortcut! handler-id)
