@@ -45,7 +45,7 @@
 
 .ui__notifications {
   position: fixed;
-  z-index: 99;
+  z-index: var(--ls-z-index-level-4);
   width: 100%;
   top: 3.2em;
   pointer-events: none;

@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
@@ -112,8 +111,7 @@
       (jump-to-anchor! anchor)
       (util/scroll-to (util/app-scroll-container-node)
                       (state/get-saved-scroll-position)
-                      false))
-    (plugin-handler/hook-plugin-app :route-changed (select-keys route [:template :path :parameters]))))
+                      false))))
 
 (defn go-to-search!
   [search-mode]
