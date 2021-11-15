@@ -105,9 +105,24 @@
                  (when (state/sub :editor/show-page-search-hashtag?)
                    (util/safe-subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
-                   (util/safe-subs edit-content pos current-pos)))
+                   (util/safe-subs edit-content pos current-pos))
+                 "")
               matched-pages (when-not (string/blank? q)
-                              (editor-handler/get-matched-pages q))]
+                              (editor-handler/get-matched-pages q))
+              matched-pages (cond
+                              (contains? (set (map string/lower-case matched-pages)) (string/trim q))
+                              matched-pages
+
+                              (empty? matched-pages)
+                              matched-pages
+
+                              :else
+                              (->>
+                               (cons (first matched-pages)
+                                     (cons
+                                      (str "New page: " q)
+                                      (rest matched-pages)))
+                               (remove nil?)))]
           (ui/auto-complete
            matched-pages
            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
@@ -304,7 +319,7 @@
         (let [command (:command (first input-option))]
           [:div.p-2.rounded-md.shadow-lg
            (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
-             [:div.my-3
+             [:div.my-3 {:key id}
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
@@ -433,18 +448,21 @@
 
 (defn get-editor-heading-class [content]
   (let [content (if content (str content) "")]
-    (cond
-      (string/includes? content "\n") "multiline-block"
-      (starts-with? content "# ") "h1"
-      (starts-with? content "## ") "h2"
-      (starts-with? content "### ") "h3"
-      (starts-with? content "#### ") "h4"
-      (starts-with? content "##### ") "h5"
-      (starts-with? content "###### ") "h6"
-      (starts-with? content "TODO ") "todo-block"
-      (starts-with? content "DOING ") "doing-block"
-      (starts-with? content "DONE ") "done-block"
-      :else "normal-block")))
+    (str
+     (if (string/includes? content "\n") "multiline-block" "uniline-block")
+     " "
+     (cond
+       (starts-with? content "# ") "h1"
+       (starts-with? content "## ") "h2"
+       (starts-with? content "### ") "h3"
+       (starts-with? content "#### ") "h4"
+       (starts-with? content "##### ") "h5"
+       (starts-with? content "###### ") "h6"
+       (starts-with? content "TODO ") "todo-block"
+       (starts-with? content "DOING ") "doing-block"
+       (starts-with? content "DONE ") "done-block"
+       (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+       :else "normal-block"))))
 
 (rum/defc mock-textarea <
   rum/static
@@ -527,7 +545,7 @@
      (state/sub :editor/show-input)
      (animated-modal "input" (input id
                                     (fn [command m pos]
-                                      (editor-handler/handle-command-input command id format m pos)))
+                                      (editor-handler/handle-command-input command id format m)))
                      true (util/react *slash-caret-pos))
 
      (state/sub :editor/show-zotero)

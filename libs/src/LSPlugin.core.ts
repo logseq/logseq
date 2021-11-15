@@ -26,11 +26,10 @@ import {
   LSPluginPkgConfig,
   StyleOptions,
   StyleString,
-  ThemeOptions, UIFrameAttrs,
+  ThemeOptions, UIContainerAttrs,
   UIOptions
 } from './LSPlugin'
 import { snakeCase } from 'snake-case'
-import DOMPurify from 'dompurify'
 
 const debug = Debug('LSPlugin:core')
 const DIR_PLUGINS = 'plugins'
@@ -175,13 +174,13 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
   const _ = (label: string): any => `main-ui:${label}`
 
   pluginLocal.on(_('visible'), ({ visible, toggle, cursor }) => {
-    const el = pluginLocal.getMainUI()
+    const el = pluginLocal.getMainUIContainer()
     el?.classList[toggle ? 'toggle' : (visible ? 'add' : 'remove')]('visible')
     // pluginLocal.caller!.callUserModel(LSPMSG, { type: _('visible'), payload: visible })
     // auto focus frame
     if (visible) {
       if (!pluginLocal.shadow && el) {
-        (el as HTMLIFrameElement).contentWindow?.focus()
+        (el.querySelector('iframe') as HTMLIFrameElement)?.contentWindow?.focus()
       }
     }
 
@@ -190,16 +189,38 @@ function initMainUIHandlers (pluginLocal: PluginLocal) {
     }
   })
 
-  pluginLocal.on(_('attrs'), (attrs: Partial<UIFrameAttrs>) => {
-    const el = pluginLocal.getMainUI()
+  pluginLocal.on(_('attrs'), (attrs: Partial<UIContainerAttrs>) => {
+    const el = pluginLocal.getMainUIContainer()
     Object.entries(attrs).forEach(([k, v]) => {
       el?.setAttribute(k, v)
+      if (k === 'draggable' && v) {
+        pluginLocal._dispose(
+          pluginLocal._setupDraggableContainer(el, {
+            title: pluginLocal.options.name,
+            close: () => {
+              pluginLocal.caller.call('sys:ui:visible', { toggle: true })
+            }
+          }))
+      }
+
+      if (k === 'resizable' && v) {
+        pluginLocal._dispose(
+          pluginLocal._setupResizableContainer(el))
+      }
     })
   })
 
   pluginLocal.on(_('style'), (style: Record<string, any>) => {
-    const el = pluginLocal.getMainUI()
+    const el = pluginLocal.getMainUIContainer()
+    const isInitedLayout = !!el.dataset.inited_layout
+
     Object.entries(style).forEach(([k, v]) => {
+      if (isInitedLayout && [
+        'left', 'top', 'bottom', 'right', 'width', 'height'
+      ].includes(k)) {
+        return
+      }
+
       el!.style[k] = v
     })
   })
@@ -244,20 +265,17 @@ function initProviderHandlers (pluginLocal: PluginLocal) {
 
   pluginLocal.on(_('ui'), (ui: UIOptions) => {
     pluginLocal._onHostMounted(() => {
-      // safe template
-      ui.template = DOMPurify.sanitize(
-        ui.template, {
-          ADD_TAGS: ['iframe'],
-          ALLOW_UNKNOWN_PROTOCOLS: true,
-          ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling']
-        })
 
       pluginLocal._dispose(
         setupInjectedUI.call(pluginLocal,
-          ui, {
+          ui, Object.assign({
             'data-ref': pluginLocal.id
-          })
-      )
+          }, ui.attrs || {}),
+          ({ el, float }) => {
+            if (!float) return
+            const identity = el.dataset.identity
+            pluginLocal.layoutCore.move_container_to_top(identity)
+          }))
     })
   })
 }
@@ -390,7 +408,7 @@ class PluginLocal
     }
   }
 
-  getMainUI (): HTMLElement | undefined {
+  getMainUIContainer (): HTMLElement | undefined {
     if (this.shadow) {
       return this.caller?._getSandboxShadowContainer()
     }
@@ -430,20 +448,23 @@ class PluginLocal
       throw new IllegalPluginPackageError(e.message)
     }
 
-    // Pick legal attrs
-    ['name', 'author', 'repository', 'version',
-      'description', 'repo', 'title', 'effect'
-    ].forEach(k => {
+    const localRoot = this._localRoot = safetyPathNormalize(url)
+    const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
+
+      // Pick legal attrs
+    ;['name', 'author', 'repository', 'version',
+      'description', 'repo', 'title', 'effect',
+    ].concat(!this.isInstalledInDotRoot ? ['devEntry'] : []).forEach(k => {
       this._options[k] = pkg[k]
     })
 
-    const localRoot = this._localRoot = safetyPathNormalize(url)
-    const logseq: Partial<LSPluginPkgConfig> = pkg.logseq || {}
-    const validateMain = (main) => main && /\.(js|html)$/.test(main)
+    const validateEntry = (main) => main && /\.(js|html)$/.test(main)
 
     // Entry from main
-    if (validateMain(pkg.main)) { // Theme has no main
-      this._options.entry = this._resolveResourceFullUrl(pkg.main, localRoot)
+    const entry = logseq.entry || logseq.main || pkg.main
+    if (validateEntry(entry)) { // Theme has no main
+      this._options.entry = this._resolveResourceFullUrl(entry, localRoot)
+      this._options.devEntry = logseq.devEntry
 
       if (logseq.mode) {
         this._options.mode = logseq.mode
@@ -496,8 +517,8 @@ class PluginLocal
   }
 
   async _tryToNormalizeEntry () {
-    let { entry, settings } = this.options
-    let devEntry = settings?.get('_devEntry')
+    let { entry, settings, devEntry } = this.options
+    devEntry = devEntry || settings?.get('_devEntry')
 
     if (devEntry) {
       this._options.entry = devEntry
@@ -555,6 +576,108 @@ class PluginLocal
     })
   }
 
+  _persistMainUILayoutData (e: { width: number, height: number, left: number, top: number }) {
+    const layouts = this.settings.get('layouts') || []
+    layouts[0] = e
+    this.settings.set('layout', layouts)
+  }
+
+  _setupDraggableContainer (
+    el: HTMLElement,
+    opts: Partial<{ key: string, title: string, close: () => void }> = {}): () => void {
+    const ds = el.dataset
+    if (ds.inited_draggable) return
+    if (!ds.identity) {
+      ds.identity = 'dd-' + genID()
+    }
+    const isInjectedUI = !!opts.key
+    const handle = document.createElement('div')
+    handle.classList.add('draggable-handle')
+
+    handle.innerHTML = `
+      <div class="th">
+        <div class="l"><h3>${opts.title || ''}</h3></div>
+        <div class="r">
+          <a class="button x"><i class="ti ti-x"></i></a>
+        </div>
+      </div>
+    `
+
+    handle.querySelector('.x')
+      .addEventListener('click', (e) => {
+        opts?.close?.()
+        e.stopPropagation()
+      }, false)
+
+    handle.addEventListener('mousedown', (e) => {
+      const target = e.target as HTMLElement
+      if (target?.closest('.r')) {
+        e.stopPropagation()
+        e.preventDefault()
+        return
+      }
+    }, false)
+
+    el.prepend(handle)
+
+    // move to top
+    el.addEventListener('mousedown', (e) => {
+      this.layoutCore.move_container_to_top(ds.identity)
+    }, true)
+
+    const setTitle = (title) => {
+      handle.querySelector('h3').textContent = title
+    }
+    const dispose = this.layoutCore.setup_draggable_container_BANG_(el,
+      !isInjectedUI ? this._persistMainUILayoutData.bind(this) : () => {})
+
+    ds.inited_draggable = 'true'
+
+    if (opts.title) {
+      setTitle(opts.title)
+    }
+
+    // click outside
+    let removeOutsideListener = null
+    if (ds.close === 'outside') {
+      const handler = (e) => {
+        const target = e.target
+        if (!el.contains(target)) {
+          opts.close()
+        }
+      }
+
+      document.addEventListener('click', handler, false)
+      removeOutsideListener = () => {
+        document.removeEventListener('click', handler)
+      }
+    }
+
+    return () => {
+      dispose()
+      removeOutsideListener?.()
+    }
+  }
+
+  _setupResizableContainer (el: HTMLElement, key?: string): () => void {
+    const ds = el.dataset
+    if (ds.inited_resizable) return
+    if (!ds.identity) {
+      ds.identity = 'dd-' + genID()
+    }
+    const handle = document.createElement('div')
+    handle.classList.add('resizable-handle')
+    el.prepend(handle)
+
+    // @ts-ignore
+    const layoutCore = window.frontend.modules.layout.core
+    const dispose = layoutCore.setup_resizable_container_BANG_(el,
+      !key ? this._persistMainUILayoutData.bind(this) : () => {})
+
+    ds.inited_resizable = 'true'
+    return dispose
+  }
+
   async load (readyIndicator?: DeferredActor) {
     if (this.pending) {
       return
@@ -587,7 +710,7 @@ class PluginLocal
       await this._caller.connectToChild()
 
       const readyFn = () => {
-        this._caller?.callUserModel(LSPMSG_READY)
+        this._caller?.callUserModel(LSPMSG_READY, { pid: this.id })
       }
 
       if (readyIndicator) {
@@ -695,6 +818,11 @@ class PluginLocal
     } else {
       actor?.promise.then(callback)
     }
+  }
+
+  get layoutCore (): any {
+    // @ts-ignore
+    return window.frontend.modules.layout.core
   }
 
   get isInstalledInDotRoot () {

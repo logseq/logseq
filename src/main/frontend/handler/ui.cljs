@@ -3,17 +3,29 @@
             [dommy.core :as dom]
             [frontend.util :as util]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
+            [frontend.config :as config]
             [frontend.state :as state]
+            [frontend.storage :as storage]
+            [frontend.fs :as fs]
+            [frontend.loader :refer [load]]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [rum.core :as rum]))
+            [frontend.storage :as storage]
+            [rum.core :as rum]
+            [clojure.edn :as edn]))
 
 ;; sidebars
 (defn close-left-sidebar!
   []
   (when-let [elem (gdom/getElement "close-left-bar")]
     (.click elem)))
+
+(defn toggle-left-sidebar!
+  []
+  (state/set-left-sidebar-open!
+    (not (@state/state :ui/left-sidebar-open?))))
 
 (defn hide-right-sidebar
   []
@@ -26,6 +38,23 @@
 (defn toggle-right-sidebar!
   []
   (state/toggle-sidebar-open?!))
+
+(defn persist-right-sidebar-state!
+  []
+  (let [sidebar-open? (:ui/sidebar-open? @state/state)
+        data (if sidebar-open? {:blocks (:sidebar/blocks @state/state)
+                                :collapsed (:ui/sidebar-collapsed-blocks @state/state)
+                                :open? true} {:open? false})]
+    (storage/set "ls-right-sidebar-state" data)))
+
+(defn restore-right-sidebar-state!
+  []
+  (when-let [data' (storage/get "ls-right-sidebar-state")]
+    (let [{:keys [open? collapsed blocks]} data']
+      (when open?
+        (state/set-state! :ui/sidebar-open? open?)
+        (state/set-state! :sidebar/blocks blocks)
+        (state/set-state! :ui/sidebar-collapsed-blocks collapsed)))))
 
 (defn toggle-contents!
   []
@@ -45,7 +74,8 @@
 
 (defn toggle-settings-modal!
   []
-  (state/toggle-settings!))
+  (when-not (:srs/mode? @state/state)
+    (state/toggle-settings!)))
 
 ;; FIXME: re-render all embedded blocks since they will not be re-rendered automatically
 
@@ -89,10 +119,46 @@
   []
   (when-let [style (or
                     (state/get-custom-css-link)
-                    (db/get-custom-css)
+                    (db-model/get-custom-css)
                     ;; (state/get-custom-css-link)
 )]
     (util/add-style! style)))
+
+(def *js-execed (atom #{}))
+
+(defn exec-js-if-exists-&-allowed!
+  [t]
+  (when-let [href (or
+                     (state/get-custom-js-link)
+                     (config/get-custom-js-path))]
+    (let [k (str "ls-js-allowed-" href)
+          execed #(swap! *js-execed conj href)
+          execed? (contains? @*js-execed href)
+          ask-allow #(let [r (js/confirm (t :plugin/custom-js-alert))]
+                       (if r
+                         (storage/set k (js/Date.now))
+                         (storage/set k false))
+                       r)
+          allowed! (storage/get k)
+          should-ask? (or (nil? allowed!)
+                          (> (- (js/Date.now) allowed!) 604800000))]
+      (when (and (not execed?)
+                 (not= false allowed!))
+        (if (string/starts-with? href "http")
+          (when (or (not should-ask?)
+                    (ask-allow))
+            (load href #(do (js/console.log "[custom js]" href) (execed))))
+          (util/p-handle
+            (fs/read-file (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo))) href)
+            #(when-let [scripts (and % (string/trim %))]
+               (when-not (string/blank? scripts)
+                 (if (or (not should-ask?) (ask-allow))
+                   (try
+                     (do
+                       (js/eval scripts)
+                       (execed))
+                     (catch js/Error e
+                       (js/console.error "[custom js]" e))))))))))))
 
 (defn toggle-wide-mode!
   []

@@ -399,7 +399,7 @@
 (rum/defc logo
   [dark?]
   [:svg
-   {:fill (if dark? "currentColor" "#002B36"), :view-box "0 0 21 21", :height "21", :width "21"}
+   {:fill "currentColor", :view-box "0 0 21 21", :height "21", :width "21"}
    [:ellipse
     {:transform
          "matrix(0.987073 0.160274 -0.239143 0.970984 11.7346 2.59206)"
@@ -531,18 +531,6 @@
 
 (def online
   (hero-icon "M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"))
-
-(rum/defc filter-icon
-  [class]
-  [:svg
-   {:stroke   "currentColor"
-    :fill     "currentColor"
-    :view-box "0 0 16.06 16.06"
-    :width    "16"
-    :height   "16"
-    :class    class}
-   [:path
-    {:d "M.53.53h15l-5 7v8h-5v-8z" :stroke-width "1.06" :stroke-linejoin "round"}]])
 
 (def collapse-right
   (hero-icon "M4 6h16M4 12h16m-7 6h7"))

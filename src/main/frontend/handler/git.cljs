@@ -50,7 +50,7 @@
              push-result (git/push repo token true)]
        (reset! pushing? false)
        (notification/clear! nil)
-       (route-handler/redirect! {:to :home}))
+       (route-handler/redirect-to-home!))
      (p/catch (fn [error]
                 (log/error :git/commit-and-force-push! error))))))
 

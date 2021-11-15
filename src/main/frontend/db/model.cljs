@@ -14,13 +14,14 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [react]]
             [medley.core :as medley]
-            [frontend.db.rules :refer [rules]]))
+            [frontend.db.rules :refer [rules]]
+            [frontend.db.default :as default-db]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; correponding handlers.
 
 ;; Use it as an input argument for datalog queries
-(defonce block-attrs
+(def block-attrs
   '[:db/id
     :block/uuid
     :block/type
@@ -28,6 +29,7 @@
     :block/format
     :block/title
     :block/refs
+    :block/_refs
     :block/path-refs
     :block/tags
     :block/content
@@ -182,23 +184,9 @@
                :where
                [?file :file/path ?path]
                [(?pred $ ?path)]
-               [?block :block/file ?file]]
+               [?p :block/file ?file]
+               [?block :block/page ?p]]
              (conn/get-conn repo-url) pred)
-        db-utils/seq-flatten)))
-
-(defn get-files-non-page-blocks
-  [repo-url paths]
-  (let [paths (set paths)
-        pred (fn [_db e]
-               (contains? paths e))]
-    (-> (d/q '[:find ?block
-               :in $ ?pred
-               :where
-               [?file :file/path ?path]
-               [(?pred $ ?path)]
-               [?block :block/file ?file]
-               [(missing? $ ?block :block/name)]]
-          (conn/get-conn repo-url) pred)
         db-utils/seq-flatten)))
 
 (defn get-file-blocks
@@ -207,7 +195,8 @@
              :in $ ?path
              :where
              [?file :file/path ?path]
-             [?block :block/file ?file]]
+             [?p :block/file ?file]
+             [?block :block/page ?p]]
            (conn/get-conn repo-url) path)
       db-utils/seq-flatten))
 
@@ -402,37 +391,32 @@
     (:block/properties page)))
 
 ;; FIXME: alert
-(defn- keep-only-one-file
-  [blocks]
-  (filter (fn [b] (= (:block/file b) (:block/file (first blocks)))) blocks))
-
 (defn sort-by-left
   ([blocks parent]
    (sort-by-left blocks parent true))
   ([blocks parent check?]
-   (let [blocks (keep-only-one-file blocks)]
-     (when check?
-       (when (not= (count blocks) (count (set (map :block/left blocks))))
-         (let [duplicates (->> (map (comp :db/id :block/left) blocks)
-                               frequencies
-                               (filter (fn [[_k v]] (> v 1)))
-                               (map (fn [[k _v]]
-                                      (let [left (db-utils/pull k)]
-                                        {:left left
-                                         :duplicates (->>
-                                                      (filter (fn [block]
-                                                                (= k (:db/id (:block/left block))))
-                                                              blocks)
-                                                      (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
-           (util/pprint duplicates)))
-       (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
+   (when check?
+     (when (not= (count blocks) (count (set (map :block/left blocks))))
+       (let [duplicates (->> (map (comp :db/id :block/left) blocks)
+                             frequencies
+                             (filter (fn [[_k v]] (> v 1)))
+                             (map (fn [[k _v]]
+                                    (let [left (db-utils/pull k)]
+                                      {:left left
+                                       :duplicates (->>
+                                                    (filter (fn [block]
+                                                              (= k (:db/id (:block/left block))))
+                                                            blocks)
+                                                    (map #(select-keys % [:db/id :block/level :block/content :block/file])))}))))]
+         (util/pprint duplicates)))
+     (assert (= (count blocks) (count (set (map :block/left blocks)))) "Each block should have a different left node"))
 
-    (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
-      (loop [block parent
-             result []]
-        (if-let [next (get left->blocks (:db/id block))]
-          (recur next (conj result next))
-          (vec result)))))))
+   (let [left->blocks (reduce (fn [acc b] (assoc acc (:db/id (:block/left b)) b)) {} blocks)]
+     (loop [block parent
+            result []]
+       (if-let [next (get left->blocks (:db/id block))]
+         (recur next (conj result next))
+         (vec result))))))
 
 (defn- sort-by-left-recursive
   [form]
@@ -465,6 +449,17 @@
           (if-let [sibling (first next-siblings)]
             (recur sibling (rest next-siblings) (conj result sibling))
             result))))))
+
+(defn get-block-refs-count
+  [block-id]
+  (when-let [repo-url (state/get-current-repo)]
+    (when block-id
+      (some->
+      (react/q repo-url [:block/refs-count block-id]
+        {:query-fn (fn [db]
+                     (count (:block/_refs (db-utils/entity repo-url [:block/uuid block-id]))))}
+        nil)
+      react))))
 
 (defn get-page-blocks
   ([page]
@@ -577,6 +572,19 @@
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 
+(defn get-nested-pages
+  [repo page-name]
+  (when-let [conn (conn/get-conn repo)]
+    (let [nested-page-name (->> (string/trim page-name)
+                                (util/format "[[%s]]"))]
+      (d/q '[:find ?e ?n
+             :in $ ?x
+             :where
+             [?e :block/name ?n]
+             [(clojure.string/includes? ?n ?x)]]
+           conn
+           nested-page-name))))
+
 (defn block-and-children-transform
   [result repo-url block-uuid]
   (some->> result
@@ -687,6 +695,11 @@
   (some-> (or (db-utils/entity [:block/name page-name])
               (db-utils/entity [:block/original-name page-name]))
           :block/file))
+
+(defn get-block-file-path
+  [block]
+  (when-let [page-id (:db/id (:block/page block))]
+    (:file/path (:block/file (db-utils/entity page-id)))))
 
 (defn get-file-page-id
   [file-path]
@@ -962,6 +975,43 @@
                                   [k blocks]))))]
          result)))))
 
+(defn get-page-referenced-blocks-ids
+  "Faster and can be used for pagination later."
+  ([page]
+   (get-page-referenced-blocks-ids (state/get-current-repo) page))
+  ([repo page]
+   (when repo
+     (when-let [conn (conn/get-conn repo)]
+       (let [page-id (:db/id (db-utils/entity [:block/name page]))
+             pages (page-alias-set repo page)
+             aliases (set/difference pages #{page-id})
+             query-result (if (seq aliases)
+                            (let [rules '[[(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
+                                           [?block :block/page ?alias]
+                                           [(contains? ?aliases ?alias)]]
+                                          [(find-blocks ?block ?ref-page ?pages ?alias ?aliases)
+                                           [?block :block/refs ?ref-page]
+                                           [(contains? ?pages ?ref-page)]]]]
+                              (d/q
+                                '[:find ?block
+                                  :in $ % ?pages ?aliases ?block-attrs
+                                  :where
+                                  (find-blocks ?block ?ref-page ?pages ?alias ?aliases)]
+                                conn
+                                rules
+                                pages
+                                aliases
+                                block-attrs))
+                            (d/q
+                              '[:find ?ref-block
+                                :in $ ?page ?block-attrs
+                                :where
+                                [?ref-block :block/refs ?page]]
+                              conn
+                              page-id
+                              block-attrs))]
+         query-result)))))
+
 (defn get-date-scheduled-or-deadlines
   [journal-title]
   (when-let [date (date/journal-title->int journal-title)]
@@ -1038,6 +1088,27 @@
             react
             (sort-by-left-recursive)
             db-utils/group-by-page)))))
+
+(defn get-block-referenced-blocks-ids
+  [block-uuid]
+  (when-let [repo (state/get-current-repo)]
+    (when-let [conn (conn/get-conn repo)]
+      (let [block (db-utils/entity [:block/uuid block-uuid])]
+        (->> (react/q repo [:ref-ids (:db/id block)] {}
+               '[:find ?ref-block
+                 :in $ ?block-uuid ?block-attrs
+                 :where
+                 [?block :block/uuid ?block-uuid]
+                 [?ref-block :block/refs ?block]]
+               block-uuid
+               block-attrs)
+             react)))))
+
+(defn get-referenced-blocks-ids
+  [page-name-or-block-uuid]
+  (if (uuid? page-name-or-block-uuid)
+    (get-block-referenced-blocks-ids page-name-or-block-uuid)
+    (get-page-referenced-blocks-ids page-name-or-block-uuid)))
 
 (defn get-matched-blocks
   [match-fn limit]
@@ -1255,8 +1326,7 @@
 (defn delete-blocks
   [repo-url files delete-page?]
   (when (seq files)
-    (let [f (if delete-page? get-files-blocks get-files-non-page-blocks)
-          blocks (f repo-url files)]
+    (let [blocks (get-files-blocks repo-url files)]
       (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks))))
 
 (defn delete-files
@@ -1357,3 +1427,34 @@
    (filter :block/file)
    (sort-by :block/updated-at >)
    (take 200)))
+
+(defn get-orphaned-pages
+  [repo]
+  (let [all-pages (get-pages repo)
+        built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
+        orphaned-pages (->>
+                         (map
+                           (fn [page]
+                             (let [name (string/lower-case page)]
+                               (when-let [page (db-utils/entity [:block/name name])]
+                                 (and
+                                   (zero? (count (:block/_refs page)))
+                                   (or
+                                     (page-empty? repo (:db/id page))
+                                     (let [first-child (first (:block/_left page))
+                                           children (:block/_page page)]
+                                       (and
+                                         first-child
+                                         (= 1 (count children))
+                                         (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
+                                   (not (contains? built-in-pages name))
+                                   page))))
+                           all-pages)
+                         (remove false?))]
+    orphaned-pages))
+
+(defn remove-orphaned-pages!
+  ([repo] (remove-orphaned-pages! repo (get-orphaned-pages repo)))
+  ([repo orphaned-pages]
+   (let [transaction (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
+     (db-utils/transact! transaction))))

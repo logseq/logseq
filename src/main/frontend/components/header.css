@@ -5,31 +5,44 @@
   padding-right: 0.5rem;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex: 0 0 auto;
-  background-color: var(--ls-primary-background-color, #fff);
   position: sticky;
   position: -webkit-sticky;
   top: 0;
   left: 0;
   right: 0;
   user-select: none;
-  transition: width 0.3s;
   line-height: 1;
+  white-space: nowrap;
+
+  > .l {
+    width: var(--ls-left-sidebar-width);
+    height: 100%;
+    align-items: center;
+    transition: padding-left .2s;
+  }
+
+  > .r {
+    align-items: center;
+  }
 
   .it svg {
     transform: scale(0.8);
   }
 
-  .repos {
-    .dropdown-wrapper {
-      left: unset;
-      right: -46px;
-      min-width: 14rem;
-    }
-  }
-
   a.button {
     margin: 0 4px;
+    height: 30px;
+    min-width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: .5;
+
+    .ti {
+      font-size: 20px;
+    }
   }
 
   svg.warning {
@@ -54,7 +67,9 @@
 
     > p {
       margin: 0;
-      padding: 0 0 6px 0;
+      display: flex;
+      align-items: center;
+      font-size: 14px;
     }
 
     a {
@@ -63,8 +78,9 @@
 
     a.restart {
       position: relative;
-      top: 3px;
       cursor: pointer !important;
+      display: flex;
+      align-items: center;
 
       svg {
         color: currentColor !important;
@@ -79,36 +95,21 @@
 }
 
 .is-electron.is-mac .cp__header {
-  padding-left: 78px;
-  -moz-transition: padding-left .3s ease-in;
-  -o-transition: padding-left .3s ease-in;
-  -webkit-transition: padding-left .3s ease-in;
-  transition: padding-left .3s ease-in;
+  > .l {
+    padding-left: 78px;
+  }
 }
 
 .cp__header .navigation svg {
   transform: scale(0.7);
 }
 
-.is-electron.is-mac.is-fullscreen .cp__header {
+.is-electron.is-mac.is-fullscreen .cp__header > .l {
   padding-left: 0;
 }
 
 .cp__header a, .cp__header svg {
   -webkit-app-region: no-drag;
-}
-
-.cp__header-left-menu {
-  @apply px-4 mr-4;
-  border-right: 1px solid var(--ls-secondary-background-color);
-  color: var(--ls-link-text-color);
-  display: block;
-  height: 100%;
-}
-
-.cp__header-left-menu:focus {
-  @apply outline-none;
-  background: var(--ls-menu-hover-color);
 }
 
 .cp__header-logo {
@@ -133,10 +134,6 @@
     @apply shadow-none;
   }
 
-  .cp__header-left-menu {
-    display: none;
-  }
-
   .cp__header-logo {
     display: block;
   }
@@ -147,13 +144,11 @@
 }
 
 #repo-name {
-  vertical-align: middle;
-  display: inline;
+  display: table-cell;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 7ch;
-  color: var(--ls-icon-color, #045591);
+  max-width: 15ch;
   height: 14px;
 }
 
@@ -162,11 +157,11 @@ a.button {
   opacity: 0.6;
   display: block;
   border-radius: 4px;
-}
 
-a.button:hover {
-  opacity: 1;
-  background: var(--ls-tertiary-background-color);
+  &:hover, &.active {
+    opacity: 1;
+    background: var(--ls-tertiary-background-color);
+  }
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {

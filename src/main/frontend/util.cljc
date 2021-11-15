@@ -10,12 +10,12 @@
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [dommy.core :as d]
+            [frontend.mobile.util :refer [is-native-platform?]]
             [frontend.react-impls :as react-impls]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [goog.string :as gstring]
             [goog.userAgent]
-            ["path" :as nodePath]
             [promesa.core :as p]))
   (:require
    [clojure.core.async :as async]
@@ -33,7 +33,7 @@
      (-pr-writer [sym writer _]
        (-write writer (str "\"" (.toString sym) "\"")))))
 
-#?(:cljs (defonce ^js node-path nodePath))
+#?(:cljs (defonce ^js node-path utils/nodePath))
 #?(:cljs (defn app-scroll-container-node []
            (gdom/getElement "main-container")))
 
@@ -70,6 +70,10 @@
      (when (and js/window (gobj/get js/window "navigator"))
        (let [ua (string/lower-case js/navigator.userAgent)]
          (string/includes? ua " electron")))))
+
+#?(:cljs
+   (def nfs? (and (not (electron?))
+                  (not (is-native-platform?)))))
 
 #?(:cljs
    (defn file-protocol?
@@ -544,6 +548,11 @@
      (subs s (+ first-index (count pattern)) (count s))]
     [s ""]))
 
+(defn safe-lower-case
+  [s]
+  (if (string? s)
+    (string/lower-case s) s))
+
 (defn split-first [pattern s]
   (when-let [first-index (string/index-of s pattern)]
     [(subs s 0 first-index)
@@ -597,18 +606,26 @@
 
 ;; Add documentation
 (defn replace-first [pattern s new-value]
-  (when-let [first-index (string/index-of s pattern)]
-    (str new-value (subs s (+ first-index (count pattern))))))
+  (if-let [first-index (string/index-of s pattern)]
+    (str new-value (subs s (+ first-index (count pattern))))
+    s))
 
 (defn replace-last
   ([pattern s new-value]
    (replace-last pattern s new-value true))
   ([pattern s new-value space?]
-   (when-let [last-index (string/last-index-of s pattern)]
+   (if-let [last-index (string/last-index-of s pattern)]
      (let [prefix (subs s 0 last-index)]
        (if space?
          (concat-without-spaces prefix new-value)
-         (str prefix new-value))))))
+         (str prefix new-value)))
+     s)))
+
+(defn replace-ignore-case [s old-value new-value]
+  (string/replace s (re-pattern (str "(?i)" old-value)) new-value))
+
+(defn replace-first-ignore-case [s old-value new-value]
+  (string/replace-first s (re-pattern (str "(?i)" old-value)) new-value))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
@@ -1379,7 +1396,7 @@
      (let [path (string/lower-case path)]
        (not
         (some #(string/ends-with? path %)
-              [".md" ".markdown" ".org" ".edn" ".css" ".png" ".jpg" ".jpeg"]))))))
+              [".md" ".markdown" ".org" ".edn" ".js" ".css" ".png" ".jpg" ".jpeg"]))))))
 
 (defn wrapped-by-quotes?
   [v]

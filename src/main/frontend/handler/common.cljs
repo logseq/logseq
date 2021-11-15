@@ -16,7 +16,8 @@
             [goog.object :as gobj]
             ["ignore" :as Ignore]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.handler.notification :as notification]))
 
 (defn get-ref
   [repo-url]
@@ -106,18 +107,35 @@
   (db/get-file repo-url (config/get-config-path)))
 
 (defn safe-read-string
-  [content error-message]
+  [content error-message-or-handler]
   (try
     (reader/read-string content)
     (catch js/Error e
-      (println error-message)
-      (js/console.dir e)
+      (js/console.error e)
+      (if (fn? error-message-or-handler)
+        (error-message-or-handler e)
+        (println error-message-or-handler))
       {})))
+
+(defn read-config
+  [content]
+  (safe-read-string content
+                    (fn [_e]
+                      (notification/show!
+                       [:div {:style {:z-index 999}}
+                        [:h1
+                         "Invalid configuration."]
+                        [:p "You can send the file \"config.edn\" to "
+                         [:code
+                          "help@logseq.com"]
+                         [:span ", we'll repair and send it back to you."]]]
+                       :error
+                       false))))
 
 (defn reset-config!
   [repo-url content]
   (when-let [content (or content (get-config repo-url))]
-    (let [config (safe-read-string content "Parsing config file failed: ")]
+    (let [config (read-config content)]
       (state/set-config! repo-url config)
       config)))
 

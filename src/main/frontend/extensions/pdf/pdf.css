@@ -673,10 +673,15 @@ body.is-pdf-active {
 
   #sidebar-nav-wrapper {
     border: none !important;
+    display: none;
   }
 
-  #head {
+  #head > .l {
     padding-left: 0;
+  }
+
+  #main-content.is-left-sidebar-open {
+    padding-left: unset;
   }
 }
 

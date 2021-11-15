@@ -5,6 +5,26 @@
             [clojure.set :as set]
             [medley.core :as medley]))
 
+(def page-ref-re-0 #"\[\[(.*)\]\]")
+(def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
+(def markdown-page-ref-re #"\[(.*)\]\(file:.*\)")
+
+(defn get-file-basename
+  [path]
+  (when-not (string/blank? path)
+    (util/node-path.name path)))
+
+(defn get-page-name
+  [s]
+  (and (string? s)
+       (or (when-let [[_ label _path] (re-matches markdown-page-ref-re s)]
+             (string/trim label))
+           (when-let [[_ path _label] (re-matches org-page-ref-re s)]
+             (some-> (get-file-basename path)
+                     (string/replace "." "/")))
+           (-> (re-matches page-ref-re-0 s)
+               second))))
+
 (defn page-ref?
   [s]
   (and
@@ -12,20 +32,16 @@
    (string/starts-with? s "[[")
    (string/ends-with? s "]]")))
 
+(def block-ref-re #"\(\(([a-zA-z0-9]{8}-[a-zA-z0-9]{4}-[a-zA-z0-9]{4}-[a-zA-z0-9]{4}-[a-zA-z0-9]{12})\)\)")
+
+(defn get-block-ref
+  [s]
+  (and (string? s)
+       (second (re-matches block-ref-re s))))
+
 (defn block-ref?
   [s]
-  (and
-   (string? s)
-   (string/starts-with? s "((")
-   (string/ends-with? s "))")))
-
-(defn extract-page-name-from-ref
-  [ref]
-  (when-not (string/blank? ref)
-    (if-let [matches (or (re-matches #"\[\[file:.+\]\[(.+)\]\]" ref)
-                         (re-matches #"\[\[(.+)\]\]" ref))]
-      (string/trim (last matches))
-      ref)))
+  (boolean (get-block-ref s)))
 
 (defonce page-ref-re #"\[\[(.*?)\]\]")
 
@@ -37,10 +53,7 @@
 
 (defn page-ref-un-brackets!
   [s]
-  (when (string? s)
-    (if (page-ref? s)
-      (subs s 2 (- (count s) 2))
-      s)))
+  (or (get-page-name s) s))
 
 (defn block-ref-un-brackets!
   [s]
@@ -167,18 +180,21 @@
     ""))
 
 (defn- remove-level-space-aux!
-  [text pattern space?]
+  [text pattern space? trim-left?]
   (let [pattern (util/format
                  (if space?
                    "^[%s]+\\s+"
                    "^[%s]+\\s?")
-                 pattern)]
-    (string/replace-first (string/triml text) (re-pattern pattern) "")))
+                 pattern)
+        text (if trim-left? (string/triml text) text)]
+    (string/replace-first text (re-pattern pattern) "")))
 
 (defn remove-level-spaces
   ([text format]
-   (remove-level-spaces text format false))
+   (remove-level-spaces text format false true))
   ([text format space?]
+   (remove-level-spaces text format space? true))
+  ([text format space? trim-left?]
    (when format
      (cond
        (string/blank? text)
@@ -189,7 +205,13 @@
        text
 
        :else
-       (remove-level-space-aux! text (config/get-block-pattern format) space?)))))
+       (remove-level-space-aux! text (config/get-block-pattern format) space? trim-left?)))))
+
+(defn remove-lines-level-spaces
+  [text format]
+  (->> (string/split-lines text)
+       (map #(remove-level-spaces (string/triml %) format true false))
+       (string/join "\n")))
 
 (defn build-data-value
   [col]
@@ -225,11 +247,7 @@
   [p]
   (and (not (string/starts-with? p "../"))
        (not (string/starts-with? p "./"))
-       (not (string/starts-with? p "http"))
-       (not
-        (when-let [last-part (last (string/split p #"/"))]
-          ;; a file
-          (string/includes? last-part ".")))))
+       (not (re-find #"(?i)^http[s]?://" p))))
 
 (defn add-timestamp
   [content key value]
@@ -257,27 +275,60 @@
                           lines)]
     (string/join "\n" new-lines)))
 
-(defn beginning-of-line
-  [content pos]
-  (or (zero? pos)
-      (when-let [pre-char (subs content (dec pos) pos)]
-        (println "pre-char: " pre-char)
-        (= pre-char \newline))))
+(defn get-current-line-by-pos
+  [s pos]
+  (let [lines (string/split-lines s)
+        result (reduce (fn [acc line]
+                         (let [new-pos (+ acc (count line))]
+                           (if (>= new-pos pos)
+                             (reduced line)
+                             (inc new-pos)))) 0 lines)]
+    (when (string? result)
+      result)))
 
-(defn end-of-line
-  [content pos]
-  (or (= pos (count content))
-      (when-let [next-char (subs content pos (inc pos))]
-        (= next-char \newline))))
+(defn get-string-all-indexes
+  "Get all indexes of `value` in the string `s`."
+  [s value]
+  (loop [acc []
+         i 0]
+    (if-let [i (string/index-of s value i)]
+      (recur (conj acc i) (+ i (count value)))
+      acc)))
 
-(defn goto-end-of-line
-  [content pos]
-  (when-not (end-of-line content pos)
-    (or (string/index-of content \newline pos)
-        (count content))))
+(defn surround-by?
+  "`pos` must be surrounded by `before` and `and` in string `value`, e.g. ((|))"
+  [value pos before end]
+  (let [start-pos (if (= :start before) 0 (- pos (count before)))
+        end-pos (if (= :end end) (count value) (+ pos (count end)))]
+    (when (>= (count value) end-pos)
+      (= (cond
+           (and (= :end end) (= :start before))
+           ""
 
-(defn goto-beginning-of-line
-  [content pos]
-  (when-not (beginning-of-line content pos)
-    (or (string/last-index-of content \newline pos)
-        0)))
+           (= :end end)
+           before
+
+           (= :start before)
+           end
+
+           :else
+           (str before end))
+         (subs value start-pos end-pos)))))
+
+(defn wrapped-by?
+  "`pos` must be wrapped by `before` and `and` in string `value`, e.g. ((a|b))"
+  [value pos before end]
+  (let [before-matches (->> (get-string-all-indexes value before)
+                            (map (fn [i] [i :before])))
+        end-matches (->> (get-string-all-indexes value end)
+                         (map (fn [i] [i :end])))
+        indexes (sort-by first (concat before-matches end-matches [[pos :between]]))
+        ks (map second indexes)
+        q [:before :between :end]]
+    (true?
+     (reduce (fn [acc k]
+               (if (= q (conj acc k))
+                 (reduced true)
+                 (vec (take-last 2 (conj acc k)))))
+             []
+             ks))))

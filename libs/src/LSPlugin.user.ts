@@ -12,7 +12,7 @@ import {
   ThemeOptions,
   UIOptions, IHookEvent, BlockIdentity,
   BlockPageName,
-  UIFrameAttrs
+  UIContainerAttrs, SimpleCommandCallback
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -30,7 +30,7 @@ const PROXY_CONTINUE = Symbol.for('proxy-continue')
 const debug = Debug('LSPlugin:user')
 
 /**
- * @param type
+ * @param type (key of group commands)
  * @param opts
  * @param action
  */
@@ -39,26 +39,43 @@ function registerSimpleCommand (
   type: string,
   opts: {
     key: string,
-    label: string
+    label: string,
+    desc?: string,
+    palette?: boolean
   },
-  action: BlockCommandCallback
+  action: SimpleCommandCallback
 ) {
   if (typeof action !== 'function') {
     return false
   }
 
-  const { key, label } = opts
+  const { key, label, desc, palette } = opts
   const eventKey = `SimpleCommandHook${key}${++registeredCmdUid}`
 
   this.Editor['on' + eventKey](action)
 
   this.caller?.call(`api:call`, {
     method: 'register-plugin-simple-command',
-    args: [this.baseInfo.id, [{ key, label, type }, ['editor/hook', eventKey]]]
+    args: [this.baseInfo.id, [{ key, label, type, desc }, ['editor/hook', eventKey]], palette]
   })
 }
 
 const app: Partial<IAppProxy> = {
+  registerCommand: registerSimpleCommand,
+
+  registerCommandPalette (
+    opts: { key: string; label: string },
+    action: SimpleCommandCallback) {
+
+    const { key, label } = opts
+    const group = 'global-palette-command'
+
+    return registerSimpleCommand.call(
+      this, group,
+      { key, label, palette: true },
+      action)
+  },
+
   registerUIItem (
     type: 'toolbar' | 'pagebar',
     opts: { key: string, template: string }
@@ -89,6 +106,18 @@ const app: Partial<IAppProxy> = {
       type, {
         key, label
       }, action)
+  },
+
+  setFullScreen (flag) {
+    const sf = (...args) => this._callWin('setFullScreen', ...args)
+
+    if (flag === 'toggle') {
+      this._callWin('isFullScreen').then(r => {
+        r ? sf() : sf(true)
+      })
+    } else {
+      flag ? sf(true) : sf()
+    }
   }
 }
 
@@ -219,6 +248,12 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   ) {
     super()
 
+    _caller.on('sys:ui:visible', (payload) => {
+      if (payload?.toggle) {
+        this.toggleMainUI()
+      }
+    })
+
     _caller.on('settings:changed', (payload) => {
       const b = Object.assign({}, this.settings)
       const a = Object.assign(this._baseInfo.settings, payload)
@@ -307,7 +342,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     // TODO: update associated baseInfo settings
   }
 
-  setMainUIAttrs (attrs: Partial<UIFrameAttrs>): void {
+  setMainUIAttrs (attrs: Partial<UIContainerAttrs>): void {
     this.caller.call('main-ui:attrs', attrs)
   }
 
@@ -340,7 +375,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
   }
 
   get isMainUIVisible (): boolean {
-    const state = this._ui.get(0)
+    const state = this._ui.get(KEY_MAIN_UI)
     return Boolean(state && state.visible)
   }
 
@@ -405,11 +440,20 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
           // Call host
           return caller.callAsync(`api:call`, {
-            method: propKey,
-            args: args
+            tag, method: propKey, args: args
           })
         }
       }
+    })
+  }
+
+  /**
+   * @param args
+   */
+  _callWin (...args) {
+    return this._caller.callAsync(`api:call`, {
+      method: '_callMainWin',
+      args: args
     })
   }
 

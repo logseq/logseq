@@ -16,6 +16,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.extensions.srs :as srs]
             [frontend.mobile.util :as mobile]
             [frontend.mobile.file-watcher :as mobile-file-watcher]
             [frontend.idb :as idb]
@@ -47,12 +48,22 @@
 
 (defn- watch-for-date!
   []
-  (let [f (fn []
-            (when-not (state/nfs-refreshing?)
-              ;; Don't create the journal file until user writes something
-              (page-handler/create-today-journal!))
-            (when-let [repo (state/get-current-repo)]
-              (when (and (search-db/empty? repo)
+  (let [cards-last-check-time (atom (util/time-ms))
+        f (fn []
+            (let [repo (state/get-current-repo)]
+              (when-not (state/nfs-refreshing?)
+               ;; Don't create the journal file until user writes something
+                (page-handler/create-today-journal!))
+
+              (when (and (state/input-idle? repo)
+                         (> (- (util/time-ms) @cards-last-check-time)
+                            (* 60 1000)))
+                (let [total (srs/get-srs-cards-total)]
+                  (state/set-state! :srs/cards-due-count total)
+                  (reset! cards-last-check-time (util/time-ms))))
+
+              (when (and repo
+                         (search-db/empty? repo)
                          (state/input-idle? repo))
                 (search/rebuild-indices!))))]
     (f)

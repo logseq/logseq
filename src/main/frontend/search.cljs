@@ -130,6 +130,7 @@
                     (:name item))
                  result)
                 (remove nil?)
+                (map string/trim)
                 (distinct)
                 (filter (fn [name]
                           (exact-matched? q name))))))))))

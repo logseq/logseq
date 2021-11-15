@@ -129,15 +129,12 @@
 (defn open-dir
   [ok-handler]
   (let [record (get-record)]
-    (->
-     (p/let [result (protocol/open-dir record ok-handler)]
-       (if (or (util/electron?)
-               (mobile-util/is-native-platform?))
-         (let [[dir & paths] (bean/->clj result)]
-           [(:path dir) paths])
-         result))
-     (p/catch (fn [error]
-                (js/console.error error))))))
+    (p/let [result (protocol/open-dir record ok-handler)]
+      (if (or (util/electron?)
+              (mobile-util/is-native-platform?))
+        (let [[dir & paths] (bean/->clj result)]
+          [(:path dir) paths])
+        result))))
 
 (defn get-files
   [path-or-handle ok-handler]

@@ -35,6 +35,9 @@
                             (.readAsText reader file)))
                         (notification/show! "Please choose a JSON file."
                                             :error))))}]
+
+     [:hr]
+
      [:div.mt-4
       (case roam-importing?
         true (ui/loading "Loading")

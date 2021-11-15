@@ -22,8 +22,19 @@
 (rum/defc toggle
   []
   (when-not (util/mobile?)
-    [:a.button {:on-click state/toggle-sidebar-open?!}
-    (svg/menu)]))
+    (ui/tippy
+      {:html [:div.text-sm.font-medium
+              "Shortcut: "
+              [:code (util/->platform-shortcut "t r")]]
+       :delay 2000
+       :hideDelay 1
+       :position "left"
+       :interactive true
+       :arrow true}
+
+      [:a.button.fade-link.toggle
+       {:on-click state/toggle-sidebar-open?!}
+       (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
 
 (rum/defc block-cp < rum/reactive
   [repo idx block]
@@ -49,8 +60,7 @@
   [repo idx db-id block-type block-data t]
   (case block-type
     :contents
-    [(or (state/get-favorites-name)
-         (t :right-side-bar/favorites))
+    [(t :right-side-bar/contents)
      (contents)]
 
     :help
@@ -68,7 +78,7 @@
              format (:block/format block)]
          [[:div.ml-2.mt-1
            (block/block-parents {:id     "block-parent"
-                                 :block? true} repo block-id format)]
+                                 :block? true} repo block-id {})]
           [:div.ml-2
            (block-cp repo idx block)]])])
 
@@ -77,7 +87,7 @@
       (let [block-id (:block/uuid block-data)
             format (:block/format block-data)]
         [(block/block-parents {:id     "block-parent"
-                               :block? true} repo block-id format)
+                               :block? true} repo block-id {})
          [:div.ml-2
           (block-cp repo idx block-data)]]))
 
@@ -118,7 +128,8 @@
    (close nil on-close))
   ([class on-close]
    [:a.close.opacity-50.hover:opacity-100.flex.items-center
-    (cond-> {:on-click on-close}
+    (cond-> {:on-click on-close
+             :style {:margin-right -4}}
       class
       (assoc :class class))
     svg/close]))
@@ -215,8 +226,7 @@
         [:div.ml-4.text-sm
          [:a.cp__right-sidebar-settings-btn {:on-click (fn [e]
                                                          (state/sidebar-add-block! repo "contents" :contents nil))}
-          (or (state/get-favorites-name)
-              (t :right-side-bar/favorites))]]
+          (t :right-side-bar/contents)]]
 
         [:div.ml-4.text-sm
          [:a.cp__right-sidebar-settings-btn {:on-click (fn []
@@ -237,7 +247,7 @@
                                        :margin-right 2}}
         (toggle)]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing {:style {:height "100vh"}}
+      [:.sidebar-item-list.flex-1.scrollbar-spacing
        (if @*anim-finished?
          (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
            (rum/with-key

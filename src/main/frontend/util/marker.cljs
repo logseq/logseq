@@ -13,7 +13,7 @@
   #"^(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS)?\s?")
 
 (def bare-marker-pattern
-  #"^(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS){1}\s+")
+  #"(NOW|LATER|TODO|DOING|DONE|WAITING|WAIT|CANCELED|CANCELLED|STARTED|IN-PROGRESS){1}\s+")
 
 
 (defn add-or-update-marker
@@ -42,7 +42,29 @@
   [content markdown? old-marker new-marker]
   (string/replace-first content (header-marker-pattern markdown? old-marker)
                         (fn [match]
-                          (string/replace match old-marker new-marker))))
+                          (if (and markdown? (= new-marker "")  (string/starts-with? match "#"))
+                            (string/replace match (str " " old-marker) "")
+                            (string/replace match old-marker new-marker)))))
+
+(defn cycle-marker-state
+  [preferred-workflow marker]
+  (case marker
+    "TODO"
+    "DOING"
+
+    "DOING"
+    "DONE"
+
+    "LATER"
+    "NOW"
+
+    "NOW"
+    "DONE"
+
+    "DONE"
+    nil
+
+    (if (= :now preferred-workflow) "LATER" "TODO")))
 
 (defn cycle-marker
   [content format preferred-workflow]

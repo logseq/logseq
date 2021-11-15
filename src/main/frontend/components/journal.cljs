@@ -52,46 +52,42 @@
            (t :open-a-directory)
            :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
       [:div.flex-1.journal.page (cond->
-                                 {:class (if intro? "logseq-intro" "")}
-                                 data-page-tags
-                                 (assoc :data-page-tags data-page-tags))
+                                  {:class (if intro? "logseq-intro" "")}
+                                  data-page-tags
+                                  (assoc :data-page-tags data-page-tags))
 
-      (when intro?
-        (ui/admonition
-         :warning
-         [:p (util/format
-              "Feel free to edit anything, no change will be saved at this moment. If you do want to persist your work, click the \"Open\" button to open a local directory%s."
-              (if (util/electron?) "" " or connect Logseq to GitHub"))]))
+       (ui/foldable
+        [:a.initial-color.title.journal-title
+         {:href     (rfe/href :page {:name page})
+          :on-mouse-down (fn [e]
+                           (when (util/right-click? e)
+                             (state/set-state! :page-title/context {:page page})))
+          :on-click (fn [e]
+                      (when (gobj/get e "shiftKey")
+                        (when-let [page page-entity]
+                          (state/sidebar-add-block!
+                           (state/get-current-repo)
+                           (:db/id page)
+                           :page
+                           {:page     page
+                            :journal? true}))
+                        (.preventDefault e)))}
+         [:h1.title
+          (util/capitalize-all title)]]
 
-      (ui/foldable
-       [:a.initial-color.title.journal-title
-        {:href     (rfe/href :page {:name page})
-         :on-click (fn [e]
-                     (when (gobj/get e "shiftKey")
-                       (when-let [page page-entity]
-                         (state/sidebar-add-block!
-                          (state/get-current-repo)
-                          (:db/id page)
-                          :page
-                          {:page     page
-                           :journal? true}))
-                       (.preventDefault e)))}
-        [:h1.title
-         (util/capitalize-all title)]]
+        (blocks-cp repo page format)
 
-       (blocks-cp repo page format)
+        {})
 
-       {})
+       (when intro? (widgets/add-graph))
 
-      (when intro? (widgets/add-graph))
+       (page/today-queries repo today? false)
 
-      (page/today-queries repo today? false)
+       (rum/with-key
+         (reference/references title false)
+         (str title "-refs"))
 
-      (rum/with-key
-        (reference/references title false)
-        (str title "-refs"))
-
-      (when intro? (onboarding/intro))])))
+       (when intro? (onboarding/intro))])))
 
 (rum/defc journals < rum/reactive
   [latest-journals]
