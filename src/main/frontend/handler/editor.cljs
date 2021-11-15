@@ -1181,6 +1181,19 @@
         (set-block-id! id))
       (util/copy-to-clipboard! ids-str))))
 
+(defn copy-block-embeds
+  []
+  (when-let [blocks (seq (get-selected-blocks-with-children))]
+    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                     (uuid id)) blocks))
+                   (remove nil?))
+          ids-str (some->> ids
+                           (map (fn [id] (util/format "{{embed ((%s))}}" id)))
+                           (string/join "\n\n"))]
+      (doseq [id ids]
+        (set-block-id! id))
+      (util/copy-to-clipboard! ids-str))))
+
 (defn get-selected-toplevel-block-uuids
   []
   (when-let [blocks (seq (get-selected-blocks-with-children))]
