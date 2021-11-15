@@ -10,10 +10,10 @@
      ```
 * In Android Studio, open **Tools** -> **SDK Manager** to install some other SDK tools [^2].
   > In the SDK Tools tab, make sure to install at least the following:
-  >> Android SDK Build-Tools
-  >> Android SDK Command-line Tools
-  >> Android Emulator
-  >> Android SDK Platform-Tools
+  >> - Android SDK Build-Tools
+  >> - Android SDK Command-line Tools
+  >> - Android Emulator
+  >> - Android SDK Platform-Tools
 * Replace the `server url` in *android/app/src/assets/capacitor.config.json* with your local-ip-address:3001 (run ifconfig to check)
   ```json
   "server": {
@@ -31,6 +31,7 @@
 * For browser console print and devtool remote debug, open chrome, type url chrome://inspect/#devices, you should see your device there, click inspect
 
 [^1] https://developer.android.com/studio/index.html
+
 [^2] https://capacitorjs.com/docs/getting-started/environment-setup
 
 ## Develop without opening Android Studio
