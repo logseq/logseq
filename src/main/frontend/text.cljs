@@ -180,18 +180,21 @@
     ""))
 
 (defn- remove-level-space-aux!
-  [text pattern space?]
+  [text pattern space? trim-left?]
   (let [pattern (util/format
                  (if space?
                    "^[%s]+\\s+"
                    "^[%s]+\\s?")
-                 pattern)]
-    (string/replace-first (string/triml text) (re-pattern pattern) "")))
+                 pattern)
+        text (if trim-left? (string/triml text) text)]
+    (string/replace-first text (re-pattern pattern) "")))
 
 (defn remove-level-spaces
   ([text format]
-   (remove-level-spaces text format false))
+   (remove-level-spaces text format false true))
   ([text format space?]
+   (remove-level-spaces text format space? true))
+  ([text format space? trim-left?]
    (when format
      (cond
        (string/blank? text)
@@ -202,7 +205,13 @@
        text
 
        :else
-       (remove-level-space-aux! text (config/get-block-pattern format) space?)))))
+       (remove-level-space-aux! text (config/get-block-pattern format) space? trim-left?)))))
+
+(defn remove-lines-level-spaces
+  [text format]
+  (->> (string/split-lines text)
+       (map #(remove-level-spaces (string/triml %) format true false))
+       (string/join "\n")))
 
 (defn build-data-value
   [col]
