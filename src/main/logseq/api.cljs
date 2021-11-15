@@ -541,6 +541,11 @@
                           content (if hiccup? (parse-hiccup-ui content) content)]
                       (notification/show! content (keyword status)))))
 
+(defn ^:export query_element_by_id
+  [id]
+  (let [^js el (gdom/getElement id)]
+    (if el (str (.-tagName el) "#" id) false)))
+
 (defn ^:export force_save_graph
   []
   (p/let [_ (el/persist-dbs!)

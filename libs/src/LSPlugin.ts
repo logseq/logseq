@@ -182,8 +182,8 @@ export type BlockCursorPosition = { left: number, top: number, height: number, p
  * App level APIs
  */
 export interface IAppProxy {
+  // base
   getUserInfo: () => Promise<AppUserInfo | null>
-
   getUserConfigs: () => Promise<AppUserConfigs>
 
   // commands
@@ -217,6 +217,7 @@ export interface IAppProxy {
   replaceState: (k: string, params?: Record<string, any>, query?: Record<string, any>) => void
 
   // ui
+  queryElementById: (id: string) => string | boolean
   showMsg: (content: string, status?: 'success' | 'warning' | 'error' | string) => void
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void
@@ -235,7 +236,28 @@ export interface IAppProxy {
   onCurrentGraphChanged: IUserHook
   onThemeModeChanged: IUserHook<{ mode: 'dark' | 'light' }>
   onBlockRendererSlotted: IUserSlotHook<{ uuid: BlockUUID }>
+
+  /**
+   * provide ui slot to block `renderer` macro for `{{renderer arg1, arg2}}`
+   *
+   * @example
+   * ```ts
+   * // e.g. {{renderer :h1, hello world, green}}
+   *
+   * logseq.App.onMacroRendererSlotted(({ slot, payload: { arguments } }) => {
+   *   let [type, text, color] = arguments
+   *   if (type !== ':h1') return
+   *    logseq.provideUI({
+   *      key: 'h1-playground',
+   *      slot, template: `
+   *       <h2 style="color: ${color || 'red'}">${text}</h2>
+   *      `,
+   *   })
+   * })
+   * ```
+   */
   onMacroRendererSlotted: IUserSlotHook<{ payload: { arguments: Array<string>, uuid: string, [key: string]: any } }>
+
   onPageHeadActionsSlotted: IUserSlotHook
   onRouteChanged: IUserHook<{ path: string, template: string }>
   onSidebarVisibleChanged: IUserHook<{ visible: boolean }>

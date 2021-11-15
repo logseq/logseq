@@ -440,8 +440,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
 
           // Call host
           return caller.callAsync(`api:call`, {
-            method: propKey,
-            args: args
+            tag, method: propKey, args: args
           })
         }
       }
