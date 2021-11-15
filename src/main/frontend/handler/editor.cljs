@@ -2982,48 +2982,56 @@
 (defn- paste-text
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
-        copied-block-tree (:copy/block-tree copied-blocks)]
-    (if (and
-         (:copy/content copied-blocks)
-         (not (string/blank? text))
-         (= (string/replace (string/trim text) "\r" "")
-            (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
+        copied-block-tree (:copy/block-tree copied-blocks)
+        input (state/get-input)]
+    (cond
+      (and
+       (:copy/content copied-blocks)
+       (not (string/blank? text))
+       (= (string/replace (string/trim text) "\r" "")
+          (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
       (do
         ;; copy from logseq internally
         (paste-block-vec-tree-at-target copied-block-tree [] nil)
         (util/stop e))
 
+      (and (text/block-ref? text)
+           (wrapped-by? input "((" "))"))
       (do
-        ;; from external
-        (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
-          (match [format
-                  (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                  (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                  (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-            [:markdown false _ _]
-            (do
-              (paste-text-parseable format text)
-              (util/stop e))
+        (util/stop e)
+        (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
 
-            [:org _ false _]
-            (do
-              (paste-text-parseable format text)
-              (util/stop e))
+      :else
+      ;; from external
+      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
+        (match [format
+                (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
+          [:markdown false _ _]
+          (do
+            (paste-text-parseable format text)
+            (util/stop e))
 
-            [:markdown true _ false]
-            (do
-              (paste-segmented-text format text)
-              (util/stop e))
+          [:org _ false _]
+          (do
+            (paste-text-parseable format text)
+            (util/stop e))
 
-            [:markdown true _ true]
-            (do)
+          [:markdown true _ false]
+          (do
+            (paste-segmented-text format text)
+            (util/stop e))
 
-            [:org _ true false]
-            (do
-              (paste-segmented-text format text)
-              (util/stop e))
-            [:org _ true true]
-            (do)))))))
+          [:markdown true _ true]
+          nil
+
+          [:org _ true false]
+          (do
+            (paste-segmented-text format text)
+            (util/stop e))
+          [:org _ true true]
+          nil)))))
 
 (defn editor-on-paste!
   [id]
