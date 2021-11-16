@@ -958,7 +958,7 @@
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
-                       sibling-block (util/get-prev-block-non-collapsed block-parent)]
+                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)]
                    (delete-block-aux! block delete-children?)
                    (move-to-prev-block repo sibling-block format id value)))))))))
    (state/set-editor-op! nil)))
@@ -1004,7 +1004,7 @@
             end-node (get-top-level-end-node blocks)
             block (first blocks)
             block-parent (get uuid->dom-block (:block/uuid block))
-            sibling-block (when block-parent (util/get-prev-block-non-collapsed block-parent))]
+            sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
         (if (= start-node end-node)
           (delete-block-aux! (first blocks) true)
           (when (outliner-core/delete-nodes start-node end-node lookup-refs)
