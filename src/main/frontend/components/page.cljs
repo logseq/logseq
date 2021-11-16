@@ -186,11 +186,11 @@
 
 (rum/defcs page-title <
   (rum/local false ::edit?)
-  (rum/local "" ::title-value)
+  {:init (fn [state]
+           (assoc state ::title-value (atom (nth (:rum/args state) 2))))}
   [state page-name icon title format fmt-journal?]
   (when title
     (let [*title-value (get state ::title-value)
-          *input-ref (rum/create-ref)
           *edit? (get state ::edit?)
           repo (state/get-current-repo)
           title-element (if (and (string/includes? title "[[")
@@ -209,24 +209,30 @@
                   (pdf-assets/human-hls-filename-display title)
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)
-          new-page-exist? (when @*title-value
-                            (db/entity [:block/name @*title-value]))
           confirm-fn (ui/make-confirm-modal
                       {:title         "Do you really want to change the page name?"
                        :on-confirm    (fn [_e {:keys [close-fn]}]
                                         (close-fn)
                                         (page-handler/rename! (or title page-name) @*title-value)
-                                        (reset! *edit? false)
-                                        (reset! *title-value ""))
+                                        (reset! *edit? false))
                        :on-cancel     (fn []
-                                        (set! (.-value (rum/deref *input-ref)) old-name)
-                                        (reset! *edit? true)
-                                        (reset! *title-value ""))})]
+                                        (reset! *title-value old-name)
+                                        (reset! *edit? true))})
+          blur-fn (fn [e]
+                    (cond
+                      (= old-name @*title-value)
+                      nil
+
+                      (page-handler/page-exists? @*title-value)
+                      (notification/show! "Page already exists!" :error)
+
+                      :else
+                      (state/set-modal! confirm-fn))
+                    (util/stop e))]
       (if @*edit?
         [:h1.title {:style {:margin-left -2}}
          [:input.w-full
           {:type          "text"
-           :ref           *input-ref
            :auto-focus    true
            :style         {:outline "none"
                            :font-weight 600}
@@ -236,19 +242,10 @@
                             (let [value (util/evalue e)]
                               (when-not (string/blank? value)
                                 (reset! *title-value (string/trim value)))))
-           :on-blur       (fn [e]
-                            (if-not new-page-exist?
-                              (when (not= old-name @*title-value)
-                                (state/set-modal! confirm-fn))
-                             (notification/show! "Page already exists!" :error))
-                            (util/stop e))
+           :on-blur       blur-fn
            :on-key-down   (fn [e]
                             (when (= (gobj/get e "key") "Enter")
-                              (if-not new-page-exist?
-                                (when (not= old-name @*title-value)
-                                  (state/set-modal! confirm-fn))
-                                (notification/show! "Page already exists!" :error))
-                              (util/stop e)))}]]
+                              (blur-fn e)))}]]
         [:a.page-title {:on-mouse-down (fn [e]
                                          (when (util/right-click? e)
                                            (state/set-state! :page-title/context {:page page-name})))

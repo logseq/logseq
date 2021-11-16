@@ -428,25 +428,28 @@
         namespace     (or (string/includes? old-name "/")
                           (db/get-namespace-pages repo old-name))
         name-changed? (not= old-name new-name)]
+    (prn {:old-name old-name
+          :new-name new-name})
+    (js/console.trace)
     (if (and old-name
              new-name
              (not (string/blank? new-name))
              name-changed?)
-      (do (cond
-            (= (string/lower-case old-name) (string/lower-case new-name))
-            (rename-page-aux old-name new-name)
+      (do
+        (cond
+          (= (string/lower-case old-name) (string/lower-case new-name))
+          (rename-page-aux old-name new-name)
 
-            (db/pull [:block/name (string/lower-case new-name)])
-            (notification/show! "Page already exists!" :error)
+          (db/pull [:block/name (string/lower-case new-name)])
+          (notification/show! "Page already exists!" :error)
 
-            namespace
-            (rename-namespace-pages! repo old-name new-name)
+          namespace
+          (rename-namespace-pages! repo old-name new-name)
 
-            :else
-            (rename-page-aux old-name new-name))
-          (rename-nested-pages old-name new-name))
-      (cond
-        (string/blank? new-name)
+          :else
+          (rename-page-aux old-name new-name))
+        (rename-nested-pages old-name new-name))
+      (when (string/blank? new-name)
         (notification/show! "Please use a valid name, empty name is not allowed!" :error)))))
 
 (defn- split-col-by-element
