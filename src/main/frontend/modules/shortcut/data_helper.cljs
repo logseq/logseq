@@ -97,7 +97,8 @@
       (str/replace "shift+/" "?")
       (str/replace "open-square-bracket" "[")
       (str/replace "close-square-bracket" "]")
-      (str/lower-case)))
+      (str/lower-case)
+      (or binding "")))
 
 ;; if multiple bindings, gen seq for first binding only for now
 (defn gen-shortcut-seq [id]
