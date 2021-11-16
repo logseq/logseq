@@ -380,8 +380,6 @@
 
         (outliner-file/sync-to-file page))
 
-
-
       ;; TODO: update browser history, remove the current one
 
       ;; Redirect to the new page

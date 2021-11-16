@@ -295,10 +295,10 @@
                          (let [m (format-block/page-name->map path-page-name true)]
                            (db/transact! repo [m])))
                        (db/pull [:block/name page-name])))
-              {:keys [title icon] :as properties} (:block/properties page)
+              {:keys [icon] :as properties} (:block/properties page)
               page-name (:block/name page)
               page-original-name (:block/original-name page)
-              title (or title page-original-name page-name)
+              title (or page-original-name page-name)
               icon (or icon "")
               today? (and
                       journal?
