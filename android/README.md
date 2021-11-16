@@ -1,6 +1,6 @@
 ## Installation:
 * Download Android studio [^1] and SDK (newer than 30) tools
-   Notes: for M1 MacBook users.
+   Note: for M1 MacBook users.
    - Download version **Mac with Apple Chip** 
    - unzip it and move **Android Studio.app** file to **Applications**, or you will get the following error later.
      ```
@@ -14,17 +14,17 @@
   >> - Android SDK Command-line Tools
   >> - Android Emulator
   >> - Android SDK Platform-Tools
-* Replace the `server url` in *android/app/src/assets/capacitor.config.json* with your local-ip-address:3001 (run ifconfig to check)
+* Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
+* Run `npx cap open android` in another termimal.
+  Notes: for the first time after a fresh clone.
+  - Run `npx cap copy android` to copy web assets from public to *android/app/src/main/assets/public*, and create *android/app/src/main/assets/capacitor.config.json*.
+  - Run `npx cap update android` to update Android plugins.
+  - Add the following code to *android/app/src/assets/capacitor.config.json*, and replace `server url` with your local-ip-address:3001 (run ifconfig to check)
   ```json
   "server": {
 		"url": "http://your-own-id-address:3001",
 		"cleartext": true} 
   ```
-* Run `yarn && yarn app-watch` from the logseq project root directory in terminal.
-* Run `npx cap open android` in another termimal.
-  Notes: for the first time after a fresh clone.
-  - Run `npx cap copy android` to copy web assets from public to *android/app/src/main/assets/public*.
-  - Run `npx cap update android` to update Android plugins.
 * In Android Studio, open **Tools** -> **AVD Manager** to create Android Virtual Device (AVD), and lanuch it in the emulator.
 * In Android Studio, open **Run** -> **Run** to run Logseq.
 * After logseq startup in Android virtual device, repl should be able to connect
