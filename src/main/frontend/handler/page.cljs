@@ -428,9 +428,6 @@
         namespace     (or (string/includes? old-name "/")
                           (db/get-namespace-pages repo old-name))
         name-changed? (not= old-name new-name)]
-    (prn {:old-name old-name
-          :new-name new-name})
-    (js/console.trace)
     (if (and old-name
              new-name
              (not (string/blank? new-name))

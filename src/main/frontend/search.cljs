@@ -183,11 +183,13 @@
                        (doseq [page-name pages-to-remove-set]
                          (.remove indice
                                   (fn [page]
-                                    (= page-name (gobj/get page "name")))))
+                                    (= (util/safe-lower-case page-name)
+                                       (util/safe-lower-case (gobj/get page "name"))))))
                        (when (seq pages-to-add)
                          (doseq [page pages-to-add]
                            (.add indice (bean/->js page)))))
                      indice))))
+
         (when (seq blocks)
           (let [blocks-result (->> (db/pull-many '[:db/id :block/uuid :block/format :block/content :block/page] (set (map :e blocks)))
                                    (map (fn [b] (assoc b :block/page (get-in b [:block/page :db/id])))))
