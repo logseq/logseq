@@ -31,4 +31,4 @@
 
 (defn git-auto-commit-disabled?
   []
-  (get-in @state [:config :git/disable-auto-commit?]))
+  (get-in @state [:config :git/disable-auto-commit?] true))
