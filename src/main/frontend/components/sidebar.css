@@ -380,10 +380,6 @@
   padding: 0;
 }
 
-.scrollbar-spacing {
-  height: 100%;
-}
-
 @supports not (overflow-y: overlay) {
   .scrollbar-spacing {
     overflow-y: auto;
