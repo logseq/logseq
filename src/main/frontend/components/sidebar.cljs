@@ -172,7 +172,11 @@
 
    (let [pages (->> (db/sub-key-value :recent/pages)
                     (remove string/blank?)
-                    (filter string?))]
+                    (filter string?)
+                    (map (fn [page] {:lowercase (string/lower-case page)
+                                    :page page}))
+                    (util/distinct-by :lowercase)
+                    (map :page))]
      [:ul.text-sm
       (for [name pages]
         (when-let [entity (db/entity [:block/name (util/safe-lower-case name)])]

@@ -209,25 +209,28 @@
                   (pdf-assets/human-hls-filename-display title)
                   (if fmt-journal? (date/journal-title->custom-format title) title))
           old-name (or title page-name)
-          confirm-fn (ui/make-confirm-modal
-                      {:title         "Do you really want to change the page name?"
-                       :on-confirm    (fn [_e {:keys [close-fn]}]
-                                        (close-fn)
-                                        (page-handler/rename! (or title page-name) @*title-value)
-                                        (reset! *edit? false))
-                       :on-cancel     (fn []
-                                        (reset! *title-value old-name)
-                                        (reset! *edit? true))})
+          confirm-fn (fn []
+                       (let [merge? (and (not= (string/lower-case page-name) (string/lower-case @*title-value))
+                                         (page-handler/page-exists? page-name)
+                                         (page-handler/page-exists? @*title-value))]
+                         (ui/make-confirm-modal
+                          {:title         (if merge?
+                                            (str "Page \"" @*title-value "\" already exists, merge them?")
+                                            "Do you really want to change the page name?")
+                           :on-confirm    (fn [_e {:keys [close-fn]}]
+                                            (close-fn)
+                                            (page-handler/rename! (or title page-name) @*title-value)
+                                            (reset! *edit? false))
+                           :on-cancel     (fn []
+                                            (reset! *title-value old-name)
+                                            (reset! *edit? true))})))
           blur-fn (fn [e]
                     (cond
                       (= old-name @*title-value)
                       nil
 
-                      (page-handler/page-exists? @*title-value)
-                      (notification/show! "Page already exists!" :error)
-
                       :else
-                      (state/set-modal! confirm-fn))
+                      (state/set-modal! (confirm-fn)))
                     (util/stop e))]
       (if @*edit?
         [:h1.title {:style {:margin-left -2}}

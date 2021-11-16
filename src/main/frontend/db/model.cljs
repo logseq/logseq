@@ -1458,3 +1458,11 @@
   ([repo orphaned-pages]
    (let [transaction (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
      (db-utils/transact! transaction))))
+
+(defn get-block-last-direct-child
+  [db-id]
+  (when-let [block (db-utils/entity db-id)]
+    (let [children (:block/_parent block)
+          all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
+          all-ids (set (map :db/id children))]
+      (first (set/difference all-ids all-left)))))

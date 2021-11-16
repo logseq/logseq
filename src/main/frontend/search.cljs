@@ -114,7 +114,7 @@
 
 (defn page-search
   ([q]
-   (page-search q 3))
+   (page-search q 10))
   ([q limit]
    (when-let [repo (state/get-current-repo)]
      (let [q (string/lower-case q)
