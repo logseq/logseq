@@ -178,7 +178,8 @@
                              (and ok-handler (ok-handler))
                              (when (util/electron?)
                                (fs/watch-dir! dir-name))
-                             (state/pub-event! [:graph/added repo])))))
+                             (state/pub-event! [:graph/added repo])
+                             (db/persist! repo)))))
                (p/catch (fn [error]
                           (log/error :nfs/load-files-error repo)
                           (log/error :exception error)))))))
