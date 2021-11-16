@@ -240,7 +240,7 @@
 
            [:div.nav-header
 
-            (if default-home
+            (if (:page default-home)
               (sidebar-item
                {:class "home-nav"
                 :title (:page default-home)
