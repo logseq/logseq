@@ -1,5 +1,6 @@
 (ns frontend.util.clock
-  (:require [frontend.util.drawer :as drawer]
+  (:require [frontend.state :as state]
+            [frontend.util.drawer :as drawer]
             [frontend.util :as util]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
@@ -8,9 +9,16 @@
 
 (defn minutes->hours:minutes
   [minutes]
-  (let [hours (/ minutes 60)
+  (let [hours (quot minutes 60)
         minutes (mod minutes 60)]
     (util/format "%02d:%02d" hours minutes)))
+
+(defn seconds->hours:minutes:seconds
+  [seconds]
+  (let [hours (quot seconds 3600)
+        minutes (quot (- seconds (* hours 3600)) 60)
+        seconds (mod seconds 60)]
+    (util/format "%02d:%02d:%02d" hours minutes seconds)))
 
 (defn minutes->days:hours:minutes
   [minutes]
@@ -22,12 +30,35 @@
                  (if (zero? hours) "" (str hours "h"))
                  (if (zero? minutes) "" (str minutes "m")))))
 
+(def support-seconds?
+  (get (state/get-config)
+       [:logbook/settings :with-second-support?] true))
+
+(defn- now []
+  (if support-seconds?
+    (date/get-date-time-string-4)
+    (date/get-date-time-string-3)))
+
+(defn- clock-interval
+  [stime etime]
+  (let [[stime etime] (map #(tf/parse
+                             (if support-seconds?
+                               date/custom-formatter-4
+                               date/custom-formatter-3)
+                             %)
+                           [stime etime])
+        interval (t/interval stime etime)
+        minutes (t/in-minutes interval)
+        seconds (t/in-seconds interval)]
+    (if support-seconds?
+      (seconds->hours:minutes:seconds seconds)
+      (minutes->hours:minutes minutes))))
+
 (defn clock-in
   [format content]
   (drawer/insert-drawer
    format content "logbook"
-   (util/format "CLOCK: [%s]"
-                (date/get-date-time-string-3))))
+   (util/format "CLOCK: [%s]" (now))))
 
 (defn clock-out
   [format content]
@@ -37,12 +68,8 @@
        (let [clock-in-log (string/trim clock-in-log)]
          (when (string/starts-with? clock-in-log "CLOCK:")
            (let [clock-start (subs clock-in-log 8 (- (count clock-in-log) 1))
-                 clock-end (date/get-date-time-string-3)
-                 clock-span (minutes->hours:minutes
-                             (t/in-minutes
-                              (t/interval
-                               (tf/parse date/custom-formatter-3 clock-start)
-                               (tf/parse date/custom-formatter-3 clock-end))))
+                 clock-end (now)
+                 clock-span (clock-interval clock-start clock-end)
                  clock-out-log (util/format "CLOCK: [%s]--[%s] =>  %s"
                                             clock-start clock-end clock-span)]
              (string/replace
@@ -58,17 +85,30 @@
   (when-let [logbook (drawer/get-logbook body)]
     (when-let [logbook-lines (last logbook)]
       (when-let [clock-lines (filter #(string/starts-with? % "CLOCK:") logbook-lines)]
-       (let [times (map #(string/trim (last (string/split % "=>"))) clock-lines)
-             hours (map #(int (first (string/split % ":"))) times)
-             minutes (map #(int (second (string/split % ":"))) times)
-             hours (reduce + hours)
-             minutes (reduce + minutes)]
-         (if string?
-           (util/format "%s%s"
-                        (if (>= hours 1)
-                          (when hours (str hours "h"))
-                          "")
-                        (if (zero? minutes)
-                          ""
-                          (str minutes "m")))
-           (+ (* hours 60) minutes)))))))
+        (let [times (map #(string/trim (last (string/split % "=>"))) clock-lines)
+              hours-coll (map #(int (first (string/split % ":"))) times)
+              minutes-coll (map #(int (second (string/split % ":"))) times)
+              seconds-coll (map #(int (nth (string/split % ":") 2 0)) times)
+              reduced-seconds (reduce + seconds-coll)
+              reduced-minutes (reduce + minutes-coll)
+              reduced-hours (reduce + hours-coll)
+              seconds (mod reduced-seconds 60)
+              minutes (mod (+ reduced-minutes (quot reduced-seconds 60)) 60)
+              hours (+ reduced-hours
+                       (quot reduced-minutes 60)
+                       (quot (+ (mod reduced-minutes 60) reduced-seconds) 3600))]
+          (if string?
+            (util/format "%s%s%s"
+                         (if (>= hours 1)
+                           (when hours (str hours "h"))
+                           "")
+                         (if (zero? minutes)
+                           ""
+                           (str minutes "m"))
+                         (if (zero? seconds)
+                           ""
+                           (str seconds "s")))
+            (let [minutes (+ (* hours 60) minutes)]
+              (if (zero? minutes)
+                seconds
+                minutes))))))))

@@ -15,9 +15,10 @@
         path (:file/path (:block/file page))
         page-title (or (:block/original-name page)
                        (:block/name page))]
-    (when (util/electron?)
-      (debug/set-ack-step! path :start-writing)
-      (debug/wait-for-write-ack! page-title path)))
+    ;; (when (util/electron?)
+    ;;   (debug/set-ack-step! path :start-writing)
+    ;;   (debug/wait-for-write-ack! page-title path))
+    )
   (file/sync-to-file page))
 
 (defn invoke-hooks

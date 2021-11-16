@@ -72,8 +72,7 @@
                             (swap! ref-pages set/union (set block-ref-pages)))
                           (-> block
                               (dissoc :ref-pages)
-                              (assoc :block/file {:file/path file}
-                                     :block/format format
+                              (assoc :block/format format
                                      :block/page [:block/name (string/lower-case page)]
                                      :block/refs block-ref-pages
                                      :block/path-refs block-path-ref-pages))))
@@ -139,7 +138,6 @@
           pages (remove nil? pages)
           pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)]
       [pages
-       block-ids
        (remove nil? blocks)])
     (catch js/Error e
       (log/error :exception e))))
@@ -211,20 +209,22 @@
     (-> (p/all (map
                  (fn [{:file/keys [path content]} contents]
                    (when content
-                     ;; TODO: remove `text/scheduled-deadline-dash->star` once migration is done
-                     (let [org? (= "org" (string/lower-case (util/get-file-ext path)))]
-                       (let [content (if org?
-                                       content
-                                       (text/scheduled-deadline-dash->star content))
-                             utf8-content (utf8/encode content)]
-                         (extract-blocks-pages repo-url path content utf8-content)))))
+                     (let [org? (= "org" (string/lower-case (util/get-file-ext path)))
+                           content (if org?
+                                     content
+                                     (text/scheduled-deadline-dash->star content))
+                           utf8-content (utf8/encode content)]
+                       (extract-blocks-pages repo-url path content utf8-content))))
                  files))
         (p/then (fn [result]
                   (let [result (remove empty? result)]
                     (when (seq result)
-                      (let [[pages block-ids blocks] (apply map concat result)
-                            block-ids (remove (fn [b] (or (nil? b)
-                                                         (nil? (:block/uuid b)))) block-ids)
+                      (let [result (util/distinct-by (fn [[pages blocks]]
+                                                       (let [page (first pages)]
+                                                         (:block/name page))) result)
+                            [pages blocks] (apply map concat result)
+                            block-ids (->> (map :block/uuid blocks)
+                                           (remove nil?))
                             pages (with-ref-pages pages blocks)
                             blocks (map (fn [block]
                                           (let [id (:block/uuid block)
@@ -233,8 +233,9 @@
                                      blocks)
                             ;; To prevent "unique constraint" on datascript
                             pages-index (map #(select-keys % [:block/name]) pages)
-                            block-ids-set (set (map (fn [{:block/keys [uuid]}] [:block/uuid uuid]) block-ids))
-                            blocks (map #(remove-illegal-refs % block-ids-set refresh?) blocks)]
+                            block-ids-set (set (map (fn [uuid] [:block/uuid uuid]) block-ids))
+                            blocks (map #(remove-illegal-refs % block-ids-set refresh?) blocks)
+                            block-ids (map (fn [uuid] {:block/uuid uuid}) block-ids)]
                         (apply concat [pages-index pages block-ids blocks])))))))))
 
 (defn extract-all-block-refs

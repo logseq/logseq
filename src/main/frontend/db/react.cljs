@@ -56,13 +56,19 @@
     (reset! query-state state)))
 
 (defn get-current-repo-refs-keys
-  []
+  [{:keys [key data]}]
   (when-let [current-repo (state/get-current-repo)]
     (->>
      (map (fn [[repo k id]]
             (when (and (= repo current-repo)
                        (contains? #{:block/refed-blocks :block/unlinked-refs} k))
-              [k id]))
+              (if (= k :block/refed-blocks)
+                (if (every? (fn [m]
+                              (when (map? m)
+                                (= id (:db/id (:block/page m))))) data)
+                  nil
+                  [k id])
+                [k id])))
        (keys @query-state))
      (remove nil?))))
 
@@ -135,9 +141,10 @@
   (conj (vec inputs) rules/rules))
 
 (defn q
-  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn]
+  [repo k {:keys [use-cache? transform-fn query-fn inputs-fn disable-reactive?]
            :or {use-cache? true
-                transform-fn identity}} query & inputs]
+                transform-fn identity}
+           :as opts} query & inputs]
   (let [kv? (and (vector? k) (= :kv (first k)))
         k (vec (cons repo k))]
     (when-let [conn (conn/get-conn repo)]
@@ -166,7 +173,9 @@
                 result-atom (or result-atom (atom nil))]
             ;; Don't notify watches now
             (set! (.-state result-atom) result)
-            (add-q! k query inputs result-atom transform-fn query-fn inputs-fn)))))))
+            (if-not disable-reactive?
+              (add-q! k query inputs result-atom transform-fn query-fn inputs-fn)
+              result-atom)))))))
 
 
 
@@ -226,7 +235,9 @@
                             (util/concat-without-nil
                              (mapcat
                               (fn [block]
-                                (when-let [page-id (:db/id (:block/page block))]
+                                (when-let [page-id (or (:db/id (:block/page block))
+                                                       (and (int? (:block/page block))
+                                                            (:block/page block)))]
                                   [[:blocks (:block/uuid block)]
                                    [:page/blocks page-id]
                                    [:page/ref-pages page-id]]))
@@ -245,26 +256,29 @@
 
                              (when current-page-id
                                [[:page/ref-pages current-page-id]
-                                ;; [:block/refed-blocks current-page-id]
                                 [:page/mentioned-pages current-page-id]])
 
                              (apply concat
                                (for [{:block/keys [refs]} blocks]
-                                 (mapcat (fn [ref]
-                                           (when-let [block (if (and (map? ref) (:block/name ref))
-                                                              (db-utils/entity [:block/name (:block/name ref)])
-                                                              (db-utils/entity ref))]
-                                             [[:page/blocks (:db/id (:block/page block))]
-                                              ;; [:block/refed-blocks (:db/id block)]
-                                              ]))
-                                         refs))))
+                                 (map (fn [ref]
+                                        (cond
+                                          (and (map? ref) (:block/name ref))
+                                          [:page/blocks (:db/id (db-utils/entity [:block/name (:block/name ref)]))]
+
+                                          (and (vector? ref) (= (first ref) :block/uuid))
+                                          [:block/refs-count (second ref)]
+
+                                          :else
+                                          nil))
+                                   refs))))
                             (distinct))
               refed-pages (map
                            (fn [[k page-id]]
                              (when (= k :block/refed-blocks)
                                [:page/ref-pages page-id]))
                             related-keys)
-              all-refed-blocks (get-current-repo-refs-keys)
+              all-refed-blocks (get-current-repo-refs-keys {:key key
+                                                            :data data})
               custom-queries (some->>
                               (filter (fn [v]
                                         (and (= (first v) (state/get-current-repo))
@@ -301,9 +315,10 @@
               (let [new-result (->
                                 (cond
                                   query-fn
-                                  (profile
-                                   "Query:"
-                                   (doall (query-fn db)))
+                                  (let [result (query-fn db)]
+                                    (if (coll? result)
+                                      (doall result)
+                                      result))
 
                                   inputs-fn
                                   (let [inputs (inputs-fn)]
@@ -343,6 +358,7 @@
    (sub-key-value (state/get-current-repo) key))
   ([repo-url key]
    (when (conn/get-conn repo-url)
-     (-> (q repo-url [:kv key] {} key key)
-         react
-         key))))
+     (let [m (some-> (q repo-url [:kv key] {} key key) react)]
+       (if-let [result (get m key)]
+         result
+         m)))))

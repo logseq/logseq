@@ -12,5 +12,11 @@ html[data-theme=light] {
 }
 
 .sidebar-item-list {
-     padding-bottom: 150px;
+  padding-bottom: 150px;
+  height: calc(100vh - 48px);
+}
+
+
+html[data-theme='light'] a.toggle:hover {
+  color: var(--ls-primary-text-color);
 }

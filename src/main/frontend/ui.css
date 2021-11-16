@@ -45,9 +45,10 @@
 
 .ui__notifications {
   position: fixed;
-  z-index: 99;
+  z-index: var(--ls-z-index-level-4);
   width: 100%;
   top: 3.2em;
+  pointer-events: none;
 
   &-content {
     @apply inset-0 flex items-end justify-center px-4 py-3
@@ -137,7 +138,7 @@
 
 @media (min-width: 1024px) {
   .panel-content {
-    min-width: 740px;
+    min-width: 820px;
   }
 
   .panel-content .ls-card {

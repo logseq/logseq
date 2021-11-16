@@ -140,7 +140,7 @@
                                                                  (let [block (db/pull [:block/uuid block-id])
                                                                        value (.getValue cm)
                                                                        textarea-value (gobj/get textarea "value")]
-                                                                   (editor-handler/edit-block! block :max (:block/format block) block-id)))
+                                                                   (editor-handler/edit-block! block :max block-id)))
                                                                ;; TODO: return "handled" or false doesn't always prevent event bubbles
                                                                (reset! esc-pressed? true)
                                                                (js/setTimeout #(reset! esc-pressed? false) 10))}}))]

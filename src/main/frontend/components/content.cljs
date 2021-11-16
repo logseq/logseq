@@ -4,6 +4,7 @@
             [dommy.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
+            [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
@@ -65,7 +66,15 @@
                   (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
                     (state/set-modal!
                      #(export/export-blocks block-uuids))))}
-     "Copy as")]])
+     "Copy as")
+    (ui/menu-link
+     {:key "copy block refs"
+      :on-click editor-handler/copy-block-refs}
+     "Copy block refs")
+    (ui/menu-link
+     {:key "cycle todos"
+      :on-click editor-handler/cycle-todos!}
+     "Cycle todos")]])
 
 ;; FIXME: Make it configurable
 (def block-background-colors
@@ -272,6 +281,19 @@
         :on-click (fn [] (editor-handler/replace-ref-with-embed! block block-ref-id))}
        "Replace with embed")]]))
 
+(rum/defc page-title-custom-context-menu-content
+  [page]
+  (when-not (string/blank? page)
+    (let [page-menu-options (page-menu/page-menu page)]
+      [:div#custom-context-menu
+       [:div.py-1.rounded-md.bg-base-3.shadow-xs
+        (for [{:keys [title options]} page-menu-options]
+          (ui/menu-link
+           (merge
+            {:key title}
+            options)
+           title))]])))
+
 ;; TODO: content could be changed
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
@@ -295,13 +317,21 @@
                     (fn [e]
                       (let [target (gobj/get e "target")
                             block-id (d/attr target "blockid")
-                            {:keys [block block-ref]} (state/sub :block-ref/context)]
+                            {:keys [block block-ref]} (state/sub :block-ref/context)
+                            {:keys [page]} (state/sub :page-title/context)]
                         (cond
+                          page
+                          (do
+                            (common-handler/show-custom-context-menu!
+                             e
+                             (page-title-custom-context-menu-content page))
+                            (state/set-state! :page-title/context nil))
+
                           block-ref
                           (do
                             (common-handler/show-custom-context-menu!
-                            e
-                            (block-ref-custom-context-menu-content block block-ref))
+                             e
+                             (block-ref-custom-context-menu-content block block-ref))
                             (state/set-state! :block-ref/context nil))
 
                           (state/selection?)
@@ -310,9 +340,12 @@
                            (custom-context-menu-content))
 
                           (and block-id (util/uuid-string? block-id))
-                          (common-handler/show-custom-context-menu!
-                           e
-                           (block-context-menu-content target (cljs.core/uuid block-id)))
+                          (let [block (.closest target ".ls-block")]
+                            (when block
+                              (util/select-highlight! [block]))
+                            (common-handler/show-custom-context-menu!
+                            e
+                            (block-context-menu-content target (cljs.core/uuid block-id))))
 
                           :else
                           nil))))))

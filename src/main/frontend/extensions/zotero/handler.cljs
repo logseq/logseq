@@ -30,13 +30,11 @@
           (when (not-empty md-items)
             (when-let [id (:block/uuid
                            (editor-handler/api-insert-new-block!
-                            first-block {:page page-name
-                                         :re-render-root? false}))]
+                            first-block {:page page-name}))]
               (doseq [md-item md-items]
                 (editor-handler/api-insert-new-block!
                  md-item
                  {:block-uuid id
-                  :re-render-root? false
                   :sibling?   false
                   :before?    false})))))))))
 
@@ -49,11 +47,9 @@
   [page-name abstract-note]
   (when-not (str/blank? abstract-note)
     (let [block (editor-handler/api-insert-new-block!
-                 "[[Abstract]]" {:page page-name
-                                 :re-render-root? false})]
+                 "[[Abstract]]" {:page page-name})]
       (editor-handler/api-insert-new-block!
        abstract-note {:block-uuid (:block/uuid block)
-                      :re-render-root? false
                       :sibling? false}))))
 
 (defn- create-page [page-name properties]
@@ -81,8 +77,7 @@
            (editor-handler/api-insert-new-block!
             ""
             {:page       page-name
-             :properties properties
-             :re-render-root? false}))
+             :properties properties}))
          (create-page page-name properties))
 
        (create-abstract-note! page-name abstract-note)

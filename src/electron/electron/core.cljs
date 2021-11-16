@@ -51,6 +51,7 @@
                                           {:plugins                 true ; pdf
                                            :nodeIntegration         false
                                            :nodeIntegrationInWorker false
+                                           :webSecurity             (not dev?)
                                            :contextIsolation        true
                                            :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                                            ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
@@ -171,6 +172,7 @@
   [^js win]
   (let [toggle-win-channel "toggle-max-or-min-active-win"
         call-app-channel "call-application"
+        call-win-channel "call-main-win"
         export-publish-assets "export-publish-assets"
         quit-dirty-state "set-quit-dirty-state"
         web-contents (. win -webContents)]
@@ -196,6 +198,13 @@
                (fn [_ type & args]
                  (try
                    (js-invoke app type args)
+                   (catch js/Error e
+                     (js/console.error e)))))
+
+      (.handle call-win-channel
+               (fn [_ type & args]
+                 (try
+                   (js-invoke @*win type args)
                    (catch js/Error e
                      (js/console.error e))))))
 
@@ -243,7 +252,8 @@
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
          (.removeHandler ipcMain quit-dirty-state)
-         (.removeHandler ipcMain call-app-channel))))
+         (.removeHandler ipcMain call-app-channel)
+         (.removeHandler ipcMain call-win-channel))))
 
 (defn- destroy-window!
   [^js win]
@@ -319,7 +329,10 @@
                                             (destroy-window! win)
                                             (reset! *win nil))
                                           (do (.preventDefault ^js/Event e)
-                                              (.hide win))))))))
+                                              (if (and mac? (.isFullScreen win))
+                                                (do (.once win "leave-full-screen" #(.hide win))
+                                                    (.setFullScreen win false))
+                                                (.hide win)))))))))
                (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
                (.on app "activate" #(if @*win (.show win)))))))))
 

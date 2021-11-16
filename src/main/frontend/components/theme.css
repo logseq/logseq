@@ -27,7 +27,7 @@ html {
   }
 
   ::-webkit-scrollbar {
-    width: 8px;
+    width: var(--ls-scrollbar-width);
     height: 8px;
   }
 
@@ -65,12 +65,6 @@ html[data-theme='light'] {
   .cp__header {
     a {
       color: var(--ls-primary-text-color);
-    }
-
-    .block-parents {
-      a {
-        color: var(--ls-link-ref-text-color);
-      }
     }
   }
 

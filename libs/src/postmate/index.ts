@@ -224,8 +224,7 @@ export class ChildAPI {
       // Reply to Parent
       resolveValue(this.model, property)
         .then(value => {
-          // @ts-ignore
-          e.source.postMessage({
+          (e.source as WindowProxy).postMessage({
             property,
             postmate: 'reply',
             type: messageType,
@@ -383,7 +382,7 @@ export class Model {
    */
   sendHandshakeReply () {
     return new Promise((resolve, reject) => {
-      const shake = (e) => {
+      const shake = (e: MessageEvent<any>) => {
         if (!e.data.postmate) {
           return
         }
@@ -395,7 +394,7 @@ export class Model {
           if (process.env.NODE_ENV !== 'production') {
             log('Child: Sending handshake reply to Parent')
           }
-          e.source.postMessage({
+          (e.source as WindowProxy).postMessage({
             postmate: 'handshake-reply',
             type: messageType,
           }, e.origin)

@@ -69,12 +69,21 @@
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
 
+(defn writable?
+  [path]
+  (assert (string? path))
+  (try
+    (fs/accessSync path (aget fs "W_OK"))
+    (catch js/Error _e
+      false)))
+
 (defmethod handle :writeFile [_window [_ path content]]
   (try
     (let [^js Buf (.-Buffer buffer)
           ^js content (if (instance? js/ArrayBuffer content)
                         (.from Buf content) content)]
-
+      (when (and (fs/existsSync path) (not (writable? path)))
+        (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path))
     (catch js/Error e
@@ -90,7 +99,7 @@
   (fs/statSync path))
 
 (defonce allowed-formats
-         #{:org :markdown :md :edn :json :css :excalidraw})
+         #{:org :markdown :md :edn :json :js :css :excalidraw})
 
 (defn get-ext
   [p]
@@ -117,10 +126,13 @@
   (let [result (.showOpenDialogSync dialog (bean/->js
                                              {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
         path (first result)]
-    (.. ^js window -webContents
-        (send "open-dir-confirmed"
-              (bean/->js {:opened? true})))
-    (get-files path)))
+    (if path
+      (do
+        (.. ^js window -webContents
+           (send "open-dir-confirmed"
+                 (bean/->js {:opened? true})))
+        (get-files path))
+      (throw (js/Error "path empty")))))
 
 (defmethod handle :getFiles [window [_ path]]
   (get-files path))
@@ -198,6 +210,9 @@
 
 (defmethod handle :getDirname [_]
   js/__dirname)
+
+(defmethod handle :getAppBaseInfo [^js win [_ opts]]
+  {:isFullScreen (.isFullScreen win)})
 
 (defmethod handle :setCurrentGraph [_ [_ path]]
   (let [path (when path (string/replace path "logseq_local_" ""))]

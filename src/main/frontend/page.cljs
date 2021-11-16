@@ -17,9 +17,7 @@
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
                    (plugin-handler/host-mounted!)
-                   (let [td-fns [(ui/setup-active-keystroke!)
-                                 (ui/setup-active-keystroke!)]
-                         teardown-fn #(mapv (fn [f] (f)) td-fns)]
+                   (let [teardown-fn (ui/setup-active-keystroke!)]
                      (assoc state ::teardown teardown-fn)))
    :will-unmount (fn [state]
                    (let [teardown (::teardown state)]
@@ -53,4 +51,3 @@
         ;;           :timeout {:enter 300
         ;;                     :exit 200}}
         ;;          (route-view view route-match)))))))
-

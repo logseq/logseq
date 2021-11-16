@@ -19,6 +19,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.commands :as commands]
             [frontend.spec :as spec]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -27,7 +29,9 @@
             ["semver" :as semver]
             [clojure.string :as string]
             [frontend.modules.instrumentation.posthog :as posthog]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.encrypt :as encrypt]
+            [promesa.core :as p]))
 
 ;; TODO: should we move all events here?
 
@@ -161,7 +165,8 @@
   (page-handler/rename! old-title new-title))
 
 (defmethod handle :page/create-today-journal [[_ repo]]
-  (page-handler/create-today-journal!))
+  (p/let [_ (page-handler/create-today-journal!)]
+    (ui-handler/re-render-root!)))
 
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (state/clear-edit!)
@@ -170,7 +175,8 @@
       (state/set-modal! #(diff/local-file repo path disk-content db-content)))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
-  (state/set-modal! #(git-component/file-specific-version path hash content)))
+  (p/let [content (when content (encrypt/decrypt content))]
+    (state/set-modal! #(git-component/file-specific-version path hash content))))
 
 (defmethod handle :after-db-restore [[_ repos]]
   (mapv (fn [{url :url} repo]
@@ -187,6 +193,9 @@
                false))))
         repos))
 
+(defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
+  (notification/show! content status clear?))
+
 (defmethod handle :command/run [_]
   (when (util/electron?)
     (state/set-modal! shell/shell)))
@@ -198,6 +207,9 @@
 
 (defmethod handle :instrument [[_ {:keys [type payload]}]]
   (posthog/capture type payload))
+
+(defmethod handle :exec-plugin-cmd [[_ {:keys [type key pid cmd action]}]]
+  (commands/exec-plugin-simple-command! pid cmd action))
 
 (defn run!
   []

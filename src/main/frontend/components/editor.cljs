@@ -105,9 +105,24 @@
                  (when (state/sub :editor/show-page-search-hashtag?)
                    (util/safe-subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
-                   (util/safe-subs edit-content pos current-pos)))
+                   (util/safe-subs edit-content pos current-pos))
+                 "")
               matched-pages (when-not (string/blank? q)
-                              (editor-handler/get-matched-pages q))]
+                              (editor-handler/get-matched-pages q))
+              matched-pages (cond
+                              (contains? (set (map string/lower-case matched-pages)) (string/trim q))
+                              matched-pages
+
+                              (empty? matched-pages)
+                              matched-pages
+
+                              :else
+                              (->>
+                               (cons (first matched-pages)
+                                     (cons
+                                      (str "New page: " q)
+                                      (rest matched-pages)))
+                               (remove nil?)))]
           (ui/auto-complete
            matched-pages
            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
@@ -202,57 +217,81 @@
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
-   [:button.bottom-action
-    {:on-click #(editor-handler/indent-outdent true)}
-    (ui/icon "chevrons-right")]
-   [:button.bottom-action
-    {:on-click #(editor-handler/indent-outdent false)}
-    (ui/icon "chevrons-left")]
-   [:button.bottom-action
-    {:on-click (editor-handler/move-up-down true)}
-    (ui/icon "chevron-up")]
-   [:button.bottom-action
-    {:on-click (editor-handler/move-up-down false)}
-    (ui/icon "chevron-down")]
-   [:button.bottom-action
-    {:on-click #(editor-handler/cycle-todo!)}
-    (ui/icon "checkbox")]
-   [:button.bottom-action
-    {:on-click #(do
-                  (commands/simple-insert! parent-id "\n"
-                                           {:forward-pos 1})
-                  ;; TODO: should we add this focus step to `simple-insert!`?
-                  (when-let [input (gdom/getElement parent-id)]
-                    (.focus input)))}
-    (ui/icon "arrow-back")]
-   [:button.bottom-action.text-sm
-    {:on-click #(do
-                  (commands/simple-insert!
-                  parent-id "[[]]"
-                  {:backward-pos 2
-                   :check-fn     (fn [_ _ new-pos]
-                                   (reset! commands/*slash-caret-pos new-pos)
-                                   (commands/handle-step [:editor/search-page]))})
-                  (when-let [input (gdom/getElement parent-id)]
-                    (.focus input)))}
-    "[["]
-   [:button.bottom-action.text-sm
-    {:on-click #(do
-                 (commands/simple-insert!
-                 parent-id "(())"
-                 {:backward-pos 2
-                  :check-fn     (fn [_ _ new-pos]
-                                  (reset! commands/*slash-caret-pos new-pos)
-                                  (commands/handle-step [:editor/search-block]))})
-                 (when-let [input (gdom/getElement parent-id)]
-                   (.focus input)))}
-    "(("]
-   [:button.bottom-action.text-sm
-    {:on-click #(do
-                  (commands/simple-insert! parent-id "/" {})
-                  (when-let [input (gdom/getElement parent-id)]
-                    (.focus input)))}
-    "/"]])
+   [:div.flex.justify-evenly.w-full
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (editor-handler/indent-outdent true))}
+      (ui/icon "chevrons-right")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (editor-handler/indent-outdent false))}
+      (ui/icon "chevrons-left")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        ((editor-handler/move-up-down true)))}
+      (ui/icon "chevron-up")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        ((editor-handler/move-up-down false)))}
+      (ui/icon "chevron-down")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (editor-handler/cycle-todo!))}
+      (ui/icon "checkbox")]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (commands/simple-insert! parent-id "\n"
+                                                 {:forward-pos 1})
+                        ;; TODO: should we add this focus step to `simple-insert!`?
+                        (when-let [input (gdom/getElement parent-id)]
+                          (.focus input)))}
+      (ui/icon "arrow-back")]]
+    [:div
+     [:button.bottom-action.text-sm
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (commands/simple-insert!
+                         parent-id "[[]]"
+                         {:backward-pos 2
+                          :check-fn     (fn [_ _ new-pos]
+                                          (reset! commands/*slash-caret-pos new-pos)
+                                          (commands/handle-step [:editor/search-page]))})
+                        (when-let [input (gdom/getElement parent-id)]
+                          (.focus input)))}
+      "[["]]
+    [:div
+     [:button.bottom-action.text-sm
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (commands/simple-insert!
+                         parent-id "(())"
+                         {:backward-pos 2
+                          :check-fn     (fn [_ _ new-pos]
+                                          (reset! commands/*slash-caret-pos new-pos)
+                                          (commands/handle-step [:editor/search-block]))})
+                        (when-let [input (gdom/getElement parent-id)]
+                          (.focus input)))}
+      "(("]]
+    [:div
+     [:button.bottom-action.text-sm
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (commands/simple-insert! parent-id "/" {})
+                        (when-let [input (gdom/getElement parent-id)]
+                          (.focus input)))}
+      "/"]]]])
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -280,7 +319,7 @@
         (let [command (:command (first input-option))]
           [:div.p-2.rounded-md.shadow-lg
            (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
-             [:div.my-3
+             [:div.my-3 {:key id}
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
@@ -409,18 +448,21 @@
 
 (defn get-editor-heading-class [content]
   (let [content (if content (str content) "")]
-    (cond
-      (string/includes? content "\n") "multiline-block"
-      (starts-with? content "# ") "h1"
-      (starts-with? content "## ") "h2"
-      (starts-with? content "### ") "h3"
-      (starts-with? content "#### ") "h4"
-      (starts-with? content "##### ") "h5"
-      (starts-with? content "###### ") "h6"
-      (starts-with? content "TODO ") "todo-block"
-      (starts-with? content "DOING ") "doing-block"
-      (starts-with? content "DONE ") "done-block"
-      :else "normal-block")))
+    (str
+     (if (string/includes? content "\n") "multiline-block" "uniline-block")
+     " "
+     (cond
+       (starts-with? content "# ") "h1"
+       (starts-with? content "## ") "h2"
+       (starts-with? content "### ") "h3"
+       (starts-with? content "#### ") "h4"
+       (starts-with? content "##### ") "h5"
+       (starts-with? content "###### ") "h6"
+       (starts-with? content "TODO ") "todo-block"
+       (starts-with? content "DOING ") "doing-block"
+       (starts-with? content "DONE ") "done-block"
+       (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+       :else "normal-block"))))
 
 (rum/defc mock-textarea <
   rum/static
@@ -503,7 +545,7 @@
      (state/sub :editor/show-input)
      (animated-modal "input" (input id
                                     (fn [command m pos]
-                                      (editor-handler/handle-command-input command id format m pos)))
+                                      (editor-handler/handle-command-input command id format m)))
                      true (util/react *slash-caret-pos))
 
      (state/sub :editor/show-zotero)

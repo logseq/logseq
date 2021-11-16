@@ -5,7 +5,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [cljs-bean.core :as bean]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.text :as text]))
 
 ;; TODO: replace with diff-match-patch
 (defn diff
@@ -30,6 +31,17 @@
       (nth result 0))
     text))
 
+(def inline-special-chars
+  #{\* \_ \/ \` \+ \^ \~ \$})
+
+(defn- markdown-link?
+  [markup current-line pos]
+  (and current-line
+       (= (util/nth-safe markup pos) "]")
+       (= (util/nth-safe markup (inc pos)) "(")
+       (string/includes? (subs current-line 0 pos) "[")
+       (string/includes? (subs current-line pos) ")")))
+
 ;; (find-position "** hello _w_" "hello w")
 (defn find-position
   [markup text]
@@ -52,11 +64,27 @@
                       (recur t1 r2 i1 (inc i2))
 
                       :else
-                      (recur r1 t2 (inc i1) i2))))]
-        (if (and (= (util/nth-safe markup pos)
-                    (util/nth-safe markup (inc pos))
-                    "]"))
+                      (recur r1 t2 (inc i1) i2))))
+            current-line (text/get-current-line-by-pos markup pos)]
+        (cond
+          (and (= (util/nth-safe markup pos)
+                  (util/nth-safe markup (inc pos))
+                  "]"))
           (+ pos 2)
+
+          (contains? inline-special-chars (util/nth-safe markup pos))
+          (let [matched (->> (take-while inline-special-chars (util/safe-subs markup pos))
+                             (apply str))
+                matched? (and current-line (string/includes? current-line (string/reverse matched)))]
+            (if matched?
+              (+ pos (count matched))
+              pos))
+
+          (markdown-link? markup current-line pos)
+          (let [idx (string/index-of (subs current-line pos) ")")]
+            (+ pos (inc idx)))
+
+          :else
           pos))
       (catch js/Error e
         (log/error :diff/find-position {:error e})

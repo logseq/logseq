@@ -55,7 +55,7 @@
         (not (string/blank? (path/extname path)))
         (not
          (some #(string/ends-with? path %)
-               [".md" ".markdown" ".org" ".edn" ".css"])))))))
+               [".md" ".markdown" ".org" ".js" ".edn" ".css"])))))))
 
 (defn fix-win-path!
   [path]

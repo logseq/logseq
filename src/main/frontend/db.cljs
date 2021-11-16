@@ -49,7 +49,7 @@
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
   set-file-last-modified-at! transact-files-db! page-empty? page-empty-or-dummy? get-alias-source-page
-  set-file-content! has-children? get-namespace-pages get-all-namespace-relation]
+  set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-nested-pages]
 
  [frontend.db.react
   get-current-marker get-current-page get-current-priority set-key-value

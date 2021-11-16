@@ -1,3 +1,7 @@
+:root {
+  --ls-draggable-handle-height: 30px;
+}
+
 .cp__plugins {
   &-page {
     > h1 {
@@ -286,31 +290,155 @@
   }
 }
 
-.lsp-iframe-sandbox, .lsp-shadow-sandbox {
+.lsp-iframe-sandbox, .lsp-shadow-sandbox, .lsp-ui-float {
+  height: 100%;
+  width: 100%;
   position: absolute;
   top: 0;
   left: 0;
-  z-index: -1;
-  visibility: hidden;
-  height: 0;
-  width: 0;
-  padding: 0;
+  right: 0;
+  bottom: 0;
   margin: 0;
+  padding: 0;
+
+  &-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: -1;
+    visibility: hidden;
+    display: none;
+    height: 0;
+    width: 0;
+    padding: 0;
+    margin: 0;
+    border:2px solid var(--ls-border-color);
+
+    &.visible {
+      z-index: var(--ls-z-index-level-2);
+      width: 100%;
+      height: 100%;
+      visibility: visible;
+      display: block;
+    }
+
+    &[draggable=true] {
+      -webkit-user-drag: none;
+
+      > .draggable-handle {
+        display: block;
+        height: var(--ls-draggable-handle-height);
+        cursor: move;
+        user-select: none;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        overflow: hidden;
+
+        > .th {
+          display: flex;
+          align-items: center;
+          height: var(--ls-draggable-handle-height);
+          user-select: none;
+          position: relative;
+          background-color: var(--ls-secondary-background-color);
+          color: var(--ls-primary-text-color);
+
+          > .l {
+            flex-basis: 80%;
+          }
+
+          > .r {
+            position: absolute;
+            right: 0;
+            top: 0;
+          }
+
+          h3 {
+            padding: 0 5px;
+            white-space: nowrap;
+            max-width: 60%;
+            overflow: hidden;
+            -webkit-line-clamp: 1;
+            text-overflow: ellipsis;
+          }
+
+          a.button {
+            &:hover {
+              background-color: transparent;
+            }
+          }
+        }
+      }
+
+      .lsp-iframe-sandbox,
+      .lsp-shadow-sandbox,
+      .ls-ui-float-content {
+        height: calc(100% - var(--ls-draggable-handle-height));
+        width: 100%;
+        margin-top: var(--ls-draggable-handle-height);
+        overflow: auto;
+      }
+
+      .ls-ui-float-content {
+        user-select: text;
+      }
+
+      &.is-dragging {
+        /*height: var(--ls-draggable-handle-height) !important;*/
+        overflow: hidden;
+        opacity: .7;
+
+        > .draggable-handle {
+          background-color: rgba(0, 0, 0, .1);
+          height: 100%;
+          z-index: 3;
+        }
+      }
+    }
+
+    &[resizable=true] {
+      > .resizable-handle {
+        position: absolute;
+        bottom: -1px;
+        right: -1px;
+        height: 15px;
+        width: 15px;
+        z-index: 2;
+        opacity: 0;
+        cursor: nwse-resize;
+        user-select: none;
+      }
+
+      &.is-resizing {
+        > .resizable-handle {
+          width: 90%;
+          height: 80%;
+        }
+      }
+    }
+  }
+}
+
+.lsp-ui-float-container {
+  top: 40%;
+  left: 30%;
+
+  .draggable-handle {
+  }
 
   &.visible {
-    z-index: 1;
-    width: 100%;
-    height: 100%;
-    visibility: visible;
+    height: unset;
   }
 }
 
 .ui-items-container {
   &[data-type=toolbar] {
-    @apply flex items-center mt-1;
+    @apply flex items-center;
 
     > .injected-ui-item-toolbar {
-      @apply opacity-70 hover:opacity-100 transition-opacity;
+      @apply hover:opacity-100 transition-opacity;
     }
   }
 

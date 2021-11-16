@@ -163,8 +163,15 @@ docker build -t logseq-docker .
 
 ### 3. Run Docker container
 
+#### MacOS/Linux
+
 ```bash
 docker run -v $(pwd):/home/logseq/logseq -p 3001:3001 -p 9630:9630 -p 8701:8701 --rm -it logseq-docker /bin/bash
+```
+#### Windows
+
+```bash
+docker run -v %cd%:/home/logseq/logseq -p 3001:3001 -p 9630:9630 -p 8701:8701 --rm -it logseq-docker /bin/bash
 ```
 
 ### 4. Inside the container compile as described above

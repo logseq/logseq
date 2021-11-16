@@ -133,54 +133,55 @@
              root-handle (first result)
              dir-name (if nfs?
                         (gobj/get root-handle "name")
-                        root-handle)
-             repo (str config/local-db-prefix dir-name)
-             root-handle-path (str config/local-handle-prefix dir-name)
-             _ (when nfs?
-                 (idb/set-item! root-handle-path root-handle)
-                 (nfs/add-nfs-file-handle! root-handle-path root-handle))
-             result (nth result 1)
-             files (-> (->db-files mobile-native? electron? dir-name result)
-                       remove-ignore-files)
-             _ (when nfs?
-                 (let [file-paths (set (map :file/path files))]
-                   (swap! path-handles (fn [handles]
-                                         (->> handles
-                                              (filter (fn [[path _handle]]
-                                                        (or
-                                                         (contains? file-paths
-                                                                    (string/replace-first path (str dir-name "/") ""))
-                                                         (let [last-part (last (string/split path "/"))]
-                                                           (contains? #{config/app-name
-                                                                        config/default-draw-directory
-                                                                        (config/get-journals-directory)
-                                                                        (config/get-pages-directory)}
-                                                                      last-part)))))
-                                              (into {})))))
+                        root-handle)]
+       (when-not (string/blank? dir-name)
+         (p/let [repo (str config/local-db-prefix dir-name)
+                 root-handle-path (str config/local-handle-prefix dir-name)
+                 _ (when nfs?
+                     (idb/set-item! root-handle-path root-handle)
+                     (nfs/add-nfs-file-handle! root-handle-path root-handle))
+                 result (nth result 1)
+                 files (-> (->db-files mobile-native? electron? dir-name result)
+                           remove-ignore-files)
+                 _ (when nfs?
+                     (let [file-paths (set (map :file/path files))]
+                       (swap! path-handles (fn [handles]
+                                             (->> handles
+                                                  (filter (fn [[path _handle]]
+                                                            (or
+                                                             (contains? file-paths
+                                                                        (string/replace-first path (str dir-name "/") ""))
+                                                             (let [last-part (last (string/split path "/"))]
+                                                               (contains? #{config/app-name
+                                                                            config/default-draw-directory
+                                                                            (config/get-journals-directory)
+                                                                            (config/get-pages-directory)}
+                                                                          last-part)))))
+                                                  (into {})))))
 
-                 (set-files! @path-handles))
-             markup-files (filter-markup-and-built-in-files files)]
-       (-> (p/all (map (fn [file]
-                         (p/let [content (if nfs?
-                                           (.text (:file/file file))
-                                           (:file/content file))
-                                 content (encrypt/decrypt content)]
-                           (assoc file :file/content content))) markup-files))
-           (p/then (fn [result]
-                     (let [files (map #(dissoc % :file/file) result)]
-                       (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
-                       (p/let [_ (repo-handler/load-repo-to-db! repo
-                                                                {:first-clone? true
-                                                                 :nfs-files    files})]
-                         (state/add-repo! {:url repo :nfs? true})
-                         (state/set-loading-files! false)
-                         (and ok-handler (ok-handler))
-                         (when (util/electron?)
-                           (fs/watch-dir! dir-name))
-                         (state/pub-event! [:graph/added repo])))))
-           (p/catch (fn [error]
-                      (log/error :nfs/load-files-error repo)
-                      (log/error :exception error)))))
+                     (set-files! @path-handles))
+                 markup-files (filter-markup-and-built-in-files files)]
+           (-> (p/all (map (fn [file]
+                             (p/let [content (if nfs?
+                                               (.text (:file/file file))
+                                               (:file/content file))
+                                     content (encrypt/decrypt content)]
+                               (assoc file :file/content content))) markup-files))
+               (p/then (fn [result]
+                         (let [files (map #(dissoc % :file/file) result)]
+                           (repo-handler/start-repo-db-if-not-exists! repo {:db-type :local-native-fs})
+                           (p/let [_ (repo-handler/load-repo-to-db! repo
+                                                                    {:first-clone? true
+                                                                     :nfs-files    files})]
+                             (state/add-repo! {:url repo :nfs? true})
+                             (state/set-loading-files! false)
+                             (and ok-handler (ok-handler))
+                             (when (util/electron?)
+                               (fs/watch-dir! dir-name))
+                             (state/pub-event! [:graph/added repo])))))
+               (p/catch (fn [error]
+                          (log/error :nfs/load-files-error repo)
+                          (log/error :exception error)))))))
      (p/catch (fn [error]
                 (if (contains? #{"AbortError" "Error"} (gobj/get error "name"))
                   (state/set-loading-files! false)

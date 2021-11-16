@@ -14,6 +14,7 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
+            [frontend.handler :as handler]
             [frontend.handler.dnd :as editor-dnd-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.export :as export-handler]
@@ -22,6 +23,8 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.handler.command-palette :as palette-handler]
+            [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
@@ -30,7 +33,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [sci.core :as sci]))
+            [sci.core :as sci]
+            [frontend.modules.layout.core]))
 
 ;; helpers
 (defn- normalize-keyword-for-json
@@ -57,7 +61,7 @@
     (bean/->js
       (normalize-keyword-for-json
         {:preferred-language    (:preferred-language @state/state)
-         :preferred-theme-mode  (if (= (:ui/theme @state/state) "light") "white" "dark")
+         :preferred-theme-mode  (if (= (:ui/theme @state/state) "white") "light" "dark")
          :preferred-format      (state/get-preferred-format)
          :preferred-workflow    (state/get-preferred-workflow)
          :preferred-todo        (state/get-preferred-todo)
@@ -225,10 +229,21 @@
                               (rest %)) actions)]))))
 
 (def ^:export register_plugin_simple_command
-  (fn [pid ^js cmd-action]
+  (fn [pid ^js cmd-action palette?]
     (when-let [[cmd action] (bean/->clj cmd-action)]
-      (plugin-handler/register-plugin-simple-command
-        pid cmd (assoc action 0 (keyword (first action)))))))
+      (let [action (assoc action 0 (keyword (first action)))]
+        (plugin-handler/register-plugin-simple-command pid cmd action)
+        (when-let [palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
+          (palette-handler/register palette-cmd))))))
+
+(defn ^:export unregister_plugin_simple_command
+  [pid]
+  (plugin-handler/unregister-plugin-simple-command pid)
+  (let [palette-matched (->> (palette-handler/get-commands)
+                             (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
+    (when (seq palette-matched)
+      (doseq [cmd palette-matched]
+        (palette-handler/unregister (:id cmd))))))
 
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]
@@ -326,10 +341,11 @@
     (some-> (if-let [page (db-model/get-page name)]
               page
               (let [properties (bean/->clj properties)
-                    {:keys [redirect createFirstBlock format]} (bean/->clj opts)
+                    {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)
                     name (page-handler/create!
                            name
                            {:redirect?           (if (boolean? redirect) redirect true)
+                            :journal?            journal
                             :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
                             :format              format
                             :properties          properties})]
@@ -346,11 +362,15 @@
 (def ^:export rename_page
   page-handler/rename!)
 
+(defn ^:export open_in_right_sidebar
+  [block-uuid]
+  (editor-handler/open-block-in-sidebar! (medley/uuid block-uuid)))
+
 (def ^:export edit_block
   (fn [block-uuid {:keys [pos] :or {pos :max} :as opts}]
     (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
       (when-let [block (db-model/query-block-by-uuid block-uuid)]
-        (editor-handler/edit-block! block pos nil block-uuid)))))
+        (editor-handler/edit-block! block pos block-uuid)))))
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
@@ -520,3 +540,13 @@
   ([content status] (let [hiccup? (and (string? content) (string/starts-with? (string/triml content) "[:"))
                           content (if hiccup? (parse-hiccup-ui content) content)]
                       (notification/show! content (keyword status)))))
+
+(defn ^:export query_element_by_id
+  [id]
+  (let [^js el (gdom/getElement id)]
+    (if el (str (.-tagName el) "#" id) false)))
+
+(defn ^:export force_save_graph
+  []
+  (p/let [_ (el/persist-dbs!)
+          _ (reset! handler/triggered? true)]))

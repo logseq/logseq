@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
@@ -23,6 +22,20 @@
 (defn redirect-to-home!
   []
   (redirect! {:to :home}))
+
+(defn redirect-to-page!
+  ([page-name]
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}}))
+  ([page-name anchor]
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}
+               :query-params {:anchor anchor}}))
+  ([page-name anchor push]
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}
+               :query-params {:anchor anchor}
+               :push push})))
 
 (defn get-title
   [name path-params]
@@ -98,8 +111,7 @@
       (jump-to-anchor! anchor)
       (util/scroll-to (util/app-scroll-container-node)
                       (state/get-saved-scroll-position)
-                      false))
-    (plugin-handler/hook-plugin-app :route-changed (select-keys route [:template :path :parameters]))))
+                      false))))
 
 (defn go-to-search!
   [search-mode]
@@ -110,7 +122,7 @@
 
 (defn go-to-journals!
   []
-  (state/set-journals-length! 2)
+  (state/set-journals-length! 1)
   (let [route (if (state/custom-home-page?)
                 :all-journals
                 :home)]
@@ -143,7 +155,6 @@
       :file
       (when-let [path (get-in (state/get-route-match) [:path-params :path])]
         (when-let [page (db/get-file-page path)]
-          (redirect! {:to :page
-                      :path-params {:name page}})))
+          (redirect-to-page! page)))
 
       nil)))

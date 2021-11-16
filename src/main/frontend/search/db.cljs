@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [frontend.text :as text]
             [frontend.util.drawer :as drawer]
+            [frontend.util.property :as property]
             ["fuse.js" :as fuse]))
 
 (defonce indices (atom nil))
@@ -17,7 +18,8 @@
 (defn block->index
   [{:block/keys [uuid content format page] :as block}]
   (when-let [result (->> (text/remove-level-spaces content format)
-                         (drawer/remove-logbook))]
+                         (drawer/remove-logbook)
+                         (property/remove-built-in-properties format))]
     {:id (:db/id block)
      :uuid (str uuid)
      :page page

@@ -35,3 +35,4 @@ resources/electron.js
 charlie/
 .vscode
 /.preprocessor-cljs
+docker
