@@ -837,21 +837,6 @@
         new-content (string/replace-first content "DONE" marker)]
     (save-block-if-changed! block new-content)))
 
-(defn cycle-todo!
-  []
-  (when (state/get-edit-block)
-    (let [edit-input-id (state/get-edit-input-id)
-          current-input (gdom/getElement edit-input-id)
-          content (state/get-edit-content)
-          format (or (db/get-page-format (state/get-current-page))
-                     (state/get-preferred-format))
-          [new-content marker] (marker/cycle-marker content format (state/get-preferred-workflow))
-          new-content (string/triml new-content)
-          new-pos (commands/compute-pos-delta-when-change-marker
-                   content marker (cursor/pos current-input))]
-      (state/set-edit-content! edit-input-id new-content)
-      (cursor/move-cursor-to current-input new-pos))))
-
 (defn set-marker
   [{:block/keys [marker content] :as block} new-marker]
   (let [new-content (->
@@ -860,6 +845,20 @@
                        (str new-marker " " content))
                      (string/triml))]
     (save-block-if-changed! block new-content)))
+
+(defn- rehighlight-selected-nodes
+  ([]
+   (rehighlight-selected-nodes (state/get-selection-blocks)))
+  ([blocks]
+   (let [blocks (doall
+                 (map
+                   (fn [block]
+                     (when-let [id (gobj/get block "id")]
+                       (when-let [block (gdom/getElement id)]
+                         (dom/add-class! block "selected noselect")
+                         block)))
+                   blocks))]
+     (state/set-selection-blocks! blocks))))
 
 (defn- get-selected-blocks-with-children
   []
@@ -881,7 +880,25 @@
         (let [block (db/pull [:block/uuid id])
               new-marker (marker/cycle-marker-state workflow (:block/marker block))
               new-marker (if new-marker new-marker "")]
-          (set-marker block new-marker))))))
+          (set-marker block new-marker)))
+      (js/setTimeout #(rehighlight-selected-nodes blocks) 0))))
+
+(defn cycle-todo!
+  []
+  (if-let [blocks (seq (get-selected-blocks-with-children))]
+    (cycle-todos!)
+    (when (state/get-edit-block)
+      (let [edit-input-id (state/get-edit-input-id)
+            current-input (gdom/getElement edit-input-id)
+            content (state/get-edit-content)
+            format (or (db/get-page-format (state/get-current-page))
+                       (state/get-preferred-format))
+            [new-content marker] (marker/cycle-marker content format (state/get-preferred-workflow))
+            new-content (string/triml new-content)
+            new-pos (commands/compute-pos-delta-when-change-marker
+                     content marker (cursor/pos current-input))]
+        (state/set-edit-content! edit-input-id new-content)
+        (cursor/move-cursor-to current-input new-pos)))))
 
 (defn set-priority
   [{:block/keys [priority content] :as block} new-priority]
@@ -1837,20 +1854,6 @@
                          (remove nil?))
         blocks (db/pull-many repo '[*] lookup-refs)]
     (reorder-blocks blocks)))
-
-(defn- rehighlight-selected-nodes
-  ([]
-   (rehighlight-selected-nodes (state/get-selection-blocks)))
-  ([blocks]
-   (let [blocks (doall
-                 (map
-                   (fn [block]
-                     (when-let [id (gobj/get block "id")]
-                       (when-let [block (gdom/getElement id)]
-                         (dom/add-class! block "selected noselect")
-                         block)))
-                   blocks))]
-     (state/set-selection-blocks! blocks))))
 
 (defn move-up-down
   [up?]
