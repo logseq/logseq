@@ -12,7 +12,7 @@ import {
   ThemeOptions,
   UIOptions, IHookEvent, BlockIdentity,
   BlockPageName,
-  UIContainerAttrs, SimpleCommandCallback
+  UIContainerAttrs, SimpleCommandCallback, SimpleCommandKeybinding
 } from './LSPlugin'
 import Debug from 'debug'
 import * as CSS from 'csstype'
@@ -41,7 +41,8 @@ function registerSimpleCommand (
     key: string,
     label: string,
     desc?: string,
-    palette?: boolean
+    palette?: boolean,
+    keybinding?: SimpleCommandKeybinding
   },
   action: SimpleCommandCallback
 ) {
@@ -49,14 +50,14 @@ function registerSimpleCommand (
     return false
   }
 
-  const { key, label, desc, palette } = opts
+  const { key, label, desc, palette, keybinding } = opts
   const eventKey = `SimpleCommandHook${key}${++registeredCmdUid}`
 
   this.Editor['on' + eventKey](action)
 
   this.caller?.call(`api:call`, {
     method: 'register-plugin-simple-command',
-    args: [this.baseInfo.id, [{ key, label, type, desc }, ['editor/hook', eventKey]], palette]
+    args: [this.baseInfo.id, [{ key, label, type, desc, keybinding }, ['editor/hook', eventKey]], palette]
   })
 }
 
@@ -64,15 +65,15 @@ const app: Partial<IAppProxy> = {
   registerCommand: registerSimpleCommand,
 
   registerCommandPalette (
-    opts: { key: string; label: string },
+    opts: { key: string; label: string, keybinding?: SimpleCommandKeybinding },
     action: SimpleCommandCallback) {
 
-    const { key, label } = opts
+    const { key, label, keybinding } = opts
     const group = 'global-palette-command'
 
     return registerSimpleCommand.call(
       this, group,
-      { key, label, palette: true },
+      { key, label, palette: true, keybinding },
       action)
   },
 

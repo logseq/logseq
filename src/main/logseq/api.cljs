@@ -24,6 +24,7 @@
             [frontend.modules.outliner.core :as outliner]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
+            [frontend.modules.shortcut.core :as st]
             [electron.listener :as el]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -231,10 +232,19 @@
 (def ^:export register_plugin_simple_command
   (fn [pid ^js cmd-action palette?]
     (when-let [[cmd action] (bean/->clj cmd-action)]
-      (let [action (assoc action 0 (keyword (first action)))]
+      (let [action (assoc action 0 (keyword (first action)))
+            key (:key cmd)
+            keybinding (:keybinding cmd)]
         (plugin-handler/register-plugin-simple-command pid cmd action)
+        ;; handle palette commands
         (when-let [palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
-          (palette-handler/register palette-cmd))))))
+          (palette-handler/register palette-cmd))
+        ;; handle shortcuts
+        (when-let [shortcut-args (and keybinding (plugin-handler/simple-cmd-keybinding->shortcut-args pid key keybinding))]
+          (let [dispatch-cmd (fn [_ e] (js/console.log "====> shortcut trigger===>" e cmd))
+                [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd)]
+            ;; ??? Delay to wait for initial shortcutHandler manager
+            (st/register-shortcut! handler-id id shortcut-map)))))))
 
 (defn ^:export unregister_plugin_simple_command
   [pid]

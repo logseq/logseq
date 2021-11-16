@@ -189,13 +189,31 @@
   (swap! state/state md/dissoc-in [:plugin/installed-commands (keyword pid)]))
 
 (defn simple-cmd->palette-cmd
-  [pid {:keys [key label type desc] :as cmd} action]
-  (let [palette-cmd {:id     (keyword (str "plugin." pid "/" key))
-                     :desc   (or desc label)
-                     :action (fn []
-                               (state/pub-event!
-                                 [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}]))}]
+  [pid {:keys [key label type desc keybinding] :as cmd} action]
+  (let [palette-cmd {:id       (keyword (str "plugin." pid "/" key))
+                     :desc     (or desc label)
+                     :shortcut (when-let [shortcut (:binding keybinding)]
+                                 (if util/mac?
+                                   (or (:mac keybinding) shortcut)
+                                   shortcut))
+                     :action   (fn []
+                                 (state/pub-event!
+                                   [:exec-plugin-cmd {:type type :key key :pid pid :cmd cmd :action action}]))}]
     palette-cmd))
+
+(defn simple-cmd-keybinding->shortcut-args
+  [pid key keybinding]
+  (let [id (keyword (str pid "/" (name key)))
+        binding (:binding keybinding)
+        binding (if util/mac?
+                  (or (:mac keybinding) binding)
+                  binding)
+        mode (or (:mode keybinding) :global-default)
+        mode (get {:global-default    :shortcut.handler/editor-global
+                   :block-non-editing :shortcut.handler/global-non-editing-only
+                   :block-editing     :shortcut.handler/block-editing-only}
+                  (keyword mode))]
+    [mode id {:binding binding}]))
 
 (defn register-plugin-simple-command
   ;; action => [:action-key :event-key]
