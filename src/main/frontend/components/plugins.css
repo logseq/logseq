@@ -465,7 +465,7 @@ html[data-theme='dark'] {
 
 .block-content {
   .lsp-hook-ui-slot {
-    display: flex;
+    display: inline-flex;
 
     [data-injected-ui] {
       display: inline-flex;

@@ -243,8 +243,7 @@ export function setupInjectedUI (
   let float: boolean
 
   const pl = this
-  const id = `${ui.key}-${slot}-${pl.id}`
-  const key = `${ui.key}-${pl.id}`
+
 
   if ('slot' in ui) {
     slot = ui.slot
@@ -254,6 +253,9 @@ export function setupInjectedUI (
   } else {
     float = true
   }
+
+  const id = `${ui.key}-${slot}-${pl.id}`
+  const key = `${ui.key}--${pl.id}`
 
   const target = float ? document.body : (selector && document.querySelector(selector))
   if (!target) {
@@ -270,7 +272,7 @@ export function setupInjectedUI (
         ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling']
       })
   } else { // remove ui
-    injectedUIEffects.get(key)?.call(null)
+    injectedUIEffects.get(id)?.call(null)
     return
   }
 
@@ -334,6 +336,15 @@ export function setupInjectedUI (
         pl._setupDraggableContainer(el, { key, close: () => teardownUI(), title: attrs?.title }))
   }
 
+  if (!!slot && ui.reset) {
+    const exists = Array.from(target.querySelectorAll('[data-injected-ui]'))
+      .map((it: HTMLElement) => it.id)
+
+    exists?.forEach((exist: string) => {
+      injectedUIEffects.get(exist)?.call(null)
+    })
+  }
+
   target.appendChild(el);
 
   // TODO: How handle events
@@ -354,11 +365,11 @@ export function setupInjectedUI (
 
   teardownUI = () => {
     disposeFloat?.()
-    injectedUIEffects.delete(key)
+    injectedUIEffects.delete(id)
     target!.removeChild(el)
   }
 
-  injectedUIEffects.set(key, teardownUI)
+  injectedUIEffects.set(id, teardownUI)
   return teardownUI
 }
 
