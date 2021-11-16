@@ -23,6 +23,7 @@ https://github.com/logseq/logseq-plugin-samples
 
 1. https://github.com/pengx17/logseq-plugin-template-react
 2. https://github.com/pengx17/logseq-plugin-template-svelte
+3. https://github.com/tiensonqin/logseq-cljs-playground
 
 #### Feedback
 If you have any feedback or encounter any issues, feel free to join Logseq's discord group.
