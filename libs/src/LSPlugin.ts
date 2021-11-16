@@ -34,6 +34,7 @@ export type UIBaseOptions = {
   style?: CSS.Properties
   attrs?: Record<string, string>
   close?: 'outside' | string
+  reset?: boolean // reset slot content or not
 }
 
 export type UIPathIdentity = {
