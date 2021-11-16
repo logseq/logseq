@@ -1589,12 +1589,7 @@
   resolved "https://registry.yarnpkg.com/@types/minimist/-/minimist-1.2.1.tgz"
   integrity sha512-fZQQafSREFyuZcdWFAExYjBiCL7AUCdgsk80iO0q4yihYYdcIiH28CcuPTGFgLOCC8RlW49GSQxdHwZP+I7CNg==
 
-"@types/node@*":
-  version "14.14.25"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-14.14.25.tgz"
-  integrity sha512-EPpXLOVqDvisVxtlbvzfyqSsFeQxltFbluZNRndIb8tr9KiBnYNLzrc1N3pyKUCww2RNrfHDViqDWWE1LCJQtQ==
-
-"@types/node@^14.14.31", "@types/node@^14.6.2":
+"@types/node@*", "@types/node@^14.14.31", "@types/node@^14.6.2":
   version "14.17.3"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-14.17.3.tgz#6d327abaa4be34a74e421ed6409a0ae2f47f4c3d"
   integrity sha512-e6ZowgGJmTuXa3GyaPbTGxX17tnThl2aSSizrFthQ7m9uLGZBXiGhgE55cjRZTF5kjZvYn9EOPOMljdjwbflxw==
@@ -3804,10 +3799,10 @@ electron-to-chromium@^1.3.723:
   resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.3.739.tgz#f07756aa92cabd5a6eec6f491525a64fe62f98b9"
   integrity sha512-+LPJVRsN7hGZ9EIUUiWCpO7l4E3qBYHNadazlucBfsXBbccDFNKUBAgzE68FnkWGJPwD/AfKhSzL+G+Iqb8A4A==
 
-electron@13.2.1:
-  version "13.2.1"
-  resolved "https://registry.yarnpkg.com/electron/-/electron-13.2.1.tgz#0dc89ed0e3faf327b39571de533ca1ae18878ff1"
-  integrity sha512-/K0Uw+o3+phbHtrVL6qDFVJqmeRF6EIPwVeUHEH5R8JNy13f4X3RouKjQzVyY/Os8fEqYHGFONWhD6q6g750HQ==
+electron@13.3.0:
+  version "13.3.0"
+  resolved "https://registry.yarnpkg.com/electron/-/electron-13.3.0.tgz#5f4f245723dd50fcd2c3d386a1d66fe748af404f"
+  integrity sha512-d/BvOLDjI4i7yf9tqCuLL2fFGA2TrM/D9PyRpua+rJolG0qrwp/FohP02L0m+44kmPpofIo4l3NPwLmzyKKimA==
   dependencies:
     "@electron/get" "^1.0.1"
     "@types/node" "^14.6.2"
@@ -7861,6 +7856,11 @@ react-grid-layout@^0.16.6:
     prop-types "15.x"
     react-draggable "3.x"
     react-resizable "1.x"
+
+react-icon-base@2.1.0:
+  version "2.1.0"
+  resolved "https://registry.yarnpkg.com/react-icon-base/-/react-icon-base-2.1.0.tgz#a196e33fdf1e7aaa1fda3aefbb68bdad9e82a79d"
+  integrity sha1-oZbjP98eeqof2jrvu2i9rZ6Cp50=
 
 react-icons@^2.2.7:
   version "2.2.7"
