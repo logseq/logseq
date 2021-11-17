@@ -22,14 +22,7 @@
 (rum/defc toggle
   []
   (when-not (util/mobile?)
-    (ui/tippy
-      {:html [:div.text-sm.font-medium
-              (ui/keyboard-shortcut-from-config :ui/toggle-right-sidebar)]
-       :position    "left"
-       :theme       "monospace"
-       :interactive true
-       :arrow       true}
-
+    (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:a.button.fade-link.toggle
        {:on-click state/toggle-sidebar-open?!}
        (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))

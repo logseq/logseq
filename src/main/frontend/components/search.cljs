@@ -275,28 +275,24 @@
   [:div.recent-search
    [:div.px-4.py-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items
     [:div "Recent search:"]
-    (ui/tippy {:html [:div.text-sm.font-medium
-                      (ui/keyboard-shortcut-from-config :go/search-in-page)]
-               :arrow           true
-               :interactive     true
-               :theme       "monospace"}
-              [:div.flex-row.flex.align-items
-               [:div.mr-2 "Search in page:"]
-               [:div {:style {:margin-top 3}}
-                (ui/toggle in-page-search?
-                           (fn [_value]
-                             (state/set-search-mode! (if in-page-search? :global :page)))
-                           true)]
-               (ui/tippy {:html [:div
-                                  ;; TODO: fetch from config
-                                 "Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"]
-                          :interactive     true
-                          :arrow           true
-                          :theme       "monospace"}
-                         [:a.inline-block.fade-link
-                          {:style {:margin-left 12}
-                           :on-click #(state/toggle! :ui/command-palette-open?)}
-                          (ui/icon "command" {:style {:font-size 20}})])])]
+    (ui/with-shortcut :go/search-in-page "bottom"
+      [:div.flex-row.flex.align-items
+       [:div.mr-2 "Search in page:"]
+       [:div {:style {:margin-top 3}}
+        (ui/toggle in-page-search?
+                   (fn [_value]
+                     (state/set-search-mode! (if in-page-search? :global :page)))
+                   true)]
+       (ui/tippy {:html [:div
+                         ;; TODO: fetch from config
+                         "Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"]
+                  :interactive     true
+                  :arrow           true
+                  :theme       "monospace"}
+                 [:a.inline-block.fade-link
+                  {:style {:margin-left 12}
+                   :on-click #(state/toggle! :ui/command-palette-open?)}
+                  (ui/icon "command" {:style {:font-size 20}})])])]
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
                     (remove nil?)

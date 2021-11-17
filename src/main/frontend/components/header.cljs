@@ -27,16 +27,11 @@
             [frontend.components.widgets :as widgets]))
 
 (rum/defc home-button []
-  (ui/tippy
-   {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/home)]
-    :interactive true
-    :position    "left"
-    :theme       "monospace"
-    :arrow       true}
-   [:a.button
-    {:href     (rfe/href :home)
-     :on-click route-handler/go-to-journals!}
-    (ui/icon "home" {:style {:fontSize 20}})]))
+  (ui/with-shortcut :go/home "left"
+    [:a.button
+     {:href     (rfe/href :home)
+      :on-click route-handler/go-to-journals!}
+     (ui/icon "home" {:style {:fontSize 20}})]))
 
 (rum/defc login
   [logged?]
@@ -63,17 +58,11 @@
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
-  (ui/tippy
-   {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :ui/toggle-left-sidebar)]
-    :position    "bottom"
-    :theme       "monospace"
-    :interactive true
-    :arrow       true}
-
-   [:a#left-menu.cp__header-left-menu.button
-    {:on-click on-click
-     :style {:margin-left 12}}
-    (ui/icon "menu-2" {:style {:fontSize 20}})]))
+  (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
+    [:a#left-menu.cp__header-left-menu.button
+     {:on-click on-click
+      :style {:margin-left 12}}
+     (ui/icon "menu-2" {:style {:fontSize 20}})]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
@@ -132,25 +121,15 @@
   []
   [:div.flex.flex-row
 
-   (ui/tippy
-    {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/backward)]
-     :interactive true
-     :position    "bottom"
-     :theme       "monospace"
-     :arrow       true}
-    [:a.it.navigation.nav-left.button
-     {:title "Go back" :on-click #(js/window.history.back)}
-     (ui/icon "arrow-left")])
-   
-   (ui/tippy
-    {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/forward)]
-     :interactive true
-     :position    "bottom"
-     :theme       "monospace"
-     :arrow       true}
-    [:a.it.navigation.nav-right.button
-     {:title "Go forward" :on-click #(js/window.history.forward)}
-     (ui/icon "arrow-right")])])
+   (ui/with-shortcut :go/backward "bottom"
+     [:a.it.navigation.nav-left.button
+      {:title "Go back" :on-click #(js/window.history.back)}
+      (ui/icon "arrow-left")])
+
+   (ui/with-shortcut :go/forward "bottom"
+     [:a.it.navigation.nav-right.button
+      {:title "Go forward" :on-click #(js/window.history.forward)}
+      (ui/icon "arrow-right")])])
 
 (rum/defc updater-tips-new-version
   [t]
@@ -201,12 +180,7 @@
                                          (not (:ui/left-sidebar-open? @state/state))))})
 
         (when current-repo ;; this is for the Search button
-          (ui/tippy
-            {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/search)]
-             :interactive true
-             :position    "right"
-             :theme       "monospace"
-             :arrow       true}
+          (ui/with-shortcut :go/search "right"
             [:a.button#search-button
              {:on-click #(state/pub-event! [:go/search])}
              (ui/icon "search" {:style {:fontSize 20}})]))]

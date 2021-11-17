@@ -225,6 +225,7 @@
         :settings-page/preferred-workflow "Preferred workflow"
         :settings-page/enable-timetracking "Enable timetracking"
         :settings-page/enable-tooltip "Enable tooltips"
+        :settings-page/enable-shortcut-tooltip "Enable shortcut tooltip"
         :settings-page/enable-journals "Enable journals"
         :settings-page/enable-all-pages-public "Enable all pages public when publishing"
         :settings-page/enable-encryption "Enable encryption feature"

@@ -758,3 +758,17 @@
                            (when (:class opts)
                              (str " " (string/trim (:class opts)))))}
               (dissoc opts :class))]))
+
+(rum/defc with-shortcut < rum/reactive
+  [shortcut-key position content]
+  (let [tooltip? (state/sub :ui/shortcut-tooltip?)]
+    (if tooltip?
+      (tippy
+       {:html [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
+        :interactive true
+        :position    position
+        :theme       "monospace"
+        :delay       [1000, 100]
+        :arrow       true}
+       content)
+      content)))

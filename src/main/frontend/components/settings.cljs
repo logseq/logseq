@@ -363,6 +363,13 @@
           (fn []
             (config-handler/toggle-ui-enable-tooltip!))))
 
+(defn shortcut-tooltip-row [t enable-shortcut-tooltip?]
+  (toggle "enable_tooltip"
+          (t :settings-page/enable-shortcut-tooltip)
+          enable-shortcut-tooltip?
+          (fn []
+            (state/toggle-shortcut-tooltip!))))
+
 (defn timetracking-row [t enable-timetracking?]
   (toggle "enable_timetracking"
           (t :settings-page/enable-timetracking)
@@ -543,6 +550,7 @@
         instrument-disabled? (state/sub :instrument/disabled?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
+        enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         show-brackets? (state/show-brackets?)
@@ -600,6 +608,7 @@
             (show-brackets-row t show-brackets?)
             (when (util/electron?) (switch-spell-check-row t))
             (outdenting-row t logical-outdenting?)
+            (shortcut-tooltip-row t enable-shortcut-tooltip?)
             (tooltip-row t enable-tooltip?)
             (timetracking-row t enable-timetracking?)
             (journal-row t enable-journals?)
