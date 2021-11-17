@@ -176,7 +176,7 @@
                 config-handler/toggle-ui-show-brackets!
                 true)]]
    [:div {:style {:text-align "right"}}
-    (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]])
+    (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]])
 
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
@@ -286,7 +286,7 @@
             :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
 
     [:div.pl-16
-     (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))]]])
+     (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))]]])
 
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start

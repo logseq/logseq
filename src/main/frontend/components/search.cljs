@@ -276,10 +276,10 @@
    [:div.px-4.py-2.text-sm.opacity-70.flex.flex-row.justify-between.align-items
     [:div "Recent search:"]
     (ui/tippy {:html [:div.text-sm.font-medium
-                      "Shortcut: "
-                      [:code (util/->platform-shortcut "Ctrl + Shift + k")]]
+                      (ui/keyboard-shortcut-from-config :go/search-in-page)]
+               :arrow           true
                :interactive     true
-               :arrow true}
+               :theme       "monospace"}
               [:div.flex-row.flex.align-items
                [:div.mr-2 "Search in page:"]
                [:div {:style {:margin-top 3}}
@@ -288,9 +288,11 @@
                              (state/set-search-mode! (if in-page-search? :global :page)))
                            true)]
                (ui/tippy {:html [:div
-                                 "Tip: " [:code (util/->platform-shortcut "Ctrl+Shift+p")] " to open the commands palette"]
+                                  ;; TODO: fetch from config
+                                 "Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"]
                           :interactive     true
-                          :arrow true}
+                          :arrow           true
+                          :theme       "monospace"}
                          [:a.inline-block.fade-link
                           {:style {:margin-left 12}
                            :on-click #(state/toggle! :ui/command-palette-open?)}

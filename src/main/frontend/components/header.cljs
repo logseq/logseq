@@ -3,6 +3,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.page :as page]
+            [clojure.string :as str]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.search :as search]
@@ -25,12 +26,17 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.components.widgets :as widgets]))
 
-(rum/defc home-button
-  []
-  [:a.button
-   {:href     (rfe/href :home)
-    :on-click route-handler/go-to-journals!}
-   (ui/icon "home" {:style {:fontSize 20}})])
+(rum/defc home-button []
+  (ui/tippy
+   {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/home)]
+    :interactive true
+    :position    "left"
+    :theme       "monospace"
+    :arrow       true}
+   [:a.button
+    {:href     (rfe/href :home)
+     :on-click route-handler/go-to-journals!}
+    (ui/icon "home" {:style {:fontSize 20}})]))
 
 (rum/defc login
   [logged?]
@@ -57,22 +63,17 @@
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
-  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
+  (ui/tippy
+   {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :ui/toggle-left-sidebar)]
+    :position    "bottom"
+    :theme       "monospace"
+    :interactive true
+    :arrow       true}
 
-    (ui/tippy
-      {:html [:div.text-sm.font-medium
-              "Shortcut: "
-              [:code (util/->platform-shortcut "t l")]]
-       :delay 2000
-       :hideDelay 1
-       :position "right"
-       :interactive true
-       :arrow true}
-
-      [:a#left-menu.cp__header-left-menu.button
-       {:on-click on-click
-        :style {:margin-left 12}}
-       (ui/icon "menu-2" {:style {:fontSize 20}})])))
+   [:a#left-menu.cp__header-left-menu.button
+    {:on-click on-click
+     :style {:margin-left 12}}
+    (ui/icon "menu-2" {:style {:fontSize 20}})]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
@@ -130,12 +131,26 @@
 (rum/defc back-and-forward
   []
   [:div.flex.flex-row
-   [:a.it.navigation.nav-left.button
-    {:title "Go Back" :on-click #(js/window.history.back)}
-    (ui/icon "arrow-left")]
-   [:a.it.navigation.nav-right.button
-    {:title "Go Forward" :on-click #(js/window.history.forward)}
-    (ui/icon "arrow-right")]])
+
+   (ui/tippy
+    {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/backward)]
+     :interactive true
+     :position    "bottom"
+     :theme       "monospace"
+     :arrow       true}
+    [:a.it.navigation.nav-left.button
+     {:title "Go back" :on-click #(js/window.history.back)}
+     (ui/icon "arrow-left")])
+   
+   (ui/tippy
+    {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/forward)]
+     :interactive true
+     :position    "bottom"
+     :theme       "monospace"
+     :arrow       true}
+    [:a.it.navigation.nav-right.button
+     {:title "Go forward" :on-click #(js/window.history.forward)}
+     (ui/icon "arrow-right")])])
 
 (rum/defc updater-tips-new-version
   [t]
@@ -185,15 +200,12 @@
                                        (state/set-left-sidebar-open!
                                          (not (:ui/left-sidebar-open? @state/state))))})
 
-        (when current-repo
+        (when current-repo ;; this is for the Search button
           (ui/tippy
-            {:html        [:div.text-sm.font-medium
-                           "Shortcut: "
-                           ;; TODO: Pull from config so it displays custom shortcut, not just the default
-                           [:code (util/->platform-shortcut "Ctrl + k")]]
+            {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/search)]
              :interactive true
-             :delay       2000
              :position    "right"
+             :theme       "monospace"
              :arrow       true}
             [:a.button#search-button
              {:on-click #(state/pub-event! [:go/search])}
