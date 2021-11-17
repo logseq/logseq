@@ -207,7 +207,7 @@
             (ui/menu-link
              {:key      "Copy block embed"
               :on-click (fn [_e]
-                          (util/copy-to-clipboard! (util/format "{{embed ((%s))}}" block-id)))}
+                          (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
              "Copy block embed")
 
             (block-template block-id)
