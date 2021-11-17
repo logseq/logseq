@@ -234,26 +234,37 @@
     (when-let [[cmd action] (bean/->clj cmd-action)]
       (let [action (assoc action 0 (keyword (first action)))
             key (:key cmd)
-            keybinding (:keybinding cmd)]
+            keybinding (:keybinding cmd)
+            palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
+
+        ;; handle simple commands
         (plugin-handler/register-plugin-simple-command pid cmd action)
+
         ;; handle palette commands
-        (when-let [palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
+        (when palette-cmd
           (palette-handler/register palette-cmd))
-        ;; handle shortcuts
-        (when-let [shortcut-args (and keybinding (plugin-handler/simple-cmd-keybinding->shortcut-args pid key keybinding))]
-          (let [dispatch-cmd (fn [_ e] (js/console.log "====> shortcut trigger===>" e cmd))
+
+        ;; handle keybinding commands
+        (when-let [shortcut-args (and palette-cmd keybinding
+                                      (plugin-handler/simple-cmd-keybinding->shortcut-args pid key keybinding))]
+          (let [dispatch-cmd (fn [_ e] (palette-handler/invoke-command palette-cmd))
                 [handler-id id shortcut-map] (update shortcut-args 2 assoc :fn dispatch-cmd)]
-            ;; ??? Delay to wait for initial shortcutHandler manager
             (st/register-shortcut! handler-id id shortcut-map)))))))
 
 (defn ^:export unregister_plugin_simple_command
   [pid]
+  ;; remove simple commands
   (plugin-handler/unregister-plugin-simple-command pid)
+
+  ;; remove palette commands
   (let [palette-matched (->> (palette-handler/get-commands)
                              (filter #(string/includes? (str (:id %)) (str "plugin." pid))))]
     (when (seq palette-matched)
       (doseq [cmd palette-matched]
-        (palette-handler/unregister (:id cmd))))))
+        (palette-handler/unregister (:id cmd))
+        ;; remove keybinding commands
+        (when (seq (:shortcut cmd))
+          (st/unregister-shortcut! (:handler-id cmd) (:id cmd)))))))
 
 (def ^:export register_plugin_ui_item
   (fn [pid type ^js opts]

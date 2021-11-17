@@ -196,6 +196,6 @@
   (let [m (get @config/config handler-id)]
     (->> m
          (map (fn [[id _]] (-> (shortcut-data-by-id id)
-                               (assoc :id id)
+                               (assoc :id id :handler-id handler-id)
                                (rename-keys {:binding :shortcut
                                              :fn      :action})))))))

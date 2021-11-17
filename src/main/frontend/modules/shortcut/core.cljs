@@ -14,6 +14,8 @@
            [goog.ui KeyboardShortcutHandler]))
 
 (def *installed (atom {}))
+(def *inited? (atom false))
+(def *pending (atom []))
 
 (def global-keys #js
   [KeyCodes/TAB
@@ -22,6 +24,15 @@
    KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (def key-names (js->clj KeyNames))
+
+(declare register-shortcut!)
+
+(defn consume-pending-shortcuts!
+  []
+  (when (and @*inited? (seq @*pending))
+    (doseq [[handler-id id shortcut] @*pending]
+      (register-shortcut! handler-id id shortcut))
+    (reset! *pending [])))
 
 (defn register-shortcut!
   "Register a shortcut, notice the id need to be a namespaced keyword to avoid
@@ -33,26 +44,28 @@
   ([handler-id id]
    (register-shortcut! handler-id id nil))
   ([handler-id id shortcut-map]
-   (when-let [handler (if (or (string? handler-id) (keyword? handler-id))
-                        (let [handler-id (keyword handler-id)]
-                          (-> (get @*installed handler-id)
-                              :handler))
-                        ;; handler
-                        handler-id)]
+   (if (and (keyword? handler-id) (not @*inited?))
+     (swap! *pending conj [handler-id id shortcut-map])
+     (when-let [handler (if (or (string? handler-id) (keyword? handler-id))
+                          (let [handler-id (keyword handler-id)]
+                            (-> (get @*installed handler-id)
+                                :handler))
+                          ;; handler
+                          handler-id)]
 
-     (when shortcut-map
-       (shortcut-config/add-shortcut! handler-id id shortcut-map))
+       (when shortcut-map
+         (shortcut-config/add-shortcut! handler-id id shortcut-map))
 
-     (when-not (false? (dh/shortcut-binding id))
-       (doseq [k (dh/shortcut-binding id)]
-         (try
-           (log/debug :shortcut/register-shortcut {:id id :binding k})
-           (.registerShortcut handler (util/keyname id) k)
-           (catch js/Object e
-             (log/error :shortcut/register-shortcut {:id id
-                                                     :binding k
-                                                     :error e})
-             (notification/show! (str/join " " [id k (.-message e)]) :error false))))))))
+       (when-not (false? (dh/shortcut-binding id))
+         (doseq [k (dh/shortcut-binding id)]
+           (try
+             (log/debug :shortcut/register-shortcut {:id id :binding k})
+             (.registerShortcut handler (util/keyname id) k)
+             (catch js/Object e
+               (log/error :shortcut/register-shortcut {:id      id
+                                                       :binding k
+                                                       :error   e})
+               (notification/show! (str/join " " [id k (.-message e)]) :error false)))))))))
 
 (defn unregister-shortcut!
   "Unregister a shortcut.
@@ -164,7 +177,8 @@
   (log/info :shortcut/refresh @*installed)
   (doseq [id (keys @*installed)]
     (uninstall-shortcut! id))
-  (install-shortcuts!))
+  (install-shortcuts!)
+  (state/pub-event! [:shortcut-handler-refreshed]))
 
 (defn- name-with-meta [e]
   (let [ctrl    (.-ctrlKey e)
