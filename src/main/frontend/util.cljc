@@ -763,6 +763,11 @@
      (->> (d/by-class "ls-block")
           (filter (fn [b] (some? (gobj/get b "offsetParent")))))))
 
+#?(:cljs
+   (defn remove-embeded-blocks [blocks]
+     (->> blocks
+          (remove (fn [b] (= "true" (d/attr b "data-embed")))))))
+
 ;; Take the idea from https://stackoverflow.com/questions/4220478/get-all-dom-block-elements-for-selected-texts.
 ;; FIXME: Note that it might not works for IE.
 #?(:cljs
@@ -917,7 +922,17 @@
        (when-let [index (.indexOf blocks block)]
          (let [idx (dec index)]
            (when (>= idx 0)
-             (nth blocks idx)))))))
+             (nth-safe blocks idx)))))))
+
+#?(:cljs
+   (defn get-prev-block-non-collapsed-non-embed
+     [block]
+     (when-let [blocks (->> (get-blocks-noncollapse)
+                            remove-embeded-blocks)]
+       (when-let [index (.indexOf blocks block)]
+         (let [idx (dec index)]
+           (when (>= idx 0)
+             (nth-safe blocks idx)))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed

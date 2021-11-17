@@ -50,11 +50,11 @@
                                   :path (utils/fix-win-path! path)
                                   :content (utils/read-file path)
                                   :stat (fs/statSync path)})))
-      ;; (.on watcher "unlink"
-      ;;      (fn [path]
-      ;;        (send-file-watcher! win "unlink"
-      ;;                            {:dir (utils/fix-win-path! dir)
-      ;;                             :path (utils/fix-win-path! path)})))
+      (.on watcher "unlink"
+           (fn [path]
+             (send-file-watcher! win "unlink"
+                                 {:dir (utils/fix-win-path! dir)
+                                  :path (utils/fix-win-path! path)})))
       (.on watcher "error"
            (fn [path]
              (println "Watch error happened: "
