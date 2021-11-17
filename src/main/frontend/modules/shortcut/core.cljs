@@ -74,10 +74,10 @@
   [handler-id shortcut-id]
   (when-let [handler (-> (get @*installed handler-id)
                          :handler)]
-    (when shortcut-id
-      (let [k (dh/shortcut-binding shortcut-id)]
-        (.unregisterShortcut ^js handler k))
-      (shortcut-config/remove-shortcut! handler-id shortcut-id))))
+    (when-let [ks (dh/shortcut-binding shortcut-id)]
+      (doseq [k ks]
+        (.unregisterShortcut ^js handler k)))
+    (shortcut-config/remove-shortcut! handler-id shortcut-id)))
 
 (defn uninstall-shortcut!
   [handler-id]
