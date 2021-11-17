@@ -42,5 +42,6 @@
     "electron-builder": "^22.11.7",
     "electron-forge-maker-appimage": "trusktr/electron-forge-maker-appimage#patch-1",
     "electron-rebuild": "3.2.5"
-  }
+  },
+  "resolutions": {  "**/node-abi": "^3.2.0" }
 }
