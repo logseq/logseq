@@ -837,21 +837,6 @@
         new-content (string/replace-first content "DONE" marker)]
     (save-block-if-changed! block new-content)))
 
-(defn cycle-todo!
-  []
-  (when (state/get-edit-block)
-    (let [edit-input-id (state/get-edit-input-id)
-          current-input (gdom/getElement edit-input-id)
-          content (state/get-edit-content)
-          format (or (db/get-page-format (state/get-current-page))
-                     (state/get-preferred-format))
-          [new-content marker] (marker/cycle-marker content format (state/get-preferred-workflow))
-          new-content (string/triml new-content)
-          new-pos (commands/compute-pos-delta-when-change-marker
-                   content marker (cursor/pos current-input))]
-      (state/set-edit-content! edit-input-id new-content)
-      (cursor/move-cursor-to current-input new-pos))))
-
 (defn set-marker
   [{:block/keys [marker content] :as block} new-marker]
   (let [new-content (->
@@ -860,6 +845,20 @@
                        (str new-marker " " content))
                      (string/triml))]
     (save-block-if-changed! block new-content)))
+
+(defn- rehighlight-selected-nodes
+  ([]
+   (rehighlight-selected-nodes (state/get-selection-blocks)))
+  ([blocks]
+   (let [blocks (doall
+                 (map
+                   (fn [block]
+                     (when-let [id (gobj/get block "id")]
+                       (when-let [block (gdom/getElement id)]
+                         (dom/add-class! block "selected noselect")
+                         block)))
+                   blocks))]
+     (state/set-selection-blocks! blocks))))
 
 (defn- get-selected-blocks-with-children
   []
@@ -881,7 +880,25 @@
         (let [block (db/pull [:block/uuid id])
               new-marker (marker/cycle-marker-state workflow (:block/marker block))
               new-marker (if new-marker new-marker "")]
-          (set-marker block new-marker))))))
+          (set-marker block new-marker)))
+      (js/setTimeout #(rehighlight-selected-nodes blocks) 0))))
+
+(defn cycle-todo!
+  []
+  (if-let [blocks (seq (get-selected-blocks-with-children))]
+    (cycle-todos!)
+    (when (state/get-edit-block)
+      (let [edit-input-id (state/get-edit-input-id)
+            current-input (gdom/getElement edit-input-id)
+            content (state/get-edit-content)
+            format (or (db/get-page-format (state/get-current-page))
+                       (state/get-preferred-format))
+            [new-content marker] (marker/cycle-marker content format (state/get-preferred-workflow))
+            new-content (string/triml new-content)
+            new-pos (commands/compute-pos-delta-when-change-marker
+                     content marker (cursor/pos current-input))]
+        (state/set-edit-content! edit-input-id new-content)
+        (cursor/move-cursor-to current-input new-pos)))))
 
 (defn set-priority
   [{:block/keys [priority content] :as block} new-priority]
@@ -941,7 +958,7 @@
              (when-not (and has-children? left-has-children?)
                (when block-parent-id
                  (let [block-parent (gdom/getElement block-parent-id)
-                       sibling-block (util/get-prev-block-non-collapsed block-parent)]
+                       sibling-block (util/get-prev-block-non-collapsed-non-embed block-parent)]
                    (delete-block-aux! block delete-children?)
                    (move-to-prev-block repo sibling-block format id value)))))))))
    (state/set-editor-op! nil)))
@@ -987,7 +1004,7 @@
             end-node (get-top-level-end-node blocks)
             block (first blocks)
             block-parent (get uuid->dom-block (:block/uuid block))
-            sibling-block (when block-parent (util/get-prev-block-non-collapsed block-parent))]
+            sibling-block (when block-parent (util/get-prev-block-non-collapsed-non-embed block-parent))]
         (if (= start-node end-node)
           (delete-block-aux! (first blocks) true)
           (when (outliner-core/delete-nodes start-node end-node lookup-refs)
@@ -1176,6 +1193,19 @@
                    (remove nil?))
           ids-str (some->> ids
                            (map (fn [id] (util/format "((%s))" id)))
+                           (string/join "\n\n"))]
+      (doseq [id ids]
+        (set-block-id! id))
+      (util/copy-to-clipboard! ids-str))))
+
+(defn copy-block-embeds
+  []
+  (when-let [blocks (seq (get-selected-blocks-with-children))]
+    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                     (uuid id)) blocks))
+                   (remove nil?))
+          ids-str (some->> ids
+                           (map (fn [id] (util/format "{{embed ((%s))}}" id)))
                            (string/join "\n\n"))]
       (doseq [id ids]
         (set-block-id! id))
@@ -1824,20 +1854,6 @@
                          (remove nil?))
         blocks (db/pull-many repo '[*] lookup-refs)]
     (reorder-blocks blocks)))
-
-(defn- rehighlight-selected-nodes
-  ([]
-   (rehighlight-selected-nodes (state/get-selection-blocks)))
-  ([blocks]
-   (let [blocks (doall
-                 (map
-                   (fn [block]
-                     (when-let [id (gobj/get block "id")]
-                       (when-let [block (gdom/getElement id)]
-                         (dom/add-class! block "selected noselect")
-                         block)))
-                   blocks))]
-     (state/set-selection-blocks! blocks))))
 
 (defn move-up-down
   [up?]
@@ -2969,48 +2985,56 @@
 (defn- paste-text
   [text e]
   (let [copied-blocks (state/get-copied-blocks)
-        copied-block-tree (:copy/block-tree copied-blocks)]
-    (if (and
-         (:copy/content copied-blocks)
-         (not (string/blank? text))
-         (= (string/replace (string/trim text) "\r" "")
-            (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
+        copied-block-tree (:copy/block-tree copied-blocks)
+        input (state/get-input)]
+    (cond
+      (and
+       (:copy/content copied-blocks)
+       (not (string/blank? text))
+       (= (string/replace (string/trim text) "\r" "")
+          (string/replace (string/trim (:copy/content copied-blocks)) "\r" "")))
       (do
         ;; copy from logseq internally
         (paste-block-vec-tree-at-target copied-block-tree [] nil)
         (util/stop e))
 
+      (and (text/block-ref? text)
+           (wrapped-by? input "((" "))"))
       (do
-        ;; from external
-        (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
-          (match [format
-                  (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
-                  (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
-                  (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
-            [:markdown false _ _]
-            (do
-              (paste-text-parseable format text)
-              (util/stop e))
+        (util/stop e)
+        (commands/simple-insert! (state/get-edit-input-id) (text/get-block-ref text) nil))
 
-            [:org _ false _]
-            (do
-              (paste-text-parseable format text)
-              (util/stop e))
+      :else
+      ;; from external
+      (let [format (or (db/get-page-format (state/get-current-page)) :markdown)]
+        (match [format
+                (nil? (util/safe-re-find #"(?m)^\s*(?:[-+*]|#+)\s+" text))
+                (nil? (util/safe-re-find #"(?m)^\s*\*+\s+" text))
+                (nil? (util/safe-re-find #"(?:\r?\n){2,}" text))]
+          [:markdown false _ _]
+          (do
+            (paste-text-parseable format text)
+            (util/stop e))
 
-            [:markdown true _ false]
-            (do
-              (paste-segmented-text format text)
-              (util/stop e))
+          [:org _ false _]
+          (do
+            (paste-text-parseable format text)
+            (util/stop e))
 
-            [:markdown true _ true]
-            (do)
+          [:markdown true _ false]
+          (do
+            (paste-segmented-text format text)
+            (util/stop e))
 
-            [:org _ true false]
-            (do
-              (paste-segmented-text format text)
-              (util/stop e))
-            [:org _ true true]
-            (do)))))))
+          [:markdown true _ true]
+          nil
+
+          [:org _ true false]
+          (do
+            (paste-segmented-text format text)
+            (util/stop e))
+          [:org _ true true]
+          nil)))))
 
 (defn editor-on-paste!
   [id]

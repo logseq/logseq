@@ -72,6 +72,10 @@
       :on-click editor-handler/copy-block-refs}
      "Copy block refs")
     (ui/menu-link
+     {:key "copy block embeds"
+      :on-click editor-handler/copy-block-embeds}
+     "Copy block embeds")
+    (ui/menu-link
      {:key "cycle todos"
       :on-click editor-handler/cycle-todos!}
      "Cycle todos")]])
@@ -199,6 +203,12 @@
               :on-click (fn [_e]
                           (editor-handler/copy-block-ref! block-id #(str "((" % "))")))}
              "Copy block ref")
+
+            (ui/menu-link
+             {:key      "Copy block embed"
+              :on-click (fn [_e]
+                          (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
+             "Copy block embed")
 
             (block-template block-id)
 

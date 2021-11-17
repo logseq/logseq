@@ -66,6 +66,13 @@
         (.unregisterShortcut ^js handler k))
       (shortcut-config/remove-shortcut! handler-id shortcut-id))))
 
+(defn uninstall-shortcut!
+  [handler-id]
+  (when-let [handler (-> (get @*installed handler-id)
+                         :handler)]
+    (.dispose ^js handler)
+    (swap! *installed dissoc handler-id)))
+
 (defn install-shortcut!
   [handler-id {:keys [set-global-keys?
                       prevent-default?
@@ -74,9 +81,10 @@
                :or   {set-global-keys? true
                       prevent-default? false
                       skip-installed? false}}]
+  (uninstall-shortcut! handler-id)
   (let [shortcut-map (dh/shortcut-map handler-id state)
         handler      (new KeyboardShortcutHandler js/window)]
-     ;; set arrows enter, tab to global
+    ;; set arrows enter, tab to global
     (when set-global-keys?
       (.setGlobalKeys handler global-keys))
 
@@ -114,39 +122,20 @@
        (map #(install-shortcut! % {}))
        doall))
 
-(defn uninstall-shortcut!
-  [handler-id]
-  (when-let [handler (-> (get @*installed handler-id)
-                         :handler)]
-    (.dispose ^js handler)
-    (swap! *installed dissoc handler-id)))
-
-(defn- uninstall-shortcut-aux!
-  [state handler-id]
-  (some-> (get state :shortcut-key)
-          uninstall-shortcut!))
-
-(defn- install-shortcut-aux!
-  [state handler-id]
-  (let [install-id (-> handler-id
-                       (install-shortcut! {:state state}))]
-    (assoc state :shortcut-key install-id)))
-
 (defn mixin [handler-id]
   {:did-mount
    (fn [state]
-     (install-shortcut-aux! state handler-id))
+     (js/setTimeout #(install-shortcut! handler-id {:state state}) 20)
+     state)
 
    :did-remount (fn [old-state new-state]
-                  ;; uninstall
-                  (uninstall-shortcut-aux! old-state handler-id)
-
-                  ;; update new states
-                  (install-shortcut-aux! new-state handler-id))
+                  (uninstall-shortcut! handler-id)
+                  (js/setTimeout #(install-shortcut! handler-id {:state new-state}) 20)
+                  new-state)
    :will-unmount
    (fn [state]
-     (uninstall-shortcut-aux! state handler-id)
-     (dissoc state :shortcut-key))})
+     (uninstall-shortcut! handler-id)
+     state)})
 
 (defn unlisten-all []
   (doseq [{:keys [handler group]} (vals @*installed)

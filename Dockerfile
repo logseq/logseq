@@ -1,7 +1,7 @@
 # NOTE: please keep it in sync with .github pipelines
 FROM clojure:openjdk-11-tools-deps-1.10.1.727
 
-RUN curl -sL https://deb.nodesource.com/setup_15.x | bash - && \
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - && \
     apt-get install -y nodejs
 
 RUN curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \

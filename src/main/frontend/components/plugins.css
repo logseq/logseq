@@ -312,7 +312,6 @@
     width: 0;
     padding: 0;
     margin: 0;
-    border:2px solid var(--ls-border-color);
 
     &.visible {
       z-index: var(--ls-z-index-level-2);
@@ -424,6 +423,7 @@
 .lsp-ui-float-container {
   top: 40%;
   left: 30%;
+  border:2px solid var(--ls-border-color);
 
   .draggable-handle {
   }
@@ -465,7 +465,7 @@ html[data-theme='dark'] {
 
 .block-content {
   .lsp-hook-ui-slot {
-    display: flex;
+    display: inline-flex;
 
     [data-injected-ui] {
       display: inline-flex;

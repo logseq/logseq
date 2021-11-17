@@ -209,6 +209,7 @@
         :content/cut "Cut"
         :content/make-todos "Make {1}s"
         :content/copy-block-ref "Copy block ref"
+        :content/copy-block-emebed "Copy block embed"
         :content/focus-on-block "Focus on block"
         :content/open-in-sidebar "Open in sidebar"
         :content/copy-as-json "Copy as JSON"

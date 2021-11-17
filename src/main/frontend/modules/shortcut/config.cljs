@@ -117,10 +117,6 @@
      {:desc    "New line in current block"
       :binding "shift+enter"
       :fn      editor-handler/keydown-new-line-handler}
-     :editor/cycle-todo
-     {:desc    "Rotate the TODO state of the current item"
-      :binding "mod+enter"
-      :fn      editor-handler/cycle-todo!}
      :editor/follow-link
      {:desc    "Follow link under cursor"
       :binding "mod+o"
@@ -196,7 +192,11 @@
 
     :shortcut.handler/editor-global
     ^{:before m/enable-when-not-component-editing!}
-    {:editor/up
+    {:editor/cycle-todo
+     {:desc    "Rotate the TODO state of the current item"
+      :binding "mod+enter"
+      :fn      editor-handler/cycle-todo!}
+     :editor/up
      {:desc    "Move cursor up / Select up"
       :binding "up"
       :fn      (editor-handler/shortcut-up-down :up)}

@@ -351,12 +351,13 @@
 (rum/defc hook-ui-slot
   ([type payload] (hook-ui-slot type payload nil))
   ([type payload opts]
-   (let [id (str "slot__" (util/rand-str 8))]
+   (let [rs (util/rand-str 8)
+         id (str "slot__" rs)]
      (rum/use-effect!
        (fn []
          (plugin-handler/hook-plugin-app type {:slot id :payload payload} nil)
          #())
-       [])
+       [id])
      [:div.lsp-hook-ui-slot
       (merge opts {:id id})])))
 

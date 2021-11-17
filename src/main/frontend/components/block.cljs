@@ -2171,6 +2171,9 @@
        (or reference? embed?)
        (assoc :data-transclude true)
 
+       embed?
+       (assoc :data-embed true)
+
        custom-query?
        (assoc :data-query true))
 
