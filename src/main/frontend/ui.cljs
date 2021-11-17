@@ -465,7 +465,7 @@
   (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))
         custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
         binding         (or custom-binding default-binding)]
-    (render-keyboard-shortcut (shortcut-helper/decorate-binding binding))))
+    (shortcut-helper/decorate-binding binding)))
 
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
@@ -721,7 +721,7 @@
                              (when-let [html (:html opts)]
                                (if (fn? html)
                                  (html)
-                                 [:div.px-2.py-2
+                                 [:div.px-2.py-1
                                   html]))
                              (catch js/Error e
                                (log/error :exception e)

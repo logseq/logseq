@@ -279,7 +279,6 @@
                       (ui/keyboard-shortcut-from-config :go/search-in-page)]
                :arrow           true
                :interactive     true
-               :theme           "extra-padding-y"
                }
               [:div.flex-row.flex.align-items
                [:div.mr-2 "Search in page:"]
@@ -293,7 +292,6 @@
                                  "Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"]
                           :interactive     true
                           :arrow           true
-                          :theme           "extra-padding-y"
                           }
                          [:a.inline-block.fade-link
                           {:style {:margin-left 12}

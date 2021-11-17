@@ -99,6 +99,7 @@
       (str/replace "shift+/" "?")
       (str/replace "left" "←")
       (str/replace "right" "→")
+      (str/replace "+" " ")
       (str/replace "open-square-bracket" "[")
       (str/replace "close-square-bracket" "]")
       (str/lower-case)))

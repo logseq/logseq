@@ -26,7 +26,6 @@
       {:html [:div.text-sm.font-medium
               (ui/keyboard-shortcut-from-config :ui/toggle-right-sidebar)]
        :position    "left"
-       :theme       "extra-padding-y"
        :interactive true
        :arrow       true}
 

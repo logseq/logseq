@@ -31,7 +31,6 @@
    {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/home)]
     :interactive true
     :position    "left"
-    :theme       "extra-padding-y"
     :arrow       true}
    [:a.button
     {:href     (rfe/href :home)
@@ -135,7 +134,6 @@
     {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/backward)]
      :interactive true
      :position    "bottom"
-     :theme       "extra-padding-y"
      :arrow       true}
     [:a.it.navigation.nav-left.button
      {:title "Go back" :on-click #(js/window.history.back)}
@@ -145,7 +143,6 @@
     {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/forward)]
      :interactive true
      :position    "bottom"
-     :theme       "extra-padding-y"
      :arrow       true}
     [:a.it.navigation.nav-right.button
      {:title "Go forward" :on-click #(js/window.history.forward)}

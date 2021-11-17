@@ -661,8 +661,3 @@
 .tippy-hover {
   cursor: pointer;
 }
-
-.tippy-popper .tippy-tooltip.extra-padding-y .py-1 {
-  padding-top: 0.5rem;
-  padding-bottom: 0.5rem;
-}
