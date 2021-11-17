@@ -1106,8 +1106,9 @@
 
 (defn get-referenced-blocks-ids
   [page-name-or-block-uuid]
-  (if (uuid? page-name-or-block-uuid)
-    (get-block-referenced-blocks-ids page-name-or-block-uuid)
+  (if (util/uuid-string? (str page-name-or-block-uuid))
+    (let [id (uuid page-name-or-block-uuid)]
+      (get-block-referenced-blocks-ids id))
     (get-page-referenced-blocks-ids page-name-or-block-uuid)))
 
 (defn get-matched-blocks
