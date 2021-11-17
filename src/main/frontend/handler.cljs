@@ -233,7 +233,7 @@
                                             [:div
                                              [:h1.title "Reload Logseq?"]
                                              (ui/button
-                                              [:span "Yes " (ui/keyboard-shortcut ["enter"])]
+                                              [:span "Yes " (ui/render-keyboard-shortcut ["enter"])]
                                               :autoFocus "on"
                                               :large? true
                                               :on-click (fn []

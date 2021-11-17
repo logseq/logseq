@@ -22,17 +22,21 @@
             [frontend.util :as util]
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
             [frontend.components.widgets :as widgets]))
 
-(rum/defc home-button
-  []
-  [:a.button
-   {:href     (rfe/href :home)
-    :on-click route-handler/go-to-journals!}
-   (ui/icon "home" {:style {:fontSize 20}})])
+(rum/defc home-button []
+  (ui/tippy
+   {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/home)]
+    :interactive true
+    :position    "left"
+    :theme       "extra-padding-y"
+    :arrow       true}
+   [:a.button
+    {:href     (rfe/href :home)
+     :on-click route-handler/go-to-journals!}
+    (ui/icon "home" {:style {:fontSize 20}})]))
 
 (rum/defc login
   [logged?]
@@ -57,43 +61,18 @@
           list))
        nil))))
 
-(defn keyboard-shortcut [shortcut-name]
-  (print "state/shortcuts: " (state/shortcuts))
-  (ui/keyboard-shortcut (or (shortcut-helper/decorate-binding
-                             "(:go/search (state/shortcuts))"
-                             #_(get (state/shortcuts) shortcut-name))
-                            ["x"])))
-
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
-
   (ui/tippy
-   {:html [:div.text-sm.font-medium
-           #_(ui/keyboard-shortcut "x")
-           (keyboard-shortcut :ui/toggle-left-sidebar)]
-    :position "right"
+   {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :ui/toggle-left-sidebar)]
+    :position    "bottom"
     :interactive true
-    :arrow true}
+    :arrow       true}
 
    [:a#left-menu.cp__header-left-menu.button
     {:on-click on-click
      :style {:margin-left 12}}
     (ui/icon "menu-2" {:style {:fontSize 20}})]))
-
-    #_(ui/tippy
-      {:html [:div.text-sm.font-medium
-              "Shortcut: "
-              [:code (util/->platform-shortcut "t l")]]
-       :delay 2000
-       :hideDelay 1
-       :position "right"
-       :interactive true
-       :arrow true}
-
-      [:a#left-menu.cp__header-left-menu.button
-       {:on-click on-click
-        :style {:margin-left 12}}
-       (ui/icon "menu-2" {:style {:fontSize 20}})])
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
@@ -151,28 +130,42 @@
 (rum/defc back-and-forward
   []
   [:div.flex.flex-row
-   [:a.it.navigation.nav-left.button
-    {:title "Go Back" :on-click #(js/window.history.back)}
-    (ui/icon "arrow-left")]
-   [:a.it.navigation.nav-right.button
-    {:title "Go Forward" :on-click #(js/window.history.forward)}
-    (ui/icon "arrow-right")]])
+
+   (ui/tippy
+    {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/backward)]
+     :interactive true
+     :position    "bottom"
+     :theme       "extra-padding-y"
+     :arrow       true}
+    [:a.it.navigation.nav-left.button
+     {:title "Go back" :on-click #(js/window.history.back)}
+     (ui/icon "arrow-left")])
+   
+   (ui/tippy
+    {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/forward)]
+     :interactive true
+     :position    "bottom"
+     :theme       "extra-padding-y"
+     :arrow       true}
+    [:a.it.navigation.nav-right.button
+     {:title "Go forward" :on-click #(js/window.history.forward)}
+     (ui/icon "arrow-right")])])
 
 (rum/defc updater-tips-new-version
   [t]
   (let [[downloaded, set-downloaded] (rum/use-state nil)
         _ (rum/use-effect!
-           (fn []
-             (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
-               (let [callback (fn [_ args]
-                                (js/console.debug "[new-version downloaded] args:" args)
-                                (let [args (bean/->clj args)]
-                                  (set-downloaded args)
-                                  (state/set-state! :electron/auto-updater-downloaded args))
-                                nil)]
-                 (js/apis.addListener channel callback)
-                 #(js/apis.removeListener channel callback))))
-           [])]
+            (fn []
+              (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
+                (let [callback (fn [_ args]
+                                 (js/console.debug "[new-version downloaded] args:" args)
+                                 (let [args (bean/->clj args)]
+                                   (set-downloaded args)
+                                   (state/set-state! :electron/auto-updater-downloaded args))
+                                 nil)]
+                  (js/apis.addListener channel callback)
+                  #(js/apis.removeListener channel callback))))
+            [])]
 
     (when downloaded
       [:div.cp__header-tips
@@ -204,26 +197,22 @@
         (left-menu-button {:on-click (fn []
                                        (open-fn)
                                        (state/set-left-sidebar-open!
-                                        (not (:ui/left-sidebar-open? @state/state))))})
+                                         (not (:ui/left-sidebar-open? @state/state))))})
 
-        (when current-repo
+        (when current-repo ;; this is for the Search button
           (ui/tippy
-           {:html        [:div.text-sm.font-medium
-                          "Shortcut: "
-                           ;; TODO: Pull from config so it displays custom shortcut, not just the default
-                          [:code (util/->platform-shortcut "Ctrl + k")]]
-            :interactive true
-            :delay       2000
-            :position    "right"
-            :arrow       true}
-           [:a.button#search-button
-            {:on-click #(state/pub-event! [:go/search])}
-            (ui/icon "search" {:style {:fontSize 20}})]))]
+            {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/search)]
+             :interactive true
+             :position    "right"
+             :arrow       true}
+            [:a.button#search-button
+             {:on-click #(state/pub-event! [:go/search])}
+             (ui/icon "search" {:style {:fontSize 20}})]))]
 
        [:div.r.flex
         (when (and
-               (not (mobile-util/is-native-platform?))
-               (not (util/electron?)))
+                (not (mobile-util/is-native-platform?))
+                (not (util/electron?)))
           (login logged?))
 
         (when plugin-handler/lsp-enabled?

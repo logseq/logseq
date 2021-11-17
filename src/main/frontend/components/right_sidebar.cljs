@@ -24,13 +24,11 @@
   (when-not (util/mobile?)
     (ui/tippy
       {:html [:div.text-sm.font-medium
-              "Shortcut: "
-              [:code (util/->platform-shortcut "t r")]]
-       :delay 2000
-       :hideDelay 1
-       :position "left"
+              (ui/keyboard-shortcut-from-config :ui/toggle-right-sidebar)]
+       :position    "left"
+       :theme       "extra-padding-y"
        :interactive true
-       :arrow true}
+       :arrow       true}
 
       [:a.button.fade-link.toggle
        {:on-click state/toggle-sidebar-open?!}
