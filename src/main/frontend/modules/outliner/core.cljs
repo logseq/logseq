@@ -590,18 +590,21 @@
                              (tree/-save txs-state)))))))))))))
 
 (defn- set-nodes-page-aux
-  [node page txs-state]
-  (let [new-node (update node :data assoc :block/page page)]
+  [node page page-format txs-state]
+  (let [new-node (update node :data assoc
+                         :block/page page
+                         :block/format page-format)]
     (tree/-save new-node txs-state)
     (doseq [n (tree/-get-children new-node)]
-      (set-nodes-page-aux n page txs-state))))
+      (set-nodes-page-aux n page page-format txs-state))))
 
 (defn- set-nodes-page
   [node target-node txs-state]
   (let [page (or (get-in target-node [:data :block/page])
                  {:db/id (get-in target-node [:data :db/id])}) ; or page block
-        ]
-    (set-nodes-page-aux node page txs-state)))
+
+        page-format (:block/format (db/entity (or (:db/id page) page)))]
+    (set-nodes-page-aux node page page-format txs-state)))
 
 (defn move-subtree
   "Move subtree to a destination position in the relation tree.

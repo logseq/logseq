@@ -22,10 +22,9 @@
           true))))))
 
 (defn move-block
-  "There can be at least 3 possible situations:
+  "There can be two possible situations:
   1. Move a block in the same file (either top-to-bottom or bottom-to-top).
   2. Move a block between two different files.
-  3. Move a block between two files in different repos.
 
   Notes:
   1. Those two blocks might have different formats, e.g. one is `org` and another is `markdown`,
