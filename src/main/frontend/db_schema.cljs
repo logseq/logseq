@@ -145,6 +145,7 @@
     :block/properties
     :block/created-at
     :block/updated-at
+    :block/warning
     }
   )
 
