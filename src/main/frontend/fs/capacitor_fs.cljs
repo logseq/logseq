@@ -46,7 +46,7 @@
               files-dir (->> files-with-stats
                              (filterv
                               (fn [{:keys [type]}]
-                                (= type "directory")))
+                                (contains? #{"directory" "NSFileTypeDirectory"} type)))
                              (mapv :uri))
 
               files-result
@@ -54,7 +54,7 @@
                (->> files-with-stats
                     (filter
                      (fn [{:keys [type]}]
-                       (= type "file")))
+                       (contains? #{"file" "NSFileTypeRegular"} type)))
                     (filter
                      (fn [{:keys [uri]}]
                        (some #(string/ends-with? uri %)
@@ -77,10 +77,10 @@
   (mkdir! [this dir]
     (prn "mkdir: " dir)
     (p/let [result (.mkdir Filesystem
-                      (clj->js
-                       {:path dir
-                        ;; :directory (.-ExternalStorage Directory)
-                        }))]
+                           (clj->js
+                            {:path dir
+                             ;; :directory (.-ExternalStorage Directory)
+                             }))]
       (js/console.log result)
       result))
   (mkdir-recur! [this dir]
@@ -101,29 +101,35 @@
   (read-file [this dir path _options]
     (let [path (str dir path)]
       (p/let [content (.readFile Filesystem
-                              (clj->js
-                               {:path path
-                                :directory (.-ExternalStorage Directory)
-                                :encoding (.-UTF8 Encoding)}))]
+                                 (clj->js
+                                  {:path path
+                                   :directory (.-ExternalStorage Directory)
+                                   :encoding (.-UTF8 Encoding)}))]
         content)))
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
-    (let [path (if (string/starts-with? path (config/get-repo-dir repo))
+    (let [path (cond
+                 (= (util/platform) "ios")
                  path
+
+                 (string/starts-with? path (config/get-repo-dir repo))
+                 path
+
+                 :else
                  (-> (str dir "/" path)
                      (string/replace "//" "/")))]
       (p/catch
-         (p/let [result (.writeFile Filesystem
-                                    (clj->js
-                                     {:path path
-                                      :data content
-                                      :encoding (.-UTF8 Encoding)
-                                      :recursive true}))]
-           (when ok-handler
-             (ok-handler repo path result)))
-         (fn [error]
-           (if error-handler
-             (error-handler error)
-             (log/error :write-file-failed error))))))
+          (p/let [result (.writeFile Filesystem
+                                     (clj->js
+                                      {:path path
+                                       :data content
+                                       :encoding (.-UTF8 Encoding)
+                                       :recursive true}))]
+            (when ok-handler
+              (ok-handler repo path result)))
+          (fn [error]
+            (if error-handler
+              (error-handler error)
+              (log/error :write-file-failed error))))))
   (rename! [this repo old-path new-path]
     nil)
   (stat [this dir path]
@@ -132,19 +138,17 @@
                                         {:path path
                                          ;; :directory (.-ExternalStorage Directory)
                                          }))]
-       result)))
+        result)))
   (open-dir [this ok-handler]
-    (case (util/platform)
-      "android"
-      (p/let [_    (check-permission-android)
-              path (p/chain
-                    (.pickFolder util/folder-picker)
-                    #(js->clj % :keywordize-keys true)
-                    :path)
-              files (readdir path)]
-        (js/console.log path)
-        (js/console.log files)
-        (into [] (concat [{:path path}] files)))))
+    (p/let [_    (when (= (util/platform) "android") (check-permission-android))
+            path (p/chain
+                  (.pickFolder util/folder-picker)
+                  #(js->clj % :keywordize-keys true)
+                  :path)
+            files (readdir path)]
+      (js/console.log path)
+      (js/console.log files)
+      (into [] (concat [{:path path}] files))))
   (get-files [this path-or-handle _ok-handler]
     (readdir path-or-handle))
   (watch-dir! [this dir]
