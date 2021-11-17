@@ -661,3 +661,7 @@
 .tippy-hover {
   cursor: pointer;
 }
+
+.tippy-popper .tippy-tooltip.monospace-theme {
+  font-family: 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
+}

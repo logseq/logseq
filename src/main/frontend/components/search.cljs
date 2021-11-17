@@ -279,7 +279,7 @@
                       (ui/keyboard-shortcut-from-config :go/search-in-page)]
                :arrow           true
                :interactive     true
-               }
+               :theme       "monospace"}
               [:div.flex-row.flex.align-items
                [:div.mr-2 "Search in page:"]
                [:div {:style {:margin-top 3}}
@@ -292,7 +292,7 @@
                                  "Tip: " [:code (util/->platform-shortcut "Ctrl + Shift + p")] " to open the commands palette"]
                           :interactive     true
                           :arrow           true
-                          }
+                          :theme       "monospace"}
                          [:a.inline-block.fade-link
                           {:style {:margin-left 12}
                            :on-click #(state/toggle! :ui/command-palette-open?)}

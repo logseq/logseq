@@ -31,6 +31,7 @@
    {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/home)]
     :interactive true
     :position    "left"
+    :theme       "monospace"
     :arrow       true}
    [:a.button
     {:href     (rfe/href :home)
@@ -65,6 +66,7 @@
   (ui/tippy
    {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :ui/toggle-left-sidebar)]
     :position    "bottom"
+    :theme       "monospace"
     :interactive true
     :arrow       true}
 
@@ -134,6 +136,7 @@
     {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/backward)]
      :interactive true
      :position    "bottom"
+     :theme       "monospace"
      :arrow       true}
     [:a.it.navigation.nav-left.button
      {:title "Go back" :on-click #(js/window.history.back)}
@@ -143,6 +146,7 @@
     {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/forward)]
      :interactive true
      :position    "bottom"
+     :theme       "monospace"
      :arrow       true}
     [:a.it.navigation.nav-right.button
      {:title "Go forward" :on-click #(js/window.history.forward)}
@@ -201,6 +205,7 @@
             {:html [:div.text-sm.font-medium (ui/keyboard-shortcut-from-config :go/search)]
              :interactive true
              :position    "right"
+             :theme       "monospace"
              :arrow       true}
             [:a.button#search-button
              {:on-click #(state/pub-event! [:go/search])}
