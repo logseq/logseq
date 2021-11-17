@@ -76,7 +76,8 @@
              (assoc state ::filters filters)))}
   [state page-name marker? priority?]
   (when page-name
-    (let [repo (state/get-current-repo)
+    (let [page-name (string/lower-case page-name)
+          repo (state/get-current-repo)
           threshold (state/get-linked-references-collapsed-threshold)
           refed-blocks-ids (model-db/get-referenced-blocks-ids page-name)
           *n-ref (::n-ref state)
