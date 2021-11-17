@@ -295,11 +295,11 @@
       :fn      config-handler/toggle-ui-show-brackets!}
      :go/search-in-page
      {:desc    "Search in the current page"
-      :binding ["mod+shift+k" "mod+shift+u"]
+      :binding "mod+shift+k"
       :fn      #(route-handler/go-to-search! :page)}
      :go/search
      {:desc    "Full text search"
-      :binding ["mod+k" "mod+u"]
+      :binding "mod+k"
       :fn      #(route-handler/go-to-search! :global)}
      :go/journals
      {:desc    "Jump to journals"
