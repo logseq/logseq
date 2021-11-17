@@ -322,6 +322,46 @@
         (when (fn? ok-handler) (ok-handler))
         (ui-handler/re-render-root!)))))
 
+(defn- rename-update-block-refs!
+  [refs from-id to-id]
+  (->> refs
+       (remove #{{:db/id from-id}})
+       (cons {:db/id to-id})
+       (distinct)
+       (vec)))
+
+(defn- rename-update-refs!
+  [page old-original-name new-name]
+  ;; update all pages which have references to this page
+  (let [repo (state/get-current-repo)
+        to-page (db/entity [:block/name (string/lower-case new-name)])
+        blocks   (db/get-page-referenced-blocks-no-cache (:db/id page))
+        page-ids (->> (map :block/page blocks)
+                      (remove nil?)
+                      (set))
+        tx       (->> (map (fn [{:block/keys [uuid title content properties] :as block}]
+                             (let [title      (let [title' (walk-replace-old-page! title old-original-name new-name)]
+                                                (when-not (= title' title)
+                                                  title'))
+                                   content    (let [content' (replace-old-page! content old-original-name new-name)]
+                                                (when-not (= content' content)
+                                                  content'))
+                                   properties (let [properties' (walk-replace-old-page! properties old-original-name new-name)]
+                                                (when-not (= properties' properties)
+                                                  properties'))]
+                               (when (or title content properties)
+                                 (util/remove-nils-non-nested
+                                  {:block/uuid       uuid
+                                   :block/title      title
+                                   :block/content    content
+                                   :block/properties properties
+                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
+                                   :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))})))) blocks)
+                      (remove nil?))]
+    (db/transact! repo tx)
+    (doseq [page-id page-ids]
+      (outliner-file/sync-to-file page-id))))
+
 (defn- rename-page-aux [old-name new-name]
   (when-let [repo (state/get-current-repo)]
     (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
@@ -354,35 +394,9 @@
         (when (and file (not journal?))
           (rename-file! file new-name (fn [] nil)))
 
-        ;; update all files which have references to this page
-        (let [blocks   (db/get-page-referenced-blocks-no-cache (:db/id page))
-              page-ids (->> (map :block/page blocks)
-                            (remove nil?)
-                            (set))
-              tx       (->> (map (fn [{:block/keys [uuid title content properties] :as block}]
-                                   (let [title      (let [title' (walk-replace-old-page! title old-original-name new-name)]
-                                                      (when-not (= title' title)
-                                                        title'))
-                                         content    (let [content' (replace-old-page! content old-original-name new-name)]
-                                                      (when-not (= content' content)
-                                                        content'))
-                                         properties (let [properties' (walk-replace-old-page! properties old-original-name new-name)]
-                                                      (when-not (= properties' properties)
-                                                        properties'))]
-                                     (when (or title content properties)
-                                       (util/remove-nils-non-nested
-                                        {:block/uuid       uuid
-                                         :block/title      title
-                                         :block/content    content
-                                         :block/properties properties})))) blocks)
-                            (remove nil?))]
-          (db/transact! repo tx)
-          (doseq [page-id page-ids]
-            (outliner-file/sync-to-file page-id)))
+        (rename-update-refs! page old-original-name new-name)
 
         (outliner-file/sync-to-file page))
-
-      ;; TODO: update browser history, remove the current one
 
       ;; Redirect to the new page
       (route-handler/redirect! {:to          :page
@@ -430,8 +444,10 @@
 (defn merge-pages!
   [from to]
   (when (and (page-exists? from) (page-exists? to) (not= from to))
-    (let [to-id (:db/id (db/entity [:block/name (string/lower-case to)]))
-          from-id (:db/id (db/entity [:block/name (string/lower-case from)]))
+    (let [to-page (db/entity [:block/name (string/lower-case to)])
+          to-id (:db/id to-page)
+          from-page (db/entity [:block/name (string/lower-case from)])
+          from-id (:db/id from-page)
           from-first-child (some->> (db/pull from-id)
                                     (outliner-core/block)
                                     (outliner-tree/-get-down)
@@ -441,17 +457,14 @@
           conn (conn/get-conn repo false)
           datoms (d/datoms @conn :avet :block/page from-id)
           block-eids (mapv :e datoms)
-          blocks (db-utils/pull-many repo '[:db/id :block/page :block/path-refs :block/left :block/parent] block-eids)
+          blocks (db-utils/pull-many repo '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
           tx-data (map (fn [block]
                          (let [id (:db/id block)]
                            (cond->
                             {:db/id id
                              :block/page {:db/id to-id}
-                             :block/path-refs (->> (:block/path-refs block)
-                                                   (remove #{{:db/id from-id}})
-                                                   (cons {:db/id to-id})
-                                                   (distinct)
-                                                   (vec))}
+                             :block/path-refs (rename-update-block-refs! (:block/path-refs block) from-id to-id)
+                             :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)}
 
                              (and from-first-child (= id (:db/id from-first-child)))
                              (assoc :block/left {:db/id (or to-last-direct-child-id to-id)})
@@ -459,7 +472,13 @@
                              (= (:block/parent block) {:db/id from-id})
                              (assoc :block/parent {:db/id to-id})))) blocks)]
       (d/transact! conn tx-data)
-      (outliner-file/sync-to-file {:db/id to-id}))
+      (outliner-file/sync-to-file {:db/id to-id})
+
+      (rename-update-refs! from-page
+                           (or (:block/original-name from-page)
+                               (:block/name from-page))
+                           (or (:block/original-name to-page)
+                               (:block/name to-page))))
 
     (delete! from nil)
 
