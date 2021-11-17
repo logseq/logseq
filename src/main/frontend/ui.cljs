@@ -702,6 +702,7 @@
     (Tippy (->
             (merge {:arrow true
                     :sticky true
+                    :delay 600
                     :theme "customized"
                     :disabled (not (state/enable-tooltip?))
                     :unmountHTMLWhenHide true
