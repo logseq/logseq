@@ -92,12 +92,10 @@
 
      [:div.ctls.flex.items-center
       (ui/button
-        (if update-pending? "Checking ..." "Check for updates")
-        :class "text-sm p-1 mr-3"
-        :disabled update-pending?
-        :on-click #(js/window.apis.checkForUpdates false))
-
-      [:span version]]
+       (if update-pending? "Checking ..." "Check for updates")
+       :class "text-sm p-1 mr-3"
+       :disabled update-pending?
+       :on-click #(js/window.apis.checkForUpdates false))]
 
      (when-not (or update-pending?
                    (string/blank? type))
