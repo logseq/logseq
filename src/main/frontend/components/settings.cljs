@@ -293,23 +293,16 @@
           [:option {:key lang-code :value lang-code} lang-label]))]]]])
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
-  [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "toggle_theme"}
-    (t :right-side-bar/switch-theme (string/capitalize switch-theme))]
-   [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-4
-    [:div.rounded-md.sm:max-w-xs
-
-     [:ul.theme-modes-options
-      [:li {:on-click (partial state/use-theme-mode! "light")
-            :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
-      [:li {:on-click (partial state/use-theme-mode! "dark")
-            :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
-      [:li {:on-click (partial state/use-theme-mode! "system")
-            :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
-
-    [:div.pl-16
-     (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))]]])
+  (let [pick-theme [:ul.theme-modes-options
+                    [:li {:on-click (partial state/use-theme-mode! "light")
+                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
+                    [:li {:on-click (partial state/use-theme-mode! "dark")
+                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
+                    [:li {:on-click (partial state/use-theme-mode! "system")
+                          :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
+    (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
+                             :action     pick-theme
+                             :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
