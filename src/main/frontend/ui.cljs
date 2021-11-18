@@ -27,7 +27,8 @@
             ["react-tweet-embed" :as react-tweet-embed]
             [rum.core :as rum]
             [clojure.string :as str]
-            [frontend.db-mixins :as db-mixins]))
+            [frontend.db-mixins :as db-mixins]
+            [frontend.mobile.util :as mobile-util]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -507,7 +508,14 @@
           :stroke-linecap  "round"}]]])]
 
    (when show?
-     [:div {:class (if fullscreen? "" "panel-content")}
+     [:div {:class (if fullscreen? "" "panel-content")
+            :style (if (or (util/mobile?)
+                           (mobile-util/is-native-platform?))
+                     {:padding-top "2em"
+                      :padding-left "0.5em"
+                      :padding-right "0.5em"
+                      :padding-bottom "1em"}
+                     {:padding "2em"})}
       (modal-panel-content panel-content close-fn)])])
 
 (rum/defc modal < rum/reactive
