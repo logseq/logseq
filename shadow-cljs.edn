@@ -28,13 +28,9 @@
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es-next-in
                       :source-map true
-                      :optimizations :simple
                       :externs ["datascript/externs.js"
                                 "externs.js"]
-                      :warnings {:fn-deprecated false}
-                      ;; For debug
-                      ;; :pseudo-names true
-                      }
+                      :warnings {:fn-deprecated false}}
    :closure-defines {goog.debug.LOGGING_ENABLED true
                      frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
 
