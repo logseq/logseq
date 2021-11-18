@@ -179,7 +179,7 @@
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
 (defmethod handle :after-db-restore [[_ repos]]
-  (mapv (fn [{url :url} repo]
+  (mapv (fn [{url :url}]
           ;; compare :ast/version
           (let [db (conn/get-conn url)
                 ast-version (:v (first (d/datoms db :aevt :ast/version)))]

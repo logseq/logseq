@@ -113,6 +113,7 @@
           :icon svg/logout-sm})]
       (concat page-menu-and-hr)
       (remove nil?))
+     {}
      ;; {:links-footer (when (and (util/electron?) (not logged?))
      ;;                  [:div.px-2.py-2 (login logged?)])}
      )))

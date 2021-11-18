@@ -74,7 +74,7 @@
                  filters (when page-name
                            (atom (page-handler/get-filters (string/lower-case page-name))))]
              (assoc state ::filters filters)))}
-  [state page-name marker? priority?]
+  [state page-name marker?]
   (when page-name
     (let [page-name (string/lower-case page-name)
           repo (state/get-current-repo)
