@@ -1,10 +1,20 @@
-{:linters {:unresolved-symbol {:exclude [goog.DEBUG]}}
+{:linters {:unresolved-symbol {:exclude [goog.DEBUG 
+                                         goog.string.unescapeEntities]}}
  :hooks {:analyze-call {rum.core/defc hooks.rum/defc
                         rum.core/defcs hooks.rum/defcs}}
  :lint-as {promesa.core/let clojure.core/let
+           promesa.core/loop clojure.core/loop
            garden.def/defstyles clojure.core/def
            garden.def/defkeyframes clojure.core/def
            rum.core/defcc rum.core/defc
+           rum.core/with-context clojure.core/doseq
+           rum.core/defcontext clojure.core/def
            clojure.test.check.clojure-test/defspec clojure.core/def
            clojure.test.check.properties/for-all clojure.core/for
-           frontend.modules.outliner.datascript/auto-transact! clojure.core/let}}
+           nubank.workspaces.core/defcard clojure.core/def
+           ;; src/main
+           frontend.modules.outliner.datascript/auto-transact! clojure.core/let
+           frontend.namespaces/import-vars potemkin/import-vars
+           ;; src/test
+           frontend.react/defc clojure.core/defn}
+ :skip-comments true}
