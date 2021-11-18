@@ -229,7 +229,7 @@
         :settings-page/enable-tooltip "Tooltips"
         :settings-page/enable-journals "Journals"
         :settings-page/enable-all-pages-public "All pages public when publishing"
-        :settings-page/enable-encryption "Enable encryption feature"
+        :settings-page/enable-encryption "Encryption"
         :settings-page/customize-shortcuts "Keyboard shortcuts"
         :settings-page/shortcut-settings "Customize shortcuts"
         :settings-page/home-default-page "Set the default home page"

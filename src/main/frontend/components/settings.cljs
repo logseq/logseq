@@ -78,11 +78,12 @@
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for label-for}
     name]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.rounded-md
-     {:style {:display "flex" :gap "1rem" :align-items "center"}}
+   [:div.rounded-md.sm:max-w-xs.sm:col-span-2
+    [:div.rounded-md {:style {:display "flex" :gap "1rem" :align-items "center"}}
      (ui/toggle state on-toggle true)
      detail-text]]])
+
+
 
 (rum/defcs app-updater < rum/reactive
   [state version]
@@ -168,13 +169,12 @@
      ;; leftright column
    [:div.mt-1.sm:mt-0.sm:col-span-2
     {:style {:display "flex" :gap "1rem" :align-items "center"}}
-    [:div
-     (if action action (ui/button
-                        button-label
-                        :class    "text-sm p-1"
-                        :href     href
-                        :on-click on-click))]
-    [:div.text-sm.opacity-50 desc]]])
+    [:div (if action action (ui/button
+                             button-label
+                             :class    "text-sm p-1"
+                             :href     href
+                             :on-click on-click))]
+    [:div.text-sm desc]]])
 
 
 (defn edit-config-edn []
@@ -196,17 +196,12 @@
       :-for          "customize_css"})))
 
 (defn show-brackets-row [t show-brackets?]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "show_brackets"}
-    (t :settings-page/show-brackets)]
-   [:div
-    [:div.rounded-md.sm:max-w-xs
-     (ui/toggle show-brackets?
-                config-handler/toggle-ui-show-brackets!
-                true)]]
-   [:div {:style {:text-align "right"}}
-    (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]])
+  (toggle "show_brackets"
+          (t :settings-page/show-brackets)
+          show-brackets?
+          config-handler/toggle-ui-show-brackets!
+          [:span {:text-align "right"}
+           (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]))
 
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
@@ -289,13 +284,7 @@
                     [:option {:key lang-code :value lang-code} lang-label]))]]
     (row-with-button-action {:left-label (t :language)
                              :-for        "preferred_language"
-                             :action     action}))
-  #_[:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      {:for "preferred_language"}
-      (t :language)]
-     [:div.mt-1.sm:mt-0.sm:col-span-4
-      [:div.max-w-lg.rounded-md]]])
+                             :action     action})))
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
   (let [pick-theme [:ul.theme-modes-options
@@ -396,8 +385,7 @@
   (toggle "enable_timetracking"
           (t :settings-page/enable-timetracking)
           enable-timetracking?
-          (fn []
-            (let [value (not enable-timetracking?)]
+          #((let [value (not enable-timetracking?)]
               (config-handler/set-config! :feature/enable-timetracking? value)))))
 
 (defn update-home-page
@@ -459,11 +447,11 @@
 
 (defn encryption-row [t enable-encryption?]
   (toggle "enable_encryption"
-          (str (t :settings-page/enable-encryption) "\n(experimental!)")
+          (t :settings-page/enable-encryption)
           enable-encryption?
-          (fn []
-            (let [value (not enable-encryption?)]
-              (config-handler/set-config! :feature/enable-encryption? value)))))
+          #((let [value (not enable-encryption?)]
+              (config-handler/set-config! :feature/enable-encryption? value)))
+          [:span.text-sm {:text-align "right"} "experimental!"]))
 
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
@@ -626,8 +614,8 @@
             (tooltip-row t enable-tooltip?)
             (timetracking-row t enable-timetracking?)
             (journal-row t enable-journals?)
-            (enable-all-pages-public-row t enable-all-pages-public?)
             (encryption-row t enable-encryption?)
+            (enable-all-pages-public-row t enable-all-pages-public?)
             (zotero-settings-row t)
             (auto-push-row t current-repo enable-git-auto-push?)]
 
@@ -642,7 +630,7 @@
 
             (ui/admonition
              :warning
-             [:p "You need to restart the app after updating the settings."])]
+             [:p "You need to restart the app after updating the Git settings."])]
 
            :advanced
            [:div.panel-wrap.is-advanced
