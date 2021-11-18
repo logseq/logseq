@@ -118,6 +118,9 @@ dummy.convertToViewportRectangle = function() {};
 dummy.init = function() {};
 dummy.commit = function() {};
 dummy.raw = function() {};
+dummy.renderer = {};
+dummy.plugins = {};
+dummy.interaction = {};
 
 /**
  * @typedef {{
