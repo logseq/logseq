@@ -254,22 +254,14 @@
                               (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
                               (ipc/ipc "userAppCfgs" :git/auto-commit-seconds value))))}]]]]))
 
-(rum/defc app-auto-update-row < rum/reactive
-  [t]
+(rum/defc app-auto-update-row < rum/reactive [t]
   (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
-
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/auto-updater)]
-     [:div
-      [:div.rounded-md.sm:max-w-xs
-       (ui/toggle
-        enabled?
-        (fn []
-          (state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
-          (ipc/ipc "userAppCfgs" :auto-update (not enabled?)))
-        true)]]]))
+    (toggle "usage-diagnostics"
+            (t :settings-page/auto-updater)
+            enabled?
+            #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
+              (ipc/ipc "userAppCfgs" :auto-update (not enabled?))))))
 
 (defn language-row [t preferred-language]
   (let [on-change (fn [e]
