@@ -39,10 +39,10 @@
            :on-change (fn [e]
                         (reset! email (util/evalue e)))}]]]]
       (ui/button
-        "Submit"
-        :on-click
-        (fn []
-          (user-handler/set-email! @email)))
+       "Submit"
+       :on-click
+       (fn []
+         (user-handler/set-email! @email)))
 
       [:hr]
 
@@ -63,10 +63,10 @@
            :on-change (fn [e]
                         (reset! cors (util/evalue e)))}]]]]
       (ui/button
-        "Submit"
-        :on-click
-        (fn []
-          (user-handler/set-cors! @cors)))
+       "Submit"
+       :on-click
+       (fn []
+         (user-handler/set-cors! @cors)))
 
       [:hr]
 
@@ -455,10 +455,10 @@
      [:div.mt-1.sm:mt-0.sm:col-span-2
       [:div
        (ui/button
-         (t :settings-page/shortcut-settings)
-         :class "text-sm p-1"
-         :style {:margin-top "0px"}
-         :on-click h)]])])
+        (t :settings-page/shortcut-settings)
+        :class "text-sm p-1"
+        :style {:margin-top "0px"}
+        :on-click h)]])])
 
 (defn zotero-settings-row [t]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -468,13 +468,13 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-       "Zotero settings"
-       :class "text-sm p-1"
-       :style {:margin-top "0px"}
-       :on-click
-       (fn []
-         (state/close-settings!)
-         (route-handler/redirect! {:to :zotero-setting})))]]])
+      "Zotero settings"
+      :class "text-sm p-1"
+      :style {:margin-top "0px"}
+      :on-click
+      (fn []
+        (state/close-settings!)
+        (route-handler/redirect! {:to :zotero-setting})))]]])
 
 (defn auto-push-row [t current-repo enable-git-auto-push?]
   (when (string/starts-with? current-repo "https://")
@@ -490,7 +490,7 @@
           (t :settings-page/disable-sentry)
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
-                 (not instrument-disabled?)))
+                  (not instrument-disabled?)))
           [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
 
 (defn clear-cache-row [t]
@@ -679,8 +679,8 @@
                 [:div.mt-1.sm:mt-0.sm:col-span-2
                  [:div.max-w-lg.rounded-md.sm:max-w-xs
                   (ui/button (t :user/delete-your-account)
-                    :on-click (fn []
-                                (ui-handler/toggle-settings-modal!)
-                                (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
+                             :on-click (fn []
+                                         (ui-handler/toggle-settings-modal!)
+                                         (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
 
            nil)]]])))
