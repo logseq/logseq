@@ -158,6 +158,27 @@
            :width  500
            :height 500}]]])
 
+(defn row-with-button-action
+  [{:keys [left-label button button-label href on-click desc]}]
+  (rum/with-context [[t] i18n/*tongue-context*]
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+     ;; left column
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      {:for "customize_css"}
+      left-label]
+
+     ;; leftright column
+     [:div.mt-1.sm:mt-0.sm:col-span-2
+      {:style {:display "flex" :gap "1rem" :align-items "center"}}
+      [:div
+       (if button button (ui/button
+                          button-label
+                          :class    "text-sm p-1"
+                          :href     href
+                          :on-click on-click))]
+      [:div.text-sm.opacity-50 desc]]]))
+
+
 (defn edit-config-edn []
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div
