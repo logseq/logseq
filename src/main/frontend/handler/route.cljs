@@ -94,7 +94,8 @@
 (defn update-page-label!
   [route]
   (let [{:keys [data]} route]
-    (set! (. js/document.body.dataset -page) (name (:name data)))))
+    (when-let [data-name (:name data)]
+      (set! (. js/document.body.dataset -page) (name data-name)))))
 
 (defn jump-to-anchor!
   [anchor-text]

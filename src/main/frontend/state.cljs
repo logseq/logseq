@@ -77,6 +77,7 @@
                               false)
       ;; remember scroll positions of visited paths
       :ui/paths-scroll-positions {}
+      :ui/shortcut-tooltip? (or (storage/get :ui/shortcut-tooltip?) true)
 
       :document/mode? document-mode?
 
@@ -1166,6 +1167,16 @@
   (let [mode (document-mode?)]
     (set-state! :document/mode? (not mode))
     (storage/set :document/mode? (not mode))))
+
+(defn shortcut-tooltip-enabled?
+  []
+  (get @state :ui/shortcut-tooltip?))
+
+(defn toggle-shortcut-tooltip!
+  []
+  (let [mode (shortcut-tooltip-enabled?)]
+    (set-state! :ui/shortcut-tooltip? (not mode))
+    (storage/set :ui/shortcut-tooltip? (not mode))))
 
 (defn enable-tooltip?
   []

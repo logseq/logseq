@@ -13,6 +13,8 @@
             [frontend.handler.plugin :as plugin-handler]
             [cljs-bean.core :as bean]
             [goog.dom :as gdom]
+            [frontend.modules.shortcut.config :as shortcut-config]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [promesa.core :as p]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
@@ -441,9 +443,15 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
-;; `sequence` can be a list of symbols or strings
-(defn keyboard-shortcut [sequence]
-  [:span.keyboard-shortcut
+;; `sequence` can be a list of symbols, a list of strings, or a string
+(defn render-keyboard-shortcut [sequence]
+  (let [sequence (if (string? sequence)
+                   (-> sequence ;; turn string into sequence
+                       (str/trim)
+                       (str/lower-case)
+                       (str/split  #" |\+"))
+                   sequence)]
+    [:span.keyboard-shortcut
    (map-indexed (fn [i key]
                   [:code {:key i}
                    ;; Display "cmd" rather than "meta" to the user to describe the Mac
@@ -451,7 +459,13 @@
                    (if (or (= :meta key) (= "meta" key))
                      (util/meta-key-name)
                      (name key))])
-                sequence)])
+                sequence)]))
+
+(defn keyboard-shortcut-from-config [shortcut-name]
+  (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))
+        custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
+        binding         (or custom-binding default-binding)]
+    (shortcut-helper/decorate-binding binding)))
 
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
@@ -688,6 +702,7 @@
     (Tippy (->
             (merge {:arrow true
                     :sticky true
+                    :delay 600
                     :theme "customized"
                     :disabled (not (state/enable-tooltip?))
                     :unmountHTMLWhenHide true
@@ -707,7 +722,7 @@
                              (when-let [html (:html opts)]
                                (if (fn? html)
                                  (html)
-                                 [:div.pr-3.py-1
+                                 [:div.px-2.py-1
                                   html]))
                              (catch js/Error e
                                (log/error :exception e)
@@ -743,3 +758,17 @@
                            (when (:class opts)
                              (str " " (string/trim (:class opts)))))}
               (dissoc opts :class))]))
+
+(rum/defc with-shortcut < rum/reactive
+  [shortcut-key position content]
+  (let [tooltip? (state/sub :ui/shortcut-tooltip?)]
+    (if tooltip?
+      (tippy
+       {:html [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
+        :interactive true
+        :position    position
+        :theme       "monospace"
+        :delay       [1000, 100]
+        :arrow       true}
+       content)
+      content)))

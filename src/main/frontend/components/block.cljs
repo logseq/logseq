@@ -1822,7 +1822,12 @@
             (for [[idx child] (medley/indexed body)]
               (when-let [block (markup-element-cp config child)]
                 (rum/with-key (block-child block)
-                  (str uuid "-" idx)))))])]]]))
+                  (str uuid "-" idx)))))])
+
+       (case (:block/warning block)
+         :multiple-blocks
+         [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
+         nil)]]]))
 
 (rum/defc block-refs-count < rum/reactive
   [block]

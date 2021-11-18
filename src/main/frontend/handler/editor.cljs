@@ -354,7 +354,6 @@
         content (if (and (seq properties) real-content (not= real-content content))
                   (property/with-built-in-properties properties content format)
                   content)
-        content (text/remove-lines-level-spaces content format)
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= left page)

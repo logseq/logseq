@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "main": "electron.js",
   "author": "Logseq",
   "description": "A privacy-first, open-source platform for knowledge management and collaboration.",
@@ -42,5 +42,6 @@
     "electron-builder": "^22.11.7",
     "electron-forge-maker-appimage": "trusktr/electron-forge-maker-appimage#patch-1",
     "electron-rebuild": "3.2.5"
-  }
+  },
+  "resolutions": {  "**/node-abi": "^3.2.0" }
 }

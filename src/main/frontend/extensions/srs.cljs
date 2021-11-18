@@ -457,15 +457,15 @@
             [:div.flex-1
              (when-not (and (not preview?) (= next-phase 1))
                (ui/button (case next-phase
-                            1 [:span "Hide answers " (ui/keyboard-shortcut [:s])]
-                            2 [:span "Show answers " (ui/keyboard-shortcut [:s])]
-                            3 [:span "Show clozes " (ui/keyboard-shortcut [:s])])
+                            1 [:span "Hide answers " (ui/render-keyboard-shortcut [:s])]
+                            2 [:span "Show answers " (ui/render-keyboard-shortcut [:s])]
+                            3 [:span "Show clozes " (ui/render-keyboard-shortcut [:s])])
                           :id "card-answers"
                           :class "mr-2"
                  :on-click #(reset! phase next-phase)))
 
              (when (and (> (count cards) 1) preview?)
-               (ui/button [:span "Next " (ui/keyboard-shortcut [:n])]
+               (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
                           :id "card-next"
                           :class "mr-2"
                  :on-click #(skip-card card card-index cards phase review-records cb)))
@@ -477,7 +477,7 @@
                  [:div.flex.flex-row.justify-between
                   (ui/button (if (util/mobile?)
                                "Forgotten"
-                               [:span "Forgotten " (ui/keyboard-shortcut [:f])])
+                               [:span "Forgotten " (ui/render-keyboard-shortcut [:f])])
                     :id "card-forgotten"
                     :on-click (fn []
                                 (score-and-next-card 1 card card-index cards phase review-records cb)
@@ -486,13 +486,13 @@
 
                   (ui/button (if (util/mobile?)
                                  "Remembered"
-                                 [:span "Remembered " (ui/keyboard-shortcut [:r])])
+                                 [:span "Remembered " (ui/render-keyboard-shortcut [:r])])
                     :id "card-remembered"
                     :on-click #(score-and-next-card 5 card card-index cards phase review-records cb))
 
                   (ui/button (if (util/mobile?)
                                "Hard"
-                               [:span "Took a while to recall " (ui/keyboard-shortcut [:t])])
+                               [:span "Took a while to recall " (ui/render-keyboard-shortcut [:t])])
                     :id "card-recall"
                     :on-click #(score-and-next-card 3 card card-index cards phase review-records cb))]))]
 

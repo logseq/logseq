@@ -34,6 +34,12 @@
       (register-shortcut! handler-id id shortcut))
     (reset! *pending [])))
 
+(defn- get-handler-by-id
+  [handler-id]
+  (-> (filter #(= (:group %) handler-id) (vals @*installed))
+      first
+      :handler))
+
 (defn register-shortcut!
   "Register a shortcut, notice the id need to be a namespaced keyword to avoid
   conflicts.
@@ -48,8 +54,8 @@
      (swap! *pending conj [handler-id id shortcut-map])
      (when-let [handler (if (or (string? handler-id) (keyword? handler-id))
                           (let [handler-id (keyword handler-id)]
-                            (-> (get @*installed handler-id)
-                                :handler))
+                            (get-handler-by-id handler-id))
+
                           ;; handler
                           handler-id)]
 
@@ -72,19 +78,18 @@
   Example:
   (unregister-shortcut! :shortcut.handler/misc :foo/bar)"
   [handler-id shortcut-id]
-  (when-let [handler (-> (get @*installed handler-id)
-                         :handler)]
+  (when-let [handler (get-handler-by-id handler-id)]
     (when-let [ks (dh/shortcut-binding shortcut-id)]
       (doseq [k ks]
         (.unregisterShortcut ^js handler k)))
     (shortcut-config/remove-shortcut! handler-id shortcut-id)))
 
 (defn uninstall-shortcut!
-  [handler-id]
-  (when-let [handler (-> (get @*installed handler-id)
+  [install-id]
+  (when-let [handler (-> (get @*installed install-id)
                          :handler)]
     (.dispose ^js handler)
-    (swap! *installed dissoc handler-id)))
+    (swap! *installed dissoc install-id)))
 
 (defn install-shortcut!
   [handler-id {:keys [set-global-keys?
@@ -94,7 +99,6 @@
                :or   {set-global-keys? true
                       prevent-default? false
                       skip-installed? false}}]
-  (uninstall-shortcut! handler-id)
   (let [shortcut-map (dh/shortcut-map handler-id state)
         handler      (new KeyboardShortcutHandler js/window)]
     ;; set arrows enter, tab to global
@@ -113,7 +117,7 @@
                     dispatch-fn (get shortcut-map (keyword (.-identifier e)))]
                 ;; trigger fn
                 (when dispatch-fn (dispatch-fn e))))
-          install-id handler-id
+          install-id (medley/random-uuid)
           data       {install-id
                       {:group      handler-id
                        :dispatch-fn f
@@ -138,16 +142,17 @@
 (defn mixin [handler-id]
   {:did-mount
    (fn [state]
-     (js/setTimeout #(install-shortcut! handler-id {:state state}) 20)
-     state)
+     (let [install-id (install-shortcut! handler-id {:state state})]
+       (assoc state ::install-id install-id)))
 
    :did-remount (fn [old-state new-state]
-                  (uninstall-shortcut! handler-id)
-                  (js/setTimeout #(install-shortcut! handler-id {:state new-state}) 20)
-                  new-state)
+                  (uninstall-shortcut! (::install-id old-state))
+                  (when-let [install-id (install-shortcut! handler-id {:state new-state})]
+                    (assoc new-state ::install-id install-id)))
    :will-unmount
    (fn [state]
-     (uninstall-shortcut! handler-id)
+     (when-let [install-id (::install-id state)]
+       (uninstall-shortcut! install-id))
      state)})
 
 (defn unlisten-all []

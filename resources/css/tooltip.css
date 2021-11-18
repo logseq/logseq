@@ -22,7 +22,7 @@
 }
 
 .tippy-popper[x-placement^=top] [x-arrow] {
-  border-top: 7px solid var(--ls-tertiary-background-color);
+  border-top: 7px solid var(--ls-quaternary-background-color);
   border-right: 7px solid transparent;
   border-left: 7px solid transparent;
   bottom: -7px;
@@ -30,14 +30,14 @@
 }
 
 .tippy-popper[x-placement^=top] [x-arrow].arrow-small {
-  border-top: 5px solid var(--ls-tertiary-background-color);
+  border-top: 5px solid var(--ls-quaternary-background-color);
   border-right: 5px solid transparent;
   border-left: 5px solid transparent;
   bottom: -5px
 }
 
 .tippy-popper[x-placement^=top] [x-arrow].arrow-big {
-  border-top: 10px solid var(--ls-tertiary-background-color);
+  border-top: 10px solid var(--ls-quaternary-background-color);
   border-right: 10px solid transparent;
   border-left: 10px solid transparent;
   bottom: -10px
@@ -158,7 +158,7 @@
 }
 
 .tippy-popper[x-placement^=bottom] [x-arrow] {
-  border-bottom: 7px solid var(--ls-tertiary-background-color);
+  border-bottom: 7px solid var(--ls-quaternary-background-color);
   border-right: 7px solid transparent;
   border-left: 7px solid transparent;
   top: -7px;
@@ -166,14 +166,14 @@
 }
 
 .tippy-popper[x-placement^=bottom] [x-arrow].arrow-small {
-  border-bottom: 5px solid var(--ls-tertiary-background-color);
+  border-bottom: 5px solid var(--ls-quaternary-background-color);
   border-right: 5px solid transparent;
   border-left: 5px solid transparent;
   top: -5px
 }
 
 .tippy-popper[x-placement^=bottom] [x-arrow].arrow-big {
-  border-bottom: 10px solid var(--ls-tertiary-background-color);
+  border-bottom: 10px solid var(--ls-quaternary-background-color);
   border-right: 10px solid transparent;
   border-left: 10px solid transparent;
   top: -10px
@@ -294,7 +294,7 @@
 }
 
 .tippy-popper[x-placement^=left] [x-arrow] {
-  border-left: 7px solid var(--ls-tertiary-background-color);
+  border-left: 7px solid var(--ls-quaternary-background-color);
   border-top: 7px solid transparent;
   border-bottom: 7px solid transparent;
   right: -7px;
@@ -302,14 +302,14 @@
 }
 
 .tippy-popper[x-placement^=left] [x-arrow].arrow-small {
-  border-left: 5px solid var(--ls-tertiary-background-color);
+  border-left: 5px solid var(--ls-quaternary-background-color);
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   right: -5px
 }
 
 .tippy-popper[x-placement^=left] [x-arrow].arrow-big {
-  border-left: 10px solid var(--ls-tertiary-background-color);
+  border-left: 10px solid var(--ls-quaternary-background-color);
   border-top: 10px solid transparent;
   border-bottom: 10px solid transparent;
   right: -10px
@@ -430,7 +430,7 @@
 }
 
 .tippy-popper[x-placement^=right] [x-arrow] {
-  border-right: 7px solid var(--ls-tertiary-background-color);
+  border-right: 7px solid var(--ls-quaternary-background-color);
   border-top: 7px solid transparent;
   border-bottom: 7px solid transparent;
   left: -7px;
@@ -438,14 +438,14 @@
 }
 
 .tippy-popper[x-placement^=right] [x-arrow].arrow-small {
-  border-right: 5px solid var(--ls-tertiary-background-color);
+  border-right: 5px solid var(--ls-quaternary-background-color);
   border-top: 5px solid transparent;
   border-bottom: 5px solid transparent;
   left: -5px
 }
 
 .tippy-popper[x-placement^=right] [x-arrow].arrow-big {
-  border-right: 10px solid var(--ls-tertiary-background-color);
+  border-right: 10px solid var(--ls-quaternary-background-color);
   border-top: 10px solid transparent;
   border-bottom: 10px solid transparent;
   left: -10px
@@ -587,12 +587,11 @@
   position: relative;
   color: var(--ls-primary-text-color);
   border-radius: 4px;
-  padding-left: 0.8em;
   text-align: center;
   will-change: transform;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--ls-tertiary-background-color)
+  background-color: var(--ls-quaternary-background-color);
 }
 
 .tippy-tooltip--small {
@@ -627,7 +626,7 @@
 .tippy-tooltip [x-circle] {
   position: absolute;
   will-change: transform;
-  background-color: var(--ls-tertiary-background-color);
+  background-color: var(--ls-quaternary-background-color);
   border-radius: 50%;
   width: 130%;
   width: calc(110% + 2rem);
@@ -656,9 +655,13 @@
 }
 
 .tippy-wrapper {
-  background-color: var(--ls-tertiary-background-color);
+  background-color: var(--ls-quaternary-background-color);
 }
 
 .tippy-hover {
   cursor: pointer;
+}
+
+.tippy-popper .tippy-tooltip.monospace-theme {
+  font-family: 'Fira Code', Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
 }

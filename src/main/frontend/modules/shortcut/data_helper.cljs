@@ -91,10 +91,15 @@
        (into {})))
 
 (defn decorate-binding [binding]
-  (-> binding
+  (-> (if (string? binding) binding (str/join "+"  binding))
       (str/replace "mod" (if util/mac? "cmd" "ctrl"))
+      (str/replace "ctrl" (if util/mac? "cmd" "ctrl"))
+      (str/replace "cmd" (if util/mac? "cmd" "ctrl"))
       (str/replace "alt" (if util/mac? "opt" "alt"))
       (str/replace "shift+/" "?")
+      (str/replace "left" "←")
+      (str/replace "right" "→")
+      (str/replace "+" " ")
       (str/replace "open-square-bracket" "[")
       (str/replace "close-square-bracket" "]")
       (str/lower-case)))
@@ -161,15 +166,15 @@
        (map key)
        (first)))
 
-(defn potential-confilct? [k]
+(defn potential-conflict? [k]
   (if-not (shortcut-binding k)
     false
     (let [handler-id    (get-group k)
           shortcut-m    (shortcut-map handler-id)
           bindings      (->> (shortcut-binding k)
-                            (map mod-key)
-                            (map KeyboardShortcutHandler/parseStringShortcut)
-                            (map js->clj))
+                             (map mod-key)
+                             (map KeyboardShortcutHandler/parseStringShortcut)
+                             (map js->clj))
           rest-bindings (->> (map key shortcut-m)
                              (remove #{k})
                              (map shortcut-binding)

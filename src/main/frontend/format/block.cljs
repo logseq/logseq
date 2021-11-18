@@ -688,11 +688,12 @@
   ([block]
    (parse-block block nil))
   ([{:block/keys [uuid content page format] :as block} {:keys [with-id?]
-                                                                              :or {with-id? true}}]
+                                                        :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
            ast (format/to-edn content format nil)
-           new-block (first (extract-blocks ast content with-id? format))
+           blocks (extract-blocks ast content with-id? format)
+           new-block (first blocks)
            parent-refs (->> (db/get-block-parent (state/get-current-repo) uuid)
                             :block/path-refs
                             (map :db/id))
@@ -700,10 +701,13 @@
            ref-pages (filter :block/name refs)
            path-ref-pages (->> (concat ref-pages parent-refs [(:db/id page)])
                                (remove nil?))
-           block (merge
-                  block
-                  new-block
-                  {:block/path-refs path-ref-pages})]
+           block (cond->
+                   (merge
+                    block
+                    new-block
+                    {:block/path-refs path-ref-pages})
+                   (> (count blocks) 1)
+                   (assoc :block/warning :multiple-blocks))]
        (if uuid (assoc block :block/uuid uuid) block)))))
 
 (defn macro-subs

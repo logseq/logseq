@@ -19,10 +19,10 @@
      [:div
       [:p.mb-4 "Press any sequence of keys to set the shortcut for the " [:b action-name] " action."]
       [:p.mb-4.mt-4
-       (ui/keyboard-shortcut (-> keyboard-shortcut
-                                 (str/trim)
-                                 (str/lower-case)
-                                 (str/split  #" |\+")))
+       (ui/render-keyboard-shortcut (-> keyboard-shortcut
+                                        (str/trim)
+                                        (str/lower-case)
+                                        (str/split  #" |\+")))
        " "
        [:a.text-sm
         {:style {:margin-left "12px"}
@@ -44,7 +44,7 @@
     (customize-shortcut-dialog-inner k action-name displayed-binding)))
 
 (rum/defc shortcut-col [k binding configurable? action-name]
-  (let [conflict?         (dh/potential-confilct? k)
+  (let [conflict?         (dh/potential-conflict? k)
         displayed-binding (dh/binding-for-display k binding)
         disabled?         (clojure.string/includes? displayed-binding "system default")]
     (if (not configurable?)
@@ -105,10 +105,10 @@
        [:td.text-right [:code "(())"]]]
       [:tr
        [:td.text-left (t :command.editor/open-link-in-sidebar)]
-       [:td.text-right (ui/keyboard-shortcut ["shift" "click"])]]
+       [:td.text-right (ui/render-keyboard-shortcut ["shift" "click"])]]
       [:tr
        [:td.text-left (t :help/context-menu)]
-       [:td.text-right (ui/keyboard-shortcut ["right click"])]]]]))
+       [:td.text-right (ui/render-keyboard-shortcut ["right" "click"])]]]]))
 
 (defn markdown-and-orgmode-syntax []
   (rum/with-context [[t] i18n/*tongue-context*]
