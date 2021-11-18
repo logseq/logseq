@@ -3126,6 +3126,7 @@
 (defn editor-delete
   [_state e]
   (when (state/editing?)
+    (util/stop e)
     (keydown-delete-handler e)))
 
 (defn editor-backspace

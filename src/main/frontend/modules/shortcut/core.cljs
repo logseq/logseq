@@ -25,7 +25,7 @@
 
 (defn- get-handler-by-id
   [handler-id]
-  (-> (some #(= (:group %) handler-id) (vals @*installed))
+  (-> (filter #(= (:group %) handler-id) (vals @*installed))
       first
       :handler))
 
