@@ -627,7 +627,7 @@
             [:div.text-sm.my-4
              [:a {:href "https://git-scm.com/"
                   :target "_blank"} "Git"]
-             " is used for pages version control, you can click the vertical three dots menu to check the page's history."]
+             " is used for pages version control. Click the vertical three dots menu to check the page's history."]
             (switch-git-auto-commit-row t)
             (git-auto-commit-seconds t)
 
