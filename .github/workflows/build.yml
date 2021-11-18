@@ -79,3 +79,36 @@ jobs:
         run: |
           yarn cljs:test
           node static/tests.js
+
+      - name: Build for cypress test
+        run: |
+          yarn gulp:build && \
+          clojure -M:cljs release app
+
+      - name: Install Chrome for cypress
+        uses: browser-actions/setup-chrome@latest
+
+      - name: Cypress run
+        uses: cypress-io/github-action@v2
+        with:
+          install: false
+          start: python3 -m http.server --directory ./static 3001
+          wait-on: 'http://localhost:3001'
+          browser: chrome
+          config: pageLoadTimeout=100000
+
+      - name: Save cypress screenshots
+        uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: cypress-screenshots
+          path: |
+            cypress/screenshots
+
+      - name: Save cypress videos
+        uses: actions/upload-artifact@v2
+        if: always()
+        with:
+          name: cypress-videos
+          path: |
+            cypress/videos
