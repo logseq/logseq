@@ -31,7 +31,8 @@
             [rum.core :as rum]
             [frontend.extensions.srs :as srs]
             [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.components.widgets :as widgets]))
+            [frontend.components.widgets :as widgets]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -345,7 +346,9 @@
          {:data-is-global-graph-pages global-graph-pages?
           :data-is-full-width         (or global-graph-pages?
                                           (contains? #{:all-files :all-pages :my-publishing} route-name))}
-         (widgets/demo-graph-alert)
+
+         (when-not (mobile-util/is-native-platform?)
+           (widgets/demo-graph-alert))
 
          (cond
            (not indexeddb-support?)
