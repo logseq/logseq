@@ -157,7 +157,7 @@
            :height 500}]]])
 
 (defn row-with-button-action
-  [{:keys [left-label button button-label href on-click desc]}]
+  [{:keys [left-label action button-label href on-click desc]}]
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      ;; left column
@@ -169,7 +169,7 @@
      [:div.mt-1.sm:mt-0.sm:col-span-2
       {:style {:display "flex" :gap "1rem" :align-items "center"}}
       [:div
-       (if button button (ui/button
+       (if action action (ui/button
                           button-label
                           :class    "text-sm p-1"
                           :href     href
@@ -520,7 +520,7 @@
 
 (defn version-row [t version]
   (row-with-button-action {:left-label   (t :settings-page/current-version)
-                           :button       (app-updater version)
+                           :action       (app-updater version)
                            :desc         (str "Version " version)}))
 
 (defn developer-mode-row [t developer-mode?]
