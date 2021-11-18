@@ -466,22 +466,12 @@
             (let [value (not enable-encryption?)]
               (config-handler/set-config! :feature/enable-encryption? value)))))
 
-(rum/defc keyboard-shortcuts-row
-  [t]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "customize_shortcuts"}
-    (t :settings-page/customize-shortcuts)]
-   (let [h (fn []
-             (state/close-settings!)
-             (route-handler/redirect! {:to :shortcut-setting}))]
-     [:div.mt-1.sm:mt-0.sm:col-span-2
-      [:div
-       (ui/button
-        (t :settings-page/shortcut-settings)
-        :class "text-sm p-1"
-        :style {:margin-top "0px"}
-        :on-click h)]])])
+(rum/defc keyboard-shortcuts-row [t]
+  (row-with-button-action
+   {:left-label   (t :settings-page/customize-shortcuts)
+    :button-label (t :settings-page/shortcut-settings)
+    :on-click      #((state/close-settings!)
+                     (route-handler/redirect! {:to :shortcut-setting}))}))
 
 (defn zotero-settings-row [t]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -594,11 +584,11 @@
 
         [:aside.md:w-64
          [:ul
-          (for [[label text icon] [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-                                   [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-                                   [:shortcuts (t :settings-page/tab-shortcuts) (ui/icon "command" {:style {:font-size 20}})]
-                                   [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
-                                   [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
+          (for [[label text icon]
+                [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
+                 [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+                 [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
+                 [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
 
             [:li
              {:class    (util/classnames [{:active (= label @*active)}])
@@ -618,9 +608,9 @@
             (language-row t preferred-language)
             (theme-modes-row t switch-theme system-theme? dark?)
             (when-let [current-repo (state/sub :git/current-repo)]
-              [:div
-               (edit-config-edn)
-               (edit-custom-css)])]
+              [(edit-config-edn)
+               (edit-custom-css)])
+            (keyboard-shortcuts-row t)]
 
            :editor
            [:div.panel-wrap.is-editor
@@ -639,10 +629,6 @@
             (encryption-row t enable-encryption?)
             (zotero-settings-row t)
             (auto-push-row t current-repo enable-git-auto-push?)]
-
-           :shortcuts
-           [:div.panel-wrap
-            (keyboard-shortcuts-row t)]
 
            :git
            [:div.panel-wrap
