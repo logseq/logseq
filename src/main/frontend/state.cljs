@@ -16,7 +16,7 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defonce ^:private state
+(defonce state
   (let [document-mode? (or (storage/get :document/mode?) false)
         current-graph (let [graph (storage/get :git/current-repo)]
                         (when graph (ipc/ipc "setCurrentGraph" graph))

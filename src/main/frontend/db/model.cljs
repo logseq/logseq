@@ -418,7 +418,7 @@
          (recur next (conj result next))
          (vec result))))))
 
-(defn- sort-by-left-recursive
+(defn sort-by-left-recursive
   [form]
   (walk/postwalk (fn [f]
                    (if (and (map? f)

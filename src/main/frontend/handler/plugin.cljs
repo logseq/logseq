@@ -370,7 +370,7 @@
                                         ;; plugins
                                         (swap! state/state md/dissoc-in [:plugin/installed-plugins pid])
                                         ;; commands
-                                        (clear-commands!))))
+                                        (clear-commands! pid))))
 
                 (.on "unlink-plugin" (fn [pid]
                                        (let [pid (keyword pid)]
