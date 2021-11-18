@@ -207,7 +207,6 @@
 
     .ctls {
       position: relative;
-      top: -8px;
 
       &:disabled {
         cursor: progress;
