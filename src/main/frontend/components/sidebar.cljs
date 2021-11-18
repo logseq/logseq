@@ -297,12 +297,19 @@
     {:class (if @open?
               "translate-x-0"
               "-translate-x-full")
-     :style {:max-width "86vw"}}
+     :style {:max-width "50vw"}}
     (when @open?
-      [:div.absolute.top-0.right-0.p-1.z-10
-       [:a.button
-        {:on-click close-fn}
-        (ui/icon "x" {:style {:font-size 24}})]])
+      [:div.cp__header#head
+       [:div.l.flex
+        (header/left-menu-button
+         {:on-click (fn []
+                      (state/set-left-sidebar-open!
+                       (not (:ui/left-sidebar-open? @state/state))))})
+
+        (ui/with-shortcut :go/search "right"
+          [:a.button#search-button
+           {:on-click #(state/pub-event! [:go/search])}
+           (ui/icon "search" {:style {:fontSize 20}})])]])
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 
