@@ -51,7 +51,7 @@ jobs:
           sudo ./linux-install-1.10.1.763.sh
 
       - name: Compile CLJS
-        run: yarn clean && yarn install && gulp build && yarn cljs:release-electron
+        run: yarn install && gulp build && yarn cljs:release-electron
 
       - name: Update APP Version
         run: |
@@ -93,12 +93,12 @@ jobs:
         with:
           node-version: 16
 
-      - name: Cache Node Modules
-        uses: actions/cache@v2
-        with:
-          path: |
-            **/node_modules
-          key: ${{ runner.os }}-node-modules
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       **/node_modules
+      #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
         run: yarn install  && yarn electron:make
@@ -140,12 +140,12 @@ jobs:
         with:
           node-version: 16
 
-      - name: Cache Node Modules
-        uses: actions/cache@v2
-        with:
-         path: |
-           **/node_modules
-         key: ${{ runner.os }}-node-modules
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #    path: |
+      #      **/node_modules
+      #    key: ${{ runner.os }}-node-modules
 
       - name: Deps Electron app
         run: yarn install
@@ -200,12 +200,12 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
 
-      - name: Cache Node Modules
-        uses: actions/cache@v2
-        with:
-          path: |
-            **/node_modules
-          key: ${{ runner.os }}-node-modules
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       **/node_modules
+      #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
         run: yarn install && yarn electron:make
@@ -276,12 +276,12 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
           p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
 
-      - name: Cache Node Modules
-        uses: actions/cache@v2
-        with:
-          path: |
-            **/node_modules
-          key: ${{ runner.os }}-node-modules
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       **/node_modules
+      #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
         run: yarn install && yarn electron:make-macos-arm64
