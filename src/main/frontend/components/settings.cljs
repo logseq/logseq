@@ -181,10 +181,19 @@
 
 (defn edit-config-edn []
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div
-     [:a.text-xs {:href     (rfe/href :file {:path (config/get-config-path)})
-                  :on-click #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))}
-      (t :settings-page/edit-config-edn)]]))
+    (row-with-button-action
+     {:left-label   "Custom configuration"
+      :button-label (t :settings-page/edit-config-edn)
+      :href         (rfe/href :file {:path (config/get-config-path)})
+      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))})))
+
+(defn edit-custom-css []
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (row-with-button-action
+     {:left-label   "Custom theme"
+      :button-label (t :settings-page/edit-custom-css)
+      :href         (rfe/href :file {:path (config/get-custom-css-path)})
+      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))})))
 
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -270,7 +279,9 @@
 (rum/defcs graph-config
   [state t]
   (when-let [current-repo (state/sub :git/current-repo)]
-    (edit-config-edn)))
+    [:div
+     (edit-config-edn)
+     (edit-custom-css)]))
 
 (defn language-row [t preferred-language]
   [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start
@@ -522,18 +533,14 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div.max-w-lg.rounded-md.sm:max-w-xs
      (ui/button
-       (t :settings-page/clear)
-       :class "text-sm p-1"
-       :on-click handler/clear-cache!)]]])
+      (t :settings-page/clear)
+      :class "text-sm p-1"
+      :on-click handler/clear-cache!)]]])
 
 (defn version-row [t version]
-  [:div.it.app-updater.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    (t :settings-page/current-version)]
-   [:div.wrap.sm:mt-0.sm:col-span-4
-    (if (util/electron?)
-      (app-updater version)
-      [:span.ver version])]])
+  (row-with-button-action {:left-label   (t :settings-page/current-version)
+                           :button       (app-updater version)
+                           :desc         (str "Version " version)}))
 
 (defn developer-mode-row [t developer-mode?]
   (toggle "developer_mode"
