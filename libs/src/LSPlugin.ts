@@ -180,7 +180,7 @@ export type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Prom
 export type BlockCursorPosition = { left: number, top: number, height: number, pos: number, rect: DOMRect }
 
 export type SimpleCommandKeybinding = {
-  mode?: 'global-default' | 'block-non-editing' | 'block-editing',
+  mode?: 'default' | 'non-editing' | 'editing',
   binding: string,
   mac?: string // special for Mac OS
 }

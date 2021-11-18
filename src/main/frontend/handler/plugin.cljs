@@ -189,9 +189,9 @@
   (swap! state/state md/dissoc-in [:plugin/installed-commands (keyword pid)]))
 
 (def keybinding-mode-handler-map
-  {:global-default    :shortcut.handler/editor-global
-   :block-non-editing :shortcut.handler/global-non-editing-only
-   :block-editing     :shortcut.handler/block-editing-only})
+  {:global      :shortcut.handler/editor-global
+   :non-editing :shortcut.handler/global-non-editing-only
+   :editing     :shortcut.handler/block-editing-only})
 
 (defn simple-cmd->palette-cmd
   [pid {:keys [key label type desc keybinding] :as cmd} action]
@@ -201,7 +201,7 @@
                                  (if util/mac?
                                    (or (:mac keybinding) shortcut)
                                    shortcut))
-                     :handler-id (let [mode (or (:mode keybinding) :global-default)]
+                     :handler-id (let [mode (or (:mode keybinding) :global)]
                                    (get keybinding-mode-handler-map (keyword mode)))
                      :action   (fn []
                                  (state/pub-event!
@@ -215,7 +215,7 @@
         binding (if util/mac?
                   (or (:mac keybinding) binding)
                   binding)
-        mode (or (:mode keybinding) :global-default)
+        mode (or (:mode keybinding) :global)
         mode (get keybinding-mode-handler-map (keyword mode))]
     [mode id {:binding binding}]))
 
