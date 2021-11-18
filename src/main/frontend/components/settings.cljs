@@ -487,22 +487,16 @@
           [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
 
 (defn clear-cache-row [t]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "clear_cache"}
-    (t :settings-page/clear-cache)]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.max-w-lg.rounded-md.sm:max-w-xs
-     (ui/button
-      (t :settings-page/clear)
-      :class "text-sm p-1"
-      :on-click handler/clear-cache!)]]])
+  (row-with-button-action {:left-label   (t :settings-page/clear-cache)
+                           :button-label (t :settings-page/clear)
+                           :on-click     handler/clear-cache!
+                           :-for         "clear_cache"}))
 
 (defn version-row [t version]
-  (row-with-button-action {:left-label   (t :settings-page/current-version)
-                           :action       (app-updater version)
-                           :desc         (str "Version " version)
-                           :-for         "current-version"}))
+  (row-with-button-action {:left-label (t :settings-page/current-version)
+                           :action     (app-updater version)
+                           :desc       (str "Version " version)
+                           :-for       "current-version"}))
 
 (defn developer-mode-row [t developer-mode?]
   (toggle "developer_mode"
