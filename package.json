@@ -57,7 +57,8 @@
         "cljs:dev-release-app": "clojure -M:cljs release app --config-merge '{:closure-defines {frontend.config/DEV-RELEASE true}}'",
         "cljs:debug": "clojure -M:cljs release parser-worker app --debug",
         "cljs:report": "clojure -M:cljs run shadow.cljs.build-report parser-worker app report.html",
-        "cljs:build-electron": "clojure -A:cljs compile parser-worker app electron"
+        "cljs:build-electron": "clojure -A:cljs compile parser-worker app electron",
+        "cljs:lint": "clojure -M:clj-kondo --parallel --lint src"
     },
     "dependencies": {
         "@capacitor/android": "3.2.2",
