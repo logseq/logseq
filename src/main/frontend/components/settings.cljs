@@ -274,13 +274,6 @@
           (ipc/ipc "userAppCfgs" :auto-update (not enabled?)))
         true)]]]))
 
-(rum/defcs graph-config
-  [state t]
-  (when-let [current-repo (state/sub :git/current-repo)]
-    [:div
-     (edit-config-edn)
-     (edit-custom-css)]))
-
 (defn language-row [t preferred-language]
   [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start
    [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -623,7 +616,11 @@
            [:div.panel-wrap.is-general
             (version-row t version)
             (language-row t preferred-language)
-            (theme-modes-row t switch-theme system-theme? dark?)]
+            (theme-modes-row t switch-theme system-theme? dark?)
+            (when-let [current-repo (state/sub :git/current-repo)]
+              [:div
+               (edit-config-edn)
+               (edit-custom-css)])]
 
            :editor
            [:div.panel-wrap.is-editor
