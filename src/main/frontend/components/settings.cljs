@@ -157,24 +157,24 @@
            :height 500}]]])
 
 (defn row-with-button-action
-  [{:keys [left-label action button-label href on-click desc]}]
-  (rum/with-context [[t] i18n/*tongue-context*]
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+  [{:keys [left-label action button-label href on-click desc -for]}]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+
      ;; left column
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      {:for "customize_css"}
-      left-label]
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for -for}
+    left-label]
 
      ;; leftright column
-     [:div.mt-1.sm:mt-0.sm:col-span-2
-      {:style {:display "flex" :gap "1rem" :align-items "center"}}
-      [:div
-       (if action action (ui/button
-                          button-label
-                          :class    "text-sm p-1"
-                          :href     href
-                          :on-click on-click))]
-      [:div.text-sm.opacity-50 desc]]]))
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    {:style {:display "flex" :gap "1rem" :align-items "center"}}
+    [:div
+     (if action action (ui/button
+                        button-label
+                        :class    "text-sm p-1"
+                        :href     href
+                        :on-click on-click))]
+    [:div.text-sm.opacity-50 desc]]])
 
 
 (defn edit-config-edn []
@@ -183,7 +183,8 @@
      {:left-label   "Custom configuration"
       :button-label (t :settings-page/edit-config-edn)
       :href         (rfe/href :file {:path (config/get-config-path)})
-      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))})))
+      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+      :-for          "config_edn"})))
 
 (defn edit-custom-css []
   (rum/with-context [[t] i18n/*tongue-context*]
@@ -191,7 +192,8 @@
      {:left-label   "Custom theme"
       :button-label (t :settings-page/edit-custom-css)
       :href         (rfe/href :file {:path (config/get-custom-css-path)})
-      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))})))
+      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+      :-for          "customize_css"})))
 
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -275,22 +277,25 @@
         true)]]]))
 
 (defn language-row [t preferred-language]
-  [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "preferred_language"}
-    (t :language)]
-   [:div.mt-1.sm:mt-0.sm:col-span-4
-    [:div.max-w-lg.rounded-md
-     [:select.form-select.is-small
-      {:value     preferred-language
-       :on-change (fn [e]
+  (let [on-change (fn [e]
                     (let [lang-code (util/evalue e)]
                       (state/set-preferred-language! lang-code)
-                      (ui-handler/re-render-root!)))}
-      (for [language dicts/languages]
-        (let [lang-code (name (:value language))
-              lang-label (:label language)]
-          [:option {:key lang-code :value lang-code} lang-label]))]]]])
+                      (ui-handler/re-render-root!)))
+        action [:select.form-select.is-small {:value     preferred-language
+                                              :on-change on-change}
+                (for [language dicts/languages]
+                  (let [lang-code (name (:value language))
+                        lang-label (:label language)]
+                    [:option {:key lang-code :value lang-code} lang-label]))]]
+    (row-with-button-action {:left-label (t :language)
+                             :-for        "preferred_language"
+                             :action     action}))
+  #_[:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start
+     [:label.block.text-sm.font-medium.leading-5.opacity-70
+      {:for "preferred_language"}
+      (t :language)]
+     [:div.mt-1.sm:mt-0.sm:col-span-4
+      [:div.max-w-lg.rounded-md]]])
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
   (let [pick-theme [:ul.theme-modes-options
@@ -301,6 +306,7 @@
                     [:li {:on-click (partial state/use-theme-mode! "system")
                           :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
     (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
+                             :-for        "toggle_theme"
                              :action     pick-theme
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
@@ -464,7 +470,8 @@
    {:left-label   (t :settings-page/customize-shortcuts)
     :button-label (t :settings-page/shortcut-settings)
     :on-click      #((state/close-settings!)
-                     (route-handler/redirect! {:to :shortcut-setting}))}))
+                     (route-handler/redirect! {:to :shortcut-setting}))
+    :-for         "customize_shortcuts"}))
 
 (defn zotero-settings-row [t]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -514,7 +521,8 @@
 (defn version-row [t version]
   (row-with-button-action {:left-label   (t :settings-page/current-version)
                            :action       (app-updater version)
-                           :desc         (str "Version " version)}))
+                           :desc         (str "Version " version)
+                           :-for         "current-version"}))
 
 (defn developer-mode-row [t developer-mode?]
   (toggle "developer_mode"
