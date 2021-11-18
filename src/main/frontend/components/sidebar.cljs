@@ -30,8 +30,7 @@
             [goog.object :as gobj]
             [rum.core :as rum]
             [frontend.extensions.srs :as srs]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.components.widgets :as widgets]))
+            [frontend.extensions.pdf.assets :as pdf-assets]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]

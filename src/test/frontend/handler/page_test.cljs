@@ -1,4 +1,6 @@
 (ns frontend.handler.page-test
+  ;; namespace local config for private function tests
+  {:clj-kondo/config {:linters {:private-call {:level :off}}}}
   (:require [cljs.test :refer [deftest are]]
             [clojure.string :as string]
             [frontend.util :as util]

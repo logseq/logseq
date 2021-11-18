@@ -12,17 +12,17 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
 
-(defn- set-git-status!
+(defn set-git-status!
   [repo-url value]
   (db/set-key-value repo-url :git/status value)
   (state/set-git-status! repo-url value))
 
-(defn- set-git-last-pulled-at!
+(defn set-git-last-pulled-at!
   [repo-url]
   (db/set-key-value repo-url :git/last-pulled-at
                     (date/get-date-time-string (tl/local-now))))
 
-(defn- set-git-error!
+(defn set-git-error!
   [repo-url value]
   (db/set-key-value repo-url :git/error (when value (str value))))
 

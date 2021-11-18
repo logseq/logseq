@@ -992,7 +992,7 @@
     (url-encode s)))
 
 #?(:cljs
-   (defn- get-clipboard-as-html
+   (defn get-clipboard-as-html
      [event]
      (if-let [c (gobj/get event "clipboardData")]
        [(.getData c "text/html") (.getData c "text")]
