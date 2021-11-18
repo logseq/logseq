@@ -489,7 +489,6 @@
 (defn set-edit-content!
   ([input-id value] (set-edit-content! input-id value true))
   ([input-id value set-input-value?]
-   (prn "set edit content: " value)
    (when input-id
      (when set-input-value?
        (when-let [input (gdom/getElement input-id)]
