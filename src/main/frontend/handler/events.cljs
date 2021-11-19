@@ -206,6 +206,9 @@
                     {:fullscreen? false
                      :close-btn?  false}))
 
+(defmethod handle :redirect-to-home [_]
+  (page-handler/create-today-journal!))
+
 (defmethod handle :instrument [[_ {:keys [type payload]}]]
   (posthog/capture type payload))
 
