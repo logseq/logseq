@@ -262,6 +262,10 @@
     (when @src
       (resizable-image config title @src metadata full_text true))))
 
+(defn ar-url->http-url
+  [href]
+  (string/replace href #"^ar://" (str (state/get-arweave-gateway) "/")))
+
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
 (defn image-link [config url href label metadata full_text]
@@ -279,6 +283,9 @@
              href (cond
                     (util/starts-with? href "http")
                     href
+
+                    (util/starts-with? href "ar")
+                    (ar-url->http-url href)
 
                     config/publishing?
                     (subs href 1)
@@ -990,6 +997,16 @@
                                (when-let [current (pdf-assets/inflate-asset href)]
                                  (state/set-state! :pdf/current current)))}
              (get-label-text label)]
+
+            (= protocol "ar")
+            (->elem
+              :a.external-link
+              (cond->
+                {:href (ar-url->http-url href)
+                 :target "_blank"}
+                title
+                (assoc :title title))
+              (map-inline config label))
 
             :else
             (->elem

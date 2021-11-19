@@ -236,6 +236,12 @@
   ([repo-url]
    (get-in @state [:config repo-url])))
 
+(def default-arweave-gateway "https://arweave.net")
+
+(defn get-arweave-gateway
+  []
+  (:arweave/gateway (get-config) default-arweave-gateway))
+
 (defonce built-in-macros
   {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
 
