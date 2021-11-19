@@ -22,7 +22,8 @@
             [frontend.version :refer [version]]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (rum/defcs set-email < (rum/local "" ::email)
   [state]
@@ -575,19 +576,23 @@
 
         [:aside.md:w-64
          [:ul
-          (for [[label text icon] [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-                                   [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-                                   [:shortcuts (t :settings-page/tab-shortcuts) (ui/icon "command" {:style {:font-size 20}})]
-                                   [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
-                                   [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
+          (let [labels&texts&icons [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
+                                    [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+                                    [:shortcuts (t :settings-page/tab-shortcuts) (ui/icon "command" {:style {:font-size 20}})]
+                                    [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
+                                    [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]
+                labels&texts&icons (if (mobile-util/is-native-platform?)
+                                     (remove #(= (first %) :git) labels&texts&icons)
+                                     labels&texts&icons)]
+            (for [[label text icon] labels&texts&icons]
 
-            [:li
-             {:class    (util/classnames [{:active (= label @*active)}])
-              :on-click #(reset! *active label)}
+              [:li
+               {:class    (util/classnames [{:active (= label @*active)}])
+                :on-click #(reset! *active label)}
 
-             [:a.flex.items-center
-              icon
-              [:strong text]]])]]
+               [:a.flex.items-center
+                icon
+                [:strong text]]]))]]
 
         [:article
 
@@ -679,8 +684,8 @@
                 [:div.mt-1.sm:mt-0.sm:col-span-2
                  [:div.max-w-lg.rounded-md.sm:max-w-xs
                   (ui/button (t :user/delete-your-account)
-                    :on-click (fn []
-                                (ui-handler/toggle-settings-modal!)
-                                (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
+                             :on-click (fn []
+                                         (ui-handler/toggle-settings-modal!)
+                                         (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
 
            nil)]]])))
