@@ -576,14 +576,14 @@
 
         [:aside.md:w-64
          [:ul
-          (let [labels&texts&icons [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-                                    [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-                                    [:shortcuts (t :settings-page/tab-shortcuts) (ui/icon "command" {:style {:font-size 20}})]
-                                    [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
-                                    [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]
+          (let [general [:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
+                editor [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+                shortcuts [:shortcuts (t :settings-page/tab-shortcuts) (ui/icon "command" {:style {:font-size 20}})]
+                git [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
+                advanced [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]
                 labels&texts&icons (if (mobile-util/is-native-platform?)
-                                     (remove #(= (first %) :git) labels&texts&icons)
-                                     labels&texts&icons)]
+                                     (conj [] general editor shortcuts advanced)
+                                     (conj [] general editor shortcuts git advanced))]
             (for [[label text icon] labels&texts&icons]
 
               [:li
