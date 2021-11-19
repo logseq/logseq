@@ -155,9 +155,8 @@
          (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
 
 (rum/defc header < rum/reactive
-  [{:keys [open-fn current-repo white? logged? page? route-match me default-home new-block-mode]}]
-  (let [local-repo? (= current-repo config/local-repo)
-        repos (->> (state/sub [:me :repos])
+  [{:keys [open-fn current-repo logged? me default-home new-block-mode]}]
+  (let [repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
         show-open-folder? (and (or (nfs/supported?)
@@ -167,7 +166,9 @@
         refreshing? (state/sub :nfs/refreshing?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
-       {:class (when electron-mac? "electron-mac")
+       {:class (cond electron-mac? "electron-mac"
+                     (mobile-util/native-ios?) "native-ios"
+                     (mobile-util/native-android?) "native-android")
         :on-double-click (fn [^js e]
                            (when-let [target (.-target e)]
                              (when (and (util/electron?)
@@ -186,9 +187,8 @@
              (ui/icon "search" {:style {:fontSize 20}})]))]
 
        [:div.r.flex
-        (when (and
-                (not (mobile-util/is-native-platform?))
-                (not (util/electron?)))
+        (when (and (not (mobile-util/is-native-platform?))
+                   (not (util/electron?)))
           (login logged?))
 
         (when plugin-handler/lsp-enabled?
@@ -197,7 +197,9 @@
         (when (not= (state/get-current-route) :home)
           (home-button))
 
-        (when (util/electron?) (back-and-forward))
+        (when (or (util/electron?)
+                  (mobile-util/native-android?))
+          (back-and-forward))
 
         (new-block-mode)
 
