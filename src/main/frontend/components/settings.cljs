@@ -176,8 +176,9 @@
      (ui/toggle show-brackets?
                 config-handler/toggle-ui-show-brackets!
                 true)]]
-   [:div {:style {:text-align "right"}}
-    (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]])
+   (when (not (or (util/mobile?) (mobile-util/is-native-platform?)))
+     [:div {:style {:text-align "right"}}
+      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))])])
 
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
