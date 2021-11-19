@@ -512,9 +512,9 @@
             :style (if (or (util/mobile?)
                            (mobile-util/is-native-platform?))
                      {:padding-top "2em"
-                      :padding-left "0.5em"
-                      :padding-right "0.5em"
-                      :padding-bottom "1em"}
+                      :padding-left "1em"
+                      :padding-right "1em"
+                      :padding-bottom "2em"}
                      {:padding "2em"})}
       (modal-panel-content panel-content close-fn)])])
 
