@@ -111,7 +111,8 @@
         }
 
         .form-select, .form-input {
-          width: 55%;
+            width: 55%;
+            min-width: 200px;
           display: inline-block;
 
           &:hover {
