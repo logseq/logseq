@@ -310,7 +310,7 @@
         (ui/with-shortcut :go/search "right"
           [:a.button#search-button
            {:on-click #(state/pub-event! [:go/search])}
-           (ui/icon "search" {:style {:fontSize 20}})])]])
+           (ui/icon "search" {:style {:fontSize header/icon-size}})])]])
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 
