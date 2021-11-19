@@ -123,16 +123,17 @@
     (vec (cons {:path (utils/fix-win-path! path)} result))))
 
 (defmethod handle :openDir [^js window _messages]
-  (let [result (.showOpenDialogSync dialog (bean/->js
-                                             {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
-        path (first result)]
+  (p/let [result (.showOpenDialog dialog (bean/->js
+                                          {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
+          result (get (js->clj result) "filePaths")
+          path (first result)]
     (if path
       (do
         (.. ^js window -webContents
-           (send "open-dir-confirmed"
-                 (bean/->js {:opened? true})))
-        (get-files path))
-      (throw (js/Error "path empty")))))
+            (send "open-dir-confirmed"
+                  (bean/->js {:opened? true})))
+        (p/resolved (bean/->js (get-files path))))
+      (p/rejected (js/Error "path empty")))))
 
 (defmethod handle :getFiles [window [_ path]]
   (get-files path))
@@ -182,11 +183,11 @@
   (when dir
     (watcher/watch-dir! window dir)))
 
-(defmethod handle :openDialogSync [^js window _messages]
-  (let [result (.showOpenDialogSync dialog (bean/->js
-                                             {:properties ["openDirectory"]}))
-        path (first result)]
-    path))
+(defmethod handle :openDialog [^js window messages]
+  (p/let [result (.showOpenDialog dialog (bean/->js
+                                          {:properties ["openDirectory"]}))
+          result (get (js->clj result) "filePaths")]
+    (p/resolved (first result))))
 
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
