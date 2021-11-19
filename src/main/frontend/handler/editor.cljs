@@ -2753,15 +2753,19 @@
 
 (defn keydown-not-matched-handler
   [format]
-  (fn [e _key-code]
+  (fn [e key-code]
     (let [input-id (state/get-edit-input-id)
           input (state/get-input)
           key (gobj/get e "key")
           value (gobj/get input "value")
           ctrlKey (gobj/get e "ctrlKey")
           metaKey (gobj/get e "metaKey")
+          is-composing? (gobj/getValueByKeys e "event_" "isComposing")
           pos (cursor/pos input)]
       (cond
+        (or is-composing? (= key-code 229))
+        nil
+
         (or ctrlKey metaKey)
         nil
 
