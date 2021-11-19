@@ -8,6 +8,14 @@
 (defn is-native-platform? []
   (.isNativePlatform Capacitor))
 
+(defn native-ios? []
+  (and (is-native-platform?)
+       (= (platform) "ios")))
+
+(defn native-android? []
+  (and (is-native-platform?)
+       (= (platform) "android")))
+
 (defn convert-file-src [path-str]
   (.convertFileSrc Capacitor path-str))
 
