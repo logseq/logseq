@@ -508,14 +508,7 @@
           :stroke-linecap  "round"}]]])]
 
    (when show?
-     [:div {:class (if fullscreen? "" "panel-content")
-            :style (if (or (util/mobile?)
-                           (mobile-util/is-native-platform?))
-                     {:padding-top "2em"
-                      :padding-left "1em"
-                      :padding-right "1em"
-                      :padding-bottom "2em"}
-                     {:padding "2em"})}
+     [:div {:class (if fullscreen? "" "panel-content")}
       (modal-panel-content panel-content close-fn)])])
 
 (rum/defc modal < rum/reactive
