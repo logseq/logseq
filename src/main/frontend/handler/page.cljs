@@ -415,23 +415,42 @@
 
 (defn- rename-nested-pages
   [old-ns-name new-ns-name]
-  (when-let [nested-pages (db/get-nested-pages
-                           (state/get-current-repo)
-                           (string/lower-case old-ns-name))]
-    (doseq [page nested-pages]
-      (let [[_page-id old-page-name] page
-            new-page-name (util/replace-ignore-case
-                           old-page-name
-                           (util/format "\\[\\[%s\\]\\]" old-ns-name)
-                           (util/format "[[%s]]" new-ns-name))]
-        (rename-page-aux old-page-name new-page-name)))))
+  (let [repo            (state/get-current-repo)
+        nested-page-str (util/format "[[%s]]" (string/lower-case old-ns-name))
+        ns-prefix       (util/format "[[%s/" (string/lower-case old-ns-name))
+        nested-pages    (db/get-pages-by-name-partition repo nested-page-str)
+        nested-pages-ns (db/get-pages-by-name-partition repo ns-prefix)]
+    (when nested-pages
+      ;; rename page "[[obsidian]] is a tool" to "[[logseq]] is a tool"
+      (doseq [{:block/keys [name original-name]} nested-pages]
+        (let [old-page-title (or original-name name)
+              new-page-title (string/replace
+                             old-page-title
+                             (util/format "[[%s]]" old-ns-name)
+                             (util/format "[[%s]]" new-ns-name))]
+          (when (and old-page-title new-page-title)
+            (p/do!
+             (rename-page-aux old-page-title new-page-title)
+             (println "Renamed " old-page-title " to " new-page-title))))))
+    (when nested-pages-ns
+      ;; rename page "[[obsidian/page1]] is a tool" to "[[logseq/page1]] is a tool"
+      (doseq [{:block/keys [name original-name]} nested-pages-ns]
+        (let [old-page-title (or original-name name)
+              new-page-title (string/replace
+                              old-page-title
+                             (util/format "[[%s/" old-ns-name)
+                             (util/format "[[%s/" new-ns-name))]
+          (when (and old-page-title new-page-title)
+            (p/do!
+             (rename-page-aux old-page-title new-page-title)
+             (println "Renamed " old-page-title " to " new-page-title))))))))
 
 (defn- rename-namespace-pages!
   [repo old-name new-name]
   (let [pages (db/get-namespace-pages repo old-name)]
-    (doseq [{:block/keys [name original-name] :as page} pages]
+    (doseq [{:block/keys [name original-name]} pages]
       (let [old-page-title (or original-name name)
-            new-page-title (util/replace-first-ignore-case old-page-title old-name new-name)]
+            new-page-title (string/replace old-page-title old-name new-name)]
         (when (and old-page-title new-page-title)
           (p/let [_ (rename-page-aux old-page-title new-page-title)]
             (println "Renamed " old-page-title " to " new-page-title)))))))
@@ -480,19 +499,13 @@
                            (or (:block/original-name to-page)
                                (:block/name to-page))))
 
-    (delete! from nil)
-
-    (route-handler/redirect! {:to          :page
-                              :push        false
-                              :path-params {:name (string/lower-case to)}})))
+    (delete! from nil)))
 
 (defn rename!
   [old-name new-name]
   (let [repo          (state/get-current-repo)
         old-name      (string/trim old-name)
         new-name      (string/trim new-name)
-        namespace     (or (string/includes? old-name "/")
-                          (db/get-namespace-pages repo old-name))
         name-changed? (not= old-name new-name)]
     (if (and old-name
              new-name
@@ -505,12 +518,9 @@
 
           (db/pull [:block/name (string/lower-case new-name)])
           (merge-pages! old-name new-name)
-
-          namespace
-          (rename-namespace-pages! repo old-name new-name)
-
+          
           :else
-          (rename-page-aux old-name new-name))
+          (rename-namespace-pages! repo old-name new-name))
         (rename-nested-pages old-name new-name))
       (when (string/blank? new-name)
         (notification/show! "Please use a valid name, empty name is not allowed!" :error)))))
