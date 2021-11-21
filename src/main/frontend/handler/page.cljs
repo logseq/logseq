@@ -499,7 +499,11 @@
                            (or (:block/original-name to-page)
                                (:block/name to-page))))
 
-    (delete! from nil)))
+    (delete! from nil)
+    
+    (route-handler/redirect! {:to          :page
+                              :push        false
+                              :path-params {:name (string/lower-case to)}})))
 
 (defn rename!
   [old-name new-name]
