@@ -623,7 +623,7 @@
 
 (defn replace-ignore-case
   [s old-value new-value & [escape-chars]]
-  (let [escape-chars (or escape-chars "[]{}().+*?")
+  (let [escape-chars (or escape-chars "[]{}().+*?|")
         old-value (if (string? escape-chars)
                     (reduce (fn [acc escape-char]
                               (string/replace acc escape-char (str "\\" escape-char)))
@@ -633,7 +633,7 @@
 
 (defn replace-first-ignore-case
   [s old-value new-value & [escape-chars]]
-  (let [escape-chars (or escape-chars "[]{}().+*?")
+  (let [escape-chars (or escape-chars "[]{}().+*?|")
         old-value (if (string? escape-chars)
                     (reduce (fn [acc escape-char]
                               (string/replace acc escape-char (str "\\" escape-char)))
