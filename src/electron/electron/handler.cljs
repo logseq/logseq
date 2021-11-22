@@ -54,7 +54,8 @@
         new-path (str recycle-dir "/" file-name)]
     (fs/renameSync path new-path)))
 
-(defmethod handle :backupDbFile [_window [_ repo path db-content]]
+(defn backup-file
+  [repo path content]
   (let [basename (path/basename path)
         file-name (-> (string/replace path (str repo "/") "")
                       (string/replace "/" "_")
@@ -63,8 +64,12 @@
         _ (fs-extra/ensureDirSync bak-dir)
         new-path (str bak-dir "/" file-name "."
                       (string/replace (.toISOString (js/Date.)) ":" "_"))]
-    (fs/writeFileSync new-path db-content)
-    (fs/statSync new-path)))
+    (fs/writeFileSync new-path content)
+    (fs/statSync new-path)
+    new-path))
+
+(defmethod handle :backupDbFile [_window [_ repo path db-content]]
+  (backup-file repo path db-content))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
@@ -77,20 +82,30 @@
     (catch js/Error _e
       false)))
 
-(defmethod handle :writeFile [_window [_ path content]]
-  (try
-    (let [^js Buf (.-Buffer buffer)
-          ^js content (if (instance? js/ArrayBuffer content)
-                        (.from Buf content) content)]
+(defmethod handle :writeFile [_window [_ repo path content]]
+  (let [^js Buf (.-Buffer buffer)
+        ^js content (if (instance? js/ArrayBuffer content)
+                      (.from Buf content)
+                      content)]
+    (try
       (when (and (fs/existsSync path) (not (writable? path)))
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
-      (fs/statSync path))
-    (catch js/Error e
-      (utils/send-to-renderer "notification" {:type "error"
-                                              :payload (str "Write to the file " path
-                                                            " failed, "
-                                                            e)}))))
+      (fs/statSync path)
+      (catch js/Error e
+        (let [backup-path (try
+                            (backup-file repo path content)
+                            (catch js/Error e
+                              (println "Backup file failed")
+                              (js/console.dir e)))]
+          (utils/send-to-renderer "notification" {:type "error"
+                                                  :payload (str "Write to the file " path
+                                                                " failed, "
+                                                                e
+                                                                (when backup-path
+                                                                  " A backup file was saved to "
+                                                                  backup-path
+                                                                  "."))}))))))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (fs/renameSync old-path new-path))
