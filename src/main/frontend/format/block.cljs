@@ -262,6 +262,7 @@
     (let [original-page-name (util/remove-boundary-slashes original-page-name)
           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
           namespace? (and (string/includes? original-page-name "/")
+                          (not (boolean (text/get-nested-page-name original-page-name)))
                           (text/namespace-page? original-page-name))
           m (merge
              {:block/name page-name
@@ -302,10 +303,12 @@
      (concat title body))
     (let [refs (remove string/blank? @refs)
           children-pages (->> (mapcat (fn [p]
-                                        (when (text/namespace-page? p)
-                                          (util/split-namespace-pages p)))
+                                        (let [p (or (text/get-nested-page-name p) p)]
+                                          (when (text/namespace-page? p)
+                                            (util/split-namespace-pages p))))
                                       refs)
-                              (remove string/blank?))
+                              (remove string/blank?)
+                              (distinct))
           refs (->> (distinct (concat refs children-pages))
                     (remove nil?))
           refs (map (fn [ref] (page-name->map ref with-id?)) refs)]

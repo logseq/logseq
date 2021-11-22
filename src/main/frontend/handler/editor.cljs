@@ -52,7 +52,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.util.keycode :as keycode]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -2753,15 +2754,19 @@
 
 (defn keydown-not-matched-handler
   [format]
-  (fn [e _key-code]
+  (fn [e key-code]
     (let [input-id (state/get-edit-input-id)
           input (state/get-input)
           key (gobj/get e "key")
           value (gobj/get input "value")
           ctrlKey (gobj/get e "ctrlKey")
           metaKey (gobj/get e "metaKey")
+          is-composing? (gobj/getValueByKeys e "event_" "isComposing")
           pos (cursor/pos input)]
       (cond
+        (or is-composing? (= key-code 229))
+        nil
+
         (or ctrlKey metaKey)
         nil
 
@@ -2783,21 +2788,20 @@
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
+        (and (not (string/blank? (util/get-selected-text))) (= key-code keycode/left-square-bracket))
+        (do
+          (util/stop e)
+          (autopair input-id "[" format nil))
+
+        (and (not (string/blank? (util/get-selected-text))) (= key-code keycode/left-paren))
+        (do
+          (util/stop e)
+          (autopair input-id "(" format nil))
+
         (contains? (set (keys autopair-map)) key)
         (do
           (util/stop e)
-          (autopair input-id key format nil)
-          (cond
-            (surround-by? input "[[" "]]")
-            (do
-              (commands/handle-step [:editor/search-page])
-              (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
-            (surround-by? input "((" "))")
-            (do
-              (commands/handle-step [:editor/search-block :reference])
-              (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
-            :else
-            (reset! commands/*show-commands false)))
+          (autopair input-id key format nil))
 
         (or
          (surround-by? input "#" " ")
@@ -2839,18 +2843,11 @@
           format (:format (get-state))
           current-pos (cursor/pos input)
           value (gobj/get input "value")
-          c (util/nth-safe value (dec current-pos))]
+          c (util/nth-safe value (dec current-pos))
+          last-key-code (state/get-last-key-code)
+          blank-selected? (string/blank? (util/get-selected-text))]
       (when-not (state/get-editor-show-input)
         (cond
-          (and (= "【" c (util/nth-safe value (dec (dec current-pos))))
-               (> current-pos 0))
-
-          (do
-            (commands/handle-step [:editor/input "[[]]" {:last-pattern "【【"
-                                                         :backward-pos 2}])
-            (commands/handle-step [:editor/search-page])
-            (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
-
           (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
                (not (:editor/show-page-search? @state/state))
                (not (:editor/show-page-search-hashtag? @state/state))
@@ -2867,10 +2864,22 @@
             (commands/handle-step [command-step])
             (reset! commands/*slash-caret-pos pos))
 
-          (and (= "（" c (util/nth-safe value (dec (dec current-pos))))
+          (and blank-selected?
+               (= keycode/left-square-bracket key-code last-key-code)
+               (not= k "[")
                (> current-pos 0))
           (do
-            (commands/handle-step [:editor/input "(())" {:last-pattern "（（"
+            (commands/handle-step [:editor/input "[[]]" {:backward-truncate-number 2
+                                                         :backward-pos 2}])
+            (commands/handle-step [:editor/search-page])
+            (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+
+          (and blank-selected?
+               (= keycode/left-paren key-code last-key-code)
+               (not= k "(")
+               (> current-pos 0))
+          (do
+            (commands/handle-step [:editor/input "(())" {:backward-truncate-number 2
                                                          :backward-pos 2}])
             (commands/handle-step [:editor/search-block :reference])
             (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
@@ -2919,7 +2928,8 @@
           (close-autocomplete-if-outside input)
 
           :else
-          nil)))))
+          nil)))
+    (state/set-last-key-code! key-code)))
 
 (defn editor-on-click!
   [id]
