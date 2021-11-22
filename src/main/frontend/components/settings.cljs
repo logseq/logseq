@@ -615,8 +615,7 @@
             (enable-all-pages-public-row t enable-all-pages-public?)
             (encryption-row t enable-encryption?)
             (zotero-settings-row t)
-            (auto-push-row t current-repo enable-git-auto-push?)
-            (graph-config t)]
+            (auto-push-row t current-repo enable-git-auto-push?)]
 
            :shortcuts
            [:div.panel-wrap
@@ -668,6 +667,8 @@
                  [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
                       :target "_blank"}
                   "https://github.com/isomorphic-git/cors-proxy"]])])
+
+            (graph-config t)
 
             (when logged?
               [:div
