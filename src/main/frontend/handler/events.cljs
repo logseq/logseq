@@ -20,6 +20,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.modules.shortcut.core :as st]
             [frontend.commands :as commands]
             [frontend.spec :as spec]
             [frontend.state :as state]
@@ -214,6 +215,11 @@
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [type key pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
+
+(defmethod handle :shortcut-handler-refreshed [[_]]
+  (when-not @st/*inited?
+    (reset! st/*inited? true)
+    (st/consume-pending-shortcuts!)))
 
 (defn run!
   []
