@@ -198,8 +198,11 @@
                                            "id"
                                            k)
                                        v (if (coll? v)
-                                           (remove util/wrapped-by-quotes? v)
-                                           (property/parse-property k v))
+                                           (->> (remove util/wrapped-by-quotes? v)
+                                                (remove string/blank?))
+                                           (if (string/blank? v)
+                                             nil
+                                             (property/parse-property k v)))
                                        k (keyword k)
                                        v (if (and
                                               (string? v)
@@ -207,7 +210,8 @@
                                            (set [v])
                                            v)
                                        v (if (coll? v) (set v) v)]
-                                   [k v]))))]
+                                   [k v])))
+                          (remove #(nil? (second %))))]
       {:properties (into {} properties)
        :properties-order (map first properties)
        :page-refs page-refs})))
@@ -469,7 +473,8 @@
                                    [(text/page-ref-un-brackets! v)]
 
                                    :else
-                                   nil)) (vals properties))]
+                                   nil)) (vals properties))
+        page-refs (remove string/blank? page-refs)]
     (map (fn [page] (page-name->map page true)) page-refs)))
 
 (defn extract-blocks

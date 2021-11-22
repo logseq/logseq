@@ -899,35 +899,36 @@
 
            [:tbody
             (for [{:block/keys [idx name created-at updated-at backlinks] :as page} @*results]
-              [:tr {:key name}
-               [:td.selector
-                (checkbox-opt (str "label-" idx)
-                              (get @*checks idx)
-                              {:on-change (fn []
-                                            (swap! *checks update idx not))})]
+              (when-not (string/blank? name)
+                [:tr {:key name}
+                 [:td.selector
+                  (checkbox-opt (str "label-" idx)
+                                (get @*checks idx)
+                                {:on-change (fn []
+                                              (swap! *checks update idx not))})]
 
-               [:td.name [:a {:on-click (fn [e]
-                                          (let [repo (state/get-current-repo)]
-                                            (when (gobj/get e "shiftKey")
-                                              (state/sidebar-add-block!
-                                               repo
-                                               (:db/id page)
-                                               :page
-                                               {:page (:block/name page)}))))
-                              :href     (rfe/href :page {:name (:block/name page)})}
-                          (block/page-cp {} page)]]
+                 [:td.name [:a {:on-click (fn [e]
+                                            (let [repo (state/get-current-repo)]
+                                              (when (gobj/get e "shiftKey")
+                                                (state/sidebar-add-block!
+                                                 repo
+                                                 (:db/id page)
+                                                 :page
+                                                 {:page (:block/name page)}))))
+                                :href     (rfe/href :page {:name (:block/name page)})}
+                            (block/page-cp {} page)]]
 
-               (when-not mobile?
-                 [:td.backlinks [:span backlinks]])
+                 (when-not mobile?
+                   [:td.backlinks [:span backlinks]])
 
-               (when-not mobile?
-                 [:td.created-at [:span (if created-at
-                                          (date/int->local-time-2 created-at)
-                                          "Unknown")]])
-               (when-not mobile?
-                 [:td.updated-at [:span (if updated-at
-                                          (date/int->local-time-2 updated-at)
-                                          "Unknown")]])])]]
+                 (when-not mobile?
+                   [:td.created-at [:span (if created-at
+                                            (date/int->local-time-2 created-at)
+                                            "Unknown")]])
+                 (when-not mobile?
+                   [:td.updated-at [:span (if updated-at
+                                            (date/int->local-time-2 updated-at)
+                                            "Unknown")]])]))]]
 
           [:div.paginates
            [:span]
