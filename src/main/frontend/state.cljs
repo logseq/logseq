@@ -104,6 +104,7 @@
       :editor/document-mode? document-mode?
       :editor/args nil
       :editor/on-paste? false
+      :editor/last-key-code nil
 
       :db/last-transact-time {}
       :db/last-persist-transact-ids {}
@@ -850,6 +851,7 @@
                      :editor/editing? {edit-input-id true}
                      :editor/last-edit-block-input-id edit-input-id
                      :editor/last-edit-block block
+                     :editor/last-key-code nil
                      :cursor-range cursor-range))))
 
        (when-let [input (gdom/getElement edit-input-id)]
@@ -1542,3 +1544,11 @@
 (defn get-git-auto-commit-enabled?
   []
   (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
+
+(defn set-last-key-code!
+  [key-code]
+  (set-state! :editor/last-key-code key-code))
+
+(defn get-last-key-code
+  []
+  (:editor/last-key-code @state))
