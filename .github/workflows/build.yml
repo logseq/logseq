@@ -75,7 +75,7 @@ jobs:
       - name: Fetch yarn deps
         run: yarn cache clean && yarn install
 
-      - name: Run Clojure test
+      - name: Run ClojureScript test
         run: |
           yarn cljs:test
           node static/tests.js

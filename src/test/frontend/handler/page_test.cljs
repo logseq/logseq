@@ -1,4 +1,6 @@
 (ns frontend.handler.page-test
+  ;; namespace local config for private function tests
+  {:clj-kondo/config {:linters {:private-call {:level :off}}}}
   (:require [cljs.test :refer [deftest are]]
             [clojure.string :as string]
             [frontend.util :as util]
@@ -15,7 +17,7 @@
         old-org-ref (re-find
                      (re-pattern
                       (util/format
-                       "\\[\\[file:\\./.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
+                       "\\[\\[file:\\.*/.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
                      content)]
     (-> (if old-org-ref
           (let [[old-full-ref old-label] old-org-ref
@@ -49,6 +51,9 @@
     
     ["bla [[file:./logseq.foo.org][logseq/foo]] bla" "logseq/foo" "logseq/bar"]
     "bla [[file:./logseq.bar.org][logseq/bar]] bla"
+
+    ["bla [[file:../pages/logseq.foo.org][logseq/foo]] bla" "logseq/foo" "logseq/bar"]
+    "bla [[file:../pages/logseq.bar.org][logseq/bar]] bla"
 
     ["bla [[file:./pages/logseq.foo.org][logseq/foo]] bla" "logseq/foo" "logseq/bar"]
     "bla [[file:./pages/logseq.bar.org][logseq/bar]] bla"

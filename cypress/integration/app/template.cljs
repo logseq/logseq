@@ -12,18 +12,23 @@
                       (.clearIndexedDB cy)
                       (cy.wait 1000))
           (before []
-                  (.visit cy "http://localhost:3001"))
+                  (.. cy
+                      (visit "http://localhost:3001")
+                      (get "#main-content-container" #js {:timeout 10000})
+                      (should (fn [result]
+                                (expect result :not.to.contain "Loading")))))
           (it "template-basic" []
               (.. cy
                   (get "#search-button")
                   (click)
+                  (get "input.cp__palette-input")
                   (type "template test page")
                   (wait 1000)
                   (type "{enter}"))
               (util/edit-block "template")
               (.. cy
                   (realPress #js ["Shift" "Enter"]))
-              (util/edit-block "template:: template-name{enter}")
+              (util/edit-block "template:: template-name{enter}{enter}")
               (util/tab)
               (util/edit-block "line1{enter}")
               (util/edit-block "line2{enter}")

@@ -1,6 +1,6 @@
 {
   "name": "Logseq",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "main": "electron.js",
   "author": "Logseq",
   "description": "A privacy-first, open-source platform for knowledge management and collaboration.",
@@ -20,15 +20,15 @@
   "dependencies": {
     "better-sqlite3": "7.4.4",
     "chokidar": "^3.5.1",
-    "dugite": "^1.103.0",
-    "electron-log": "^4.3.1",
-    "electron-squirrel-startup": "^1.0.0",
-    "electron-window-state": "^5.0.3",
-    "fs-extra": "^9.1.0",
-    "node-fetch": "^2.6.1",
-    "open": "^7.3.1",
-    "semver": "^7.3.5",
-    "update-electron-app": "^2.0.1",
+    "dugite": "1.103.0",
+    "electron-log": "4.3.1",
+    "electron-squirrel-startup": "1.0.0",
+    "electron-window-state": "5.0.3",
+    "fs-extra": "9.1.0",
+    "node-fetch": "2.6.1",
+    "open": "7.3.1",
+    "semver": "7.3.5",
+    "update-electron-app": "2.0.1",
     "extract-zip": "2.0.1"
   },
   "devDependencies": {

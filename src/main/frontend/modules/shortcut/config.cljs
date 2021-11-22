@@ -413,9 +413,9 @@
                          :date-picker/next-week])
 
     :shortcut.handler/pdf
-    ^{:before m/enable-when-not-editing-mode!}
-    (build-category-map [:pdf/previous-page
-                         :pdf/next-page])
+    (-> (build-category-map [:pdf/previous-page
+                             :pdf/next-page])
+        (with-meta {:before m/enable-when-not-editing-mode!}))
 
     :shortcut.handler/auto-complete
     (build-category-map [:auto-complete/complete
@@ -431,68 +431,71 @@
                          :cards/recall])
 
     :shortcut.handler/block-editing-only
-    ^{:before m/enable-when-editing-mode!}
-    (build-category-map [:editor/escape-editing
-                         :editor/backspace
-                         :editor/delete
-                         :editor/new-block
-                         :editor/new-line
-                         :editor/follow-link
-                         :editor/open-link-in-sidebar
-                         :editor/bold
-                         :editor/italics
-                         :editor/highlight
-                         :editor/strike-through
-                         :editor/clear-block
-                         :editor/kill-line-before
-                         :editor/kill-line-after
-                         :editor/beginning-of-block
-                         :editor/end-of-block
-                         :editor/forward-word
-                         :editor/backward-word
-                         :editor/forward-kill-word
-                         :editor/backward-kill-word
-                         :editor/replace-block-reference-at-point
-                         :editor/paste-text-in-one-block-at-point
-                         :editor/insert-youtube-timestamp])
+    (->
+     (build-category-map [:editor/escape-editing
+                          :editor/backspace
+                          :editor/delete
+                          :editor/new-block
+                          :editor/new-line
+                          :editor/follow-link
+                          :editor/open-link-in-sidebar
+                          :editor/bold
+                          :editor/italics
+                          :editor/highlight
+                          :editor/strike-through
+                          :editor/clear-block
+                          :editor/kill-line-before
+                          :editor/kill-line-after
+                          :editor/beginning-of-block
+                          :editor/end-of-block
+                          :editor/forward-word
+                          :editor/backward-word
+                          :editor/forward-kill-word
+                          :editor/backward-kill-word
+                          :editor/replace-block-reference-at-point
+                          :editor/paste-text-in-one-block-at-point
+                          :editor/insert-youtube-timestamp])
+     (with-meta {:before m/enable-when-editing-mode!}))
 
     :shortcut.handler/editor-global
-    ^{:before m/enable-when-not-component-editing!}
-    (build-category-map [:editor/cycle-todo
-                         :editor/up
-                         :editor/down
-                         :editor/left
-                         :editor/right
-                         :editor/move-block-up
-                         :editor/move-block-down
-                         :editor/open-edit
-                         :editor/select-block-up
-                         :editor/select-block-down
-                         :editor/delete-selection
-                         :editor/expand-block-children
-                         :editor/collapse-block-children
-                         :editor/indent
-                         :editor/outdent
-                         :editor/copy
-                         :editor/cut
-                         :editor/undo
-                         :editor/redo])
+    (->
+     (build-category-map [:editor/cycle-todo
+                          :editor/up
+                          :editor/down
+                          :editor/left
+                          :editor/right
+                          :editor/move-block-up
+                          :editor/move-block-down
+                          :editor/open-edit
+                          :editor/select-block-up
+                          :editor/select-block-down
+                          :editor/delete-selection
+                          :editor/expand-block-children
+                          :editor/collapse-block-children
+                          :editor/indent
+                          :editor/outdent
+                          :editor/copy
+                          :editor/cut
+                          :editor/undo
+                          :editor/redo])
+     (with-meta {:before m/enable-when-not-component-editing!}))
 
     :shortcut.handler/global-prevent-default
-    ^{:before m/prevent-default-behavior}
-    (build-category-map [:editor/insert-link
-                         :editor/select-all-blocks
-                         :editor/zoom-in
-                         :editor/zoom-out
-                         :ui/toggle-brackets
-                         :go/search-in-page
-                         :go/search
-                         :go/journals
-                         :go/backward
-                         :go/forward
-                         :search/re-index
-                         :sidebar/open-today-page
-                         :sidebar/clear])
+    (->
+     (build-category-map [:editor/insert-link
+                          :editor/select-all-blocks
+                          :editor/zoom-in
+                          :editor/zoom-out
+                          :ui/toggle-brackets
+                          :go/search-in-page
+                          :go/search
+                          :go/journals
+                          :go/backward
+                          :go/forward
+                          :search/re-index
+                          :sidebar/open-today-page
+                          :sidebar/clear])
+     (with-meta {:before m/prevent-default-behavior}))
 
     :shortcut.handler/misc
     ;; always overrides the copy due to "mod+c mod+s"
@@ -500,29 +503,29 @@
      :command-palette/toggle (:command-palette/toggle all-default-keyboard-shortcuts)}
 
     :shortcut.handler/global-non-editing-only
-    ^{:before m/enable-when-not-editing-mode!}
-    (build-category-map [:command/run
-                         :go/home
-                         :go/keyboard-shortcuts
-                         :go/tomorrow
-                         :go/next-journal
-                         :go/prev-journal
-                         :ui/toggle-document-mode
-                         :ui/toggle-settings
-                         :ui/toggle-right-sidebar
-                         :ui/toggle-left-sidebar
-                         :ui/toggle-help
-                         :ui/toggle-theme
-                         :ui/toggle-contents
-                         :editor/open-file-in-default-app
-                         :editor/open-file-in-directory
-                         :ui/toggle-wide-mode
-                         :ui/select-theme-color
-                         :ui/goto-plugins
-                         :editor/toggle-open-blocks
-                         :ui/toggle-cards
-                         :git/commit])}))
-
+    (->
+     (build-category-map [:command/run
+                          :go/home
+                          :go/keyboard-shortcuts
+                          :go/tomorrow
+                          :go/next-journal
+                          :go/prev-journal
+                          :ui/toggle-document-mode
+                          :ui/toggle-settings
+                          :ui/toggle-right-sidebar
+                          :ui/toggle-left-sidebar
+                          :ui/toggle-help
+                          :ui/toggle-theme
+                          :ui/toggle-contents
+                          :editor/open-file-in-default-app
+                          :editor/open-file-in-directory
+                          :ui/toggle-wide-mode
+                          :ui/select-theme-color
+                          :ui/goto-plugins
+                          :editor/toggle-open-blocks
+                          :ui/toggle-cards
+                          :git/commit])
+     (with-meta {:before m/enable-when-not-editing-mode!}))}))
 
 ;; Categories for docs purpose
 (def category

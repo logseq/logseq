@@ -21,6 +21,7 @@
 
 (defn redirect-to-home!
   []
+  (state/pub-event! [:redirect-to-home])
   (redirect! {:to :home}))
 
 (defn redirect-to-page!

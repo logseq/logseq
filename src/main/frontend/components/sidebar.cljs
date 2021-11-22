@@ -34,6 +34,7 @@
             [frontend.components.widgets :as widgets]
             [frontend.mobile.util :as mobile-util]))
 
+
 (defn nav-item
   [title href svg-d active? close-modal-fn]
   [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.hover:text-gray-200.transition.ease-in-out.duration-150.nav-item

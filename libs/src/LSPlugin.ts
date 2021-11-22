@@ -179,6 +179,12 @@ export type SimpleCommandCallback = (e: IHookEvent) => void
 export type BlockCommandCallback = (e: IHookEvent & { uuid: BlockUUID }) => Promise<void>
 export type BlockCursorPosition = { left: number, top: number, height: number, pos: number, rect: DOMRect }
 
+export type SimpleCommandKeybinding = {
+  mode?: 'global' | 'non-editing' | 'editing',
+  binding: string,
+  mac?: string // special for Mac OS
+}
+
 /**
  * App level APIs
  */
@@ -194,7 +200,8 @@ export interface IAppProxy {
       key: string,
       label: string,
       desc?: string,
-      palette?: boolean
+      palette?: boolean,
+      keybinding?: SimpleCommandKeybinding
     },
     action: SimpleCommandCallback) => void
 
@@ -202,6 +209,7 @@ export interface IAppProxy {
     opts: {
       key: string,
       label: string,
+      keybinding?: SimpleCommandKeybinding
     },
     action: SimpleCommandCallback) => void
 
@@ -346,7 +354,7 @@ export interface IEditorProxy extends Record<string, any> {
   insertBlock: (
     srcBlock: BlockIdentity,
     content: string,
-    opts?: Partial<{ before: boolean; sibling: boolean; properties: {} }>
+    opts?: Partial<{ before: boolean; sibling: boolean; isPageBlock: boolean; properties: {} }>
   ) => Promise<BlockEntity | null>
 
   insertBatchBlock: (

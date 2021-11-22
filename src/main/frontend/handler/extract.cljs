@@ -197,7 +197,7 @@
                  (let [block-refs (if refresh? (set refs)
                                       (set/intersection (set refs) block-ids-set))]
                    (set/union
-                    (filter :block/name refs)
+                    (set (filter :block/name refs))
                     block-refs)))]
     (-> block
         (update :block/refs aux-fn)
@@ -207,7 +207,7 @@
   [repo-url files metadata refresh?]
   (when (seq files)
     (-> (p/all (map
-                 (fn [{:file/keys [path content]} contents]
+                 (fn [{:file/keys [path content]}]
                    (when content
                      (let [org? (= "org" (string/lower-case (util/get-file-ext path)))
                            content (if org?

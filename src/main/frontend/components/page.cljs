@@ -485,7 +485,8 @@
                                                         (reset! *focus-nodes [])
                                                         (reset! *n-hops nil)
                                                         (state/clear-search-filters!))}
-                 "Reset Graph"]]])))
+                 "Reset Graph"]]]))
+           {})
           (graph-filter-section
            [:span.font-medium "Search"]
            (fn [open?]

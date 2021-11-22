@@ -20,6 +20,7 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.modules.shortcut.core :as st]
             [frontend.commands :as commands]
             [frontend.spec :as spec]
             [frontend.state :as state]
@@ -171,7 +172,8 @@
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (state/clear-edit!)
   (when-let [repo (state/get-current-repo)]
-    (when (not= (string/trim disk-content) (string/trim db-content))
+    (when (and disk-content db-content
+               (not= (string/trim disk-content) (string/trim db-content)))
       (state/set-modal! #(diff/local-file repo path disk-content db-content)))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
@@ -179,7 +181,7 @@
     (state/set-modal! #(git-component/file-specific-version path hash content))))
 
 (defmethod handle :after-db-restore [[_ repos]]
-  (mapv (fn [{url :url} repo]
+  (mapv (fn [{url :url}]
           ;; compare :ast/version
           (let [db (conn/get-conn url)
                 ast-version (:v (first (d/datoms db :aevt :ast/version)))]
@@ -205,11 +207,19 @@
                     {:fullscreen? false
                      :close-btn?  false}))
 
+(defmethod handle :redirect-to-home [_]
+  (page-handler/create-today-journal!))
+
 (defmethod handle :instrument [[_ {:keys [type payload]}]]
   (posthog/capture type payload))
 
 (defmethod handle :exec-plugin-cmd [[_ {:keys [type key pid cmd action]}]]
   (commands/exec-plugin-simple-command! pid cmd action))
+
+(defmethod handle :shortcut-handler-refreshed [[_]]
+  (when-not @st/*inited?
+    (reset! st/*inited? true)
+    (st/consume-pending-shortcuts!)))
 
 (defn run!
   []

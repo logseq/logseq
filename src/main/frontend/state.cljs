@@ -16,7 +16,7 @@
             [promesa.core :as p]
             [rum.core :as rum]))
 
-(defonce ^:private state
+(defonce state
   (let [document-mode? (or (storage/get :document/mode?) false)
         current-graph (let [graph (storage/get :git/current-repo)]
                         (when graph (ipc/ipc "setCurrentGraph" graph))
@@ -104,6 +104,7 @@
       :editor/document-mode? document-mode?
       :editor/args nil
       :editor/on-paste? false
+      :editor/last-key-code nil
 
       :db/last-transact-time {}
       :db/last-persist-transact-ids {}
@@ -235,6 +236,12 @@
    (get-config (get-current-repo)))
   ([repo-url]
    (get-in @state [:config repo-url])))
+
+(def default-arweave-gateway "https://arweave.net")
+
+(defn get-arweave-gateway
+  []
+  (:arweave/gateway (get-config) default-arweave-gateway))
 
 (defonce built-in-macros
   {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
@@ -489,7 +496,6 @@
 (defn set-edit-content!
   ([input-id value] (set-edit-content! input-id value true))
   ([input-id value set-input-value?]
-   (prn "set edit content: " value)
    (when input-id
      (when set-input-value?
        (when-let [input (gdom/getElement input-id)]
@@ -845,6 +851,7 @@
                      :editor/editing? {edit-input-id true}
                      :editor/last-edit-block-input-id edit-input-id
                      :editor/last-edit-block block
+                     :editor/last-key-code nil
                      :cursor-range cursor-range))))
 
        (when-let [input (gdom/getElement edit-input-id)]
@@ -1537,3 +1544,11 @@
 (defn get-git-auto-commit-enabled?
   []
   (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
+
+(defn set-last-key-code!
+  [key-code]
+  (set-state! :editor/last-key-code key-code))
+
+(defn get-last-key-code
+  []
+  (:editor/last-key-code @state))

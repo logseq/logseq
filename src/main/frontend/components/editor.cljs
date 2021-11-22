@@ -150,7 +150,7 @@
                                             (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
                      (reset! result matched-blocks)))
                  state)}
-  [state edit-block input id q format content]
+  [state edit-block input id q format]
   (let [result (rum/react (get state ::result))
         chosen-handler (editor-handler/block-on-chosen-handler input id q format)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
@@ -166,7 +166,7 @@
                              repo (state/sub :git/current-repo)
                              format (db/get-page-format page)]
 
-                         [:.py-2 (search/block-search-result-item repo uuid format content q)]))
+                         [:.py-2 (search/block-search-result-item repo uuid format content q :block)]))
         :class       "black"}))))
 
 (rum/defcs block-search < rum/reactive

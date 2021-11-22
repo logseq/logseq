@@ -55,18 +55,19 @@
                       (let [value (util/evalue event)]
                         (swap! *timestamp assoc-in [:repeater :num] value)))}]
        (ui/select
-        (mapv
-         (fn [item]
-           (if (= (:label item) duration)
-             (assoc item :selected "selected")
-             item))
-         [{:label "h"}
-          {:label "d"}
-          {:label "w"}
-          {:label "m"}
-          {:label "y"}])
-        (fn [value]
-          (swap! *timestamp assoc-in [:repeater :duration] value)))
+         (mapv
+          (fn [item]
+            (if (= (:label item) duration)
+              (assoc item :selected "selected")
+              item))
+          [{:label "h"}
+           {:label "d"}
+           {:label "w"}
+           {:label "m"}
+           {:label "y"}])
+         (fn [value]
+           (swap! *timestamp assoc-in [:repeater :duration] value))
+         nil)
 
        [:a.ml-2.self-center {:on-click (fn []
                                          (reset! *show-repeater? false)
