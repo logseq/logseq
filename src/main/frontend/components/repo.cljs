@@ -173,7 +173,7 @@
                (t :git/version) (str " " version/version)]]])))])))
 
 (rum/defc repos-dropdown < rum/reactive
-  [toggle-dropdown-f]
+  []
   (when-let [current-repo (state/sub :git/current-repo)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (let [get-repo-name (fn [repo]

@@ -11,12 +11,17 @@
   (beforeEach []
               (.clearIndexedDB cy))
   (before []
-          (.visit cy "http://localhost:3001"))
+          (.. cy
+              (visit "http://localhost:3001")
+              (get "#main-content-container" #js {:timeout 10000})
+              (should (fn [result]
+                        (expect result :not.to.contain "Loading")))))
 
   (it "Search" []
     (.. cy
         (get "#search-button")
         (click)
+        (get "input.cp__palette-input")
         (type "welcome to Logseq"))
     (.. cy (get "#ui__ac-inner")
         (should (fn [result]
@@ -27,14 +32,11 @@
     (.. cy
         (get "#search-button")
         (click)
-        (type "new page"))
-
-    (.wait cy 1000)
-
-    (.. cy
-        (get "#search-button")
+        (get "input.cp__palette-input")
+        (type "new page")
+        (wait 500)
         (type "{enter}"))
-
+      
     ;; edit bullet
     (util/edit-block "this is my first bullet {enter}")
     (util/edit-block "this is my second bullet {enter}")

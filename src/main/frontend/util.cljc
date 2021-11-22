@@ -621,11 +621,25 @@
          (str prefix new-value)))
      s)))
 
-(defn replace-ignore-case [s old-value new-value]
-  (string/replace s (re-pattern (str "(?i)" old-value)) new-value))
+(defn replace-ignore-case
+  [s old-value new-value & [escape-chars]]
+  (let [escape-chars (or escape-chars "[]{}().+*?")
+        old-value (if (string? escape-chars)
+                    (reduce (fn [acc escape-char]
+                              (string/replace acc escape-char (str "\\" escape-char)))
+                            old-value escape-chars)
+                    old-value)]
+    (string/replace s (re-pattern (str "(?i)" old-value)) new-value)))
 
-(defn replace-first-ignore-case [s old-value new-value]
-  (string/replace-first s (re-pattern (str "(?i)" old-value)) new-value))
+(defn replace-first-ignore-case
+  [s old-value new-value & [escape-chars]]
+  (let [escape-chars (or escape-chars "[]{}().+*?")
+        old-value (if (string? escape-chars)
+                    (reduce (fn [acc escape-char]
+                              (string/replace acc escape-char (str "\\" escape-char)))
+                            old-value escape-chars)
+                    old-value)]
+    (string/replace-first s (re-pattern (str "(?i)" old-value)) new-value)))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
@@ -992,7 +1006,7 @@
     (url-encode s)))
 
 #?(:cljs
-   (defn- get-clipboard-as-html
+   (defn get-clipboard-as-html
      [event]
      (if-let [c (gobj/get event "clipboardData")]
        [(.getData c "text/html") (.getData c "text")]

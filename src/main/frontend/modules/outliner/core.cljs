@@ -575,7 +575,7 @@
              ;; direct outdenting (the old behavior)
              (let [right-siblings (get-right-siblings last-node)
                    right-siblings (doall
-                                   (map (fn [sibling right-siblings]
+                                   (map (fn [sibling]
                                           (some->
                                            (tree/-set-parent-id sibling last-node-id)
                                            (tree/-save txs-state)))

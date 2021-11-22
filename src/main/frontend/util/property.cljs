@@ -5,7 +5,6 @@
             [frontend.config :as config]
             [medley.core :as medley]
             [frontend.format.mldoc :as mldoc]
-            [frontend.handler.link :as link]
             [frontend.text :as text]
             [frontend.util.cursor :as cursor]
             [frontend.handler.link :as link]))

@@ -1,4 +1,6 @@
 (ns frontend.handler.export-test
+  ;; namespace local config for private function tests
+  {:clj-kondo/config {:linters {:private-call {:level :off}}}}
   (:require [cljs.test :refer [async deftest is testing use-fixtures are]]
             [frontend.handler.export :as export]
             [frontend.db.config :refer [test-db] :as config]

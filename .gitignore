@@ -36,3 +36,4 @@ charlie/
 .vscode
 /.preprocessor-cljs
 docker
+yarn.lock

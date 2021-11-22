@@ -296,7 +296,7 @@
 (defn load-unpacked-plugin
   []
   (when util/electron?
-    (p/let [path (ipc/ipc "openDialogSync")]
+    (p/let [path (ipc/ipc "openDialog")]
       (when-not (:plugin/selected-unpacked-pkg @state/state)
         (state/set-state! :plugin/selected-unpacked-pkg path)))))
 
@@ -392,7 +392,7 @@
                                         ;; plugins
                                        (swap! state/state md/dissoc-in [:plugin/installed-plugins pid])
                                         ;; commands
-                                       (clear-commands!))))
+                                       (clear-commands! pid))))
 
                (.on "unlink-plugin" (fn [pid]
                                       (let [pid (keyword pid)]

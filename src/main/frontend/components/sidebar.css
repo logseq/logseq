@@ -19,6 +19,7 @@
 
 #main-container {
   position: relative;
+  height: 100%;
 }
 
 #main-content {

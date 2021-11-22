@@ -5,7 +5,7 @@
 
 (defn back-to-home
   []
-  (.. cy (get ".cp__header-logo")
+  (.. cy (get ".ui__modal")
       (first)
       (click)))
 

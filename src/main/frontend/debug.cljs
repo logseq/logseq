@@ -2,7 +2,6 @@
   (:require [cljs.pprint :as pprint]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.state :as state]
             [frontend.handler.notification :as notification]))
 
 (defn pprint

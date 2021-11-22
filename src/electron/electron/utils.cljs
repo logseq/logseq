@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             ["fs-extra" :as fs]
             ["path" :as path]
-            [clojure.string :as string]
             [cljs-bean.core :as bean]
             ["electron" :refer [app BrowserWindow]]))
 

@@ -1,6 +1,5 @@
 (ns frontend.extensions.graph
   (:require [cljs-bean.core :as bean]
-            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.extensions.graph.pixi :as pixi]
             [frontend.handler.route :as route-handler]

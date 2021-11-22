@@ -79,7 +79,7 @@ exports.electron = () => {
 }
 
 exports.electronMaker = async () => {
-  cp.execSync('yarn cljs:release', {
+  cp.execSync('yarn cljs:release-electron', {
     stdio: 'inherit'
   })
 

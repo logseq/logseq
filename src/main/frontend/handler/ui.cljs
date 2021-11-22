@@ -12,7 +12,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [frontend.storage :as storage]
             [rum.core :as rum]
             [clojure.edn :as edn]))
 

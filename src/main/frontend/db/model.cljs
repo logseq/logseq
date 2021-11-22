@@ -418,7 +418,7 @@
          (recur next (conj result next))
          (vec result))))))
 
-(defn- sort-by-left-recursive
+(defn sort-by-left-recursive
   [form]
   (walk/postwalk (fn [f]
                    (if (and (map? f)
@@ -572,18 +572,20 @@
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 
-(defn get-nested-pages
-  [repo page-name]
+(defn get-pages-by-name-partition
+  [repo partition]
   (when-let [conn (conn/get-conn repo)]
-    (let [nested-page-name (->> (string/trim page-name)
-                                (util/format "[[%s]]"))]
-      (d/q '[:find ?e ?n
-             :in $ ?x
-             :where
-             [?e :block/name ?n]
-             [(clojure.string/includes? ?n ?x)]]
-           conn
-           nested-page-name))))
+    (when-not (string/blank? partition)
+      (let [partition (string/lower-case (string/trim partition))
+            ids (->> (d/datoms conn :aevt :block/name)
+                     (filter (fn [datom]
+                               (let [page (:v datom)]
+                                 (string/includes? page partition))))
+                     (map :e))]
+        (when (seq ids)
+          (db-utils/pull-many repo
+                              '[:db/id :block/name :block/original-name]
+                              ids))))))
 
 (defn block-and-children-transform
   [result repo-url block-uuid]
