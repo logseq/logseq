@@ -80,4 +80,4 @@ jobs:
           yarn cljs:test
           node static/tests.js
       - name: Run Clojure test
-        run: clj -Mtest-clj
+        run: clojure -Mtest-clj
