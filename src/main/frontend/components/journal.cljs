@@ -97,6 +97,7 @@
                        [:div.journal-item.content {:key journal-name}
                         (journal-cp [journal-name format])])
                      {:has-more (page-handler/has-more-journals?)
+                      :on-top-reached page-handler/create-today-journal!
                       :on-load (fn []
                                  (page-handler/load-more-journals!))})])
 
