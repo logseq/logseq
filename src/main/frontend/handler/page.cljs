@@ -215,7 +215,7 @@
                          (re-find
                           (re-pattern
                            (util/format
-                            "\\[\\[file:\\./.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
+                            "\\[\\[file:\\.*/.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
                           content))]
     (-> (if old-org-ref
             (let [[old-full-ref old-label] old-org-ref
