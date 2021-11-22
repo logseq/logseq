@@ -36,6 +36,7 @@
                  (not (:encryption/graph-parsing? @state/state)))
         (cond
           (and (= "add" type)
+               (not= (string/trim content) (string/trim db-content))
                (not (string/includes? path "logseq/pages-metadata.edn")))
           (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                                 :from-disk? true})]
