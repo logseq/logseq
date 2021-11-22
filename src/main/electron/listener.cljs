@@ -67,7 +67,13 @@
 
   (js/window.apis.on "setGitUsernameAndEmail"
                      (fn []
-                       (state/pub-event! [:modal/set-git-username-and-email]))))
+                       (state/pub-event! [:modal/set-git-username-and-email])))
+
+
+  (js/window.apis.on "getCurrentGraph"
+                     (fn []
+                       (when-let [graph (state/get-current-repo)]
+                         (ipc/ipc "setCurrentGraph" graph)))))
 
 (defn listen!
   []
