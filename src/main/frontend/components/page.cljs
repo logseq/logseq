@@ -846,7 +846,7 @@
             [:a.ml-1.pr-2.opacity-70.hover:opacity-100
              {:on-click (fn [] (state/set-modal!
                                 (batch-delete-dialog
-                                 (model/get-orphaned-pages (state/get-current-repo)) true
+                                 (model/get-orphaned-pages {}) true
                                  #(do
                                     (reset! *checks nil)
                                     (refresh-pages)))))}

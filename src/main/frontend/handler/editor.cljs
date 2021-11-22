@@ -186,13 +186,6 @@
     (doseq [block blocks]
       (gdom-classes/remove block "block-highlight"))))
 
-;; FIXME: children' :block/path-ref-pages
-(defn compute-retract-refs
-  "Computes old references to be retracted."
-  [eid {:block/keys [refs]} old-refs]
-  ;; TODO:
-  )
-
 (defn- get-edit-input-id-with-block-id
   [block-id]
   (when-let [first-block (util/get-first-block-by-id block-id)]
