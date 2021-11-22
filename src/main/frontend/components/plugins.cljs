@@ -102,6 +102,21 @@
   (when unpacked-pkg-path
     [:strong.inline-flex.px-3 "Loading ..."]))
 
+(rum/defc category-tabs
+  [t category on-action]
+
+  [:div.secondary-tabs.categories
+   (ui/button
+     [:span (ui/icon "puzzle") (t :plugins)]
+     :intent "logseq"
+     :on-click #(on-action :plugins)
+     :class (if (= category :plugins) "active" ""))
+   (ui/button
+     [:span (ui/icon "palette") (t :themes)]
+     :intent "logseq"
+     :on-click #(on-action :themes)
+     :class (if (= category :themes) "active" ""))])
+
 (rum/defc local-markdown-display
   < rum/reactive
   []
@@ -256,6 +271,7 @@
 (rum/defcs marketplace-plugins
   < rum/static rum/reactive
     (rum/local false ::fetching)
+    (rum/local :plugins ::category)
     (rum/local nil ::error)
     {:did-mount (fn [s]
                   (reset! (::fetching s) true)
@@ -271,73 +287,100 @@
         installed-plugins (state/sub :plugin/installed-plugins)
         installing (state/sub :plugin/installing)
         online? (state/sub :network/online?)
+        *category (::category state)
         *fetching (::fetching state)
-        *error (::error state)]
+        *error (::error state)
+        filtered-pkgs (when (seq pkgs)
+                        (if (= @*category :themes)
+                          (filter #(:theme %) pkgs)
+                          pkgs))]
 
-    (cond
-      (not online?)
-      [:p.flex.justify-center.pt-20.opacity-50
-       (svg/offline 30)]
+    (rum/with-context
+      [[t] i18n/*tongue-context*]
 
-      @*fetching
-      [:p.flex.justify-center.pt-20
-       svg/loading]
-
-      @*error
-      [:p.flex.justify-center.pt-20.opacity-50
-       "Remote error: " (.-message @*error)]
-
-      :else
       [:div.cp__plugins-marketplace
-       {:class (util/classnames [{:has-installing (boolean installing)}])}
-       [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
-        (for [item pkgs]
-          (rum/with-key
-            (let [pid (keyword (:id item))]
-              (plugin-item-card
-                item (and installing (= (keyword (:id installing)) pid))
-                (contains? installed-plugins pid)
-                (get stats pid)))
-            (:id item)))]])))
+
+       [:div.mb-4.flex.justify-between
+        [:div.flex.align-items
+         (category-tabs t @*category #(reset! *category %))]
+
+        [:div.flex.align-items
+         (ui/button
+           (t :plugin/contribute)
+           :href "https://github.com/logseq/marketplace"
+           :intent "logseq"
+           :target "_blank")
+         ]]
+
+       (cond
+         (not online?)
+         [:p.flex.justify-center.pt-20.opacity-50
+          (svg/offline 30)]
+
+         @*fetching
+         [:p.flex.justify-center.pt-20
+          svg/loading]
+
+         @*error
+         [:p.flex.justify-center.pt-20.opacity-50
+          "Remote error: " (.-message @*error)]
+
+         :else
+         [:div.cp__plugins-marketplace-cnt
+          {:class (util/classnames [{:has-installing (boolean installing)}])}
+          [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
+           (for [item filtered-pkgs]
+             (rum/with-key
+               (let [pid (keyword (:id item))]
+                 (plugin-item-card
+                   item (and installing (= (keyword (:id installing)) pid))
+                   (contains? installed-plugins pid)
+                   (get stats pid)))
+               (:id item)))]])])
+    ))
 
 (rum/defcs installed-plugins
   < rum/static rum/reactive
   [state]
   (let [installed-plugins (state/sub :plugin/installed-plugins)
         updating (state/sub :plugin/installing)
-        selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)]
+        selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
+        sorted-plugins (->> (vals installed-plugins)
+                            (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)]
+                                       (update %1 k conj %2)) [[] []])
+                            (#(update % 0 (fn [it] (sort-by :iir it))))
+                            (flatten))]
     (rum/with-context
       [[t] i18n/*tongue-context*]
 
       [:div.cp__plugins-installed
        [:div.mb-4.flex.items-center.justify-between
 
-        [:div.flex.align-items
-         (ui/tippy {:html [:div (t :plugin/unpacked-tips)]
+        [:div.flex.align-items.secondary-tabs
+         (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
                     :arrow true}
-          (ui/button
-            (t :plugin/load-unpacked)
-            :intent "logseq"
-            :on-click plugin-handler/load-unpacked-plugin))
+                   (ui/button
+                     [:span (ui/icon "upload") (t :plugin/load-unpacked)]
+                     :intent "logseq"
+                     :on-click plugin-handler/load-unpacked-plugin))
 
          (unpacked-plugin-loader selected-unpacked-pkg)]
 
-        (when (util/electron?)
-          [:div.flex.align-items
-           ;; (ui/button
-           ;;   (t :plugin/open-preferences)
-           ;;   :intent "logseq"
-           ;;   :on-click (fn []
-           ;;               (p/let [root (plugin-handler/get-ls-dotdir-root)]
-           ;;                 (js/apis.openPath (str root "/preferences.json")))))
-           (ui/button
-             (t :plugin/contribute)
-             :href "https://github.com/logseq/marketplace"
-             :intent "logseq"
-             :target "_blank")
-           ])]
+        [:div.flex.align-items
+         ;;(ui/button
+         ;;  (t :plugin/open-preferences)
+         ;;  :intent "logseq"
+         ;;  :on-click (fn []
+         ;;              (p/let [root (plugin-handler/get-ls-dotdir-root)]
+         ;;                (js/apis.openPath (str root "/preferences.json")))))
+         (ui/button
+           (t :plugin/contribute)
+           :href "https://github.com/logseq/marketplace"
+           :intent "logseq"
+           :target "_blank")
+         ]]
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
-        (for [[_ item] installed-plugins]
+        (for [item sorted-plugins]
           (rum/with-key
             (let [pid (keyword (:id item))]
               (plugin-item-card
