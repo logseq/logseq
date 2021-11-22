@@ -83,6 +83,11 @@
         y (re-seq #"\]\]" s)]
     (and (> (count x) 0) (= (count x) (count y)))))
 
+(defn get-nested-page-name
+  [page-name]
+  (when-let [first-match (re-find page-ref-re-without-nested page-name)]
+    (second first-match)))
+
 (defn- concat-nested-pages
   [coll]
   (first
