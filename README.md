@@ -118,12 +118,6 @@ Run Cypress tests
 yarn e2e-test
 ```
 
-Run Clojure tests. (Note: `.cljc` files may be tested both by ClojureScript, and Clojure.)
-
-```bash
-clj -Mtest-clj
-```
-
 ## Desktop app development
 
 ### 1. Compile to JavaScript

@@ -79,5 +79,3 @@ jobs:
         run: |
           yarn cljs:test
           node static/tests.js
-      - name: Run Clojure test
-        run: clojure -Mtest-clj
