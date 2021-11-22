@@ -25,7 +25,7 @@
                                                v))))
           before (remove nil? (map #(build-property-fn %) [:title :alias :aliases]))
           other (reduce (fn [acc elem]
-                          (util/replace-ignore-case acc (str elem "\n*") "" "[]{}().+"))
+                          (util/replace-ignore-case acc (str elem "\n*") "" "[]{}().+|"))
                         content before)]
       (string/join "\n" (remove #(= "" %)
                                 (concat before [other]))))))
