@@ -293,7 +293,7 @@
         filtered-pkgs (when (seq pkgs)
                         (if (= @*category :themes)
                           (filter #(:theme %) pkgs)
-                          pkgs))]
+                          (filter #(not (:theme %)) pkgs)))]
 
     (rum/with-context
       [[t] i18n/*tongue-context*]
