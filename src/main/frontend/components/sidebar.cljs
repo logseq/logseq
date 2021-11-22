@@ -34,7 +34,6 @@
             [frontend.components.widgets :as widgets]
             [frontend.mobile.util :as mobile-util]))
 
-
 (defn nav-item
   [title href svg-d active? close-modal-fn]
   [:a.mb-1.group.flex.items-center.pl-4.py-2.text-base.leading-6.font-medium.hover:text-gray-200.transition.ease-in-out.duration-150.nav-item
@@ -286,6 +285,8 @@
               (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
               [:span.flex-1 "New page"]])]]]))))
 
+(def main-content-position (if (mobile-util/native-ios?) "48px" "0px"))
+
 (rum/defc sidebar-mobile-sidebar < rum/reactive
   [{:keys [open? left-sidebar-open? close-fn route-match]}]
   [:div.md:hidden.ls-mobile-left-sidebar
@@ -299,7 +300,8 @@
     {:class (if @open?
               "translate-x-0"
               "-translate-x-full")
-     :style {:max-width "50vw"}}
+     :style {:max-width "50vw"
+             :top main-content-position}}
     (when @open?
       [:div.cp__header#head
        [:div.l.flex
@@ -332,7 +334,8 @@
         mobile? (util/mobile?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#main-content.cp__sidebar-main-layout.flex-1.flex
-       {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
+       {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])
+        :style {:top main-content-position}}
 
        ;; desktop left sidebar layout
        (when-not mobile?
@@ -559,7 +562,7 @@
           :close-fn    close-fn
           :route-match route-match})
 
-        [:div.#app-container.h-screen.flex
+        [:div.#app-container.h-screen.flex {:style {:top main-content-position}}
          [:div.flex-1.h-full.flex.flex-col#left-container.relative
           {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
           (header/header {:open-fn        open-fn
