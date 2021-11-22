@@ -36,7 +36,6 @@
                  (not (:encryption/graph-parsing? @state/state)))
         (cond
           (and (= "add" type)
-               (not= (string/trim content) (string/trim db-content))
                (not (string/includes? path "logseq/pages-metadata.edn")))
           (p/let [_ (file-handler/alter-file repo path content {:re-render-root? true
                                                                 :from-disk? true})]
@@ -69,7 +68,7 @@
                (db/file-exists? repo path))
           (when-let [page-name (db/get-file-page path)]
             (println "Delete page: " page-name ", file path: " path ".")
-            (page-handler/delete! page-name #()))
+            (page-handler/delete! page-name #() :delete-file? false))
 
           (contains? #{"add" "change" "unlink"} type)
           nil

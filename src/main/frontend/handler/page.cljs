@@ -294,7 +294,8 @@
       (config-handler/set-config! :favorites favorites))))
 
 (defn delete!
-  [page-name ok-handler]
+  [page-name ok-handler & {:keys [delete-file?]
+                           :or {delete-file? true}}]
   (when page-name
     (when-let [repo (state/get-current-repo)]
       (let [page-name (string/lower-case page-name)
@@ -305,7 +306,7 @@
                      blocks)]
         (db/transact! tx-data)
 
-        (delete-file! repo page-name)
+        (when delete-file? (delete-file! repo page-name))
 
         ;; if other page alias this pagename,
         ;; then just remove some attrs of this entity instead of retractEntity
