@@ -1864,7 +1864,6 @@
 
 (rum/defc block-content-fallback
   [edit-input-id block]
-
   (let [content (:block/content block)]
     [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
      {:on-click #(state/set-editing! edit-input-id content block "")}
@@ -1882,16 +1881,18 @@
         slide? (:slide? config)]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
-       (editor-box {:block block
-                    :block-id uuid
-                    :block-parent-id block-id
-                    :format format
-                    :heading-level heading-level
-                    :on-hide (fn [_value event]
-                               (when (= event :esc)
-                                 (editor-handler/escape-editing)))}
-                   edit-input-id
-                   config)]
+       (ui/catch-error
+        [:p.warning "Something wrong in the editor"]
+        (editor-box {:block block
+                     :block-id uuid
+                     :block-parent-id block-id
+                     :format format
+                     :heading-level heading-level
+                     :on-hide (fn [_value event]
+                                (when (= event :esc)
+                                  (editor-handler/escape-editing)))}
+                    edit-input-id
+                    config))]
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (ui/catch-error
