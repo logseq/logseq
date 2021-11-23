@@ -213,7 +213,9 @@
 
         (repo/sync-status current-repo)
 
-        (when show-open-folder?
+        (when (and
+               show-open-folder?
+               (not (mobile-util/is-native-platform?)))
           [:a.text-sm.font-medium.button
            {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
            [:div.flex.flex-row.text-center.open-button__inner.items-center
