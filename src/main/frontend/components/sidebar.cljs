@@ -289,7 +289,7 @@
   [{:keys [open? left-sidebar-open? close-fn route-match]}]
   [:div.md:hidden.ls-mobile-left-sidebar
    {:class (if left-sidebar-open? "is-left-sidebar-open" "")}
-   [:div.fixed.inset-0.z-30.bg-gray-600.pointer-events-none.ease-linear.duration-300
+   [:div.fixed.inset-0.z-30.pointer-events-none.ease-linear.duration-300
     {:class (if @open?
               "opacity-75 pointer-events-auto"
               "opacity-0 pointer-events-none")
@@ -298,7 +298,7 @@
     {:class (if @open?
               "translate-x-0"
               "-translate-x-full")
-     :style {:max-width "50vw"
+     :style {:max-width "80vw"
              :top (ui/main-content-position)}}
     (when @open?
       [:div.cp__header#head
