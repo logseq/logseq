@@ -333,7 +333,9 @@
 
 (defn get-local-dir
   [s]
-  (string/replace s local-db-prefix ""))
+  (if-not (mobile-util/is-native-platform?)
+    (string/replace s local-db-prefix "")
+    (util/node-path.name s)))
 
 (defn get-local-repo
   [dir]
