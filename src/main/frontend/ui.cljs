@@ -38,7 +38,7 @@
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 
-(defn main-content-position
+(defn main-content-top-padding
   []
   (if (mobile-util/native-ios?)
     (- (mobile-util/get-idevice-statusbar-height) 10)

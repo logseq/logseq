@@ -289,7 +289,7 @@
   [{:keys [open? left-sidebar-open? close-fn route-match]}]
   [:div.md:hidden.ls-mobile-left-sidebar
    {:class (if left-sidebar-open? "is-left-sidebar-open" "")}
-   [:div.fixed.inset-0.z-30.pointer-events-none.ease-linear.duration-300
+   [:div.fixed.inset-0.z-30.bg-gray-600.pointer-events-none.ease-linear.duration-300
     {:class (if @open?
               "opacity-75 pointer-events-auto"
               "opacity-0 pointer-events-none")
@@ -299,7 +299,7 @@
               "translate-x-0"
               "-translate-x-full")
      :style {:max-width "80vw"
-             :top (ui/main-content-position)}}
+             :padding-top (ui/main-content-top-padding)}}
     (when @open?
       [:div.cp__header#head
        [:div.l.flex
@@ -333,7 +333,7 @@
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#main-content.cp__sidebar-main-layout.flex-1.flex
        {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])
-        :style {:top (ui/main-content-position)}}
+        :style {:padding-top (ui/main-content-top-padding)}}
 
        ;; desktop left sidebar layout
        (when-not mobile?
@@ -562,7 +562,7 @@
           :close-fn    close-fn
           :route-match route-match})
 
-        [:div.#app-container.h-screen.flex {:style {:top (ui/main-content-position)}}
+        [:div.#app-container.h-screen.flex {:style {:padding-top (ui/main-content-top-padding)}}
          [:div.flex-1.h-full.flex.flex-col#left-container.relative
           {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
           (header/header {:open-fn        open-fn
