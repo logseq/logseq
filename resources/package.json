@@ -11,7 +11,7 @@
     "electron:make": "electron-forge make",
     "electron:make-macos-arm64": "electron-forge make --platform=darwin --arch=arm64",
     "electron:publish:github": "electron-forge publish",
-    "rebuild:better-sqlite3": "electron-rebuild -v 15 -f -w better-sqlite3",
+    "rebuild:better-sqlite3": "electron-rebuild -v 15.1.2 -f -w better-sqlite3",
     "postinstall": "install-app-deps"
   },
   "config": {
