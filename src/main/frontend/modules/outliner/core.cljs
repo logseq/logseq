@@ -90,7 +90,8 @@
           old-pages (->> (map :db/id old-refs)
                          (db-model/get-entities-by-ids)
                          (remove (fn [e] (contains? new-refs (:block/name e))))
-                         (map :block/name))
+                         (map :block/name)
+                         (remove nil?))
           orphaned-pages (db-model/get-orphaned-pages {:pages old-pages
                                                        :empty-ref-f (fn [page]
                                                                       (let [refs (:block/_refs page)]

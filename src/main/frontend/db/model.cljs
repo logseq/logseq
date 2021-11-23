@@ -1442,7 +1442,8 @@
   [{:keys [repo pages empty-ref-f]
           :or {repo (state/get-current-repo)
                empty-ref-f (fn [page] (zero? (count (:block/_refs page))))}}]
-  (let [pages (or pages (get-pages repo))
+  (let [pages (->> (or pages (get-pages repo))
+                   (remove nil?))
         built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
         orphaned-pages (->>
                         (map
