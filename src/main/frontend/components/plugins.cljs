@@ -402,7 +402,8 @@
          #())
        [id])
      [:div.lsp-hook-ui-slot
-      (merge opts {:id id})])))
+      (merge opts {:id id
+                   :on-mouse-down (fn [e] (util/stop e))})])))
 
 (rum/defc ui-item-renderer
   [pid type {:keys [key template]}]
