@@ -102,6 +102,3 @@
     (if (and model landscape?)
       20
       (:statusbar (model @idevice-info)))))
-
-(js/alert (str "Device Model: " (first (get-idevice-model))
-               "\nStatus Bar height: " (get-idevice-statusbar-height)))
