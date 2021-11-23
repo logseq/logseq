@@ -24,6 +24,6 @@
                                                           :status status}))
 
      (when clear?
-       (js/setTimeout #(clear! uid) 3000))
+       (js/setTimeout #(clear! uid) 1500))
 
      uid)))

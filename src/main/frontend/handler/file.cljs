@@ -157,11 +157,12 @@
                    (p/let [delete-blocks (db/delete-file-blocks! repo-url file)
                            [pages blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
                            _ (when-let [current-file (page-exists-in-another-file (first pages) file)]
-                               (let [error (str "Page already exists with another file: " current-file)]
-                                 (state/pub-event! [:notification/show
-                                                    {:content error
-                                                     :status :error
-                                                     :clear? false}])))
+                               (when (not= file current-file)
+                                 (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
+                                   (state/pub-event! [:notification/show
+                                                      {:content error
+                                                       :status :error
+                                                       :clear? false}]))))
                            blocks (remove-non-exists-refs! blocks)
                            block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
                            pages (extract-handler/with-ref-pages pages blocks)]
