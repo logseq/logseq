@@ -62,25 +62,31 @@
 
 (defn get-idevice-model
   []
-  (let [width (.-innerWidth js/window)
-        height (.-innerHeight js/window)]
-    (case [width height]
-      [320 568] "iPhoneSE4"
-      [375 667] "iPhone8"
-      [375 812] "iPhoneX"
-      [390 844] "iPhone12"
-      [414 736] "iPhone8Plus"
-      [414 896] "iPhone11"
-      [428 926] "iPhone12ProMax"
-      [768 1024] "iPad-9.7"
-      [810 1080] "iPad-10.2"
-      [834 1112] "iPadAir-10.5"
-      [834 1194] "iPadPro-11"
-      [1024 1194] "iPadPro-12.9"
-      "Not a known Apple device!")))
+  (when (native-ios?)
+    (let [width (.-innerWidth js/window)
+          height (.-innerHeight js/window)
+          landscape? (> width height)
+          [width height] (if landscape? [height width] [width height])]
+      [(case [width height]
+         [320 568] "iPhoneSE4"
+         [375 667] "iPhone8"
+         [375 812] "iPhoneX"
+         [390 844] "iPhone12"
+         [414 736] "iPhone8Plus"
+         [414 896] "iPhone11"
+         [428 926] "iPhone12ProMax"
+         [768 1024] "iPad-9.7"
+         [810 1080] "iPad-10.2"
+         [834 1112] "iPadAir-10.5"
+         [834 1194] "iPadPro-11"
+         [1024 1366] "iPadPro-12.9"
+         "Not a known Apple device!")
+       landscape?])))
 
 (defn get-idevice-statusbar-height
   []
-  (let [model (get-idevice-model)
+  (let [[model landscape?] (get-idevice-model)
         model (keyword model)]
-    (:statusbar (model @idevice-info))))
+    (if landscape?
+      20
+      (:statusbar (model @idevice-info)))))
