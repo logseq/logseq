@@ -44,6 +44,8 @@
     (- (mobile-util/get-idevice-statusbar-height) 10)
     0))
 
+(defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
+
 (rum/defc ls-textarea
   < rum/reactive
   {:did-mount (fn [state]

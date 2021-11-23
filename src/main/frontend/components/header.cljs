@@ -26,14 +26,12 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.components.widgets :as widgets]))
 
-(defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
-
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
     [:a.button
      {:href     (rfe/href :home)
       :on-click route-handler/go-to-journals!}
-     (ui/icon "home" {:style {:fontSize icon-size}})]))
+     (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc login
   [logged?]
@@ -64,7 +62,7 @@
     [:a#left-menu.cp__header-left-menu.button
      {:on-click on-click
       :style {:margin-left 12}}
-     (ui/icon "menu-2" {:style {:fontSize icon-size}})]))
+     (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
@@ -78,7 +76,7 @@
      (fn [{:keys [toggle-fn]}]
        [:a.button
         {:on-click toggle-fn}
-        (ui/icon "dots" {:style {:fontSize icon-size}})])
+        (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
      (->>
       [(when-not (state/publishing-enable-editing?)
          {:title (t :settings)
@@ -127,12 +125,12 @@
    (ui/with-shortcut :go/backward "bottom"
      [:a.it.navigation.nav-left.button
       {:title "Go back" :on-click #(js/window.history.back)}
-      (ui/icon "arrow-left" {:style {:fontSize icon-size}})])
+      (ui/icon "arrow-left" {:style {:fontSize ui/icon-size}})])
 
    (ui/with-shortcut :go/forward "bottom"
      [:a.it.navigation.nav-right.button
       {:title "Go forward" :on-click #(js/window.history.forward)}
-      (ui/icon "arrow-right" {:style {:fontSize icon-size}})])])
+      (ui/icon "arrow-right" {:style {:fontSize ui/icon-size}})])])
 
 (rum/defc updater-tips-new-version
   [t]
@@ -188,7 +186,7 @@
           (ui/with-shortcut :go/search "right"
             [:a.button#search-button
              {:on-click #(state/pub-event! [:go/search])}
-             (ui/icon "search" {:style {:fontSize icon-size}})]))]
+             (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
 
        [:div.r.flex
         (when (and (not (mobile-util/is-native-platform?))

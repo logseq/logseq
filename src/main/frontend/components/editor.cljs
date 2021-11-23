@@ -223,31 +223,36 @@
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (editor-handler/indent-outdent true))}
-      (ui/icon "chevrons-right")]]
+      (ui/icon "chevrons-right"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (editor-handler/indent-outdent false))}
-      (ui/icon "chevrons-left")]]
+      (ui/icon "chevrons-left"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         ((editor-handler/move-up-down true)))}
-      (ui/icon "chevron-up")]]
+      (ui/icon "chevron-up"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         ((editor-handler/move-up-down false)))}
-      (ui/icon "chevron-down")]]
+      (ui/icon "chevron-down"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (editor-handler/cycle-todo!))}
-      (ui/icon "checkbox")]]
+      (ui/icon "checkbox"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
@@ -257,9 +262,10 @@
                         ;; TODO: should we add this focus step to `simple-insert!`?
                         (when-let [input (gdom/getElement parent-id)]
                           (.focus input)))}
-      (ui/icon "arrow-back")]]
+      (ui/icon "arrow-back"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
-     [:button.bottom-action.text-sm
+     [:button.bottom-action.text-lg.font-medium
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (commands/simple-insert!
@@ -272,7 +278,7 @@
                           (.focus input)))}
       "[["]]
     [:div
-     [:button.bottom-action.text-sm
+     [:button.bottom-action.text-lg.font-medium
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (commands/simple-insert!
@@ -285,7 +291,7 @@
                           (.focus input)))}
       "(("]]
     [:div
-     [:button.bottom-action.text-sm
+     [:button.bottom-action.text-lg.font-medium
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (commands/simple-insert! parent-id "/" {})
