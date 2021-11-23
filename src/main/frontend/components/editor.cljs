@@ -63,7 +63,7 @@
             (reset! commands/*current-command command)
             (let [command-steps (get (into {} matched) command)
                   restore-slash? (or
-                                  (contains? #{"Today" "Yesterday" "Tomorrow"} command)
+                                  (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
                                   (and
                                    (not (fn? command-steps))
                                    (not (contains? (set (map first command-steps)) :editor/input))
