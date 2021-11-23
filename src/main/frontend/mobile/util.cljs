@@ -1,6 +1,7 @@
 (ns frontend.mobile.util
   (:require ["@capacitor/core" :refer [Capacitor registerPlugin]]
-            ["@capacitor/splash-screen" :refer [SplashScreen]]))
+            ["@capacitor/splash-screen" :refer [SplashScreen]]
+            [clojure.string :as str]))
 
 (defn platform []
   (.getPlatform Capacitor))
@@ -27,10 +28,10 @@
 (defn hide-splash []
   (.hide SplashScreen))
 
-(defonce idevice-info
+(def idevice-info
   (atom
-   {:iPadPro-12.9  {:width 1024 :height 1194 :statusbar 40}
-    :iPadPro-11    {:width 834  :height 1194 :statusbar 40}
+   {:iPadPro-12.9   {:width 1024 :height 1366 :statusbar 40}
+    :iPadPro-11     {:width 834  :height 1194 :statusbar 40}
     :iPadAir-10.5   {:width 834  :height 1112 :statusbar 40}
     :iPad-10.2	    {:width 810  :height 1080 :statusbar 40}
     :iPadPro-9.7	{:width 768  :height 1024 :statusbar 40}
@@ -83,10 +84,22 @@
          "Not a known Apple device!")
        landscape?])))
 
+(defn native-iphone?
+  []
+  (str/starts-with? (first (get-idevice-model)) "iPhone"))
+
+(defn native-ipad?
+  []
+  (str/starts-with? (first (get-idevice-model)) "iPad"))
+
 (defn get-idevice-statusbar-height
   []
   (let [[model landscape?] (get-idevice-model)
-        model (keyword model)]
-    (if landscape?
+        model (when-not (= model "Not a known Apple device!")
+                (keyword model))]
+    (if (and model landscape?)
       20
       (:statusbar (model @idevice-info)))))
+
+(js/alert (str "Device Model: " (first (get-idevice-model))
+               "\nStatus Bar height: " (get-idevice-statusbar-height)))

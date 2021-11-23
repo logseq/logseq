@@ -38,6 +38,12 @@
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 
+(defn main-content-position
+  []
+  (if (mobile-util/native-ios?)
+    (- (mobile-util/get-idevice-statusbar-height) 15)
+    0))
+
 (rum/defc ls-textarea
   < rum/reactive
   {:did-mount (fn [state]
