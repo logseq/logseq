@@ -202,7 +202,7 @@
           (home-button))
 
         (when (or (util/electron?)
-                  (mobile-util/native-android?))
+                  (mobile-util/is-native-platform?))
           (back-and-forward))
 
         (new-block-mode)
