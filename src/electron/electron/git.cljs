@@ -79,7 +79,7 @@
                ["init"])]
     (p/let [_ (run-git! (clj->js args))]
       (when utils/win32?
-        (run-git! ["config" "core.safecrlf" "false"])))))
+        (run-git! #js ["config" "core.safecrlf" "false"])))))
 
 (defn add-all!
   []
@@ -171,5 +171,6 @@
     (js/setTimeout add-all-and-commit! 3000)
     (let [seconds (state/get-git-commit-seconds)]
       (when (int? seconds)
+        (js/setTimeout add-all-and-commit! 5000)
         (let [interval (js/setInterval add-all-and-commit! (* seconds 1000))]
           (state/set-git-commit-interval! interval))))))
