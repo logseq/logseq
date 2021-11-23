@@ -535,6 +535,7 @@
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)
+        edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (theme/container
@@ -542,6 +543,7 @@
         :theme         theme
         :route         route-match
         :current-repo  current-repo
+        :edit?         edit?
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
         :sidebar-open? sidebar-open?
