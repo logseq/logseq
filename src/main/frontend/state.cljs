@@ -77,7 +77,9 @@
                               false)
       ;; remember scroll positions of visited paths
       :ui/paths-scroll-positions {}
-      :ui/shortcut-tooltip? (or (storage/get :ui/shortcut-tooltip?) true)
+      :ui/shortcut-tooltip? (if (false? (storage/get :ui/shortcut-tooltip?))
+                              false
+                              true)
 
       :document/mode? document-mode?
 
