@@ -310,7 +310,7 @@
                        (not (:ui/left-sidebar-open? @state/state))))})
 
         (ui/with-shortcut :go/search "right"
-          [:a.button#search-button
+          [:a.button#search-button-mobile
            {:on-click #(state/pub-event! [:go/search])}
            (ui/icon "search" {:style {:fontSize ui/icon-size}})])]])
     [:div.flex-1.h-0.overflow-y-auto
