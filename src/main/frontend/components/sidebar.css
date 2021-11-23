@@ -1,3 +1,10 @@
+@supports(padding: max(0px)) {
+    .post {
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+    }
+}
+
 #app-container {
   background-color: var(--ls-primary-background-color, #fff);
   position: relative;

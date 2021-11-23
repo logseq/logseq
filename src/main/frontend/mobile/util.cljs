@@ -86,11 +86,13 @@
 
 (defn native-iphone?
   []
-  (str/starts-with? (first (get-idevice-model)) "iPhone"))
+  (when-let [model (get-idevice-model)]
+   (str/starts-with? (first model) "iPhone")))
 
 (defn native-ipad?
   []
-  (str/starts-with? (first (get-idevice-model)) "iPad"))
+  (when-let [model (get-idevice-model)]
+   (str/starts-with? (first model) "iPad")))
 
 (defn get-idevice-statusbar-height
   []
