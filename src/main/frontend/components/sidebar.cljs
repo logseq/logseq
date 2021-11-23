@@ -240,6 +240,7 @@
                                    [".favorites" ".recent" ".dropdown-wrapper" ".nav-header"])
                          (close-modal-fn)))}
          [:div.flex.flex-col.pb-4.wrap
+          {:style {:padding-top (when (mobile-util/is-native-platform?) 0)}}
           [:nav.px-2.space-y-1 {:aria-label "Sidebar"}
            (repo/repos-dropdown)
 
