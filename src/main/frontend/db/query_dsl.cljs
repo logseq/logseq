@@ -147,6 +147,7 @@
   ([repo e {:keys [sort-by blocks? sample counter current-filter vars] :as env} level]
    ;; TODO: replace with multi-methods for extensibility.
    (let [fe (first e)
+         fe (when fe (symbol (string/lower-case (name fe))))
          page-ref? (text/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
