@@ -41,7 +41,7 @@
 (defn main-content-position
   []
   (if (mobile-util/native-ios?)
-    (- (mobile-util/get-idevice-statusbar-height) 15)
+    (- (mobile-util/get-idevice-statusbar-height) 10)
     0))
 
 (rum/defc ls-textarea
@@ -544,7 +544,10 @@
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 9999 -1)}}
+     {:style {:z-index (if show? 9999 -1)
+              :top (when (or (mobile-util/native-iphone?)
+                             (and (util/mobile?) (util/ios?)))
+                     60)}}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
