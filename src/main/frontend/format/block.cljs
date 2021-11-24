@@ -55,6 +55,7 @@
 
                   (and
                    (= typ "Search")
+                   (text/page-ref? (second (:url (second block))))
                    (text/page-ref-un-brackets! (second (:url (second block)))))
 
                   (and
@@ -84,10 +85,10 @@
 
                (and (vector? block)
                     (= "Macro" (first block)))
-               (let [{:keys [name arguments]} (second block)]
-                 (let [argument (string/join ", " arguments)]
+               (let [{:keys [name arguments]} (second block)
+                     argument (string/join ", " arguments)]
                    (when (= name "embed")
-                     (text/page-ref-un-brackets! argument))))
+                     (text/page-ref-un-brackets! argument)))
 
                (and (vector? block)
                     (= "Tag" (first block)))
