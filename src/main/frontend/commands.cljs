@@ -377,6 +377,9 @@
           postfix (subs edit-content current-pos)
           postfix (if postfix-fn (postfix-fn postfix) postfix)
           new-value (cond
+                      (string/blank? postfix)
+                      prefix
+
                       space?
                       (util/concat-without-spaces prefix postfix)
 
