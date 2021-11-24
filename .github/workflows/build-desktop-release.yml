@@ -155,12 +155,19 @@ jobs:
         run: yarn run postinstall
         working-directory: ./static/node_modules/dugite/
 
+      - name: Add Windows certificate
+        id: write_file
+        uses: timheuer/base64-to-file@v1
+        with:
+          fileName: ~/cert
+          encodedString: ${{ secrets.WIN_CSC_LINK }}
+
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
         env:
-          WIN_CSC_LINK: ${{ secrets.CSC_LINK }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          WIN_CSC_LINK: ~/cert
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Change Artifact Name
         run: Get-ChildItem  static\out\make\squirrel.windows\x64\*.exe | Rename-Item -NewName Logseq-win64.exe
