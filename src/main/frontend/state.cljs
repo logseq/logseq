@@ -536,6 +536,10 @@
   []
   (get (:editor/content @state) (get-edit-input-id)))
 
+(defn sub-edit-content
+  []
+  (get (sub :editor/content) (get-edit-input-id)))
+
 (defn append-current-edit-content!
   [append-text]
   (when-not (string/blank? append-text)

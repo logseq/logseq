@@ -448,19 +448,23 @@
 
 (defn get-editor-heading-class [content]
   (let [content (if content (str content) "")]
+    ;; as the function is binding to the editor content, optimization is welcome
     (str
-     (if (string/includes? content "\n") "multiline-block" "uniline-block")
+     (if (or (> (.-length content) 1000)
+             (string/includes? content "\n"))
+       "multiline-block"
+       "uniline-block")
      " "
-     (cond
+     (cond ;; TODO: unfold to hierarcal if conditions
        (starts-with? content "# ") "h1"
        (starts-with? content "## ") "h2"
        (starts-with? content "### ") "h3"
        (starts-with? content "#### ") "h4"
        (starts-with? content "##### ") "h5"
        (starts-with? content "###### ") "h6"
-       (starts-with? content "TODO ") "todo-block"
-       (starts-with? content "DOING ") "doing-block"
-       (starts-with? content "DONE ") "done-block"
+      ;;  (starts-with? content "TODO ") "todo-block"
+      ;;  (starts-with? content "DOING ") "doing-block"
+      ;;  (starts-with? content "DONE ") "done-block"
        (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
        :else "normal-block"))))
 
@@ -565,16 +569,12 @@
   lifecycle/lifecycle
   [state {:keys [on-hide node format block block-parent-id heading-level]
           :as   option} id config]
-  (let [content (state/get-edit-content)
-        heading-level (get state ::heading-level)]
-    [:div.editor-inner {:class (str
-                                (if block "block-editor" "non-block-editor")
-                                " "
-                                (get-editor-heading-class content))}
+  (let [content (state/sub-edit-content)]
+    [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
-       :cacheMeasurements true
+       :cacheMeasurements false
        :default-value     (or content "")
        :minRows           (if (state/enable-grammarly?) 2 1)
        :on-click          (editor-handler/editor-on-click! id)
