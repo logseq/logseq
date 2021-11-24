@@ -288,6 +288,8 @@
     (when (util/ios?) (.add cl "is-ios"))
     (when (util/mobile?) (.add cl "is-mobile"))
     (when (util/safari?) (.add cl "is-safari"))
+    (when (mobile-util/native-ios?) (.add cl "is-native-ios"))
+    (when (mobile-util/native-android?) (.add cl "is-native-android"))
     (when (util/electron?)
       (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen"))
       (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
