@@ -231,7 +231,8 @@
           (catch js/Error error
             (let [type :handle-system-events/failed]
               (js/console.error (str type) (clj->js payload) "\n" error)
-              (state/pub-event! [:instrument {:type type
-                                              :payload {:payload payload :error error}}])))))
+              (state/pub-event! [:instrument {:type    type
+                                              :payload payload
+                                              :error error}])))))
       (recur))
     chan))
