@@ -2755,7 +2755,8 @@
           ctrlKey (gobj/get e "ctrlKey")
           metaKey (gobj/get e "metaKey")
           is-composing? (gobj/getValueByKeys e "event_" "isComposing")
-          pos (cursor/pos input)]
+          pos (cursor/pos input)
+          shift? (.-shiftKey e)]
       (cond
         (or is-composing? (= key-code 229))
         nil
@@ -2781,12 +2782,16 @@
         (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
         nil
 
-        (and (not (string/blank? (util/get-selected-text))) (= key-code keycode/left-square-bracket))
+        (and (not (string/blank? (util/get-selected-text)))
+             (= key-code keycode/left-square-bracket)
+             (not shift?))
         (do
           (util/stop e)
           (autopair input-id "[" format nil))
 
-        (and (not (string/blank? (util/get-selected-text))) (= key-code keycode/left-paren))
+        (and (not (string/blank? (util/get-selected-text)))
+             (= key-code keycode/left-paren)
+             shift?)
         (do
           (util/stop e)
           (autopair input-id "(" format nil))
@@ -2838,7 +2843,8 @@
           value (gobj/get input "value")
           c (util/nth-safe value (dec current-pos))
           last-key-code (state/get-last-key-code)
-          blank-selected? (string/blank? (util/get-selected-text))]
+          blank-selected? (string/blank? (util/get-selected-text))
+          shift? (.-shiftKey e)]
       (when-not (state/get-editor-show-input)
         (cond
           (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
@@ -2858,7 +2864,8 @@
             (reset! commands/*slash-caret-pos pos))
 
           (and blank-selected?
-               (= keycode/left-square-bracket key-code last-key-code)
+               (= keycode/left-square-bracket key-code (:key-code last-key-code))
+               (not shift?)
                (not= k "[")
                (> current-pos 0))
           (do
@@ -2868,7 +2875,9 @@
             (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
           (and blank-selected?
-               (= keycode/left-paren key-code last-key-code)
+               (= keycode/left-paren key-code (:key-code last-key-code))
+               (:shift? last-key-code)
+               shift?
                (not= k "(")
                (> current-pos 0))
           (do
@@ -2922,7 +2931,8 @@
 
           :else
           nil)))
-    (state/set-last-key-code! key-code)))
+    (state/set-last-key-code! {:key-code key-code
+                               :shift? (.-shiftKey e)})))
 
 (defn editor-on-click!
   [id]
