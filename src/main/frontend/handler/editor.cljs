@@ -123,8 +123,11 @@
 (defn strike-through-format! []
   (format-text! config/get-strike-through))
 
-(defn html-link-format! []
-  (when-let [m (get-selection-and-format)]
+(defn html-link-format!
+  ([]
+   (html-link-format! nil))
+  ([link]
+   (when-let [m (get-selection-and-format)]
     (let [{:keys [selection-start selection-end format value edit-id input]} m
           cur-pos (cursor/pos input)
           empty-selection? (= selection-start selection-end)
@@ -134,6 +137,9 @@
           [content forward-pos] (cond
                                   empty-selection?
                                   (config/get-empty-link-and-forward-pos format)
+
+                                  link
+                                  (config/with-label-link format selection link)
 
                                   selection-link?
                                   (config/with-default-link format selection)
@@ -146,7 +152,7 @@
                      (subs value selection-end))
           cur-pos (or selection-start cur-pos)]
       (state/set-edit-content! edit-id new-value)
-      (cursor/move-cursor-to input (+ cur-pos forward-pos)))))
+      (cursor/move-cursor-to input (+ cur-pos forward-pos))))))
 
 (defn open-block-in-sidebar!
   [block-id]
@@ -3009,6 +3015,12 @@
         ;; copy from logseq internally
         (paste-block-vec-tree-at-target copied-block-tree [] nil)
         (util/stop e))
+
+      (and (util/url? text)
+           (not (string/blank? (util/get-selected-text))))
+      (do
+        (util/stop e)
+        (html-link-format! text))
 
       (and (text/block-ref? text)
            (wrapped-by? input "((" "))"))
