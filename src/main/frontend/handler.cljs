@@ -17,7 +17,8 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.extensions.srs :as srs]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.core :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
@@ -210,15 +211,16 @@
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
       (restore-and-setup! me repos logged? db-schema)
-      (when (mobile/is-native-platform?)
-        (p/do! (mobile/hide-splash))))
+      (when (mobile-util/is-native-platform?)
+        (p/do! (mobile-util/hide-splash))))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
     (pool/init-parser-pool!)
     (when (util/electron?)
-      (el/listen!))))
+      (el/listen!))
+    (mobile/init!)))
 
 (defn stop! []
   (prn "stop!"))
