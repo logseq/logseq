@@ -159,14 +159,14 @@ jobs:
         id: write_file
         uses: timheuer/base64-to-file@v1
         with:
-          fileName: ~/cert
+          fileName: cert.txt
           encodedString: ${{ secrets.WIN_CSC_LINK }}
 
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
         env:
-          WIN_CSC_LINK: ~/cert
+          WIN_CSC_LINK: ${{ steps.write_file.outputs.filePath }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Change Artifact Name
