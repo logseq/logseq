@@ -21,7 +21,9 @@ module.exports = {
       'name': '@electron-forge/maker-squirrel',
       'config': {
         'name': 'Logseq',
-        'loadingGif': './icons/installing.gif'
+        'loadingGif': './icons/installing.gif',
+        "certificateFile": process.env['WINDOWS_CERT_FILE'],
+        "certificatePassword": process.env['WINDOWS_CERT_PASSWORD'],
       }
     },
     {
