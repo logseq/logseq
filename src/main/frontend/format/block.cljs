@@ -718,6 +718,22 @@
                    (assoc :block/warning :multiple-blocks))]
        (if uuid (assoc block :block/uuid uuid) block)))))
 
+(defn parse-title-and-body
+  [format pre-block? content]
+  (def content content)
+  (let [ast (format/to-edn content format nil)
+        content (if pre-block? content
+                    (str (config/get-block-pattern format) " " (string/triml content)))
+        content (property/remove-properties format content)
+        ast (->> (format/to-edn content format nil)
+                 (map first))
+        title (when (heading-block? (first ast))
+                (:title (second (first ast))))]
+    (cond->
+      {:block/body (vec (if title (rest ast) ast))}
+      title
+      (assoc :block/title title))))
+
 (defn macro-subs
   [macro-content arguments]
   (loop [s macro-content
