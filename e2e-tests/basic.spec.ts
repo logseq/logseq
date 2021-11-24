@@ -1,21 +1,10 @@
 import { test, expect } from '@playwright/test'
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
+import { randomString, createRandomPage, openSidebar, newBlock } from './utils'
 
 let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
-
-function randomString(length: number) {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-  let result = '';
-  const charactersLength = characters.length;
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
-  }
-
-  return result;
-}
 
 test.beforeAll(async () => {
   electronApp = await electron.launch({
@@ -63,10 +52,9 @@ test('render app', async () => {
   await page.waitForLoadState('domcontentloaded')
   await page.waitForFunction('window.document.title != "Loading"')
 
-  const title = await page.title()
   // Logseq: "A privacy-first platform for knowledge management and collaboration."
   // or Logseq
-  expect(title).toMatch(/^Logseq.*?/)
+  expect(await page.title()).toMatch(/^Logseq.*?/)
 
   page.once('load', async () => {
     console.log('Page loaded!')
@@ -79,16 +67,10 @@ test('first start', async () => {
 })
 
 test('open sidebar', async () => {
-  let sidebarVisible = await page.isVisible('#sidebar-nav-wrapper .left-sidebar-inner')
-  if (!sidebarVisible) {
-    await page.click('#left-menu.button')
-    await page.waitForTimeout(1000)
-    sidebarVisible = await page.isVisible('#sidebar-nav-wrapper .left-sidebar-inner')
-  }
-  expect(sidebarVisible).toBe(true)
+  await openSidebar(page)
 
-  const button = await page.$('#sidebar-nav-wrapper a:has-text("New page")')
-  expect(button).not.toBeNull()
+  await page.waitForSelector('#sidebar-nav-wrapper a:has-text("New page")', { state: 'visible' })
+  await page.waitForSelector('#sidebar-nav-wrapper >> text=Journals', { state: 'visible' })
 })
 
 test('search', async () => {
@@ -102,14 +84,7 @@ test('search', async () => {
 })
 
 test('create page and blocks', async () => {
-  const randomTitle = randomString(20)
-
-  // Click #sidebar-nav-wrapper a:has-text("New page")
-  await page.click('#sidebar-nav-wrapper a:has-text("New page")')
-  // Fill [placeholder="Search or create page"]
-  await page.fill('[placeholder="Search or create page"]', randomTitle)
-  // Click text=/.*New page: "new page".*/
-  await page.click('text=/.*New page: ".*/')
+  await createRandomPage(page)
 
   // do editing
   await page.fill(':nth-match(textarea, 1)', 'this is my first bullet')
@@ -138,7 +113,7 @@ test('create page and blocks', async () => {
   const blocks = await page.$$('.ls-block')
   expect(blocks).toHaveLength(5)
 
-  // active edit,
+  // active edit
   await page.click('.ls-block >> nth=-1')
   await page.press('textarea >> nth=0', 'Enter')
   await page.fill('textarea >> nth=0', 'test')
@@ -147,21 +122,16 @@ test('create page and blocks', async () => {
   }
 
   await page.keyboard.press('Escape')
-  await page.waitForTimeout(1000)
+  await page.waitForTimeout(500)
   expect(await page.$$('.ls-block')).toHaveLength(5)
-
 })
 
 test('delete and backspace', async () => {
-  // active edit by click last block
-  await page.dblclick('.ls-block >> nth=-1')
-  await page.waitForSelector(':nth-match(textarea, 1)')
-  await page.click(':nth-match(textarea, 1)')
+  await createRandomPage(page)
 
   await page.fill(':nth-match(textarea, 1)', 'test')
 
-  const input = await page.inputValue(':nth-match(textarea, 1)')
-  expect(input).toBe('test')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('test')
 
   // backspace
   await page.keyboard.press('Backspace')
@@ -186,9 +156,19 @@ test('delete and backspace', async () => {
 
 
 test('selection', async () => {
-  await page.dblclick('.ls-block >> nth=-1')
-  await page.waitForSelector(':nth-match(textarea, 1)')
-  await page.click(':nth-match(textarea, 1)')
+  await createRandomPage(page)
+
+  await page.fill(':nth-match(textarea, 1)', 'line 1')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.fill(':nth-match(textarea, 1)', 'line 2')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.press(':nth-match(textarea, 1)', 'Tab')
+  await page.fill(':nth-match(textarea, 1)', 'line 3')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.fill(':nth-match(textarea, 1)', 'line 4')
+  await page.press(':nth-match(textarea, 1)', 'Tab')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.fill(':nth-match(textarea, 1)', 'line 5')
 
   await page.keyboard.down('Shift')
   await page.keyboard.press('ArrowUp')
@@ -203,12 +183,9 @@ test('selection', async () => {
 })
 
 test('template', async () => {
-  const randomTitle = randomString(20)
   const randomTemplate = randomString(10)
 
-  await page.click('#sidebar-nav-wrapper a:has-text("New page")')
-  await page.fill('[placeholder="Search or create page"]', "template" + randomTitle)
-  await page.click('text=/.*New page: ".*/')
+  await createRandomPage(page)
 
   await page.fill(':nth-match(textarea, 1)', 'template')
   await page.press(':nth-match(textarea, 1)', 'Shift+Enter')
@@ -243,19 +220,84 @@ test('template', async () => {
   expect(await page.$$('.ls-block')).toHaveLength(8)
 })
 
+test('auto completion square brackets', async () => {
+  await createRandomPage(page)
+
+  await page.fill(':nth-match(textarea, 1)', 'Auto-completion test')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+
+  // [[]]
+  await page.type(':nth-match(textarea, 1)', 'This is a [')
+  await page.inputValue(':nth-match(textarea, 1)').then(text => {
+    expect(text).toBe('This is a []')
+  })
+  await page.type(':nth-match(textarea, 1)', '[')
+  // wait for search popup
+  await page.waitForSelector('text="Search for a page"')
+
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('This is a [[]]')
+
+  // re-enter edit mode
+  await page.press(':nth-match(textarea, 1)', 'Escape')
+  await page.click('.ls-block >> nth=-1')
+  await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+
+  // #3253
+  await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
+  await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+  await page.waitForSelector('text="Search for a page"', { state: 'visible' })
+
+  // type more `]`s
+  await page.press(':nth-match(textarea, 1)', 'Escape')
+  await page.type(':nth-match(textarea, 1)', ']')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('This is a [[]]')
+  await page.type(':nth-match(textarea, 1)', ']')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('This is a [[]]')
+  await page.type(':nth-match(textarea, 1)', ']')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('This is a [[]]]')
+})
+
+test('auto completion and auto pair', async () => {
+  await createRandomPage(page)
+
+  await page.fill(':nth-match(textarea, 1)', 'Auto-completion test')
+  await page.press(':nth-match(textarea, 1)', 'Enter')
+
+  // {}
+  await page.type(':nth-match(textarea, 1)', 'type {{')
+  await page.press(':nth-match(textarea, 1)', 'Escape')
+
+  // FIXME: keycode seq is wrong
+  // expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type {{}}')
+
+  // (()
+  await newBlock(page)
+
+  await page.type(':nth-match(textarea, 1)', 'type (')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type ()')
+  await page.type(':nth-match(textarea, 1)', '(')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type (())')
+
+  // ``
+  await newBlock(page)
+
+  await page.type(':nth-match(textarea, 1)', 'type `')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type ``')
+  await page.type(':nth-match(textarea, 1)', 'code here')
+
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type `code here`')
+})
+
+
 // FIXME: Electron with filechooser is not working
 test.skip('open directory', async () => {
-  page.on('filechooser', async (fileChooser) => {
-    console.log("file chooser")
-    await fileChooser.setFiles('./test-graph')
-    await page.keyboard.press('Enter')
-  });
-
   await page.click('#sidebar-nav-wrapper >> text=Journals')
+  await page.waitForSelector('h1:has-text("Open a local directory")')
   await page.click('h1:has-text("Open a local directory")')
 
   // await page.waitForEvent('filechooser')
   await page.keyboard.press('Escape')
 
-  await page.waitForTimeout(5000)
+  await page.click('#sidebar-nav-wrapper >> text=Journals')
 })
