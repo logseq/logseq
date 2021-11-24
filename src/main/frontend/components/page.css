@@ -289,3 +289,25 @@
 .cp__right-sidebar .add-button-link {
     margin-left: 21px;
 }
+
+html.is-native-android,
+html.is-native-ios {
+  .cp__all_pages {
+    .actions > .r {
+      position: relative;
+      padding: 15px 0;
+      padding-right: 10px;
+      padding-bottom: 25px;
+      justify-content: space-between;
+
+      .paginates {
+        position: absolute;
+        top: 40px;
+        right: 0;
+        width: 100%;
+        display: flex;
+        justify-content: flex-end;
+      }
+    }
+  }
+}

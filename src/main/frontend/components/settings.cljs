@@ -646,7 +646,7 @@
            [:div.panel-wrap.is-advanced
             (when (and util/mac? (util/electron?)) (app-auto-update-row t))
             (usage-diagnostics-row t instrument-disabled?)
-            (developer-mode-row t developer-mode?)
+            (if-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
             (clear-cache-row t)
 
             (when logged?
