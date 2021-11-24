@@ -159,9 +159,8 @@ jobs:
         run: yarn electron:make
         working-directory: ./static
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          DEBUG: "electron-forge:*"
+          WIN_CSC_LINK: ${{ secrets.CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
       - name: Change Artifact Name
         run: Get-ChildItem  static\out\make\squirrel.windows\x64\*.exe | Rename-Item -NewName Logseq-win64.exe
