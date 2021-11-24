@@ -290,7 +290,7 @@
                     config/publishing?
                     (subs href 1)
 
-                    (= protocol "data")
+                    (= "Embed_data" (first url))
                     href
 
                     :else
@@ -870,6 +870,9 @@
               (if (and (string? page) (string/blank? page))
                 [:span (util/format "[[%s]]" page)]
                 (page-reference (:html-export? config) page config label*)))))
+
+        ["Embed_data" src]
+        (image-link config url src nil metadata full_text)
 
         ["Search" s]
         (cond
