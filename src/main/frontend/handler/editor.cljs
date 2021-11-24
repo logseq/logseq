@@ -2427,7 +2427,7 @@
               "admonition-block" (keydown-new-line)
               "source-block" (keydown-new-line)
               "block-ref" (open-block-in-sidebar! (:link thing-at-point))
-              "page-ref" (do
+              "page-ref" (when-not (string/blank? (:link thing-at-point))
                            (insert-first-page-block-if-not-exists! (:link thing-at-point))
                            (route-handler/redirect-to-page! (:link thing-at-point)))
               "list-item"
