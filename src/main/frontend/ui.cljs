@@ -40,9 +40,16 @@
 
 (defn main-content-top-padding
   []
-  (if (mobile-util/native-ios?)
+  (cond
+    (mobile-util/native-iphone?)
     (- (mobile-util/get-idevice-statusbar-height) 10)
+
+    (mobile-util/native-ipad?)
+    15
+    
+    :else
     0))
+
 
 (defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
 
