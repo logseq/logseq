@@ -155,13 +155,6 @@ jobs:
         run: yarn run postinstall
         working-directory: ./static/node_modules/dugite/
 
-      - name: Add Windows certificate
-        id: write_file
-        uses: timheuer/base64-to-file@v1
-        with:
-          fileName: ${{ secrets.WINDOWS_CERT_FILE }}
-          encodedString: ${{ secrets.WINDOWS_CERT }}
-
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
