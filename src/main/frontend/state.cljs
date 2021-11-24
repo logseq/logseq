@@ -1150,6 +1150,11 @@
   (storage/set "ls-left-sidebar-open?" (boolean value))
   (set-state! :ui/left-sidebar-open? value))
 
+(defn toggle-left-sidebar!
+  []
+  (set-left-sidebar-open!
+    (not (get-left-sidebar-open?))))
+
 (defn set-developer-mode!
   [value]
   (set-state! :ui/developer-mode? value)
