@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
-import { randomString, createRandomPage, openSidebar, newBlock } from './utils'
+import { randomString, createRandomPage, openSidebar, newBlock, lastBlock } from './utils'
 
 let electronApp: ElectronApplication
 let context: BrowserContext
@@ -249,7 +249,6 @@ test('auto completion square brackets', async () => {
   await page.waitForSelector('text="Search for a page"', { state: 'visible' })
 
   // type more `]`s
-  await page.press(':nth-match(textarea, 1)', 'Escape')
   await page.type(':nth-match(textarea, 1)', ']')
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('This is a [[]]')
   await page.type(':nth-match(textarea, 1)', ']')
