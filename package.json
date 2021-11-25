@@ -38,6 +38,7 @@
         "debug-electron": "cd static/ && yarn electron:debug",
         "e2e-test": "./node_modules/.bin/cypress open",
         "run-android-release": "yarn clean && yarn release-app && rm -rf ./public/static && mv static ./public && npx cap copy android && npx cap run android",
+        "run-ios-release": "yarn clean && yarn release-app && rm -rf ./public/static && mv static ./public && npx cap copy ios && npx cap run ios",
         "clean": "gulp clean",
         "test": "run-s cljs:test cljs:run-test",
         "report": "run-s cljs:report",
