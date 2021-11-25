@@ -379,10 +379,9 @@ jobs:
       - name: List files
         run: ls -rl
 
-      - name: Upload artifacts
+      - name: Upload build artifacts
         if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
         uses: actions/upload-artifact@v2
-        name: nightly-build
         path: |
             logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
             logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
