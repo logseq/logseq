@@ -231,6 +231,8 @@
 
 (defn ->edn
   [content config]
+    (js/console.log "D:" content)
+
   (if (string? content)
     (try
       (if (string/blank? content)

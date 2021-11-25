@@ -24,7 +24,7 @@ on:
         type: boolean
         required: true
         default: true
-  schedule: # Every Monday at noon (UTC) we run a scheduled nightly build
+  schedule: # Every workday at the noon (UTC) we run a scheduled nightly build
     - cron: '0 12 * * MON-FRI'
 
 env:
@@ -289,7 +289,7 @@ jobs:
           path: builds
 
   release:
-    # NOTE: For now, we only have beta channel
+    # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta') }}
     needs: [ build-macos, build-linux, build-windows ]
     runs-on: ubuntu-18.04
