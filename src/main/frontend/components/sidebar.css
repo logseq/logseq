@@ -40,6 +40,12 @@
   }
 }
 
+html.is-mobile {
+  #main-content.is-left-sidebar-open {
+    padding-left: 0;
+  }
+}
+
 #left-sidebar {
   width: 240px;
   height: 100%;
