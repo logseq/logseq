@@ -78,7 +78,7 @@
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for label-for}
     name]
-   [:div.rounded-md.sm:max-w-xs.sm:col-span-2
+   [:div.rounded-md.sm:max-w-tss.sm:col-span-2
     [:div.rounded-md {:style {:display "flex" :gap "1rem" :align-items "center"}}
      (ui/toggle state on-toggle true)
      detail-text]]])
@@ -443,7 +443,7 @@
           enable-encryption?
           #((let [value (not enable-encryption?)]
               (config-handler/set-config! :feature/enable-encryption? value)))
-          [:span.text-sm {:text-align "right"} "experimental!"]))
+          [:div.text-sm.opacity-50 "⚠️ This feature is experimental"]))
 
 (rum/defc keyboard-shortcuts-row [t]
   (row-with-button-action
@@ -608,9 +608,15 @@
            :git
            [:div.panel-wrap
             [:div.text-sm.my-4
-             [:a {:href "https://git-scm.com/"
-                  :target "_blank"} "Git"]
-             " is used for pages version control. Click the vertical three dots menu to check the page's history."]
+             [:span.text-sm.opacity-50.my-4
+              "You can see a page's history by clicking the three vertical dots "
+              "in the top-right corner and selecting \"Check page's history\". "
+              "Logseq uses "]
+             [:a {:href "https://git-scm.com/" :target "_blank"}
+              "Git"]
+             [:span.text-sm.opacity-50.my-4
+              " for version control."]]
+            [:br]
             (switch-git-auto-commit-row t)
             (git-auto-commit-seconds t)
 
@@ -651,8 +657,6 @@
                  [:a {:href   "https://github.com/isomorphic-git/cors-proxy"
                       :target "_blank"}
                   "https://github.com/isomorphic-git/cors-proxy"]])])
-
-            (graph-config t)
 
             (when logged?
               [:div

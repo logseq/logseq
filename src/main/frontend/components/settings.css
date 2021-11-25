@@ -244,6 +244,10 @@
   }
 }
 
+/* Styles for the category icon on the left of settings-modal */
+.cp__settings-inner > aside ul > li > a > i {
+  margin-right: 4px;
+}
 
 svg.git {
     margin-left: -4px;
