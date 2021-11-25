@@ -1399,6 +1399,10 @@
   []
   (toggle! :ui/settings-open?))
 
+(defn settings-open?
+  []
+  (:ui/settings-open? @state))
+
 (defn close-settings!
   []
   (set-state! :ui/settings-open? false))
