@@ -29,15 +29,15 @@ jobs:
           fetch-depth: 1
           submodules: 'true'
 
-      - name: Maven cache
+      - name: Clojure cache
         uses: actions/cache@v1
-        id: maven-cache
+        id: clojure-cache
         with:
           path: |
             ~/.m2/repository
             ~/.gitlibs
-          key: ${{ runner.os }}-maven-${{ hashFiles('deps.edn') }}
-          restore-keys: ${{ runner.os }}-maven-
+          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-deps-
 
       - name: Prepare Java
         uses: actions/setup-java@v1
@@ -60,7 +60,7 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Fetch Maven deps
-        if: steps.maven-cache.outputs.cache-hit != 'true'
+        if: steps.clojure-cache.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
 
       - name: Get yarn cache directory path
