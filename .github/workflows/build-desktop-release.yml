@@ -1,25 +1,31 @@
-# This is a basic workflow to help you get started with Actions
+# This is the main desktop application release workflow for both nightly and beta/stable releases.
 
 name: Build-Desktop-Release
 
 on:
   workflow_dispatch:
     inputs:
-      tag-version:
-        description: "Release Tag Version"
+      build-target:
+        description: 'Build Target ("nightly"/"release")'
+        type: string
         required: true
+        default: "nightly"
       git-ref:
         description: "Release Git Ref"
         required: true
         default: "master"
       is-draft:
         description: 'Draft Release? '
+        type: boolean
         required: true
-        default: "true"
+        default: true
       is-pre-release:
         description: 'Pre Release?'
+        type: boolean
         required: true
-        default: "true"
+        default: true
+  schedule: # Every Monday at noon (UTC) we run a scheduled nightly build
+    - cron: '0 12 * * MON-FRI'
 
 jobs:
   compile-cljs:
@@ -44,18 +50,23 @@ jobs:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven
 
-      - name: Install clojure
-        run: |
-          curl -O https://download.clojure.org/install/linux-install-1.10.1.763.sh
-          chmod +x linux-install-1.10.1.763.sh
-          sudo ./linux-install-1.10.1.763.sh
+      - name: Setup clojure
+        uses: DeLaGuardo/setup-clojure@3.5
+        with:
+          cli: 1.10.1.763
 
       - name: Compile CLJS
         run: yarn install && gulp build && yarn cljs:release-electron
 
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(node ./scripts/get-pkg-version.js)
+          echo ::set-output name=version::$pkgver
+
       - name: Update APP Version
         run: |
-          sed -i 's/"version": "0.0.1"/"version": "${{ github.event.inputs.tag-version }}"/g' ./package.json
+          sed -i 's/"version": "0.0.1"/"version": "${{ steps.ref.outputs.version }}"/g' ./package.json
         working-directory: ./static
 
       - name: Display Package.json
@@ -66,14 +77,11 @@ jobs:
         run: ls -al
         working-directory: ./static
 
-      - name: Compress Static Files
-        run: zip -r static.zip ./static
-
       - name: Cache Static File
         uses: actions/upload-artifact@v1
         with:
-          name: static.zip
-          path: static.zip
+          name: static
+          path: static
 
   build-linux:
     runs-on: ubuntu-18.04
@@ -82,11 +90,8 @@ jobs:
       - name: Download The Static Asset
         uses: actions/download-artifact@v1
         with:
-          name: static.zip
+          name: static
           path: ./
-
-      - name: Uncompress Static FIles
-        run: unzip static.zip
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
@@ -101,7 +106,7 @@ jobs:
       #     key: ${{ runner.os }}-node-modules
 
       - name: Build/Release Electron App
-        run: yarn install  && yarn electron:make
+        run: yarn install && yarn electron:make
         working-directory: ./static
 
       - name: Change Artifact Name For ZIP File
@@ -123,17 +128,15 @@ jobs:
           path: static/out/make/Logseq-linux.AppImage
 
   build-windows:
+    if: false
     runs-on: windows-latest
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
         uses: actions/download-artifact@v1
         with:
-          name: static.zip
+          name: static
           path: ./
-
-      - name: Uncompress Static FIles
-        run: unzip static.zip
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
@@ -183,11 +186,8 @@ jobs:
       - name: Download The Static Asset
         uses: actions/download-artifact@v1
         with:
-          name: static.zip
+          name: static
           path: ./
-
-      - name: Uncompress Static Files
-        run: unzip ./static.zip
 
       - name: List Static Files
         run: ls -al ./static
@@ -218,27 +218,28 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
 
       - name: Change DMG Name
-        run: mv static/out/make/*.dmg static/out/make/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+        run: mv static/out/make/*.dmg static/out/make/Logseq-macos-x64.dmg
 
       - name: Cache Artifact DMG
         uses: actions/upload-artifact@v1
         with:
-          name: Logseq-x64.dmg
-          path: static/out/make/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+          name: Logseq-macos-x64.dmg
+          path: static/out/make/Logseq-macos-x64.dmg
 
       - name: ls files
         run: du -a static/out/
 
       - name: Change zip Name
-        run: mv static/out/make/zip/darwin/x64/*.zip static/out/make/zip/darwin/x64/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
+        run: mv static/out/make/zip/darwin/x64/*.zip static/out/make/zip/darwin/x64/Logseq-macos-x64.zip
 
       - name: Cache Artifact ZIP
         uses: actions/upload-artifact@v1
         with:
-          name: Logseq-x64.zip
-          path: static/out/make/zip/darwin/x64/logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
+          name: Logseq-macos-x64.zip
+          path: static/out/make/zip/darwin/x64/Logseq-macos-x64.zip
 
   build-macos-arm64:
+    if: false
     needs: [ compile-cljs ]
     runs-on: macos-latest
 
@@ -256,14 +257,12 @@ jobs:
             ls -l
             popd
           fi
+
       - name: Download The Static Asset
         uses: actions/download-artifact@v1
         with:
-          name: static.zip
+          name: static
           path: ./
-
-      - name: Uncompress Static Files
-        run: unzip ./static.zip
 
       - name: List Static Files
         run: ls -al ./static
@@ -294,25 +293,25 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
 
       - name: Change DMG Name
-        run: mv static/out/make/*.dmg static/out/make/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
+        run: mv static/out/make/*.dmg static/out/make/Logseq-macos-arm64.dmg
 
       - name: Cache Artifact DMG
         uses: actions/upload-artifact@v1
         with:
-          name: Logseq-arm64.dmg
-          path: static/out/make/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
+          name: Logseq-macos-arm64.dmg
+          path: static/out/make/Logseq-macos-arm64.dmg
 
       - name: ls files
         run: du -a static/out/
 
       - name: Change zip Name
-        run: mv static/out/make/zip/darwin/arm64/*.zip static/out/make/zip/darwin/arm64/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+        run: mv static/out/make/zip/darwin/arm64/*.zip static/out/make/zip/darwin/arm64/Logseq-macos-arm64.zip
 
       - name: Cache Artifact ZIP
         uses: actions/upload-artifact@v1
         with:
-          name: Logseq-arm64.zip
-          path: static/out/make/zip/darwin/arm64/logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+          name: Logseq-macos-arm64.zip
+          path: static/out/make/zip/darwin/arm64/Logseq-macos-arm64.zip
 
   release:
     needs: [ build-macos, build-linux, build-windows, build-macos-arm64 ]
@@ -322,26 +321,26 @@ jobs:
       - name: Download The MacOS X64 DMG Artifact
         uses: actions/download-artifact@v1
         with:
-          name: Logseq-x64.dmg
+          name: Logseq-macos-x64.dmg
           path: ./
 
       - name: Download The MacOS X64 ZIP Artifact
         uses: actions/download-artifact@v1
         with:
-          name: Logseq-x64.zip
+          name: Logseq-macos-x64.zip
           path: ./
 
-      - name: Download The MacOS ARM64 DMG Artifact
-        uses: actions/download-artifact@v1
-        with:
-          name: Logseq-arm64.dmg
-          path: ./
+      # - name: Download The MacOS ARM64 DMG Artifact
+      #   uses: actions/download-artifact@v1
+      #   with:
+      #     name: Logseq-macos-arm64.dmg
+      #     path: ./
 
-      - name: Download The MacOS ARM64 ZIP Artifact
-        uses: actions/download-artifact@v1
-        with:
-          name: Logseq-arm64.zip
-          path: ./
+      # - name: Download The MacOS ARM64 ZIP Artifact
+      #   uses: actions/download-artifact@v1
+      #   with:
+      #     name: Logseq-macos-arm64.zip
+      #     path: ./
 
       - name: Download The Linux Artifact In Zip format
         uses: actions/download-artifact@v1
@@ -355,99 +354,61 @@ jobs:
           name: Logseq-linux.AppImage
           path: ./
 
-      - name: Download The Windows Artifact
-        uses: actions/download-artifact@v1
-        with:
-          name: Logseq-win64.exe
-          path: ./
+      # - name: Download The Windows Artifact
+      #   uses: actions/download-artifact@v1
+      #   with:
+      #     name: Logseq-win64.exe
+      #     path: ./
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(node ./scripts/get-pkg-version.js)
+          echo ::set-output name=version::$pkgver
+
+      - name: Rename files
+        run: |
+          mv -v ./Logseq-macos-x64.dmg logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+          mv -v ./Logseq-macos-x64.zip logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
+#          mv -v ./Logseq-macos-arm64.dmg logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
+#          mv -v ./Logseq-macos-arm64.zip logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+          mv -v ./Logseq-linux.AppImage logseq-linux-x64-${{ github.event.inputs.tag-version }}.AppImage
+          mv -v ./Logseq-linux.zip logseq-linux-x64-${{ github.event.inputs.tag-version }}.zip
+#          mv -v ./Logseq-win64.exe logseq-win-x64-${{ github.event.inputs.tag-version }}.exe
 
       - name: List files
         run: ls -rl
 
+      - name: Upload artifacts
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+        uses: actions/upload-artifact@v2
+        name: nightly-build
+        path: |
+            logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
+            logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
+#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
+#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
+            logseq-linux-x64-${{ steps.ref.outpus.version }}.zip
+            logseq-linux-x64-${{ steps.ref.outpus.version }}.AppImage
+#           logseq-win-x64-${{ steps.ref.outpus.version }}.exe
+
       - name: Create Release Draft
-        id: create_release
-        uses: actions/create-release@v1
+        if: ${{ !(github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+        uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.event.inputs.tag-version }}
-          release_name: Desktop APP ${{ github.event.inputs.tag-version }} (Beta Testing)
+          tag_name: ${{ steps.ref.outpus.version }}
+          name: Desktop APP ${{ steps.ref.outpus.version }} (Beta Testing)
+          body: "TODO: Fill this changelog. Sorry for the inconvenience!"
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}
+          files: |
+            logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
+            logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
+#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
+#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
+            logseq-linux-x64-${{ steps.ref.outpus.version }}.zip
+            logseq-linux-x64-${{ steps.ref.outpus.version }}.AppImage
+#           logseq-win-x64-${{ steps.ref.outpus.version }}.exe
 
-      - name: Upload MacOS X64 ZIP Artifact
-        id: upload-macos-x64-zip-artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
-          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
-          asset_content_type: application/zip
-
-      - name: Upload MacOS X64 DMG Artifact
-        id: upload-macos-x64-dmg-artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
-          asset_name: logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
-          asset_content_type: application/x-apple-diskimage
-
-      - name: Upload MacOS ARM64 ZIP Artifact
-        id: upload-macos-arm64-zip-artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
-          asset_name: logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
-          asset_content_type: application/zip
-
-      - name: Upload MacOS ARM64 DMG Artifact
-        id: upload-macos-arm64-dmg-artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
-          asset_name: logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
-          asset_content_type: application/x-apple-diskimage
-
-      - name: Upload Linux Artifact With Zip format
-        id: upload-linux-artifact-with-zip-format
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Logseq-linux.zip
-          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-version }}.zip
-          asset_content_type: application/zip
-
-      - name: Upload Linux Artifact With AppImage format
-        id: upload-linux-artifact-with-appimage-format
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Logseq-linux.AppImage
-          asset_name: logseq-linux-x64-${{ github.event.inputs.tag-version }}.AppImage
-          asset_content_type: application/octet-stream
-
-      - name: Upload Windows Artifact
-        id: upload-win-artifact
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./Logseq-win64.exe
-          asset_name: logseq-win-x64-${{ github.event.inputs.tag-version }}.exe
-          asset_content_type: application/octet-stream
