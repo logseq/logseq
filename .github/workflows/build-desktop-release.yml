@@ -370,11 +370,11 @@ jobs:
         run: |
           mv -v ./Logseq-macos-x64.dmg logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
           mv -v ./Logseq-macos-x64.zip logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
-#          mv -v ./Logseq-macos-arm64.dmg logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
-#          mv -v ./Logseq-macos-arm64.zip logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
+          # mv -v ./Logseq-macos-arm64.dmg logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
+          # mv -v ./Logseq-macos-arm64.zip logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
           mv -v ./Logseq-linux.AppImage logseq-linux-x64-${{ github.event.inputs.tag-version }}.AppImage
           mv -v ./Logseq-linux.zip logseq-linux-x64-${{ github.event.inputs.tag-version }}.zip
-#          mv -v ./Logseq-win64.exe logseq-win-x64-${{ github.event.inputs.tag-version }}.exe
+          # mv -v ./Logseq-win64.exe logseq-win-x64-${{ github.event.inputs.tag-version }}.exe
 
       - name: List files
         run: ls -rl
@@ -386,10 +386,11 @@ jobs:
         path: |
             logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
             logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
-#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
-#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
             logseq-linux-x64-${{ steps.ref.outpus.version }}.zip
             logseq-linux-x64-${{ steps.ref.outpus.version }}.AppImage
+
+#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
+#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
 #           logseq-win-x64-${{ steps.ref.outpus.version }}.exe
 
       - name: Create Release Draft
@@ -406,9 +407,10 @@ jobs:
           files: |
             logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
             logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
-#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
-#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
             logseq-linux-x64-${{ steps.ref.outpus.version }}.zip
             logseq-linux-x64-${{ steps.ref.outpus.version }}.AppImage
+
+#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
+#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
 #           logseq-win-x64-${{ steps.ref.outpus.version }}.exe
 
