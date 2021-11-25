@@ -287,9 +287,9 @@ jobs:
           path: builds
 
   release:
-    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target != 'nightly' }}
+    # if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target != 'nightly') }}
     #needs: [ build-macos, build-linux, build-windows ]
-    needs: [ build-linux ]
+    needs: [ build-linux, build-macos ]
     runs-on: ubuntu-18.04
     steps:
       - name: Download MacOS Artifacts
@@ -343,10 +343,10 @@ jobs:
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}
           files: |
-            logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
-            logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
-            logseq-linux-x64-${{ steps.ref.outpus.version }}.zip
-            logseq-linux-x64-${{ steps.ref.outpus.version }}.AppImage
+            ./*.zip
+            ./*.dmg
+            ./*.exe
+            ./*.AppImage
 
 #           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
 #           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
