@@ -33,7 +33,9 @@ jobs:
         uses: actions/cache@v1
         id: maven-cache
         with:
-          path: ~/.m2/repository
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
           key: ${{ runner.os }}-maven-${{ hashFiles('deps.edn') }}
           restore-keys: ${{ runner.os }}-maven-
 
