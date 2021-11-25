@@ -88,10 +88,10 @@ jobs:
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v2
         with:
           name: static
-          path: ./
+          path: static
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
@@ -133,10 +133,10 @@ jobs:
     needs: [ compile-cljs ]
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v2
         with:
           name: static
-          path: ./
+          path: static
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
@@ -184,10 +184,10 @@ jobs:
 
     steps:
       - name: Download The Static Asset
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v2
         with:
           name: static
-          path: ./
+          path: static
 
       - name: List Static Files
         run: ls -al ./static
@@ -259,13 +259,10 @@ jobs:
           fi
 
       - name: Download The Static Asset
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v2
         with:
           name: static
-          path: ./
-
-      - name: List Static Files
-        run: ls -al ./static
+          path: static
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
@@ -319,43 +316,43 @@ jobs:
 
     steps:
       - name: Download The MacOS X64 DMG Artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v2
         with:
           name: Logseq-macos-x64.dmg
           path: ./
 
       - name: Download The MacOS X64 ZIP Artifact
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v2
         with:
           name: Logseq-macos-x64.zip
           path: ./
 
       # - name: Download The MacOS ARM64 DMG Artifact
-      #   uses: actions/download-artifact@v1
+      #   uses: actions/download-artifact@v2
       #   with:
       #     name: Logseq-macos-arm64.dmg
       #     path: ./
 
       # - name: Download The MacOS ARM64 ZIP Artifact
-      #   uses: actions/download-artifact@v1
+      #   uses: actions/download-artifact@v2
       #   with:
       #     name: Logseq-macos-arm64.zip
       #     path: ./
 
       - name: Download The Linux Artifact In Zip format
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v2
         with:
           name: Logseq-linux.zip
           path: ./
 
       - name: Download The Linux Artifact In AppImage format
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v2
         with:
           name: Logseq-linux.AppImage
           path: ./
 
       # - name: Download The Windows Artifact
-      #   uses: actions/download-artifact@v1
+      #   uses: actions/download-artifact@v2
       #   with:
       #     name: Logseq-win64.exe
       #     path: ./
