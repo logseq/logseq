@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       build-target:
-        description: 'Build Target ("nightly"/"release")'
+        description: 'Build Target ("nightly"/"beta")'
         type: string
         required: true
         default: "nightly"
@@ -142,6 +142,7 @@ jobs:
       - name: Save artifacts
         run: |
           mkdir -p builds
+          # NOTE: save VERSION file to builds directory
           cp static/VERSION ./builds/VERSION
           mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
           mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
@@ -243,11 +244,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
 
-      # - name: Signing By Apple Developer ID
-      #   uses: apple-actions/import-codesign-certs@v1
-      #   with:
-      #     p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
-      #     p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+      - name: Signing By Apple Developer ID
+        uses: apple-actions/import-codesign-certs@v1
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
 
       # - name: Cache Node Modules
       #   uses: actions/cache@v2
@@ -288,9 +289,9 @@ jobs:
           path: builds
 
   release:
-    # if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target != 'nightly') }}
-    #needs: [ build-macos, build-linux, build-windows ]
-    needs: [ build-linux, build-macos ]
+    # NOTE: For now, we only have beta channel
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta') }}
+    needs: [ build-macos, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
       - name: Download MacOS Artifacts
@@ -299,30 +300,11 @@ jobs:
           name: logseq-darwin-builds
           path: ./
 
-      # - name: Download The MacOS X64 ZIP Artifact
-      #   uses: actions/download-artifact@v2
-      #   with:
-      #     name: Logseq-darwin-x64.zip
-      #     path: ./
-
-      # - name: Download The MacOS ARM64 DMG Artifact
-      #   uses: actions/download-artifact@v2
-      #   with:
-      #     name: Logseq-darwin-arm64.dmg
-      #     path: ./
-
-      # - name: Download The MacOS ARM64 ZIP Artifact
-      #   uses: actions/download-artifact@v2
-      #   with:
-      #     name: Logseq-darwin-arm64.zip
-      #     path: ./
-
       - name: Download The Linux Artifacts
         uses: actions/download-artifact@v2
         with:
           name: logseq-linux-builds
           path: ./
-
 
       - name: Download The Windows Artifact
         uses: actions/download-artifact@v2
@@ -344,6 +326,7 @@ jobs:
           sha256sum *-darwin-* > SHA256SUMS.txt
           sha256sum *-win-* >> SHA256SUMS.txt
           sha256sum *-linux-* >> SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Create Release Draft
         uses: softprops/action-gh-release@v1
