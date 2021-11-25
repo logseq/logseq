@@ -202,11 +202,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      #- name: Signing By Apple Developer ID
-      #  uses: apple-actions/import-codesign-certs@v1
-      #  with:
-      #    p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
-      #    p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+      - name: Signing By Apple Developer ID
+        uses: apple-actions/import-codesign-certs@v1
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
 
       # - name: Cache Node Modules
       #   uses: actions/cache@v2
@@ -244,7 +244,6 @@ jobs:
           path: static/out/make/zip/darwin/x64/Logseq-macos-x64.zip
 
   build-macos-arm64:
-    if: false
     needs: [ compile-cljs ]
     runs-on: macos-latest
 
@@ -262,6 +261,8 @@ jobs:
             ls -l
             popd
           fi
+
+      - run: sw_vers -productVersion
 
       - name: Download The Static Asset
         uses: actions/download-artifact@v2
@@ -320,17 +321,17 @@ jobs:
     needs: [ build-linux ]
     runs-on: ubuntu-18.04
     steps:
-      - name: Download The MacOS X64 DMG Artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: Logseq-macos-x64.dmg
-          path: ./
+      # - name: Download The MacOS X64 DMG Artifact
+      #   uses: actions/download-artifact@v2
+      #   with:
+      #     name: Logseq-macos-x64.dmg
+      #     path: ./
 
-      - name: Download The MacOS X64 ZIP Artifact
-        uses: actions/download-artifact@v2
-        with:
-          name: Logseq-macos-x64.zip
-          path: ./
+      # - name: Download The MacOS X64 ZIP Artifact
+      #   uses: actions/download-artifact@v2
+      #   with:
+      #     name: Logseq-macos-x64.zip
+      #     path: ./
 
       # - name: Download The MacOS ARM64 DMG Artifact
       #   uses: actions/download-artifact@v2
@@ -370,8 +371,8 @@ jobs:
 
       - name: Rename files
         run: |
-          mv -v ./Logseq-macos-x64.dmg logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
-          mv -v ./Logseq-macos-x64.zip logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
+          #mv -v ./Logseq-macos-x64.dmg logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
+          #mv -v ./Logseq-macos-x64.zip logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
           # mv -v ./Logseq-macos-arm64.dmg logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
           # mv -v ./Logseq-macos-arm64.zip logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
           mv -v ./Logseq-linux.AppImage logseq-linux-x64-${{ github.event.inputs.tag-version }}.AppImage
@@ -387,11 +388,11 @@ jobs:
         with:
           name: nightly-build
           path: |
-            logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
-            logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
             logseq-linux-x64-${{ steps.ref.outpus.version }}.zip
             logseq-linux-x64-${{ steps.ref.outpus.version }}.AppImage
 
+#            logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
+#            logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
 #           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
 #           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
 #           logseq-win-x64-${{ steps.ref.outpus.version }}.exe
