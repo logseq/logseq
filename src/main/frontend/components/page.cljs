@@ -748,8 +748,7 @@
 
         search-key (fn [key]
                      (when-let [key (and key (string/trim key))]
-                       (if (and (> (count key) 2)
-                                (not (string/blank? key))
+                       (if (and (not (string/blank? key))
                                 (seq @*results))
                          (reset! *search-key key)
                          (reset! *search-key nil))))
