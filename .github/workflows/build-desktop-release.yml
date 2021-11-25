@@ -78,7 +78,7 @@ jobs:
         working-directory: ./static
 
       - name: Cache Static File
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: static
           path: static
@@ -116,13 +116,13 @@ jobs:
         run: mv static/out/make/*-*.AppImage  static/out/make/Logseq-linux.AppImage
 
       - name: Cache Artifact With ZIP format
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: Logseq-linux.zip
           path: static/out/make/zip/linux/x64/Logseq-linux.zip
 
       - name: Cache Artifact With AppImage format
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: Logseq-linux.AppImage
           path: static/out/make/Logseq-linux.AppImage
@@ -173,7 +173,7 @@ jobs:
         working-directory: static/out/make/squirrel.windows/x64/
 
       - name: Cache Artifact
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: Logseq-win64.exe
           path: static/out/make/squirrel.windows/x64/Logseq-win64.exe
@@ -221,7 +221,7 @@ jobs:
         run: mv static/out/make/*.dmg static/out/make/Logseq-macos-x64.dmg
 
       - name: Cache Artifact DMG
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: Logseq-macos-x64.dmg
           path: static/out/make/Logseq-macos-x64.dmg
@@ -233,7 +233,7 @@ jobs:
         run: mv static/out/make/zip/darwin/x64/*.zip static/out/make/zip/darwin/x64/Logseq-macos-x64.zip
 
       - name: Cache Artifact ZIP
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: Logseq-macos-x64.zip
           path: static/out/make/zip/darwin/x64/Logseq-macos-x64.zip
@@ -296,7 +296,7 @@ jobs:
         run: mv static/out/make/*.dmg static/out/make/Logseq-macos-arm64.dmg
 
       - name: Cache Artifact DMG
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: Logseq-macos-arm64.dmg
           path: static/out/make/Logseq-macos-arm64.dmg
@@ -308,7 +308,7 @@ jobs:
         run: mv static/out/make/zip/darwin/arm64/*.zip static/out/make/zip/darwin/arm64/Logseq-macos-arm64.zip
 
       - name: Cache Artifact ZIP
-        uses: actions/upload-artifact@v1
+        uses: actions/upload-artifact@v2
         with:
           name: Logseq-macos-arm64.zip
           path: static/out/make/zip/darwin/arm64/Logseq-macos-arm64.zip
