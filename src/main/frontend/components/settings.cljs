@@ -94,7 +94,7 @@
      [:div.ctls.flex.items-center
       (ui/button
        (if update-pending? "Checking ..." "Check for updates")
-       :class "text-sm p-1 mr-3"
+       :class "text-sm p-1 mr-1"
        :disabled update-pending?
        :on-click #(js/window.apis.checkForUpdates false))]
 
@@ -168,7 +168,7 @@
 
      ;; right column
    [:div.mt-1.sm:mt-0.sm:col-span-2
-    {:style {:display "flex" :gap "1rem" :align-items "center"}}
+    {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
     [:div (if action action (ui/button
                              button-label
                              :class    "text-sm p-1"
@@ -495,7 +495,7 @@
 (defn version-row [t version]
   (row-with-button-action {:left-label (t :settings-page/current-version)
                            :action     (app-updater version)
-                           :desc       (str "Version " version)
+                           :desc       [:div.text-sm.opacity-50 (str "Version " version)]
                            :-for       "current-version"}))
 
 (defn developer-mode-row [t developer-mode?]
