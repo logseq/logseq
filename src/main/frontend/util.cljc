@@ -1453,3 +1453,13 @@
            button (gobj/get e "button")]
        (or (= which 3)
            (= button 2)))))
+
+#?(:cljs
+   (defn url?
+     [s]
+     (and (string? s)
+          (try
+            (js/URL. s)
+            true
+            (catch js/Error _e
+              false)))))

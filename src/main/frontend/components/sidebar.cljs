@@ -353,6 +353,8 @@
          (when-not (mobile-util/is-native-platform?)
            (widgets/demo-graph-alert))
 
+         (widgets/github-integration-soon-deprecated-alert)
+
          (cond
            (not indexeddb-support?)
            nil

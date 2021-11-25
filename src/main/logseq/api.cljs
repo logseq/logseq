@@ -288,6 +288,22 @@
     (when (re-find #"https?://" url)
       (js/apis.openExternal url))))
 
+;; flag - boolean | 'toggle'
+(def ^:export set_left_sidebar_visible
+  (fn [flag]
+    (if (= flag "toggle")
+      (state/toggle-left-sidebar!)
+      (state/set-state! :ui/left-sidebar-open? (boolean flag)))
+    nil))
+
+;; flag - boolean | 'toggle'
+(def ^:export set_right_sidebar_visible
+  (fn [flag]
+    (if (= flag "toggle")
+      (state/toggle-sidebar-open?!)
+      (state/set-state! :ui/sidebar-open? (boolean flag)))
+    nil))
+
 (def ^:export push_state
   (fn [^js k ^js params ^js query]
     (rfe/push-state

@@ -294,7 +294,8 @@
       (config-handler/set-config! :favorites favorites))))
 
 (defn delete!
-  [page-name ok-handler]
+  [page-name ok-handler & {:keys [delete-file?]
+                           :or {delete-file? true}}]
   (when page-name
     (when-let [repo (state/get-current-repo)]
       (let [page-name (string/lower-case page-name)
@@ -305,7 +306,7 @@
                      blocks)]
         (db/transact! tx-data)
 
-        (delete-file! repo page-name)
+        (when delete-file? (delete-file! repo page-name))
 
         ;; if other page alias this pagename,
         ;; then just remove some attrs of this entity instead of retractEntity
@@ -339,11 +340,8 @@
         page-ids (->> (map :block/page blocks)
                       (remove nil?)
                       (set))
-        tx       (->> (map (fn [{:block/keys [uuid title content properties] :as block}]
-                             (let [title      (let [title' (walk-replace-old-page! title old-original-name new-name)]
-                                                (when-not (= title' title)
-                                                  title'))
-                                   content    (let [content' (replace-old-page! content old-original-name new-name)]
+        tx       (->> (map (fn [{:block/keys [uuid title content properties format pre-block?] :as block}]
+                             (let [content    (let [content' (replace-old-page! content old-original-name new-name)]
                                                 (when-not (= content' content)
                                                   content'))
                                    properties (let [properties' (walk-replace-old-page! properties old-original-name new-name)]
@@ -351,12 +349,13 @@
                                                   properties'))]
                                (when (or title content properties)
                                  (util/remove-nils-non-nested
-                                  {:block/uuid       uuid
-                                   :block/title      title
-                                   :block/content    content
-                                   :block/properties properties
-                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
-                                   :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))})))) blocks)
+                                  (merge
+                                   {:block/uuid       uuid
+                                    :block/content    content
+                                    :block/properties properties
+                                    :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
+                                    :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))}
+                                   (block/parse-title-and-body format pre-block? content)))))) blocks)
                       (remove nil?))]
     (db/transact! repo tx)
     (doseq [page-id page-ids]
@@ -697,7 +696,8 @@
 (defn create-today-journal!
   []
   (when-let [repo (state/get-current-repo)]
-    (when (state/enable-journals? repo)
+    (when (and (state/enable-journals? repo)
+               (not (:repo/loading-files? @state/state)))
       (state/set-today! (date/today))
       (when (or (db/cloned? repo)
                 (or (config/local-db? repo)

@@ -45,7 +45,7 @@
 
           (and (= "change" type)
                (not (db/file-exists? repo path)))
-          (js/console.warn "Can't get file in the db: " path)
+          (js/console.error "Can't get file in the db: " path)
 
           (and (= "change" type)
                (not= (string/trim content) (string/trim db-content))
@@ -69,7 +69,7 @@
                (db/file-exists? repo path))
           (when-let [page-name (db/get-file-page path)]
             (println "Delete page: " page-name ", file path: " path ".")
-            (page-handler/delete! page-name #()))
+            (page-handler/delete! page-name #() :delete-file? false))
 
           (contains? #{"add" "change" "unlink"} type)
           nil

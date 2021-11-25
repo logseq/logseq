@@ -77,7 +77,9 @@
                               false)
       ;; remember scroll positions of visited paths
       :ui/paths-scroll-positions {}
-      :ui/shortcut-tooltip? (or (storage/get :ui/shortcut-tooltip?) true)
+      :ui/shortcut-tooltip? (if (false? (storage/get :ui/shortcut-tooltip?))
+                              false
+                              true)
 
       :document/mode? document-mode?
 
@@ -1147,6 +1149,11 @@
   [value]
   (storage/set "ls-left-sidebar-open?" (boolean value))
   (set-state! :ui/left-sidebar-open? value))
+
+(defn toggle-left-sidebar!
+  []
+  (set-left-sidebar-open!
+    (not (get-left-sidebar-open?))))
 
 (defn set-developer-mode!
   [value]

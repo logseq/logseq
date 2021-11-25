@@ -129,7 +129,7 @@
                                      (swap! path-handles assoc path handle))))
              _ (state/set-loading-files! true)
              _ (when-not (state/home?)
-                 (route-handler/redirect-to-home!))
+                 (route-handler/redirect-to-home! false))
              root-handle (first result)
              dir-name (if nfs?
                         (gobj/get root-handle "name")

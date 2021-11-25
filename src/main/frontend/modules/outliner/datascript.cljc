@@ -44,9 +44,20 @@
                editor-cursor (state/get-current-edit-block-and-position)
                meta (merge opts {:editor-cursor editor-cursor})
                rs (d/transact! conn txs meta)]
+           (when true                 ; TODO: add debug flag
+             (let [eids (distinct (mapv first (:tx-data rs)))
+                   left&parent-list (->>
+                                     (d/q '[:find ?e ?l ?p
+                                            :in $ [?e ...]
+                                            :where
+                                            [?e :block/left ?l]
+                                            [?e :block/parent ?p]] @conn eids)
+                                     (vec)
+                                     (map next))]
+               (assert (= (count left&parent-list) (count (distinct left&parent-list))) eids)))
            (when-not config/test?
-            (after-transact-pipelines rs))
-          rs)
+             (after-transact-pipelines rs))
+           rs)
          (catch js/Error e
            (log/error :exception e)
            (throw e))))))

@@ -141,3 +141,20 @@
     (ui/admonition
      :warning
      [:p "This is a demo graph, changes will not be saved until you open a local folder."])))
+
+(rum/defc github-integration-soon-deprecated-alert
+  []
+  (when-let [repo (state/get-current-repo)]
+    (when (string/starts-with? repo "https://github.com")
+      [:div.github-alert
+       (ui/admonition
+        :warning
+        [:p "We're going to deprecate the GitHub integration when the mobile app is out, you can switch to the latest "
+         [:a {:href "https://github.com/logseq/logseq/releases"
+              :target "_blank"}
+          "desktop app"]
+         [:span ", see more details at "]
+         [:a {:href "https://discord.com/channels/725182569297215569/735735090784632913/861656585578086400"
+              :target "_blank"}
+          "here"]
+         [:span "."]])])))

@@ -11,13 +11,9 @@
 
 (def log-error (partial (.-error logger) "[Git]"))
 
-(defn get-graph-path
-  []
-  (:graph/current @state/state))
-
 (defn get-graph-git-dir
   []
-  (when-let [graph-path (some-> (get-graph-path)
+  (when-let [graph-path (some-> (state/get-graph-path)
                                 (string/replace "/" "_")
                                 (string/replace ":" "comma"))]
     (let [dir (.join path (.homedir os) ".logseq" "git" graph-path ".git")]
@@ -26,12 +22,12 @@
 
 (defn dot-git-exists?
   []
-  (let [p (.join path (get-graph-path) ".git")]
+  (let [p (.join path (state/get-graph-path) ".git")]
     (fs/existsSync p)))
 
 (defn run-git!
   [commands]
-  (when-let [path (get-graph-path)]
+  (when-let [path (state/get-graph-path)]
     (when (fs/existsSync path)
       (p/let [result (.exec GitProcess commands path)]
         (if (zero? (gobj/get result "exitCode"))
@@ -45,7 +41,7 @@
 (defn git-dir-exists?
   []
   (try
-    (let [p (.join path (get-graph-path) ".git")]
+    (let [p (.join path (state/get-graph-path) ".git")]
       (.isDirectory (fs/statSync p)))
     (catch js/Error e
       nil)))
@@ -53,8 +49,10 @@
 (defn remove-dot-git-file!
   []
   (try
-    (let [graph-path (get-graph-path)
-          _ (and (string/blank? graph-path) (throw (js/Error. "Empty graph path")))
+    (let [graph-path (state/get-graph-path)
+          _ (when (string/blank? graph-path)
+              (utils/send-to-renderer "getCurrentGraph" {})
+              (throw (js/Error. "Empty graph path")))
           p (.join path graph-path ".git")]
       (when (and (fs/existsSync p)
                  (.isFile (fs/statSync p)))
@@ -81,7 +79,7 @@
                ["init"])]
     (p/let [_ (run-git! (clj->js args))]
       (when utils/win32?
-        (run-git! ["config" "core.safecrlf" "false"])))))
+        (run-git! #js ["config" "core.safecrlf" "false"])))))
 
 (defn add-all!
   []
@@ -173,5 +171,6 @@
     (js/setTimeout add-all-and-commit! 3000)
     (let [seconds (state/get-git-commit-seconds)]
       (when (int? seconds)
+        (js/setTimeout add-all-and-commit! 5000)
         (let [interval (js/setInterval add-all-and-commit! (* seconds 1000))]
           (state/set-git-commit-interval! interval))))))

@@ -173,7 +173,7 @@
   (state/clear-edit!)
   (when-let [repo (state/get-current-repo)]
     (when (and disk-content db-content
-               (not= (string/trim disk-content) (string/trim db-content)))
+               (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
       (state/set-modal! #(diff/local-file repo path disk-content db-content)))))
 
 (defmethod handle :modal/display-file-version [[_ path content hash]]
@@ -226,6 +226,13 @@
   (let [chan (state/get-events-chan)]
     (async/go-loop []
       (let [payload (async/<! chan)]
-        (handle payload))
+        (try
+          (handle payload)
+          (catch js/Error error
+            (let [type :handle-system-events/failed]
+              (js/console.error (str type) (clj->js payload) "\n" error)
+              (state/pub-event! [:instrument {:type    type
+                                              :payload payload
+                                              :error error}])))))
       (recur))
     chan))

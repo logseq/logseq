@@ -290,7 +290,7 @@
                     config/publishing?
                     (subs href 1)
 
-                    (= protocol "data")
+                    (= "Embed_data" (first url))
                     href
 
                     :else
@@ -871,6 +871,9 @@
                 [:span (util/format "[[%s]]" page)]
                 (page-reference (:html-export? config) page config label*)))))
 
+        ["Embed_data" src]
+        (image-link config url src nil metadata full_text)
+
         ["Search" s]
         (cond
           (string/blank? s)
@@ -887,7 +890,7 @@
           (not (string/includes? s "."))
           (page-reference (:html-export? config) s config label)
 
-          (util/safe-re-find #"(?i)^http[s]?://" s)
+          (util/url? s)
           (->elem :a {:href s
                       :data-href s
                       :target "_blank"}
@@ -1864,7 +1867,6 @@
 
 (rum/defc block-content-fallback
   [edit-input-id block]
-
   (let [content (:block/content block)]
     [:section.border.mt-1.p-1.cursor-pointer.block-content-fallback-ui
      {:on-click #(state/set-editing! edit-input-id content block "")}
@@ -1882,16 +1884,18 @@
         slide? (:slide? config)]
     (if (and edit? editor-box)
       [:div.editor-wrapper {:id editor-id}
-       (editor-box {:block block
-                    :block-id uuid
-                    :block-parent-id block-id
-                    :format format
-                    :heading-level heading-level
-                    :on-hide (fn [_value event]
-                               (when (= event :esc)
-                                 (editor-handler/escape-editing)))}
-                   edit-input-id
-                   config)]
+       (ui/catch-error
+        [:p.warning "Something wrong in the editor"]
+        (editor-box {:block block
+                     :block-id uuid
+                     :block-parent-id block-id
+                     :format format
+                     :heading-level heading-level
+                     :on-hide (fn [_value event]
+                                (when (= event :esc)
+                                  (editor-handler/escape-editing)))}
+                    edit-input-id
+                    config))]
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (ui/catch-error
