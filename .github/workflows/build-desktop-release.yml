@@ -142,8 +142,9 @@ jobs:
       - name: Save artifacts
         run: |
           mkdir -p builds
-          mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outpus.version }}.AppImage
-          mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outpus.version }}.zip
+          cp static/VERSION ./builds/VERSION
+          mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
+          mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
@@ -197,7 +198,7 @@ jobs:
       - name: Save Artifact
         run: |
           mkdir builds
-          mv static\out\make\squirrel.windows\x64\*.exe builds\Logseq-win-x64-${{ steps.ref.outpus.version }}.exe
+          mv static\out\make\squirrel.windows\x64\*.exe builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
@@ -265,8 +266,8 @@ jobs:
       - name: Save x64 artifacts
         run: |
           mkdir -p builds
-          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
-          mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
+          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
+          mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
 
       - name: Build/Release Electron App for arm64
         run: yarn install && yarn electron:make-macos-arm64
@@ -277,8 +278,8 @@ jobs:
 
       - name: Save arm64 artifacts
         run: |
-          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
-          mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
+          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
+          mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v2
@@ -323,32 +324,42 @@ jobs:
           path: ./
 
 
-      # - name: Download The Windows Artifact
-      #   uses: actions/download-artifact@v2
-      #   with:
-      #     name: Logseq-win64.exe
-      #     path: ./
+      - name: Download The Windows Artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-win64-builds
+          path: ./
 
       - name: List files
         run: ls -rl
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat VERSION)
+          echo ::set-output name=version::$pkgver
+
+      - name: Generate SHA256 checksums
+        run: |
+          sha256sum *-darwin-* > SHA256SUMS.txt
+          sha256sum *-win-* >> SHA256SUMS.txt
+          sha256sum *-linux-* >> SHA256SUMS.txt
 
       - name: Create Release Draft
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.ref.outpus.version }}
-          name: Desktop APP ${{ steps.ref.outpus.version }} (Beta Testing)
+          tag_name: ${{ steps.ref.outputs.version }}
+          name: Desktop APP ${{ steps.ref.outputs.version }} (Beta Testing)
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
           draft: ${{ github.event.inputs.is-draft }}
           prerelease: ${{ github.event.inputs.is-pre-release }}
           files: |
+            ./VERSION
+            ./SHA256SUMS.txt
             ./*.zip
             ./*.dmg
             ./*.exe
             ./*.AppImage
-
-#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
-#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
-#           logseq-win-x64-${{ steps.ref.outpus.version }}.exe
 
