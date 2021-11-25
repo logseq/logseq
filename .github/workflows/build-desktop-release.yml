@@ -91,6 +91,10 @@ jobs:
         run: cat ./package.json
         working-directory: ./static
 
+      - name: Save VERSION file
+        run: echo "${{ steps.ref.outputs.version }}" > ./VERSION
+        working-directory: ./static
+
       - name: List Files
         run: ls -al
         working-directory: ./static
@@ -283,10 +287,18 @@ jobs:
     needs: [ build-linux ]
     runs-on: ubuntu-18.04
     steps:
-      - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v2
+      - name: Download The Static Asset (VERSION)
+        uses: actions/download-artifact@v2
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(echo ./static/VERSION)
+          echo ::set-output name=version::$pkgver
+
       # - name: Download The MacOS X64 DMG Artifact
       #   uses: actions/download-artifact@v2
       #   with:
