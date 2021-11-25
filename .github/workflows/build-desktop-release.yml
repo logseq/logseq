@@ -183,7 +183,6 @@ jobs:
           path: static/out/make/squirrel.windows/x64/Logseq-win64.exe
 
   build-macos:
-    if: false
     needs: [ compile-cljs ]
     runs-on: macos-latest
 
@@ -223,16 +222,13 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
 
       - name: Change DMG Name
-        run: mv static/out/make/*.dmg static/out/make/Logseq-macos-x64.dmg
+        run: mv static/out/make/Logseq.dmg static/out/make/Logseq-macos-x64.dmg
 
       - name: Cache Artifact DMG
         uses: actions/upload-artifact@v2
         with:
           name: Logseq-macos-x64.dmg
           path: static/out/make/Logseq-macos-x64.dmg
-
-      - name: ls files
-        run: du -a static/out/
 
       - name: Change zip Name
         run: mv static/out/make/zip/darwin/x64/*.zip static/out/make/zip/darwin/x64/Logseq-macos-x64.zip
@@ -243,52 +239,7 @@ jobs:
           name: Logseq-macos-x64.zip
           path: static/out/make/zip/darwin/x64/Logseq-macos-x64.zip
 
-  build-macos-arm64:
-    needs: [ compile-cljs ]
-    runs-on: macos-latest
-
-    steps:
-      # this is only needed temporarily
-      # wait until macos-11 GA https://github.com/actions/virtual-environments/issues/2486
-      # or m1 hardware https://github.com/actions/virtual-environments/issues/2187
-      - name: hack osx sdk
-        run: |
-          if [ "$(sw_vers -productVersion | cut -d'.' -f1)" = 10 ]; then
-            pushd /Library/Developer/CommandLineTools/SDKs
-            sudo rm MacOSX.sdk
-            sudo ln -s MacOSX11.1.sdk MacOSX.sdk
-            sudo rm -rf MacOSX10.15.sdk
-            ls -l
-            popd
-          fi
-
-      - run: sw_vers -productVersion
-
-      - name: Download The Static Asset
-        uses: actions/download-artifact@v2
-        with:
-          name: static
-          path: static
-
-      - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v2
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      #- name: Signing By Apple Developer ID
-      #  uses: apple-actions/import-codesign-certs@v1
-      #  with:
-      #    p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
-      #    p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
-
-      # - name: Cache Node Modules
-      #   uses: actions/cache@v2
-      #   with:
-      #     path: |
-      #       **/node_modules
-      #     key: ${{ runner.os }}-node-modules
-
-      - name: Build/Release Electron App
+      - name: Build/Release Electron App for arm64
         run: yarn install && yarn electron:make-macos-arm64
         working-directory: ./static
         env:
@@ -296,16 +247,13 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
 
       - name: Change DMG Name
-        run: mv static/out/make/*.dmg static/out/make/Logseq-macos-arm64.dmg
+        run: mv static/out/make/Logseq.dmg static/out/make/Logseq-macos-arm64.dmg
 
       - name: Cache Artifact DMG
         uses: actions/upload-artifact@v2
         with:
           name: Logseq-macos-arm64.dmg
           path: static/out/make/Logseq-macos-arm64.dmg
-
-      - name: ls files
-        run: du -a static/out/
 
       - name: Change zip Name
         run: mv static/out/make/zip/darwin/arm64/*.zip static/out/make/zip/darwin/arm64/Logseq-macos-arm64.zip
@@ -317,7 +265,7 @@ jobs:
           path: static/out/make/zip/darwin/arm64/Logseq-macos-arm64.zip
 
   release:
-    #needs: [ build-macos, build-linux, build-windows, build-macos-arm64 ]
+    #needs: [ build-macos, build-linux, build-windows ]
     needs: [ build-linux ]
     runs-on: ubuntu-18.04
     steps:
