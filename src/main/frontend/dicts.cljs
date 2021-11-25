@@ -349,7 +349,7 @@
         :pdf/linked-ref "Linked references"
         :pdf/toggle-dashed "Dashed style for area highlight"
 
-        :updater/new-version-install "A new version has been downloaded. Restart the application to apply the updates."
+        :updater/new-version-install "A new version has been downloaded."
         :updater/quit-and-install "Restart to install"
 
         :paginates/pages "Total {1} pages"
