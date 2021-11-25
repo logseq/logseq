@@ -27,6 +27,10 @@ on:
   schedule: # Every Monday at noon (UTC) we run a scheduled nightly build
     - cron: '0 12 * * MON-FRI'
 
+env:
+  CLOJURE_VERSION: '1.10.1.763'
+  NODE_VERSION: '16'
+
 jobs:
   compile-cljs:
     runs-on: ubuntu-18.04
@@ -37,7 +41,7 @@ jobs:
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
         with:
-          node-version: 16
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup Java JDK
         uses: actions/setup-java@v1.4.3
@@ -53,7 +57,7 @@ jobs:
       - name: Setup clojure
         uses: DeLaGuardo/setup-clojure@3.5
         with:
-          cli: 1.10.1.763
+          cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Compile CLJS
         run: yarn install && gulp build && yarn cljs:release-electron
@@ -96,7 +100,7 @@ jobs:
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
         with:
-          node-version: 16
+          node-version: ${{ env.NODE_VERSION }}
 
       # - name: Cache Node Modules
       #   uses: actions/cache@v2
@@ -141,7 +145,7 @@ jobs:
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
         with:
-          node-version: 16
+          node-version: ${{ env.NODE_VERSION }}
 
       # - name: Cache Node Modules
       #   uses: actions/cache@v2
@@ -195,7 +199,7 @@ jobs:
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
         with:
-          node-version: 16
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Signing By Apple Developer ID
         uses: apple-actions/import-codesign-certs@v1
@@ -267,13 +271,13 @@ jobs:
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
         with:
-          node-version: 16
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Signing By Apple Developer ID
-        uses: apple-actions/import-codesign-certs@v1
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+      #- name: Signing By Apple Developer ID
+      #  uses: apple-actions/import-codesign-certs@v1
+      #  with:
+      #    p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+      #    p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
 
       # - name: Cache Node Modules
       #   uses: actions/cache@v2
@@ -311,9 +315,9 @@ jobs:
           path: static/out/make/zip/darwin/arm64/Logseq-macos-arm64.zip
 
   release:
-    needs: [ build-macos, build-linux, build-windows, build-macos-arm64 ]
+    #needs: [ build-macos, build-linux, build-windows, build-macos-arm64 ]
+    needs: [ build-macos, build-linux ]
     runs-on: ubuntu-18.04
-
     steps:
       - name: Download The MacOS X64 DMG Artifact
         uses: actions/download-artifact@v2
@@ -392,7 +396,7 @@ jobs:
 #           logseq-win-x64-${{ steps.ref.outpus.version }}.exe
 
       - name: Create Release Draft
-        if: ${{ !(github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') }}
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
