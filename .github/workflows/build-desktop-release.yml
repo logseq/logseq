@@ -62,7 +62,7 @@ jobs:
         with:
           java-version: 1.8
 
-      - name: Cache local clojure lib directory
+      - name: Cache local clojure deps directory
         uses: actions/cache@v2
         with:
           path: |
@@ -117,6 +117,12 @@ jobs:
           name: static
           path: static
 
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat ./static/VERSION)
+          echo ::set-output name=version::$pkgver
+
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
         with:
@@ -133,26 +139,19 @@ jobs:
         run: yarn install && yarn electron:make
         working-directory: ./static
 
-      - name: Change Artifact Name For ZIP File
-        run: mv static/out/make/zip/linux/x64/*-linux-x64-*.zip  static/out/make/zip/linux/x64/Logseq-linux.zip
+      - name: Save artifacts
+        run: |
+          mkdir -p builds
+          mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outpus.version }}.AppImage
+          mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outpus.version }}.zip
 
-      - name: Change Artifact Name For AppImage File
-        run: mv static/out/make/*-*.AppImage  static/out/make/Logseq-linux.AppImage
-
-      - name: Cache Artifact With ZIP format
+      - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: Logseq-linux.zip
-          path: static/out/make/zip/linux/x64/Logseq-linux.zip
-
-      - name: Cache Artifact With AppImage format
-        uses: actions/upload-artifact@v2
-        with:
-          name: Logseq-linux.AppImage
-          path: static/out/make/Logseq-linux.AppImage
+          name: logseq-linux-builds
+          path: builds
 
   build-windows:
-    if: false
     runs-on: windows-latest
     needs: [ compile-cljs ]
     steps:
@@ -161,6 +160,12 @@ jobs:
         with:
           name: static
           path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          $env:PkgVer=$(cat ./static/VERSION)
+          echo "::set-output name=version::$env:PkgVer"
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
@@ -189,18 +194,16 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 
-      - name: Change Artifact Name
-        run: Get-ChildItem  static\out\make\squirrel.windows\x64\*.exe | Rename-Item -NewName Logseq-win64.exe
+      - name: Save Artifact
+        run: |
+          mkdir builds
+          mv static\out\make\squirrel.windows\x64\*.exe builds\Logseq-win-x64-${{ steps.ref.outpus.version }}.exe
 
-      - name: List Directory
-        run: dir
-        working-directory: static/out/make/squirrel.windows/x64/
-
-      - name: Cache Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: Logseq-win64.exe
-          path: static/out/make/squirrel.windows/x64/Logseq-win64.exe
+          name: logseq-win64-builds
+          path: builds
 
   build-macos:
     needs: [ compile-cljs ]
@@ -213,6 +216,12 @@ jobs:
           name: static
           path: static
 
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat ./static/VERSION)
+          echo ::set-output name=version::$pkgver
+
       - name: List Static Files
         run: ls -al ./static
 
@@ -224,10 +233,8 @@ jobs:
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
         run: echo "::set-output name=dir::$(yarn cache dir)"
-
       - name: Cache yarn cache directory
         uses: actions/cache@v2
-        # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
         id: yarn-cache
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
@@ -248,108 +255,73 @@ jobs:
       #       **/node_modules
       #     key: ${{ runner.os }}-node-modules
 
-      - name: Build/Release Electron App
+      - name: Build/Release Electron App for x64
         run: yarn install && yarn electron:make
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
 
-      - name: Change DMG Name
-        run: mv static/out/make/Logseq.dmg static/out/make/Logseq-macos-x64.dmg
-
-      - name: Cache Artifact DMG
-        uses: actions/upload-artifact@v2
-        with:
-          name: Logseq-macos-x64.dmg
-          path: static/out/make/Logseq-macos-x64.dmg
-
-      - name: Change zip Name
-        run: mv static/out/make/zip/darwin/x64/*.zip static/out/make/zip/darwin/x64/Logseq-macos-x64.zip
-
-      - name: Cache Artifact ZIP
-        uses: actions/upload-artifact@v2
-        with:
-          name: Logseq-macos-x64.zip
-          path: static/out/make/zip/darwin/x64/Logseq-macos-x64.zip
+      - name: Save x64 artifacts
+        run: |
+          mkdir -p builds
+          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
+          mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
 
       - name: Build/Release Electron App for arm64
-        run: yarn install && yarn electron:make-macos-arm64
+        run: yarn install && yarn electron:make-darwin-arm64
         working-directory: ./static
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
 
-      - name: Change DMG Name
-        run: mv static/out/make/Logseq.dmg static/out/make/Logseq-macos-arm64.dmg
+      - name: Save arm64 artifacts
+        run: |
+          mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
+          mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
 
-      - name: Cache Artifact DMG
+      - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: Logseq-macos-arm64.dmg
-          path: static/out/make/Logseq-macos-arm64.dmg
-
-      - name: Change zip Name
-        run: mv static/out/make/zip/darwin/arm64/*.zip static/out/make/zip/darwin/arm64/Logseq-macos-arm64.zip
-
-      - name: Cache Artifact ZIP
-        uses: actions/upload-artifact@v2
-        with:
-          name: Logseq-macos-arm64.zip
-          path: static/out/make/zip/darwin/arm64/Logseq-macos-arm64.zip
+          name: logseq-darwin-builds
+          path: builds
 
   release:
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target != 'nightly' }}
     #needs: [ build-macos, build-linux, build-windows ]
     needs: [ build-linux ]
     runs-on: ubuntu-18.04
     steps:
-      - name: Download The Static Asset (VERSION)
+      - name: Download MacOS Artifacts
         uses: actions/download-artifact@v2
         with:
-          name: static
-          path: static
-
-      - name: Retrieve tag version
-        id: ref
-        run: |
-          pkgver=$(echo ./static/VERSION)
-          echo ::set-output name=version::$pkgver
-
-      # - name: Download The MacOS X64 DMG Artifact
-      #   uses: actions/download-artifact@v2
-      #   with:
-      #     name: Logseq-macos-x64.dmg
-      #     path: ./
+          name: logseq-darwin-builds
+          path: ./
 
       # - name: Download The MacOS X64 ZIP Artifact
       #   uses: actions/download-artifact@v2
       #   with:
-      #     name: Logseq-macos-x64.zip
+      #     name: Logseq-darwin-x64.zip
       #     path: ./
 
       # - name: Download The MacOS ARM64 DMG Artifact
       #   uses: actions/download-artifact@v2
       #   with:
-      #     name: Logseq-macos-arm64.dmg
+      #     name: Logseq-darwin-arm64.dmg
       #     path: ./
 
       # - name: Download The MacOS ARM64 ZIP Artifact
       #   uses: actions/download-artifact@v2
       #   with:
-      #     name: Logseq-macos-arm64.zip
+      #     name: Logseq-darwin-arm64.zip
       #     path: ./
 
-      - name: Download The Linux Artifact In Zip format
+      - name: Download The Linux Artifacts
         uses: actions/download-artifact@v2
         with:
-          name: Logseq-linux.zip
+          name: logseq-linux-builds
           path: ./
 
-      - name: Download The Linux Artifact In AppImage format
-        uses: actions/download-artifact@v2
-        with:
-          name: Logseq-linux.AppImage
-          path: ./
 
       # - name: Download The Windows Artifact
       #   uses: actions/download-artifact@v2
@@ -357,36 +329,10 @@ jobs:
       #     name: Logseq-win64.exe
       #     path: ./
 
-      - name: Rename files
-        run: |
-          #mv -v ./Logseq-macos-x64.dmg logseq-darwin-x64-${{ github.event.inputs.tag-version }}.dmg
-          #mv -v ./Logseq-macos-x64.zip logseq-darwin-x64-${{ github.event.inputs.tag-version }}.zip
-          # mv -v ./Logseq-macos-arm64.dmg logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.dmg
-          # mv -v ./Logseq-macos-arm64.zip logseq-darwin-arm64-${{ github.event.inputs.tag-version }}.zip
-          mv -v ./Logseq-linux.AppImage logseq-linux-x64-${{ github.event.inputs.tag-version }}.AppImage
-          mv -v ./Logseq-linux.zip logseq-linux-x64-${{ github.event.inputs.tag-version }}.zip
-          # mv -v ./Logseq-win64.exe logseq-win-x64-${{ github.event.inputs.tag-version }}.exe
-
       - name: List files
         run: ls -rl
 
-      - name: Upload build artifacts
-        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: nightly-build
-          path: |
-            logseq-linux-x64-${{ steps.ref.outpus.version }}.zip
-            logseq-linux-x64-${{ steps.ref.outpus.version }}.AppImage
-
-#            logseq-darwin-x64-${{ steps.ref.outpus.version }}.zip
-#            logseq-darwin-x64-${{ steps.ref.outpus.version }}.dmg
-#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.zip
-#           logseq-darwin-arm64-${{ steps.ref.outpus.version }}.dmg
-#           logseq-win-x64-${{ steps.ref.outpus.version }}.exe
-
       - name: Create Release Draft
-        if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
