@@ -166,7 +166,7 @@
     {:for -for}
     left-label]
 
-     ;; leftright column
+     ;; right column
    [:div.mt-1.sm:mt-0.sm:col-span-2
     {:style {:display "flex" :gap "1rem" :align-items "center"}}
     [:div (if action action (ui/button
@@ -184,7 +184,7 @@
       :button-label (t :settings-page/edit-config-edn)
       :href         (rfe/href :file {:path (config/get-config-path)})
       :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-      :-for          "config_edn"})))
+      :-for         "config_edn"})))
 
 (defn edit-custom-css []
   (rum/with-context [[t] i18n/*tongue-context*]
@@ -193,7 +193,7 @@
       :button-label (t :settings-page/edit-custom-css)
       :href         (rfe/href :file {:path (config/get-custom-css-path)})
       :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
-      :-for          "customize_css"})))
+      :-for         "customize_css"})))
 
 (defn show-brackets-row [t show-brackets?]
   (toggle "show_brackets"
@@ -275,7 +275,7 @@
                         lang-label (:label language)]
                     [:option {:key lang-code :value lang-code} lang-label]))]]
     (row-with-button-action {:left-label (t :language)
-                             :-for        "preferred_language"
+                             :-for       "preferred_language"
                              :action     action})))
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
@@ -287,7 +287,7 @@
                     [:li {:on-click (partial state/use-theme-mode! "system")
                           :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
     (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
-                             :-for        "toggle_theme"
+                             :-for       "toggle_theme"
                              :action     pick-theme
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
