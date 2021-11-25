@@ -53,7 +53,7 @@
         f (fn []
             (let [repo (state/get-current-repo)]
               (when-not (state/nfs-refreshing?)
-               ;; Don't create the journal file until user writes something
+                ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))
 
               (when (and (state/input-idle? repo)

@@ -37,8 +37,9 @@
         (try (do-write-file! page-db-id)
              (catch js/Error e
                (notification/show!
-                "Write file failed, please copy the changes to other editors in case of losing data."
-                [:div "Error: " (str (gobj/get e "stack"))]
+                [:div
+                 [:p "Write file failed, please copy the changes to other editors in case of losing data."]
+                 "Error: " (str (gobj/get e "stack"))]
                 :error)
                (log/error :file/write-file-error {:error e})))))))
 

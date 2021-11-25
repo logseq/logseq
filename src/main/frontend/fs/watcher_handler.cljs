@@ -45,7 +45,7 @@
 
           (and (= "change" type)
                (not (db/file-exists? repo path)))
-          (js/console.warn "Can't get file in the db: " path)
+          (js/console.error "Can't get file in the db: " path)
 
           (and (= "change" type)
                (not= (string/trim content) (string/trim db-content))

@@ -696,7 +696,8 @@
 (defn create-today-journal!
   []
   (when-let [repo (state/get-current-repo)]
-    (when (state/enable-journals? repo)
+    (when (and (state/enable-journals? repo)
+               (not (:repo/loading-files? @state/state)))
       (state/set-today! (date/today))
       (when (or (db/cloned? repo)
                 (or (config/local-db? repo)
