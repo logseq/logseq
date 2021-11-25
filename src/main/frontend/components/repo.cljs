@@ -18,6 +18,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.fs :as fs]
             [frontend.version :as version]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
@@ -196,7 +197,9 @@
                                                  (common-handler/reset-config! url nil)
                                                  (shortcut/refresh!)
                                                  (when-not (= :draw (state/get-current-route))
-                                                   (route-handler/redirect-to-home!)))}})
+                                                   (route-handler/redirect-to-home!))
+                                                 (when-let [dir-name (config/get-repo-dir url)]
+                                                   (fs/watch-dir! dir-name)))}})
                         switch-repos)
             links (concat repo-links
                           [(when (seq switch-repos)
