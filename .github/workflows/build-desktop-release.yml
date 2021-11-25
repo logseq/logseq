@@ -183,6 +183,7 @@ jobs:
           path: static/out/make/squirrel.windows/x64/Logseq-win64.exe
 
   build-macos:
+    if: false
     needs: [ compile-cljs ]
     runs-on: macos-latest
 
@@ -316,7 +317,7 @@ jobs:
 
   release:
     #needs: [ build-macos, build-linux, build-windows, build-macos-arm64 ]
-    needs: [ build-macos, build-linux ]
+    needs: [ build-linux ]
     runs-on: ubuntu-18.04
     steps:
       - name: Download The MacOS X64 DMG Artifact
