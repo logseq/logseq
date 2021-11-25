@@ -62,11 +62,13 @@ jobs:
         with:
           java-version: 1.8
 
-      - name: Cache local Maven repository
+      - name: Cache local clojure lib directory
         uses: actions/cache@v2
         with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-lib-${{ hashFiles('**/deps.edn') }}
 
       - name: Setup clojure
         uses: DeLaGuardo/setup-clojure@3.5
@@ -79,7 +81,7 @@ jobs:
       - name: Retrieve tag version
         id: ref
         run: |
-          pkgver=$(node ./scripts/get-pkg-version.js "${{ github.workflow.inputs.build-target }}")
+          pkgver=$(node ./scripts/get-pkg-version.js "${{ github.event.inputs.build-target }}")
           echo ::set-output name=version::$pkgver
 
       - name: Update APP Version
@@ -218,6 +220,20 @@ jobs:
         uses: actions/setup-node@v2
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+
+      - name: Cache yarn cache directory
+        uses: actions/cache@v2
+        # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
 
       # - name: Signing By Apple Developer ID
       #   uses: apple-actions/import-codesign-certs@v1
