@@ -16,10 +16,10 @@ const config: CapacitorConfig = {
     }
     // do not commit this into source control
     // source: https://capacitorjs.com/docs/guides/live-reload
-    //, server: {
-    //    url: process.env.LOGSEQ_APP_SERVER_URL,
-    //    cleartext: true
-    //}
+    , server: {
+       url: "http://192.168.0.104:3001" //process.env.LOGSEQ_APP_SERVER_URL,
+       cleartext: true
+    }
 };
 
 export = config;

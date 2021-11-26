@@ -24,7 +24,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.components.widgets :as widgets]))
+            [frontend.components.widgets :as widgets]
+            [frontend.handler.web.nfs :as nfs-handler]))
 
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
@@ -205,9 +206,24 @@
 
         (new-block-mode)
 
-        (when refreshing?
-          [:div {:class "animate-spin-reverse"}
-           svg/refresh])
+        (when (mobile-util/is-native-platform?)
+          [:a.text-sm.font-medium.button
+           {:on-click
+            (fn []
+              (state/pub-event!
+               [:modal/show
+                [:div {:style {:max-width 700}}
+                 [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
+                 (ui/button
+                  "Yes"
+                  :on-click (fn []
+                              (state/close-modal!)
+                              (nfs-handler/refresh! (state/get-current-repo) repo/refresh-cb)))]]))}
+           (if refreshing?
+             [:div {:class "animate-spin-reverse"}
+              svg/refresh]
+             [:div.flex.flex-row.text-center.open-button__inner.items-center
+              (ui/icon "refresh" {:style {:fontSize ui/icon-size}})])])
 
         (repo/sync-status current-repo)
 
