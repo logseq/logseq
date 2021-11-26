@@ -299,8 +299,7 @@
     {:class (if @open?
               "translate-x-0"
               "-translate-x-full")
-     :style {:max-width "80vw"
-             :padding-top (ui/main-content-top-padding)}}
+     :style {:padding-top (ui/main-content-top-padding)}}
     (when @open?
       [:div.cp__header#head
        [:div.l.flex
