@@ -19,6 +19,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.util.keycode :as keycode]
             [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -468,6 +469,15 @@
        (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
        :else "normal-block"))))
 
+(defn editor-row-height-unchanged?
+  "Check if the row height of editor textarea is changed, which happens when style changed"
+  []
+  ;; FIXME: assuming enter key is the only trigger of the height changing (over conservative)
+  ;; FIXME: find an elegant & robust way to track the change of style
+  (let [last-key (state/get-last-key-code)]
+    (and (not= keycode/enter (:key-code last-key))
+         (not= keycode/enter-code (:code last-key)))))
+
 (rum/defc mock-textarea <
   rum/static
   {:did-update
@@ -498,7 +508,7 @@
 
 (rum/defc mock-textarea-wrapper < rum/reactive
   []
-  (let [content (state/sub [:editor/content (state/get-edit-input-id)])]
+  (let [content (state/sub-edit-content)]
     (mock-textarea content)))
 
 (defn animated-modal
@@ -569,19 +579,20 @@
   lifecycle/lifecycle
   [state {:keys [on-hide node format block block-parent-id heading-level]
           :as   option} id config]
-  (let [content (state/sub-edit-content)]
+  (let [content (state/sub-edit-content)
+        heading-class (get-editor-heading-class content)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
-       :cacheMeasurements false
+       :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
        :default-value     (or content "")
        :minRows           (if (state/enable-grammarly?) 2 1)
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
        :auto-focus        false
-       :class             (get-editor-heading-class content)})
+       :class             heading-class})
 
      (mock-textarea-wrapper)
      (modals id format)
