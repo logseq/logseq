@@ -538,7 +538,7 @@
 
 (defn sub-edit-content
   []
-  (get (sub :editor/content) (get-edit-input-id)))
+  (sub [:editor/content (get-edit-input-id)]))
 
 (defn append-current-edit-content!
   [append-text]
