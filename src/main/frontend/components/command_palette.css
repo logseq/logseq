@@ -1,6 +1,6 @@
 .cp__palette {
   --palettle-input-height: 64px;
-  --palettle-container-height: 70vh;
+  --palettle-container-height: 75vh;
 
   &-main {
     max-height: var(--palettle-container-height);

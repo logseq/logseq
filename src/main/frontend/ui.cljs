@@ -557,8 +557,9 @@
     [:div.ui__modal
      {:style {:z-index (if show? 9999 -1)
               :top (when (or (mobile-util/native-iphone?)
+                             (mobile-util/native-android?)
                              (and (util/mobile?) (util/ios?)))
-                     60)}}
+                     "22vh")}}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
