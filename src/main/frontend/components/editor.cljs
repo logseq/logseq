@@ -447,7 +447,9 @@
 
 (def starts-with? clojure.string/starts-with?)
 
-(defn get-editor-heading-class [content]
+(defn get-editor-style-class
+  "Get textarea css class according to it's content"
+  [content format]
   (let [content (if content (str content) "")]
     ;; as the function is binding to the editor content, optimization is welcome
     (str
@@ -456,24 +458,27 @@
        "multiline-block"
        "uniline-block")
      " "
-     (cond ;; TODO: unfold to hierarcal if conditions
-       (starts-with? content "# ") "h1"
-       (starts-with? content "## ") "h2"
-       (starts-with? content "### ") "h3"
-       (starts-with? content "#### ") "h4"
-       (starts-with? content "##### ") "h5"
-       (starts-with? content "###### ") "h6"
-      ;;  (starts-with? content "TODO ") "todo-block"
-      ;;  (starts-with? content "DOING ") "doing-block"
-      ;;  (starts-with? content "DONE ") "done-block"
-       (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
-       :else "normal-block"))))
+     (case format
+       :markdown
+       (cond
+         (starts-with? content "# ") "h1"
+         (starts-with? content "## ") "h2"
+         (starts-with? content "### ") "h3"
+         (starts-with? content "#### ") "h4"
+         (starts-with? content "##### ") "h5"
+         (starts-with? content "###### ") "h6"
+         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         :else "normal-block")
+       ;; other formats
+       (cond
+         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         :else "normal-block")))))
 
 (defn editor-row-height-unchanged?
-  "Check if the row height of editor textarea is changed, which happens when style changed"
+  "Check if the row height of editor textarea is changed, which happens when font-size changed"
   []
-  ;; FIXME: assuming enter key is the only trigger of the height changing (over conservative)
-  ;; FIXME: find an elegant & robust way to track the change of style
+  ;; FIXME: assuming enter key is the only trigger of the height changing (under markdown editing of headlines)
+  ;; FIXME: looking for an elegant & robust way to track the change of font-size, or wait for our own WYSIWYG text area
   (let [last-key (state/get-last-key-code)]
     (and (not= keycode/enter (:key-code last-key))
          (not= keycode/enter-code (:code last-key)))))
@@ -580,7 +585,7 @@
   [state {:keys [on-hide node format block block-parent-id heading-level]
           :as   option} id config]
   (let [content (state/sub-edit-content)
-        heading-class (get-editor-heading-class content)]
+        heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
