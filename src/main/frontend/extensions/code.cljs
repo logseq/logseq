@@ -130,56 +130,62 @@
 (defn render!
   [state]
   (let [esc-pressed? (atom nil)
-        dark? (state/dark?)]
-    (let [[config id attr code theme] (:rum/args state)
-          original-mode (get attr :data-lang)
-          mode original-mode
-          clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
-          mode (if clojure? "clojure" (text->cm-mode mode))
-          lisp? (or clojure?
-                    (contains? #{"scheme" "racket" "lisp"} mode))
-          textarea (gdom/getElement id)
-          editor (when textarea
-                   (from-textarea textarea
-                                  #js {:mode mode
-                                       :theme (str "solarized " theme)
-                                       :matchBrackets lisp?
-                                       :autoCloseBrackets true
-                                       :lineNumbers true
-                                       :styleActiveLine true
-                                       :extraKeys #js {"Esc" (fn [cm]
-                                                               (save-file-or-block-when-blur-or-esc! cm textarea config state)
-                                                               (when-let [block-id (:block/uuid config)]
-                                                                 (let [block (db/pull [:block/uuid block-id])
-                                                                       value (.getValue cm)
-                                                                       textarea-value (gobj/get textarea "value")]
-                                                                   (editor-handler/edit-block! block :max block-id)))
-                                                               ;; TODO: return "handled" or false doesn't always prevent event bubbles
-                                                               (reset! esc-pressed? true)
-                                                               (js/setTimeout #(reset! esc-pressed? false) 10))}}))]
-      (when editor
-        (let [textarea-ref (rum/ref-node state textarea-ref-name)]
-          (gobj/set textarea-ref codemirror-ref-name editor))
-        (let [element (.getWrapperElement editor)]
-          (when (= mode "calc")
-            (.on editor "change" (fn [_cm e]
-                                   (let [new-code (.getValue editor)]
-                                     (reset! (:calc-atom state) (calc/eval-lines new-code))))))
-          (.on editor "blur" (fn [_cm e]
-                               (when e (util/stop e))
-                               (state/set-block-component-editing-mode! false)
-                               (when-not @esc-pressed?
-                                 (save-file-or-block-when-blur-or-esc! editor textarea config state))))
-          (.addEventListener element "mousedown"
-                             (fn [e]
-                               (state/clear-selection!)
-                               (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
-                                 (state/set-editing! id (.getValue editor) block nil false))
-                               (util/stop e)
-                               (state/set-block-component-editing-mode! true)))
-          (.save editor)
-          (.refresh editor)))
-      editor)))
+        dark? (state/dark?)
+        [config id attr code theme] (:rum/args state)
+        default-open? (and (:editor/code-mode? @state/state)
+                           (= (:block/uuid (state/get-edit-block))
+                              (get-in config [:block :block/uuid])))
+        _ (state/set-state! :editor/code-mode? false)
+        original-mode (get attr :data-lang)
+        mode original-mode
+        clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
+        mode (if clojure? "clojure" (text->cm-mode mode))
+        lisp? (or clojure?
+                  (contains? #{"scheme" "racket" "lisp"} mode))
+        textarea (gdom/getElement id)
+        editor (when textarea
+                 (from-textarea textarea
+                                #js {:mode mode
+                                     :theme (str "solarized " theme)
+                                     :matchBrackets lisp?
+                                     :autoCloseBrackets true
+                                     :lineNumbers true
+                                     :styleActiveLine true
+                                     :extraKeys #js {"Esc" (fn [cm]
+                                                             (save-file-or-block-when-blur-or-esc! cm textarea config state)
+                                                             (when-let [block-id (:block/uuid config)]
+                                                               (let [block (db/pull [:block/uuid block-id])
+                                                                     value (.getValue cm)
+                                                                     textarea-value (gobj/get textarea "value")]
+                                                                 (editor-handler/edit-block! block :max block-id)))
+                                                             ;; TODO: return "handled" or false doesn't always prevent event bubbles
+                                                             (reset! esc-pressed? true)
+                                                             (js/setTimeout #(reset! esc-pressed? false) 10))}}))]
+    (when editor
+      (let [textarea-ref (rum/ref-node state textarea-ref-name)]
+        (gobj/set textarea-ref codemirror-ref-name editor))
+      (let [element (.getWrapperElement editor)]
+        (when (= mode "calc")
+          (.on editor "change" (fn [_cm e]
+                                 (let [new-code (.getValue editor)]
+                                   (reset! (:calc-atom state) (calc/eval-lines new-code))))))
+        (.on editor "blur" (fn [_cm e]
+                             (when e (util/stop e))
+                             (state/set-block-component-editing-mode! false)
+                             (when-not @esc-pressed?
+                               (save-file-or-block-when-blur-or-esc! editor textarea config state))))
+        (.addEventListener element "mousedown"
+                           (fn [e]
+                             (state/clear-selection!)
+                             (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
+                               (state/set-editing! id (.getValue editor) block nil false))
+                             (util/stop e)
+                             (state/set-block-component-editing-mode! true)))
+        (.save editor)
+        (.refresh editor)))
+    (when default-open?
+      (.focus editor))
+    editor))
 
 (defn- load-and-render!
   [state]
