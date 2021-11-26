@@ -240,7 +240,6 @@
                                    [".favorites" ".recent" ".dropdown-wrapper" ".nav-header"])
                          (close-modal-fn)))}
          [:div.flex.flex-col.pb-4.wrap
-          {:style {:padding-top (if (mobile-util/native-iphone?) 10 60)}}
           [:nav.px-2.space-y-1 {:aria-label "Sidebar"}
            (repo/repos-dropdown)
 
@@ -312,7 +311,8 @@
           [:a.button#search-button-mobile
            {:on-click #(state/pub-event! [:go/search])}
            (ui/icon "search" {:style {:fontSize ui/icon-size}})])]])
-    [:div.flex-1.h-0.overflow-y-auto
+    [:div.flex-1.h-0.overflow-y-auto {:style {:position "relative"
+                                              :top "-48px"}}
      (sidebar-nav route-match close-fn)]]])
 
 (rum/defc main <
