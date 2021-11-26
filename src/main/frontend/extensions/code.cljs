@@ -46,6 +46,7 @@
             [frontend.handler.file :as file-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.text :as text]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]))
@@ -56,6 +57,7 @@
 
 (def textarea-ref-name "textarea")
 (def codemirror-ref-name "codemirror-instance")
+
 
 (defn- save-file-or-block-when-blur-or-esc!
   [editor textarea config state]
@@ -68,16 +70,27 @@
         (let [block (db/pull [:block/uuid (:block/uuid config)])
               format (:block/format block)
               content (:block/content block)
-              full-content (:full_content (last (:rum/args state)))]
-          (when (and full-content (string/includes? content full-content))
+              {:keys [lines]} (last (:rum/args state))
+              full-content (:full_content (last (:rum/args state)))
+              value (text/remove-indentations value)]
+          (when full-content
             (let [lines (string/split-lines full-content)
                   fl (first lines)
                   ll (last lines)]
               (when (and fl ll)
-                (let [value' (str (string/trim fl) "\n" value "\n" (string/trim ll))
-                      ;; FIXME: What if there're multiple code blocks with the same value?
-                      content' (string/replace-first content full-content value')]
-                  (editor-handler/save-block-if-changed! block content'))))))
+                (let [src (->> (subvec (vec lines) 1 (dec (count lines)))
+                               (string/join "\n"))
+                      src (text/remove-indentations src)
+                      full-content (str (string/trim fl)
+                                        (if (seq src)
+                                          (str "\n" src "\n")
+                                          "\n")
+                                        (string/trim ll))]
+                  (when (string/includes? content full-content)
+                    (let [value' (str (string/trim fl) "\n" value "\n" (string/trim ll))
+                          ;; FIXME: What if there're multiple code blocks with the same value?
+                          content' (string/replace-first content full-content value')]
+                      (editor-handler/save-block-if-changed! block content'))))))))
 
         (:file-path config)
         (let [path (:file-path config)

@@ -27,7 +27,9 @@
                    (string/blank? (:block/content (first blocks)))
                    (nil? (:block/file page-block)))
       (let [tree (tree/blocks->vec-tree blocks (:block/name page-block))]
-        (file/save-tree page-block tree)))))
+        (if page-block
+          (file/save-tree page-block tree)
+          (js/console.error (str "can't find page id: " page-db-id)))))))
 
 (defn write-files!
   [page-db-ids]
