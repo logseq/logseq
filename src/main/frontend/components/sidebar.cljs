@@ -441,7 +441,10 @@
          (seq latest-journals)
          (journal/journals latest-journals)
 
-         (and logged? (empty? (:repos me)))
+         (or
+          (and (mobile-util/is-native-platform?)
+               (nil? (state/get-current-repo)))
+          (and logged? (empty? (:repos me))))
          (widgets/add-graph)
 
                          ;; FIXME: why will this happen?

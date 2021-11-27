@@ -111,7 +111,8 @@
                               (and (not logged?)
                                    (not (seq (db/get-files config/local-repo)))
                                    ;; Not native local directory
-                                   (not (some config/local-db? (map :url repos))))
+                                   (not (some config/local-db? (map :url repos)))
+                                   (not (mobile-util/is-native-platform?)))
                               (repo-handler/setup-local-repo-if-not-exists!)
 
                               :else

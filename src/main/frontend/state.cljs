@@ -14,7 +14,8 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile]))
 
 (defonce state
   (let [document-mode? (or (storage/get :document/mode?) false)
@@ -231,7 +232,9 @@
 
 (defn get-current-repo
   []
-  (or (:git/current-repo @state) "local"))
+  (or (:git/current-repo @state)
+      (when-not (mobile/is-native-platform?)
+        "local")))
 
 (defn get-config
   ([]

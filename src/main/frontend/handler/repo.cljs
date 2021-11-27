@@ -555,26 +555,25 @@
 
 (defn setup-local-repo-if-not-exists!
   []
-  (when-not (mobile/is-native-platform?)
-    (if js/window.pfs
-      (let [repo config/local-repo]
-        (p/do! (fs/mkdir-if-not-exists (str "/" repo))
-               (state/set-current-repo! repo)
-               (db/start-db-conn! nil repo)
-               (when-not config/publishing?
-                 (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
-                   (create-dummy-notes-page repo dummy-notes)))
-               (when-not config/publishing?
-                 (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
-                       tutorial (string/replace-first tutorial "$today" (date/today))]
-                   (create-today-journal-if-not-exists repo {:content tutorial})))
-               (create-config-file-if-not-exists repo)
-               (create-contents-file repo)
-               (create-favorites-file repo)
-               (create-custom-theme repo)
-               (state/set-db-restoring! false)
-               (ui-handler/re-render-root!)))
-      (js/setTimeout setup-local-repo-if-not-exists! 100))))
+  (if js/window.pfs
+    (let [repo config/local-repo]
+      (p/do! (fs/mkdir-if-not-exists (str "/" repo))
+             (state/set-current-repo! repo)
+             (db/start-db-conn! nil repo)
+             (when-not config/publishing?
+               (let [dummy-notes (get-in dicts/dicts [:en :tutorial/dummy-notes])]
+                 (create-dummy-notes-page repo dummy-notes)))
+             (when-not config/publishing?
+               (let [tutorial (get-in dicts/dicts [:en :tutorial/text])
+                     tutorial (string/replace-first tutorial "$today" (date/today))]
+                 (create-today-journal-if-not-exists repo {:content tutorial})))
+             (create-config-file-if-not-exists repo)
+             (create-contents-file repo)
+             (create-favorites-file repo)
+             (create-custom-theme repo)
+             (state/set-db-restoring! false)
+             (ui-handler/re-render-root!)))
+    (js/setTimeout setup-local-repo-if-not-exists! 100)))
 
 (defn periodically-pull-current-repo
   []

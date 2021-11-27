@@ -36,6 +36,8 @@
                          (remove (fn [file] (string/starts-with? file "."))))
               files (->> files
                          (map (fn [file] (futil/node-path.join d file))))
+              _ (prn "files: ")
+              _ (js/console.dir files)
               files-with-stats (p/all
                                 (mapv
                                  (fn [file]
@@ -148,9 +150,8 @@
                   (.pickFolder util/folder-picker)
                   #(js->clj % :keywordize-keys true)
                   :path)
-            files (readdir path)]
-      (js/console.log path)
-      (js/console.log files)
+            files (readdir path)
+            files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
   (get-files [this path-or-handle _ok-handler]
     (readdir path-or-handle))
