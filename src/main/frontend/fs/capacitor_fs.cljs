@@ -100,12 +100,15 @@
     nil)
   (read-file [this dir path _options]
     (let [path (str dir path)]
-      (p/let [content (.readFile Filesystem
-                                 (clj->js
-                                  {:path path
-                                   :directory (.-ExternalStorage Directory)
-                                   :encoding (.-UTF8 Encoding)}))]
-        content)))
+      (->
+       (p/let [content (.readFile Filesystem
+                                  (clj->js
+                                   {:path path
+                                    :directory (.-ExternalStorage Directory)
+                                    :encoding (.-UTF8 Encoding)}))]
+         content)
+       (p/catch (fn [error]
+                  (js/alert error))))))
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
     (let [path (cond
                  (= (util/platform) "ios")
