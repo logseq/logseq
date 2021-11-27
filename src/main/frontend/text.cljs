@@ -337,3 +337,12 @@
                  (vec (take-last 2 (conj acc k)))))
              []
              ks))))
+
+(defn get-graph-name-from-path
+  [path]
+  (when (string? path)
+    (let [parts (->> (string/split path #"/")
+                     (take-last 2))]
+      (if (not= (first parts) "0")
+        (string/join "/" parts)
+        (last parts)))))
