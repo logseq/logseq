@@ -138,9 +138,10 @@
   []
   (when (and (config/demo-graph?)
              (not config/publishing?))
-    (ui/admonition
-     :warning
-     [:p "This is a demo graph, changes will not be saved until you open a local folder."])))
+    (rum/with-context [[t] i18n/*tongue-context*]
+      (ui/admonition
+        :warning
+        [:p (t :on-boarding/demo-graph)]))))
 
 (rum/defc github-integration-soon-deprecated-alert
   []
