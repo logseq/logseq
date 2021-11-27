@@ -352,7 +352,7 @@
 
    :ui/toggle-left-sidebar          {:desc    "Toggle left sidebar"
                                      :binding "t l"
-                                     :fn      ui-handler/toggle-left-sidebar!}
+                                     :fn      state/toggle-left-sidebar!}
 
    :ui/toggle-help                  {:desc    "Toggle help"
                                      :binding "shift+/"

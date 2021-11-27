@@ -30,16 +30,38 @@
         }
       }
     }
+
+    .secondary-tabs {
+      button {
+        margin-right: 5px;
+        background: transparent;
+
+        .ti {
+          margin-right: 3px;
+        }
+
+        &.active {
+          background: var(--ls-secondary-background-color);
+          color: var(--ls-link-text-color);
+        }
+      }
+    }
   }
 
   &-installed {
     min-height: 60vh;
     padding-top: 5px;
+
+    .secondary-tabs {
+      button {
+        background: var(--ls-secondary-background-color);
+      }
+    }
   }
 
   &-marketplace {
     min-height: 60vh;
-    padding-top: 20px;
+    padding-top: 5px;
 
     &.has-installing {
       .ctl {
@@ -423,7 +445,7 @@
 .lsp-ui-float-container {
   top: 40%;
   left: 30%;
-  border:2px solid var(--ls-border-color);
+  border: 2px solid var(--ls-border-color);
 
   .draggable-handle {
   }

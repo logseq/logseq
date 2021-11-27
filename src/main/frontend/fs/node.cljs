@@ -38,7 +38,7 @@
   [this repo dir path content {:keys [ok-handler error-handler skip-compare?] :as opts} stat]
   (if skip-compare?
     (p/catch
-        (p/let [result (ipc/ipc "writeFile" path content)]
+        (p/let [result (ipc/ipc "writeFile" repo path content)]
           (when ok-handler
             (ok-handler repo path result)))
         (fn [error]
@@ -69,12 +69,12 @@
           (when (util/electron?)
             (debug/set-ack-step! path :saved-successfully)
             (debug/ack-file-write! path))
-          (let [disk-content (encrypt/decrypt disk-content)]
+          (p/let [disk-content (encrypt/decrypt disk-content)]
             (state/pub-event! [:file/not-matched-from-disk path disk-content content])))
 
         :else
         (->
-         (p/let [result (ipc/ipc "writeFile" path content)
+         (p/let [result (ipc/ipc "writeFile" repo path content)
                  mtime (gobj/get result "mtime")]
            (when (util/electron?)
              (debug/set-ack-step! path :saved-successfully)

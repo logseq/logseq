@@ -339,6 +339,8 @@
                                           (contains? #{:all-files :all-pages :my-publishing} route-name))}
          (widgets/demo-graph-alert)
 
+         (widgets/github-integration-soon-deprecated-alert)
+
          (cond
            (not indexeddb-support?)
            nil

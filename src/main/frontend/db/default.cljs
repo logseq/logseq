@@ -2,7 +2,7 @@
   (:require [clojure.string :as string]))
 
 (defonce built-in-pages-names
-  #{"NOW" "LATER" "DOING" "DONE" "IN-PROGRESS" "TODO" "WAIT" "WAITING" "A" "B" "C" "Favorites"})
+  #{"NOW" "LATER" "DOING" "DONE" "IN-PROGRESS" "TODO" "WAIT" "WAITING" "A" "B" "C" "Favorites" "Contents" "card"})
 
 (def built-in-pages
   (mapv (fn [p]

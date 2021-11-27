@@ -1,6 +1,5 @@
 (ns frontend.external.roam-test
-  (:require #?(:clj  [clojure.test :refer :all]
-               :cljs [cljs.test :refer [is deftest]])
+  (:require [cljs.test :refer [is deftest]]
             [frontend.external.roam :as roam]
             [frontend.external :refer [to-markdown-files]]))
 

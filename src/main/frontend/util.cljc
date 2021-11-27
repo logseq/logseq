@@ -621,11 +621,27 @@
          (str prefix new-value)))
      s)))
 
-(defn replace-ignore-case [s old-value new-value]
-  (string/replace s (re-pattern (str "(?i)" old-value)) new-value))
+(defonce default-escape-chars "[]{}().+*?|")
 
-(defn replace-first-ignore-case [s old-value new-value]
-  (string/replace-first s (re-pattern (str "(?i)" old-value)) new-value))
+(defn replace-ignore-case
+  [s old-value new-value & [escape-chars]]
+  (let [escape-chars (or escape-chars default-escape-chars)
+        old-value (if (string? escape-chars)
+                    (reduce (fn [acc escape-char]
+                              (string/replace acc escape-char (str "\\" escape-char)))
+                            old-value escape-chars)
+                    old-value)]
+    (string/replace s (re-pattern (str "(?i)" old-value)) new-value)))
+
+(defn replace-first-ignore-case
+  [s old-value new-value & [escape-chars]]
+  (let [escape-chars (or escape-chars default-escape-chars)
+        old-value (if (string? escape-chars)
+                    (reduce (fn [acc escape-char]
+                              (string/replace acc escape-char (str "\\" escape-char)))
+                            old-value escape-chars)
+                    old-value)]
+    (string/replace-first s (re-pattern (str "(?i)" old-value)) new-value)))
 
 ;; copy from https://stackoverflow.com/questions/18735665/how-can-i-get-the-positions-of-regex-matches-in-clojurescript
 #?(:cljs
@@ -1437,3 +1453,13 @@
            button (gobj/get e "button")]
        (or (= which 3)
            (= button 2)))))
+
+#?(:cljs
+   (defn url?
+     [s]
+     (and (string? s)
+          (try
+            (js/URL. s)
+            true
+            (catch js/Error _e
+              false)))))

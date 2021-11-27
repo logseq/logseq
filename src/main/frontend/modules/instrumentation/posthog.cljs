@@ -16,7 +16,6 @@
      :app_ver version
      :schema_ver 0
      ;; hack, did not find ways to hack data on-the-fly with posthog-js
-     :$ip masked
      :$current_url masked
      :$pathname masked})))
 

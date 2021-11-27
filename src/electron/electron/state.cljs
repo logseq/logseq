@@ -32,3 +32,7 @@
 (defn git-auto-commit-disabled?
   []
   (get-in @state [:config :git/disable-auto-commit?] true))
+
+(defn get-graph-path
+  []
+  (:graph/current @state))

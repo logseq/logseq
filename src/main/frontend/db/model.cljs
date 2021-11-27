@@ -336,6 +336,13 @@
      (set)
      (set/union #{page-id}))))
 
+(defn get-entities-by-ids
+  ([ids]
+   (get-entities-by-ids (state/get-current-repo) ids))
+  ([repo ids]
+   (when repo
+     (db-utils/pull-many repo '[*] ids))))
+
 (defn get-page-names-by-ids
   ([ids]
    (get-page-names-by-ids (state/get-current-repo) ids))
@@ -572,18 +579,20 @@
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 
-(defn get-nested-pages
-  [repo page-name]
+(defn get-pages-by-name-partition
+  [repo partition]
   (when-let [conn (conn/get-conn repo)]
-    (let [nested-page-name (->> (string/trim page-name)
-                                (util/format "[[%s]]"))]
-      (d/q '[:find ?e ?n
-             :in $ ?x
-             :where
-             [?e :block/name ?n]
-             [(clojure.string/includes? ?n ?x)]]
-           conn
-           nested-page-name))))
+    (when-not (string/blank? partition)
+      (let [partition (string/lower-case (string/trim partition))
+            ids (->> (d/datoms conn :aevt :block/name)
+                     (filter (fn [datom]
+                               (let [page (:v datom)]
+                                 (string/includes? page partition))))
+                     (map :e))]
+        (when (seq ids)
+          (db-utils/pull-many repo
+                              '[:db/id :block/name :block/original-name]
+                              ids))))))
 
 (defn block-and-children-transform
   [result repo-url block-uuid]
@@ -1430,32 +1439,35 @@
    (take 200)))
 
 (defn get-orphaned-pages
-  [repo]
-  (let [all-pages (get-pages repo)
+  [{:keys [repo pages empty-ref-f]
+          :or {repo (state/get-current-repo)
+               empty-ref-f (fn [page] (zero? (count (:block/_refs page))))}}]
+  (let [pages (->> (or pages (get-pages repo))
+                   (remove nil?))
         built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
         orphaned-pages (->>
-                         (map
-                           (fn [page]
-                             (let [name (string/lower-case page)]
-                               (when-let [page (db-utils/entity [:block/name name])]
-                                 (and
-                                   (zero? (count (:block/_refs page)))
-                                   (or
-                                     (page-empty? repo (:db/id page))
-                                     (let [first-child (first (:block/_left page))
-                                           children (:block/_page page)]
-                                       (and
-                                         first-child
-                                         (= 1 (count children))
-                                         (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
-                                   (not (contains? built-in-pages name))
-                                   page))))
-                           all-pages)
-                         (remove false?))]
+                        (map
+                          (fn [page]
+                            (let [name (string/lower-case page)]
+                              (when-let [page (db-utils/entity [:block/name name])]
+                                (and
+                                 (empty-ref-f page)
+                                 (or
+                                  (page-empty? repo (:db/id page))
+                                  (let [first-child (first (:block/_left page))
+                                        children (:block/_page page)]
+                                    (and
+                                     first-child
+                                     (= 1 (count children))
+                                     (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
+                                 (not (contains? built-in-pages name))
+                                 page))))
+                          pages)
+                        (remove false?))]
     orphaned-pages))
 
 (defn remove-orphaned-pages!
-  ([repo] (remove-orphaned-pages! repo (get-orphaned-pages repo)))
+  ([repo] (remove-orphaned-pages! repo (get-orphaned-pages {})))
   ([repo orphaned-pages]
    (let [transaction (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
      (db-utils/transact! transaction))))

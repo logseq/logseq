@@ -7,6 +7,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
+            [frontend.db.conn :as conn]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.common :as common-handler]
@@ -28,6 +29,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.pool :as pool]
+            [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -51,7 +53,7 @@
         f (fn []
             (let [repo (state/get-current-repo)]
               (when-not (state/nfs-refreshing?)
-               ;; Don't create the journal file until user writes something
+                ;; Don't create the journal file until user writes something
                 (page-handler/create-today-journal!))
 
               (when (and (state/input-idle? repo)
@@ -149,6 +151,21 @@
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
 
+(defn enable-datalog-console
+  "Enables datalog console in browser provided by https://github.com/homebaseio/datalog-console"
+  []
+  (js/document.documentElement.setAttribute "__datalog-console-remote-installed__" true)
+  (.addEventListener js/window "message"
+                     (fn [event]
+                       (let [conn (conn/get-conn)]
+                         (when-let [devtool-message (gobj/getValueByKeys event "data" ":datalog-console.client/devtool-message")]
+                           (let [msg-type (:type (read-string devtool-message))]
+                             (case msg-type
+
+                               :datalog-console.client/request-whole-database-as-string
+                               (.postMessage js/window #js {":datalog-console.remote/remote-message" (pr-str conn)} "*")
+
+                               nil)))))))
 (defn- get-repos
   []
   (let [logged? (state/logged?)
@@ -217,6 +234,8 @@
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
     (pool/init-parser-pool!)
+    (when config/dev?
+      (enable-datalog-console))
     (when (util/electron?)
       (el/listen!))))
 

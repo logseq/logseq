@@ -21,6 +21,7 @@ module.exports = {
       'name': '@electron-forge/maker-squirrel',
       'config': {
         'name': 'Logseq',
+        'setupIcon': './icons/logseq.ico',
         'loadingGif': './icons/installing.gif'
       }
     },

@@ -20,9 +20,11 @@
     (route-fn to path-params query-params)))
 
 (defn redirect-to-home!
-  []
-  (state/pub-event! [:redirect-to-home])
-  (redirect! {:to :home}))
+  ([]
+   (redirect-to-home! true))
+  ([pub-event?]
+   (when pub-event? (state/pub-event! [:redirect-to-home]))
+   (redirect! {:to :home})))
 
 (defn redirect-to-page!
   ([page-name]

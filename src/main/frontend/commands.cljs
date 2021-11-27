@@ -335,10 +335,11 @@
 
 (defn insert!
   [id value
-   {:keys [last-pattern postfix-fn backward-pos forward-pos end-pattern]
+   {:keys [last-pattern postfix-fn backward-pos forward-pos end-pattern backward-truncate-number]
     :as _option}]
   (when-let [input (gdom/getElement id)]
-    (let [last-pattern (or last-pattern (state/get-editor-command-trigger))
+    (let [last-pattern (when-not backward-truncate-number
+                         (or last-pattern (state/get-editor-command-trigger)))
           edit-content (gobj/get input "value")
           current-pos (cursor/pos input)
           current-pos (or
@@ -356,18 +357,29 @@
                             (string/ends-with? s "(")
                             (or (string/starts-with? last-pattern "((")
                                 (string/starts-with? last-pattern "[[")))
-                       (string/starts-with? s "{{embed")))))
+                       (and s (string/starts-with? s "{{embed"))))))
           space? (if (and space? (string/starts-with? last-pattern "#[["))
                    false
                    space?)
-          prefix (if (string/blank? last-pattern)
+          prefix (cond
+                   (and backward-truncate-number (integer? backward-truncate-number))
+                   (str (util/safe-subs orig-prefix 0 (- (count orig-prefix) backward-truncate-number))
+                        (when-not (zero? backward-truncate-number)
+                          value))
+
+                   (string/blank? last-pattern)
                    (if space?
                      (util/concat-without-spaces orig-prefix value)
                      (str orig-prefix value))
+
+                   :else
                    (util/replace-last last-pattern orig-prefix value space?))
           postfix (subs edit-content current-pos)
           postfix (if postfix-fn (postfix-fn postfix) postfix)
           new-value (cond
+                      (string/blank? postfix)
+                      prefix
+
                       space?
                       (util/concat-without-spaces prefix postfix)
 

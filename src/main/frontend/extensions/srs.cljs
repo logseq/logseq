@@ -571,7 +571,8 @@
   (let [repo (state/get-current-repo)
         query-string (:query-string state)
         card-index (::card-index state)
-        query-result (:query-result state)]
+        query-result (:query-result state)
+        global? (:global? config)]
     (if (seq query-result)
       (let [{:keys [total result]} (query-scheduled repo query-result (tl/local-now))
             review-cards result
@@ -580,7 +581,7 @@
             filtered-total (count result)
             modal? (:modal? config)]
         [:div.flex-1.cards-review {:style (when modal? {:height "100%"})
-                                   :class (if (:global? config) "" "shadow-xl")}
+                                   :class (if global? "" "shadow-xl")}
          [:div.flex.flex-row.items-center.justify-between.cards-title
           [:div.flex.flex-row.items-center
            (ui/icon "infinity" {:style {:font-size 20}})
@@ -638,10 +639,9 @@
                                  (persist-var/persist-save of-matrix))})
                        card-index))]
            review-finished)])
-
-      (if (zero? @cards-total)
+      (if global?
         [:div.ls-card
-         [:h1.title "Time to create your first card!"]
+         [:h1.title "Time to create a card!"]
 
          [:div
           [:p "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."]

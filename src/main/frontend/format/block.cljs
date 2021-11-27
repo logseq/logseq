@@ -55,6 +55,7 @@
 
                   (and
                    (= typ "Search")
+                   (text/page-ref? (second (:url (second block))))
                    (text/page-ref-un-brackets! (second (:url (second block)))))
 
                   (and
@@ -84,10 +85,10 @@
 
                (and (vector? block)
                     (= "Macro" (first block)))
-               (let [{:keys [name arguments]} (second block)]
-                 (let [argument (string/join ", " arguments)]
+               (let [{:keys [name arguments]} (second block)
+                     argument (string/join ", " arguments)]
                    (when (= name "embed")
-                     (text/page-ref-un-brackets! argument))))
+                     (text/page-ref-un-brackets! argument)))
 
                (and (vector? block)
                     (= "Tag" (first block)))
@@ -198,8 +199,11 @@
                                            "id"
                                            k)
                                        v (if (coll? v)
-                                           (remove util/wrapped-by-quotes? v)
-                                           (property/parse-property k v))
+                                           (->> (remove util/wrapped-by-quotes? v)
+                                                (remove string/blank?))
+                                           (if (string/blank? v)
+                                             nil
+                                             (property/parse-property k v)))
                                        k (keyword k)
                                        v (if (and
                                               (string? v)
@@ -207,7 +211,8 @@
                                            (set [v])
                                            v)
                                        v (if (coll? v) (set v) v)]
-                                   [k v]))))]
+                                   [k v])))
+                          (remove #(nil? (second %))))]
       {:properties (into {} properties)
        :properties-order (map first properties)
        :page-refs page-refs})))
@@ -262,6 +267,7 @@
     (let [original-page-name (util/remove-boundary-slashes original-page-name)
           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
           namespace? (and (string/includes? original-page-name "/")
+                          (not (boolean (text/get-nested-page-name original-page-name)))
                           (text/namespace-page? original-page-name))
           m (merge
              {:block/name page-name
@@ -302,10 +308,12 @@
      (concat title body))
     (let [refs (remove string/blank? @refs)
           children-pages (->> (mapcat (fn [p]
-                                        (when (text/namespace-page? p)
-                                          (util/split-namespace-pages p)))
+                                        (let [p (or (text/get-nested-page-name p) p)]
+                                          (when (text/namespace-page? p)
+                                            (util/split-namespace-pages p))))
                                       refs)
-                              (remove string/blank?))
+                              (remove string/blank?)
+                              (distinct))
           refs (->> (distinct (concat refs children-pages))
                     (remove nil?))
           refs (map (fn [ref] (page-name->map ref with-id?)) refs)]
@@ -466,7 +474,8 @@
                                    [(text/page-ref-un-brackets! v)]
 
                                    :else
-                                   nil)) (vals properties))]
+                                   nil)) (vals properties))
+        page-refs (remove string/blank? page-refs)]
     (map (fn [page] (page-name->map page true)) page-refs)))
 
 (defn extract-blocks
@@ -709,6 +718,22 @@
                    (> (count blocks) 1)
                    (assoc :block/warning :multiple-blocks))]
        (if uuid (assoc block :block/uuid uuid) block)))))
+
+(defn parse-title-and-body
+  [format pre-block? content]
+  (def content content)
+  (let [ast (format/to-edn content format nil)
+        content (if pre-block? content
+                    (str (config/get-block-pattern format) " " (string/triml content)))
+        content (property/remove-properties format content)
+        ast (->> (format/to-edn content format nil)
+                 (map first))
+        title (when (heading-block? (first ast))
+                (:title (second (first ast))))]
+    (cond->
+      {:block/body (vec (if title (rest ast) ast))}
+      title
+      (assoc :block/title title))))
 
 (defn macro-subs
   [macro-content arguments]

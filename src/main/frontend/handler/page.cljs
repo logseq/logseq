@@ -215,7 +215,7 @@
                          (re-find
                           (re-pattern
                            (util/format
-                            "\\[\\[file:\\./.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
+                            "\\[\\[file:\\.*/.*%s\\.org\\]\\[(.*?)\\]\\]" old-name))
                           content))]
     (-> (if old-org-ref
             (let [[old-full-ref old-label] old-org-ref
@@ -294,7 +294,8 @@
       (config-handler/set-config! :favorites favorites))))
 
 (defn delete!
-  [page-name ok-handler]
+  [page-name ok-handler & {:keys [delete-file?]
+                           :or {delete-file? true}}]
   (when page-name
     (when-let [repo (state/get-current-repo)]
       (let [page-name (string/lower-case page-name)
@@ -305,7 +306,7 @@
                      blocks)]
         (db/transact! tx-data)
 
-        (delete-file! repo page-name)
+        (when delete-file? (delete-file! repo page-name))
 
         ;; if other page alias this pagename,
         ;; then just remove some attrs of this entity instead of retractEntity
@@ -339,11 +340,8 @@
         page-ids (->> (map :block/page blocks)
                       (remove nil?)
                       (set))
-        tx       (->> (map (fn [{:block/keys [uuid title content properties] :as block}]
-                             (let [title      (let [title' (walk-replace-old-page! title old-original-name new-name)]
-                                                (when-not (= title' title)
-                                                  title'))
-                                   content    (let [content' (replace-old-page! content old-original-name new-name)]
+        tx       (->> (map (fn [{:block/keys [uuid title content properties format pre-block?] :as block}]
+                             (let [content    (let [content' (replace-old-page! content old-original-name new-name)]
                                                 (when-not (= content' content)
                                                   content'))
                                    properties (let [properties' (walk-replace-old-page! properties old-original-name new-name)]
@@ -351,12 +349,13 @@
                                                   properties'))]
                                (when (or title content properties)
                                  (util/remove-nils-non-nested
-                                  {:block/uuid       uuid
-                                   :block/title      title
-                                   :block/content    content
-                                   :block/properties properties
-                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
-                                   :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))})))) blocks)
+                                  (merge
+                                   {:block/uuid       uuid
+                                    :block/content    content
+                                    :block/properties properties
+                                    :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
+                                    :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))}
+                                   (block/parse-title-and-body format pre-block? content)))))) blocks)
                       (remove nil?))]
     (db/transact! repo tx)
     (doseq [page-id page-ids]
@@ -415,23 +414,42 @@
 
 (defn- rename-nested-pages
   [old-ns-name new-ns-name]
-  (when-let [nested-pages (db/get-nested-pages
-                           (state/get-current-repo)
-                           (string/lower-case old-ns-name))]
-    (doseq [page nested-pages]
-      (let [[_page-id old-page-name] page
-            new-page-name (util/replace-ignore-case
-                           old-page-name
-                           (util/format "\\[\\[%s\\]\\]" old-ns-name)
-                           (util/format "[[%s]]" new-ns-name))]
-        (rename-page-aux old-page-name new-page-name)))))
+  (let [repo            (state/get-current-repo)
+        nested-page-str (util/format "[[%s]]" (string/lower-case old-ns-name))
+        ns-prefix       (util/format "[[%s/" (string/lower-case old-ns-name))
+        nested-pages    (db/get-pages-by-name-partition repo nested-page-str)
+        nested-pages-ns (db/get-pages-by-name-partition repo ns-prefix)]
+    (when nested-pages
+      ;; rename page "[[obsidian]] is a tool" to "[[logseq]] is a tool"
+      (doseq [{:block/keys [name original-name]} nested-pages]
+        (let [old-page-title (or original-name name)
+              new-page-title (string/replace
+                             old-page-title
+                             (util/format "[[%s]]" old-ns-name)
+                             (util/format "[[%s]]" new-ns-name))]
+          (when (and old-page-title new-page-title)
+            (p/do!
+             (rename-page-aux old-page-title new-page-title)
+             (println "Renamed " old-page-title " to " new-page-title))))))
+    (when nested-pages-ns
+      ;; rename page "[[obsidian/page1]] is a tool" to "[[logseq/page1]] is a tool"
+      (doseq [{:block/keys [name original-name]} nested-pages-ns]
+        (let [old-page-title (or original-name name)
+              new-page-title (string/replace
+                              old-page-title
+                             (util/format "[[%s/" old-ns-name)
+                             (util/format "[[%s/" new-ns-name))]
+          (when (and old-page-title new-page-title)
+            (p/do!
+             (rename-page-aux old-page-title new-page-title)
+             (println "Renamed " old-page-title " to " new-page-title))))))))
 
 (defn- rename-namespace-pages!
   [repo old-name new-name]
   (let [pages (db/get-namespace-pages repo old-name)]
-    (doseq [{:block/keys [name original-name] :as page} pages]
+    (doseq [{:block/keys [name original-name]} pages]
       (let [old-page-title (or original-name name)
-            new-page-title (util/replace-first-ignore-case old-page-title old-name new-name)]
+            new-page-title (string/replace old-page-title old-name new-name)]
         (when (and old-page-title new-page-title)
           (p/let [_ (rename-page-aux old-page-title new-page-title)]
             (println "Renamed " old-page-title " to " new-page-title)))))))
@@ -491,8 +509,6 @@
   (let [repo          (state/get-current-repo)
         old-name      (string/trim old-name)
         new-name      (string/trim new-name)
-        namespace     (or (string/includes? old-name "/")
-                          (db/get-namespace-pages repo old-name))
         name-changed? (not= old-name new-name)]
     (if (and old-name
              new-name
@@ -506,11 +522,8 @@
           (db/pull [:block/name (string/lower-case new-name)])
           (merge-pages! old-name new-name)
 
-          namespace
-          (rename-namespace-pages! repo old-name new-name)
-
           :else
-          (rename-page-aux old-name new-name))
+          (rename-namespace-pages! repo old-name new-name))
         (rename-nested-pages old-name new-name))
       (when (string/blank? new-name)
         (notification/show! "Please use a valid name, empty name is not allowed!" :error)))))
@@ -629,7 +642,8 @@
                           (count old-page-ref))
                        2)]
         (cursor/move-cursor-to input new-pos)))
-    (cursor/move-cursor-forward input 2)))
+    (let [current-selected (util/get-selected-text)]
+      (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
 (defn on-chosen-handler
   [input id q pos format]
@@ -682,7 +696,8 @@
 (defn create-today-journal!
   []
   (when-let [repo (state/get-current-repo)]
-    (when (state/enable-journals? repo)
+    (when (and (state/enable-journals? repo)
+               (not (:repo/loading-files? @state/state)))
       (state/set-today! (date/today))
       (when (or (db/cloned? repo)
                 (or (config/local-db? repo)

@@ -29,13 +29,15 @@ jobs:
           fetch-depth: 1
           submodules: 'true'
 
-      - name: Maven cache
-        uses: actions/cache@v1
-        id: maven-cache
+      - name: Clojure cache
+        uses: actions/cache@v2
+        id: clojure-deps
         with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-maven-${{ hashFiles('deps.edn') }}
-          restore-keys: ${{ runner.os }}-maven-
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: ${{ runner.os }}-clojure-deps-${{ hashFiles('deps.edn') }}
+          restore-keys: ${{ runner.os }}-clojure-deps-
 
       - name: Prepare Java
         uses: actions/setup-java@v1
@@ -57,8 +59,8 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
-      - name: Fetch Maven deps
-        if: steps.maven-cache.outputs.cache-hit != 'true'
+      - name: Fetch Clojure deps
+        if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
 
       - name: Get yarn cache directory path
@@ -75,7 +77,23 @@ jobs:
       - name: Fetch yarn deps
         run: yarn cache clean && yarn install
 
-      - name: Run Clojure test
+      - name: Run ClojureScript test
         run: |
           yarn cljs:test
           node static/tests.js
+
+      - name: Run Playwright test
+        if: github.event_name == 'pull_request'
+        run: |
+          yarn release
+          (cd static && yarn install && yarn rebuild:better-sqlite3)
+          xvfb-run -- yarn e2e-test
+        env:
+          DEBUG: "pw:test"
+
+      - name: Save test artifacts
+        if: ${{ github.event_name == 'pull_request' && failure() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: e2e-test-report
+          path: artifacts.zip

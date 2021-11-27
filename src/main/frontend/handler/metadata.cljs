@@ -45,6 +45,7 @@
         all-pages (->> (db/get-all-pages repo)
                        (common-handler/fix-pages-timestamps)
                        (map #(select-keys % [:block/name :block/created-at :block/updated-at]))
+                       (sort-by :block/name)
                        (vec))]
     (p/let [_ (-> (file-handler/create-pages-metadata-file repo)
                   (p/catch (fn [] nil)))]
