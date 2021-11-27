@@ -311,8 +311,7 @@
           [:a.button#search-button-mobile
            {:on-click #(state/pub-event! [:go/search])}
            (ui/icon "search" {:style {:fontSize ui/icon-size}})])]])
-    [:div.flex-1.h-0.overflow-y-auto {:style {:position "relative"
-                                              :top "-48px"}}
+    [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 
 (rum/defc main <

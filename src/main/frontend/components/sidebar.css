@@ -100,7 +100,10 @@ html.is-mobile {
   overflow: auto;
 
   > .wrap {
-    padding-top: 60px;
+      padding-top: 24px;
+      @screen md {
+          padding-top: 60px;
+      }
   }
 
   .dropdown-wrapper {
