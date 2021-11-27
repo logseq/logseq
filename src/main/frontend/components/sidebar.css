@@ -64,9 +64,9 @@ html.is-mobile {
 
 #left-bar {
   background-color: var(--ls-primary-background-color);
-  width:             80vw;
-  max-width:         250px;
-  
+  width:             75vw;
+  max-width:         300px;
+
   > .head-wrap {
     background-color: var(--ls-search-background-color);
   }
