@@ -11,5 +11,9 @@
 			"splashImmersive": true,
 			"backgroundColor": "#002b36"
 		}
+	},
+	"server": {
+		"url": "http://192.168.1.59:3001",
+		"cleartext": true
 	}
 }
