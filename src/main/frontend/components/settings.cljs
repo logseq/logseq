@@ -493,8 +493,8 @@
           (t :settings-page/disable-sentry)
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
-                 (not instrument-disabled?)))
-          [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
+                  (not instrument-disabled?)))
+          [:span.text-sm.text-justify.ml-2.5.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
 
 (defn clear-cache-row [t]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
