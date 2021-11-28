@@ -14,8 +14,12 @@
   }
 
   &-inner {
-    > aside {
-      border-right: 1px solid var(--ls-quaternary-background-color);
+      > aside {
+        border-right: 0px solid var(--ls-quaternary-background-color);
+        border-bottom: 1px solid var(--ls-quaternary-background-color);
+        @screen md {
+          border-right: 1px solid var(--ls-quaternary-background-color);
+        }
 
       ul {
         padding: 12px;
