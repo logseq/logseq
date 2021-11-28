@@ -130,13 +130,14 @@
    (fn [{:keys [close-fn] :as state}]
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
-      (for [{:keys [options title icon hr]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon hr hover-detail]} (if (fn? links) (links) links)]
         (let [new-options
-              (assoc options
-                     :on-click (fn [e]
-                                 (when-let [on-click-fn (:on-click options)]
-                                   (on-click-fn e))
-                                 (close-fn)))
+              (merge options
+                     {:title hover-detail
+                      :on-click (fn [e]
+                                  (when-let [on-click-fn (:on-click options)]
+                                    (on-click-fn e))
+                                  (close-fn))})
               child (if hr
                       nil
                       [:div
