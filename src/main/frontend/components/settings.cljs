@@ -287,8 +287,9 @@
       [:li {:on-click (partial state/use-theme-mode! "system")
             :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
 
-    [:div.pl-16
-     (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))]]])
+    (when-not (mobile-util/is-native-platform?)
+     [:div.pl-16
+      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))])]])
 
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
