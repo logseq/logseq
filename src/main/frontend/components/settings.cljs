@@ -202,7 +202,7 @@
   (let [enabled? (state/get-git-auto-commit-enabled?)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      "Enable Git auto commit"]
+      (t :settings-page/git-switcher-label)]
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
@@ -217,7 +217,7 @@
   (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      "Git auto commit seconds"]
+      (t :settings-page/git-commit-delay)]
      [:div.mt-1.sm:mt-0.sm:col-span-2
       [:div.max-w-lg.rounded-md.sm:max-w-xs
        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
@@ -626,13 +626,13 @@
             [:div.text-sm.my-4
              [:a {:href "https://git-scm.com/"
                   :target "_blank"} "Git"]
-             " is used for pages version control, you can click the vertical three dots menu to check the page's history."]
+             (t :settings-page/git-desc)]
             (switch-git-auto-commit-row t)
             (git-auto-commit-seconds t)
 
             (ui/admonition
              :warning
-             [:p "You need to restart the app after updating the settings."])]
+             [:p (t :settings-page/git-confirm)])]
 
            :advanced
            [:div.panel-wrap.is-advanced
