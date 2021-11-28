@@ -215,10 +215,11 @@
     }
 
     .update-state {
-      padding: 15px;
+      padding: 6px 10px;
       background-color: var(--ls-quaternary-background-color);
       border-radius: 4px;
-      margin-bottom: -8px;
+      margin-top: 10px;
+      width: fit-content;
 
       > p {
         margin: 0;

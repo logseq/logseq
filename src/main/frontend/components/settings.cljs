@@ -92,18 +92,23 @@
     [:span.cp__settings-app-updater
 
      [:div.ctls.flex.items-center
-      (ui/button
-       (if update-pending? "Checking ..." "Check for updates")
-       :class "text-sm p-1 mr-1"
-       :disabled update-pending?
-       :on-click #(js/window.apis.checkForUpdates false))]
+
+      [:div.mt-1.sm:mt-0.sm:col-span-2
+       {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
+       [:div (ui/button
+              (if update-pending? "Checking ..." "Check for updates")
+              :class "text-sm p-1 mr-1"
+              :disabled update-pending?
+              :on-click #(js/window.apis.checkForUpdates false))]
+
+       [:div.text-sm.opacity-50 (str "Version " version)]]]
 
      (when-not (or update-pending?
                    (string/blank? type))
-       [:div.update-state
+       [:div.update-state.text-sm
         (case type
           "update-not-available"
-          [:p "😀 Your app is up-to-date!"]
+          [:p "Your app is up-to-date 🎉"]
 
           "update-available"
           (let [{:keys [name url]} payload]
@@ -495,7 +500,6 @@
 (defn version-row [t version]
   (row-with-button-action {:left-label (t :settings-page/current-version)
                            :action     (app-updater version)
-                           :desc       [:div.text-sm.opacity-50 (str "Version " version)]
                            :-for       "current-version"}))
 
 (defn developer-mode-row [t developer-mode?]
