@@ -18,7 +18,8 @@
         border-right: 0px solid var(--ls-quaternary-background-color);
         border-bottom: 1px solid var(--ls-quaternary-background-color);
         @screen md {
-          border-right: 1px solid var(--ls-quaternary-background-color);
+            border-right: 1px solid var(--ls-quaternary-background-color);
+            border-bottom: 0px solid var(--ls-quaternary-background-color);
         }
 
       ul {
@@ -66,7 +67,7 @@
 
     > article {
       flex: 1;
-      padding: 0 12px 12px;
+      padding: 0 12px 24px;
       max-height: 70vh;
       overflow: auto;
     }
