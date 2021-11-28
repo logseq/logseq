@@ -2555,7 +2555,7 @@
     (let [{:keys [lines language]} options
           attr (when language
                  {:data-lang language})
-          code (join-lines lines)]
+          code (apply str lines)]
       (cond
         html-export?
         (highlight/html-export attr code)

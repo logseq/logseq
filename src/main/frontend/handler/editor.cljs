@@ -2431,7 +2431,12 @@
                           (+ (string/index-of content right-bound pos)
                              (count right-bound))))
               "admonition-block" (keydown-new-line)
-              "source-block" (keydown-new-line)
+              "source-block" (do
+                               (keydown-new-line)
+                               (case (:action thing-at-point)
+                                 :into-code-editor
+                                 (state/into-code-editor-mode!)
+                                 nil))
               "block-ref" (open-block-in-sidebar! (:link thing-at-point))
               "page-ref" (when-not (string/blank? (:link thing-at-point))
                            (insert-first-page-block-if-not-exists! (:link thing-at-point))
@@ -2765,7 +2770,8 @@
           shift? (.-shiftKey e)
           code (gobj/getValueByKeys e "event_" "code")]
       (cond
-        (or is-composing? (= key-code 229))
+        (and (or is-composing? (= key-code 229))
+             (not (state/get-editor-show-page-search-hashtag?)))
         nil
 
         (or ctrlKey metaKey)
