@@ -609,7 +609,7 @@
            [:div.panel-wrap
             [:div.text-sm.my-4
              [:span.text-sm.opacity-50.my-4
-              "You can see a page's history by clicking the three vertical dots "
+              "You can view a page's edit history by clicking the three vertical dots "
               "in the top-right corner and selecting \"Check page's history\". "
               "Logseq uses "]
              [:a {:href "https://git-scm.com/" :target "_blank"}
