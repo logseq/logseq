@@ -443,7 +443,7 @@
                 ;;      (set-setting! :layout value))
                 ;;    "graph-layout")]
                 [:div.flex.items-center.justify-between.mb-2
-                 [:span "Journals"]
+                 [:span (t :right-side-bar/journals)]
                  ;; FIXME: why it's not aligned well?
                  [:div.mt-1
                   (ui/toggle journal?
