@@ -536,6 +536,10 @@
   []
   (get (:editor/content @state) (get-edit-input-id)))
 
+(defn sub-edit-content
+  []
+  (sub [:editor/content (get-edit-input-id)]))
+
 (defn append-current-edit-content!
   [append-text]
   (when-not (string/blank? append-text)
@@ -688,7 +692,6 @@
 
 (defn drop-last-selection-block!
   []
-  (def blocks (:selection/blocks @state))
   (let [last-block (peek (vec (:selection/blocks @state)))]
     (swap! state assoc
            :selection/mode true
@@ -873,6 +876,12 @@
   (swap! state merge {:editor/editing? nil
                       :editor/block nil
                       :cursor-range nil}))
+
+(defn into-code-editor-mode!
+  []
+  (swap! state merge {:editor/editing? nil
+                      :cursor-range nil
+                      :editor/code-mode? true}))
 
 (defn set-last-pos!
   [new-pos]

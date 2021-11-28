@@ -31,7 +31,7 @@ jobs:
 
       - name: Clojure cache
         uses: actions/cache@v2
-        id: clojure-cache
+        id: clojure-deps
         with:
           path: |
             ~/.m2/repository
@@ -59,8 +59,8 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
 
-      - name: Fetch Maven deps
-        if: steps.clojure-cache.outputs.cache-hit != 'true'
+      - name: Fetch Clojure deps
+        if: steps.clojure-deps.outputs.cache-hit != 'true'
         run: clojure -A:cljs -P
 
       # - name: Get yarn cache directory path
