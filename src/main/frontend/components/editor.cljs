@@ -265,7 +265,7 @@
       (ui/icon "arrow-back"
                {:style {:fontSize ui/icon-size}})]]
     [:div
-     [:button.bottom-action.text-lg.font-medium
+     [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (commands/simple-insert!
@@ -276,9 +276,10 @@
                                           (commands/handle-step [:editor/search-page]))})
                         (when-let [input (gdom/getElement parent-id)]
                           (.focus input)))}
-      "[["]]
+      (ui/icon "brackets"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
-     [:button.bottom-action.text-lg.font-medium
+     [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (commands/simple-insert!
@@ -289,15 +290,17 @@
                                           (commands/handle-step [:editor/search-block]))})
                         (when-let [input (gdom/getElement parent-id)]
                           (.focus input)))}
-      "(("]]
+      (ui/icon "parentheses"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
-     [:button.bottom-action.text-lg.font-medium
+     [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (commands/simple-insert! parent-id "/" {})
                         (when-let [input (gdom/getElement parent-id)]
                           (.focus input)))}
-      "/"]]]])
+      (ui/icon "command"
+               {:style {:fontSize ui/icon-size}})]]]])
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
