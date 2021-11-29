@@ -16,29 +16,31 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		7435D10C2704659F00AB88E0 /* FolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10B2704659F00AB88E0 /* FolderPicker.swift */; };
 		7435D10F2704660B00AB88E0 /* FolderPicker.m in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10E2704660B00AB88E0 /* FolderPicker.m */; };
-		BDDF3BC6333CA3EA105F48B2 /* Pods_App.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6A16FBA319D846498E23D2B9 /* Pods_App.framework */; };
+		B50C6194D06FE919721B594B /* Pods_Logseq.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 659A484D0A608EE5D778DEF1 /* Pods_Logseq.framework */; };
 		D32752BE275496C60039291C /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D32752BD275496C60039291C /* CloudKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
-		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		504EC3041FED79650016851F /* Logseq.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Logseq.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
-		6A16FBA319D846498E23D2B9 /* Pods_App.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_App.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		659A484D0A608EE5D778DEF1 /* Pods_Logseq.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Logseq.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7435D10B2704659F00AB88E0 /* FolderPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPicker.swift; sourceTree = "<group>"; };
 		7435D10D2704660A00AB88E0 /* App-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "App-Bridging-Header.h"; sourceTree = "<group>"; };
 		7435D10E2704660B00AB88E0 /* FolderPicker.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FolderPicker.m; sourceTree = "<group>"; };
+		8A489CEC51E94726DDD58810 /* Pods-Logseq.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.release.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.release.xcconfig"; sourceTree = "<group>"; };
 		A693BFCEA424C37DF4D9AF1B /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
 		B9A79754543D95E609C23F91 /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
 		D32752BC275496A60039291C /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		D32752BD275496C60039291C /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
 		D32752BF2754C5AB0039291C /* AppDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppDebug.entitlements; sourceTree = "<group>"; };
+		DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.debug.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,8 +48,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BDDF3BC6333CA3EA105F48B2 /* Pods_App.framework in Frameworks */,
 				D32752BE275496C60039291C /* CloudKit.framework in Frameworks */,
+				B50C6194D06FE919721B594B /* Pods_Logseq.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,7 +69,7 @@
 		504EC3051FED79650016851F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				504EC3041FED79650016851F /* App.app */,
+				504EC3041FED79650016851F /* Logseq.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -96,7 +98,7 @@
 			isa = PBXGroup;
 			children = (
 				D32752BD275496C60039291C /* CloudKit.framework */,
-				6A16FBA319D846498E23D2B9 /* Pods_App.framework */,
+				659A484D0A608EE5D778DEF1 /* Pods_Logseq.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -106,6 +108,8 @@
 			children = (
 				B9A79754543D95E609C23F91 /* Pods-App.debug.xcconfig */,
 				A693BFCEA424C37DF4D9AF1B /* Pods-App.release.xcconfig */,
+				DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */,
+				8A489CEC51E94726DDD58810 /* Pods-Logseq.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -113,9 +117,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		504EC3031FED79650016851F /* App */ = {
+		504EC3031FED79650016851F /* Logseq */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 504EC3161FED79650016851F /* Build configuration list for PBXNativeTarget "App" */;
+			buildConfigurationList = 504EC3161FED79650016851F /* Build configuration list for PBXNativeTarget "Logseq" */;
 			buildPhases = (
 				818545F0788D5DB466761623 /* [CP] Check Pods Manifest.lock */,
 				504EC3001FED79650016851F /* Sources */,
@@ -127,9 +131,9 @@
 			);
 			dependencies = (
 			);
-			name = App;
+			name = Logseq;
 			productName = App;
-			productReference = 504EC3041FED79650016851F /* App.app */;
+			productReference = 504EC3041FED79650016851F /* Logseq.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -161,7 +165,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				504EC3031FED79650016851F /* App */,
+				504EC3031FED79650016851F /* Logseq */,
 			);
 		};
 /* End PBXProject section */
@@ -195,7 +199,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-App/Pods-App-frameworks.sh\"\n";
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Logseq/Pods-Logseq-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		818545F0788D5DB466761623 /* [CP] Check Pods Manifest.lock */ = {
@@ -213,7 +217,7 @@
 			outputFileListPaths = (
 			);
 			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-App-checkManifestLockResult.txt",
+				"$(DERIVED_FILE_DIR)/Pods-Logseq-checkManifestLockResult.txt",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -370,7 +374,7 @@
 		};
 		504EC3171FED79650016851F /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = B9A79754543D95E609C23F91 /* Pods-App.debug.xcconfig */;
+			baseConfigurationReference = DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -393,7 +397,7 @@
 		};
 		504EC3181FED79650016851F /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = A693BFCEA424C37DF4D9AF1B /* Pods-App.release.xcconfig */;
+			baseConfigurationReference = 8A489CEC51E94726DDD58810 /* Pods-Logseq.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
@@ -424,7 +428,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		504EC3161FED79650016851F /* Build configuration list for PBXNativeTarget "App" */ = {
+		504EC3161FED79650016851F /* Build configuration list for PBXNativeTarget "Logseq" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,

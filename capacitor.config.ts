@@ -14,6 +14,9 @@ const config: CapacitorConfig = {
             showSpinner: true
             backgroundColor: "#002b36"
         },
+    },
+    ios: {
+        scheme: "Logseq"
     }
     // do not commit this into source control
     // source: https://capacitorjs.com/docs/guides/live-reload

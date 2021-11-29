@@ -13,6 +13,9 @@
 			"backgroundColor": "#002b36"
 		}
 	},
+	"ios": {
+		"scheme": "Logseq"
+	},
 	"server": {
 		"url": "http://192.168.1.59:3001",
 		"cleartext": true

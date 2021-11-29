@@ -14,7 +14,7 @@ def capacitor_pods
   pod 'CapacitorSplashScreen', :path => '../../node_modules/@capacitor/splash-screen'
 end
 
-target 'App' do
+target 'Logseq' do
   capacitor_pods
   # Add your Pods here
 end
