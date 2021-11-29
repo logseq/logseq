@@ -152,11 +152,17 @@ jobs:
           mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
           mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
 
-      - name: Upload Artifact
+      - name: Upload Linux AppImage
         uses: actions/upload-artifact@v2
         with:
-          name: logseq-linux-builds
-          path: builds
+          name: logseq-linux-appimage
+          path: ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
+
+      - name: Upload Linux zip
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-linux-zip
+          path: ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
 
   build-windows:
     runs-on: windows-latest
@@ -206,11 +212,11 @@ jobs:
           mkdir builds
           mv static\out\make\squirrel.windows\x64\*.exe builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
 
-      - name: Upload Artifact
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: logseq-win64-builds
-          path: builds
+          name: logseq-win64-exe
+          path: builds/Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
 
   build-macos:
     needs: [ compile-cljs ]
@@ -247,7 +253,7 @@ jobs:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-yarn-
+            ${{ runner.os }}-x64-yarn-
 
       #- name: Signing By Apple Developer ID
       #  uses: apple-actions/import-codesign-certs@v1
@@ -275,6 +281,68 @@ jobs:
           mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
           mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
 
+      - name: Upload dmg Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-darwin-x64-dmg
+          path: ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
+
+      - name: Upload dmg Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-darwin-x64-dmg
+          path: ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
+
+  build-macos-arm64:
+    needs: [ compile-cljs ]
+    runs-on: macos-latest
+
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v2
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat ./static/VERSION)
+          echo ::set-output name=version::$pkgver
+
+      - name: List Static Files
+        run: ls -al ./static
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v2
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "::set-output name=dir::$(yarn cache dir)"
+      - name: Cache yarn cache directory
+        uses: actions/cache@v2
+        id: yarn-cache
+        with:
+          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-arm64-yarn-
+
+      #- name: Signing By Apple Developer ID
+      #  uses: apple-actions/import-codesign-certs@v1
+      #  with:
+      #    p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
+      #    p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
+
+      # - name: Cache Node Modules
+      #   uses: actions/cache@v2
+      #   with:
+      #     path: |
+      #       **/node_modules
+      #     key: ${{ runner.os }}-node-modules
+
       - name: Build/Release Electron App for arm64
         run: yarn install && yarn electron:make-macos-arm64
         working-directory: ./static
@@ -287,11 +355,17 @@ jobs:
           mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
           mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
-      - name: Upload Artifact
+      - name: Upload dmg
         uses: actions/upload-artifact@v2
         with:
-          name: logseq-darwin-builds
-          path: builds
+          name: logseq-darwin-arm64-dmg
+          path: ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
+
+      - name: Upload zip
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-darwin-arm64-zip
+          path: ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
   release:
     # NOTE: For now, we only have beta channel to be released on Github
@@ -302,20 +376,34 @@ jobs:
       - name: Download MacOS Artifacts
         uses: actions/download-artifact@v2
         with:
-          name: logseq-darwin-builds
-          path: ./
+          name: logseq-darwin-x64-dmg
+      - name: Download MacOS Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-darwin-x64-zip
+
+      - name: Download MacOS Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-darwin-arm64-dmg
+      - name: Download MacOS Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-darwin-arm64-zip
 
       - name: Download The Linux Artifacts
         uses: actions/download-artifact@v2
         with:
-          name: logseq-linux-builds
-          path: ./
+          name: logseq-linux-appimage
+      - name: Download The Linux Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-linux-zip
 
       - name: Download The Windows Artifact
         uses: actions/download-artifact@v2
         with:
-          name: logseq-win64-builds
-          path: ./
+          name: logseq-win64-exe
 
       - name: List files
         run: ls -rl
