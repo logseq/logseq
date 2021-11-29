@@ -223,35 +223,28 @@
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (editor-handler/indent-outdent true))}
-      (ui/icon "chevrons-right"
+      (ui/icon "indent-increase"
                {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (editor-handler/indent-outdent false))}
-      (ui/icon "chevrons-left"
+      (ui/icon "indent-decrease"
                {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         ((editor-handler/move-up-down true)))}
-      (ui/icon "chevron-up"
+      (ui/icon "arrow-bar-to-up"
                {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         ((editor-handler/move-up-down false)))}
-      (ui/icon "chevron-down"
-               {:style {:fontSize ui/icon-size}})]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (editor-handler/cycle-todo!))}
-      (ui/icon "checkbox"
+      (ui/icon "arrow-bar-to-down"
                {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
@@ -263,6 +256,13 @@
                         (when-let [input (gdom/getElement parent-id)]
                           (.focus input)))}
       (ui/icon "arrow-back"
+               {:style {:fontSize ui/icon-size}})]]
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (editor-handler/cycle-todo!))}
+      (ui/icon "checkbox"
                {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
