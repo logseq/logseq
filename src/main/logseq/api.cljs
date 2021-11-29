@@ -359,6 +359,15 @@
           block (and block (db-utils/pull (:db/id block)))]
       (bean/->js (normalize-keyword-for-json block)))))
 
+(def ^:export get_selected_blocks
+  (fn []
+    (when-let [blocks (and (state/in-selection-mode?)
+                           (seq (:selection/blocks @state/state)))]
+      (let [blocks (->> blocks
+                        (map (fn [^js el] (some-> (.getAttribute el "blockid")
+                                                  (db-model/query-block-by-uuid)))))]
+        (bean/->js (normalize-keyword-for-json blocks))))))
+
 (def ^:export get_current_page
   (fn []
     (when-let [page (state/get-current-page)]

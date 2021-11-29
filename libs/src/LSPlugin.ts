@@ -335,6 +335,8 @@ export interface IEditorProxy extends Record<string, any> {
 
   getCurrentBlock: () => Promise<BlockEntity | null>
 
+  getSelectedBlocks: () => Promise<Array<BlockEntity> | null>
+
   /**
    * get all blocks of the current page as a tree structure
    *
