@@ -580,7 +580,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   /**
    * show the plugin's UI
    */
-  showMainUI (): void
+  showMainUI (opts?: { autoFocus: boolean}): void
 
   /**
    * hide the plugin's UI
