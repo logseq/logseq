@@ -47,7 +47,7 @@ public class FolderPicker: CAPPlugin, UIDocumentPickerDelegate {
           }
           
           self._call?.resolve([
-            "path": items.first
+            "path": items.first as Any
           ])
       }
 }
