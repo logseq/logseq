@@ -147,10 +147,14 @@ jobs:
       - name: Save artifacts
         run: |
           mkdir -p builds
-          # NOTE: save VERSION file to builds directory
-          cp static/VERSION ./builds/VERSION
           mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
           mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
+
+      - name: Upload VERSION
+        uses: actions/upload-artifact@v2
+        with:
+          name: logseq-version
+          path: static/VERSION
 
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v2
@@ -218,7 +222,7 @@ jobs:
           name: logseq-win64-exe
           path: builds/Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
 
-  build-macos:
+  build-macos-x64:
     needs: [ compile-cljs ]
     runs-on: macos-latest
 
@@ -352,6 +356,7 @@ jobs:
 
       - name: Save arm64 artifacts
         run: |
+          mkdir -p ./builds
           mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
           mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
@@ -370,7 +375,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     #if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta') }}
-    needs: [ build-macos, build-macos-arm64, build-linux, build-windows ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
       - name: Download MacOS Artifacts - x64 dmg
@@ -404,6 +409,11 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: logseq-win64-exe
+
+      - name: Download VERSION
+        uses: actions/download-artifact@v2
+        with:
+          name: logseq-version
 
       - name: List files
         run: ls -rl
