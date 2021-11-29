@@ -91,7 +91,9 @@
   [input]
   (let [[content pos] (get-input-content&pos input)]
     (if (zero? pos) 0
-        (inc (string/last-index-of content \newline (dec pos))))))
+        (let [last-newline-pos (string/last-index-of content \newline (dec pos))]
+          (if (= nil last-newline-pos) 0 ;; no newline found (first line)
+              (inc last-newline-pos))))))
 
 (defn line-end-pos
   [input]
