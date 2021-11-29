@@ -211,8 +211,6 @@ test('auto completion and auto pair', async ({ page }) => {
 
   // {}
   await page.type(':nth-match(textarea, 1)', 'type {{')
-  await page.press(':nth-match(textarea, 1)', 'Escape')
-
   // FIXME: keycode seq is wrong
   // expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type {{}}')
 
