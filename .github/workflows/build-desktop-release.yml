@@ -26,7 +26,7 @@ on:
         default: true
   schedule: # Every workday at the noon (UTC) we run a scheduled nightly build
     #- cron: '0 12 * * MON-FRI'
-    - cron: '10 14 * * MON-FRI'
+    - cron: '0 15 * * MON-FRI'
 
 env:
   CLOJURE_VERSION: '1.10.1.763'
