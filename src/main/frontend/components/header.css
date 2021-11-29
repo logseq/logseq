@@ -58,13 +58,13 @@
     width: 100%;
     font-weight: 500;
     align-items: center;
-    background: rgba(219, 234, 254);
+    background: var(--color-level-3);
     margin-top: -16px;
     left: 0;
     z-index: 1000;
 
     > p {
-      color: #433f38;
+      color: var(--ls-primary-text-color);
       margin: 0;
       display: inline-flex;
       align-items: center;
@@ -72,9 +72,9 @@
     }
 
     a {
-      color: #106ba3 !important;
+      color: var(--ls-link-text-color, #045591) !important;
     }
-
+    
     a.restart {
       position: relative;
       cursor: pointer !important;
