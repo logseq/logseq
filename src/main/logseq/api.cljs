@@ -352,6 +352,9 @@
 (def ^:export get_current_block
   (fn []
     (let [block (state/get-edit-block)
+          block (or block (some-> (first (:selection/blocks @state/state))
+                                  (.getAttribute "blockid")
+                                  (db-model/get-block-by-uuid)))
           block (or block (state/get-last-edit-block))
           block (and block (db-utils/pull (:db/id block)))]
       (bean/->js (normalize-keyword-for-json block)))))
