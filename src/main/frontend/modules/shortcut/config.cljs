@@ -255,7 +255,7 @@
 
    :editor/insert-link             {:desc    "HTML Link"
                                     :binding "mod+l"
-                                    :fn      editor-handler/html-link-format!}
+                                    :fn      #(editor-handler/html-link-format!)}
 
    :editor/select-all-blocks       {:desc    "Select all blocks"
                                     :binding "mod+shift+a"
