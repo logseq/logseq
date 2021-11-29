@@ -287,10 +287,10 @@ jobs:
           name: logseq-darwin-x64-dmg
           path: ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
 
-      - name: Upload dmg Artifact
+      - name: Upload zip Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: logseq-darwin-x64-dmg
+          name: logseq-darwin-x64-zip
           path: ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
 
   build-macos-arm64:
@@ -355,13 +355,13 @@ jobs:
           mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
           mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
-      - name: Upload dmg
+      - name: Upload dmg Artifact
         uses: actions/upload-artifact@v2
         with:
           name: logseq-darwin-arm64-dmg
           path: ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
 
-      - name: Upload zip
+      - name: Upload zip Artifact
         uses: actions/upload-artifact@v2
         with:
           name: logseq-darwin-arm64-zip
@@ -370,32 +370,32 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     #if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta') }}
-    needs: [ build-macos, build-linux, build-windows ]
+    needs: [ build-macos, build-macos-arm64, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
-      - name: Download MacOS Artifacts
+      - name: Download MacOS Artifacts - x64 dmg
         uses: actions/download-artifact@v2
         with:
           name: logseq-darwin-x64-dmg
-      - name: Download MacOS Artifacts
+      - name: Download MacOS Artifacts - x64 zip
         uses: actions/download-artifact@v2
         with:
           name: logseq-darwin-x64-zip
 
-      - name: Download MacOS Artifacts
+      - name: Download MacOS Artifacts - arm64 dmg
         uses: actions/download-artifact@v2
         with:
           name: logseq-darwin-arm64-dmg
-      - name: Download MacOS Artifacts
+      - name: Download MacOS Artifacts - arm64 zip
         uses: actions/download-artifact@v2
         with:
           name: logseq-darwin-arm64-zip
 
-      - name: Download The Linux Artifacts
+      - name: Download The Linux Artifacts - AppImage
         uses: actions/download-artifact@v2
         with:
           name: logseq-linux-appimage
-      - name: Download The Linux Artifacts
+      - name: Download The Linux Artifacts - zip
         uses: actions/download-artifact@v2
         with:
           name: logseq-linux-zip
