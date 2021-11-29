@@ -2421,7 +2421,8 @@
                   (when (thingatpt/get-setting :properties?)
                     (thingatpt/properties-at-point input))
                   (when (thingatpt/get-setting :list?)
-                    (thingatpt/list-item-at-point input)))]
+                    (and (cursor/end-of-line? input) ;; only apply DWIM when cursor at EOL 
+                         (thingatpt/list-item-at-point input))))]
           (cond
             thing-at-point
             (case (:type thing-at-point)
