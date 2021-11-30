@@ -6,6 +6,8 @@ labels: ''
 assignees: ''
 
 ---
+**Before opening an issue**
+- [ ] Click `Settings` / `Advanced` / `Clear cache`
 
 **Describe the bug**
 A clear and concise description of what the bug is.
