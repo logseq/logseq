@@ -232,7 +232,7 @@
   (let [enabled? (state/get-git-auto-commit-enabled?)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      "Enable Git auto commit"]
+      (t :settings-page/git-switcher-label)]
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
@@ -247,7 +247,7 @@
   (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      "Git auto commit seconds"]
+      (t :settings-page/git-commit-delay)]
      [:div.mt-1.sm:mt-0.sm:col-span-2
       [:div.max-w-lg.rounded-md.sm:max-w-xs
        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
@@ -626,7 +626,7 @@
 
             (ui/admonition
              :warning
-             [:p "You need to restart the app after updating the Git settings."])]
+             [:p (t :settings-page/git-confirm)])]
 
            :advanced
            [:div.panel-wrap.is-advanced
@@ -634,6 +634,10 @@
             (usage-diagnostics-row t instrument-disabled?)
             (developer-mode-row t developer-mode?)
             (clear-cache-row t)
+
+            (ui/admonition
+             :warning
+             [:p "Clear cache will discard open graphs. You will lose unsaved changes."])
 
             (when logged?
               [:div

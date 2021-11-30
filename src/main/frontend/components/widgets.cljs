@@ -86,7 +86,7 @@
   []
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.flex.flex-col
-     [:h1.title "Add a graph"]
+     [:h1.title (t :on-boarding/add-graph)]
      (let [nfs-supported? (or (nfs/supported?) (mobile/is-native-platform?))]
        [:div.cp__widgets-open-local-directory
         [:div.select-file-wrap.cursor
@@ -94,13 +94,13 @@
            {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)})
 
          [:div
-          [:h1.title "Open a local directory"]
-          [:p "Logseq supports both Markdown and Org-mode. You can open an existing directory or create a new one on your device, a directory is also known simply as a folder. Your data will be stored only on this device."]
-          [:p "After you have opened your directory, it will create three folders in that directory:"]
+          [:h1.title (t :on-boarding/open-local-dir)]
+          [:p (t :on-boarding/new-graph-desc-1)]
+          [:p (t :on-boarding/new-graph-desc-2)]
           [:ul
-           [:li "/journals - store your journal pages"]
-           [:li "/pages - store the other pages"]
-           [:li "/logseq - store configuration, custom.css, and some metadata."]]
+           [:li (t :on-boarding/new-graph-desc-3)]
+           [:li (t :on-boarding/new-graph-desc-4)]
+           [:li (t :on-boarding/new-graph-desc-5)]]
           (when-not nfs-supported?
             (ui/admonition :warning
                            [:p "It seems that your browser doesn't support the "
@@ -138,9 +138,10 @@
   []
   (when (and (config/demo-graph?)
              (not config/publishing?))
-    (ui/admonition
-     :warning
-     [:p "This is a demo graph, changes will not be saved until you open a local folder."])))
+    (rum/with-context [[t] i18n/*tongue-context*]
+      (ui/admonition
+        :warning
+        [:p (t :on-boarding/demo-graph)]))))
 
 (rum/defc github-integration-soon-deprecated-alert
   []
