@@ -24,8 +24,8 @@ on:
         type: boolean
         required: true
         default: true
-  schedule: # Every workday at the noon (UTC) we run a scheduled nightly build
-    - cron: '0 12 * * MON-FRI'
+  # schedule: # Every workday at the noon (UTC) we run a scheduled nightly build
+  #   - cron: '0 12 * * MON-FRI'
 
 env:
   CLOJURE_VERSION: '1.10.1.763'
@@ -36,7 +36,9 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.git-ref }}
 
       - name: Install Node.js, NPM and Yarn
         uses: actions/setup-node@v2
@@ -49,7 +51,6 @@ jobs:
 
       - name: Cache yarn cache directory
         uses: actions/cache@v2
-        # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
         id: yarn-cache
         with:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
@@ -82,7 +83,7 @@ jobs:
           echo ::set-output name=version::$pkgver
 
       - name: Update Nightly APP Version
-        if: ${{ github.event.inputs.build-target == 'nightly' }}
+        if: ${{ github.event.inputs.build-target == 'nightly' || github.event_name == 'schedule' }}
         run: |
           sed -i 's/defonce version ".*"/defonce version "${{ steps.ref.outputs.version }}"/g' src/main/frontend/version.cljs
 
@@ -341,8 +342,8 @@ jobs:
           tag_name: ${{ steps.ref.outputs.version }}
           name: Desktop APP ${{ steps.ref.outputs.version }} (Beta Testing)
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
-          draft: ${{ github.event.inputs.is-draft }}
-          prerelease: ${{ github.event.inputs.is-pre-release }}
+          draft: ${{ github.event.inputs.is-draft == true || github.event_name == 'schedule' }}
+          prerelease: ${{ github.event.inputs.is-pre-release == true || github.event_name == 'schedule' }}
           files: |
             ./VERSION
             ./SHA256SUMS.txt

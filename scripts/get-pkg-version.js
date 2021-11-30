@@ -18,7 +18,7 @@ if (match) {
   process.exit(1)
 }
 
-if (process.argv[2] === 'nightly') {
+if (process.argv[2] === 'nightly' || process.argv[2] === '') {
   const today = new Date()
   console.log(
     ver + '+nightly.' + today.toISOString().split('T')[0].replaceAll('-', '')
