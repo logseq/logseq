@@ -120,7 +120,6 @@ yarn electron-watch
 yarn e2e-test # or npx playwright test
 ```
 
-
 ## Desktop app development
 
 ### 1. Compile to JavaScript
