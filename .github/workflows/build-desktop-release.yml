@@ -432,6 +432,11 @@ jobs:
           sha256sum *-linux-* >> SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      - name: Create info file
+        run: |
+          echo -e "ref: $GITHUB_REF \ncommit: $GITHUB_SHA\nbuild: ${{ steps.ref.outputs.version }}" \
+          > info.txt
+
       - name: Create Nightly Release
         # if: ${{ github.event_name == 'schedule' }}
         uses: eine/tip@master
@@ -440,6 +445,7 @@ jobs:
           rm: true
           token: ${{ secrets.GITHUB_TOKEN }}
           files: |
+            ./info.txt
             ./VERSION
             ./SHA256SUMS.txt
             ./*.zip
