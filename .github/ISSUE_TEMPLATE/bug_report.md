@@ -8,6 +8,7 @@ assignees: ''
 ---
 **Before opening an issue**
 - [ ] Click `Settings` / `Advanced` / `Clear cache`
+  * (Note that you will need to re-add the graph back)
 
 **Describe the bug**
 A clear and concise description of what the bug is.
