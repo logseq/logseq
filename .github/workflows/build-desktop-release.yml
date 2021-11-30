@@ -376,7 +376,6 @@ jobs:
 
   release:
     # NOTE: For now, we only have beta channel to be released on Github
-    #if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta') }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
@@ -433,7 +432,22 @@ jobs:
           sha256sum *-linux-* >> SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      - name: Create Nightly Release
+        # if: ${{ github.event_name == 'schedule' }}
+        with:
+          tag: nightly
+          rm: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          files: |
+            ./VERSION
+            ./SHA256SUMS.txt
+            ./*.zip
+            ./*.dmg
+            ./*.exe
+            ./*.AppImage
+
       - name: Create Release Draft
+        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta') }}
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
