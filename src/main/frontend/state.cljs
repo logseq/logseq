@@ -15,7 +15,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile]))
+            [frontend.mobile.util :as mobile]
+            [frontend.mobile.util :as mobile-util]))
 
 (defonce state
   (let [document-mode? (or (storage/get :document/mode?) false)
@@ -771,14 +772,16 @@
 
 (defn sidebar-add-block!
   [repo db-id block-type block-data]
-  (when db-id
-    (update-state! :sidebar/blocks (fn [blocks]
-                                     (->> (remove #(= (second %) db-id) blocks)
-                                          (cons [repo db-id block-type block-data])
-                                          (distinct))))
-    (open-right-sidebar!)
-    (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
-      (util/scroll-to elem 0))))
+  (when-not (or (util/mobile?)
+            (mobile-util/is-native-platform?))
+   (when db-id
+     (update-state! :sidebar/blocks (fn [blocks]
+                                      (->> (remove #(= (second %) db-id) blocks)
+                                           (cons [repo db-id block-type block-data])
+                                           (distinct))))
+     (open-right-sidebar!)
+     (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
+       (util/scroll-to elem 0)))))
 
 (defn sidebar-remove-block!
   [idx]
