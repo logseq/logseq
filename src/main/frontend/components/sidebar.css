@@ -1,8 +1,8 @@
-@supports(padding: max(0px)) {
-    .post {
-        padding-left: max(12px, env(safe-area-inset-left));
-        padding-right: max(12px, env(safe-area-inset-right));
-    }
+@supports (padding: max(0px)) {
+  .post {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
 }
 
 #app-container {
@@ -21,7 +21,12 @@
 }
 
 #app-container {
+  display: flex;
   flex: 0 0 100%;
+}
+
+#left-container {
+  @apply flex flex-1 flex-col relative h-screen;
 }
 
 #main-container {
@@ -64,8 +69,8 @@ html.is-mobile {
 
 #left-bar {
   background-color: var(--ls-primary-background-color);
-  width:             70vw;
-  max-width:         300px;
+  width: 70vw;
+  max-width: 300px;
 
   > .head-wrap {
     background-color: var(--ls-search-background-color);
@@ -100,10 +105,11 @@ html.is-mobile {
   overflow: auto;
 
   > .wrap {
-      padding-top: 24px;
-      @screen md {
-          padding-top: 60px;
-      }
+    padding-top: 64px;
+
+    @screen md {
+      padding-top: 55px;
+    }
   }
 
   .dropdown-wrapper {

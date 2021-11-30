@@ -46,10 +46,9 @@
 
     (mobile-util/native-ipad?)
     15
-    
+
     :else
     0))
-
 
 (defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
 
@@ -304,35 +303,37 @@
         (.appendChild js/document.head node))
       style)))
 
-(defn setup-patch-ios-fixed-bottom-position!
-  "fix a common issue about ios webpage viewport
-   when soft keyboard setup"
+(defn setup-patch-ios-visual-viewport-state!
   []
-  (when (and
-         (util/ios?)
-         (not (nil? js/window.visualViewport)))
-    (let [viewport js/visualViewport
-          style (get-dynamic-style-node)
-          sheet (.-sheet style)
-          raf-pending? (atom false)
+  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
+                             (mobile-util/native-ios?))
+                         js/window.visualViewport)]
+    (let [raf-pending? (atom false)
           set-raf-pending! #(reset! raf-pending? %)
-          handler
+          on-viewport-changed
           (fn []
-            (when-not @raf-pending?
-              (let [f (fn []
-                        (set-raf-pending! false)
-                        (let [vh (+ (.-offsetTop viewport) (.-height viewport))
-                              rule (.. sheet -rules (item 0))
-                              set-top #(set! (.. rule -style -top) (str % "px"))]
-                          (set-top vh)))]
-                (set-raf-pending! true)
-                (js/window.requestAnimationFrame f))))]
-      (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 100vh;}")
-      (.addEventListener viewport "resize" handler)
-      (.addEventListener viewport "scroll" handler)
+            (let [update-vw-state
+                  (util/debounce 20
+                                 (fn []
+                                   (state/set-visual-viewport-state {:height     (.-height vp)
+                                                                     :page-top   (.-pageTop vp)
+                                                                     :offset-top (.-offsetTop vp)})
+                                   (state/set-state! :ui/visual-viewport-pending? false)))]
+              (when-not @raf-pending?
+                (let [f (fn []
+                          (set-raf-pending! false)
+                          (update-vw-state))]
+                  (set-raf-pending! true)
+                  (state/set-state! :ui/visual-viewport-pending? true)
+                  (js/window.requestAnimationFrame f)))))]
+
+      (.addEventListener vp "resize" on-viewport-changed)
+      (.addEventListener vp "scroll" on-viewport-changed)
+
       (fn []
-        (.removeEventListener viewport "resize" handler)
-        (.removeEventListener viewport "scroll" handler)))))
+        (.removeEventListener vp "resize" on-viewport-changed)
+        (.removeEventListener vp "scroll" on-viewport-changed)
+        (state/set-visual-viewport-state nil)))))
 
 (defn setup-system-theme-effect!
   []
@@ -470,14 +471,14 @@
                        (str/split  #" |\+"))
                    sequence)]
     [:span.keyboard-shortcut
-   (map-indexed (fn [i key]
-                  [:code {:key i}
+     (map-indexed (fn [i key]
+                    [:code {:key i}
                    ;; Display "cmd" rather than "meta" to the user to describe the Mac
                    ;; mod key, because that's what the Mac keyboards actually say.
-                   (if (or (= :meta key) (= "meta" key))
-                     (util/meta-key-name)
-                     (name key))])
-                sequence)]))
+                     (if (or (= :meta key) (= "meta" key))
+                       (util/meta-key-name)
+                       (name key))])
+                  sequence)]))
 
 (defn keyboard-shortcut-from-config [shortcut-name]
   (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))

@@ -8,6 +8,7 @@
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
+            [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
@@ -216,91 +217,99 @@
 
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
-  [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
-   [:div.flex.justify-evenly.w-full
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (editor-handler/indent-outdent true))}
-      (ui/icon "indent-increase"
-               {:style {:fontSize ui/icon-size}})]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (editor-handler/indent-outdent false))}
-      (ui/icon "indent-decrease"
-               {:style {:fontSize ui/icon-size}})]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        ((editor-handler/move-up-down true)))}
-      (ui/icon "arrow-bar-to-up"
-               {:style {:fontSize ui/icon-size}})]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        ((editor-handler/move-up-down false)))}
-      (ui/icon "arrow-bar-to-down"
-               {:style {:fontSize ui/icon-size}})]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (commands/simple-insert! parent-id "\n"
-                                                 {:forward-pos 1})
-                        ;; TODO: should we add this focus step to `simple-insert!`?
-                        (when-let [input (gdom/getElement parent-id)]
-                          (.focus input)))}
-      (ui/icon "arrow-back"
-               {:style {:fontSize ui/icon-size}})]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (editor-handler/cycle-todo!))}
-      (ui/icon "checkbox"
-               {:style {:fontSize ui/icon-size}})]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (commands/simple-insert!
-                         parent-id "[[]]"
-                         {:backward-pos 2
-                          :check-fn     (fn [_ _ new-pos]
-                                          (reset! commands/*slash-caret-pos new-pos)
-                                          (commands/handle-step [:editor/search-page]))})
-                        (when-let [input (gdom/getElement parent-id)]
-                          (.focus input)))}
-      (ui/icon "brackets"
-               {:style {:fontSize ui/icon-size}})]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (commands/simple-insert!
-                         parent-id "(())"
-                         {:backward-pos 2
-                          :check-fn     (fn [_ _ new-pos]
-                                          (reset! commands/*slash-caret-pos new-pos)
-                                          (commands/handle-step [:editor/search-block]))})
-                        (when-let [input (gdom/getElement parent-id)]
-                          (.focus input)))}
-      (ui/icon "parentheses"
-               {:style {:fontSize ui/icon-size}})]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (commands/simple-insert! parent-id "/" {})
-                        (when-let [input (gdom/getElement parent-id)]
-                          (.focus input)))}
-      (ui/icon "command"
-               {:style {:fontSize ui/icon-size}})]]]])
+  (let [vw-state (state/sub :ui/visual-viewport-state)
+        vw-pending? (state/sub :ui/visual-viewport-pending?)]
+    [:div#mobile-editor-toolbar.bg-base-2
+     {:style {:bottom (if (and vw-state)
+                        (- (.-clientHeight js/document.documentElement)
+                           (:height vw-state)
+                           (:offset-top vw-state))
+                        0)}
+      :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
+     [:div.flex.justify-evenly.w-full
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/indent-outdent true))}
+        (ui/icon "indent-increase"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/indent-outdent false))}
+        (ui/icon "indent-decrease"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          ((editor-handler/move-up-down true)))}
+        (ui/icon "arrow-bar-to-up"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          ((editor-handler/move-up-down false)))}
+        (ui/icon "arrow-bar-to-down"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (commands/simple-insert! parent-id "\n"
+                                                   {:forward-pos 1})
+                          ;; TODO: should we add this focus step to `simple-insert!`?
+                          (when-let [input (gdom/getElement parent-id)]
+                            (.focus input)))}
+        (ui/icon "arrow-back"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/cycle-todo!))}
+        (ui/icon "checkbox"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (commands/simple-insert!
+                            parent-id "[[]]"
+                            {:backward-pos 2
+                             :check-fn     (fn [_ _ new-pos]
+                                             (reset! commands/*slash-caret-pos new-pos)
+                                             (commands/handle-step [:editor/search-page]))})
+                          (when-let [input (gdom/getElement parent-id)]
+                            (.focus input)))}
+        (ui/icon "brackets"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (commands/simple-insert!
+                            parent-id "(())"
+                            {:backward-pos 2
+                             :check-fn     (fn [_ _ new-pos]
+                                             (reset! commands/*slash-caret-pos new-pos)
+                                             (commands/handle-step [:editor/search-block]))})
+                          (when-let [input (gdom/getElement parent-id)]
+                            (.focus input)))}
+        (ui/icon "parentheses"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (commands/simple-insert! parent-id "/" {})
+                          (when-let [input (gdom/getElement parent-id)]
+                            (.focus input)))}
+        (ui/icon "command"
+                 {:style {:fontSize ui/icon-size}})]]]]))
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -589,6 +598,7 @@
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
+       :on-touch-end       #(notification/show! "touch end~ textarea" :warning)
        :auto-focus        false
        :class             (get-editor-heading-class content)})
 
