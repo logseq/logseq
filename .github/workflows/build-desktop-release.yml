@@ -432,20 +432,18 @@ jobs:
           sha256sum *-linux-* >> SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Create info file
-        run: |
-          echo -e "ref: $GITHUB_REF \ncommit: $GITHUB_SHA\nbuild: ${{ steps.ref.outputs.version }}" \
-          > info.txt
-
       - name: Create Nightly Release
-        # if: ${{ github.event_name == 'schedule' }}
-        uses: eine/tip@master
+        if: ${{ github.event_name == 'schedule' || (github.event.inputs.build-target == 'nightly') }}
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag: nightly
-          rm: true
-          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: nightly
+          name: Desktop APP Nightly Release
+          body: "Nightly Release of ${{ steps.ref.outputs.version }}"
+          draft: ${{ github.event_name == 'schedule' && github.event.inputs.is-draft }}
+          prerelease: true
           files: |
-            ./info.txt
             ./VERSION
             ./SHA256SUMS.txt
             ./*.zip
