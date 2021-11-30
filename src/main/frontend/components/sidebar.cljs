@@ -308,12 +308,7 @@
         (header/left-menu-button
          {:on-click (fn []
                       (state/set-left-sidebar-open!
-                       (not (:ui/left-sidebar-open? @state/state))))})
-
-        (ui/with-shortcut :go/search "right"
-          [:a.button#search-button-mobile
-           {:on-click #(state/pub-event! [:go/search])}
-           (ui/icon "search" {:style {:fontSize ui/icon-size}})])]])
+                       (not (:ui/left-sidebar-open? @state/state))))})]])
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 
