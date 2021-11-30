@@ -116,7 +116,8 @@
             [:div.font-bold.mb-2 "I need some help"]
             [:p "👋 Join our discord group to chat with the makers and our helpful community members."]
             (ui/button "Join the community"
-              :href "https://discord.gg/KpN4eHY")]]]
+              :href "https://discord.gg/KpN4eHY"
+              :target "_blank")]]]
          [:div.cp__widgets-open-local-directory
           [:div.select-file-wrap.cursor
            (when nfs-supported?
