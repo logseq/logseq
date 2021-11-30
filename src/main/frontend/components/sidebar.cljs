@@ -32,7 +32,8 @@
             [frontend.extensions.srs :as srs]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.components.widgets :as widgets]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.handler.mobile.swipe :as swipe]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -289,20 +290,20 @@
               [:span.flex-1 "New page"]])]]]))))
 
 (rum/defc sidebar-mobile-sidebar < rum/reactive
-  [{:keys [open? left-sidebar-open? close-fn route-match]}]
+  [{:keys [left-sidebar-open? close-fn route-match]}]
   [:div.md:hidden.ls-mobile-left-sidebar
    {:class (if left-sidebar-open? "is-left-sidebar-open" "")}
    [:div.fixed.inset-0.z-30.bg-gray-600.pointer-events-none.ease-linear.duration-300
-    {:class (if @open?
+    {:class (if left-sidebar-open?
               "opacity-75 pointer-events-auto"
               "opacity-0 pointer-events-none")
      :on-click close-fn}]
    [:div#left-bar.fixed.inset-y-0.left-0.flex.flex-col.z-40.transform.ease-in-out.duration-300
-    {:class (if @open?
+    {:class (if left-sidebar-open?
               "translate-x-0"
               "-translate-x-full")
      :style {:padding-top (ui/main-content-top-padding)}}
-    (when @open?
+    (when left-sidebar-open?
       [:div.cp__header#head
        [:div.l.flex
         (header/left-menu-button
@@ -516,6 +517,9 @@
                         (if (state/modal-opened?)
                           (state/close-modal!)
                           (hide-context-menu-and-clear-selection)))))))
+  {:did-mount (fn [state]
+                (swipe/setup-listeners!)
+                state)}
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
@@ -559,8 +563,7 @@
         {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?}])}
 
         (sidebar-mobile-sidebar
-         {:open?       open?
-          :left-sidebar-open? left-sidebar-open?
+         {:left-sidebar-open? left-sidebar-open?
           :close-fn    close-fn
           :route-match route-match})
 
