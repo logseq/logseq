@@ -160,7 +160,10 @@ a.button {
 
   &:hover, &.active {
     opacity: 1;
-    background: var(--ls-tertiary-background-color);
+    background: none;
+    @screen md {
+        background: var(--ls-tertiary-background-color);
+    }
   }
 }
 
