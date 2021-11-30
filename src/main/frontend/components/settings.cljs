@@ -635,6 +635,10 @@
             (developer-mode-row t developer-mode?)
             (clear-cache-row t)
 
+            (ui/admonition
+             :warning
+             [:p "Clear cache will discard open graphs. You will lose unsaved changes."])
+
             (when logged?
               [:div
                [:div.mt-6.sm:mt-5.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center.sm:pt-5
