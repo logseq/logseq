@@ -434,6 +434,7 @@ jobs:
 
       - name: Create Nightly Release
         # if: ${{ github.event_name == 'schedule' }}
+        uses: eine/tip@master
         with:
           tag: nightly
           rm: true
