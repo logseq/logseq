@@ -223,8 +223,9 @@
            (if refreshing?
              [:div {:class "animate-spin-reverse"}
               svg/refresh]
-             [:div.flex.flex-row.text-center.open-button__inner.items-center
-              (ui/icon "refresh" {:style {:fontSize ui/icon-size}})])])
+             (when (seq repos)
+               [:div.flex.flex-row.text-center.open-button__inner.items-center
+                (ui/icon "refresh" {:style {:fontSize ui/icon-size}})]))])
 
         (repo/sync-status current-repo)
 
