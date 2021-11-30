@@ -281,7 +281,10 @@
           [:nav.px-2.space-y-1 {:aria-label "Sidebar"
                                 :class "new-page"}
            (when-not config/publishing?
-             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:go/search])}
+             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+              {:on-click (fn []
+                           (state/toggle-left-sidebar!)
+                           (state/pub-event! [:go/search]))}
               (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
               [:span.flex-1 "New page"]])]]]))))
 
