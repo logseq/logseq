@@ -90,8 +90,33 @@
      [:h1.title "Add a graph"]
      (let [nfs-supported? (or (nfs/supported?) (mobile/is-native-platform?))]
        (if (mobile-util/is-native-platform?)
-         (ui/button "Open a local directory"
-           :on-click #(page-handler/ls-dir-files! shortcut/refresh!))
+         [:div.text-sm
+          (ui/button "Open a local directory"
+            :on-click #(page-handler/ls-dir-files! shortcut/refresh!))
+          [:hr]
+          [:ol
+           [:li
+            [:div.font-bold.mb-2 "How to sync my notes?"]
+            (if (mobile-util/native-android?)
+              [:div
+               [:p "We're developing our built-in paid Logseq Sync, but you can use any third-party sync service to keep your notes sync with other devices."]
+               [:p "If you prefer to use Dropbox to sync your notes, you can use "
+                [:a {:href "https://play.google.com/store/apps/details?id=com.ttxapps.dropsync"
+                     :target "_blank"}
+                 "Dropsync"]
+                ". Or you can use "
+                [:a {:href "https://play.google.com/store/apps/details?id=dk.tacit.android.foldersync.lite"
+                     :target "_blank"}
+                 "FolderSync"]
+                "."]]
+              [:div
+               [:p "iCloud TBD"]])]
+
+           [:li.mt-8
+            [:div.font-bold.mb-2 "I need some help"]
+            [:p "👋 Join our discord group to chat with the makers and our helpful community members."]
+            (ui/button "Join the community"
+              :href "https://discord.gg/KpN4eHY")]]]
          [:div.cp__widgets-open-local-directory
           [:div.select-file-wrap.cursor
            (when nfs-supported?
