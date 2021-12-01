@@ -1694,7 +1694,7 @@
   [state block typ ast]
   (let [show? (get state ::show?)]
     [:div.flex.flex-col.timestamp
-     [:div.text-sm.mb-1.flex.flex-row
+     [:div.text-sm.flex.flex-row
       [:div.opacity-50.font-medium.timestamp-label
        (str typ ": ")]
       [:a.opacity-80.hover:opacity-100
