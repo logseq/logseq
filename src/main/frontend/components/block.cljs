@@ -1777,6 +1777,31 @@
                   (= move-to :nested)))
           (dnd-separator move-to block-content?))))))
 
+(defn clock-summary-cp
+  [block body]
+  (when (and (state/enable-timetracking?)
+             (or (= (:block/marker block) "DONE")
+                 (contains? #{"TODO" "LATER"} (:block/marker block))))
+    (let [summary (clock/clock-summary body true)]
+      (when (and summary
+                 (not= summary "0m")
+                 (not (string/blank? summary)))
+        (ui/tippy {:html        (fn []
+                                  (when-let [logbook (drawer/get-logbook body)]
+                                    (let [clocks (->> (last logbook)
+                                                      (filter #(string/starts-with? % "CLOCK:"))
+                                                      (remove string/blank?))]
+                                      [:div.p-4
+                                       [:div.font-bold.mb-2 "LOGBOOK:"]
+                                       [:ul
+                                        (for [clock (take 10 (reverse clocks))]
+                                          [:li clock])]])))
+                   :interactive true
+                   :delay       [1000, 100]}
+                  [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
+                   [:a.fade-link
+                    summary]])))))
+
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title body content children properties scheduled deadline] :as block} edit-input-id block-id slide?]
   (let [collapsed? (get properties :collapsed)
@@ -1787,14 +1812,14 @@
         mouse-down-key (if (util/ios?)
                          :on-click
                          :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
-)
+                         )
         attrs (cond->
-               {:blockid       (str uuid)
-                :data-type (name block-type)
-                :style {:width "100%"}}
-                (not block-ref?)
-                (assoc mouse-down-key (fn [e]
-                                        (block-content-on-mouse-down e block block-id content edit-input-id))))]
+                  {:blockid       (str uuid)
+                   :data-type (name block-type)
+                   :style {:width "100%"}}
+                  (not block-ref?)
+                  (assoc mouse-down-key (fn [e]
+                                          (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-mouse-up (fn [_e]
@@ -1810,12 +1835,17 @@
       ;; .flex.relative {:style {:width "100%"}}
       [:span
        ;; .flex-1.flex-col.relative.block-content
-       (cond
-         (seq title)
-         (build-block-title config block)
+       [:span.flex.flex-row.justify-between
+        [:span
+         (cond
+           (seq title)
+           (build-block-title config block)
 
-         :else
-         nil)
+           :else
+           nil)]
+
+        [:span
+         (clock-summary-cp block body)]]
 
        (when (seq children)
          (dnd-separator-wrapper block block-id slide? false true))
@@ -1910,29 +1940,6 @@
                              (when-let [block (:embed-parent config)]
                                (editor-handler/edit-block! block :max (:block/uuid block))))}
            svg/edit])
-
-        (when (and (state/enable-timetracking?)
-                   (or (= (:block/marker block) "DONE")
-                       (contains? #{"TODO" "LATER"} (:block/marker block))))
-          (let [summary (clock/clock-summary body true)]
-            (when (and summary
-                       (not= summary "0m")
-                       (not (string/blank? summary)))
-              (ui/tippy {:html        (fn []
-                                        (when-let [logbook (drawer/get-logbook body)]
-                                          (let [clocks (->> (last logbook)
-                                                            (filter #(string/starts-with? % "CLOCK:"))
-                                                            (remove string/blank?))]
-                                            [:div.p-4
-                                             [:div.font-bold.mb-2 "LOGBOOK:"]
-                                             [:ul
-                                              (for [clock (take 10 (reverse clocks))]
-                                                [:li clock])]])))
-                         :interactive true
-                         :delay       [1000, 100]}
-                        [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
-                         [:a.fade-link
-                          summary]]))))
 
         (block-refs-count block)]])))
 
@@ -2587,15 +2594,15 @@
                                       [:logbook/settings :enabled-in-timestamped-blocks] true)
                           (or (:block/scheduled (:block config))
                               (:block/deadline (:block config)))))))
-          [:div.flex.flex-col
-           [:div.text-sm.mt-1.flex.flex-row
+          [:div
+           [:div.text-sm
             [:div.drawer {:data-drawer-name name}
              (ui/foldable
               [:div.opacity-50.font-medium
                (util/format ":%s:" (string/upper-case name))]
-              [:div (apply str lines)
-               [:div.opacity-50.font-medium {:style {:width 95}}
-                ":END:"]]
+              [:div.opacity-50.font-medium
+               (apply str lines)
+               [:div ":END:"]]
               {:default-collapsed? true
                :title-trigger? true})]]])
 
