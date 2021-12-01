@@ -652,15 +652,16 @@
                                              (assoc :on-mouse-down on-mouse-down
                                                     :class "cursor"))
        [:div.flex.flex-row.items-center
-        [:a.block-control.opacity-50.hover:opacity-100.mr-2
-         (cond->
-          {:style    {:width       14
-                      :height      16
-                      :margin-left -30}}
-           (not title-trigger?)
-           (assoc :on-mouse-down on-mouse-down))
-         [:span {:class (if @control? "control-show" "control-hide")}
-          (rotating-arrow @collapsed?)]]
+        (when-not (mobile-util/is-native-platform?)
+          [:a.block-control.opacity-50.hover:opacity-100.mr-2
+           (cond->
+               {:style    {:width       14
+                           :height      16
+                           :margin-left -30}}
+             (not title-trigger?)
+             (assoc :on-mouse-down on-mouse-down))
+           [:span {:class (if @control? "control-show" "control-hide")}
+            (rotating-arrow @collapsed?)]])
         (if (fn? header)
           (header @collapsed?)
           header)]]]
