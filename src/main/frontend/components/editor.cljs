@@ -217,20 +217,20 @@
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
-   [:div.flex.justify-evenly.w-full
+   [:div.flex.justify-around.w-full
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (editor-handler/indent-outdent true))}
-      (ui/icon "indent-increase"
+      (ui/icon "arrow-bar-right"
                {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (editor-handler/indent-outdent false))}
-      (ui/icon "indent-decrease"
+      (ui/icon "arrow-bar-left"
                {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
