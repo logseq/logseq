@@ -2514,7 +2514,8 @@
 
               :else
               [:div.text-sm.mt-2.ml-2.font-medium.opacity-50 "Empty"])]
-           {:default-collapsed? collapsed?}))]))))
+           {:default-collapsed? collapsed?
+            :title-trigger? true}))]))))
 
 (defn admonition
   [config type result]
