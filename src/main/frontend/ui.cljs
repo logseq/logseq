@@ -159,7 +159,7 @@
         klass (if small? (str klass ".px-2.py-1") klass)
         klass (if large? (str klass ".text-base") klass)]
     (if href
-      [:button.ui__button.is-link
+      [:a.ui__button.is-link
        (merge
         {:type  "button"
          :class (str (util/hiccup->class klass) " " class)}
