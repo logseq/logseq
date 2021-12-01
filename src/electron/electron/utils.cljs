@@ -47,8 +47,9 @@
            ["." ".recycle" "assets" "node_modules"])
      (string/ends-with? path ".DS_Store")
      ;; hidden directory or file
-     (re-find #"/\.[^.]+" path)
-     (re-find #"^\.[^.]+" path)
+     (let [relpath (path/relative dir path)]
+       (or (re-find #"/\.[^.]+" relpath)
+           (re-find #"^\.[^.]+" relpath)))
      (let [path (string/lower-case path)]
        (and
         (not (string/blank? (path/extname path)))
