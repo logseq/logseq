@@ -702,9 +702,9 @@
 
 (rum/defc select
   [options on-change class]
-  [:select.mt-1.block.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
+  [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
    {:class     (or class "form-select")
-    :style     {:padding "0 0 0 12px"}
+    :style     {:padding "0 0 0 6px"}
     :on-change (fn [e]
                  (let [value (util/evalue e)]
                    (on-change value)))}
