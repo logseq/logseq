@@ -7,6 +7,7 @@
             [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
             [frontend.config :as config]
+            [frontend.components.block :as block]
             [frontend.context.i18n :as i18n]
             [frontend.db :as db]
             [frontend.extensions.srs :as srs]
@@ -217,6 +218,11 @@
               :on-click (fn [_]
                           (state/set-modal! #(export/export-blocks [block-id])))}
              "Copy as")
+
+            (ui/menu-link
+             {:key     "Encrypt block"
+              :on-click (fn [_e] (state/set-modal! #(block/decrypt-block block block-id (:block/content block))))}
+             (if (:encrypted properties) "Decrypt block" "Encrypt block"))
 
             (if (srs/card-block? block)
               (ui/menu-link

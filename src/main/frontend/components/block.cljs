@@ -14,6 +14,7 @@
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
             [frontend.components.macro :as macro]
+            [frontend.encrypt :as encrypt]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.date :as date]
@@ -1809,11 +1810,78 @@
                     [:a.fade-link
                      summary]]))))])
 
+(rum/defcs decrypt-block  < rum/reactive
+  {:init (fn [state]
+           (state/update-state! :editor/content {})
+           state)
+   :did-mount (fn [state]
+                (state/set-editor-args! (:rum/args state))
+                state) }
+  (rum/local true ::textclear?)
+  (rum/local "" ::password)
+  [state block block-id content]
+  (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+        properties (:block/properties block)
+        encryption (:encrypted properties)
+        content (-> (property/remove-built-in-properties (:block/format block) content)
+                    (drawer/remove-logbook)
+                    )
+        text-input-id (str "ls-encryption-" (:block/uuid block))
+        text (state/sub [:editor/content text-input-id])
+        textclear? (::textclear? state)
+        password (::password state)
+        ]
+    (when (nil? text)
+      (reset! textclear? (not encryption))
+      (state/set-edit-content! text-input-id (if encryption (string/join "\n" (rest (string/split-lines content))) content))
+      )
+          
+    [:div.encrypt.resize
+     (ui/ls-textarea
+      {:id                text-input-id
+       :cacheMeasurements true
+       :default-value     text
+       :auto-focus        false
+       :read-only         (not @textclear?)
+       :on-change (fn [e] (when @textclear?
+                            (state/set-edit-content! text-input-id (util/evalue e))
+                            ))
+       })
+     [:div.mt-4
+      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
+       {:type "password"
+        :placeholder (if @textclear?  "Password ..(empty to disable encryption)" "Password")
+        :auto-focus true
+        :on-change (fn [e]
+                     (reset! password (util/evalue e)) )}]
+      (ui/button (if @textclear? "Save!" "Decrypt!")
+                 :on-click (if @textclear?
+                               (fn []
+                                 (when (string/blank? @password)
+                                   (editor-handler/save-block-aux! block text {})
+                                   (editor-handler/remove-block-property! block-id :encrypted))
+                                 (when-not (string/blank? @password)
+                                 (p/let [encrypted      (encrypt/encrypt-with-passphrase @password text)
+                                         title     (first (string/split-lines text))
+                                         title (if (string/blank? title) "ENCRYPTED BLOCK" title)
+                                         ]
+                                   (editor-handler/save-block-aux! block (string/join "\n" [title encrypted]) {})
+                                   (editor-handler/set-block-property! block-id :encrypted true)
+                                   )))
+                               (fn []
+                                 (p/let [decrypted (encrypt/decrypt-with-passphrase @password (str text "\n") )]
+                                   (state/set-edit-content! text-input-id decrypted)
+                                   (reset! textclear? true))
+                                 )))
+      ]]))
+
+
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body format pre-block? content)))
         collapsed? (get properties :collapsed)
+        encrypted? (get properties :encrypted)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
         block-type (or (:ls-type properties) :default)
@@ -1844,11 +1912,12 @@
       ;; .flex.relative {:style {:width "100%"}}
       [:span
        ;; .flex-1.flex-col.relative.block-content
+
        [:span.flex.flex-row.justify-between
         [:span
          (cond
            (seq title)
-           (build-block-title config block)
+           (if encrypted? (map-inline config title) (build-block-title config block)
 
            :else
            nil)]
@@ -1875,12 +1944,15 @@
 
        (when (and (not block-ref-with-title?) (seq body))
          [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
+          (if encrypted?
+            [:a.prefix-link {:on-click (fn [] (state/set-modal! #(decrypt-block block uuid content)))}
+             [:span.hl-page [:label.blank "... "] [:strong.forbid-edit "encrypted"]]]
           ;; TODO: consistent id instead of the idx (since it could be changed later)
           (let [body (block/trim-break-lines! (:block/body block))]
             (for [[idx child] (medley/indexed body)]
               (when-let [block (markup-element-cp config child)]
                 (rum/with-key (block-child block)
-                  (str uuid "-" idx)))))])
+                  (str uuid "-" idx))))))])
 
        (case (:block/warning block)
          :multiple-blocks
@@ -1919,8 +1991,9 @@
   [config {:block/keys [uuid body format] :as block} edit-input-id block-id heading-level edit?]
   (let [editor-box (get config :editor-box)
         editor-id (str "editor-" edit-input-id)
+        encrypted? (:encrypted (:block/properties block))
         slide? (:slide? config)]
-    (if (and edit? editor-box)
+    (if (and edit? editor-box (not encrypted?))
       [:div.editor-wrapper {:id editor-id}
        (ui/catch-error
         [:p.warning "Something wrong in the editor"]

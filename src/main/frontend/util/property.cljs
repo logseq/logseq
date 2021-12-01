@@ -22,7 +22,7 @@
 (defn built-in-properties
   []
   (set/union
-   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table :query-properties :query-sort-by :query-sort-desc
+   #{:id :custom-id :background-color :heading :collapsed :created-at :updated-at :last-modified-at :created_at :last_modified_at :query-table :query-properties :query-sort-by :query-sort-desc :encrypted
      :ls-type :hl-type :hl-page :hl-stamp}
    (set (map keyword config/markers))
    (set (config/get-block-hidden-properties))
