@@ -205,7 +205,7 @@
           :on-blur       (fn [e] (setting/set-setting! :attachments-block-text (util/evalue e)))}]]]])
    (when (setting/setting :include-attachments?)
      [:div.row
-      [:label.title.w-70
+      [:label.title.w-72
        {:for "zotero_linked_attachment_base_directory"}
        "Zotero linked attachment base directory"
        [:a.ml-2
@@ -349,7 +349,7 @@
 (rum/defc zotero-profile-selector <
   rum/reactive
   [profile*]
-  [:div.zotero-profile-selector.my-4.flex.flex-wrap
+  [:div.row
    [:label.mr-32 {:for "profile-select"} "Choose a profile:"]
    [:span.justify-evenly
     [:select
