@@ -1124,6 +1124,13 @@ a.tooltip-priority {
   background: var(--ls-tertiary-background-color);
 }
 
+.references-blocks .block-control {
+    margin-left: -22px;
+    @screen sm {
+        margin-left: 2px;
+    }
+}
+
 #head .fade-link {
   font-weight: 600;
   font-size: 13px;

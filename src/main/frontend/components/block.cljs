@@ -2868,7 +2868,7 @@
                 parent-blocks (group-by :block/parent blocks)]
             [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                          (:ref? config)
-                         (assoc :class "color-level px-7 py-2 rounded"))
+                         (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
              (ui/foldable
               [:div
                (page-cp config page)
@@ -2891,7 +2891,7 @@
                 page (db/entity (:db/id page))]
             [:div.my-2 (cond-> {:key (str "page-" (:db/id page))}
                          (:ref? config)
-                         (assoc :class "color-level px-7 py-2 rounded"))
+                         (assoc :class "color-level px-2 sm:px-7 py-2 rounded"))
              (ui/foldable
               [:div
                (page-cp config page)
