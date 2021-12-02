@@ -182,11 +182,13 @@
 
    :editor/up                      {:desc    "Move cursor up / Select up"
                                     :binding "up"
-                                    :fn      (editor-handler/shortcut-up-down :up)}
+                                    :fn      (editor-handler/shortcut-up-down :up)
+                                    :force?  true}
 
    :editor/down                    {:desc    "Move cursor down / Select down"
                                     :binding "down"
-                                    :fn      (editor-handler/shortcut-up-down :down)}
+                                    :fn      (editor-handler/shortcut-up-down :down)
+                                    :force?  true}
 
    :editor/left                    {:desc    "Move cursor left / Open selected block at beginning"
                                     :binding "left"

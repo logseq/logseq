@@ -288,6 +288,15 @@
     (when (re-find #"https?://" url)
       (js/apis.openExternal url))))
 
+(def ^:export invoke_external_command
+  (fn [type & args]
+    (when-let [id (and (string/starts-with? type "logseq.")
+                       (-> (string/replace type #"^logseq." "")
+                           (util/safe-lower-case)
+                           (keyword)))]
+      (when-let [action (get-in (palette-handler/get-commands-unique) [id :action])]
+        (apply action args)))))
+
 ;; flag - boolean | 'toggle'
 (def ^:export set_left_sidebar_visible
   (fn [flag]

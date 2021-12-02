@@ -26,7 +26,7 @@
        ;; some of the shortcut fn takes the shape of (fn [e] xx)
        ;; instead of (fn [] xx)
        ;; remove them for now
-       (remove (fn [{:keys [action]}] (not (zero? (.-length action)))))))
+       (filter (fn [{:keys [action force?]}] (or force? (zero? (.-length action)))))))
 
 (defn get-commands []
   (->> (get @state/state :command-palette/commands)

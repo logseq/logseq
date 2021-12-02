@@ -185,6 +185,41 @@ export type SimpleCommandKeybinding = {
   mac?: string // special for Mac OS
 }
 
+export type ExternalCommandType =
+  'logseq.command/run' |
+  'logseq.editor/cycle-todo' |
+  'logseq.editor/down' |
+  'logseq.editor/up' |
+  'logseq.editor/open-file-in-default-app' |
+  'logseq.editor/open-file-in-directory' |
+  'logseq.editor/select-all-blocks' |
+  'logseq.editor/toggle-open-blocks' |
+  'logseq.editor/zoom-in' |
+  'logseq.editor/zoom-out' |
+  'logseq.go/home' |
+  'logseq.go/journals' |
+  'logseq.go/keyboard-shortcuts' |
+  'logseq.go/next-journal' |
+  'logseq.go/prev-journal' |
+  'logseq.go/search' |
+  'logseq.go/search-in-page' |
+  'logseq.go/tomorrow' |
+  'logseq.search/re-index' |
+  'logseq.sidebar/clear' |
+  'logseq.sidebar/open-today-page' |
+  'logseq.ui/goto-plugins' |
+  'logseq.ui/select-theme-color' |
+  'logseq.ui/toggle-brackets' |
+  'logseq.ui/toggle-cards' |
+  'logseq.ui/toggle-contents' |
+  'logseq.ui/toggle-document-mode' |
+  'logseq.ui/toggle-help' |
+  'logseq.ui/toggle-left-sidebar' |
+  'logseq.ui/toggle-right-sidebar' |
+  'logseq.ui/toggle-settings' |
+  'logseq.ui/toggle-theme' |
+  'logseq.ui/toggle-wide-mode'
+
 /**
  * App level APIs
  */
@@ -212,6 +247,10 @@ export interface IAppProxy {
       keybinding?: SimpleCommandKeybinding
     },
     action: SimpleCommandCallback) => void
+
+  invokeExternalCommand: (
+    type: ExternalCommandType,
+    ...args: Array<any>) => Promise<void>
 
   // native
   relaunch: () => Promise<void>
@@ -582,7 +621,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   /**
    * show the plugin's UI
    */
-  showMainUI (opts?: { autoFocus: boolean}): void
+  showMainUI (opts?: { autoFocus: boolean }): void
 
   /**
    * hide the plugin's UI
