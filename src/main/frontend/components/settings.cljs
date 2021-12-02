@@ -637,7 +637,7 @@
 
             (ui/admonition
              :warning
-             [:p "Clear cache will discard open graphs. You will lose unsaved changes."])
+             [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
 
             (when logged?
               [:div
