@@ -233,6 +233,7 @@
   (fn [pid ^js cmd-action palette?]
     (when-let [[cmd action] (bean/->clj cmd-action)]
       (let [action (assoc action 0 (keyword (first action)))
+            cmd (assoc cmd :key (string/replace (:key cmd) ":" "-"))
             key (:key cmd)
             keybinding (:keybinding cmd)
             palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]

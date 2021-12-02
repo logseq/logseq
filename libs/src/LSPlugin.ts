@@ -218,7 +218,8 @@ export type ExternalCommandType =
   'logseq.ui/toggle-right-sidebar' |
   'logseq.ui/toggle-settings' |
   'logseq.ui/toggle-theme' |
-  'logseq.ui/toggle-wide-mode'
+  'logseq.ui/toggle-wide-mode' |
+  'logseq.command-palette/toggle'
 
 /**
  * App level APIs

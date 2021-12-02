@@ -314,7 +314,8 @@
 
    :command-palette/toggle         {:desc    "Toggle command palette"
                                     :binding "mod+shift+p"
-                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
+                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))
+                                    :force?   true}
 
    :command/run                    {:desc    "Run git command"
                                     :binding "mod+shift+1"
@@ -461,7 +462,8 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [:editor/cycle-todo
+     (build-category-map [:command-palette/toggle
+                          :editor/cycle-todo
                           :editor/up
                           :editor/down
                           :editor/left
