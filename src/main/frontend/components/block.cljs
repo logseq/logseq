@@ -1779,28 +1779,29 @@
 
 (defn clock-summary-cp
   [block body]
-  (when (and (state/enable-timetracking?)
-             (or (= (:block/marker block) "DONE")
-                 (contains? #{"TODO" "LATER"} (:block/marker block))))
-    (let [summary (clock/clock-summary body true)]
-      (when (and summary
-                 (not= summary "0m")
-                 (not (string/blank? summary)))
-        (ui/tippy {:html        (fn []
-                                  (when-let [logbook (drawer/get-logbook body)]
-                                    (let [clocks (->> (last logbook)
-                                                      (filter #(string/starts-with? % "CLOCK:"))
-                                                      (remove string/blank?))]
-                                      [:div.p-4
-                                       [:div.font-bold.mb-2 "LOGBOOK:"]
-                                       [:ul
-                                        (for [clock (take 10 (reverse clocks))]
-                                          [:li clock])]])))
-                   :interactive true
-                   :delay       [1000, 100]}
-                  [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
-                   [:a.fade-link
-                    summary]])))))
+  [:span.text-right {:style {:max-width 100}}
+   (when (and (state/enable-timetracking?)
+              (or (= (:block/marker block) "DONE")
+                  (contains? #{"TODO" "LATER"} (:block/marker block))))
+     (let [summary (clock/clock-summary body true)]
+       (when (and summary
+                  (not= summary "0m")
+                  (not (string/blank? summary)))
+         (ui/tippy {:html        (fn []
+                                   (when-let [logbook (drawer/get-logbook body)]
+                                     (let [clocks (->> (last logbook)
+                                                       (filter #(string/starts-with? % "CLOCK:"))
+                                                       (remove string/blank?))]
+                                       [:div.p-4
+                                        [:div.font-bold.mb-2 "LOGBOOK:"]
+                                        [:ul
+                                         (for [clock (take 10 (reverse clocks))]
+                                           [:li clock])]])))
+                    :interactive true
+                    :delay       [1000, 100]}
+                   [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
+                    [:a.fade-link
+                     summary]]))))])
 
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid title body content children properties scheduled deadline] :as block} edit-input-id block-id slide?]
@@ -1844,8 +1845,7 @@
            :else
            nil)]
 
-        [:span
-         (clock-summary-cp block body)]]
+        (clock-summary-cp block body)]
 
        (when (seq children)
          (dnd-separator-wrapper block block-id slide? false true))
