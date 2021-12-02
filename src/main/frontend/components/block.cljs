@@ -2359,23 +2359,25 @@
 (defn logbook-cp
   [log]
   (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
+        ;; TODO: diplay states change log
         states (filter #(not (string/starts-with? % "CLOCK:")) log)]
-    (when (or (seq clocks) (seq states))
+    (when (seq clocks)
       (let [tr (fn [elm cols] (->elem :tr
                                       (mapv (fn [col] (->elem elm col)) cols)))
-            head  [:thead (tr :th.py-0 ["Type" "Start" "End" "Span"])]
+            head  [:thead.overflow-x-scroll (tr :th.py-0 ["Type" "Start" "End" "Span"])]
             clock-tbody (->elem
-                         :tbody
+                         :tbody.overflow-scroll.sm:overflow-auto
                          (mapv (fn [clock]
                                  (let [cols (->> (string/split clock #": |--|=>")
                                                  (map string/trim))]
                                    (mapv #(tr :td.py-0 %) [cols])))
                                clocks))]
-        [:div.bg-gray-100
+        [:div.overflow-x-scroll.sm:overflow-auto
          (->elem
-          :table.m-0
+          :table.m-0 
           {:class "logbook-table"
            :border 0
+           :style {:width "max-content"}
            :cell-spacing 15}
           (cons head [clock-tbody]))]))))
 
@@ -2619,12 +2621,11 @@
                               (:block/deadline (:block config)))))))
           [:div
            [:div.text-sm
-            [:div.drawer {:data-drawer-name name
-                          :style {:overflow "overlay"}}
+            [:div.drawer {:data-drawer-name name}
              (ui/foldable
               [:div.opacity-50.font-medium
                (util/format ":%s:" (string/upper-case name))]
-              [:div.opacity-50.font-medium.overflow-scroll.logbook-clock
+              [:div.opacity-50.font-medium
                (logbook-cp lines)
                [:div ":END:"]]
               {:default-collapsed? true

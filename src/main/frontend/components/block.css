@@ -531,11 +531,3 @@ span.cloze-revealed {
   opacity: 1;
 }
 
-.logbook-clock {
-    width: max-content;
-    max-height: 300px;
-    
-    @screen sm {
-        width: auto;
-    }
-}
