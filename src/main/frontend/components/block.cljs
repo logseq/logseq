@@ -2359,6 +2359,7 @@
 (defn logbook-cp
   [log]
   (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
+        clocks (reverse (sort-by str clocks))
         ;; TODO: diplay states change log
         states (filter #(not (string/starts-with? % "CLOCK:")) log)]
     (when (seq clocks)
