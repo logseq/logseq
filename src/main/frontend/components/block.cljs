@@ -2596,11 +2596,14 @@
                               (:block/deadline (:block config)))))))
           [:div
            [:div.text-sm
-            [:div.drawer {:data-drawer-name name}
+            [:div.drawer {:data-drawer-name name
+                          :style {:overflow "overlay"}}
              (ui/foldable
               [:div.opacity-50.font-medium
                (util/format ":%s:" (string/upper-case name))]
-              [:div.opacity-50.font-medium
+              [:div.opacity-50.font-medium.overflow-scroll
+               {:style {:width "max-content"
+                        :max-height 300}}
                (apply str lines)
                [:div ":END:"]]
               {:default-collapsed? true
