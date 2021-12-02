@@ -2356,6 +2356,29 @@
        tb-col-groups
        (cons head groups)))]))
 
+(defn logbook-cp
+  [log]
+  (let [clocks (filter #(string/starts-with? % "CLOCK:") log)
+        states (filter #(not (string/starts-with? % "CLOCK:")) log)]
+    (when (or (seq clocks) (seq states))
+      (let [tr (fn [elm cols] (->elem :tr
+                                      (mapv (fn [col] (->elem elm col)) cols)))
+            head  [:thead (tr :th.py-0 ["Type" "Start" "End" "Span"])]
+            clock-tbody (->elem
+                         :tbody
+                         (mapv (fn [clock]
+                                 (let [cols (->> (string/split clock #": |--|=>")
+                                                 (map string/trim))]
+                                   (mapv #(tr :td.py-0 %) [cols])))
+                               clocks))]
+        [:div.bg-gray-100
+         (->elem
+          :table.m-0
+          {:class "logbook-table"
+           :border 0
+           :cell-spacing 15}
+          (cons head [clock-tbody]))]))))
+
 (defn map-inline
   [config col]
   (map #(inline config %) col))
@@ -2601,10 +2624,8 @@
              (ui/foldable
               [:div.opacity-50.font-medium
                (util/format ":%s:" (string/upper-case name))]
-              [:div.opacity-50.font-medium.overflow-scroll
-               {:style {:width "max-content"
-                        :max-height 300}}
-               (apply str lines)
+              [:div.opacity-50.font-medium.overflow-scroll.logbook-clock
+               (logbook-cp lines)
                [:div ":END:"]]
               {:default-collapsed? true
                :title-trigger? true})]]])
