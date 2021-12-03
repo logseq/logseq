@@ -258,9 +258,12 @@
                                (rename-f "modify" modified))]
                     (when (or (and (seq diffs) (seq modified-files))
                               (seq diffs))
+                      (comment "re-index a local graph is handled here")
                       (repo-handler/load-repo-to-db! repo
                                                      {:diffs     diffs
                                                       :nfs-files modified-files
+                                                      ;; re-ask encryption
+                                                      :first-clone? re-index?
                                                       :refresh? (not re-index?)}))
                     (when (and (util/electron?) (not re-index?))
                       (db/transact! repo new-files))))))))
