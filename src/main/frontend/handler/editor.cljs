@@ -25,7 +25,6 @@
             [frontend.handler.export :as export]
             [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
-            [frontend.handler.recent :as recent-handler]
             [frontend.handler.repeated :as repeated]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
@@ -1287,7 +1286,6 @@
       (let [page-name (string/lower-case page)]
         (state/clear-edit!)
         (insert-first-page-block-if-not-exists! page-name)
-        (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
         (route-handler/redirect-to-page! page-name)))))
 
 (defn open-link-in-sidebar!
