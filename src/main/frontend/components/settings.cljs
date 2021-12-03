@@ -382,8 +382,8 @@
   (toggle "enable_timetracking"
           (t :settings-page/enable-timetracking)
           enable-timetracking?
-          #((let [value (not enable-timetracking?)]
-              (config-handler/set-config! :feature/enable-timetracking? value)))))
+          #(let [value (not enable-timetracking?)]
+             (config-handler/set-config! :feature/enable-timetracking? value))))
 
 (defn update-home-page
   [event]
@@ -446,8 +446,8 @@
   (toggle "enable_encryption"
           (t :settings-page/enable-encryption)
           enable-encryption?
-          #((let [value (not enable-encryption?)]
-              (config-handler/set-config! :feature/enable-encryption? value)))
+          #(let [value (not enable-encryption?)]
+             (config-handler/set-config! :feature/enable-encryption? value))
           [:div.text-sm.opacity-50 "⚠️ This feature is experimental"]))
 
 (rum/defc keyboard-shortcuts-row [t]
