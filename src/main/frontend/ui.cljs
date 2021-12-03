@@ -189,10 +189,10 @@
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
                 :fill-rule "evenodd"}]]])]
       [:div.ui__notifications-content
-       {:style {:z-index (if (or (= state "exiting")
-                                 (= state "exited"))
-                           -1
-                           99)}}
+       {:style
+        (when (or (= state "exiting")
+                  (= state "exited"))
+                  {:z-index -1})}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
                   "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
@@ -537,7 +537,7 @@
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 9999 -1)}}
+     {:style {:z-index (if show? 999 -1)}}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
