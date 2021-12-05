@@ -194,12 +194,13 @@
                  200)
                 state)}
   [state]
-  (let [num (state/sub :srs/cards-due-count)]
-    [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
-     (ui/icon "infinity mr-3" {:style {:font-size 20}})
-     [:span.flex-1 "Flashcards"]
-     (when (and num (not (zero? num)))
-       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [num (state/sub :srs/cards-due-count)]
+      [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
+      (ui/icon "infinity mr-3" {:style {:font-size 20}})
+      [:span.flex-1 (t :right-side-bar/flashcards)]
+      (when (and num (not (zero? num)))
+        [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])])))
 
 (defn get-default-home-if-valid
   []
@@ -254,7 +255,7 @@
                 :icon "home"})
               (sidebar-item
                {:class "journals-nav"
-                :title "Journals"
+                :title (t :right-side-bar/journals)
                 :on-click-handler route-handler/go-to-journals!
                 :icon "calendar"}))
 
@@ -263,13 +264,13 @@
 
             (sidebar-item
              {:class "graph-view-nav"
-              :title "Graph view"
+              :title (t :right-side-bar/graph-view)
               :href (rfe/href :graph)
               :icon "hierarchy"})
 
             (sidebar-item
              {:class "all-pages-nav"
-              :title "All pages"
+              :title (t :right-side-bar/all-pages)
               :href (rfe/href :all-pages)
               :icon "files"})]]
 
@@ -287,7 +288,7 @@
                            (state/toggle-left-sidebar!)
                            (state/pub-event! [:go/search]))}
               (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
-              [:span.flex-1 "New page"]])]]]))))
+              [:span.flex-1 (t :right-side-bar/new-page)]])]]]))))
 
 (rum/defc sidebar-mobile-sidebar < rum/reactive
   [{:keys [left-sidebar-open? close-fn route-match]}]

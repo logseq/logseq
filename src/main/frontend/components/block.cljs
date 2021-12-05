@@ -89,6 +89,7 @@
 
 ;; TODO: dynamic
 (defonce max-blocks-per-page 200)
+(defonce max-depth-of-links 5)
 (defonce *blocks-container-id (atom 0))
 
 ;; TODO:
@@ -857,8 +858,12 @@
     (let [{:keys [url label title metadata full_text]} link]
       (match url
         ["Block_ref" id]
-        (let [label* (if (seq (mldoc/plain->text label)) label nil)]
-          (block-reference (assoc config :reference? true) id label*))
+        (let [label* (if (seq (mldoc/plain->text label)) label nil)
+              {:keys [link-depth]} config
+              link-depth (or link-depth 0)]
+          (if (> link-depth max-depth-of-links)
+            [:p.warning.text-sm "Block ref nesting is too deep"]
+            (block-reference (assoc config :reference? true :link-depth (inc link-depth)) id label*)))
 
         ["Page_ref" page]
         (let [format (get-in config [:block :block/format])]
@@ -1200,16 +1205,21 @@
               (ui/tweet-embed id))))
 
         (= name "embed")
-        (let [a (first arguments)]
+        (let [a (first arguments)
+              {:keys [link-depth]} config
+              link-depth (or link-depth 0)]
           (cond
             (nil? a) ; empty embed
             nil
+
+            (> link-depth max-depth-of-links)
+            [:p.warning.text-sm "Embed depth is too deep"]
 
             (and (string/starts-with? a "[[")
                  (string/ends-with? a "]]"))
             (let [page-name (text/get-page-name a)]
               (when-not (string/blank? page-name)
-                (page-embed config page-name)))
+                (page-embed (assoc config :link-depth (inc link-depth)) page-name)))
 
             (and (string/starts-with? a "((")
                  (string/ends-with? a "))"))
@@ -1220,7 +1230,7 @@
                                  (let [s (string/trim s)]
                                    (and (util/uuid-string? s)
                                         (uuid s))))]
-                (block-embed config id)))
+                (block-embed (assoc config :link-depth (inc link-depth)) id)))
 
             :else                       ;TODO: maybe collections?
             nil))
@@ -2589,7 +2599,7 @@
     (let [{:keys [lines language]} options
           attr (when language
                  {:data-lang language})
-          code (join-lines lines)]
+          code (apply str lines)]
       (cond
         html-export?
         (highlight/html-export attr code)

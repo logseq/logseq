@@ -14,13 +14,8 @@
   }
 
   &-inner {
-      > aside {
-        border-right: 0px solid var(--ls-quaternary-background-color);
-        border-bottom: 1px solid var(--ls-quaternary-background-color);
-        @screen md {
-            border-right: 1px solid var(--ls-quaternary-background-color);
-            border-bottom: 0px solid var(--ls-quaternary-background-color);
-        }
+    > aside {
+      border-right: 1px solid var(--ls-quaternary-background-color);
 
       ul {
         padding: 12px;
@@ -67,7 +62,7 @@
 
     > article {
       flex: 1;
-      padding: 0 12px 24px;
+      padding: 0 12px 12px;
       max-height: 70vh;
       overflow: auto;
     }
@@ -116,8 +111,8 @@
         }
 
         .form-select, .form-input {
-            width: 55%;
-            min-width: 200px;
+          width: 100%;
+          max-width: 200px;
           display: inline-block;
 
           &:hover {
@@ -213,7 +208,6 @@
 
     .ctls {
       position: relative;
-      top: -8px;
 
       &:disabled {
         cursor: progress;
@@ -221,10 +215,11 @@
     }
 
     .update-state {
-      padding: 15px;
+      padding: 6px 10px;
       background-color: var(--ls-quaternary-background-color);
       border-radius: 4px;
-      margin-bottom: -8px;
+      margin-top: 10px;
+      width: fit-content;
 
       > p {
         margin: 0;
@@ -250,6 +245,10 @@
   }
 }
 
+/* Styles for the category icon on the left of settings-modal */
+.cp__settings-inner > aside ul > li > a > i {
+  margin-right: 4px;
+}
 
 svg.git {
     margin-left: -4px;

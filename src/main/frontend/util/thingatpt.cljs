@@ -147,12 +147,17 @@
                        string/split-lines
                        first
                        (string/replace "```" "")
-                       string/trim)]
-      (when-not (string/blank? language)
-            (assoc markdown-src
-                   :type "source-block"
-                   :language language
-                   :headers nil)))))
+                       string/trim)
+          raw-content (:raw-content markdown-src)
+          blank-raw-content? (string/blank? raw-content)
+          action (if (or blank-raw-content? (= (string/trim raw-content) language))
+                   :into-code-editor
+                   :none)]
+      (assoc markdown-src
+             :type "source-block"
+             :language language
+             :action action
+             :headers nil))))
 
 (defn admonition&src-at-point [& [input]]
   (or (org-admonition&src-at-point input)
