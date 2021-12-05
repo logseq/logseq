@@ -165,7 +165,7 @@
   border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
   padding: 2px 0;
-  display: inline;
+  display: inline-block;
 
   &:hover {
     color: var(--ls-link-text-hover-color);
@@ -531,4 +531,3 @@ span.cloze-revealed {
 .block-parents a:hover {
   opacity: 1;
 }
-

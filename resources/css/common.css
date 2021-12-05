@@ -1090,10 +1090,6 @@ mark {
 
 /* block references */
 
-.block-ref {
-  display: inline;
-}
-
 .block-ref .block-ref {
   padding: 6px 5px;
   border: none;
