@@ -15,8 +15,7 @@
             [clojure.core.async :as async]
             [electron.search :as search]
             [electron.git :as git]
-            [electron.plugin :as plugin]
-            [frontend.handler.route :as route-handler]))
+            [electron.plugin :as plugin]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -189,7 +188,7 @@
           (fs-extra/removeSync path)
           (catch js/Error e
             (js/console.error e)))))
-    (route-handler/redirect-to-home!)))
+    (utils/send-to-renderer "redirect" {:payload {:to :home}})))
 
 (defmethod handle :clearCache [_window _]
   (search/close!)

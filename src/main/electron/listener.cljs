@@ -73,7 +73,14 @@
   (js/window.apis.on "getCurrentGraph"
                      (fn []
                        (when-let [graph (state/get-current-repo)]
-                         (ipc/ipc "setCurrentGraph" graph)))))
+                         (ipc/ipc "setCurrentGraph" graph))))
+
+  (js/window.apis.on "redirect"
+                     (fn [data]
+                       (let [{:keys [payload]} (bean/->clj data)
+                             payload (update payload :to keyword)]
+                         (prn {:payload payload})
+                         (route-handler/redirect! payload)))))
 
 (defn listen!
   []
