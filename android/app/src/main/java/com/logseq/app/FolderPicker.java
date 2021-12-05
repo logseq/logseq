@@ -4,7 +4,9 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Environment;
 import android.provider.DocumentsContract;
+import android.provider.Settings;
 
 import androidx.activity.result.ActivityResult;
 import androidx.documentfile.provider.DocumentFile;
@@ -21,9 +23,16 @@ import com.getcapacitor.PluginMethod;
 public class FolderPicker extends Plugin {
     @PluginMethod()
     public void pickFolder(PluginCall call) {
-        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        i.addCategory(Intent.CATEGORY_DEFAULT);
-        startActivityForResult(call, i, "folderPickerResult");
+        if (Environment.isExternalStorageManager()) {
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            i.addCategory(Intent.CATEGORY_DEFAULT);
+            startActivityForResult(call, i, "folderPickerResult");
+        } else {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+            Uri uri = Uri.fromParts("package", BuildConfig.APPLICATION_ID, null);
+            intent.setData(uri);
+            startActivityForResult(call, intent, 20);
+        }
     }
 
     @ActivityCallback

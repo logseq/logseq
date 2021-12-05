@@ -10,15 +10,18 @@ const config: CapacitorConfig = {
             launchShowDuration: 3000,
             launchAutoHide: false,
             androidScaleType: "CENTER_CROP",
-            splashImmersive: true,
+            splashImmersive: false,
             backgroundColor: "#002b36"
         },
+    },
+    ios: {
+        scheme: "Logseq"
     }
     // do not commit this into source control
     // source: https://capacitorjs.com/docs/guides/live-reload
     // , server: {
-    //     url: process.env.LOGSEQ_APP_SERVER_URL,
-    //     cleartext: true
+    //    url: process.env.LOGSEQ_APP_SERVER_URL,
+    //    cleartext: true
     // }
 };
 

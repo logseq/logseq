@@ -28,7 +28,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [shadow.resource :as rc]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.mobile.util :as mobile]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)

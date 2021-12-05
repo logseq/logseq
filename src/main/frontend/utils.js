@@ -288,9 +288,9 @@ export const nodePath = Object.assign({}, path, {
     input = toPosixPath(input)
     return path.dirname(input)
   },
-  
+
   extname (input) {
     input = toPosixPath(input)
     return path.extname(input)
-  }  
+  }
 })

@@ -8,12 +8,11 @@
 			"launchShowDuration": 3000,
 			"launchAutoHide": false,
 			"androidScaleType": "CENTER_CROP",
-			"splashImmersive": true,
+			"splashImmersive": false,
 			"backgroundColor": "#002b36"
 		}
+	},
+	"ios": {
+		"scheme": "Logseq"
 	}
-    "server": {
-		"url": "http://192.168.0.104:3001",
-		"cleartext": true
-	} 
 }

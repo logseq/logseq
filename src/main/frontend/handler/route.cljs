@@ -3,6 +3,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.text :as text]
@@ -28,13 +29,16 @@
 
 (defn redirect-to-page!
   ([page-name]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
    (redirect! {:to :page
                :path-params {:name (str page-name)}}))
   ([page-name anchor]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
    (redirect! {:to :page
                :path-params {:name (str page-name)}
                :query-params {:anchor anchor}}))
   ([page-name anchor push]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
    (redirect! {:to :page
                :path-params {:name (str page-name)}
                :query-params {:anchor anchor}

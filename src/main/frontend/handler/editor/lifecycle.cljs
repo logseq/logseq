@@ -2,6 +2,8 @@
   (:require [frontend.handler.editor :as editor-handler :refer [get-state]]
             [frontend.handler.editor.keyboards :as keyboards-handler]
             [frontend.state :as state]
+            [frontend.util :as util]
+            [frontend.mobile.util :as mobile-util]
             [goog.dom :as gdom]))
 
 (defn did-mount!
@@ -18,7 +20,10 @@
     (js/setTimeout #(keyboards-handler/esc-save! state) 100)
 
     (when-let [element (gdom/getElement id)]
-      (.focus element)))
+      (.focus element)
+      (when (and (util/mobile?)
+                 (not (mobile-util/native-ios?)))
+        (js/setTimeout #(util/make-el-into-viewport element 60) 64))))
   state)
 
 (defn did-remount!
