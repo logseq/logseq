@@ -484,7 +484,7 @@
         (route-handler/redirect! {:to :zotero-setting})))]]])
 
 (defn auto-push-row [t current-repo enable-git-auto-push?]
-  (when (string/starts-with? current-repo "https://")
+  (when (and current-repo (string/starts-with? current-repo "https://"))
     (toggle "enable_git_auto_push"
             "Enable Git auto push"
             enable-git-auto-push?
