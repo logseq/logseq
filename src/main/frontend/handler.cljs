@@ -62,12 +62,7 @@
                             (* 60 1000)))
                 (let [total (srs/get-srs-cards-total)]
                   (state/set-state! :srs/cards-due-count total)
-                  (reset! cards-last-check-time (util/time-ms))))
-
-              (when (and repo
-                         (search-db/empty? repo)
-                         (state/input-idle? repo))
-                (search/rebuild-indices!))))]
+                  (reset! cards-last-check-time (util/time-ms))))))]
     (f)
     (js/setInterval f 5000)))
 
@@ -133,7 +128,7 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
-                            (file-handler/watch-for-local-dirs!)
+                            (file-handler/watch-for-current-graph-dir!)
                             ;; (when-not (state/logged?)
                             ;;   (state/pub-event! [:after-db-restore repos]))
                             ))

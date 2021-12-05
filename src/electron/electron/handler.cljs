@@ -163,7 +163,8 @@
 (defmethod handle :rebuild-blocks-indice [window [_ repo data]]
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
-  (search/upsert-blocks! repo (bean/->js data)))
+  (search/upsert-blocks! repo (bean/->js data))
+  [])
 
 (defmethod handle :transact-blocks [window [_ repo data]]
   (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
