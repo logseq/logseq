@@ -24,7 +24,8 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.debug :as debug]))
+            [frontend.debug :as debug]
+            [frontend.mobile.util :as mobile]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -134,7 +135,6 @@
   [repo-url file content]
   (let [electron-local-repo? (and (util/electron?)
                                   (config/local-db? repo-url))
-        ;; FIXME: store relative path in db
         file (cond
                (and electron-local-repo?
                     util/win32?
@@ -144,6 +144,9 @@
                (and electron-local-repo? (or
                                           util/win32?
                                           (not= "/" (first file))))
+               (str (config/get-repo-dir repo-url) "/" file)
+
+               (and (mobile/is-native-platform?) (not= "/" (first file)))
                (str (config/get-repo-dir repo-url) "/" file)
 
                :else

@@ -503,7 +503,8 @@
                          (not beginning-of-line?))
                   (str "\n" value)
                   value)]
-      (insert! input-id value option))))
+      (insert! input-id value option)
+      (reset! *show-commands false))))
 
 (defmethod handle-step :editor/cursor-back [[_ n]]
   (when-let [input-id (state/get-edit-input-id)]

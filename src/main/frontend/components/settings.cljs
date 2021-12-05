@@ -22,7 +22,8 @@
             [frontend.version :refer [version]]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (rum/defcs set-email < (rum/local "" ::email)
   [state]
@@ -179,7 +180,9 @@
                              :class    "text-sm p-1"
                              :href     href
                              :on-click on-click))]
-    [:div.text-sm desc]]])
+    (when-not (or (util/mobile?)
+                  (mobile-util/is-native-platform?))
+      [:div.text-sm desc])]])
 
 
 (defn edit-config-edn []
@@ -201,12 +204,18 @@
       :-for         "customize_css"})))
 
 (defn show-brackets-row [t show-brackets?]
-  (toggle "show_brackets"
-          (t :settings-page/show-brackets)
-          show-brackets?
-          config-handler/toggle-ui-show-brackets!
-          [:span {:text-align "right"}
-           (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]))
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "show_brackets"}
+    (t :settings-page/show-brackets)]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/toggle show-brackets?
+                config-handler/toggle-ui-show-brackets!
+                true)]]
+   (when (not (or (util/mobile?) (mobile-util/is-native-platform?)))
+     [:div {:style {:text-align "right"}}
+      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))])])
 
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
@@ -566,16 +575,18 @@
           (for [[label text icon]
                 [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
                  [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-                 [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
+                 (when-not (mobile-util/is-native-platform?)
+                   [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
                  [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
 
-            [:li
-             {:class    (util/classnames [{:active (= label @*active)}])
-              :on-click #(reset! *active label)}
+            (when label
+              [:li
+               {:class    (util/classnames [{:active (= label @*active)}])
+                :on-click #(reset! *active label)}
 
-             [:a.flex.items-center
-              icon
-              [:strong text]]])]]
+               [:a.flex.items-center
+                icon
+                [:strong text]]]))]]
 
         [:article
 
@@ -600,8 +611,9 @@
             (show-brackets-row t show-brackets?)
             (when (util/electron?) (switch-spell-check-row t))
             (outdenting-row t logical-outdenting?)
-            (shortcut-tooltip-row t enable-shortcut-tooltip?)
-            (tooltip-row t enable-tooltip?)
+            (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
+              (shortcut-tooltip-row t enable-shortcut-tooltip?)
+              (tooltip-row t enable-tooltip?))
             (timetracking-row t enable-timetracking?)
             (journal-row t enable-journals?)
             (encryption-row t enable-encryption?)
@@ -632,7 +644,7 @@
            [:div.panel-wrap.is-advanced
             (when (and util/mac? (util/electron?)) (app-auto-update-row t))
             (usage-diagnostics-row t instrument-disabled?)
-            (developer-mode-row t developer-mode?)
+            (if-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
             (clear-cache-row t)
 
             (ui/admonition

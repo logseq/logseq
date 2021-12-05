@@ -20,62 +20,73 @@
       (p/do!
        (.requestPermissions Filesystem)))))
 
+(defn- clean-uri
+  [uri]
+  (when (string? uri)
+    (-> uri
+        (string/replace "file://" "")
+        (futil/url-decode))))
+
 (defn readdir
   "readdir recursively"
   [path]
-  (p/loop [result []
-           dirs [path]]
-    (if (empty? dirs)
-      result
-      (p/let [d (first dirs)
-              files (.readdir Filesystem (clj->js {:path d}))
-              files (-> files
-                        js->clj
-                        (get "files" []))
-              files (->> files
-                         (remove (fn [file] (string/starts-with? file "."))))
-              files (->> files
-                         (map (fn [file] (futil/node-path.join d file))))
-              files-with-stats (p/all
-                                (mapv
-                                 (fn [file]
-                                   (p/chain
-                                    (.stat Filesystem (clj->js {:path file}))
-                                    #(js->clj % :keywordize-keys true)))
-                                 files))
-              files-dir (->> files-with-stats
-                             (filterv
-                              (fn [{:keys [type]}]
-                                (contains? #{"directory" "NSFileTypeDirectory"} type)))
-                             (mapv :uri))
+  (p/let [result (p/loop [result []
+                          dirs [path]]
+                   (if (empty? dirs)
+                     result
+                     (p/let [d (first dirs)
+                             files (.readdir Filesystem (clj->js {:path d}))
+                             files (-> files
+                                       js->clj
+                                       (get "files" []))
+                             files (->> files
+                                        (remove (fn [file]
+                                                  (or (string/starts-with? file ".")
+                                                      (= file "bak")))))
+                             files (->> files
+                                        (map (fn [file]
+                                               (futil/node-path.join d file))))
+                             files-with-stats (p/all
+                                               (mapv
+                                                (fn [file]
+                                                  (p/chain
+                                                   (.stat Filesystem (clj->js {:path file}))
+                                                   #(js->clj % :keywordize-keys true)))
+                                                files))
+                             files-dir (->> files-with-stats
+                                            (filterv
+                                             (fn [{:keys [type]}]
+                                               (contains? #{"directory" "NSFileTypeDirectory"} type)))
+                                            (mapv :uri))
 
-              files-result
-              (p/all
-               (->> files-with-stats
-                    (filter
-                     (fn [{:keys [type]}]
-                       (contains? #{"file" "NSFileTypeRegular"} type)))
-                    (filter
-                     (fn [{:keys [uri]}]
-                       (some #(string/ends-with? uri %)
-                             [".md" ".markdown" ".org" ".edn" ".css"])))
-                    (mapv
-                     (fn [{:keys [uri] :as file-result}]
-                       (p/chain
-                        (.readFile Filesystem
-                                   (clj->js
-                                    {:path uri
-                                     :encoding (.-UTF8 Encoding)}))
-                        #(js->clj % :keywordize-keys true)
-                        :data
-                        #(assoc file-result :content %))))))]
-        (p/recur (concat result files-result)
-                 (concat (rest dirs) files-dir))))))
+                             files-result
+                             (p/all
+                              (->> files-with-stats
+                                   (filter
+                                    (fn [{:keys [type]}]
+                                      (contains? #{"file" "NSFileTypeRegular"} type)))
+                                   (filter
+                                    (fn [{:keys [uri]}]
+                                      (some #(string/ends-with? uri %)
+                                            [".md" ".markdown" ".org" ".edn" ".css"])))
+                                   (mapv
+                                    (fn [{:keys [uri] :as file-result}]
+                                      (p/chain
+                                       (.readFile Filesystem
+                                                  (clj->js
+                                                   {:path uri
+                                                    :encoding (.-UTF8 Encoding)}))
+                                       #(js->clj % :keywordize-keys true)
+                                       :data
+                                       #(assoc file-result :content %))))))]
+                       (p/recur (concat result files-result)
+                                (concat (rest dirs) files-dir)))))
+          result (js->clj result :keywordize-keys true)]
+    (map (fn [result] (update result :uri clean-uri)) result)))
 
 (defrecord Capacitorfs []
   protocol/Fs
   (mkdir! [this dir]
-    (prn "mkdir: " dir)
     (p/let [result (.mkdir Filesystem
                            (clj->js
                             {:path dir
@@ -100,12 +111,15 @@
     nil)
   (read-file [this dir path _options]
     (let [path (str dir path)]
-      (p/let [content (.readFile Filesystem
-                                 (clj->js
-                                  {:path path
-                                   :directory (.-ExternalStorage Directory)
-                                   :encoding (.-UTF8 Encoding)}))]
-        content)))
+      (->
+       (p/let [content (.readFile Filesystem
+                                  (clj->js
+                                   {:path path
+                                    ;; :directory (.-ExternalStorage Directory)
+                                    :encoding (.-UTF8 Encoding)}))]
+         content)
+       (p/catch (fn [error]
+                  (js/alert error))))))
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
     (let [path (cond
                  (= (util/platform) "ios")
@@ -145,9 +159,8 @@
                   (.pickFolder util/folder-picker)
                   #(js->clj % :keywordize-keys true)
                   :path)
-            files (readdir path)]
-      (js/console.log path)
-      (js/console.log files)
+            files (readdir path)
+            files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
   (get-files [this path-or-handle _ok-handler]
     (readdir path-or-handle))

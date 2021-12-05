@@ -1463,3 +1463,12 @@
             true
             (catch js/Error _e
               false)))))
+
+#?(:cljs
+   (defn make-el-into-viewport
+     [^js/HTMLElement el offset]
+     (let [wrap-height (.-clientHeight js/document.documentElement)
+           target-bottom (.-bottom (.getBoundingClientRect el))]
+       (when (> (+ target-bottom (or (safe-parse-int offset) 0))
+                wrap-height)
+         (.scrollIntoView el #js {:block "center" :behavior "smooth"})))))

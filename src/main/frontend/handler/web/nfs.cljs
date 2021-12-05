@@ -184,10 +184,11 @@
                           (log/error :nfs/load-files-error repo)
                           (log/error :exception error)))))))
      (p/catch (fn [error]
+                (log/error :exception error)
                 (if (contains? #{"AbortError" "Error"} (gobj/get error "name"))
                   (state/set-loading-files! false)
                   ;; (log/error :nfs/open-dir-error error)
-                  (log/error :exception error)))))))
+                  ))))))
 
 (defn- compute-diffs
   [old-files new-files]
