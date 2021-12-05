@@ -11,6 +11,11 @@
             [promesa.core :as p]
             [clojure.string :as string]))
 
+(when (util/native-ios?)
+  (defn iOS-ensure-documents!
+    []
+    (.ensureDocuments util/ios-file-container)))
+
 (defn check-permission-android []
   (p/let [permission (.checkPermissions Filesystem)
           permission (-> permission
