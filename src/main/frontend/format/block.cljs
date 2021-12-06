@@ -716,24 +716,29 @@
                     new-block
                     {:block/path-refs path-ref-pages})
                    (> (count blocks) 1)
-                   (assoc :block/warning :multiple-blocks))]
+                   (assoc :block/warning :multiple-blocks))
+           block (dissoc block :block/title :block/body :block/level)]
        (if uuid (assoc block :block/uuid uuid) block)))))
 
 (defn parse-title-and-body
-  [format pre-block? content]
-  (def content content)
-  (let [ast (format/to-edn content format nil)
-        content (if pre-block? content
-                    (str (config/get-block-pattern format) " " (string/triml content)))
-        content (property/remove-properties format content)
-        ast (->> (format/to-edn content format nil)
-                 (map first))
-        title (when (heading-block? (first ast))
-                (:title (second (first ast))))]
-    (cond->
-      {:block/body (vec (if title (rest ast) ast))}
-      title
-      (assoc :block/title title))))
+  ([block]
+   (when (map? block)
+     (merge block
+            (parse-title-and-body (:block/format block)
+                                  (:block/pre-block? block)
+                                  (:block/content block)))))
+  ([format pre-block? content]
+   (let [content (if pre-block? content
+                     (str (config/get-block-pattern format) " " (string/triml content)))
+         content (property/remove-properties format content)
+         ast (->> (format/to-edn content format nil)
+                  (map first))
+         title (when (heading-block? (first ast))
+                 (:title (second (first ast))))]
+     (cond->
+       {:block/body (vec (if title (rest ast) ast))}
+       title
+       (assoc :block/title title)))))
 
 (defn macro-subs
   [macro-content arguments]
