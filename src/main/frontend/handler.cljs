@@ -248,9 +248,9 @@
                          (.preventDefault e)
                          (state/pub-event! [:modal/show
                                             [:div
-                                             [:h1.title "Reload Logseq?"]
+                                             [:p "Reload Logseq?"]
                                              (ui/button
-                                              [:span "Yes " (ui/render-keyboard-shortcut ["enter"])]
+                                              "Yes"
                                               :autoFocus "on"
                                               :large? true
                                               :on-click (fn []
