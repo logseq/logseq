@@ -240,10 +240,12 @@
                                                [:div {:style {:max-width 700}}
                                                 [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
                                                 (ui/button
-                                                  "Yes"
-                                                  :on-click (fn []
-                                                              (state/close-modal!)
-                                                              (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}}))
+                                                 "Yes"
+                                                 :autoFocus "on"
+                                                 :large? true
+                                                 :on-click (fn []
+                                                             (state/close-modal!)
+                                                             (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}}))
                            {:title        (t :re-index)
                             :hover-detail (t :re-index-detail)
                             :options {:on-click
@@ -254,6 +256,8 @@
                                            [:p "Re-index will discard the current graph, and then processes all the files again as they are currently stored on disk. You will lose unsaved changes and it might take a while. Continue?"]
                                            (ui/button
                                             "Yes"
+                                            :autoFocus "on"
+                                            :large? true
                                             :on-click (fn []
                                                         (state/close-modal!)
                                                         (repo-handler/re-index!
