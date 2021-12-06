@@ -27,7 +27,8 @@
             ["react-tweet-embed" :as react-tweet-embed]
             [rum.core :as rum]
             [clojure.string :as str]
-            [frontend.db-mixins :as db-mixins]))
+            [frontend.db-mixins :as db-mixins]
+            [frontend.mobile.util :as mobile-util]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -36,6 +37,21 @@
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
+
+(defn main-content-top-padding
+  []
+  (cond
+    (mobile-util/native-iphone?)
+    (- (mobile-util/get-idevice-statusbar-height) 10)
+
+    (mobile-util/native-ipad?)
+    15
+
+    :else
+    0))
+
+
+(defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
 
 (rum/defc ls-textarea
   < rum/reactive
@@ -272,6 +288,8 @@
     (when (util/ios?) (.add cl "is-ios"))
     (when (util/mobile?) (.add cl "is-mobile"))
     (when (util/safari?) (.add cl "is-safari"))
+    (when (mobile-util/native-ios?) (.add cl "is-native-ios"))
+    (when (mobile-util/native-android?) (.add cl "is-native-android"))
     (when (util/electron?)
       (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen"))
       (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
@@ -537,7 +555,11 @@
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 999 -1)}}
+     {:style {:z-index (if show? 9999 -1)
+              :top (when (or (mobile-util/native-iphone?)
+                             (mobile-util/native-android?)
+                             (and (util/mobile?) (util/ios?)))
+                     "22vh")}}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
@@ -630,15 +652,16 @@
                                              (assoc :on-mouse-down on-mouse-down
                                                     :class "cursor"))
        [:div.flex.flex-row.items-center
-        [:a.block-control.opacity-50.hover:opacity-100.mr-2
-         (cond->
-          {:style    {:width       14
-                      :height      16
-                      :margin-left -30}}
-           (not title-trigger?)
-           (assoc :on-mouse-down on-mouse-down))
-         [:span {:class (if @control? "control-show" "control-hide")}
-          (rotating-arrow @collapsed?)]]
+        (when-not (mobile-util/is-native-platform?)
+          [:a.block-control.opacity-50.hover:opacity-100.mr-2
+           (cond->
+               {:style    {:width       14
+                           :height      16
+                           :margin-left -30}}
+             (not title-trigger?)
+             (assoc :on-mouse-down on-mouse-down))
+           [:span {:class (if @control? "control-show" "control-hide")}
+            (rotating-arrow @collapsed?)]])
         (if (fn? header)
           (header @collapsed?)
           header)]]]
@@ -679,9 +702,9 @@
 
 (rum/defc select
   [options on-change class]
-  [:select.mt-1.block.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
+  [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
    {:class     (or class "form-select")
-    :style     {:padding "0 0 0 12px"}
+    :style     {:padding "0 0 0 6px"}
     :on-change (fn [e]
                  (let [value (util/evalue e)]
                    (on-change value)))}

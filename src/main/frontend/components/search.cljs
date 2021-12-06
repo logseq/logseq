@@ -20,7 +20,8 @@
             [frontend.context.i18n :as i18n]
             [frontend.date :as date]
             [reitit.frontend.easy :as rfe]
-            [frontend.modules.shortcut.core :as shortcut]))
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn- partition-between
   "Split `coll` at positions where `pred?` is true."
@@ -362,6 +363,8 @@
     (rum/with-context [[t] i18n/*tongue-context*]
       (let [input (::input state)]
         [:div.cp__palette.cp__palette-main
+         (when (mobile-util/is-native-platform?)
+          {:style {:min-height "50vh"}})
 
          [:div.input-wrap
           [:input.cp__palette-input.w-full

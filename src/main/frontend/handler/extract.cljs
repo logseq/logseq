@@ -16,7 +16,8 @@
             [frontend.util :as util]
             [frontend.util.property :as property]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.mobile.util :as mobile]))
 
 (defn- extract-page-list
   [content]
@@ -150,7 +151,10 @@
      (p/resolved [])
      (p/let [format (format/get-format file)
              _ (println "Parsing start : " file)
-             ast (mldoc/->edn-async content (mldoc/default-config format))]
+             parse-f (if (mobile/is-native-platform?)
+                       mldoc/->edn
+                       mldoc/->edn-async)
+             ast (parse-f content (mldoc/default-config format))]
        _ (println "Parsing finished : " file)
        (let [journal? (config/journal? file)
              first-block (ffirst ast)

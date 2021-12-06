@@ -218,37 +218,35 @@
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
-   [:div.flex.justify-evenly.w-full
+   [:div.flex.justify-around.w-full
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (editor-handler/indent-outdent true))}
-      (ui/icon "chevrons-right")]]
+      (ui/icon "arrow-bar-right"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (editor-handler/indent-outdent false))}
-      (ui/icon "chevrons-left")]]
+      (ui/icon "arrow-bar-left"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         ((editor-handler/move-up-down true)))}
-      (ui/icon "chevron-up")]]
+      (ui/icon "arrow-bar-to-up"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         ((editor-handler/move-up-down false)))}
-      (ui/icon "chevron-down")]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (editor-handler/cycle-todo!))}
-      (ui/icon "checkbox")]]
+      (ui/icon "arrow-bar-to-down"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
@@ -258,9 +256,17 @@
                         ;; TODO: should we add this focus step to `simple-insert!`?
                         (when-let [input (gdom/getElement parent-id)]
                           (.focus input)))}
-      (ui/icon "arrow-back")]]
+      (ui/icon "arrow-back"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
-     [:button.bottom-action.text-sm
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (editor-handler/cycle-todo!))}
+      (ui/icon "checkbox"
+               {:style {:fontSize ui/icon-size}})]]
+    [:div
+     [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (commands/simple-insert!
@@ -271,9 +277,10 @@
                                           (commands/handle-step [:editor/search-page]))})
                         (when-let [input (gdom/getElement parent-id)]
                           (.focus input)))}
-      "[["]]
+      (ui/icon "brackets"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
-     [:button.bottom-action.text-sm
+     [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (commands/simple-insert!
@@ -284,15 +291,17 @@
                                           (commands/handle-step [:editor/search-block]))})
                         (when-let [input (gdom/getElement parent-id)]
                           (.focus input)))}
-      "(("]]
+      (ui/icon "parentheses"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
-     [:button.bottom-action.text-sm
+     [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
                         (commands/simple-insert! parent-id "/" {})
                         (when-let [input (gdom/getElement parent-id)]
                           (.focus input)))}
-      "/"]]]])
+      (ui/icon "command"
+               {:style {:fontSize ui/icon-size}})]]]])
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)

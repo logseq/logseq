@@ -109,7 +109,7 @@
                                                 :editor-box editor/box}
                                                {})]
                 (content/content page-name {:hiccup ref-hiccup}))]
-             {}))
+             {:title-trigger? true}))
 
           (when (seq refed-blocks-ids)
             (ui/foldable
@@ -164,7 +164,8 @@
                     (content/content page-name
                                      {:hiccup ref-hiccup}))]))
 
-             {:default-collapsed? default-collapsed?}))]]))))
+             {:default-collapsed? default-collapsed?
+              :title-trigger? true}))]]))))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
@@ -205,4 +206,5 @@
                                                   "s"))
               "Unlinked References")]
            (fn [] (unlinked-references-aux page-name n-ref))
-           {:default-collapsed? true})]]))))
+           {:default-collapsed? true
+            :title-trigger? true})]]))))

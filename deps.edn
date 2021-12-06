@@ -6,7 +6,7 @@
   ;; rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
   ;; persistent-sorted-set       {:mvn/version "0.1.2"}
   datascript/datascript       {:git/url "https://github.com/logseq/datascript",
-                               :sha "ddf86f3165be621a78e595577eb271472e9f1d07"}
+                               :sha "de8df66e69ecd847c048f548fa0d5de0d4378bd0"}
   datascript-transit/datascript-transit
   {:mvn/version "0.3.0"
    :exclusions [datascript/datascript]}

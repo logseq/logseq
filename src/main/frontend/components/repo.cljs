@@ -22,7 +22,8 @@
             [frontend.version :as version]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.text :as text]))
 
 (rum/defc add-repo
   [args]
@@ -62,10 +63,11 @@
               :intent "logseq"))]
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
-              [:div.flex.justify-between.mb-1 {:key id}
+              [:div.flex.justify-between.mb-4 {:key id}
                (if local?
                  [:a
-                  (config/get-local-dir url)]
+                  (some-> (config/get-local-dir url)
+                          (text/get-graph-name-from-path))]
                  [:a {:target "_blank"
                       :href url}
                   (db/get-repo-path url)])
@@ -75,9 +77,10 @@
                                :on-click (fn []
                                            (state/set-modal! (encryption/encryption-dialog url)))}
                    "🔐"])
-                [:a.text-gray-400.ml-4 {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
-                                        :on-click (fn []
-                                                    (repo-handler/remove-repo! repo))}
+                [:a.text-gray-400.ml-4.font-medium.text-sm
+                 {:title "No worries, unlink this graph will clear its cache only, it does not remove your files on the disk."
+                  :on-click (fn []
+                              (repo-handler/remove-repo! repo))}
                  "Unlink"]]]))]]
         (widgets/add-graph)))))
 
@@ -178,8 +181,14 @@
   (when-let [current-repo (state/sub :git/current-repo)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (let [get-repo-name (fn [repo]
-                            (if (config/local-db? repo)
+                            (cond
+                              (mobile-util/is-native-platform?)
+                              (text/get-graph-name-from-path repo)
+
+                              (config/local-db? repo)
                               (config/get-local-dir repo)
+
+                              :else
                               (db/get-repo-path repo)))
             repos (state/sub [:me :repos])
             repos (remove (fn [r] (= config/local-repo (:url r))) repos)

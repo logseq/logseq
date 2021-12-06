@@ -159,7 +159,7 @@
       (fn [_stat])
       (fn [error]
         (mkdir! dir))))
-   (p/catch (fn [_error] nil))))
+   (p/catch (fn [error] (js/console.error error)))))
 
 (defn create-if-not-exists
   ([repo dir path]

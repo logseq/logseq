@@ -14,7 +14,8 @@
             [frontend.util :as util]
             [rum.core :as rum]
             [frontend.handler.shell :as shell]
-            [frontend.handler.plugin :as plugin-handler]))
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn- delete-page!
   [page-name]
@@ -83,13 +84,14 @@
                          (page-handler/unfavorite-page! page-original-name)
                          (page-handler/favorite-page! page-original-name)))}}
 
-          {:title (t :page/presentation-mode)
-           :options {:on-click (fn []
-                                 (state/sidebar-add-block!
-                                  repo
-                                  (:db/id page)
-                                  :page-presentation
-                                  {:page page}))}}
+          (when-not (mobile-util/is-native-platform?)
+           {:title (t :page/presentation-mode)
+            :options {:on-click (fn []
+                                  (state/sidebar-add-block!
+                                   repo
+                                   (:db/id page)
+                                   :page-presentation
+                                   {:page page}))}})
 
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of

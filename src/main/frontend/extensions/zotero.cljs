@@ -83,7 +83,7 @@
       (notification/show! "Please setup Zotero API key and user/group id first!" :warn false))
 
     [:div#zotero-search.zotero-search.p-4
-     {:style {:width 600}}
+     {:style {:width 720}}
 
      [:div.flex.items-center.mb-2
       [[:input.p-2.border.mr-2.flex-1.focus:outline-none
@@ -123,7 +123,7 @@
   [state]
   [:div
    [:div.row
-    [:label.title
+    [:label.title.w-72
      {:for "zotero_type"}
      "Zotero user or group?"]
     [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -139,7 +139,7 @@
          [:option {:key type :value type} (str/capitalize type)])]]]]
 
    [:div.row
-    [:label.title
+    [:label.title.w-72
      {:for "zotero_type_id"}
      "User or Group ID"]
     [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -166,7 +166,7 @@
   []
   [:div
    [:div.row
-    [:label.title
+    [:label.title.w-72
      {:for "zotero_overwrite_mode"}
      "Overwrite existing item page?"]
     [:div
@@ -185,7 +185,7 @@
   []
   [:div
    [:div.row
-    [:label.title
+    [:label.title.w-72
      {:for "zotero_include_attachment_links"}
      "Include attachment links?"]
     [:div
@@ -195,7 +195,7 @@
                  true)]]]
    (when (setting/setting :include-attachments?)
      [:div.row
-      [:label.title
+      [:label.title.w-72
        {:for "zotero_attachments_block_text"}
        "Attachment under block of:"]
       [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -205,7 +205,7 @@
           :on-blur       (fn [e] (setting/set-setting! :attachments-block-text (util/evalue e)))}]]]])
    (when (setting/setting :include-attachments?)
      [:div.row
-      [:label.title
+      [:label.title.w-72
        {:for "zotero_linked_attachment_base_directory"}
        "Zotero linked attachment base directory"
        [:a.ml-2
@@ -224,10 +224,10 @@
   rum/reactive
   []
   [:div.row
-   [:label.title
+   [:label.title.w-72
     {:for   "zotero_prefer_citekey"
      :title "Make sure to install Better BibTeX and pin your item first"}
-    "Always prefer citekey as your page title?"]
+    "Use citekey as your page title?"]
    [:div
     [:div.rounded-md.sm:max-w-xs
      (ui/toggle (setting/setting :prefer-citekey?)
@@ -236,7 +236,7 @@
 
 (rum/defc api-key-setting []
   [:div.row
-   [:label.title
+   [:label.title.w-72
     {:for "zotero_api_key"}
     "Zotero API key"]
    [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -251,7 +251,7 @@
   []
   [:div
    [:div.row
-    [:label.title
+    [:label.title.w-72
      {:for "zotero_include_notes"}
      "Include notes?"]
     [:div
@@ -329,7 +329,7 @@
 
      [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
       [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
+       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-720.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
         {:type "button"
          :class "ui__modal-enter"
          :on-click (fn []
@@ -349,37 +349,38 @@
 (rum/defc zotero-profile-selector <
   rum/reactive
   [profile*]
-  [:div.zotero-profile-selector.my-4
+  [:div.row
    [:label.mr-32 {:for "profile-select"} "Choose a profile:"]
-   [:select
-    {:value @profile*
-     :on-change
-     (fn [e]
-       (when-let [profile (util/evalue e)]
-         (p/let [_ (setting/set-profile profile)]
-           (reset! profile* profile))))}
-    (map-indexed (fn [i x] [:option
-                            {:key      i
-                             :value    x}
-                            x]) (setting/all-profiles))]
-   (ui/button
-    "New profile"
-    :small? true
-    :class "ml-4"
-    :on-click
-    (fn []
-      (state/set-modal!
+   [:span.justify-evenly
+    [:select
+     {:value @profile*
+      :on-change
+      (fn [e]
+        (when-let [profile (util/evalue e)]
+          (p/let [_ (setting/set-profile profile)]
+            (reset! profile* profile))))}
+     (map-indexed (fn [i x] [:option
+                             {:key      i
+                              :value    x}
+                             x]) (setting/all-profiles))]
+    (ui/button
+     "New profile"
+     :small? true
+     :class "ml-4"
+     :on-click
+     (fn []
+       (state/set-modal!
         (fn [close-fn]
           (profile-name-dialog-inner profile* close-fn)))))
-   (ui/button
-    "Delete profile!"
-    :small? true
-    :background "red"
-    :class "ml-4"
-    :on-click
-    (fn []
-      (p/let [_ (setting/remove-profile @profile*)]
-        (reset! profile* (setting/profile)))))])
+    (ui/button
+     "Delete profile!"
+     :small? true
+     :background "red"
+     :class "ml-4"
+     :on-click
+     (fn []
+       (p/let [_ (setting/remove-profile @profile*)]
+         (reset! profile* (setting/profile)))))]])
 
 (rum/defcs add-all-items <
   (rum/local nil ::progress)
@@ -389,7 +390,7 @@
   [state]
   [:div
    [:div.row
-    [:label.title
+    [:label.title.w-72
      {:for "zotero_import_all"}
      "Add all zotero items"]
     [:div.mt-1.sm:mt-0.sm:col-span-2

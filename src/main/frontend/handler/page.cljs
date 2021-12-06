@@ -33,7 +33,8 @@
             [frontend.util.page-property :as page-property]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.mobile.util :as mobile]))
 
 (defn- get-directory
   [journal?]
@@ -700,8 +701,8 @@
                (not (:repo/loading-files? @state/state)))
       (state/set-today! (date/today))
       (when (or (db/cloned? repo)
-                (or (config/local-db? repo)
-                    (= "local" repo)))
+                (config/local-db? repo)
+                (and (= "local" repo) (not (mobile/is-native-platform?))))
         (let [title (date/today)
               today-page (string/lower-case title)
               template (state/get-default-journal-template)

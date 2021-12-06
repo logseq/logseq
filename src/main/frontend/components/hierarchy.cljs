@@ -44,4 +44,5 @@
                                          {}
                                          page))))
              (interpose [:span.mx-2.opacity-30 "/"]))])]
-        {:default-collapsed? true})])))
+        {:default-collapsed? true
+         :title-trigger? true})])))
