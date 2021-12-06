@@ -225,11 +225,13 @@
 
    :editor/expand-block-children   {:desc    "Expand"
                                     :binding "mod+down"
-                                    :fn      editor-handler/expand!}
+                                    :fn      editor-handler/expand!
+                                    :force?  true}
 
    :editor/collapse-block-children {:desc    "Collapse"
                                     :binding "mod+up"
-                                    :fn      editor-handler/collapse!}
+                                    :fn      editor-handler/collapse!
+                                    :force?  true}
 
    :editor/indent                  {:desc    "Indent block"
                                     :binding "tab"
@@ -370,11 +372,11 @@
                                      :fn      ui-handler/toggle-contents!}
 
    :editor/open-file-in-default-app {:desc    "Open file in default app"
-                                     :binding "o f"
+                                     :binding nil
                                      :fn      page-handler/open-file-in-default-app}
 
    :editor/open-file-in-directory   {:desc    "Open file in parent directory"
-                                     :binding "o d"
+                                     :binding nil
                                      :fn      page-handler/open-file-in-directory}
 
    :ui/toggle-wide-mode             {:desc    "Toggle wide mode"

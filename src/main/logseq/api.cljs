@@ -518,6 +518,16 @@
       (when-let [right-siblings (outliner/get-right-siblings (outliner/->Block block))]
         (bean/->js (normalize-keyword-for-json (:data (first right-siblings))))))))
 
+(def ^:export set_block_collapsed
+  (fn [uuid ^js opts]
+    (when-let [block (db-model/get-block-by-uuid uuid)]
+      (let [{:keys [flag]} (bean/->clj opts)
+            flag (if (= "toggle" flag)
+                   (not (-> block :block/properties :collapsed))
+                   (boolean flag))]
+        (if flag (editor-handler/collapse-block! uuid)
+                 (editor-handler/expand-block! uuid))))))
+
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
     (editor-handler/set-block-property! (medley/uuid block-uuid) key value)))

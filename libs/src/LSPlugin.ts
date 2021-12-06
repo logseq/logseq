@@ -190,6 +190,8 @@ export type ExternalCommandType =
   'logseq.editor/cycle-todo' |
   'logseq.editor/down' |
   'logseq.editor/up' |
+  'logseq.editor/expand-block-children' |
+  'logseq.editor/collapse-block-children' |
   'logseq.editor/open-file-in-default-app' |
   'logseq.editor/open-file-in-directory' |
   'logseq.editor/select-all-blocks' |
@@ -421,6 +423,11 @@ export interface IEditorProxy extends Record<string, any> {
     srcBlock: BlockIdentity | EntityID,
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<BlockEntity | null>
+
+  setBlockCollapsed: (
+    uuid: BlockUUID,
+    opts?: { flag: boolean | 'toggle' }
+  ) => Promise<void>
 
   getPage: (
     srcPage: PageIdentity | EntityID,
