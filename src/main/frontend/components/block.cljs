@@ -2181,8 +2181,8 @@
       {:id block-id
        :data-refs data-refs
        :data-refs-self data-refs-self
+       :data-collapsed (and collapsed? has-child?)
        :class (str uuid
-                   (when (and collapsed? has-child?) " collapsed")
                    (when pre-block? " pre-block")
                    (when (and card? (not review-cards?)) " shadow-xl"))
        :blockid (str uuid)
