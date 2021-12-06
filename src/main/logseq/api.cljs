@@ -57,6 +57,15 @@
         (js/console.error "[parse hiccup error]" e) input))))
 
 ;; base
+(defn ^:export get_state_from_store
+  [^js path]
+  (when-let [path (if (string? path) [path] (bean/->clj path))]
+    (->> path
+         (map #(if (string/starts-with? % "@")
+                 (subs % 1)
+                 (keyword %)))
+         (get-in @state/state))))
+
 (def ^:export get_user_configs
   (fn []
     (bean/->js
@@ -621,3 +630,10 @@
   []
   (p/let [_ (el/persist-dbs!)
           _ (reset! handler/triggered? true)]))
+
+(defn ^:export __debug_state
+  [path]
+  (-> (if (string? path)
+        (get @state/state (keyword path))
+        @state/state)
+      (bean/->js)))

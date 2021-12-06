@@ -255,6 +255,20 @@ export interface IAppProxy {
     type: ExternalCommandType,
     ...args: Array<any>) => Promise<void>
 
+  /**
+   * Get state from app store
+   * valid state is here
+   * https://github.com/logseq/logseq/blob/master/src/main/frontend/state.cljs#L27
+   *
+   * @example
+   * ```ts
+   * const isDocMode = await logseq.App.getStateFromStore('document/mode?')
+   * ```
+   * @param path
+   */
+  getStateFromStore:
+    <T = any>(path: string | Array<string>) => Promise<T>
+
   // native
   relaunch: () => Promise<void>
   quit: () => Promise<void>
