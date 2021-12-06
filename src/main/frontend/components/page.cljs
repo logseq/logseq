@@ -443,7 +443,7 @@
                 ;;      (set-setting! :layout value))
                 ;;    "graph-layout")]
                 [:div.flex.items-center.justify-between.mb-2
-                 [:span "Journals"]
+                 [:span (t :right-side-bar/journals)]
                  ;; FIXME: why it's not aligned well?
                  [:div.mt-1
                   (ui/toggle journal?
@@ -842,16 +842,21 @@
                    (ui/icon "x")])])]]
 
            [:div.r.flex.items-center.justify-between
-            [:a.ml-1.pr-2.opacity-70.hover:opacity-100
-             {:on-click (fn [] (state/set-modal!
-                                (batch-delete-dialog
-                                 (model/get-orphaned-pages {}) true
-                                 #(do
-                                    (reset! *checks nil)
-                                    (refresh-pages)))))}
-             [:span
-              (ui/icon "file-x")
-              [:span.ml-1 (t :remove-orphaned-pages)]]]
+            (let [orphaned-pages (model/get-orphaned-pages {})
+                  orphaned-pages? (seq orphaned-pages)]
+              [:a.ml-1.pr-2.opacity-70.hover:opacity-100
+               {:on-click (fn []
+                            (if orphaned-pages?
+                              (state/set-modal!
+                               (batch-delete-dialog
+                                orphaned-pages  true
+                                #(do
+                                   (reset! *checks nil)
+                                   (refresh-pages))))
+                              (notification/show! "Congratulations, no orphaned pages in your graph!" :success)))}
+               [:span
+                (ui/icon "file-x")
+                [:span.ml-1 (t :remove-orphaned-pages)]]])
 
             [:a.ml-1.pr-2.opacity-70.hover:opacity-100 {:href (rfe/href :all-files)}
              [:span

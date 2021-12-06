@@ -282,7 +282,7 @@ export interface IAppProxy {
   replaceState: (k: string, params?: Record<string, any>, query?: Record<string, any>) => void
 
   // ui
-  queryElementById: (id: string) => string | boolean
+  queryElementById: (id: string) => Promise<string | boolean>
   showMsg: (content: string, status?: 'success' | 'warning' | 'error' | string) => void
   setZoomFactor: (factor: number) => void
   setFullScreen: (flag: boolean | 'toggle') => void

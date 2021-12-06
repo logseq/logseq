@@ -214,11 +214,11 @@
    (when repo
      (when-let [engine (get-engine repo)]
        (let [pages (search-db/make-pages-indice!)]
-        (p/let [blocks (protocol/rebuild-blocks-indice! engine)]
-          (let [result {:pages pages
-                        :blocks blocks}]
-            (swap! indices assoc repo result)
-            indices)))))))
+         (p/let [blocks (protocol/rebuild-blocks-indice! engine)]
+           (let [result {:pages pages
+                         :blocks blocks}]
+             (swap! indices assoc repo result)
+             indices)))))))
 
 (defn reset-indice!
   [repo]

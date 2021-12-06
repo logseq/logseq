@@ -1,79 +1,25 @@
-import { test, expect } from '@playwright/test'
-import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
+import { expect } from '@playwright/test'
+import { test } from './fixtures'
 import { randomString, createRandomPage, openSidebar, newBlock, lastBlock } from './utils'
 
-let electronApp: ElectronApplication
-let context: BrowserContext
-let page: Page
 
-test.beforeAll(async () => {
-  electronApp = await electron.launch({
-    cwd: "./static",
-    args: ["electron.js"],
-    // NOTE: video recording for Electron is not supported yet
-    // recordVideo: {
-    //   dir: "./videos",
-    // }
-  })
-
-  context = electronApp.context()
-  await context.tracing.start({ screenshots: true, snapshots: true });
-
-  // Evaluation expression in the Electron context.
-  const appPath = await electronApp.evaluate(async ({ app }) => {
-    // This runs in the main Electron process, parameter here is always
-    // the result of the require('electron') in the main app script.
-    return app.getAppPath()
-  })
-  console.log("Test start with AppPath:", appPath)
-})
-
-test.beforeEach(async () => {
-  // discard any dialog by ESC
-  if (page) {
-    await page.keyboard.press('Escape')
-    await page.keyboard.press('Escape')
-  } else {
-    page = await electronApp.firstWindow()
-  }
-})
-
-test.afterAll(async () => {
-  // await context.close();
-  await context.tracing.stop({ path: 'artifacts.zip' });
-  await electronApp.close()
-})
-
-test('render app', async () => {
+test('render app', async ({ page }) => {
   // Direct Electron console to Node terminal.
   // page.on('console', console.log)
 
-  // Wait for the app to load
-  await page.waitForLoadState('domcontentloaded')
-  await page.waitForFunction('window.document.title != "Loading"')
+  // NOTE: part of app startup tests is moved to `fixtures.ts`.
 
-  // Logseq: "A privacy-first platform for knowledge management and collaboration."
-  // or Logseq
   expect(await page.title()).toMatch(/^Logseq.*?/)
-
-  page.once('load', async () => {
-    console.log('Page loaded!')
-    await page.screenshot({ path: 'startup.png' })
-  })
 })
 
-test('first start', async () => {
-  await page.waitForSelector('text=This is a demo graph, changes will not be saved until you open a local folder')
-})
-
-test('open sidebar', async () => {
+test('open sidebar', async ({ page }) => {
   await openSidebar(page)
 
   await page.waitForSelector('#sidebar-nav-wrapper a:has-text("New page")', { state: 'visible' })
   await page.waitForSelector('#sidebar-nav-wrapper >> text=Journals', { state: 'visible' })
 })
 
-test('search', async () => {
+test('search', async ({ page }) => {
   await page.click('#search-button')
   await page.waitForSelector('[placeholder="Search or create page"]')
   await page.fill('[placeholder="Search or create page"]', 'welcome')
@@ -83,7 +29,7 @@ test('search', async () => {
   expect(results.length).toBeGreaterThanOrEqual(1)
 })
 
-test('create page and blocks', async () => {
+test('create page and blocks', async ({ page }) => {
   await createRandomPage(page)
 
   // do editing
@@ -126,7 +72,7 @@ test('create page and blocks', async () => {
   expect(await page.$$('.ls-block')).toHaveLength(5)
 })
 
-test('delete and backspace', async () => {
+test('delete and backspace', async ({ page }) => {
   await createRandomPage(page)
 
   await page.fill(':nth-match(textarea, 1)', 'test')
@@ -155,7 +101,7 @@ test('delete and backspace', async () => {
 })
 
 
-test('selection', async () => {
+test('selection', async ({ page }) => {
   await createRandomPage(page)
 
   await page.fill(':nth-match(textarea, 1)', 'line 1')
@@ -182,7 +128,7 @@ test('selection', async () => {
   expect(await page.$$('.ls-block')).toHaveLength(2)
 })
 
-test('template', async () => {
+test('template', async ({ page }) => {
   const randomTemplate = randomString(10)
 
   await createRandomPage(page)
@@ -220,7 +166,7 @@ test('template', async () => {
   expect(await page.$$('.ls-block')).toHaveLength(8)
 })
 
-test('auto completion square brackets', async () => {
+test('auto completion square brackets', async ({ page }) => {
   await createRandomPage(page)
 
   await page.fill(':nth-match(textarea, 1)', 'Auto-completion test')
@@ -257,7 +203,7 @@ test('auto completion square brackets', async () => {
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('This is a [[]]]')
 })
 
-test('auto completion and auto pair', async () => {
+test('auto completion and auto pair', async ({ page }) => {
   await createRandomPage(page)
 
   await page.fill(':nth-match(textarea, 1)', 'Auto-completion test')
@@ -265,8 +211,6 @@ test('auto completion and auto pair', async () => {
 
   // {}
   await page.type(':nth-match(textarea, 1)', 'type {{')
-  await page.press(':nth-match(textarea, 1)', 'Escape')
-
   // FIXME: keycode seq is wrong
   // expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type {{}}')
 
@@ -290,7 +234,7 @@ test('auto completion and auto pair', async () => {
 
 
 // FIXME: Electron with filechooser is not working
-test.skip('open directory', async () => {
+test.skip('open directory', async ({ page }) => {
   await page.click('#sidebar-nav-wrapper >> text=Journals')
   await page.waitForSelector('h1:has-text("Open a local directory")')
   await page.click('h1:has-text("Open a local directory")')

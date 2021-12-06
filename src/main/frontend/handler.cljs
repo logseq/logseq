@@ -18,7 +18,8 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.extensions.srs :as srs]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.core :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
@@ -61,12 +62,7 @@
                             (* 60 1000)))
                 (let [total (srs/get-srs-cards-total)]
                   (state/set-state! :srs/cards-due-count total)
-                  (reset! cards-last-check-time (util/time-ms))))
-
-              (when (and repo
-                         (search-db/empty? repo)
-                         (state/input-idle? repo))
-                (search/rebuild-indices!))))]
+                  (reset! cards-last-check-time (util/time-ms))))))]
     (f)
     (js/setInterval f 5000)))
 
@@ -110,7 +106,8 @@
                               (and (not logged?)
                                    (not (seq (db/get-files config/local-repo)))
                                    ;; Not native local directory
-                                   (not (some config/local-db? (map :url repos))))
+                                   (not (some config/local-db? (map :url repos)))
+                                   (not (mobile-util/is-native-platform?)))
                               (repo-handler/setup-local-repo-if-not-exists!)
 
                               :else
@@ -131,7 +128,7 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
-                            (file-handler/watch-for-local-dirs!)
+                            (file-handler/watch-for-current-graph-dir!)
                             ;; (when-not (state/logged?)
                             ;;   (state/pub-event! [:after-db-restore repos]))
                             ))
@@ -227,8 +224,8 @@
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
       (restore-and-setup! me repos logged? db-schema)
-      (when (mobile/is-native-platform?)
-        (p/do! (mobile/hide-splash))))
+      (when (mobile-util/is-native-platform?)
+        (p/do! (mobile-util/hide-splash))))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
@@ -237,7 +234,8 @@
     (when config/dev?
       (enable-datalog-console))
     (when (util/electron?)
-      (el/listen!))))
+      (el/listen!))
+    (mobile/init!)))
 
 (defn stop! []
   (prn "stop!"))

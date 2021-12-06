@@ -3,9 +3,9 @@
   --ls-tag-text-hover-opacity: 1;
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
-  --ls-font-family: 'Inter';
   --ls-main-content-max-width: 810px;
   --ls-main-content-max-width-wide: 100%;
+  --ls-font-family: Inter;
   --ls-scrollbar-width: 6px;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
@@ -143,13 +143,15 @@ html[data-theme='light'] {
   --color-level-5: #bbdaf6;
 }
 
+html:not(.is-native-android) {
+  font-family: var(--ls-font-family), sans-serif, system-ui,
+  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+  Arial, 'Noto Sans', serif, Apple Color Emoji, Segoe UI Emoji,
+  Segoe UI Symbol !important;
+}
+
 /* region Reset top elements */
 html {
-  font-family: var(--ls-font-family), Inter, sans-serif, system-ui,
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
-    Arial, 'Noto Sans', serif, Apple Color Emoji, Segoe UI Emoji,
-    Segoe UI Symbol !important;
-
   /* FIXME: rewrite revealjs.css ? */
   height: unset !important;
   overflow: auto !important;
@@ -1088,10 +1090,6 @@ mark {
 
 /* block references */
 
-.block-ref {
-  display: inline;
-}
-
 .block-ref .block-ref {
   padding: 6px 5px;
   border: none;
@@ -1120,6 +1118,13 @@ a.tooltip-priority {
 
 .references-blocks .page-reference:hover {
   background: var(--ls-tertiary-background-color);
+}
+
+.references-blocks .block-control {
+    margin-left: -22px;
+    @screen sm {
+        margin-left: 2px;
+    }
 }
 
 #head .fade-link {

@@ -30,7 +30,10 @@
             [goog.object :as gobj]
             [rum.core :as rum]
             [frontend.extensions.srs :as srs]
-            [frontend.extensions.pdf.assets :as pdf-assets]))
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.components.widgets :as widgets]
+            [frontend.mobile.util :as mobile-util]
+            [frontend.handler.mobile.swipe :as swipe]))
 
 (defn nav-item
   [title href svg-d active? close-modal-fn]
@@ -191,12 +194,13 @@
                  200)
                 state)}
   [state]
-  (let [num (state/sub :srs/cards-due-count)]
-    [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
-     (ui/icon "infinity mr-3" {:style {:font-size 20}})
-     [:span.flex-1 "Flashcards"]
-     (when (and num (not (zero? num)))
-       [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (let [num (state/sub :srs/cards-due-count)]
+      [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:modal/show-cards])}
+      (ui/icon "infinity mr-3" {:style {:font-size 20}})
+      [:span.flex-1 (t :right-side-bar/flashcards)]
+      (when (and num (not (zero? num)))
+        [:span.ml-3.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])])))
 
 (defn get-default-home-if-valid
   []
@@ -251,7 +255,7 @@
                 :icon "home"})
               (sidebar-item
                {:class "journals-nav"
-                :title "Journals"
+                :title (t :right-side-bar/journals)
                 :on-click-handler route-handler/go-to-journals!
                 :icon "calendar"}))
 
@@ -260,13 +264,13 @@
 
             (sidebar-item
              {:class "graph-view-nav"
-              :title "Graph view"
+              :title (t :right-side-bar/graph-view)
               :href (rfe/href :graph)
               :icon "hierarchy"})
 
             (sidebar-item
              {:class "all-pages-nav"
-              :title "All pages"
+              :title (t :right-side-bar/all-pages)
               :href (rfe/href :all-pages)
               :icon "files"})]]
 
@@ -279,29 +283,34 @@
           [:nav.px-2.space-y-1 {:aria-label "Sidebar"
                                 :class "new-page"}
            (when-not config/publishing?
-             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md {:on-click #(state/pub-event! [:go/search])}
+             [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+              {:on-click (fn []
+                           (state/toggle-left-sidebar!)
+                           (state/pub-event! [:go/search]))}
               (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
-              [:span.flex-1 "New page"]])]]]))))
+              [:span.flex-1 (t :right-side-bar/new-page)]])]]]))))
 
 (rum/defc sidebar-mobile-sidebar < rum/reactive
-  [{:keys [open? left-sidebar-open? close-fn route-match]}]
+  [{:keys [left-sidebar-open? close-fn route-match]}]
   [:div.md:hidden.ls-mobile-left-sidebar
    {:class (if left-sidebar-open? "is-left-sidebar-open" "")}
    [:div.fixed.inset-0.z-30.bg-gray-600.pointer-events-none.ease-linear.duration-300
-    {:class (if @open?
+    {:class (if left-sidebar-open?
               "opacity-75 pointer-events-auto"
               "opacity-0 pointer-events-none")
      :on-click close-fn}]
-   [:div#left-bar.fixed.inset-y-0.left-0.flex.flex-col.z-40.w-full.transform.ease-in-out.duration-300
-    {:class (if @open?
+   [:div#left-bar.fixed.inset-y-0.left-0.flex.flex-col.z-40.transform.ease-in-out.duration-300
+    {:class (if left-sidebar-open?
               "translate-x-0"
               "-translate-x-full")
-     :style {:max-width "86vw"}}
-    (when @open?
-      [:div.absolute.top-0.right-0.p-1.z-10
-       [:a.button
-        {:on-click close-fn}
-        (ui/icon "x" {:style {:font-size 24}})]])
+     :style {:padding-top (ui/main-content-top-padding)}}
+    (when left-sidebar-open?
+      [:div.cp__header#head
+       [:div.l.flex
+        (header/left-menu-button
+         {:on-click (fn []
+                      (state/set-left-sidebar-open!
+                       (not (:ui/left-sidebar-open? @state/state))))})]])
     [:div.flex-1.h-0.overflow-y-auto
      (sidebar-nav route-match close-fn)]]])
 
@@ -322,7 +331,8 @@
         mobile? (util/mobile?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#main-content.cp__sidebar-main-layout.flex-1.flex
-       {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
+       {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])
+        :style {:padding-top (ui/main-content-top-padding)}}
 
        ;; desktop left sidebar layout
        (when-not mobile?
@@ -337,7 +347,9 @@
          {:data-is-global-graph-pages global-graph-pages?
           :data-is-full-width         (or global-graph-pages?
                                           (contains? #{:all-files :all-pages :my-publishing} route-name))}
-         (widgets/demo-graph-alert)
+
+         (when-not (mobile-util/is-native-platform?)
+           (widgets/demo-graph-alert))
 
          (widgets/github-integration-soon-deprecated-alert)
 
@@ -428,7 +440,10 @@
          (seq latest-journals)
          (journal/journals latest-journals)
 
-         (and logged? (empty? (:repos me)))
+         (or
+          (and (mobile-util/is-native-platform?)
+               (nil? (state/get-current-repo)))
+          (and logged? (empty? (:repos me))))
          (widgets/add-graph)
 
                          ;; FIXME: why will this happen?
@@ -503,6 +518,9 @@
                         (if (state/modal-opened?)
                           (state/close-modal!)
                           (hide-context-menu-and-clear-selection)))))))
+  {:did-mount (fn [state]
+                (swipe/setup-listeners!)
+                state)}
   [state route-match main-content]
   (let [{:keys [open? close-fn open-fn]} state
         close-fn (fn []
@@ -524,6 +542,7 @@
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)
+        edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)]
     (rum/with-context [[t] i18n/*tongue-context*]
       (theme/container
@@ -531,6 +550,7 @@
         :theme         theme
         :route         route-match
         :current-repo  current-repo
+        :edit?         edit?
         :nfs-granted?  granted?
         :db-restoring? db-restoring?
         :sidebar-open? sidebar-open?
@@ -544,12 +564,11 @@
         {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?}])}
 
         (sidebar-mobile-sidebar
-         {:open?       open?
-          :left-sidebar-open? left-sidebar-open?
+         {:left-sidebar-open? left-sidebar-open?
           :close-fn    close-fn
           :route-match route-match})
 
-        [:div.#app-container.h-screen.flex
+        [:div.#app-container.h-screen.flex {:style {:padding-top (ui/main-content-top-padding)}}
          [:div.flex-1.h-full.flex.flex-col#left-container.relative
           {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
           (header/header {:open-fn        open-fn
