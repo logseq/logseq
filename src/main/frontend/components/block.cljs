@@ -126,7 +126,9 @@
   [url]
   (match url
     ["File" s]
-    (string/replace s "file://" "")
+    (-> (string/replace s "file://" "")
+        ;; "file:/Users/ll/Downloads/test.pdf" is a normal org file link
+        (string/replace "file:" ""))
 
     ["Complex" m]
     (let [{:keys [link protocol]} m]
