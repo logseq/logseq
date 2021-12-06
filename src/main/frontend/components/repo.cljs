@@ -177,7 +177,10 @@
                (t :git/version) (str " " version/version)]]])))])))
 
 (defn shorten-repo-name [repo-name]
-  (last (string/split repo-name #"/")))
+  (cond
+    util/mac? (last (string/split repo-name #"/"))
+    util/win32? (last (string/split repo-name #"\\"))
+    :else repo-name))
 
 (rum/defc repos-dropdown < rum/reactive
   []
