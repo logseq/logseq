@@ -347,8 +347,10 @@
     value))
 
 (defn wrap-parse-block
-  [{:block/keys [content format left page uuid level] :as block}]
-  (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
+  [{:block/keys [content format left page uuid level pre-block?] :as block}]
+  (let [block (merge
+               (or (and (:db/id block) (db/pull (:db/id block))) block)
+               (block/parse-title-and-body format pre-block? content))
         properties (:block/properties block)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
@@ -747,7 +749,6 @@
      :block/format format
      :block/content content
      :block/parent page
-     :block/unordered true
      :block/page page}))
 
 (defn default-properties-block
@@ -767,7 +768,6 @@
       :block/format format
       :block/content content
       :block/parent page
-      :block/unordered true
       :block/page page})))
 
 (defn add-default-title-property-if-needed!
@@ -2151,22 +2151,10 @@
   [uuid page exclude-properties format content-update-fn]
   (fn [block]
     (outliner-core/block
-     (let [[new-content new-title]
+     (let [new-content
            (if content-update-fn
-             (let [new-content (content-update-fn (:block/content block))
-                   new-title (or (->> (mldoc/->edn
-                                       (str (case format
-                                              :markdown "- "
-                                              :org "* ")
-                                            (if (seq (:block/title block)) "" "\n")
-                                            new-content)
-                                       (mldoc/default-config format))
-                                      (ffirst)
-                                      (second)
-                                      (:title))
-                                 (:block/title block))]
-               [new-content new-title])
-             [(:block/content block) (:block/title block)])
+             (content-update-fn (:block/content block))
+             (:block/content block))
            new-content
            (->> new-content
                 (property/remove-property format "id")
@@ -2185,7 +2173,6 @@
                                                  exclude-properties))
                      :block/meta (dissoc (:block/meta block) :start-pos :end-pos)
                      :block/content new-content
-                     :block/title new-title
                      :block/path-refs (->> (cons (:db/id page) (:block/path-refs block))
                                            (remove nil?))})]
        m))))
@@ -2441,7 +2428,7 @@
                   (when (thingatpt/get-setting :properties?)
                     (thingatpt/properties-at-point input))
                   (when (thingatpt/get-setting :list?)
-                    (and (cursor/end-of-line? input) ;; only apply DWIM when cursor at EOL 
+                    (and (cursor/end-of-line? input) ;; only apply DWIM when cursor at EOL
                          (thingatpt/list-item-at-point input))))]
           (cond
             thing-at-point
@@ -3313,10 +3300,11 @@
 
 (defn collapsable? [block-id]
   (if-let [block (db-model/get-block-by-uuid block-id)]
-    (and
-     (nil? (-> block :block/properties :collapsed))
-     (or (not-empty (:block/body block))
-         (db-model/has-children? block-id)))
+    (let [block (block/parse-title-and-body block)]
+      (and
+       (nil? (-> block :block/properties :collapsed))
+       (or (not-empty (:block/body block))
+           (db-model/has-children? block-id))))
     false))
 
 (defn collapse-block! [block-id]

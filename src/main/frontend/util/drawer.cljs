@@ -76,7 +76,7 @@
                             lines (concat [title] scheduled deadline before
                                           [(drawer-start typ)] middle [drawer-end] after)]
                         (string/join "\n" lines))
-                      
+
                       :else
                       content)]
         (string/trimr result))

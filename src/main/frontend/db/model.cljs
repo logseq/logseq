@@ -27,7 +27,6 @@
     :block/type
     :block/left
     :block/format
-    :block/title
     :block/refs
     :block/_refs
     :block/path-refs
@@ -36,7 +35,6 @@
     :block/marker
     :block/priority
     :block/properties
-    :block/body
     :block/pre-block?
     :block/scheduled
     :block/deadline
@@ -45,7 +43,6 @@
     :block/updated-at
     :block/file
     :block/parent
-    :block/unordered
     :block/heading-level
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])

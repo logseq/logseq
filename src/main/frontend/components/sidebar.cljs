@@ -65,15 +65,6 @@
      [:a.more svg/arrow-down-v2]]]
    [:div.bd child]])
 
-;; TODO: enhance
-(defn- pick-one-ast-page-ref
-  [block]
-  (when-let [title-ast (and block (:block/title block))]
-    (when-let [link-ref (and (= (ffirst title-ast) "Link")
-                             (:url (second (first title-ast))))]
-      (when (= "Page_ref" (first link-ref))
-        (second link-ref)))))
-
 (defn- delta-y
   [e]
   (let [rect (.. (.. e -target) getBoundingClientRect)]
