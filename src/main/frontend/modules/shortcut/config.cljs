@@ -366,9 +366,9 @@
                                      :binding "t f"
                                      :fn      ui-handler/toggle-contents!}
 
-   :command/add-to-favorites       {:desc    "Add to/remove from favorites"
-                                    :binding "mod+shift+f"
-                                    :fn      #((page-handler/toggle-favorite!))}
+   :command/toggle-favorite         {:desc    "Add to/remove from favorites"
+                                     :binding "mod+shift+f"
+                                     :fn      page-handler/toggle-favorite!}
 
    :editor/open-file-in-default-app {:desc    "Open file in default app"
                                      :binding "o f"
@@ -482,7 +482,7 @@
                           :editor/cut
                           :editor/undo
                           :editor/redo
-                          :command/add-to-favorites])
+                          :command/toggle-favorite])
      (with-meta {:before m/enable-when-not-component-editing!}))
 
     :shortcut.handler/global-prevent-default
