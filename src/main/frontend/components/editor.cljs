@@ -614,7 +614,6 @@
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
-       :on-touch-end       #(notification/show! "touch end~ textarea" :warning)
        :auto-focus        false
        :class             heading-class})
 
