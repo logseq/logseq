@@ -276,7 +276,7 @@
                 (ui/icon "database mr-3" {:style {:font-size 20} :id "database-icon"})
                 [:div.graphs
                  [:span#repo-switch.block.pr-2.whitespace-nowrap
-                  [:span#repo-name.font-medium short-repo-name]
+                  [:span [:span#repo-name.font-medium short-repo-name]]
                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
            links
            (cond->
