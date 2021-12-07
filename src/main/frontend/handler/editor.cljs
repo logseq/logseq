@@ -1879,7 +1879,8 @@
           (let [blocks (-> (state/get-selection-blocks)
                            reorder-selected-blocks)
                 blocks (filter #(= (:block/parent %) (:block/parent (first blocks))) blocks)]
-            (move-nodes blocks)))))))
+            (when (seq blocks)
+              (move-nodes blocks))))))))
 
 ;; selections
 (defn on-tab
