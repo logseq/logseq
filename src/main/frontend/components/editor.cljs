@@ -7,6 +7,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [frontend.mobile.camera :as mobile-camera]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.extensions.zotero :as zotero]
@@ -218,7 +219,14 @@
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
   [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
-   [:div.flex.justify-around.w-full
+   [:div.flex.overflow-scroll
+    [:div
+     [:button.bottom-action
+      {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (mobile-camera/embed-photo parent-id))}
+      (ui/icon "camera"
+               {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
@@ -237,14 +245,14 @@
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
-                        ((editor-handler/move-up-down true)))}
+                        (editor-handler/move-up-down true))}
       (ui/icon "arrow-bar-to-up"
                {:style {:fontSize ui/icon-size}})]]
     [:div
      [:button.bottom-action
       {:on-mouse-down (fn [e]
                         (util/stop e)
-                        ((editor-handler/move-up-down false)))}
+                        (editor-handler/move-up-down false))}
       (ui/icon "arrow-bar-to-down"
                {:style {:fontSize ui/icon-size}})]]
     [:div
