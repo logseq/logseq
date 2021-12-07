@@ -1092,10 +1092,6 @@ mark {
 
 /* block references */
 
-.block-ref {
-  display: inline;
-}
-
 .block-ref .block-ref {
   padding: 6px 5px;
   border: none;
@@ -1124,6 +1120,13 @@ a.tooltip-priority {
 
 .references-blocks .page-reference:hover {
   background: var(--ls-tertiary-background-color);
+}
+
+.references-blocks .block-control {
+    margin-left: -22px;
+    @screen sm {
+        margin-left: 2px;
+    }
 }
 
 #head .fade-link {

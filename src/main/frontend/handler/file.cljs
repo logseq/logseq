@@ -330,14 +330,11 @@
       (recur))
     chan))
 
-(defn watch-for-local-dirs!
+(defn watch-for-current-graph-dir!
   []
   (when (util/electron?)
-    (let [repos (->> (state/get-repos)
-                     (filter (fn [repo]
-                               (config/local-db? (:url repo)))))
-          directories (map (fn [repo] (config/get-repo-dir (:url repo))) repos)]
-      (doseq [dir directories]
+    (when-let [repo (state/get-current-repo)]
+      (when-let [dir (config/get-repo-dir repo)]
         (fs/watch-dir! dir)))))
 
 (defn create-metadata-file

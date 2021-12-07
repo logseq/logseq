@@ -129,13 +129,14 @@
    (fn [{:keys [close-fn] :as state}]
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
-      (for [{:keys [options title icon hr]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon hr hover-detail]} (if (fn? links) (links) links)]
         (let [new-options
-              (assoc options
-                     :on-click (fn [e]
-                                 (when-let [on-click-fn (:on-click options)]
-                                   (on-click-fn e))
-                                 (close-fn)))
+              (merge options
+                     {:title hover-detail
+                      :on-click (fn [e]
+                                  (when-let [on-click-fn (:on-click options)]
+                                    (on-click-fn e))
+                                  (close-fn))})
               child (if hr
                       nil
                       [:div
@@ -204,10 +205,10 @@
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
                 :fill-rule "evenodd"}]]])]
       [:div.ui__notifications-content
-       {:style {:z-index (if (or (= state "exiting")
-                                 (= state "exited"))
-                           -1
-                           99)}}
+       {:style
+        (when (or (= state "exiting")
+                  (= state "exited"))
+                  {:z-index -1})}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
                   "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
@@ -653,15 +654,16 @@
                                              (assoc :on-mouse-down on-mouse-down
                                                     :class "cursor"))
        [:div.flex.flex-row.items-center
-        [:a.block-control.opacity-50.hover:opacity-100.mr-2
-         (cond->
-          {:style    {:width       14
-                      :height      16
-                      :margin-left -30}}
-           (not title-trigger?)
-           (assoc :on-mouse-down on-mouse-down))
-         [:span {:class (if @control? "control-show" "control-hide")}
-          (rotating-arrow @collapsed?)]]
+        (when-not (mobile-util/is-native-platform?)
+          [:a.block-control.opacity-50.hover:opacity-100.mr-2
+           (cond->
+               {:style    {:width       14
+                           :height      16
+                           :margin-left -30}}
+             (not title-trigger?)
+             (assoc :on-mouse-down on-mouse-down))
+           [:span {:class (if @control? "control-show" "control-hide")}
+            (rotating-arrow @collapsed?)]])
         (if (fn? header)
           (header @collapsed?)
           header)]]]
@@ -702,9 +704,9 @@
 
 (rum/defc select
   [options on-change class]
-  [:select.mt-1.block.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
+  [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
    {:class     (or class "form-select")
-    :style     {:padding "0 0 0 12px"}
+    :style     {:padding "0 0 0 6px"}
     :on-change (fn [e]
                  (let [value (util/evalue e)]
                    (on-change value)))}

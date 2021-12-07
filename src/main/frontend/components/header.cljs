@@ -152,7 +152,7 @@
     (when downloaded
       [:div.cp__header-tips
        [:p (t :updater/new-version-install)
-        [:a.ui__button.restart
+        [:a.restart.ml-2
          {:on-click #(handler/quit-and-install-new-version!)}
          (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
 
@@ -227,8 +227,9 @@
            (if refreshing?
              [:div {:class "animate-spin-reverse"}
               svg/refresh]
-             [:div.flex.flex-row.text-center.open-button__inner.items-center
-              (ui/icon "refresh" {:style {:fontSize ui/icon-size}})])])
+             (when (seq repos)
+               [:div.flex.flex-row.text-center.open-button__inner.items-center
+                (ui/icon "refresh" {:style {:fontSize ui/icon-size}})]))])
 
         (repo/sync-status current-repo)
 

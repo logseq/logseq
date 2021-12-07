@@ -165,7 +165,7 @@
   border-bottom-color: var(--ls-block-ref-link-text-color);
   cursor: alias;
   padding: 2px 0;
-  display: inline;
+  display: inline-block;
 
   &:hover {
     color: var(--ls-link-text-hover-color);
@@ -274,48 +274,49 @@
 }
 
 .ls-block h1,
-.editor-inner .h1 {
+.editor-inner .h1.uniline-block {
   font-size: 2em;
   min-height: 1.5em;
 }
 
 .ls-block h2,
-.editor-inner .h2 {
+.editor-inner .h2.uniline-block {
   font-size: 1.5em;
   min-height: 1.5em;
 }
 
 .ls-block h3,
-.editor-inner .h3 {
+.editor-inner .h3.uniline-block {
   font-size: 1.17em;
   min-height: 1.17em;
 }
 
 .ls-block h4,
-.editor-inner .h4 {
+.editor-inner .h4.uniline-block {
   font-size: 1.12em;
   min-height: 1.12em;
 }
 
 .ls-block h5,
-.editor-inner .h5 {
+.editor-inner .h5.uniline-block {
   font-size: 0.83em;
   min-height: 0.83em;
 }
 
 .ls-block h6,
-.editor-inner .h6 {
+.editor-inner .h6.uniline-block {
   font-size: 0.75em;
   min-height: 0.75em;
 }
 
 .ls-block :is(h1, h2, h3, h4, h5, h6),
-.editor-inner :is(.h1, .h2, .h3, .h4, .h5, .h6) {
+.editor-inner .uniline-block:is(.h1, .h2, .h3, .h4, .h5, .h6),
+.editor-inner .multiline-block:is(.h1, .h2, .h3, .h4, .h5, .h6)::first-line {
   font-weight: 600;
 }
 
 .ls-block :is(h1, h2),
-.editor-inner :is(.h1, .h2) {
+.editor-inner .uniline-block:is(.h1, .h2) {
   border-bottom: 1px solid var(--ls-quaternary-background-color);
   margin: 0.4em 0 0;
 }

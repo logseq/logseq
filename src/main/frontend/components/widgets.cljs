@@ -87,27 +87,52 @@
   []
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.flex.flex-col
-     [:h1.title "Add a graph"]
+     [:h1.title (t :on-boarding/add-graph)]
      (let [nfs-supported? (or (nfs/supported?) (mobile/is-native-platform?))]
        (if (mobile-util/is-native-platform?)
-         (ui/button "Open a local directory"
-           :on-click #(page-handler/ls-dir-files! shortcut/refresh!))
+         [:div.text-sm
+          (ui/button "Open a local directory"
+            :on-click #(page-handler/ls-dir-files! shortcut/refresh!))
+          [:hr]
+          [:ol
+           [:li
+            [:div.font-bold.mb-2 "How to sync my notes?"]
+            (if (mobile-util/native-android?)
+              [:div
+               [:p "We're developing our built-in paid Logseq Sync, but you can use any third-party sync service to keep your notes sync with other devices."]
+               [:p "If you prefer to use Dropbox to sync your notes, you can use "
+                [:a {:href "https://play.google.com/store/apps/details?id=com.ttxapps.dropsync"
+                     :target "_blank"}
+                 "Dropsync"]
+                ". Or you can use "
+                [:a {:href "https://play.google.com/store/apps/details?id=dk.tacit.android.foldersync.lite"
+                     :target "_blank"}
+                 "FolderSync"]
+                "."]]
+              [:div
+               [:p "iCloud TBD"]])]
+
+           [:li.mt-8
+            [:div.font-bold.mb-2 "I need some help"]
+            [:p "👋 Join our discord group to chat with the makers and our helpful community members."]
+            (ui/button "Join the community"
+              :href "https://discord.gg/KpN4eHY"
+              :target "_blank")]]]
          [:div.cp__widgets-open-local-directory
           [:div.select-file-wrap.cursor
            (when nfs-supported?
              {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)})
            [:div
-            [:h1.title "Open a local directory"]
-            [:p "Logseq supports both Markdown and Org-mode. You can open an existing directory or create a new one on your device, a directory is also known simply as a folder. Your data will be stored only on this device."]
-            [:p "After you have opened your directory, it will create three folders in that directory:"]
+            [:h1.title (t :on-boarding/open-local-dir)]
+            [:p (t :on-boarding/new-graph-desc-1)]
+            [:p (t :on-boarding/new-graph-desc-2)]
             [:ul
-             [:li "/journals - store your journal pages"]
-             [:li "/pages - store the other pages"]
-             [:li "/logseq - store configuration, custom.css, and some metadata."]]
+             [:li (t :on-boarding/new-graph-desc-3)]
+             [:li (t :on-boarding/new-graph-desc-4)]
+             [:li (t :on-boarding/new-graph-desc-5)]]
             (when-not nfs-supported?
               (ui/admonition :warning
                              [:p "It seems that your browser doesn't support the "
-
                               [:a {:href   "https://web.dev/file-system-access/"
                                    :target "_blank"}
                                "new native filesystem API"]
@@ -141,9 +166,10 @@
   []
   (when (and (config/demo-graph?)
              (not config/publishing?))
-    (ui/admonition
-     :warning
-     [:p "This is a demo graph, changes will not be saved until you open a local folder."])))
+    (rum/with-context [[t] i18n/*tongue-context*]
+      (ui/admonition
+        :warning
+        [:p (t :on-boarding/demo-graph)]))))
 
 (rum/defc github-integration-soon-deprecated-alert
   []

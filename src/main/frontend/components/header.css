@@ -54,30 +54,29 @@
 
   &-tips {
     position: absolute;
+    padding: 6px 0;
+    text-align: center;
+    min-width: var(--ls-main-content-max-width);
     width: 100%;
-    padding: 0 0;
-    transform: translateY(100%);
-    display: flex;
-    justify-content: center;
+    font-weight: 500;
     align-items: center;
-    background-color: var(--ls-secondary-background-color);
-    box-sizing: border-box;
-    margin: 0;
+    background: var(--color-level-3);
+    margin-top: -16px;
     left: 0;
-    top: -2px;
-    color: var(--ls-secondary-text-color);
+    z-index: 1000;
 
     > p {
+      color: var(--ls-primary-text-color);
       margin: 0;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       font-size: 14px;
     }
 
     a {
-      color: var(--ls-link-text-color) !important;
+      color: var(--ls-link-text-color, #045591) !important;
     }
-
+    
     a.restart {
       position: relative;
       cursor: pointer !important;
@@ -86,6 +85,7 @@
 
       svg {
         color: currentColor !important;
+        margin-right: 2px;
       }
 
       > strong {
@@ -162,7 +162,10 @@ a.button {
 
   &:hover, &.active {
     opacity: 1;
-    background: var(--ls-tertiary-background-color);
+    background: none;
+    @screen md {
+        background: var(--ls-tertiary-background-color);
+    }
   }
 }
 
