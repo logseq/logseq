@@ -36,40 +36,16 @@
 
 #main-content {
   &.is-left-sidebar-open {
-    padding-left: var(--ls-left-sidebar-width);
+    padding-left: 0;
+
+    @screen sm {
+      padding-left: var(--ls-left-sidebar-width);
+    }
   }
 
   &-container {
     @apply p-4 sm:px-8;
     font-size: 1em;
-  }
-}
-
-html.is-mobile {
-  #main-content.is-left-sidebar-open {
-    padding-left: 0;
-  }
-
-  .left-sidebar-inner {
-    > .wrap {
-      padding-top: 64px;
-    }
-  }
-}
-
-#left-sidebar {
-  width: 240px;
-  height: 100%;
-  top: 0;
-  left: -240px;
-  position: absolute;
-  z-index: 11;
-  opacity: 0;
-  background-color: #002b36;
-
-  .enter {
-    opacity: 1;
-    left: 0;
   }
 }
 
@@ -95,27 +71,19 @@ html.is-mobile {
   }
 }
 
-.ls-mobile-left-sidebar {
-  position: relative;
-  z-index: -1;
-
-  &.is-left-sidebar-open {
-    z-index: var(--ls-z-index-level-3);
-  }
-}
-
 .left-sidebar-inner {
   position: relative;
   height: 100%;
-  z-index: 1;
-  overflow: auto;
+  width: var(--ls-left-sidebar-sm-width);
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: var(--ls-primary-background-color);
+  transition: transform .3s;
+  transform: translateX(-100%);
+  z-index: 3;
 
   > .wrap {
-    padding-top: 24px;
-
-    @screen md {
-      padding-top: 55px;
-    }
+    padding-top: 55px;
   }
 
   .dropdown-wrapper {
@@ -124,9 +92,14 @@ html.is-mobile {
 
   a.item {
     user-select: none;
+    transition: none;
 
     > span {
       margin-top: 3px;
+    }
+
+    &:hover {
+      background-color: var(--ls-quaternary-background-color);
     }
   }
 
@@ -225,44 +198,63 @@ html.is-mobile {
     }
   }
 
-  a.item:hover {
-    background-color: var(--ls-quaternary-background-color);
+  @screen sm {
+    background-color: var(--ls-secondary-background-color);
+    width: var(--ls-left-sidebar-width);
   }
 }
 
-.white-theme .left-sidebar-inner a, .white-theme .left-bar a {
-  color: var(--ls-primary-text-color);
-}
-
 .cp__sidebar-left-layout {
-  @apply flex-col sm:block;
-
-  background-color: var(--ls-secondary-background-color);
-  width: var(--ls-left-sidebar-width);
+  width: 100%;
   height: 100vh;
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 9;
+  z-index: -1;
 
-  transition: transform .25s;
-  transform: translateX(-100%);
-  overflow: hidden;
+  &.is-open {
+    z-index: 9;
+
+    .left-sidebar-inner {
+      transform: translateX(0);
+    }
+  }
 
   &:before {
     content: " ";
     height: 3rem;
-    width: calc(var(--ls-left-sidebar-width) - var(--ls-scrollbar-width));
-    background-color: var(--ls-secondary-background-color);
+    width: calc(var(--ls-left-sidebar-sm-width) - var(--ls-scrollbar-width));
     position: fixed;
     left: 0;
     top: 0;
     z-index: 2;
   }
 
-  &.is-open {
-    transform: translateX(0);
+  > .shade-mask {
+    background-color: rgba(0, 0, 0, .5);
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    z-index: 1;
   }
+
+  @screen sm {
+    width: var(--ls-left-sidebar-width);
+
+    &:before {
+      width: calc(var(--ls-left-sidebar-width) - var(--ls-scrollbar-width));
+    }
+
+    & > .shade-mask {
+      display: none;
+    }
+  }
+}
+
+.white-theme #left-sidebar a {
+  color: var(--ls-primary-text-color);
 }
 
 .settings-modal {

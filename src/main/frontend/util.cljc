@@ -1472,3 +1472,8 @@
        (when (> (+ target-bottom (or (safe-parse-int offset) 0))
                 wrap-height)
          (.scrollIntoView el #js {:block "center" :behavior "smooth"})))))
+
+#?(:cljs
+   (defn sm-breakpoint?
+     []
+     (< (.-offsetWidth js/document.documentElement) 640)))
