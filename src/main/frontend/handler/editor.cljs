@@ -1186,16 +1186,35 @@
 
 (defn copy-block-refs
   []
-  (when-let [blocks (seq (get-selected-blocks-with-children))]
-    (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
-                                     (uuid id)) blocks))
-                   (remove nil?))
-          ids-str (some->> ids
-                           (map (fn [id] (util/format "((%s))" id)))
-                           (string/join "\n\n"))]
-      (doseq [id ids]
-        (set-block-id! id))
-      (util/copy-to-clipboard! ids-str))))
+  (when-let [selected-blocks (seq (get-selected-blocks-with-children))]
+    (let [blocks (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
+                                        (let [level (dom/attr % "level")]
+                                          {:id (uuid id)
+                                           :level (int level)}))
+                                     selected-blocks))
+                      (remove nil?))
+          first-block (first blocks)
+          first-root-level-index (ffirst
+                                   (filter (fn [[_ block]] (= (:level block) 1))
+                                           (map-indexed vector blocks)))
+          adjusted-blocks (map-indexed (fn [index {:keys [id level]}]
+                                         {:id id
+                                          :level (if (and (< index first-root-level-index))
+                                                   (inc (- level (:level first-block)))
+                                                   level)})
+                                       blocks)
+          block (db/pull [:block/uuid (:id first-block)])
+          copy-str (some->> adjusted-blocks
+                            (map (fn [{:keys [id level]}]
+                                   (condp = (:block/format block)
+                                    :org
+                                    (util/format (str (string/join (repeat level "*")) " ((%s))") id)
+                                    :markdown
+                                    (util/format (str (string/join (repeat (dec level) "\t")) "- ((%s))") id))))
+                            (string/join "\n\n"))]
+      (doseq [block blocks]
+        (set-block-id! (:id block)))
+      (util/copy-to-clipboard! copy-str))))
 
 (defn copy-block-embeds
   []
