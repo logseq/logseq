@@ -49,6 +49,12 @@ html.is-mobile {
   #main-content.is-left-sidebar-open {
     padding-left: 0;
   }
+
+  .left-sidebar-inner {
+    > .wrap {
+      padding-top: 64px;
+    }
+  }
 }
 
 #left-sidebar {
@@ -105,7 +111,7 @@ html.is-mobile {
   overflow: auto;
 
   > .wrap {
-    padding-top: 64px;
+    padding-top: 24px;
 
     @screen md {
       padding-top: 55px;
