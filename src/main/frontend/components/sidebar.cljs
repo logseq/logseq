@@ -289,30 +289,6 @@
             (ui/icon "circle-plus mr-3" {:style {:font-size 20}})
             [:span.flex-1 (t :right-side-bar/new-page)]])]]])))
 
-;(rum/defc sidebar-mobile-sidebar < rum/reactive
-;  [{:keys [left-sidebar-open? close-fn route-match]}]
-;  [:div.md:hidden.ls-mobile-left-sidebar
-;   {:class (if left-sidebar-open? "is-left-sidebar-open" "")}
-;   [:div.fixed.inset-0.z-30.bg-gray-600.pointer-events-none.ease-linear.duration-300
-;    {:class (if left-sidebar-open?
-;              "opacity-75 pointer-events-auto"
-;              "opacity-0 pointer-events-none")
-;     :on-click close-fn}]
-;   [:div#left-bar.fixed.inset-y-0.left-0.flex.flex-col.z-40.transform.ease-in-out.duration-300
-;    {:class (if left-sidebar-open?
-;              "translate-x-0"
-;              "-translate-x-full")
-;     :style {:padding-top (ui/main-content-top-padding)}}
-;    (when left-sidebar-open?
-;      [:div.cp__header#head
-;       [:div.l.flex
-;        (header/left-menu-button
-;         {:on-click (fn []
-;                      (state/set-left-sidebar-open!
-;                       (not (:ui/left-sidebar-open? @state/state))))})]])
-;    [:div.flex-1.h-0.overflow-y-auto
-;     (sidebar-nav route-match close-fn)]]])
-
 (rum/defc left-sidebar < rum/reactive
   [{:keys [left-sidebar-open? route-match]}]
   (let [close-fn #(state/set-left-sidebar-open! false)]
