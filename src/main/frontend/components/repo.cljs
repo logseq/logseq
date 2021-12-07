@@ -25,6 +25,17 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.text :as text]))
 
+(defn- open-repo-url [url]
+  (repo-handler/push-if-auto-enabled! (state/get-current-repo))
+  (state/set-current-repo! url)
+  ;; load config
+  (common-handler/reset-config! url nil)
+  (shortcut/refresh!)
+  (when-not (= :draw (state/get-current-route))
+    (route-handler/redirect-to-home!))
+  (when-let [dir-name (config/get-repo-dir url)]
+    (fs/watch-dir! dir-name)))
+
 (rum/defc add-repo
   [args]
   (if-let [graph-types (get-in args [:query-params :graph-types])]
@@ -66,6 +77,8 @@
               [:div.flex.justify-between.mb-4 {:key id}
                (if local?
                  [:a
+                  {:title url ;; show full path on hover
+                   :on-click #(open-repo-url url)}
                   (some-> (config/get-local-dir url)
                           (text/get-graph-name-from-path))]
                  [:a {:target "_blank"
@@ -176,12 +189,6 @@
               [:p.pt-2.text-sm.opacity-50
                (t :git/version) (str " " version/version)]]])))])))
 
-(defn shorten-repo-name [repo-name]
-  (cond
-    util/mac? (last (string/split repo-name #"/"))
-    util/win32? (last (string/split repo-name #"\\"))
-    :else repo-name))
-
 (rum/defc repos-dropdown < rum/reactive
   []
   (when-let [current-repo (state/sub :git/current-repo)]
@@ -198,26 +205,17 @@
                               (db/get-repo-path repo)))
             repos (state/sub [:me :repos])
             repos (remove (fn [r] (= config/local-repo (:url r))) repos)
-            switch-repos (remove (fn [repo] (= current-repo (:url repo)))
+            switch-repos (remove (fn [repo]
+                                   (= current-repo (:url repo)))
                                  repos)
             repo-links (mapv
                         (fn [{:keys [id url]}]
                           (let [repo-path (get-repo-name url)
-                                short-repo-name (shorten-repo-name repo-path)]
-
-                            {:title        [:span short-repo-name]
+                                short-repo-name (text/get-graph-name-from-path repo-path)]
+                            {:title short-repo-name
                              :hover-detail repo-path ;; show full path on hover
-                             :options      {:on-click
-                                            (fn []
-                                              (repo-handler/push-if-auto-enabled! (state/get-current-repo))
-                                              (state/set-current-repo! url)
-                                                 ;; load config
-                                              (common-handler/reset-config! url nil)
-                                              (shortcut/refresh!)
-                                              (when-not (= :draw (state/get-current-route))
-                                                (route-handler/redirect-to-home!))
-                                              (when-let [dir-name (config/get-repo-dir url)]
-                                                (fs/watch-dir! dir-name)))}}))
+                             :options {:class "ml-1"
+                                       :on-click #(open-repo-url url)}}))
                         switch-repos)
             links (concat repo-links
                           [(when (seq switch-repos)
@@ -227,25 +225,25 @@
                            {:title (t :all-graphs)
                             :options {:href (rfe/href :repos)}}
                            (let [nfs-repo? (config/local-db? current-repo)]
-                              (when (and nfs-repo?
-                                         (not= current-repo config/local-repo)
-                                         (or (nfs-handler/supported?)
-                                             (mobile-util/is-native-platform?)))
-                                {:title (t :sync-from-local-files)
-                                 :hover-detail (t :sync-from-local-files-detail)
-                                 :options {:on-click
-                                           (fn []
-                                             (state/pub-event!
-                                              [:modal/show
-                                               [:div {:style {:max-width 700}}
-                                                [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
-                                                (ui/button
-                                                 "Yes"
-                                                 :autoFocus "on"
-                                                 :large? true
-                                                 :on-click (fn []
-                                                             (state/close-modal!)
-                                                             (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}}))
+                             (when (and nfs-repo?
+                                        (not= current-repo config/local-repo)
+                                        (or (nfs-handler/supported?)
+                                            (mobile-util/is-native-platform?)))
+                               {:title (t :sync-from-local-files)
+                                :hover-detail (t :sync-from-local-files-detail)
+                                :options {:on-click
+                                          (fn []
+                                            (state/pub-event!
+                                             [:modal/show
+                                              [:div {:style {:max-width 700}}
+                                               [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
+                                               (ui/button
+                                                "Yes"
+                                                :autoFocus "on"
+                                                :large? true
+                                                :on-click (fn []
+                                                            (state/close-modal!)
+                                                            (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}}))
                            {:title        (t :re-index)
                             :hover-detail (t :re-index-detail)
                             :options {:on-click
@@ -269,7 +267,7 @@
              (let [repo-path (get-repo-name current-repo)
                    short-repo-name (if (or (util/electron?)
                                            (mobile-util/is-native-platform?))
-                                     (shorten-repo-name repo-path)
+                                     (text/get-file-basename repo-path)
                                      repo-path)]
                [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
                 {:on-click toggle-fn :title repo-path} ;; show full path on hover
