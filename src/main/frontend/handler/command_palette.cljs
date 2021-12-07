@@ -8,9 +8,7 @@
 
 (s/def :command/id keyword?)
 (s/def :command/desc string?)
-(s/def :command/action (and fn?
-                            ;; action fn expects zero number of arities
-                            (fn [action] (zero? (.-length action)))))
+(s/def :command/action fn?)
 (s/def :command/shortcut string?)
 (s/def :command/tag vector?)
 
