@@ -9,6 +9,8 @@
   --ls-scrollbar-width: 6px;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
+  --ls-headbar-height: 3rem;
+  --ls-headbar-inner-top-padding: 0px;
   --ls-left-sidebar-width: 240px;
   --ls-left-sidebar-nav-btn-size: 38px;
 }
