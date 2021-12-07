@@ -1,8 +1,10 @@
 .cp__header {
-  @apply shadow z-10 h-12;
+  @apply shadow z-10;
   -webkit-app-region: drag;
 
   padding-right: 0.5rem;
+  padding-top: var(--ls-headbar-inner-top-padding);
+  height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -169,4 +171,24 @@ a.button {
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
   cursor: default !important;
+}
+
+html.is-native-ios,
+html.is-ios.is-safari {
+  #main-container {
+    padding-top: 20px;
+  }
+
+  .cp__header {
+    position: fixed !important;
+    background-color: var(--ls-primary-background-color);
+  }
+
+  .is-vw-pending {
+    display: none !important;
+  }
+}
+
+html.is-native-ios {
+  --ls-headbar-inner-top-padding: 36px;
 }
