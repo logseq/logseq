@@ -5,7 +5,8 @@
             [frontend.components.block :as block]
             [frontend.db :as db]
             [frontend.extensions.slide :as slide]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.format.block :as block]))
 
 ;; Consider generate a db index so that search can still works
 
@@ -16,7 +17,8 @@
 
 (defn- build-block
   [config block]
-  (let [body (:block/body block)
+  (let [block (block/parse-title-and-body block)
+        body (:block/body block)
         block (block/build-block-title config block)]
     [:div.block
      block

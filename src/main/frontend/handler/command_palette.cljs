@@ -22,7 +22,6 @@
         :shortcut.handler/global-non-editing-only]
        (mapcat shortcut-helper/shortcuts->commands)))
 
-
 (defn get-commands []
   (->> (get @state/state :command-palette/commands)
        (sort-by :id)))

@@ -126,31 +126,6 @@
            (route-handler/redirect-to-page! page))
          page)))))
 
-
-
-(defn get-plugins
-  [blocks]
-  (let [plugins (atom {})
-        add-plugin #(swap! plugins assoc % true)]
-    (walk/postwalk
-     (fn [x]
-       (if (and (vector? x)
-                (>= (count x) 2))
-         (let [[type option] x]
-           (case type
-             "Src" (when (:language option)
-                     (add-plugin "highlight"))
-             "Export" (when (= option "latex")
-                        (add-plugin "latex"))
-             "Latex_Fragment" (add-plugin "latex")
-             "Math" (add-plugin "latex")
-             "Latex_Environment" (add-plugin "latex")
-             nil)
-           x)
-         x))
-     (map :block/body blocks))
-    @plugins))
-
 (defn delete-file!
   [repo page-name]
   (let [file (db/get-page-file page-name)
@@ -350,22 +325,20 @@
         page-ids (->> (map :block/page blocks)
                       (remove nil?)
                       (set))
-        tx       (->> (map (fn [{:block/keys [uuid title content properties format pre-block?] :as block}]
+        tx       (->> (map (fn [{:block/keys [uuid content properties format pre-block?] :as block}]
                              (let [content    (let [content' (replace-old-page! content old-original-name new-name)]
                                                 (when-not (= content' content)
                                                   content'))
                                    properties (let [properties' (walk-replace-old-page! properties old-original-name new-name)]
                                                 (when-not (= properties' properties)
                                                   properties'))]
-                               (when (or title content properties)
+                               (when (or content properties)
                                  (util/remove-nils-non-nested
-                                  (merge
-                                   {:block/uuid       uuid
-                                    :block/content    content
-                                    :block/properties properties
-                                    :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
-                                    :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))}
-                                   (block/parse-title-and-body format pre-block? content)))))) blocks)
+                                  {:block/uuid       uuid
+                                   :block/content    content
+                                   :block/properties properties
+                                   :block/refs (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
+                                   :block/path-refs (rename-update-block-refs! (:block/path-refs block) (:db/id page) (:db/id to-page))})))) blocks)
                       (remove nil?))]
     (db/transact! repo tx)
     (doseq [page-id page-ids]
