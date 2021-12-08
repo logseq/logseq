@@ -80,7 +80,7 @@
                 (callback #js {:cancel false
                                :requestHeaders requestHeaders}))))))
     (.loadURL win url)
-    (when dev? (.. win -webContents (openDevTools)))
+    ;;(when dev? (.. win -webContents (openDevTools)))
     win))
 
 (defn setup-updater! [^js win]
