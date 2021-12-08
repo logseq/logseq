@@ -24,9 +24,8 @@ on:
         type: boolean
         required: true
         default: true
-  schedule: # Every workday at the noon (UTC) we run a scheduled nightly build
-    #- cron: '0 12 * * MON-FRI'
-    - cron: '0 15 * * MON-FRI'
+  # schedule: # Every workday at the noon (UTC) we run a scheduled nightly build
+  #   - cron: '0 12 * * MON-FRI'
 
 env:
   CLOJURE_VERSION: '1.10.1.763'
@@ -149,26 +148,16 @@ jobs:
       - name: Save artifacts
         run: |
           mkdir -p builds
+          # NOTE: save VERSION file to builds directory
+          cp static/VERSION ./builds/VERSION
           mv static/out/make/*-*.AppImage ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
           mv static/out/make/zip/linux/x64/*-linux-x64-*.zip ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
 
-      - name: Upload VERSION
+      - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: logseq-version
-          path: static/VERSION
-
-      - name: Upload Linux AppImage
-        uses: actions/upload-artifact@v2
-        with:
-          name: logseq-linux-appimage
-          path: ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.AppImage
-
-      - name: Upload Linux zip
-        uses: actions/upload-artifact@v2
-        with:
-          name: logseq-linux-zip
-          path: ./builds/Logseq-linux-x64-${{ steps.ref.outputs.version }}.zip
+          name: logseq-linux-builds
+          path: builds
 
   build-windows:
     runs-on: windows-latest
@@ -218,13 +207,13 @@ jobs:
           mkdir builds
           mv static\out\make\squirrel.windows\x64\*.exe builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
 
-      - name: Upload Windows Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: logseq-win64-exe
-          path: builds/Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
+          name: logseq-win64-builds
+          path: builds
 
-  build-macos-x64:
+  build-macos:
     needs: [ compile-cljs ]
     runs-on: macos-latest
 
@@ -259,7 +248,7 @@ jobs:
           path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
           key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
           restore-keys: |
-            ${{ runner.os }}-x64-yarn-
+            ${{ runner.os }}-yarn-
 
       #- name: Signing By Apple Developer ID
       #  uses: apple-actions/import-codesign-certs@v1
@@ -287,68 +276,6 @@ jobs:
           mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
           mv static/out/make/zip/darwin/x64/*.zip ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
 
-      - name: Upload dmg Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: logseq-darwin-x64-dmg
-          path: ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.dmg
-
-      - name: Upload zip Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: logseq-darwin-x64-zip
-          path: ./builds/Logseq-darwin-x64-${{ steps.ref.outputs.version }}.zip
-
-  build-macos-arm64:
-    needs: [ compile-cljs ]
-    runs-on: macos-latest
-
-    steps:
-      - name: Download The Static Asset
-        uses: actions/download-artifact@v2
-        with:
-          name: static
-          path: static
-
-      - name: Retrieve tag version
-        id: ref
-        run: |
-          pkgver=$(cat ./static/VERSION)
-          echo ::set-output name=version::$pkgver
-
-      - name: List Static Files
-        run: ls -al ./static
-
-      - name: Install Node.js, NPM and Yarn
-        uses: actions/setup-node@v2
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "::set-output name=dir::$(yarn cache dir)"
-      - name: Cache yarn cache directory
-        uses: actions/cache@v2
-        id: yarn-cache
-        with:
-          path: ${{ steps.yarn-cache-dir-path.outputs.dir }}
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-arm64-yarn-
-
-      #- name: Signing By Apple Developer ID
-      #  uses: apple-actions/import-codesign-certs@v1
-      #  with:
-      #    p12-file-base64: ${{ secrets.APPLE_CERTIFICATES_P12 }}
-      #    p12-password: ${{ secrets.APPLE_CERTIFICATES_P12_PASSWORD }}
-
-      # - name: Cache Node Modules
-      #   uses: actions/cache@v2
-      #   with:
-      #     path: |
-      #       **/node_modules
-      #     key: ${{ runner.os }}-node-modules
-
       - name: Build/Release Electron App for arm64
         run: yarn install && yarn electron:make-macos-arm64
         working-directory: ./static
@@ -358,63 +285,38 @@ jobs:
 
       - name: Save arm64 artifacts
         run: |
-          mkdir -p ./builds
           mv static/out/make/Logseq.dmg ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
           mv static/out/make/zip/darwin/arm64/*.zip ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
 
-      - name: Upload dmg Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v2
         with:
-          name: logseq-darwin-arm64-dmg
-          path: ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.dmg
-
-      - name: Upload zip Artifact
-        uses: actions/upload-artifact@v2
-        with:
-          name: logseq-darwin-arm64-zip
-          path: ./builds/Logseq-darwin-arm64-${{ steps.ref.outputs.version }}.zip
+          name: logseq-darwin-builds
+          path: builds
 
   release:
     # NOTE: For now, we only have beta channel to be released on Github
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
+    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta') }}
+    needs: [ build-macos, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
-      - name: Download MacOS Artifacts - x64 dmg
+      - name: Download MacOS Artifacts
         uses: actions/download-artifact@v2
         with:
-          name: logseq-darwin-x64-dmg
-      - name: Download MacOS Artifacts - x64 zip
-        uses: actions/download-artifact@v2
-        with:
-          name: logseq-darwin-x64-zip
+          name: logseq-darwin-builds
+          path: ./
 
-      - name: Download MacOS Artifacts - arm64 dmg
+      - name: Download The Linux Artifacts
         uses: actions/download-artifact@v2
         with:
-          name: logseq-darwin-arm64-dmg
-      - name: Download MacOS Artifacts - arm64 zip
-        uses: actions/download-artifact@v2
-        with:
-          name: logseq-darwin-arm64-zip
-
-      - name: Download The Linux Artifacts - AppImage
-        uses: actions/download-artifact@v2
-        with:
-          name: logseq-linux-appimage
-      - name: Download The Linux Artifacts - zip
-        uses: actions/download-artifact@v2
-        with:
-          name: logseq-linux-zip
+          name: logseq-linux-builds
+          path: ./
 
       - name: Download The Windows Artifact
         uses: actions/download-artifact@v2
         with:
-          name: logseq-win64-exe
-
-      - name: Download VERSION
-        uses: actions/download-artifact@v2
-        with:
-          name: logseq-version
+          name: logseq-win64-builds
+          path: ./
 
       - name: List files
         run: ls -rl
@@ -432,27 +334,7 @@ jobs:
           sha256sum *-linux-* >> SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Create Nightly Release
-        if: ${{ github.event_name == 'schedule' || (github.event.inputs.build-target == 'nightly') }}
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: nightly
-          name: Desktop APP Nightly Release
-          body: "Nightly Release of ${{ steps.ref.outputs.version }}"
-          draft: ${{ github.event_name == 'schedule' && github.event.inputs.is-draft }}
-          prerelease: true
-          files: |
-            ./VERSION
-            ./SHA256SUMS.txt
-            ./*.zip
-            ./*.dmg
-            ./*.exe
-            ./*.AppImage
-
       - name: Create Release Draft
-        if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta') }}
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -460,8 +342,8 @@ jobs:
           tag_name: ${{ steps.ref.outputs.version }}
           name: Desktop APP ${{ steps.ref.outputs.version }} (Beta Testing)
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
-          draft: ${{ github.event_name == 'schedule' && github.event.inputs.is-draft }}
-          prerelease: ${{ github.event_name == 'schedule' && github.event.inputs.is-pre-release }}
+          draft: ${{ github.event.inputs.is-draft == true || github.event_name == 'schedule' }}
+          prerelease: ${{ github.event.inputs.is-pre-release == true || github.event_name == 'schedule' }}
           files: |
             ./VERSION
             ./SHA256SUMS.txt
