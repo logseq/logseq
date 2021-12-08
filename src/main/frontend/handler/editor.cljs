@@ -3308,73 +3308,75 @@
   (remove-block-property! block-id :collapsed))
 
 (defn expand!
-  [e]
-  (util/stop e)
-  (cond
-    (state/editing?)
-    (when-let [block-id (:block/uuid (state/get-edit-block))]
-      (expand-block! block-id))
+  ([e] (expand! e false))
+  ([e clear-selection?]
+   (util/stop e)
+   (cond
+     (state/editing?)
+     (when-let [block-id (:block/uuid (state/get-edit-block))]
+       (expand-block! block-id))
 
-    (state/selection?)
-    (do
-      (->> (get-selected-blocks-with-children)
-           (map (fn [dom]
-                  (-> (dom/attr dom "blockid")
-                      medley/uuid
-                      expand-block!)))
-           doall)
-      (clear-selection!))
+     (state/selection?)
+     (do
+       (->> (get-selected-blocks-with-children)
+            (map (fn [dom]
+                   (-> (dom/attr dom "blockid")
+                       medley/uuid
+                       expand-block!)))
+            doall)
+       (and clear-selection? (clear-selection!)))
 
-    :else
-    ;; expand one level
-    (let [blocks-with-level (all-blocks-with-level {})
-          max-level (or (apply max (map :block/level blocks-with-level)) 99)]
-      (loop [level 1]
-        (if (> level max-level)
-          nil
-          (let [blocks-to-expand (->> blocks-with-level
-                                      (filter (fn [b] (= (:block/level b) level)))
-                                      (filter (fn [{:block/keys [properties]}]
-                                                (contains? properties :collapsed))))]
-            (if (empty? blocks-to-expand)
-              (recur (inc level))
-              (doseq [{:block/keys [uuid]} blocks-to-expand]
-                (expand-block! uuid)))))))))
+     :else
+     ;; expand one level
+     (let [blocks-with-level (all-blocks-with-level {})
+           max-level (or (apply max (map :block/level blocks-with-level)) 99)]
+       (loop [level 1]
+         (if (> level max-level)
+           nil
+           (let [blocks-to-expand (->> blocks-with-level
+                                       (filter (fn [b] (= (:block/level b) level)))
+                                       (filter (fn [{:block/keys [properties]}]
+                                                 (contains? properties :collapsed))))]
+             (if (empty? blocks-to-expand)
+               (recur (inc level))
+               (doseq [{:block/keys [uuid]} blocks-to-expand]
+                 (expand-block! uuid))))))))))
 
 (defn collapse!
-  [e]
-  (util/stop e)
-  (cond
-    (state/editing?)
-    (when-let [block-id (:block/uuid (state/get-edit-block))]
-      (collapse-block! block-id))
+  ([e] (collapse! e false))
+  ([e clear-selection?]
+   (util/stop e)
+   (cond
+     (state/editing?)
+     (when-let [block-id (:block/uuid (state/get-edit-block))]
+       (collapse-block! block-id))
 
-    (state/selection?)
-    (do
-      (->> (get-selected-blocks-with-children)
-           (map (fn [dom]
-                  (-> (dom/attr dom "blockid")
-                      medley/uuid
-                      collapse-block!)))
-           doall)
-      (clear-selection!))
+     (state/selection?)
+     (do
+       (->> (get-selected-blocks-with-children)
+            (map (fn [dom]
+                   (-> (dom/attr dom "blockid")
+                       medley/uuid
+                       collapse-block!)))
+            doall)
+       (and clear-selection? (clear-selection!)))
 
-    :else
-    ;; collapse by one level from outside
-    (let [blocks-with-level
-          (all-blocks-with-level {:collapse? true})
-          max-level (or (apply max (map :block/level blocks-with-level)) 99)]
-      (loop [level max-level]
-        (if (zero? level)
-          nil
-          (let [blocks-to-collapse
-                (->> blocks-with-level
-                     (filter (fn [b] (= (:block/level b) level)))
-                     (filter (fn [b] (collapsable? (:block/uuid b)))))]
-            (if (empty? blocks-to-collapse)
-              (recur (dec level))
-              (doseq [{:block/keys [uuid]} blocks-to-collapse]
-                (collapse-block! uuid)))))))))
+     :else
+     ;; collapse by one level from outside
+     (let [blocks-with-level
+           (all-blocks-with-level {:collapse? true})
+           max-level (or (apply max (map :block/level blocks-with-level)) 99)]
+       (loop [level max-level]
+         (if (zero? level)
+           nil
+           (let [blocks-to-collapse
+                 (->> blocks-with-level
+                      (filter (fn [b] (= (:block/level b) level)))
+                      (filter (fn [b] (collapsable? (:block/uuid b)))))]
+             (if (empty? blocks-to-collapse)
+               (recur (dec level))
+               (doseq [{:block/keys [uuid]} blocks-to-collapse]
+                 (collapse-block! uuid))))))))))
 
 (defn- collapse-all!
   []

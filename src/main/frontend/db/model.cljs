@@ -900,7 +900,7 @@
    (has-children? (state/get-current-repo) block-id))
   ([repo block-id]
    (let [db (conn/get-conn repo)]
-     (when-let [block (db-utils/entity [:block/uuid block-id])]
+     (when-let [block (get-block-by-uuid block-id)]
        ;; perf: early stop
        (let [result (d/datoms db :avet :block/parent (:db/id block))]
          (boolean (seq result)))))))

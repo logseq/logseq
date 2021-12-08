@@ -182,11 +182,13 @@
 
    :editor/up                      {:desc    "Move cursor up / Select up"
                                     :binding "up"
-                                    :fn      (editor-handler/shortcut-up-down :up)}
+                                    :fn      (editor-handler/shortcut-up-down :up)
+                                    :force?  true}
 
    :editor/down                    {:desc    "Move cursor down / Select down"
                                     :binding "down"
-                                    :fn      (editor-handler/shortcut-up-down :down)}
+                                    :fn      (editor-handler/shortcut-up-down :down)
+                                    :force?  true}
 
    :editor/left                    {:desc    "Move cursor left / Open selected block at beginning"
                                     :binding "left"
@@ -223,11 +225,13 @@
 
    :editor/expand-block-children   {:desc    "Expand"
                                     :binding "mod+down"
-                                    :fn      editor-handler/expand!}
+                                    :fn      editor-handler/expand!
+                                    :force?  true}
 
    :editor/collapse-block-children {:desc    "Collapse"
                                     :binding "mod+up"
-                                    :fn      editor-handler/collapse!}
+                                    :fn      editor-handler/collapse!
+                                    :force?  true}
 
    :editor/indent                  {:desc    "Indent block"
                                     :binding "tab"
@@ -312,7 +316,8 @@
 
    :command-palette/toggle         {:desc    "Toggle command palette"
                                     :binding "mod+shift+p"
-                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
+                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))
+                                    :force?   true}
 
    :command/run                    {:desc    "Run git command"
                                     :binding "mod+shift+1"
@@ -371,11 +376,11 @@
                                      :fn      page-handler/toggle-favorite!}
 
    :editor/open-file-in-default-app {:desc    "Open file in default app"
-                                     :binding "o f"
+                                     :binding nil
                                      :fn      page-handler/open-file-in-default-app}
 
    :editor/open-file-in-directory   {:desc    "Open file in parent directory"
-                                     :binding "o d"
+                                     :binding nil
                                      :fn      page-handler/open-file-in-directory}
 
    :ui/toggle-wide-mode             {:desc    "Toggle wide mode"
@@ -463,7 +468,8 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [:editor/cycle-todo
+     (build-category-map [:command-palette/toggle
+                          :editor/cycle-todo
                           :editor/up
                           :editor/down
                           :editor/left
