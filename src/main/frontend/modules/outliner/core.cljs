@@ -60,15 +60,6 @@
      (outliner-state/get-by-parent-id repo [:block/uuid id])
      (mapv block))))
 
-(defn- update-block-unordered
-  [block]
-  (let [parent (:block/parent block)
-        page (:block/page block)
-        type (:block/type block)]
-    (if (and parent page type (= parent page) (= type :heading))
-      (assoc block :block/unordered false)
-      (assoc block :block/unordered true))))
-
 (defn- block-with-timestamps
   [block]
   (let [updated-at (util/time-ms)
@@ -155,8 +146,7 @@
   (-save [this txs-state]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [this (block (update-block-unordered (:data this)))
-          m (-> (:data this)
+    (let [m (-> (:data this)
                 (dissoc :block/children :block/meta :block/top? :block/bottom?)
                 (util/remove-nils))
           m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)

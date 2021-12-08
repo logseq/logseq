@@ -57,6 +57,15 @@
         (js/console.error "[parse hiccup error]" e) input))))
 
 ;; base
+(defn ^:export get_state_from_store
+  [^js path]
+  (when-let [path (if (string? path) [path] (bean/->clj path))]
+    (->> path
+         (map #(if (string/starts-with? % "@")
+                 (subs % 1)
+                 (keyword %)))
+         (get-in @state/state))))
+
 (def ^:export get_user_configs
   (fn []
     (bean/->js
@@ -233,6 +242,7 @@
   (fn [pid ^js cmd-action palette?]
     (when-let [[cmd action] (bean/->clj cmd-action)]
       (let [action (assoc action 0 (keyword (first action)))
+            cmd (assoc cmd :key (string/replace (:key cmd) ":" "-"))
             key (:key cmd)
             keybinding (:keybinding cmd)
             palette-cmd (and palette? (plugin-handler/simple-cmd->palette-cmd pid cmd action))]
@@ -287,6 +297,15 @@
   (fn [url]
     (when (re-find #"https?://" url)
       (js/apis.openExternal url))))
+
+(def ^:export invoke_external_command
+  (fn [type & args]
+    (when-let [id (and (string/starts-with? type "logseq.")
+                       (-> (string/replace type #"^logseq." "")
+                           (util/safe-lower-case)
+                           (keyword)))]
+      (when-let [action (get-in (palette-handler/get-commands-unique) [id :action])]
+        (apply action args)))))
 
 ;; flag - boolean | 'toggle'
 (def ^:export set_left_sidebar_visible
@@ -352,9 +371,21 @@
 (def ^:export get_current_block
   (fn []
     (let [block (state/get-edit-block)
+          block (or block (some-> (first (:selection/blocks @state/state))
+                                  (.getAttribute "blockid")
+                                  (db-model/get-block-by-uuid)))
           block (or block (state/get-last-edit-block))
           block (and block (db-utils/pull (:db/id block)))]
       (bean/->js (normalize-keyword-for-json block)))))
+
+(def ^:export get_selected_blocks
+  (fn []
+    (when-let [blocks (and (state/in-selection-mode?)
+                           (seq (:selection/blocks @state/state)))]
+      (let [blocks (->> blocks
+                        (map (fn [^js el] (some-> (.getAttribute el "blockid")
+                                                  (db-model/query-block-by-uuid)))))]
+        (bean/->js (normalize-keyword-for-json blocks))))))
 
 (def ^:export get_current_page
   (fn []
@@ -496,6 +527,16 @@
       (when-let [right-siblings (outliner/get-right-siblings (outliner/->Block block))]
         (bean/->js (normalize-keyword-for-json (:data (first right-siblings))))))))
 
+(def ^:export set_block_collapsed
+  (fn [uuid ^js opts]
+    (when-let [block (db-model/get-block-by-uuid uuid)]
+      (let [{:keys [flag]} (bean/->clj opts)
+            flag (if (= "toggle" flag)
+                   (not (-> block :block/properties :collapsed))
+                   (boolean flag))]
+        (if flag (editor-handler/collapse-block! uuid)
+                 (editor-handler/expand-block! uuid))))))
+
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
     (editor-handler/set-block-property! (medley/uuid block-uuid) key value)))
@@ -589,3 +630,10 @@
   []
   (p/let [_ (el/persist-dbs!)
           _ (reset! handler/triggered? true)]))
+
+(defn ^:export __debug_state
+  [path]
+  (-> (if (string? path)
+        (get @state/state (keyword path))
+        @state/state)
+      (bean/->js)))

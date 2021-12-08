@@ -48,7 +48,7 @@
             [frontend.template :as template]
             [frontend.text :as text]
             [frontend.ui :as ui]
-            [frontend.util :as util]
+            [frontend.util :as util :refer [profile]]
             [frontend.util.clock :as clock]
             [frontend.util.property :as property]
             [frontend.util.drawer :as drawer]
@@ -643,13 +643,10 @@
           hl-type (get-in block [:block/properties :hl-type])
           repo (state/get-current-repo)]
       (if block
-        (let [title (let [title (:block/title block)
-                          block-content (block-content (assoc config :block-ref? true)
-                                                       block nil (:block/uuid block)
-                                                       (:slide? config))
-                          class (if (seq title) "block-ref" "block-ref-no-title")]
-                      [:span {:class class}
-                       block-content])
+        (let [title [:span {:class "block-ref"}
+                     (block-content (assoc config :block-ref? true)
+                                    block nil (:block/uuid block)
+                                    (:slide? config))]
               inner (if label
                       (->elem
                        :span.block-ref
@@ -1369,7 +1366,7 @@
                (rum/with-key (block-container config child)
                  (:block/uuid child)))))]))))
 
-(defn block-content-empty?
+(defn- block-content-empty?
   [{:block/keys [properties title body]}]
   (and
    (or
@@ -1813,8 +1810,10 @@
                      summary]]))))])
 
 (rum/defc block-content < rum/reactive
-  [config {:block/keys [uuid title body content children properties scheduled deadline] :as block} edit-input-id block-id slide?]
-  (let [collapsed? (get properties :collapsed)
+  [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
+  (let [{:block/keys [title body] :as block} (if (:block/title block) block
+                                                 (merge block (block/parse-title-and-body format pre-block? content)))
+        collapsed? (get properties :collapsed)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
         block-type (or (:ls-type properties) :default)
@@ -1999,12 +1998,13 @@
                               [:page
                                (or page-original-name page-name)])
             parents-props (doall
-                           (for [{:block/keys [uuid title body name] :as block} parents]
+                           (for [{:block/keys [uuid name content] :as block} parents]
                              (when-not name ; not page
-                               [block
-                                (if (seq title)
-                                  (->elem :span (map-inline config title))
-                                  (->elem :div (markup-elements-cp config body)))])))
+                               (let [{:block/keys [title body]} (block/parse-title-and-body (:block/format block) (:block/pre-block? block) content)]
+                                 [block
+                                 (if (seq title)
+                                   (->elem :span (map-inline config title))
+                                   (->elem :div (markup-elements-cp config body)))]))))
             breadcrumb (->> (into [] parents-props)
                             (concat [page-name-props] (when more? [:more]))
                             (filterv identity)
@@ -2159,8 +2159,10 @@
                              (select-keys (second (:rum/args new-state)) compare-keys))
                        (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                              (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
-  [state config {:block/keys [uuid body repo children pre-block? top? properties refs heading-level level type] :as block}]
-  (let [blocks-container-id (:blocks-container-id config)
+  [state config {:block/keys [uuid repo children pre-block? top? properties refs heading-level level type format content] :as block}]
+  (let [block (merge block (block/parse-title-and-body format pre-block? content))
+        body (:block/body block)
+        blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
         ;; Each block might have multiple queries, but we store only the first query's result
         config (if (nil? (:query-result config))
@@ -2197,8 +2199,8 @@
       {:id block-id
        :data-refs data-refs
        :data-refs-self data-refs-self
+       :data-collapsed (and collapsed? has-child?)
        :class (str uuid
-                   (when (and collapsed? has-child?) " collapsed")
                    (when pre-block? " pre-block")
                    (when (and card? (not review-cards?)) " shadow-xl"))
        :blockid (str uuid)
@@ -2384,7 +2386,7 @@
                                clocks))]
         [:div.overflow-x-scroll.sm:overflow-auto
          (->elem
-          :table.m-0 
+          :table.m-0
           {:class "logbook-table"
            :border 0
            :style {:width "max-content"}

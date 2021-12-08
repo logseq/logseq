@@ -547,8 +547,6 @@
           :block/heading-level
           :block/format
           :block/children
-          :block/title
-          :block/body
           :block/content]))})
 
 (defn- file-name [repo extension]
