@@ -6,8 +6,9 @@
             [frontend.db :as db]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.debug :as debug]))
+            [frontend.util :as util :refer [profile]]
+            [frontend.debug :as debug]
+            [frontend.format.block :as block]))
 
 (defn- indented-block-content
   [content spaces-tabs]
@@ -23,8 +24,9 @@
         (ffirst body))))
 
 (defn transform-content
-  [{:block/keys [format pre-block? title content unordered body heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
-  (let [content (or content "")
+  [{:block/keys [format pre-block? unordered content heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
+  (let [{:block/keys [title body]} (block/parse-title-and-body format pre-block? content)
+        content (or content "")
         heading-with-title? (seq title)
         allowed-block-as-title? (allowed-block-as-title? title body)
         first-block? (= left page)

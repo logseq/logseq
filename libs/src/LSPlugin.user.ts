@@ -358,8 +358,8 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
     this._ui.set(payload.key, payload)
   }
 
-  showMainUI (): void {
-    const payload = { key: KEY_MAIN_UI, visible: true }
+  showMainUI (opts?: { autoFocus: boolean }): void {
+    const payload = { key: KEY_MAIN_UI, visible: true, autoFocus: opts?.autoFocus }
     this.caller.call('main-ui:visible', payload)
     this.emit('ui:visible:changed', payload)
     this._ui.set(payload.key, payload)
