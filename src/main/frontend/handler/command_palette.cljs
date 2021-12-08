@@ -20,11 +20,7 @@
   (->> [:shortcut.handler/editor-global
         :shortcut.handler/global-prevent-default
         :shortcut.handler/global-non-editing-only]
-       (mapcat shortcut-helper/shortcuts->commands)
-       ;; some of the shortcut fn takes the shape of (fn [e] xx)
-       ;; instead of (fn [] xx)
-       ;; remove them for now
-       (filter (fn [{:keys [action force?]}] (or force? (zero? (and action (.-length action))))))))
+       (mapcat shortcut-helper/shortcuts->commands)))
 
 (defn get-commands []
   (->> (get @state/state :command-palette/commands)

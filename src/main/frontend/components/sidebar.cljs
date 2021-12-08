@@ -568,8 +568,9 @@
           :close-fn    close-fn
           :route-match route-match})
 
-        [:div.#app-container.h-screen.flex {:style {:padding-top (ui/main-content-top-padding)}}
-         [:div.flex-1.h-full.flex.flex-col#left-container.relative
+        [:div.#app-container
+         {:style {:padding-top (ui/main-content-top-padding)}}
+         [:div#left-container
           {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
           (header/header {:open-fn        open-fn
                           :white?         white?

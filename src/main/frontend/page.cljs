@@ -17,7 +17,9 @@
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
                    (plugin-handler/host-mounted!)
-                   (let [teardown-fn (ui/setup-active-keystroke!)]
+                   (let [teardown-fn (comp
+                                      (ui/setup-active-keystroke!)
+                                      (ui/setup-patch-ios-visual-viewport-state!))]
                      (assoc state ::teardown teardown-fn)))
    :will-unmount (fn [state]
                    (let [teardown (::teardown state)]

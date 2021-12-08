@@ -62,12 +62,6 @@
      #(when system-theme?
         (ui/setup-system-theme-effect!))
      [system-theme?])
-
-    (rum/use-effect!
-     #(when (mobile-util/native-ios?)
-        (ui/setup-patch-ios-fixed-bottom-position!))
-     [edit?])
-
     [:div
      {:class    (str theme "-theme")
       :on-click on-click}
