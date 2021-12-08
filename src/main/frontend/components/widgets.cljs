@@ -83,7 +83,7 @@
                     :error
                     false)))))))]])))
 
-(rum/defcs add-local-directory
+(rum/defc add-local-directory
   []
   (rum/with-context [[t] i18n/*tongue-context*]
     [:div.flex.flex-col
