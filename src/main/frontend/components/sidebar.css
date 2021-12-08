@@ -180,6 +180,7 @@
   @screen sm {
     background-color: var(--ls-secondary-background-color);
     width: var(--ls-left-sidebar-width);
+    padding-top: 0;
   }
 }
 
