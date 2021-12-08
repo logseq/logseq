@@ -49,12 +49,6 @@ html.is-mobile {
   #main-content.is-left-sidebar-open {
     padding-left: 0;
   }
-
-  .left-sidebar-inner {
-    > .wrap {
-      padding-top: 64px;
-    }
-  }
 }
 
 #left-sidebar {
