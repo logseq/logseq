@@ -52,6 +52,7 @@
 .left-sidebar-inner {
   position: relative;
   height: 100%;
+  padding-top: 12px;
   width: var(--ls-left-sidebar-sm-width);
   overflow-x: hidden;
   overflow-y: auto;
