@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.Build;
 import android.provider.DocumentsContract;
 import android.provider.Settings;
 
@@ -21,9 +22,19 @@ import com.getcapacitor.PluginMethod;
 
 @CapacitorPlugin(name = "FolderPicker")
 public class FolderPicker extends Plugin {
+    public static boolean FileAccessAllowed()
+        {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+                return true;
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                return (Environment.isExternalStorageManager());
+            }
+            return false;
+        }
+
     @PluginMethod()
     public void pickFolder(PluginCall call) {
-        if (Environment.isExternalStorageManager()) {
+        if (FileAccessAllowed()) {
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
             i.addCategory(Intent.CATEGORY_DEFAULT);
             startActivityForResult(call, i, "folderPickerResult");
