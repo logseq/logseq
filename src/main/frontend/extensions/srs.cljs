@@ -490,7 +490,8 @@
                                       :shortcut   "f"
                                       :id         "card-forgotten"
                                       :background "red"
-                                      :on-click   #((score-and-next-card 1 card card-index cards phase review-records cb)
+                                      :on-click   (fn []
+                                                    (score-and-next-card 1 card card-index cards phase review-records cb)
                                                     (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
                                                       (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
