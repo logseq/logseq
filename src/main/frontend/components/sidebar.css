@@ -255,6 +255,18 @@
   }
 }
 
+.ls-left-sidebar-open {
+  .cp__header > .r {
+    display: none;
+  }
+
+  @screen sm {
+    .cp__header > .r {
+      display: flex;
+    }
+  }
+}
+
 .white-theme #left-sidebar a {
   color: var(--ls-primary-text-color);
 }
