@@ -34,7 +34,7 @@ export async function createRandomPage(page: Page) {
     const randomTitle = randomString(20)
 
     // Click #left-sidebar a:has-text("New page")
-    await page.click('#left-sidebar a:has-text("New page")')
+    await page.click('#search-button')
     // Fill [placeholder="Search or create page"]
     await page.fill('[placeholder="Search or create page"]', randomTitle)
     // Click text=/.*New page: "new page".*/
