@@ -183,14 +183,30 @@
 }
 
 .cp__sidebar-left-layout {
-  width: 100%;
+  width: 0;
   height: 100vh;
   position: fixed;
   top: 0;
   left: 0;
   z-index: 9;
+  transition: width 1.2s;
+
+  > .shade-mask {
+    background-color: rgba(0, 0, 0, .5);
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity .1s;
+  }
 
   &.is-open {
+    transition: none;
+    width: 100%;
+
     .left-sidebar-inner {
       transform: translateX(0);
     }
@@ -214,18 +230,6 @@
     z-index: 5;
   }
 
-  > .shade-mask {
-    background-color: rgba(0, 0, 0, .5);
-    position: absolute;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    right: 0;
-    z-index: -1;
-    opacity: 0;
-    transition: opacity .3s;
-  }
-
   @screen sm {
     width: var(--ls-left-sidebar-width);
 
@@ -236,6 +240,8 @@
     }
 
     &.is-open {
+      width: var(--ls-left-sidebar-width);
+
       &:before {
         width: calc(var(--ls-left-sidebar-width) - var(--ls-scrollbar-width));
       }
