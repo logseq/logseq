@@ -40,6 +40,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string></string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string></string>
 	<key>NSDownloadsFolderUsageDescription</key>
@@ -47,6 +49,10 @@
 	<key>NSFileProviderDomainUsageDescription</key>
 	<string></string>
 	<key>NSFileProviderPresenceUsageDescription</key>
+	<string></string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string></string>
+	<key>NSPhotoLibraryUsageDescription</key>
 	<string></string>
 	<key>NSUbiquitousContainers</key>
 	<dict>

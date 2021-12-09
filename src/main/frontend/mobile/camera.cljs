@@ -23,7 +23,8 @@
           path (str "file://" repo-dir "/" assets-dir "/" filename)
           _file (.writeFile Filesystem (clj->js
                                          {:data (.-data photo-buffer)
-                                          :path path}))]
+                                          :path path
+                                          :recursive true}))]
     (p/resolved filename)))
 
 (defn embed-photo [id]
