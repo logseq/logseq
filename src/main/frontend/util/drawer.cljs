@@ -61,7 +61,7 @@
 
                             :else
                             (let [properties-count (count (second (first (second ast))))
-                                  properties (subvec body-without-timestamps 0 (inc properties-count))
+                                  properties (subvec body-without-timestamps 0 properties-count)
                                   after (rest body-without-timestamps)]
                               (string/join "\n" (concat [title] scheduled deadline properties [drawer] after))))
                           (string/join "\n" (concat [title] scheduled deadline [drawer] body-without-timestamps))))
