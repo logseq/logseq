@@ -233,7 +233,7 @@
   }
 
   @screen sm {
-    width: var(--ls-left-sidebar-width);
+    width: 0;
 
     &:before {
       background-color: var(--ls-secondary-background-color);
