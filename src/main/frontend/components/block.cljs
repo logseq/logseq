@@ -1917,7 +1917,7 @@
         [:span
          (cond
            (seq title)
-           (if encrypted? (map-inline config title) (build-block-title config block)
+           (if encrypted? (map-inline config title) (build-block-title config block))
 
            :else
            nil)]
