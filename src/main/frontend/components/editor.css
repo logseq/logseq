@@ -1,15 +1,15 @@
 #mobile-editor-toolbar {
   position: fixed;
   bottom: 0;
-  width: 100%;
   left: 0;
+  width: 100%;
   justify-content: center;
   height: 2.5rem;
   display: flex;
   align-items: center;
   z-index: 9999;
 
-  transition: top 0.3s;
+  transition: none;
 
   button {
     padding: 10px;

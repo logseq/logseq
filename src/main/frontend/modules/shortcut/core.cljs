@@ -18,10 +18,10 @@
 (def *pending (atom []))
 
 (def global-keys #js
-  [KeyCodes/TAB
-   KeyCodes/ENTER
-   KeyCodes/BACKSPACE KeyCodes/DELETE
-   KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
+                  [KeyCodes/TAB
+                   KeyCodes/ENTER
+                   KeyCodes/BACKSPACE KeyCodes/DELETE
+                   KeyCodes/UP KeyCodes/LEFT KeyCodes/DOWN KeyCodes/RIGHT])
 
 (def key-names (js->clj KeyNames))
 
@@ -109,7 +109,7 @@
 
     ;; register shortcuts
     (doseq [[id _] shortcut-map]
-      ;; (log/info :shortcut/install-shortcut {:id id :shortcut (dh/shortcut-binding id)})
+      ;;(log/info :shortcut/install-shortcut {:id id :shortcut (str (dh/shortcut-binding id))})
       (register-shortcut! handler id))
 
     (let [f (fn [e]
@@ -123,7 +123,7 @@
                        :dispatch-fn f
                        :handler    handler}}]
 
-      (events/listen handler EventType/SHORTCUT_TRIGGERED f)
+      (.listen handler EventType/SHORTCUT_TRIGGERED f)
 
       (when-not skip-installed?
         (swap! *installed merge data))

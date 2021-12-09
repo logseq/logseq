@@ -671,7 +671,7 @@ body.is-pdf-active {
     padding-left: calc(var(--ph-view-container-width) + 15px);
   }
 
-  #sidebar-nav-wrapper {
+  #left-sidebar {
     border: none !important;
     display: none;
   }

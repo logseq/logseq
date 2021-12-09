@@ -137,9 +137,10 @@
                            (remove nil? blocks))
                      (remove nil?))
           pages (remove nil? pages)
-          pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)]
-      [pages
-       (remove nil? blocks)])
+          pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)
+          blocks (->> (remove nil? blocks)
+                      (map (fn [b] (dissoc b :block/title :block/body :block/level))))]
+      [pages blocks])
     (catch js/Error e
       (log/error :exception e))))
 
@@ -232,8 +233,11 @@
                             pages (with-ref-pages pages blocks)
                             blocks (map (fn [block]
                                           (let [id (:block/uuid block)
-                                                properties (get-in metadata [:block/properties id])]
-                                            (update block :block/properties merge properties)))
+                                                properties (merge (get-in metadata [:block/properties id])
+                                                                  (:block/properties block))]
+                                            (if (seq properties)
+                                              (assoc block :block/properties properties)
+                                              (dissoc block :block/properties))))
                                      blocks)
                             ;; To prevent "unique constraint" on datascript
                             pages-index (map #(select-keys % [:block/name]) pages)

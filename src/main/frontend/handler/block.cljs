@@ -68,7 +68,7 @@
                (remove nil?)))))))
 
 ;; TODO: reduced version
-(defn walk-block
+(defn- walk-block
   [block check? transform]
   (let [result (atom nil)]
     (walk/postwalk

@@ -14,6 +14,7 @@ module.exports = {
     osxNotarize: {
       appleId: process.env['APPLE_ID'],
       appleIdPassword: process.env['APPLE_ID_PASSWORD'],
+      ascProvider: process.env['APPLE_ASC_PROVIDER']
     },
   },
   makers: [

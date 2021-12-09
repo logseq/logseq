@@ -15,8 +15,8 @@ test('render app', async ({ page }) => {
 test('open sidebar', async ({ page }) => {
   await openSidebar(page)
 
-  await page.waitForSelector('#sidebar-nav-wrapper a:has-text("New page")', { state: 'visible' })
-  await page.waitForSelector('#sidebar-nav-wrapper >> text=Journals', { state: 'visible' })
+  await page.waitForSelector('#left-sidebar a:has-text("New page")', { state: 'visible' })
+  await page.waitForSelector('#left-sidebar >> text=Journals', { state: 'visible' })
 })
 
 test('search', async ({ page }) => {
@@ -235,12 +235,12 @@ test('auto completion and auto pair', async ({ page }) => {
 
 // FIXME: Electron with filechooser is not working
 test.skip('open directory', async ({ page }) => {
-  await page.click('#sidebar-nav-wrapper >> text=Journals')
+  await page.click('#left-sidebar >> text=Journals')
   await page.waitForSelector('h1:has-text("Open a local directory")')
   await page.click('h1:has-text("Open a local directory")')
 
   // await page.waitForEvent('filechooser')
   await page.keyboard.press('Escape')
 
-  await page.click('#sidebar-nav-wrapper >> text=Journals')
+  await page.click('#left-sidebar >> text=Journals')
 })
