@@ -1345,6 +1345,16 @@
   (let [blocks (get-file-blocks repo-url path)]
     (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks)))
 
+(defn delete-page-blocks
+  [repo-url page]
+  (when page
+    (let [db (conn/get-conn repo-url)
+          page (db-utils/pull [:block/name (string/lower-case page)])]
+      (when page
+        (let [datoms (d/datoms db :avet :block/page (:db/id page))
+              block-eids (mapv :e datoms)]
+          (mapv (fn [eid] [:db.fn/retractEntity eid]) block-eids))))))
+
 (defn delete-file-pages!
   [repo-url path]
   (let [pages (get-file-pages repo-url path)]
