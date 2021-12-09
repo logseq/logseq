@@ -516,7 +516,6 @@
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
-                          :go/journals
                           :go/backward
                           :go/forward
                           :search/re-index
