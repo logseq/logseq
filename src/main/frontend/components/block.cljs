@@ -1843,8 +1843,7 @@
      [:span
       ;; .flex.relative {:style {:width "100%"}}
       [:span
-       ;; .flex-1.flex-col.relative.block-content
-       [:span.flex.flex-row.justify-between
+       [:span.flex-1.flex-row.justify-between
         [:span
          (cond
            (seq title)
