@@ -1,6 +1,6 @@
 (ns frontend.mobile.camera
   (:require ["@capacitor/camera" :refer [Camera CameraResultType]]
-            ["@capacitor/filesystem" :refer [Filesystem Directory Encoding]]
+            ["@capacitor/filesystem" :refer [Filesystem]]
             [promesa.core :as p]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
@@ -29,5 +29,7 @@
     (p/let [filename (get-photo)]
       (commands/simple-insert!
        id
-       (util/format "[[../assets/%s]]" filename)
+       (case format
+         :org (util/format "[[../assets/%s]]" filename)
+         (util/format "![%s](../assets/%s)" filename filename))
        {}))))
