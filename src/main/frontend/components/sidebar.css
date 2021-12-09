@@ -188,7 +188,7 @@
   width: 0;
   height: 100vh;
   position: fixed;
-  top: 0;
+  top: var(--ls-headbar-inner-top-padding);
   left: 0;
   z-index: 9;
   transition: width 1.2s;
