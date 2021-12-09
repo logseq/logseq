@@ -215,7 +215,7 @@ jobs:
 
   build-macos:
     needs: [ compile-cljs ]
-    runs-on: macos-latest
+    runs-on: macos-11
 
     steps:
       - name: Download The Static Asset
@@ -269,6 +269,7 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_ASC_PROVIDER: ${{ secrets.APPLE_ASC_PROVIDER }}
 
       - name: Save x64 artifacts
         run: |
@@ -282,6 +283,7 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_ASC_PROVIDER: ${{ secrets.APPLE_ASC_PROVIDER }}
 
       - name: Save arm64 artifacts
         run: |
@@ -351,4 +353,3 @@ jobs:
             ./*.dmg
             ./*.exe
             ./*.AppImage
-

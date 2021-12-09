@@ -23,18 +23,18 @@ export async function appFirstLoaded(page: Page) {
 }
 
 export async function openSidebar(page: Page) {
-    let sidebarVisible = await page.isVisible('#sidebar-nav-wrapper .left-sidebar-inner')
+    let sidebarVisible = await page.isVisible('#left-sidebar .left-sidebar-inner')
     if (!sidebarVisible) {
         await page.click('#left-menu.button')
     }
-    await page.waitForSelector('#sidebar-nav-wrapper .left-sidebar-inner', { state: 'visible' })
+    await page.waitForSelector('#left-sidebar .left-sidebar-inner', { state: 'visible' })
 }
 
 export async function createRandomPage(page: Page) {
     const randomTitle = randomString(20)
 
-    // Click #sidebar-nav-wrapper a:has-text("New page")
-    await page.click('#sidebar-nav-wrapper a:has-text("New page")')
+    // Click #left-sidebar a:has-text("New page")
+    await page.click('#search-button')
     // Fill [placeholder="Search or create page"]
     await page.fill('[placeholder="Search or create page"]', randomTitle)
     // Click text=/.*New page: "new page".*/

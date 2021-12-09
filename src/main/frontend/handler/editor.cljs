@@ -1197,12 +1197,18 @@
           first-root-level-index (ffirst
                                    (filter (fn [[_ block]] (= (:level block) 1))
                                            (map-indexed vector blocks)))
-          adjusted-blocks (map-indexed (fn [index {:keys [id level]}]
-                                         {:id id
-                                          :level (if (and (< index first-root-level-index))
-                                                   (inc (- level (:level first-block)))
-                                                   level)})
-                                       blocks)
+          root-level (atom (:level first-block))
+          adjusted-blocks (map-indexed
+                            (fn [index {:keys [id level]}]
+                              {:id id
+                               :level (if (and (< index first-root-level-index))
+                                        (if (< level @root-level)
+                                          (do
+                                            (reset! root-level level)
+                                            1)
+                                          (inc (- level @root-level)))
+                                        level)})
+                            blocks)
           block (db/pull [:block/uuid (:id first-block)])
           copy-str (some->> adjusted-blocks
                             (map (fn [{:keys [id level]}]
