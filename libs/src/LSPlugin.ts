@@ -185,6 +185,44 @@ export type SimpleCommandKeybinding = {
   mac?: string // special for Mac OS
 }
 
+export type ExternalCommandType =
+  'logseq.command/run' |
+  'logseq.editor/cycle-todo' |
+  'logseq.editor/down' |
+  'logseq.editor/up' |
+  'logseq.editor/expand-block-children' |
+  'logseq.editor/collapse-block-children' |
+  'logseq.editor/open-file-in-default-app' |
+  'logseq.editor/open-file-in-directory' |
+  'logseq.editor/select-all-blocks' |
+  'logseq.editor/toggle-open-blocks' |
+  'logseq.editor/zoom-in' |
+  'logseq.editor/zoom-out' |
+  'logseq.go/home' |
+  'logseq.go/journals' |
+  'logseq.go/keyboard-shortcuts' |
+  'logseq.go/next-journal' |
+  'logseq.go/prev-journal' |
+  'logseq.go/search' |
+  'logseq.go/search-in-page' |
+  'logseq.go/tomorrow' |
+  'logseq.search/re-index' |
+  'logseq.sidebar/clear' |
+  'logseq.sidebar/open-today-page' |
+  'logseq.ui/goto-plugins' |
+  'logseq.ui/select-theme-color' |
+  'logseq.ui/toggle-brackets' |
+  'logseq.ui/toggle-cards' |
+  'logseq.ui/toggle-contents' |
+  'logseq.ui/toggle-document-mode' |
+  'logseq.ui/toggle-help' |
+  'logseq.ui/toggle-left-sidebar' |
+  'logseq.ui/toggle-right-sidebar' |
+  'logseq.ui/toggle-settings' |
+  'logseq.ui/toggle-theme' |
+  'logseq.ui/toggle-wide-mode' |
+  'logseq.command-palette/toggle'
+
 /**
  * App level APIs
  */
@@ -212,6 +250,24 @@ export interface IAppProxy {
       keybinding?: SimpleCommandKeybinding
     },
     action: SimpleCommandCallback) => void
+
+  invokeExternalCommand: (
+    type: ExternalCommandType,
+    ...args: Array<any>) => Promise<void>
+
+  /**
+   * Get state from app store
+   * valid state is here
+   * https://github.com/logseq/logseq/blob/master/src/main/frontend/state.cljs#L27
+   *
+   * @example
+   * ```ts
+   * const isDocMode = await logseq.App.getStateFromStore('document/mode?')
+   * ```
+   * @param path
+   */
+  getStateFromStore:
+    <T = any>(path: string | Array<string>) => Promise<T>
 
   // native
   relaunch: () => Promise<void>
@@ -335,6 +391,8 @@ export interface IEditorProxy extends Record<string, any> {
 
   getCurrentBlock: () => Promise<BlockEntity | null>
 
+  getSelectedBlocks: () => Promise<Array<BlockEntity> | null>
+
   /**
    * get all blocks of the current page as a tree structure
    *
@@ -379,6 +437,11 @@ export interface IEditorProxy extends Record<string, any> {
     srcBlock: BlockIdentity | EntityID,
     opts?: Partial<{ includeChildren: boolean }>
   ) => Promise<BlockEntity | null>
+
+  setBlockCollapsed: (
+    uuid: BlockUUID,
+    opts?: { flag: boolean | 'toggle' }
+  ) => Promise<void>
 
   getPage: (
     srcPage: PageIdentity | EntityID,
@@ -580,7 +643,7 @@ export interface ILSPluginUser extends EventEmitter<LSPluginUserEvents> {
   /**
    * show the plugin's UI
    */
-  showMainUI (): void
+  showMainUI (opts?: { autoFocus: boolean }): void
 
   /**
    * hide the plugin's UI

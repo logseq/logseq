@@ -276,8 +276,10 @@
         :cancel "Cancel"
         :close "Close"
         :delete "Delete"
-        :re-index "Re-index (rebuild the graph)"
-        :sync-from-local-files "Refresh (import changes from local files)"
+        :re-index "Re-index"
+        :re-index-detail "Rebuild the graph"
+        :sync-from-local-files "Refresh"
+        :sync-from-local-files-detail "Import changes from local files"
         :unlink "unlink"
         :search (if config/publishing?
                   "Search"

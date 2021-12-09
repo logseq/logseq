@@ -193,7 +193,7 @@
 
 (defn ext-of-image? [s]
   (some #(string/ends-with? s %)
-        [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp"]))
+        [".png" ".jpg" ".jpeg" ".bmp" ".gif" ".webp" ".svg"]))
 
 ;; ".lg:absolute.lg:inset-y-0.lg:right-0.lg:w-1/2"
 (defn hiccup->class
@@ -1472,3 +1472,8 @@
        (when (> (+ target-bottom (or (safe-parse-int offset) 0))
                 wrap-height)
          (.scrollIntoView el #js {:block "center" :behavior "smooth"})))))
+
+#?(:cljs
+   (defn sm-breakpoint?
+     []
+     (< (.-offsetWidth js/document.documentElement) 640)))
