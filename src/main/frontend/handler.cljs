@@ -62,9 +62,19 @@
                             (* 60 1000)))
                 (let [total (srs/get-srs-cards-total)]
                   (state/set-state! :srs/cards-due-count total)
-                  (reset! cards-last-check-time (util/time-ms))))))]
+                  (reset! cards-last-check-time (util/time-ms))
+                  ))))]
     (f)
     (js/setInterval f 5000)))
+
+(defn- instrument!
+  []
+  (let [total (srs/get-srs-cards-total)]
+    (state/set-state! :srs/cards-due-count total)
+    (state/pub-event! [:instrument {:type :flashcards/count
+                                    :payload {:total (or total 0)}}])
+    (state/pub-event! [:instrument {:type :blocks/count
+                                    :payload {:total (db/blocks-count)}}])))
 
 (defn store-schema!
   []
@@ -235,7 +245,8 @@
       (enable-datalog-console))
     (when (util/electron?)
       (el/listen!))
-    (mobile/init!)))
+    (mobile/init!)
+    (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []
   (prn "stop!"))
