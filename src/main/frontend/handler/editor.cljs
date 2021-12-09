@@ -2604,7 +2604,7 @@
           (cursor/move-cursor-forward input))))))
 
 (defn- delete-and-update [^js input start end]
-  (.setRangeText input "" start end)
+  (util/safe-set-range-text! input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
 (defn- delete-concat [current-block]
