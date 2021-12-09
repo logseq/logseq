@@ -473,23 +473,24 @@
   ([repo-url page {:keys [use-cache? pull-keys]
                    :or {use-cache? true
                         pull-keys '[*]}}]
-   (let [page (string/lower-case (string/trim page))
-         page-entity (or (db-utils/entity repo-url [:block/name page])
-                         (db-utils/entity repo-url [:block/original-name page]))
-         page-id (:db/id page-entity)
-         db (conn/get-conn repo-url)]
-     (when page-id
-       (some->
-        (react/q repo-url [:page/blocks page-id]
-                 {:use-cache? use-cache?
-                  :transform-fn #(page-blocks-transform repo-url %)
-                  :query-fn (fn [db]
-                              (let [datoms (d/datoms db :avet :block/page page-id)
-                                    block-eids (mapv :e datoms)]
-                                (db-utils/pull-many repo-url pull-keys block-eids)))}
-                 nil)
-        react
-        (flatten-blocks-sort-by-left page-entity))))))
+   (when page
+     (let [page (string/lower-case (string/trim page))
+           page-entity (or (db-utils/entity repo-url [:block/name page])
+                           (db-utils/entity repo-url [:block/original-name page]))
+           page-id (:db/id page-entity)
+           db (conn/get-conn repo-url)]
+       (when page-id
+         (some->
+          (react/q repo-url [:page/blocks page-id]
+            {:use-cache? use-cache?
+             :transform-fn #(page-blocks-transform repo-url %)
+             :query-fn (fn [db]
+                         (let [datoms (d/datoms db :avet :block/page page-id)
+                               block-eids (mapv :e datoms)]
+                           (db-utils/pull-many repo-url pull-keys block-eids)))}
+            nil)
+          react
+          (flatten-blocks-sort-by-left page-entity)))))))
 
 (defn get-page-blocks-no-cache
   ([page]
@@ -498,15 +499,16 @@
    (get-page-blocks-no-cache repo-url page nil))
   ([repo-url page {:keys [pull-keys]
                    :or {pull-keys '[*]}}]
-   (let [page (string/lower-case page)
-         page-id (or (:db/id (db-utils/entity repo-url [:block/name page]))
-                     (:db/id (db-utils/entity repo-url [:block/original-name page])))
-         db (conn/get-conn repo-url)]
-     (when page-id
-       (let [datoms (d/datoms db :avet :block/page page-id)
-             block-eids (mapv :e datoms)]
-         (some->> (db-utils/pull-many repo-url pull-keys block-eids)
-                  (page-blocks-transform repo-url)))))))
+   (when page
+     (let [page (string/lower-case page)
+           page-id (or (:db/id (db-utils/entity repo-url [:block/name page]))
+                       (:db/id (db-utils/entity repo-url [:block/original-name page])))
+           db (conn/get-conn repo-url)]
+       (when page-id
+         (let [datoms (d/datoms db :avet :block/page page-id)
+               block-eids (mapv :e datoms)]
+           (some->> (db-utils/pull-many repo-url pull-keys block-eids)
+                    (page-blocks-transform repo-url))))))))
 
 (defn get-page-blocks-count
   [repo page-id]
