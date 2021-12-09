@@ -11,7 +11,10 @@
 (defn- get-photo []
   (p/let [photo (.getPhoto Camera (clj->js
                                    {:quality 90
-                                    :allowEditing false
+                                    :allowEditing (get-in
+                                                   (state/get-config)
+                                                   [:mobile/photo :allow-editing?]
+                                                   true)
                                     :saveToGallery true
                                     :resultType (.-Uri CameraResultType)}))
           photo-buffer (.readFile Filesystem (clj->js {:path (.-path photo)}))
