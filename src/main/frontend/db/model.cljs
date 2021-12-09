@@ -699,10 +699,12 @@
         first)))))
 
 (defn get-page-file
-  [page-name]
-  (some-> (or (db-utils/entity [:block/name page-name])
-              (db-utils/entity [:block/original-name page-name]))
-          :block/file))
+  ([page-name]
+   (get-page-file (state/get-current-repo) page-name))
+  ([repo page-name]
+   (some-> (or (db-utils/entity repo [:block/name page-name])
+               (db-utils/entity repo [:block/original-name page-name]))
+           :block/file)))
 
 (defn get-block-file-path
   [block]
