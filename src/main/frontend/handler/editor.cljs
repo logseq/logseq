@@ -1113,18 +1113,19 @@
     (state/exit-editing-and-set-selected-blocks! [block])))
 
 (defn- blocks-with-level
+  "Should be sorted already."
   [blocks]
-  (let [level-blocks (mapv #(assoc % :level 1) blocks)
-        level-blocks-map (into {} (mapv (fn [b] [(:db/id b) b]) level-blocks))
-        [level-blocks-map _]
-        (reduce (fn [[r state] [id block]]
-                  (if-let [parent-level (get-in state [(:db/id (:block/parent block)) :level])]
-                    [(conj r [id (assoc block :level (inc parent-level))])
-                     (assoc-in state [(:db/id block) :level] (inc parent-level))]
-                    [(conj r [id block])
-                     state]))
-                [{} level-blocks-map] level-blocks-map)]
-    level-blocks-map))
+  (let [root (assoc (first blocks) :level 1)]
+    (loop [m [[(:db/id root) root]]
+           blocks (rest blocks)]
+      (if (empty? blocks)
+        m
+        (let [block (first blocks)
+              parent-id (:db/id (:block/parent block))
+              parent-level (:level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
+              block (assoc block :level (inc parent-level))
+              m' (vec (conj m [(:db/id block) block]))]
+          (recur m' (rest blocks)))))))
 
 (defn- blocks-vec->tree
   [blocks]
@@ -1160,8 +1161,8 @@
                                  (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
                                  [b])) blocks))
         block-ids* (mapv :block/uuid blocks*)
-        level-blocks-map (blocks-with-level blocks*)
-        level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
+        level-blocks (blocks-with-level blocks*)
+        level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (map second level-blocks)))
         level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
         tree (blocks-vec->tree level-blocks)
         top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
@@ -1254,8 +1255,8 @@
                                [b])) )
                (flatten))
           block-ids* (mapv :block/uuid blocks*)
-          level-blocks-map (blocks-with-level blocks*)
-          level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
+          level-blocks (blocks-with-level blocks*)
+          level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (map second level-blocks)))
           level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
           tree (blocks-vec->tree level-blocks)
           top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))]
@@ -2292,12 +2293,15 @@
            block-uuid (:block/uuid block)
            template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
            blocks (if template-including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
-           level-blocks (vals (blocks-with-level blocks))
-           grouped-blocks (group-by #(= db-id (:db/id %)) level-blocks)
-           root-block (or (first (get grouped-blocks true)) (assoc (db/pull db-id) :level 1))
-           blocks-exclude-root (get grouped-blocks false)
+           root-block (db/pull db-id)
+           blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
            sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
-           result-blocks (if template-including-parent? sorted-blocks (drop 1 sorted-blocks))
+           sorted-blocks (->> (blocks-with-level sorted-blocks)
+                              (map second))
+           result-blocks (if template-including-parent?
+                           sorted-blocks
+                           (->> (drop 1 sorted-blocks)
+                                (map (fn [block] (update block :level dec)))))
            tree (blocks-vec->tree result-blocks)]
        (when element-id
          (insert-command! element-id "" format {}))

@@ -349,7 +349,7 @@
   []
   (let [text (state/sub :plugin/indicator-text)]
     (if-not (= text "END")
-      [:div.flex.align-items.justify-center.h-screen.w-full
+      [:div.flex.align-items.justify-center.h-screen.w-full.preboot-loading
        [:span.flex.items-center.justify-center.w-60.flex-col
         [:small.scale-250.opacity-70.mb-10.animate-pulse (svg/logo false)]
         [:small.block.text-sm.relative.opacity-50 {:style {:right "-8px"}} text]]])))
