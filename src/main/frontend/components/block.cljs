@@ -1785,7 +1785,7 @@
 
 (defn clock-summary-cp
   [block body]
-  [:span.text-right {:style {:max-width 100}}
+  [:div {:style {:max-width 100}}
    (when (and (state/enable-timetracking?)
               (or (= (:block/marker block) "DONE")
                   (contains? #{"TODO" "LATER"} (:block/marker block))))
@@ -1841,50 +1841,48 @@
        (merge attrs))
 
      [:span
-      ;; .flex.relative {:style {:width "100%"}}
-      [:span
-       [:span.flex-1.flex-row.justify-between
-        [:span
-         (cond
-           (seq title)
-           (build-block-title config block)
+      [:div.flex.flex-row.justify-between
+       [:div.flex-1
+        (cond
+          (seq title)
+          (build-block-title config block)
 
-           :else
-           nil)]
+          :else
+          nil)]
 
-        (clock-summary-cp block body)]
+       (clock-summary-cp block body)]
 
-       (when (seq children)
-         (dnd-separator-wrapper block block-id slide? false true))
+      (when (seq children)
+        (dnd-separator-wrapper block block-id slide? false true))
 
-       (when deadline
-         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
-           (timestamp-cp block "DEADLINE" deadline-ast)))
+      (when deadline
+        (when-let [deadline-ast (block-handler/get-deadline-ast block)]
+          (timestamp-cp block "DEADLINE" deadline-ast)))
 
-       (when scheduled
-         (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
-           (timestamp-cp block "SCHEDULED" scheduled-ast)))
+      (when scheduled
+        (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
+          (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
-       (when (and (seq properties)
-                  (let [hidden? (property/properties-built-in? properties)]
-                    (not hidden?))
-                  (not block-ref?)
-                  (not (:slide? config)))
-         (properties-cp config block))
+      (when (and (seq properties)
+                 (let [hidden? (property/properties-built-in? properties)]
+                   (not hidden?))
+                 (not block-ref?)
+                 (not (:slide? config)))
+        (properties-cp config block))
 
-       (when (and (not block-ref-with-title?) (seq body))
-         [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
-          ;; TODO: consistent id instead of the idx (since it could be changed later)
-          (let [body (block/trim-break-lines! (:block/body block))]
-            (for [[idx child] (medley/indexed body)]
-              (when-let [block (markup-element-cp config child)]
-                (rum/with-key (block-child block)
-                  (str uuid "-" idx)))))])
+      (when (and (not block-ref-with-title?) (seq body))
+        [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
+         ;; TODO: consistent id instead of the idx (since it could be changed later)
+         (let [body (block/trim-break-lines! (:block/body block))]
+           (for [[idx child] (medley/indexed body)]
+             (when-let [block (markup-element-cp config child)]
+               (rum/with-key (block-child block)
+                 (str uuid "-" idx)))))])
 
-       (case (:block/warning block)
-         :multiple-blocks
-         [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
-         nil)]]]))
+      (case (:block/warning block)
+        :multiple-blocks
+        [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
+        nil)]]))
 
 (rum/defc block-refs-count < rum/reactive
   [block]

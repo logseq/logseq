@@ -12,11 +12,25 @@ test('render app', async ({ page }) => {
   expect(await page.title()).toMatch(/^Logseq.*?/)
 })
 
-test('open sidebar', async ({ page }) => {
-  await openSidebar(page)
+test('toggle sidebar', async ({ page }) => {
+  let sidebar = page.locator('#left-sidebar')
 
+  // Left sidebar is toggled by `is-open` class
+  if (/is-open/.test(await sidebar.getAttribute('class'))) {
+    await page.click('#left-menu.button')
+    expect(await sidebar.getAttribute('class')).not.toMatch(/is-open/)
+  } else {
+    await page.click('#left-menu.button')
+    expect(await sidebar.getAttribute('class')).toMatch(/is-open/)
+    await page.click('#left-menu.button')
+    expect(await sidebar.getAttribute('class')).not.toMatch(/is-open/)
+  }
+
+  await page.click('#left-menu.button')
+
+  expect(await sidebar.getAttribute('class')).toMatch(/is-open/)
+  await page.waitForSelector('#left-sidebar .left-sidebar-inner', { state: 'visible' })
   await page.waitForSelector('#left-sidebar a:has-text("New page")', { state: 'visible' })
-  await page.waitForSelector('#left-sidebar >> text=Journals', { state: 'visible' })
 })
 
 test('search', async ({ page }) => {
