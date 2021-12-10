@@ -125,9 +125,9 @@
       data)))
 
 (defn- page-exists-in-another-file
-  [page file]
+  [repo-url page file]
   (when-let [page-name (:block/name page)]
-    (let [current-file (:file/path (db/get-page-file page-name))]
+    (let [current-file (:file/path (db/get-page-file repo-url page-name))]
       (when (not= file current-file)
        current-file))))
 
@@ -164,7 +164,7 @@
                                            (db/delete-file-blocks! repo-url file)
                                            (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
                                           (distinct))
-                           _ (when-let [current-file (page-exists-in-another-file first-page file)]
+                           _ (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
                                (when (not= file current-file)
                                  (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
                                    (state/pub-event! [:notification/show

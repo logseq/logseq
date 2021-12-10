@@ -270,7 +270,7 @@
 
 (defn main-node
   []
-  (gdom/getElement "main-content"))
+  (gdom/getElement "main-container"))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
@@ -369,16 +369,26 @@
       (.removeEventListener js/window "blur" clear-all)
       (.removeEventListener js/window "visibilitychange" clear-all))))
 
+(defonce last-scroll-top (atom 0))
+
+(defn scroll-down?
+  []
+  (let [scroll-top (get-scroll-top)]
+    (let [down? (> scroll-top @last-scroll-top)]
+      (reset! last-scroll-top scroll-top)
+      down?)))
+
 (defn on-scroll
   [node on-load on-top-reached]
   (let [full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
         bottom-reached? (<= (- full-height scroll-top client-height) 100)
-        top-reached? (= scroll-top 0)]
-    (when (and bottom-reached? on-load)
+        top-reached? (= scroll-top 0)
+        down? (scroll-down?)]
+    (when (and down? bottom-reached? on-load)
       (on-load))
-    (when (and top-reached? on-top-reached)
+    (when (and (not down?) top-reached? on-top-reached)
       (on-top-reached))))
 
 (defn attach-listeners

@@ -1843,8 +1843,7 @@
      [:span
       ;; .flex.relative {:style {:width "100%"}}
       [:span
-       ;; .flex-1.flex-col.relative.block-content
-       [:span.flex.flex-row.justify-between
+       [:span.flex-1.flex-row.justify-between
         [:span
          (cond
            (seq title)
@@ -2638,7 +2637,9 @@
               [:div.opacity-50.font-medium
                (util/format ":%s:" (string/upper-case name))]
               [:div.opacity-50.font-medium
-               (logbook-cp lines)
+               (if (= name "logbook")
+                 (logbook-cp lines)
+                 (apply str lines))
                [:div ":END:"]]
               {:default-collapsed? true
                :title-trigger? true})]]])

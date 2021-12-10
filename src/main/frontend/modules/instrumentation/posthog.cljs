@@ -1,6 +1,7 @@
 (ns frontend.modules.instrumentation.posthog
   (:require [frontend.config :as cfg]
             [frontend.util :as util]
+            [frontend.mobile.util :as mobile]
             [frontend.version :refer [version]]
             ["posthog-js" :as posthog]
             [cljs-bean.core :as bean]))
@@ -11,7 +12,14 @@
 (defn register []
   (posthog/register
    (clj->js
-    {:app_type (if (util/electron?) "electron" "web")
+    {:app_type (let [platform (mobile/platform)]
+                 (cond
+                   platform
+                   platform
+                   (util/electron?)
+                   "electron"
+                   :else
+                   "web"))
      :app_env (if cfg/dev? "development" "production")
      :app_ver version
      :schema_ver 0

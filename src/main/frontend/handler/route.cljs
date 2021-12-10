@@ -27,6 +27,14 @@
    (when pub-event? (state/pub-event! [:redirect-to-home]))
    (redirect! {:to :home})))
 
+(defn redirect-to-all-pages!
+  []
+  (redirect! {:to :all-pages}))
+
+(defn redirect-to-graph-view!
+  []
+  (redirect! {:to :graph}))
+
 (defn redirect-to-page!
   ([page-name]
    (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
