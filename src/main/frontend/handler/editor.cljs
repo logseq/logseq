@@ -1372,8 +1372,11 @@
 (defn cut-block!
   [block-id]
   (when-let [block (db/pull [:block/uuid block-id])]
-    (let [content (:block/content block)]
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
+    (let [repo (state/get-current-repo)
+          content (:block/content block)
+          ;; TODO: support org mode
+          [md-content _tree] (compose-copied-blocks-contents-&-block-tree repo [block-id])]
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content)
       (delete-block-aux! block true))))
 
 (defn clear-last-selected-block!
@@ -1864,11 +1867,6 @@
         (when-not (string/blank? doc-text)
           (util/stop event)
           (state/append-current-edit-content! doc-text))))))
-
-(defn- block-and-children-content
-  [block-children]
-  (-> (map :block/content block-children)
-      string/join))
 
 (defn- reorder-selected-blocks
   [blocks]
