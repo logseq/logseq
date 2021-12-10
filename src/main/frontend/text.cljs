@@ -350,10 +350,8 @@
 (defn remove-indentations
   [text]
   (when (string? text)
-    (let [lines (string/split-lines text)
-          spaces (re-find #"^[\s\t]+" (first lines))
-          spaces-count (count spaces)]
-      (string/join "\n" (map (fn [line]
-                               (let [spaces (re-find #"^[\s\t]+" line)
-                                     spaces-count (min (count spaces) spaces-count)]
-                                 (util/safe-subs line spaces-count))) lines)))))
+    (let [lines (string/split text #"\r?\n" -1)
+          spaces-count (apply min (map #(count (re-find #"^[\s\t]+" %)) lines))]
+      (if (zero? spaces-count)
+        text
+        (string/join "\n" (map #(util/safe-subs % spaces-count) lines))))))
