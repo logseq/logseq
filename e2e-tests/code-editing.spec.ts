@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, newBlock, lastBlock, appFirstLoaded, IsMac, IsLinux, escapeToCodeEditor, escapeToBlockEditor } from './utils'
+import { createRandomPage, escapeToCodeEditor, escapeToBlockEditor } from './utils'
 
 /**
  * NOTE: CodeMirror is a complex library that requires a lot of setup to work.
