@@ -1,9 +1,7 @@
 (ns frontend.text
   (:require [frontend.config :as config]
             [frontend.util :as util]
-            [clojure.string :as string]
-            [clojure.set :as set]
-            [medley.core :as medley]))
+            [clojure.string :as string]))
 
 (def page-ref-re-0 #"\[\[(.*)\]\]")
 (def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
@@ -346,12 +344,3 @@
       (if (not= (first parts) "0")
         (string/join "/" parts)
         (last parts)))))
-
-(defn remove-indentations
-  [text]
-  (when (string? text)
-    (let [lines (string/split text #"\r?\n" -1)
-          spaces-count (apply min (map #(count (re-find #"^[\s\t]+" %)) lines))]
-      (if (zero? spaces-count)
-        text
-        (string/join "\n" (map #(util/safe-subs % spaces-count) lines))))))
