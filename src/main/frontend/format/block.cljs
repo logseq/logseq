@@ -728,17 +728,18 @@
                                   (:block/pre-block? block)
                                   (:block/content block)))))
   ([format pre-block? content]
-   (let [content (if pre-block? content
-                     (str (config/get-block-pattern format) " " (string/triml content)))
-         content (property/remove-properties format content)
-         ast (->> (format/to-edn content format nil)
-                  (map first))
-         title (when (heading-block? (first ast))
-                 (:title (second (first ast))))]
-     (cond->
-       {:block/body (vec (if title (rest ast) ast))}
-       title
-       (assoc :block/title title)))))
+   (when content
+     (let [content (if pre-block? content
+                      (str (config/get-block-pattern format) " " (string/triml content)))
+          content (property/remove-properties format content)
+          ast (->> (format/to-edn content format nil)
+                   (map first))
+          title (when (heading-block? (first ast))
+                  (:title (second (first ast))))]
+      (cond->
+        {:block/body (vec (if title (rest ast) ast))}
+        title
+        (assoc :block/title title))))))
 
 (defn macro-subs
   [macro-content arguments]
