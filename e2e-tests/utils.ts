@@ -52,3 +52,23 @@ export async function newBlock(page: Page): Promise<Locator> {
 
     return page.locator(':nth-match(textarea, 1)')
 }
+
+export async function escapeToCodeEditor(page: Page): Promise<void> {
+    await page.press('.block-editor textarea', 'Escape')
+    await page.waitForSelector('.CodeMirror pre', { state: 'visible' })
+
+    await page.waitForTimeout(500)
+    await page.click('.CodeMirror pre')
+    await page.waitForTimeout(500)
+
+    await page.waitForSelector('.CodeMirror textarea', { state: 'visible' })
+}
+
+export async function escapeToBlockEditor(page: Page): Promise<void> {
+    await page.waitForTimeout(500)
+    await page.click('.CodeMirror pre')
+    await page.waitForTimeout(500)
+
+    await page.press('.CodeMirror textarea', 'Escape')
+    await page.waitForTimeout(500)
+}
