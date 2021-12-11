@@ -15,7 +15,7 @@ on:
         required: true
         default: "master"
       is-draft:
-        description: 'Draft Release? (won't be public)'
+        description: 'Draft Release? (will not be public)'
         type: boolean
         required: true
         default: true
