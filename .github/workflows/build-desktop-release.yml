@@ -6,21 +6,21 @@ on:
   workflow_dispatch:
     inputs:
       build-target:
-        description: 'Build Target ("nightly"/"beta")'
+        description: 'Build Target ("beta"/"nightly")'
         type: string
         required: true
-        default: "nightly"
+        default: "beta"
       git-ref:
         description: "Release Git Ref"
         required: true
         default: "master"
       is-draft:
-        description: 'Draft Release? '
+        description: 'Draft Release? (won't be public)'
         type: boolean
         required: true
         default: true
       is-pre-release:
-        description: 'Pre Release?'
+        description: 'Pre Release? (labeled as "PreRelease")'
         type: boolean
         required: true
         default: true
@@ -298,7 +298,7 @@ jobs:
 
   release:
     # NOTE: For now, we only have beta channel to be released on Github
-    if: ${{ github.event_name == 'workflow_dispatch' && (github.event.inputs.build-target == 'beta') }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: [ build-macos, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
@@ -338,14 +338,12 @@ jobs:
 
       - name: Create Release Draft
         uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.ref.outputs.version }}
           name: Desktop APP ${{ steps.ref.outputs.version }} (Beta Testing)
           body: "TODO: Fill this changelog. Sorry for the inconvenience!"
-          draft: ${{ github.event.inputs.is-draft == true || github.event_name == 'schedule' }}
-          prerelease: ${{ github.event.inputs.is-pre-release == true || github.event_name == 'schedule' }}
+          draft: ${{ github.event.inputs.is-draft }}
+          prerelease: ${{ github.event.inputs.is-pre-release }}
           files: |
             ./VERSION
             ./SHA256SUMS.txt
