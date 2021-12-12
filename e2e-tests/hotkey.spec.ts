@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { createRandomPage, newBlock, lastBlock, appFirstLoaded, IsMac, IsLinux } from './utils'
+import { createRandomPage, newBlock, lastBlock, IsMac, IsLinux } from './utils'
 
 test('open search dialog', async ({ page }) => {
   if (IsMac) {

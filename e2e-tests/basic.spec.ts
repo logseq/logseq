@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { randomString, createRandomPage, openSidebar, newBlock, lastBlock } from './utils'
+import { randomString, createRandomPage, newBlock } from './utils'
 
 
 test('render app', async ({ page }) => {
