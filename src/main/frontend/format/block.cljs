@@ -21,6 +21,12 @@
    (vector? block)
    (= "Heading" (first block))))
 
+(defn properties-block?
+  [block]
+  (and
+   (vector? block)
+   (= "Properties" (first block))))
+
 (defn get-tag
   [block]
   (when-let [tag-value (and (vector? block)
@@ -736,9 +742,11 @@
            ast (->> (format/to-edn content format (mldoc/default-config format))
                     (map first))
            title (when (heading-block? (first ast))
-                   (:title (second (first ast))))]
+                   (:title (second (first ast))))
+           body (vec (if title (rest ast) ast))
+           body (drop-while properties-block? body)]
        (cond->
-         {:block/body (vec (if title (rest ast) ast))}
+         {:block/body body}
          title
          (assoc :block/title title))))))
 
