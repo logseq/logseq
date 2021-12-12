@@ -3,8 +3,7 @@
             [rum.core :as rum]
             [shadow.lazy :as lazy]
             [frontend.ui :as ui]
-            [frontend.state :as state]
-            [frontend.text :as text]))
+            [frontend.state :as state]))
 
 (def lazy-editor (lazy/loadable frontend.extensions.code/editor))
 
@@ -20,7 +19,6 @@
   (let [loaded? (rum/react loaded?)
         theme (state/sub :ui/theme)
         code (or code "")
-        code (text/remove-indentations code)
         code (string/replace-first code #"\n$" "")] ;; See-also: #3410
     (if loaded?
       (@lazy-editor config id attr code theme options)
