@@ -1,5 +1,6 @@
 (ns frontend.components.lazy-editor
-  (:require [rum.core :as rum]
+  (:require [clojure.string :as string]
+            [rum.core :as rum]
             [shadow.lazy :as lazy]
             [frontend.ui :as ui]
             [frontend.state :as state]
@@ -18,7 +19,9 @@
   [config id attr code options]
   (let [loaded? (rum/react loaded?)
         theme (state/sub :ui/theme)
-        code (when code (text/remove-indentations code))]
+        code (or code "")
+        code (text/remove-indentations code)
+        code (string/replace-first code #"\n$" "")] ;; See-also: #3410
     (if loaded?
       (@lazy-editor config id attr code theme options)
       (ui/loading "CodeMirror"))))

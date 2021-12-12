@@ -3307,7 +3307,7 @@
      (map (fn [x] (dissoc x :block/children))))))
 
 (defn collapsable? [block-id]
-  (if-let [block (db-model/get-block-by-uuid block-id)]
+  (if-let [block (db-model/query-block-by-uuid block-id)]
     (let [block (block/parse-title-and-body block)]
       (and
        (nil? (-> block :block/properties :collapsed))

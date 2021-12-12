@@ -12,7 +12,8 @@
             [frontend.util :as util]
             [frontend.util.property :as property]
             [lambdaisland.glogi :as log]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.format.mldoc :as mldoc]))
 
 (defn heading-block?
   [block]
@@ -732,7 +733,7 @@
      (let [content (if pre-block? content
                        (str (config/get-block-pattern format) " " (string/triml content)))
            content (property/remove-properties format content)
-           ast (->> (format/to-edn content format nil)
+           ast (->> (format/to-edn content format (mldoc/default-config format))
                     (map first))
            title (when (heading-block? (first ast))
                    (:title (second (first ast))))]
