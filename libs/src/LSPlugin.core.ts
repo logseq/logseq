@@ -714,8 +714,10 @@ class PluginLocal
   }
 
   async load (
-    readyIndicator?: DeferredActor,
-    reloadSettings?: boolean
+    opts?: Partial<{
+      indicator: DeferredActor,
+      reload: boolean
+    }>
   ) {
     if (this.pending) {
       return
@@ -731,7 +733,7 @@ class PluginLocal
       let installPackageThemes = await this._preparePackageConfigs()
 
       this._dispose(
-        await this._setupUserSettings(reloadSettings)
+        await this._setupUserSettings(opts?.reload)
       )
 
       if (!this.disabled) {
@@ -751,8 +753,8 @@ class PluginLocal
         this._caller?.callUserModel(LSPMSG_READY, { pid: this.id })
       }
 
-      if (readyIndicator) {
-        readyIndicator.promise.then(readyFn)
+      if (opts?.indicator) {
+        opts.indicator.promise.then(readyFn)
       } else {
         readyFn()
       }
@@ -784,7 +786,7 @@ class PluginLocal
 
     this._ctx.emit('beforereload', this)
     await this.unload()
-    await this.load(null, true)
+    await this.load({ reload: true })
     this._ctx.emit('reloaded', this)
   }
 
@@ -1064,7 +1066,7 @@ class LSPluginCore
         const perfInfo = { o: pluginLocal, s: performance.now(), e: 0 }
         perfTable.set(pluginLocal.id, perfInfo)
 
-        await pluginLocal.load(readyIndicator)
+        await pluginLocal.load({ indicator: readyIndicator })
 
         const { loadErr } = pluginLocal
 
