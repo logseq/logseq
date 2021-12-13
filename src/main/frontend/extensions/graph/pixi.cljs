@@ -7,6 +7,9 @@
             ["graphology" :as graphology]
             ["pixi-graph-fork" :as Pixi-Graph]))
 
+(defonce *graph-instance (atom nil))
+(defonce *simulation (atom nil))
+
 (def Graph (gobj/get graphology "Graph"))
 
 (defonce colors
@@ -54,7 +57,8 @@
 
 (defn layout!
   [nodes links]
-  (let [simulation (forceSimulation nodes)]
+  (let [nodes-count (count nodes)
+        simulation (forceSimulation nodes)]
     (-> simulation
         (.force "link"
                 (-> (forceLink)
@@ -63,7 +67,7 @@
                     (.links links)))
         (.force "charge"
                 (-> (forceManyBody)
-                    (.distanceMax 4000)
+                    (.distanceMax (if (> nodes-count 500) 4000 600))
                     (.theta 0.5)
                     (.strength -600)))
         (.force "collision"
@@ -71,17 +75,21 @@
                     (.radius (+ 8 18))))
         (.force "x" (-> (forceX 0) (.strength 0.02)))
         (.force "y" (-> (forceY 0) (.strength 0.02)))
-        (.force "center" (forceCenter))
-        (.tick 3)
-        (.stop))))
-
-(defonce *graph-instance (atom nil))
+        (.force "center" (forceCenter)))
+    (reset! *simulation simulation)
+    simulation))
 
 (defn- clear-nodes!
   [graph]
   (.forEachNode graph
                 (fn [node]
                   (.dropNode graph node))))
+
+(defn- clear-edges!
+  [graph]
+  (.forEachEdge graph
+                (fn [edge]
+                  (.dropEdge graph edge))))
 
 (defn destroy-instance!
   []
@@ -90,6 +98,45 @@
     (reset! *graph-instance nil)))
 
 (defonce *dark? (atom nil))
+
+(defn tick!
+  [pixi graph nodes-js links-js]
+  (fn []
+    (let [nodes-objects (.getNodesObjects pixi)
+          edges-objects (.getEdgesObjects pixi)]
+      (doseq [node nodes-js]
+        (when-let [node-object (.get nodes-objects (.-id node))]
+          (.updatePosition node-object #js {:x (.-x node)
+                                            :y (.-y node)})))
+      (doseq [edge links-js]
+        (when-let [edge-object (.get edges-objects (str (.-index edge)))]
+          (.updatePosition edge-object
+                           #js {:x (.-x (.-source edge))
+                                :y (.-y (.-source edge))}
+                           #js {:x (.-x (.-target edge))
+                                :y (.-y (.-target edge))}))))))
+
+(defn- set-up-listeners!
+  [pixi-graph]
+  (when pixi-graph
+    ;; drag start
+    (let [nodes (.getNodesObjects pixi-graph)]
+      (doseq [node (.values nodes)]
+        (.on node "mousedown"
+             (fn [event]
+               (prn "mouse down")
+               (when-not (.-active event)
+                 (when-let [s @*simulation]
+                   (-> (.alphaTarget s 0.3)
+                       (.restart))))))))
+    ;; drag end
+    (.on pixi-graph "nodeMouseup"
+         (fn [event node-key]
+           (.stopPropagation event)
+           (println "Mouse up node-key: " node-key)
+           (when-not (.-active event)
+             (when-let [s @*simulation]
+              (.alphaTarget s 0)))))))
 
 (defn render!
   [state]
@@ -102,7 +149,8 @@
     (let [old-instance         @*graph-instance
           {:keys [graph pixi]} old-instance]
       (when (and graph pixi)
-            (clear-nodes! graph))
+        (when @*simulation (.stop @*simulation))
+        (clear-nodes! graph))
       (let [{:keys [nodes links style hover-style height register-handlers-fn dark?]} (first (:rum/args state))
             style                                                                     (or style (default-style dark?))
             hover-style                                                               (or hover-style (default-hover-style dark?))
@@ -118,28 +166,32 @@
             links                                                                     (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
             nodes-js                                                                  (bean/->js nodes)
             links-js                                                                  (bean/->js links)]
-        (layout! nodes-js links-js)
-        (doseq [node nodes-js]
-          (.addNode graph (.-id node) node))
-        (doseq [link links-js]
-          (let [source (.-id (.-source link))
-                target (.-id (.-target link))]
-            (.addEdge graph source target link)))
-        (if pixi
-          (.resetView pixi)
-          (when-let [container-ref (:ref state)]
-            (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
-                                  (bean/->js
-                                   {:container  @container-ref
-                                    :graph      graph
-                                    :style      style
-                                    :hoverStyle hover-style
-                                    :height     height}))]
-              (reset! *graph-instance
-                      {:graph graph
-                       :pixi  pixi-graph})
-              (when register-handlers-fn
-                (register-handlers-fn pixi-graph)))))))
+        (let [simulation (layout! nodes-js links-js)]
+          (doseq [node nodes-js]
+            (.addNode graph (.-id node) node))
+          (doseq [link links-js]
+            (let [source (.-id (.-source link))
+                  target (.-id (.-target link))]
+              (.addEdge graph source target link)))
+          (if pixi
+            (.resetView pixi)
+            (when-let [container-ref (:ref state)]
+              (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
+                                    (bean/->js
+                                     {:container  @container-ref
+                                      :graph      graph
+                                      :style      style
+                                      :hoverStyle hover-style
+                                      :height     height}))]
+                (reset! *graph-instance
+                        {:graph graph
+                         :pixi  pixi-graph})
+                (when register-handlers-fn
+                  (register-handlers-fn pixi-graph)))))
+          (let [{:keys [pixi graph]} @*graph-instance]
+            (when (and pixi graph)
+              (set-up-listeners! pixi)
+              (.on simulation "tick" (tick! pixi graph nodes-js links-js)))))))
     (catch js/Error e
       (js/console.error e)))
   state)
