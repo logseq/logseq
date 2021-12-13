@@ -355,11 +355,6 @@ jobs:
     needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
-      - name: Check out Git repository
-        uses: actions/checkout@v2
-        with:
-          ref: ${{ github.event.inputs.git-ref }}  # defaults to master
-
       - name: Download MacOS x64 Artifacts
         uses: actions/download-artifact@v2
         with:
@@ -398,6 +393,7 @@ jobs:
         run: |
           echo '## Commit History' > RELEASE-NOTES.txt
           git log --oneline --since "`date -d '-1 day'`" >> RELEASE-NOTES.txt
+          cat RELEASE-NOTES.txt
 
       - name: Update Nightly Release
         uses: andelf/nightly-release@main
