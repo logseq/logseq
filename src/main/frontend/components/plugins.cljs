@@ -156,10 +156,9 @@
 
 (rum/defc plugin-item-card < rum/static
   [{:keys [id name title settings version url description author icon usf iir repo] :as item}
-   installing-or-updating? installed? stat]
+   market? installing-or-updating? installed? stat]
 
-  (let [market? (and (not (nil? repo)) (nil? usf))
-        disabled (:disabled settings)
+  (let [disabled (:disabled settings)
         name (or title name "Untitled")]
     (rum/with-context
       [[t] i18n/*tongue-context*]
@@ -333,7 +332,8 @@
              (rum/with-key
                (let [pid (keyword (:id item))]
                  (plugin-item-card
-                   item (and installing (= (keyword (:id installing)) pid))
+                   item true
+                   (and installing (= (keyword (:id installing)) pid))
                    (contains? installed-plugins pid)
                    (get stats pid)))
                (:id item)))]])])
@@ -384,7 +384,8 @@
           (rum/with-key
             (let [pid (keyword (:id item))]
               (plugin-item-card
-                item (and updating (= (keyword (:id updating)) pid))
+                item false
+                (and updating (= (keyword (:id updating)) pid))
                 true nil)) (:id item)))]])))
 
 (defn open-select-theme!
