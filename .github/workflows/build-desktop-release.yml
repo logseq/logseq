@@ -213,7 +213,7 @@ jobs:
           name: logseq-win64-builds
           path: builds
 
-  build-macos:
+  build-macos-x64:
     needs: [ compile-cljs ]
     runs-on: macos-11
 
@@ -352,7 +352,7 @@ jobs:
 
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos, build-macos-arm64, build-linux, build-windows ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
       - name: Check out Git repository
@@ -418,7 +418,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target != 'nightly' }}
-    needs: [ build-macos, build-macos-arm64, build-linux, build-windows ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
       - name: Download MacOS x64 Artifacts
