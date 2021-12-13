@@ -400,12 +400,12 @@ jobs:
           git log --oneline --since "`date -d '-1 day'`" >> RELEASE-NOTES.txt
 
       - name: Update Nightly Release
-        uses: andelf/nightly-release@nightly
+        uses: andelf/nightly-release@master
         with:
-          tag_name: nightly
+          tag_name: daily
           name: 'Desktop App Nightly Relase $$'
-          draft: false
-          prerelease: true
+          draft: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-draft) || false }}
+          prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
           body_path: RELEASE-NOTES.txt
           files: |
             ./VERSION
