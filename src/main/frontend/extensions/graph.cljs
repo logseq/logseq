@@ -6,13 +6,6 @@
             [goog.object :as gobj]
             [rum.core :as rum]))
 
-(defn- highlight-node!
-  [^js graph node]
-  (.resetNodeStyle graph node
-                   (bean/->js {:color "#6366F1"
-                               :border {:width 2
-                                        :color "#6366F1"}})))
-
 (defn- highlight-neighbours!
   [^js graph node focus-nodes dark?]
   (.forEachNeighbor
@@ -61,6 +54,11 @@
 (rum/defcs graph-2d <
   (rum/local nil :ref)
   {:did-update pixi/render!
+   :should-update (fn [old-state new-state]
+                    (not= (select-keys (first (:rum/args old-state))
+                                       [:nodes :links :dark?])
+                          (select-keys (first (:rum/args new-state))
+                                       [:nodes :links :dark?])))
    :will-unmount (fn [state]
                    (when-let [graph (:graph state)]
                      (.destroy graph))

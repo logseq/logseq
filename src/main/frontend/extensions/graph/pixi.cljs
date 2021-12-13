@@ -41,7 +41,6 @@
                    :type     (.-TEXT (.-TextType Pixi-Graph))
                    :fontSize 12
                    :color (if dark? "rgba(255, 255, 255, 0.8)" "rgba(0, 0, 0, 0.8)")
-                   ;                  :backgroundColor "rgba(255, 255, 255, 0.5)"
                    :padding  4}}
    :edge {:width 1
           :color (if dark? "#094b5a" "#cccccc")}})
@@ -49,8 +48,6 @@
 (defn default-hover-style
   [dark?]
   {:node {:color  "#6366F1"
-          :border {:width 2
-                   :color "#6366F1"}
           :label  {:backgroundColor "rgba(238, 238, 238, 1)"
                    :color           "#333333"}}
    :edge {:color "#A5B4FC"}})
@@ -72,10 +69,12 @@
                     (.strength -600)))
         (.force "collision"
                 (-> (forceCollide)
-                    (.radius (+ 8 18))))
+                    (.radius (+ 8 18))
+                    (.iterations 2)))
         (.force "x" (-> (forceX 0) (.strength 0.02)))
         (.force "y" (-> (forceY 0) (.strength 0.02)))
-        (.force "center" (forceCenter)))
+        (.force "center" (forceCenter))
+        (.velocityDecay 0.8))
     (reset! *simulation simulation)
     simulation))
 
@@ -120,23 +119,35 @@
   [pixi-graph]
   (when pixi-graph
     ;; drag start
-    (let [nodes (.getNodesObjects pixi-graph)]
-      (doseq [node (.values nodes)]
-        (.on node "mousedown"
-             (fn [event]
-               (prn "mouse down")
-               (when-not (.-active event)
-                 (when-let [s @*simulation]
+    (let [*dragging? (atom false)
+          nodes (.getNodesObjects pixi-graph)
+          on-drag-end (fn [node event]
+                        (.stopPropagation event)
+                        (when-let [s @*simulation]
+                          (when-not (.-active event)
+                            (.alphaTarget s 0)))
+                        (reset! *dragging? false))]
+      (.on pixi-graph "nodeMousedown"
+           (fn [event node-key]
+             (when-let [node (.get nodes node-key)]
+               (when-let [s @*simulation]
+                 (when-not (.-active event)
                    (-> (.alphaTarget s 0.3)
-                       (.restart))))))))
-    ;; drag end
-    (.on pixi-graph "nodeMouseup"
-         (fn [event node-key]
-           (.stopPropagation event)
-           (println "Mouse up node-key: " node-key)
-           (when-not (.-active event)
-             (when-let [s @*simulation]
-              (.alphaTarget s 0)))))))
+                       (.restart))
+                   (js/setTimeout #(.alphaTarget s 0) 2000))
+                 (reset! *dragging? true)))))
+
+      (.on pixi-graph "nodeMouseup"
+           (fn [event node-key]
+             (when-let [node (.get nodes node-key)]
+               (on-drag-end node event))))
+
+      (.on pixi-graph "nodeMousemove"
+           (fn [event node-key]
+             (when-let [node (.get nodes node-key)]
+               (when @*dragging?
+                 (.updatePosition node #js {:x (.-x event)
+                                            :y (.-y event)}))))))))
 
 (defn render!
   [state]
@@ -149,8 +160,8 @@
     (let [old-instance         @*graph-instance
           {:keys [graph pixi]} old-instance]
       (when (and graph pixi)
-        (when @*simulation (.stop @*simulation))
-        (clear-nodes! graph))
+        (clear-nodes! graph)
+        (when @*simulation (.stop @*simulation)))
       (let [{:keys [nodes links style hover-style height register-handlers-fn dark?]} (first (:rum/args state))
             style                                                                     (or style (default-style dark?))
             hover-style                                                               (or hover-style (default-hover-style dark?))
@@ -185,11 +196,11 @@
                                       :height     height}))]
                 (reset! *graph-instance
                         {:graph graph
-                         :pixi  pixi-graph})
-                (when register-handlers-fn
-                  (register-handlers-fn pixi-graph)))))
+                         :pixi  pixi-graph}))))
           (let [{:keys [pixi graph]} @*graph-instance]
             (when (and pixi graph)
+              (when register-handlers-fn
+                (register-handlers-fn pixi))
               (set-up-listeners! pixi)
               (.on simulation "tick" (tick! pixi graph nodes-js links-js)))))))
     (catch js/Error e
