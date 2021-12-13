@@ -142,7 +142,7 @@ test('multiple code block', async ({ page }) => {
   await createRandomPage(page)
 
   // NOTE: the two code blocks are of the same content
-  await page.fill('.block-editor textarea', 'Heading\n```clojure\n```\nMiddle\n```clojure\n```\nFooter')
+  await page.fill('.block-editor textarea', '中文 Heading\n```clojure\n```\nMiddle 🚀\n```clojure\n```\nFooter')
   await page.waitForTimeout(500)
 
   await page.press('.block-editor textarea', 'Escape')
@@ -159,7 +159,7 @@ test('multiple code block', async ({ page }) => {
   await page.press('.CodeMirror textarea >> nth=0', 'Escape')
   await page.waitForTimeout(500)
   expect(await page.inputValue('.block-editor textarea'))
-    .toBe('Heading\n```clojure\n:key-test\n\n```\nMiddle\n```clojure\n```\nFooter')
+    .toBe('中文 Heading\n```clojure\n:key-test\n\n```\nMiddle 🚀\n```clojure\n```\nFooter')
 
   // second
   await page.press('.block-editor textarea', 'Escape')
@@ -169,11 +169,11 @@ test('multiple code block', async ({ page }) => {
   await page.click('.CodeMirror pre >> nth=1')
   await page.waitForTimeout(500)
 
-  await page.type('.CodeMirror textarea >> nth=1', '\n  :key-test\n', { strict: true })
+  await page.type('.CodeMirror textarea >> nth=1', '\n  :key-test 日本語\n', { strict: true })
   await page.waitForTimeout(500)
 
   await page.press('.CodeMirror textarea >> nth=1', 'Escape')
   await page.waitForTimeout(500)
   expect(await page.inputValue('.block-editor textarea'))
-    .toBe('Heading\n```clojure\n:key-test\n\n```\nMiddle\n```clojure\n\n  :key-test\n\n```\nFooter')
+    .toBe('中文 Heading\n```clojure\n:key-test\n\n```\nMiddle 🚀\n```clojure\n\n  :key-test 日本語\n\n```\nFooter')
 })

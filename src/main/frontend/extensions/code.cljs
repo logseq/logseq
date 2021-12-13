@@ -45,6 +45,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.state :as state]
+            [frontend.utf8 :as utf8]
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -69,8 +70,9 @@
         (let [block (db/pull [:block/uuid (:block/uuid config)])
               content (:block/content block)
               {:keys [start_pos end_pos]} (:pos_meta (last (:rum/args state)))
-              prefix (subs content 0 (- start_pos 2))
-              surfix (subs content (- end_pos 2))
+              raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
+              prefix (utf8/decode (.slice raw-content 0 (- start_pos 2)))
+              surfix (utf8/decode (.slice raw-content (- end_pos 2)))
               new-content (if (string/blank? value)
                             (str prefix surfix)
                             (str prefix value "\n" surfix))]
