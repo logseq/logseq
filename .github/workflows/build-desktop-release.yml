@@ -15,7 +15,7 @@ on:
         required: true
         default: "master"
       is-draft:
-        description: 'Draft Release? (will not be public)'
+        description: 'Draft Release? (Beta only, Nightly will always be a non-draft)'
         type: boolean
         required: true
         default: true
@@ -389,7 +389,7 @@ jobs:
         with:
           tag_name: nightly
           name: 'Desktop App Nightly Relase $$'
-          draft: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-draft) || false }}
+          draft: true
           prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
           body: "This is a nightly release of the Logseq desktop app."
           files: |
