@@ -400,7 +400,7 @@ jobs:
           git log --oneline --since "`date -d '-1 day'`" >> RELEASE-NOTES.txt
 
       - name: Update Nightly Release
-        uses: andelf/nightly-release@v0.0.1
+        uses: andelf/nightly-release@nightly
         with:
           tag_name: nightly
           name: 'Desktop App Nightly Relase $$'
