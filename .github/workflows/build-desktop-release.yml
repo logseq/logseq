@@ -402,6 +402,8 @@ jobs:
 
       - name: Update Nightly Release
         uses: andelf/nightly-release@main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: daily
           name: 'Desktop App Nightly Relase $$'
