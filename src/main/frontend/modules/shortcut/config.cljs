@@ -182,11 +182,13 @@
 
    :editor/up                      {:desc    "Move cursor up / Select up"
                                     :binding "up"
-                                    :fn      (editor-handler/shortcut-up-down :up)}
+                                    :fn      (editor-handler/shortcut-up-down :up)
+                                    :force?  true}
 
    :editor/down                    {:desc    "Move cursor down / Select down"
                                     :binding "down"
-                                    :fn      (editor-handler/shortcut-up-down :down)}
+                                    :fn      (editor-handler/shortcut-up-down :down)
+                                    :force?  true}
 
    :editor/left                    {:desc    "Move cursor left / Open selected block at beginning"
                                     :binding "left"
@@ -223,11 +225,13 @@
 
    :editor/expand-block-children   {:desc    "Expand"
                                     :binding "mod+down"
-                                    :fn      editor-handler/expand!}
+                                    :fn      editor-handler/expand!
+                                    :force?  true}
 
    :editor/collapse-block-children {:desc    "Collapse"
                                     :binding "mod+up"
-                                    :fn      editor-handler/collapse!}
+                                    :fn      editor-handler/collapse!
+                                    :force?  true}
 
    :editor/indent                  {:desc    "Indent block"
                                     :binding "tab"
@@ -281,8 +285,8 @@
                                     :binding "mod+k"
                                     :fn      #(route-handler/go-to-search! :global)}
 
-   :go/journals                    {:desc    "Jump to journals"
-                                    :binding (if mac? "mod+j" "alt+j")
+   :go/journals                    {:desc    "Go to journals"
+                                    :binding "g j"
                                     :fn      route-handler/go-to-journals!}
 
    :go/backward                    {:desc    "Backwards"
@@ -312,7 +316,8 @@
 
    :command-palette/toggle         {:desc    "Toggle command palette"
                                     :binding "mod+shift+p"
-                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))}
+                                    :fn      (fn [] (state/toggle! :ui/command-palette-open?))
+                                    :force?   true}
 
    :command/run                    {:desc    "Run git command"
                                     :binding "mod+shift+1"
@@ -320,7 +325,16 @@
 
    :go/home                        {:desc    "Go to home"
                                     :binding "g h"
-                                    :fn      #(route-handler/redirect-to-home!)}
+                                    :fn      route-handler/redirect-to-home!}
+
+   :go/all-pages                   {:desc    "Go to all pages"
+                                    :binding "g a"
+                                    :fn      route-handler/redirect-to-all-pages!}
+
+   :go/graph-view                  {:desc    "Go to graph view"
+                                    :binding "g g"
+                                    :fn      route-handler/redirect-to-graph-view!}
+
 
    :go/keyboard-shortcuts          {:desc    "Go to keyboard shortcuts"
                                     :binding "g s"
@@ -337,6 +351,13 @@
    :go/prev-journal                {:desc    "Go to previous journal"
                                     :binding "g p"
                                     :fn      journal-handler/go-to-prev-journal!}
+
+   :go/flashcards                  {:desc    "Toggle flashcards"
+                                    :binding "g f"
+                                    :fn      (fn []
+                                               (if (state/modal-opened?)
+                                                 (state/close-modal!)
+                                                 (state/pub-event! [:modal/show-cards])))}
 
    :ui/toggle-document-mode        {:desc    "Toggle document mode"
                                     :binding "t d"
@@ -362,16 +383,20 @@
                                      :binding "t t"
                                      :fn      state/toggle-theme!}
 
-   :ui/toggle-contents              {:desc    "Toggle Favorites in sidebar"
-                                     :binding "t f"
+   :ui/toggle-contents              {:desc    "Toggle Contents in sidebar"
+                                     :binding "mod+shift+c"
                                      :fn      ui-handler/toggle-contents!}
 
+   :command/toggle-favorite         {:desc    "Add to/remove from favorites"
+                                     :binding "mod+shift+f"
+                                     :fn      page-handler/toggle-favorite!}
+
    :editor/open-file-in-default-app {:desc    "Open file in default app"
-                                     :binding "o f"
+                                     :binding nil
                                      :fn      page-handler/open-file-in-default-app}
 
    :editor/open-file-in-directory   {:desc    "Open file in parent directory"
-                                     :binding "o d"
+                                     :binding nil
                                      :fn      page-handler/open-file-in-directory}
 
    :ui/toggle-wide-mode             {:desc    "Toggle wide mode"
@@ -459,7 +484,8 @@
 
     :shortcut.handler/editor-global
     (->
-     (build-category-map [:editor/cycle-todo
+     (build-category-map [:command-palette/toggle
+                          :editor/cycle-todo
                           :editor/up
                           :editor/down
                           :editor/left
@@ -477,7 +503,8 @@
                           :editor/copy
                           :editor/cut
                           :editor/undo
-                          :editor/redo])
+                          :editor/redo
+                          :command/toggle-favorite])
      (with-meta {:before m/enable-when-not-component-editing!}))
 
     :shortcut.handler/global-prevent-default
@@ -489,7 +516,6 @@
                           :ui/toggle-brackets
                           :go/search-in-page
                           :go/search
-                          :go/journals
                           :go/backward
                           :go/forward
                           :search/re-index
@@ -506,6 +532,10 @@
     (->
      (build-category-map [:command/run
                           :go/home
+                          :go/journals
+                          :go/all-pages
+                          :go/flashcards
+                          :go/graph-view
                           :go/keyboard-shortcuts
                           :go/tomorrow
                           :go/next-journal
@@ -622,6 +652,9 @@
    ^{:doc "Others"}
    [:go/home
     :go/journals
+    :go/all-pages
+    :go/graph-view
+    :go/flashcards
     :go/tomorrow
     :go/next-journal
     :go/prev-journal

@@ -27,7 +27,6 @@
     :block/type
     :block/left
     :block/format
-    :block/title
     :block/refs
     :block/_refs
     :block/path-refs
@@ -36,7 +35,6 @@
     :block/marker
     :block/priority
     :block/properties
-    :block/body
     :block/pre-block?
     :block/scheduled
     :block/deadline
@@ -45,7 +43,6 @@
     :block/updated-at
     :block/file
     :block/parent
-    :block/unordered
     :block/heading-level
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
@@ -476,23 +473,24 @@
   ([repo-url page {:keys [use-cache? pull-keys]
                    :or {use-cache? true
                         pull-keys '[*]}}]
-   (let [page (string/lower-case (string/trim page))
-         page-entity (or (db-utils/entity repo-url [:block/name page])
-                         (db-utils/entity repo-url [:block/original-name page]))
-         page-id (:db/id page-entity)
-         db (conn/get-conn repo-url)]
-     (when page-id
-       (some->
-        (react/q repo-url [:page/blocks page-id]
-                 {:use-cache? use-cache?
-                  :transform-fn #(page-blocks-transform repo-url %)
-                  :query-fn (fn [db]
-                              (let [datoms (d/datoms db :avet :block/page page-id)
-                                    block-eids (mapv :e datoms)]
-                                (db-utils/pull-many repo-url pull-keys block-eids)))}
-                 nil)
-        react
-        (flatten-blocks-sort-by-left page-entity))))))
+   (when page
+     (let [page (string/lower-case (string/trim page))
+           page-entity (or (db-utils/entity repo-url [:block/name page])
+                           (db-utils/entity repo-url [:block/original-name page]))
+           page-id (:db/id page-entity)
+           db (conn/get-conn repo-url)]
+       (when page-id
+         (some->
+          (react/q repo-url [:page/blocks page-id]
+            {:use-cache? use-cache?
+             :transform-fn #(page-blocks-transform repo-url %)
+             :query-fn (fn [db]
+                         (let [datoms (d/datoms db :avet :block/page page-id)
+                               block-eids (mapv :e datoms)]
+                           (db-utils/pull-many repo-url pull-keys block-eids)))}
+            nil)
+          react
+          (flatten-blocks-sort-by-left page-entity)))))))
 
 (defn get-page-blocks-no-cache
   ([page]
@@ -501,15 +499,16 @@
    (get-page-blocks-no-cache repo-url page nil))
   ([repo-url page {:keys [pull-keys]
                    :or {pull-keys '[*]}}]
-   (let [page (string/lower-case page)
-         page-id (or (:db/id (db-utils/entity repo-url [:block/name page]))
-                     (:db/id (db-utils/entity repo-url [:block/original-name page])))
-         db (conn/get-conn repo-url)]
-     (when page-id
-       (let [datoms (d/datoms db :avet :block/page page-id)
-             block-eids (mapv :e datoms)]
-         (some->> (db-utils/pull-many repo-url pull-keys block-eids)
-                  (page-blocks-transform repo-url)))))))
+   (when page
+     (let [page (string/lower-case page)
+           page-id (or (:db/id (db-utils/entity repo-url [:block/name page]))
+                       (:db/id (db-utils/entity repo-url [:block/original-name page])))
+           db (conn/get-conn repo-url)]
+       (when page-id
+         (let [datoms (d/datoms db :avet :block/page page-id)
+               block-eids (mapv :e datoms)]
+           (some->> (db-utils/pull-many repo-url pull-keys block-eids)
+                    (page-blocks-transform repo-url))))))))
 
 (defn get-page-blocks-count
   [repo page-id]
@@ -700,10 +699,12 @@
         first)))))
 
 (defn get-page-file
-  [page-name]
-  (some-> (or (db-utils/entity [:block/name page-name])
-              (db-utils/entity [:block/original-name page-name]))
-          :block/file))
+  ([page-name]
+   (get-page-file (state/get-current-repo) page-name))
+  ([repo page-name]
+   (some-> (or (db-utils/entity repo [:block/name page-name])
+               (db-utils/entity repo [:block/original-name page-name]))
+           :block/file)))
 
 (defn get-block-file-path
   [block]
@@ -900,7 +901,7 @@
    (has-children? (state/get-current-repo) block-id))
   ([repo block-id]
    (let [db (conn/get-conn repo)]
-     (when-let [block (db-utils/entity [:block/uuid block-id])]
+     (when-let [block (get-block-by-uuid block-id)]
        ;; perf: early stop
        (let [result (d/datoms db :avet :block/parent (:db/id block))]
          (boolean (seq result)))))))
@@ -1347,6 +1348,16 @@
   [repo-url path]
   (let [blocks (get-file-blocks repo-url path)]
     (mapv (fn [eid] [:db.fn/retractEntity eid]) blocks)))
+
+(defn delete-page-blocks
+  [repo-url page]
+  (when page
+    (let [db (conn/get-conn repo-url)
+          page (db-utils/pull [:block/name (string/lower-case page)])]
+      (when page
+        (let [datoms (d/datoms db :avet :block/page (:db/id page))
+              block-eids (mapv :e datoms)]
+          (mapv (fn [eid] [:db.fn/retractEntity eid]) block-eids))))))
 
 (defn delete-file-pages!
   [repo-url path]

@@ -118,6 +118,8 @@ dummy.convertToViewportRectangle = function() {};
 dummy.init = function() {};
 dummy.commit = function() {};
 dummy.raw = function() {};
+dummy.onHeadersReceived = function() {};
+dummy.responseHeaders = function() {};
 
 /**
  * @typedef {{

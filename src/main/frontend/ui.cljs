@@ -50,7 +50,6 @@
     :else
     0))
 
-
 (defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
 
 (rum/defc ls-textarea
@@ -130,13 +129,14 @@
    (fn [{:keys [close-fn] :as state}]
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
-      (for [{:keys [options title icon hr]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon hr hover-detail]} (if (fn? links) (links) links)]
         (let [new-options
-              (assoc options
-                     :on-click (fn [e]
-                                 (when-let [on-click-fn (:on-click options)]
-                                   (on-click-fn e))
-                                 (close-fn)))
+              (merge options
+                     {:title hover-detail
+                      :on-click (fn [e]
+                                  (when-let [on-click-fn (:on-click options)]
+                                    (on-click-fn e))
+                                  (close-fn))})
               child (if hr
                       nil
                       [:div
@@ -205,10 +205,10 @@
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
                 :fill-rule "evenodd"}]]])]
       [:div.ui__notifications-content
-       {:style {:z-index (if (or (= state "exiting")
-                                 (= state "exited"))
-                           -1
-                           99)}}
+       {:style
+        (when (or (= state "exiting")
+                  (= state "exited"))
+                  {:z-index -1})}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
                   "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
@@ -270,7 +270,7 @@
 
 (defn main-node
   []
-  (gdom/getElement "main-content"))
+  (gdom/getElement "main-container"))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
@@ -304,35 +304,37 @@
         (.appendChild js/document.head node))
       style)))
 
-(defn setup-patch-ios-fixed-bottom-position!
-  "fix a common issue about ios webpage viewport
-   when soft keyboard setup"
+(defn setup-patch-ios-visual-viewport-state!
   []
-  (when (and
-         (util/ios?)
-         (not (nil? js/window.visualViewport)))
-    (let [viewport js/visualViewport
-          style (get-dynamic-style-node)
-          sheet (.-sheet style)
-          raf-pending? (atom false)
+  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
+                             (mobile-util/native-ios?))
+                         js/window.visualViewport)]
+    (let [raf-pending? (atom false)
           set-raf-pending! #(reset! raf-pending? %)
-          handler
+          on-viewport-changed
           (fn []
-            (when-not @raf-pending?
-              (let [f (fn []
-                        (set-raf-pending! false)
-                        (let [vh (+ (.-offsetTop viewport) (.-height viewport))
-                              rule (.. sheet -rules (item 0))
-                              set-top #(set! (.. rule -style -top) (str % "px"))]
-                          (set-top vh)))]
-                (set-raf-pending! true)
-                (js/window.requestAnimationFrame f))))]
-      (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 100vh;}")
-      (.addEventListener viewport "resize" handler)
-      (.addEventListener viewport "scroll" handler)
+            (let [update-vw-state
+                  (util/debounce 20
+                                 (fn []
+                                   (state/set-visual-viewport-state {:height     (.-height vp)
+                                                                     :page-top   (.-pageTop vp)
+                                                                     :offset-top (.-offsetTop vp)})
+                                   (state/set-state! :ui/visual-viewport-pending? false)))]
+              (when-not @raf-pending?
+                (let [f (fn []
+                          (set-raf-pending! false)
+                          (update-vw-state))]
+                  (set-raf-pending! true)
+                  (state/set-state! :ui/visual-viewport-pending? true)
+                  (js/window.requestAnimationFrame f)))))]
+
+      (.addEventListener vp "resize" on-viewport-changed)
+      (.addEventListener vp "scroll" on-viewport-changed)
+
       (fn []
-        (.removeEventListener viewport "resize" handler)
-        (.removeEventListener viewport "scroll" handler)))))
+        (.removeEventListener vp "resize" on-viewport-changed)
+        (.removeEventListener vp "scroll" on-viewport-changed)
+        (state/set-visual-viewport-state nil)))))
 
 (defn setup-system-theme-effect!
   []
@@ -367,16 +369,26 @@
       (.removeEventListener js/window "blur" clear-all)
       (.removeEventListener js/window "visibilitychange" clear-all))))
 
+(defonce last-scroll-top (atom 0))
+
+(defn scroll-down?
+  []
+  (let [scroll-top (get-scroll-top)]
+    (let [down? (> scroll-top @last-scroll-top)]
+      (reset! last-scroll-top scroll-top)
+      down?)))
+
 (defn on-scroll
   [node on-load on-top-reached]
   (let [full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
         bottom-reached? (<= (- full-height scroll-top client-height) 100)
-        top-reached? (= scroll-top 0)]
-    (when (and bottom-reached? on-load)
+        top-reached? (= scroll-top 0)
+        down? (scroll-down?)]
+    (when (and down? bottom-reached? on-load)
       (on-load))
-    (when (and top-reached? on-top-reached)
+    (when (and (not down?) top-reached? on-top-reached)
       (on-top-reached))))
 
 (defn attach-listeners
@@ -470,14 +482,14 @@
                        (str/split  #" |\+"))
                    sequence)]
     [:span.keyboard-shortcut
-   (map-indexed (fn [i key]
-                  [:code {:key i}
+     (map-indexed (fn [i key]
+                    [:code {:key i}
                    ;; Display "cmd" rather than "meta" to the user to describe the Mac
                    ;; mod key, because that's what the Mac keyboards actually say.
-                   (if (or (= :meta key) (= "meta" key))
-                     (util/meta-key-name)
-                     (name key))])
-                sequence)]))
+                     (if (or (= :meta key) (= "meta" key))
+                       (util/meta-key-name)
+                       (name key))])
+                  sequence)]))
 
 (defn keyboard-shortcut-from-config [shortcut-name]
   (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))

@@ -15,7 +15,8 @@
             ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
             [electron.state :as state]
-            [electron.git :as git]))
+            [electron.git :as git]
+            ["/electron/utils" :as utils]))
 
 (defonce LSP_SCHEME "lsp")
 (defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
@@ -80,7 +81,7 @@
                 (callback #js {:cancel false
                                :requestHeaders requestHeaders}))))))
     (.loadURL win url)
-    (when dev? (.. win -webContents (openDevTools)))
+    ;;(when dev? (.. win -webContents (openDevTools)))
     win))
 
 (defn setup-updater! [^js win]
@@ -294,6 +295,8 @@
                    _ (reset! *win win)
                    *quitting? (atom false)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
+
+               (utils/disableXFrameOptions win)
 
                (when (search/version-changed?)
                  (search/rm-search-dir!))

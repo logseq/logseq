@@ -109,7 +109,6 @@
                      :block/left page-id
                      :block/parent page-id
                      :block/page page-id
-                     :block/title []
                      :block/content (if org?
                                       (str "#+" (string/upper-case (name key)) ": " value)
                                       (str (name key) ":: " value))
@@ -124,4 +123,3 @@
                              :data [block]})
           (ui-handler/re-render-root!)))
       (outliner-file/sync-to-file page-id))))
-

@@ -9,7 +9,10 @@
   --ls-scrollbar-width: 6px;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
+  --ls-headbar-height: 3rem;
+  --ls-headbar-inner-top-padding: 0px;
   --ls-left-sidebar-width: 240px;
+  --ls-left-sidebar-sm-width: 70%;
   --ls-left-sidebar-nav-btn-size: 38px;
 }
 
@@ -1118,13 +1121,6 @@ a.tooltip-priority {
 
 .references-blocks .page-reference:hover {
   background: var(--ls-tertiary-background-color);
-}
-
-.references-blocks .block-control {
-    margin-left: -22px;
-    @screen sm {
-        margin-left: 2px;
-    }
 }
 
 #head .fade-link {

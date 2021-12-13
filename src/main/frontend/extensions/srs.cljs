@@ -416,6 +416,16 @@
 (def review-finished
   [:p.p-2 "Congrats, you've reviewed all the cards for this query, see you next time! 💯"])
 
+(defn btn-with-shortcut [{:keys [shortcut id btn-text background on-click]}]
+  (ui/tippy
+   {:html  [:div.text-sm.font-medium shortcut]
+    :delay 200
+    :theme "monospace"}
+   (ui/button btn-text
+              :id id
+              :background background
+              :on-click on-click)))
+
 (rum/defcs view
   < rum/reactive
   (rum/local 1 ::phase)
@@ -455,14 +465,15 @@
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             [:div.flex-1
-             (when-not (and (not preview?) (= next-phase 1))
-               (ui/button (case next-phase
-                            1 [:span "Hide answers " (ui/render-keyboard-shortcut [:s])]
-                            2 [:span "Show answers " (ui/render-keyboard-shortcut [:s])]
-                            3 [:span "Show clozes " (ui/render-keyboard-shortcut [:s])])
-                          :id "card-answers"
-                          :class "mr-2"
-                 :on-click #(reset! phase next-phase)))
+              (when-not (and (not preview?) (= next-phase 1))
+                [:div.flex.flex-row.justify-between
+                 (btn-with-shortcut {:btn-text (case next-phase
+                                                 1 "Hide answers"
+                                                 2 "Show answers"
+                                                 3 "Show clozes")
+                                     :shortcut "s"
+                                     :id       "card-answers"
+                                     :on-click #(reset! phase next-phase)})])
 
              (when (and (> (count cards) 1) preview?)
                (ui/button [:span "Next " (ui/render-keyboard-shortcut [:n])]
@@ -475,26 +486,25 @@
                      interval-days-score-4 (get (get-next-interval card 5) card-last-interval-property)
                      interval-days-score-5 (get (get-next-interval card 5) card-last-interval-property)]
                  [:div.flex.flex-row.justify-between
-                  (ui/button (if (util/mobile?)
-                               "Forgotten"
-                               [:span "Forgotten " (ui/render-keyboard-shortcut [:f])])
-                    :id "card-forgotten"
-                    :on-click (fn []
-                                (score-and-next-card 1 card card-index cards phase review-records cb)
-                                (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                                  (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow))))
+                  (btn-with-shortcut {:btn-text   "Forgotten"
+                                      :shortcut   "f"
+                                      :id         "card-forgotten"
+                                      :background "red"
+                                      :on-click   (fn []
+                                                    (score-and-next-card 1 card card-index cards phase review-records cb)
+                                                    (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
+                                                      (editor-handler/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
 
-                  (ui/button (if (util/mobile?)
-                                 "Remembered"
-                                 [:span "Remembered " (ui/render-keyboard-shortcut [:r])])
-                    :id "card-remembered"
-                    :on-click #(score-and-next-card 5 card card-index cards phase review-records cb))
+                  (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" "Took a while to recall")
+                                      :shortcut "t"
+                                      :id       "card-recall"
+                                      :on-click #(score-and-next-card 3 card card-index cards phase review-records cb)})
 
-                  (ui/button (if (util/mobile?)
-                               "Hard"
-                               [:span "Took a while to recall " (ui/render-keyboard-shortcut [:t])])
-                    :id "card-recall"
-                    :on-click #(score-and-next-card 3 card card-index cards phase review-records cb))]))]
+                  (btn-with-shortcut {:btn-text   "Remembered"
+                                      :shortcut   "r"
+                                      :id         "card-remembered"
+                                      :background "green"
+                                      :on-click   #(score-and-next-card 5 card card-index cards phase review-records cb)})]))]
 
             (when preview?
               (ui/tippy {:html [:div.text-sm

@@ -9,6 +9,7 @@
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.property :as property]
+            [frontend.format.block :as block]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -47,7 +48,8 @@
   [result]
   (let [ks [:block/properties :clock-time]
         result (map (fn [b]
-                      (assoc-in b ks (or (clock/clock-summary (:block/body b) false) 0)))
+                      (let [b (block/parse-title-and-body b)]
+                        (assoc-in b ks (or (clock/clock-summary (:block/body b) false) 0))))
                  result)]
     (if (every? #(zero? (get-in % ks)) result)
       (map #(medley/dissoc-in % ks) result)
@@ -125,10 +127,11 @@
                                           (:block/name item))]
 
                              :block       ; block title
-                             (let [title (:block/title item)]
+                             (let [content (:block/content item)
+                                   {:block/keys [title]} (block/parse-title-and-body (:block/format item) (:block/pre-block? item) content)]
                                (if (seq title)
                                  [:element (->elem :div (map-inline config title))]
-                                 [:string (:block/content item)]))
+                                 [:string content]))
 
                              :created-at
                              [:string (when-let [created-at (:block/created-at item)]

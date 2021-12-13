@@ -161,6 +161,8 @@
   (let [repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
+        vw-state (state/sub :ui/visual-viewport-state)
+        vw-pending? (state/sub :ui/visual-viewport-pending?)
         show-open-folder? (and (or (nfs/supported?)
                                    (mobile-util/is-native-platform?))
                                (empty? repos)
@@ -168,15 +170,17 @@
         refreshing? (state/sub :nfs/refreshing?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
-       {:class (cond electron-mac? "electron-mac"
-                     (mobile-util/native-ios?) "native-ios"
-                     (mobile-util/native-android?) "native-android")
+       {:class           (util/classnames [{:electron-mac   electron-mac?
+                                            :native-ios     (mobile-util/native-ios?)
+                                            :native-android (mobile-util/native-android?)
+                                            :is-vw-pending  (boolean vw-pending?)}])
         :on-double-click (fn [^js e]
                            (when-let [target (.-target e)]
                              (when (and (util/electron?)
                                         (or (.. target -classList (contains "cp__header"))))
                                (js/window.apis.toggleMaxOrMinActiveWindow))))
-        :style {:fontSize 50}}
+        :style           {:fontSize  50
+                          :transform (str "translateY(" (or (:offset-top vw-state) 0) "px)")}}
        [:div.l.flex
         (left-menu-button {:on-click (fn []
                                        (open-fn)

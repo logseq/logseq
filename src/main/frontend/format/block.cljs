@@ -12,13 +12,20 @@
             [frontend.util :as util]
             [frontend.util.property :as property]
             [lambdaisland.glogi :as log]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.format.mldoc :as mldoc]))
 
 (defn heading-block?
   [block]
   (and
    (vector? block)
    (= "Heading" (first block))))
+
+(defn properties-block?
+  [block]
+  (and
+   (vector? block)
+   (= "Properties" (first block))))
 
 (defn get-tag
   [block]
@@ -716,24 +723,32 @@
                     new-block
                     {:block/path-refs path-ref-pages})
                    (> (count blocks) 1)
-                   (assoc :block/warning :multiple-blocks))]
+                   (assoc :block/warning :multiple-blocks))
+           block (dissoc block :block/title :block/body :block/level)]
        (if uuid (assoc block :block/uuid uuid) block)))))
 
 (defn parse-title-and-body
-  [format pre-block? content]
-  (def content content)
-  (let [ast (format/to-edn content format nil)
-        content (if pre-block? content
-                    (str (config/get-block-pattern format) " " (string/triml content)))
-        content (property/remove-properties format content)
-        ast (->> (format/to-edn content format nil)
-                 (map first))
-        title (when (heading-block? (first ast))
-                (:title (second (first ast))))]
-    (cond->
-      {:block/body (vec (if title (rest ast) ast))}
-      title
-      (assoc :block/title title))))
+  ([block]
+   (when (map? block)
+     (merge block
+            (parse-title-and-body (:block/format block)
+                                  (:block/pre-block? block)
+                                  (:block/content block)))))
+  ([format pre-block? content]
+   (when-not (string/blank? content)
+     (let [content (if pre-block? content
+                       (str (config/get-block-pattern format) " " (string/triml content)))
+           content (property/remove-properties format content)
+           ast (->> (format/to-edn content format (mldoc/default-config format))
+                    (map first))
+           title (when (heading-block? (first ast))
+                   (:title (second (first ast))))
+           body (vec (if title (rest ast) ast))
+           body (drop-while properties-block? body)]
+       (cond->
+         {:block/body body}
+         title
+         (assoc :block/title title))))))
 
 (defn macro-subs
   [macro-content arguments]

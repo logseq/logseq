@@ -219,9 +219,7 @@
 
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
-  (let [enabled? (state/sub [:electron/user-cfgs :spell-check])
-        enabled? (if (nil? enabled?) true enabled?)]
-
+  (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings-page/spell-checker)]

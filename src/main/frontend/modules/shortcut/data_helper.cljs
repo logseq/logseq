@@ -30,7 +30,7 @@
                       (get (get-bindings) id))]
     (cond
       (nil? shortcut)
-      (log/error :shortcut/binding-not-found {:id id})
+      (log/warn :shortcut/binding-not-found {:id id})
 
       (false? shortcut)
       (do
@@ -191,11 +191,10 @@
         data    (->> (vals @config/config)
                      (into  {})
                      id)]
-    (when binding
-      (assoc
-       data
-       :binding
-       (binding-for-display id binding)))))
+    (assoc
+      data
+      :binding
+      (binding-for-display id binding))))
 
 (defn shortcuts->commands [handler-id]
   (let [m (get @config/config handler-id)]

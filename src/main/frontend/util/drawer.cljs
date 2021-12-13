@@ -61,8 +61,8 @@
 
                             :else
                             (let [properties-count (count (second (first (second ast))))
-                                  properties (subvec body-without-timestamps 0 (inc properties-count))
-                                  after (rest body-without-timestamps)]
+                                  properties (subvec body-without-timestamps 0 properties-count)
+                                  after (subvec body-without-timestamps properties-count)]
                               (string/join "\n" (concat [title] scheduled deadline properties [drawer] after))))
                           (string/join "\n" (concat [title] scheduled deadline [drawer] body-without-timestamps))))
 
@@ -76,7 +76,7 @@
                             lines (concat [title] scheduled deadline before
                                           [(drawer-start typ)] middle [drawer-end] after)]
                         (string/join "\n" lines))
-                      
+
                       :else
                       content)]
         (string/trimr result))
