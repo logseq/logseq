@@ -56,12 +56,10 @@
   {:did-update pixi/render!
    :should-update (fn [old-state new-state]
                     (not= (select-keys (first (:rum/args old-state))
-                                       [:nodes :links :dark?])
+                                       [:nodes :links :dark? :id])
                           (select-keys (first (:rum/args new-state))
-                                       [:nodes :links :dark?])))
+                                       [:nodes :links :dark? :id])))
    :will-unmount (fn [state]
-                   (when-let [graph (:graph state)]
-                     (.destroy graph))
                    (reset! pixi/*graph-instance nil)
                    state)}
   [state opts]

@@ -94,19 +94,24 @@
   []
   (when-let [instance (:pixi @*graph-instance)]
     (.destroy instance)
-    (reset! *graph-instance nil)))
+    (reset! *graph-instance nil)
+    (reset! *simulation nil)))
 
 (defonce *dark? (atom nil))
 
-(defn tick!
+(defn- update-position!
+  [node obj]
+  (.updatePosition node #js {:x (.-x obj)
+                             :y (.-y obj)}))
+
+(defn- tick!
   [pixi graph nodes-js links-js]
   (fn []
     (let [nodes-objects (.getNodesObjects pixi)
           edges-objects (.getEdgesObjects pixi)]
       (doseq [node nodes-js]
         (when-let [node-object (.get nodes-objects (.-id node))]
-          (.updatePosition node-object #js {:x (.-x node)
-                                            :y (.-y node)})))
+          (update-position! node-object node)))
       (doseq [edge links-js]
         (when-let [edge-object (.get edges-objects (str (.-index edge)))]
           (.updatePosition edge-object
@@ -146,63 +151,52 @@
            (fn [event node-key]
              (when-let [node (.get nodes node-key)]
                (when @*dragging?
-                 (.updatePosition node #js {:x (.-x event)
-                                            :y (.-y event)}))))))))
+                 (update-position! node event))))))))
 
 (defn render!
   [state]
-  (let [dark? (:dark? (first (:rum/args state)))]
-    (when (and (some? @*dark?) (not= @*dark? dark?))
-      (destroy-instance!))
-    (reset! *dark? dark?))
-
   (try
-    (let [old-instance         @*graph-instance
-          {:keys [graph pixi]} old-instance]
-      (when (and graph pixi)
-        (clear-nodes! graph)
-        (when @*simulation (.stop @*simulation)))
-      (let [{:keys [nodes links style hover-style height register-handlers-fn dark?]} (first (:rum/args state))
-            style                                                                     (or style (default-style dark?))
-            hover-style                                                               (or hover-style (default-hover-style dark?))
-            graph                                                                     (or graph (Graph.))
-            nodes-set                                                                 (set (map :id nodes))
-            links                                                                     (->>
-                                                                                        (filter
-                                                                                          (fn [link]
-                                                                                            (and (nodes-set (:source link)) (nodes-set (:target link))))
-                                                                                          links)
-                                                                                        (distinct))
-            nodes                                                                     (remove nil? nodes)
-            links                                                                     (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
-            nodes-js                                                                  (bean/->js nodes)
-            links-js                                                                  (bean/->js links)]
-        (let [simulation (layout! nodes-js links-js)]
-          (doseq [node nodes-js]
-            (.addNode graph (.-id node) node))
-          (doseq [link links-js]
-            (let [source (.-id (.-source link))
-                  target (.-id (.-target link))]
-              (.addEdge graph source target link)))
-          (if pixi
-            (.resetView pixi)
-            (when-let [container-ref (:ref state)]
-              (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
-                                    (bean/->js
-                                     {:container  @container-ref
-                                      :graph      graph
-                                      :style      style
-                                      :hoverStyle hover-style
-                                      :height     height}))]
-                (reset! *graph-instance
-                        {:graph graph
-                         :pixi  pixi-graph}))))
-          (let [{:keys [pixi graph]} @*graph-instance]
-            (when (and pixi graph)
-              (when register-handlers-fn
-                (register-handlers-fn pixi))
-              (set-up-listeners! pixi)
-              (.on simulation "tick" (tick! pixi graph nodes-js links-js)))))))
+    (when @*graph-instance
+      (clear-nodes! (:graph @*graph-instance))
+      (destroy-instance!))
+    (let [{:keys [nodes links style hover-style height register-handlers-fn dark?]} (first (:rum/args state))
+          style                                                                     (or style (default-style dark?))
+          hover-style                                                               (or hover-style (default-hover-style dark?))
+          graph                                                                     (Graph.)
+          nodes-set                                                                 (set (map :id nodes))
+          links                                                                     (->>
+                                                                                     (filter
+                                                                                      (fn [link]
+                                                                                        (and (nodes-set (:source link)) (nodes-set (:target link))))
+                                                                                      links)
+                                                                                     (distinct))
+          nodes                                                                     (remove nil? nodes)
+          links                                                                     (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
+          nodes-js                                                                  (bean/->js nodes)
+          links-js                                                                  (bean/->js links)]
+      (let [simulation (layout! nodes-js links-js)]
+        (doseq [node nodes-js]
+          (.addNode graph (.-id node) node))
+        (doseq [link links-js]
+          (let [source (.-id (.-source link))
+                target (.-id (.-target link))]
+            (.addEdge graph source target link)))
+        (when-let [container-ref (:ref state)]
+          (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
+                                (bean/->js
+                                 {:container  @container-ref
+                                  :graph      graph
+                                  :style      style
+                                  :hoverStyle hover-style
+                                  :height     height}))]
+            (prn "new graph")
+            (reset! *graph-instance
+                    {:graph graph
+                     :pixi  pixi-graph})
+            (when register-handlers-fn
+              (register-handlers-fn pixi-graph))
+            (set-up-listeners! pixi-graph)
+            (.on simulation "tick" (tick! pixi-graph graph nodes-js links-js))))))
     (catch js/Error e
       (js/console.error e)))
   state)
