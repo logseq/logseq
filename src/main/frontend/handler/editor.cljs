@@ -350,7 +350,7 @@
   [{:block/keys [content format left page uuid level pre-block?] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (merge block
-                     (block/parse-title-and-body format pre-block? (:block/content block)))
+                     (block/parse-title-and-body uuid format pre-block? (:block/content block)))
         properties (:block/properties block)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
