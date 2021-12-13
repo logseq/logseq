@@ -417,7 +417,7 @@ jobs:
 
   release:
     # NOTE: For now, we only have beta channel to be released on Github
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.inputs.build-target != 'nightly'  }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target != 'nightly' }}
     needs: [ build-macos, build-macos-arm64, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
