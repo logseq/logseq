@@ -1812,7 +1812,7 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
-                                                 (merge block (block/parse-title-and-body format pre-block? content)))
+                                                 (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (get properties :collapsed)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
@@ -1997,7 +1997,11 @@
             parents-props (doall
                            (for [{:block/keys [uuid name content] :as block} parents]
                              (when-not name ; not page
-                               (let [{:block/keys [title body]} (block/parse-title-and-body (:block/format block) (:block/pre-block? block) content)]
+                               (let [{:block/keys [title body]} (block/parse-title-and-body
+                                                                 uuid
+                                                                 (:block/format block)
+                                                                 (:block/pre-block? block)
+                                                                 content)]
                                  [block
                                  (if (seq title)
                                    (->elem :span (map-inline config title))
@@ -2157,7 +2161,7 @@
                        (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                              (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
   [state config {:block/keys [uuid repo children pre-block? top? properties refs heading-level level type format content] :as block}]
-  (let [block (merge block (block/parse-title-and-body format pre-block? content))
+  (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
         body (:block/body block)
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)

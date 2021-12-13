@@ -731,24 +731,29 @@
   ([block]
    (when (map? block)
      (merge block
-            (parse-title-and-body (:block/format block)
+            (parse-title-and-body (:block/uuid block)
+                                  (:block/format block)
                                   (:block/pre-block? block)
                                   (:block/content block)))))
-  ([format pre-block? content]
+  ([block-uuid format pre-block? content]
    (when-not (string/blank? content)
      (let [content (if pre-block? content
                        (str (config/get-block-pattern format) " " (string/triml content)))
-           content (property/remove-properties format content)
-           ast (->> (format/to-edn content format (mldoc/default-config format))
-                    (map first))
-           title (when (heading-block? (first ast))
-                   (:title (second (first ast))))
-           body (vec (if title (rest ast) ast))
-           body (drop-while properties-block? body)]
-       (cond->
-         {:block/body body}
-         title
-         (assoc :block/title title))))))
+           content (property/remove-properties format content)]
+       (if-let [result (state/get-block-ast block-uuid content)]
+         result
+         (let [ast (->> (format/to-edn content format (mldoc/default-config format))
+                        (map first))
+               title (when (heading-block? (first ast))
+                       (:title (second (first ast))))
+               body (vec (if title (rest ast) ast))
+               body (drop-while properties-block? body)
+               result (cond->
+                        (if (seq body) {:block/body body} {})
+                        title
+                        (assoc :block/title title))]
+           (state/add-block-ast-cache! block-uuid content result)
+           result))))))
 
 (defn macro-subs
   [macro-content arguments]
