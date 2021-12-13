@@ -22,9 +22,8 @@
   (let [show? (rum/react *show-time?)]
     (if (or show? (not (string/blank? default-value)))
       [:div.flex.flex-row {:style {:height 32}}
-       [:input#time.form-input
-        {:style {:width 240}
-         :default-value default-value
+       [:input#time.form-input.w-20.ms:w-60
+        {:default-value default-value
          :on-change (fn [event]
                       (util/stop event)
                       (let [value (util/evalue event)]
@@ -45,12 +44,9 @@
   [{:keys [num duration kind]}]
   (let [show? (rum/react *show-repeater?)]
     (if (or show? (and num duration kind))
-      [:div.flex.flex-row.justify-center {:style {:height 32}}
-       [:div.block.text-medium.mr-2.mt-1 {:style {:width 110}}
-        "Every"]
-       [:input#repeater-num.form-input.mt-1
-        {:style {:width 48}
-         :default-value num
+      [:div.w.full.flex.flex-row.justify-left {:style {:height 32}}
+       [:input#repeater-num.form-input.mt-1.w-8.px-1.sm:w-20.sm:px-2.text-center
+        {:default-value num
          :on-change (fn [event]
                       (let [value (util/evalue event)]
                         (swap! *timestamp assoc-in [:repeater :num] value)))}]
@@ -66,9 +62,10 @@
           {:label "m"}
           {:label "y"}])
         (fn [value]
-          (swap! *timestamp assoc-in [:repeater :duration] value)))
+          (swap! *timestamp assoc-in [:repeater :duration] value))
+        nil)
 
-       [:a.ml-2.self-center {:on-click (fn []
+       [:a.ml-1.self-center {:on-click (fn []
                                          (reset! *show-repeater? false)
                                          (swap! *timestamp assoc :repeater {}))}
         svg/close]]

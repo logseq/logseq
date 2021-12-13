@@ -60,6 +60,7 @@ class LSPluginCaller extends EventEmitter {
     }
   }
 
+  // run in sandbox
   async connectToParent (userModel = {}) {
     if (this._connected) return
 
@@ -72,7 +73,14 @@ class LSPluginCaller extends EventEmitter {
     const readyDeferred = deferred(1000 * 5)
 
     const model: any = this._extendUserModel({
-      [LSPMSG_READY]: async () => {
+      [LSPMSG_READY]: async (baseInfo) => {
+        // dynamically setup common msg handler
+        model[LSPMSGFn(baseInfo?.pid)] = ({ type, payload }: { type: string, payload: any }) => {
+          debug(`[call from host (_call)] ${this._debugTag}`, type, payload)
+          // host._call without async
+          caller.emit(type, payload)
+        }
+
         await readyDeferred.resolve()
       },
 
@@ -87,7 +95,7 @@ class LSPluginCaller extends EventEmitter {
       },
 
       [LSPMSG]: async ({ ns, type, payload }: any) => {
-        debug(`[call from host] ${this._debugTag}`, ns, type, payload)
+        debug(`[call from host (async)] ${this._debugTag}`, ns, type, payload)
 
         if (ns && ns.startsWith('hook')) {
           caller.emit(`${ns}:${type}`, payload)
@@ -187,8 +195,8 @@ class LSPluginCaller extends EventEmitter {
     return this._callUserModel?.call(this, type, payload)
   }
 
+  // run in host
   async _setupIframeSandbox () {
-    const cnt = document.body
     const pl = this._pluginLocal!
     const id = pl.id
     const url = new URL(pl.options.entry!)
@@ -197,11 +205,30 @@ class LSPluginCaller extends EventEmitter {
       .set(`__v__`, IS_DEV ? Date.now().toString() : pl.options.version)
 
     // clear zombie sandbox
-    const zb = cnt.querySelector(`#${id}`)
+    const zb = document.querySelector(`#${id}`)
     if (zb) zb.parentElement.removeChild(zb)
 
+    const cnt = document.createElement('div')
+    cnt.classList.add('lsp-iframe-sandbox-container')
+    cnt.id = id
+
+    // TODO: apply any container layout data
+    {
+      const mainLayoutInfo = this._pluginLocal.settings.get('layout')?.[0]
+      if (mainLayoutInfo) {
+        cnt.dataset.inited_layout = 'true'
+        const { width, height, left, top } = mainLayoutInfo
+        Object.assign(cnt.style, {
+          width: width + 'px', height: height + 'px',
+          left: left + 'px', top: top + 'px'
+        })
+      }
+    }
+
+    document.body.appendChild(cnt)
+
     const pt = new Postmate({
-      id, container: cnt, url: url.href,
+      id: id + '_iframe', container: cnt, url: url.href,
       classListArray: ['lsp-iframe-sandbox'],
       model: { baseInfo: JSON.parse(JSON.stringify(pl.toJSON())) }
     })
@@ -310,10 +337,18 @@ class LSPluginCaller extends EventEmitter {
   }
 
   _getSandboxIframeContainer () {
-    return this._parent?.frame
+    return this._parent?.frame.parentNode as HTMLDivElement
   }
 
   _getSandboxShadowContainer () {
+    return this._shadow?.frame.parentNode as HTMLDivElement
+  }
+
+  _getSandboxIframeRoot () {
+    return this._parent?.frame
+  }
+
+  _getSandboxShadowRoot () {
     return this._shadow?.frame
   }
 
@@ -322,13 +357,18 @@ class LSPluginCaller extends EventEmitter {
   }
 
   async destroy () {
+    let root: HTMLElement = null
     if (this._parent) {
+      root = this._getSandboxIframeContainer()
       await this._parent.destroy()
     }
 
     if (this._shadow) {
+      root = this._getSandboxShadowContainer()
       this._shadow.destroy()
     }
+
+    root?.parentNode.removeChild(root)
   }
 }
 

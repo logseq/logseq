@@ -3,6 +3,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.page :as page]
+            [clojure.string :as str]
             [frontend.components.page-menu :as page-menu]
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.search :as search]
@@ -22,14 +23,16 @@
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.components.widgets :as widgets]
+            [frontend.handler.web.nfs :as nfs-handler]))
 
-(rum/defc home-button
-  []
-  [:a.button
-   {:href     (rfe/href :home)
-    :on-click route-handler/go-to-journals!}
-   (ui/icon "home" {:style {:fontSize 20}})])
+(rum/defc home-button []
+  (ui/with-shortcut :go/home "left"
+    [:a.button
+     {:href     (rfe/href :home)
+      :on-click route-handler/go-to-journals!}
+     (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc login
   [logged?]
@@ -56,22 +59,11 @@
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
-  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
-
-    (ui/tippy
-      {:html [:div.text-sm.font-medium
-              "Shortcut: "
-              [:code (util/->platform-shortcut "t l")]]
-       :delay 2000
-       :hideDelay 1
-       :position "right"
-       :interactive true
-       :arrow true}
-
-      [:a#left-menu.cp__header-left-menu.button
-       {:on-click on-click
-        :style {:margin-left 12}}
-       (ui/icon "menu-2" {:style {:fontSize 20}})])))
+  (ui/with-shortcut :ui/toggle-left-sidebar "bottom"
+    [:a#left-menu.cp__header-left-menu.button
+     {:on-click on-click
+      :style {:margin-left 12}}
+     (ui/icon "menu-2" {:style {:fontSize ui/icon-size}})]))
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [me current-repo t default-home]}]
@@ -85,7 +77,7 @@
      (fn [{:keys [toggle-fn]}]
        [:a.button
         {:on-click toggle-fn}
-        (ui/icon "dots" {:style {:fontSize 20}})])
+        (ui/icon "dots" {:style {:fontSize ui/icon-size}})])
      (->>
       [(when-not (state/publishing-enable-editing?)
          {:title (t :settings)
@@ -122,6 +114,7 @@
           :icon svg/logout-sm})]
       (concat page-menu-and-hr)
       (remove nil?))
+     {}
      ;; {:links-footer (when (and (util/electron?) (not logged?))
      ;;                  [:div.px-2.py-2 (login logged?)])}
      )))
@@ -129,12 +122,16 @@
 (rum/defc back-and-forward
   []
   [:div.flex.flex-row
-   [:a.it.navigation.nav-left.button
-    {:title "Go Back" :on-click #(js/window.history.back)}
-    (ui/icon "arrow-left")]
-   [:a.it.navigation.nav-right.button
-    {:title "Go Forward" :on-click #(js/window.history.forward)}
-    (ui/icon "arrow-right")]])
+
+   (ui/with-shortcut :go/backward "bottom"
+     [:a.it.navigation.nav-left.button
+      {:title "Go back" :on-click #(js/window.history.back)}
+      (ui/icon "arrow-left" {:style {:fontSize ui/icon-size}})])
+
+   (ui/with-shortcut :go/forward "bottom"
+     [:a.it.navigation.nav-right.button
+      {:title "Go forward" :on-click #(js/window.history.forward)}
+      (ui/icon "arrow-right" {:style {:fontSize ui/icon-size}})])])
 
 (rum/defc updater-tips-new-version
   [t]
@@ -155,16 +152,17 @@
     (when downloaded
       [:div.cp__header-tips
        [:p (t :updater/new-version-install)
-        [:a.ui__button.restart
+        [:a.restart.ml-2
          {:on-click #(handler/quit-and-install-new-version!)}
          (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
 
 (rum/defc header < rum/reactive
-  [{:keys [open-fn current-repo white? logged? page? route-match me default-home new-block-mode]}]
-  (let [local-repo? (= current-repo config/local-repo)
-        repos (->> (state/sub [:me :repos])
+  [{:keys [open-fn current-repo logged? me default-home new-block-mode]}]
+  (let [repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
+        vw-state (state/sub :ui/visual-viewport-state)
+        vw-pending? (state/sub :ui/visual-viewport-pending?)
         show-open-folder? (and (or (nfs/supported?)
                                    (mobile-util/is-native-platform?))
                                (empty? repos)
@@ -172,36 +170,32 @@
         refreshing? (state/sub :nfs/refreshing?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div.cp__header#head
-       {:class (when electron-mac? "electron-mac")
+       {:class           (util/classnames [{:electron-mac   electron-mac?
+                                            :native-ios     (mobile-util/native-ios?)
+                                            :native-android (mobile-util/native-android?)
+                                            :is-vw-pending  (boolean vw-pending?)}])
         :on-double-click (fn [^js e]
                            (when-let [target (.-target e)]
                              (when (and (util/electron?)
                                         (or (.. target -classList (contains "cp__header"))))
-                               (js/window.apis.toggleMaxOrMinActiveWindow))))}
+                               (js/window.apis.toggleMaxOrMinActiveWindow))))
+        :style           {:fontSize  50
+                          :transform (str "translateY(" (or (:offset-top vw-state) 0) "px)")}}
        [:div.l.flex
         (left-menu-button {:on-click (fn []
                                        (open-fn)
                                        (state/set-left-sidebar-open!
                                          (not (:ui/left-sidebar-open? @state/state))))})
 
-        (when current-repo
-          (ui/tippy
-            {:html        [:div.text-sm.font-medium
-                           "Shortcut: "
-                           ;; TODO: Pull from config so it displays custom shortcut, not just the default
-                           [:code (util/->platform-shortcut "Ctrl + k")]]
-             :interactive true
-             :delay       2000
-             :position    "right"
-             :arrow       true}
+        (when current-repo ;; this is for the Search button
+          (ui/with-shortcut :go/search "right"
             [:a.button#search-button
              {:on-click #(state/pub-event! [:go/search])}
-             (ui/icon "search" {:style {:fontSize 20}})]))]
+             (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
 
        [:div.r.flex
-        (when (and
-                (not (mobile-util/is-native-platform?))
-                (not (util/electron?)))
+        (when (and (not (mobile-util/is-native-platform?))
+                   (not (util/electron?)))
           (login logged?))
 
         (when plugin-handler/lsp-enabled?
@@ -210,21 +204,42 @@
         (when (not= (state/get-current-route) :home)
           (home-button))
 
-        (when (util/electron?) (back-and-forward))
+        (when (or (util/electron?)
+                  ;; (mobile-util/is-native-platform?)
+                  )
+          (back-and-forward))
 
         (new-block-mode)
 
-        (when refreshing?
-          [:div {:class "animate-spin-reverse"}
-           svg/refresh])
+        (when (mobile-util/is-native-platform?)
+          [:a.text-sm.font-medium.button
+           {:on-click
+            (fn []
+              (state/pub-event!
+               [:modal/show
+                [:div {:style {:max-width 700}}
+                 [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
+                 (ui/button
+                  "Yes"
+                  :on-click (fn []
+                              (state/close-modal!)
+                              (nfs-handler/refresh! (state/get-current-repo) repo/refresh-cb)))]]))}
+           (if refreshing?
+             [:div {:class "animate-spin-reverse"}
+              svg/refresh]
+             (when (seq repos)
+               [:div.flex.flex-row.text-center.open-button__inner.items-center
+                (ui/icon "refresh" {:style {:fontSize ui/icon-size}})]))])
 
         (repo/sync-status current-repo)
 
-        (when show-open-folder?
+        (when (and
+               show-open-folder?
+               (not (mobile-util/is-native-platform?)))
           [:a.text-sm.font-medium.button
            {:on-click #(page-handler/ls-dir-files! shortcut/refresh!)}
            [:div.flex.flex-row.text-center.open-button__inner.items-center
-            [:span.inline-block.open-button__icon-wrapper svg/folder-add]
+            (ui/icon "folder-plus")
             (when-not config/mobile?
               [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
                (t :open)])]])

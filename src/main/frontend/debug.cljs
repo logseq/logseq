@@ -1,8 +1,8 @@
 (ns frontend.debug
+  (:refer-clojure :exclude [print])
   (:require [cljs.pprint :as pprint]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.state :as state]
             [frontend.handler.notification :as notification]))
 
 (defn pprint
@@ -10,6 +10,11 @@
   (when (state/developer-mode?)
     (doseq [x xs]
       (pprint/pprint x))))
+
+(defn print
+  [& xs]
+  (println "Time: " (str (js/Date.)))
+  (apply println xs))
 
 (defonce ack-wait-timeouts (atom {}))
 

@@ -35,3 +35,7 @@ resources/electron.js
 charlie/
 .vscode
 /.preprocessor-cljs
+docker
+android/app/src/main/assets/capacitor.plugin.json
+ios/App/App/capacitor.config.json
+yarn.lock

@@ -3,13 +3,16 @@
   --ls-tag-text-hover-opacity: 1;
   --ls-page-text-size: 1em;
   --ls-page-title-size: 36px;
-  --ls-font-family: 'Inter';
   --ls-main-content-max-width: 810px;
   --ls-main-content-max-width-wide: 100%;
+  --ls-font-family: Inter;
   --ls-scrollbar-width: 6px;
   --ls-border-radius-low: 4px;
   --ls-border-radius-medium: 8px;
+  --ls-headbar-height: 3rem;
+  --ls-headbar-inner-top-padding: 0px;
   --ls-left-sidebar-width: 240px;
+  --ls-left-sidebar-sm-width: 70%;
   --ls-left-sidebar-nav-btn-size: 38px;
 }
 
@@ -143,13 +146,15 @@ html[data-theme='light'] {
   --color-level-5: #bbdaf6;
 }
 
+html:not(.is-native-android) {
+  font-family: var(--ls-font-family), sans-serif, system-ui,
+  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+  Arial, 'Noto Sans', serif, Apple Color Emoji, Segoe UI Emoji,
+  Segoe UI Symbol !important;
+}
+
 /* region Reset top elements */
 html {
-  font-family: var(--ls-font-family), Inter, sans-serif, system-ui,
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
-    Arial, 'Noto Sans', serif, Apple Color Emoji, Segoe UI Emoji,
-    Segoe UI Symbol !important;
-
   /* FIXME: rewrite revealjs.css ? */
   height: unset !important;
   overflow: auto !important;
@@ -850,6 +855,32 @@ h1.title {
   font-weight: 600;
 }
 
+.title .page-icon {
+  margin-right: 12px;
+}
+
+.left-sidebar-inner .recent .page-icon,
+.left-sidebar-inner .favorites .page-icon {
+  margin-right: 8px;
+  width: 1.1em;
+  text-align: center;
+  display: inline-block;
+  color: #aaa;
+}
+
+.favorites li.favorite-item,
+.recent    li.recent-item {
+  margin: 0.1rem 0;
+}
+
+.left-sidebar-inner > .wrap {
+  height: 100%;
+}
+
+.left-sidebar-inner .flex-column-spacer {
+  flex: 1 1 0%;
+}
+
 .block-highlight,
 .content .selected {
   transition: background-color 0.15s;
@@ -1062,10 +1093,6 @@ mark {
 
 /* block references */
 
-.block-ref {
-  display: inline;
-}
-
 .block-ref .block-ref {
   padding: 6px 5px;
   border: none;
@@ -1122,10 +1149,8 @@ a.tooltip-priority {
   text-align: right;
 }
 
-a.page-op {
-    svg {
-        transform: scale(0.9);
-    }
+a.page-op svg {
+  transform: scale(0.9);
 }
 
 .search-more {

@@ -30,9 +30,6 @@
    ;; :markdown, :org
    :block/format {}
 
-   ;; mldoc parsed ast
-   :block/title {}
-
    ;; belongs to which page
    :block/page {:db/valueType :db.type/ref
                 :db/index true}
@@ -70,9 +67,6 @@
    :block/properties {}
    ;; vector
    :block/properties-order {}
-
-   ;; parsed ast
-   :block/body {}
 
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
@@ -140,11 +134,10 @@
     :block/level
     :block/heading-level
     :block/type
-    :block/title
-    :block/body
     :block/properties
     :block/created-at
     :block/updated-at
+    :block/warning
     }
   )
 
@@ -159,5 +152,4 @@
     :block/content
     :block/properties
     :block/alias
-    :block/tags
-    :block/unordered})
+    :block/tags})

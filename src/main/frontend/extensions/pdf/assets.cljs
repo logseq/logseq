@@ -18,7 +18,7 @@
 
 (defn hls-file?
   [filename]
-  (and filename (string/starts-with? filename "hls__")))
+  (and filename (string? filename) (string/starts-with? filename "hls__")))
 
 (defn inflate-asset
   [full-path]
@@ -36,10 +36,14 @@
               full-path
 
               :else
-              (str "file://"                                ;; TODO: bfs
-                   (util/node-path.join
-                     (config/get-repo-dir (state/get-current-repo))
-                     "assets" filename)))]
+              (let [full-path (string/replace full-path #"^[.\/\\]+" "")
+                    full-path (if-not (string/starts-with? full-path config/local-assets-dir)
+                                (util/node-path.join config/local-assets-dir full-path)
+                                full-path)]
+                (str "file://"  ;; TODO: bfs
+                     (util/node-path.join
+                       (config/get-repo-dir (state/get-current-repo))
+                       full-path))))]
     (when-let [key
                (if web-link?
                  (str (hash url))

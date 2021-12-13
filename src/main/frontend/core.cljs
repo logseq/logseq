@@ -15,7 +15,11 @@
   []
   (rfe/start!
    (rf/router routes/routes nil)
-   route/set-route-match!
+   (fn [route]
+     (route/set-route-match! route)
+     (plugin-handler/hook-plugin-app
+      :route-changed (select-keys route [:template :path :parameters])))
+
    ;; set to false to enable HistoryAPI
    {:use-fragment true}))
 

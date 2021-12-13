@@ -12,8 +12,9 @@
             [frontend.handler.common :as common-handler])
   (:import [goog.ui KeyboardShortcutHandler]))
 
-(defonce default-binding
-  (->> (vals config/default-config)
+(defn get-bindings
+  []
+  (->> (vals @config/config)
        (into {})
        (map (fn [[k {:keys [binding]}]]
               {k binding}))
@@ -26,10 +27,10 @@
 (defn shortcut-binding
   [id]
   (let [shortcut (get (state/shortcuts) id
-                      (get default-binding id))]
+                      (get (get-bindings) id))]
     (cond
       (nil? shortcut)
-      (log/error :shortcut/binding-not-found {:id id})
+      (log/warn :shortcut/binding-not-found {:id id})
 
       (false? shortcut)
       (do
@@ -45,7 +46,7 @@
 
 ;; returns a vector to preserve order
 (defn binding-by-category [name]
-  (let [dict (->> (vals config/default-config)
+  (let [dict (->> (vals @config/config)
                   (apply merge)
                   (map (fn [[k _]]
                          {k {:binding (shortcut-binding k)}}))
@@ -57,7 +58,7 @@
   ([handler-id]
    (shortcut-map handler-id nil))
   ([handler-id state]
-   (let [raw       (get config/default-config handler-id)
+   (let [raw       (get @config/config handler-id)
          handler-m (->> raw
                         (map (fn [[k {:keys [fn]}]]
                                {k fn}))
@@ -77,7 +78,7 @@
     (keyword (str "command." ns) n)))
 
 (defn desc-helper []
-  (->> (vals config/default-config)
+  (->> (vals @config/config)
        (apply merge)
        (map (fn [[k {:keys [desc]}]]
               {(decorate-namespace k) desc}))
@@ -90,10 +91,15 @@
        (into {})))
 
 (defn decorate-binding [binding]
-  (-> binding
+  (-> (if (string? binding) binding (str/join "+"  binding))
       (str/replace "mod" (if util/mac? "cmd" "ctrl"))
+      (str/replace "ctrl" (if util/mac? "cmd" "ctrl"))
+      (str/replace "cmd" (if util/mac? "cmd" "ctrl"))
       (str/replace "alt" (if util/mac? "opt" "alt"))
       (str/replace "shift+/" "?")
+      (str/replace "left" "←")
+      (str/replace "right" "→")
+      (str/replace "+" " ")
       (str/replace "open-square-bracket" "[")
       (str/replace "close-square-bracket" "]")
       (str/lower-case)))
@@ -155,20 +161,20 @@
   "Given shortcut key, return handler group
   eg: :editor/new-line -> :shortcut.handler/block-editing-only"
   [k]
-  (->> config/default-config
+  (->> @config/config
        (filter (fn [[_ v]] (contains? v k)))
        (map key)
        (first)))
 
-(defn potential-confilct? [k]
+(defn potential-conflict? [k]
   (if-not (shortcut-binding k)
     false
     (let [handler-id    (get-group k)
           shortcut-m    (shortcut-map handler-id)
           bindings      (->> (shortcut-binding k)
-                            (map mod-key)
-                            (map KeyboardShortcutHandler/parseStringShortcut)
-                            (map js->clj))
+                             (map mod-key)
+                             (map KeyboardShortcutHandler/parseStringShortcut)
+                             (map js->clj))
           rest-bindings (->> (map key shortcut-m)
                              (remove #{k})
                              (map shortcut-binding)
@@ -182,19 +188,18 @@
 
 (defn shortcut-data-by-id [id]
   (let [binding (shortcut-binding id)
-        data    (->> (vals config/default-config)
+        data    (->> (vals @config/config)
                      (into  {})
                      id)]
-    (when binding
-      (assoc
-       data
-       :binding
-       (binding-for-display id binding)))))
+    (assoc
+      data
+      :binding
+      (binding-for-display id binding))))
 
 (defn shortcuts->commands [handler-id]
-  (let [m (get config/default-config handler-id)]
+  (let [m (get @config/config handler-id)]
     (->> m
          (map (fn [[id _]] (-> (shortcut-data-by-id id)
-                               (assoc :id id)
+                               (assoc :id id :handler-id handler-id)
                                (rename-keys {:binding :shortcut
                                              :fn      :action})))))))

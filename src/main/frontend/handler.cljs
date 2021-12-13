@@ -7,6 +7,7 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db-schema :as db-schema]
+            [frontend.db.conn :as conn]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.common :as common-handler]
@@ -17,7 +18,8 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.extensions.srs :as srs]
-            [frontend.mobile.util :as mobile]
+            [frontend.mobile.core :as mobile]
+            [frontend.mobile.util :as mobile-util]
             [frontend.idb :as idb]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.core :as shortcut]
@@ -28,6 +30,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.pool :as pool]
+            [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]))
@@ -51,22 +54,19 @@
         f (fn []
             (let [repo (state/get-current-repo)]
               (when-not (state/nfs-refreshing?)
-               ;; Don't create the journal file until user writes something
-                (page-handler/create-today-journal!))
-
-              (when (and (state/input-idle? repo)
-                         (> (- (util/time-ms) @cards-last-check-time)
-                            (* 60 1000)))
-                (let [total (srs/get-srs-cards-total)]
-                  (state/set-state! :srs/cards-due-count total)
-                  (reset! cards-last-check-time (util/time-ms))))
-
-              (when (and repo
-                         (search-db/empty? repo)
-                         (state/input-idle? repo))
-                (search/rebuild-indices!))))]
+                ;; Don't create the journal file until user writes something
+                (page-handler/create-today-journal!))))]
     (f)
     (js/setInterval f 5000)))
+
+(defn- instrument!
+  []
+  (let [total (srs/get-srs-cards-total)]
+    (state/set-state! :srs/cards-due-count total)
+    (state/pub-event! [:instrument {:type :flashcards/count
+                                    :payload {:total (or total 0)}}])
+    (state/pub-event! [:instrument {:type :blocks/count
+                                    :payload {:total (db/blocks-count)}}])))
 
 (defn store-schema!
   []
@@ -108,7 +108,8 @@
                               (and (not logged?)
                                    (not (seq (db/get-files config/local-repo)))
                                    ;; Not native local directory
-                                   (not (some config/local-db? (map :url repos))))
+                                   (not (some config/local-db? (map :url repos)))
+                                   (not (mobile-util/is-native-platform?)))
                               (repo-handler/setup-local-repo-if-not-exists!)
 
                               :else
@@ -129,7 +130,7 @@
                                  (js/console.error "Failed to request GitHub app tokens."))))
 
                             (watch-for-date!)
-                            (file-handler/watch-for-local-dirs!)
+                            (file-handler/watch-for-current-graph-dir!)
                             ;; (when-not (state/logged?)
                             ;;   (state/pub-event! [:after-db-restore repos]))
                             ))
@@ -149,6 +150,21 @@
   (js/window.addEventListener "online" handle-connection-change)
   (js/window.addEventListener "offline" handle-connection-change))
 
+(defn enable-datalog-console
+  "Enables datalog console in browser provided by https://github.com/homebaseio/datalog-console"
+  []
+  (js/document.documentElement.setAttribute "__datalog-console-remote-installed__" true)
+  (.addEventListener js/window "message"
+                     (fn [event]
+                       (let [conn (conn/get-conn)]
+                         (when-let [devtool-message (gobj/getValueByKeys event "data" ":datalog-console.client/devtool-message")]
+                           (let [msg-type (:type (read-string devtool-message))]
+                             (case msg-type
+
+                               :datalog-console.client/request-whole-database-as-string
+                               (.postMessage js/window #js {":datalog-console.remote/remote-message" (pr-str conn)} "*")
+
+                               nil)))))))
 (defn- get-repos
   []
   (let [logged? (state/logged?)
@@ -210,15 +226,19 @@
     (p/let [repos (get-repos)]
       (state/set-repos! repos)
       (restore-and-setup! me repos logged? db-schema)
-      (when (mobile/is-native-platform?)
-        (p/do! (mobile/hide-splash))))
+      (when (mobile-util/is-native-platform?)
+        (p/do! (mobile-util/hide-splash))))
 
     (reset! db/*sync-search-indice-f search/sync-search-indice!)
     (db/run-batch-txs!)
     (file-handler/run-writes-chan!)
     (pool/init-parser-pool!)
+    (when config/dev?
+      (enable-datalog-console))
     (when (util/electron?)
-      (el/listen!))))
+      (el/listen!))
+    (mobile/init!)
+    (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []
   (prn "stop!"))
@@ -231,9 +251,9 @@
                          (.preventDefault e)
                          (state/pub-event! [:modal/show
                                             [:div
-                                             [:h1.title "Reload Logseq?"]
+                                             [:p "Reload Logseq?"]
                                              (ui/button
-                                              [:span "Yes " (ui/keyboard-shortcut ["enter"])]
+                                              "Yes"
                                               :autoFocus "on"
                                               :large? true
                                               :on-click (fn []

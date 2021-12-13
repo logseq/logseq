@@ -1,8 +1,10 @@
 .cp__header {
-  @apply shadow z-10 h-12;
+  @apply shadow z-10;
   -webkit-app-region: drag;
 
   padding-right: 0.5rem;
+  padding-top: var(--ls-headbar-inner-top-padding);
+  height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -14,6 +16,7 @@
   right: 0;
   user-select: none;
   line-height: 1;
+  white-space: nowrap;
 
   > .l {
     width: var(--ls-left-sidebar-width);
@@ -33,8 +36,7 @@
   a.button {
     margin: 0 4px;
     height: 30px;
-    width: 30px;
-    padding: 0;
+    min-width: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -52,30 +54,29 @@
 
   &-tips {
     position: absolute;
+    padding: 6px 0;
+    text-align: center;
+    min-width: var(--ls-main-content-max-width);
     width: 100%;
-    padding: 0 0;
-    transform: translateY(100%);
-    display: flex;
-    justify-content: center;
+    font-weight: 500;
     align-items: center;
-    background-color: var(--ls-secondary-background-color);
-    box-sizing: border-box;
-    margin: 0;
+    background: var(--color-level-3);
+    margin-top: -16px;
     left: 0;
-    top: -2px;
-    color: var(--ls-secondary-text-color);
+    z-index: 1000;
 
     > p {
+      color: var(--ls-primary-text-color);
       margin: 0;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       font-size: 14px;
     }
 
     a {
-      color: var(--ls-link-text-color) !important;
+      color: var(--ls-link-text-color, #045591) !important;
     }
-
+    
     a.restart {
       position: relative;
       cursor: pointer !important;
@@ -84,6 +85,7 @@
 
       svg {
         color: currentColor !important;
+        margin-right: 2px;
       }
 
       > strong {
@@ -157,13 +159,40 @@ a.button {
   opacity: 0.6;
   display: block;
   border-radius: 4px;
-}
 
-a.button:hover {
-  opacity: 1;
-  background: var(--ls-tertiary-background-color);
+  &:hover, &.active {
+    opacity: 1;
+    background: none;
+    @screen md {
+        background: var(--ls-tertiary-background-color);
+    }
+  }
 }
 
 .is-mac.is-electron :is(.cp__header, .cp__right-sidebar-topbar) :is(button, .button, a) {
   cursor: default !important;
+}
+
+html.is-native-ios,
+html.is-ios.is-safari {
+  #main-container {
+    padding-top: 20px;
+  }
+
+  .cp__header {
+    position: fixed !important;
+    background-color: var(--ls-primary-background-color);
+  }
+
+  .is-vw-pending {
+    display: none !important;
+  }
+}
+
+html.is-native-ios {
+  --ls-headbar-inner-top-padding: 36px;
+
+  .cp__header > .r {
+    display: flex;
+  }
 }

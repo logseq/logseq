@@ -671,21 +671,17 @@ body.is-pdf-active {
     padding-left: calc(var(--ph-view-container-width) + 15px);
   }
 
-  #sidebar-nav-wrapper {
+  #left-sidebar {
     border: none !important;
     display: none;
   }
 
-  #head {
+  #head > .l {
     padding-left: 0;
   }
 
   #main-content.is-left-sidebar-open {
     padding-left: unset;
-  }
-
- .ls-left-sidebar-open .cp__header {
-    margin-left: unset;
   }
 }
 

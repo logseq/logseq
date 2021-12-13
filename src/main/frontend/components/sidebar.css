@@ -1,3 +1,10 @@
+@supports (padding: max(0px)) {
+  .post {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+}
+
 #app-container {
   background-color: var(--ls-primary-background-color, #fff);
   position: relative;
@@ -14,16 +21,26 @@
 }
 
 #app-container {
+  display: flex;
   flex: 0 0 100%;
+}
+
+#left-container {
+  @apply flex flex-1 flex-col relative h-screen;
 }
 
 #main-container {
   position: relative;
+  height: 100%;
 }
 
 #main-content {
   &.is-left-sidebar-open {
-    padding-left: var(--ls-left-sidebar-width);
+    padding-left: 0;
+
+    @screen sm {
+      padding-left: var(--ls-left-sidebar-width);
+    }
   }
 
   &-container {
@@ -32,50 +49,20 @@
   }
 }
 
-#left-sidebar {
-  width: 240px;
-  height: 100%;
-  top: 0;
-  left: -240px;
-  position: absolute;
-  z-index: 11;
-  opacity: 0;
-  background-color: #002b36;
-
-  .enter {
-    opacity: 1;
-    left: 0;
-  }
-}
-
-#left-bar {
-  background-color: var(--ls-primary-background-color);
-
-  > .head-wrap {
-    background-color: var(--ls-search-background-color);
-  }
-
-  .close-panel-btn {
-    color: var(--ls-active-primary-color);
-  }
-
-  nav > a {
-    color: var(--ls-icon-color);
-  }
-
-  a {
-    color: var(--ls-primary-text-color);
-  }
-}
-
 .left-sidebar-inner {
   position: relative;
   height: 100%;
-  z-index: 1;
-  overflow: auto;
+  padding-top: 12px;
+  width: var(--ls-left-sidebar-sm-width);
+  overflow-x: hidden;
+  overflow-y: auto;
+  background-color: var(--ls-primary-background-color);
+  transition: transform .3s;
+  transform: translateX(-100%);
+  z-index: 3;
 
   > .wrap {
-    padding-top: 60px;
+    padding-top: 55px;
   }
 
   .dropdown-wrapper {
@@ -84,22 +71,27 @@
 
   a.item {
     user-select: none;
+    transition: none;
 
     > span {
       margin-top: 3px;
+    }
+
+    &:hover {
+      background-color: var(--ls-quaternary-background-color);
     }
   }
 
   .nav-content-item {
     padding: 32px 0 0 0;
 
-    > .hd {
+    > .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       user-select: none;
       cursor: pointer;
-      padding: 0 18px;
+      padding: 4px 18px;
 
       > span {
         > a {
@@ -115,12 +107,18 @@
           &:last-child {
             transform: translateY(-6px) translateX(2px) rotate(90deg);
             transform-origin: center center;
-            transition: .25s transform;
+            transition: .15s transform;
           }
         }
       }
 
       &:hover {
+        background-color: var(--ls-tertiary-background-color);
+
+        * {
+          opacity: 1 !important;
+        }
+
         > span {
           > a {
             display: block;
@@ -167,7 +165,7 @@
     }
 
     &.is-expand {
-      > .hd > span > a {
+      > .header > span > a {
         &:last-child {
           transform: translateY(2px) translateX(-3px);
         }
@@ -179,44 +177,98 @@
     }
   }
 
-  a.item:hover {
-    background-color: var(--ls-quaternary-background-color);
+  @screen sm {
+    background-color: var(--ls-secondary-background-color);
+    width: var(--ls-left-sidebar-width);
+    padding-top: 0;
   }
 }
 
-.white-theme .left-sidebar-inner a, .white-theme .left-bar a {
-  color: var(--ls-primary-text-color);
-}
-
 .cp__sidebar-left-layout {
-  @apply flex-col sm:block;
-
-  background-color: var(--ls-secondary-background-color);
-  width: var(--ls-left-sidebar-width);
+  width: 0;
   height: 100vh;
   position: fixed;
-  top: 0;
+  top: var(--ls-headbar-inner-top-padding);
   left: 0;
   z-index: 9;
+  transition: width 1.2s;
 
-  transition: transform .25s;
-  transform: translateX(-100%);
-  overflow: hidden;
+  > .shade-mask {
+    background-color: rgba(0, 0, 0, .5);
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity .1s;
+  }
+
+  &.is-open {
+    transition: none;
+    width: 100%;
+
+    .left-sidebar-inner {
+      transform: translateX(0);
+    }
+
+    > .shade-mask {
+      opacity: 1;
+      z-index: 1;
+    }
+  }
 
   &:before {
     content: " ";
     height: 3rem;
-    width: calc(var(--ls-left-sidebar-width) - var(--ls-scrollbar-width));
-    background-color: var(--ls-secondary-background-color);
+    width: calc(var(--ls-left-sidebar-sm-width) - var(--ls-scrollbar-width));
+    transition: width .3s;
+    background-color: transparent;
     position: fixed;
     left: 0;
     top: 0;
-    z-index: 2;
+    opacity: .8;
+    z-index: 5;
   }
 
-  &.is-open {
-    transform: translateX(0);
+  @screen sm {
+    width: 0;
+
+    &:before {
+      background-color: var(--ls-secondary-background-color);
+      width: 0;
+      overflow: hidden;
+    }
+
+    &.is-open {
+      width: var(--ls-left-sidebar-width);
+
+      &:before {
+        width: calc(var(--ls-left-sidebar-width) - var(--ls-scrollbar-width));
+      }
+    }
+
+    > .shade-mask {
+      display: none;
+    }
   }
+}
+
+.ls-left-sidebar-open {
+  .cp__header > .r {
+    display: none;
+  }
+
+  @screen sm {
+    .cp__header > .r {
+      display: flex;
+    }
+  }
+}
+
+.white-theme #left-sidebar a {
+  color: var(--ls-primary-text-color);
 }
 
 .settings-modal {
@@ -363,10 +415,6 @@
 
 .cp__sidebar-main-content[data-is-global-graph-pages='true'] {
   padding: 0;
-}
-
-.scrollbar-spacing {
-  height: 100%;
 }
 
 @supports not (overflow-y: overlay) {

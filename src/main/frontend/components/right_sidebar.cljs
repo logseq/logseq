@@ -22,16 +22,7 @@
 (rum/defc toggle
   []
   (when-not (util/mobile?)
-    (ui/tippy
-      {:html [:div.text-sm.font-medium
-              "Shortcut: "
-              [:code (util/->platform-shortcut "t r")]]
-       :delay 2000
-       :hideDelay 1
-       :position "left"
-       :interactive true
-       :arrow true}
-
+    (ui/with-shortcut :ui/toggle-right-sidebar "left"
       [:a.button.fade-link.toggle
        {:on-click state/toggle-sidebar-open?!}
        (ui/icon "layout-sidebar-right" {:style {:fontSize "20px"}})])))
@@ -247,7 +238,7 @@
                                        :margin-right 2}}
         (toggle)]]
 
-      [:.sidebar-item-list.flex-1.scrollbar-spacing {:style {:height "100vh"}}
+      [:.sidebar-item-list.flex-1.scrollbar-spacing
        (if @*anim-finished?
          (for [[idx [repo db-id block-type block-data]] (medley/indexed blocks)]
            (rum/with-key

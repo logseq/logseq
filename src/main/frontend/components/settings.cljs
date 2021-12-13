@@ -22,7 +22,8 @@
             [frontend.version :refer [version]]
             [goog.object :as gobj]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile-util]))
 
 (rum/defcs set-email < (rum/local "" ::email)
   [state]
@@ -39,10 +40,10 @@
            :on-change (fn [e]
                         (reset! email (util/evalue e)))}]]]]
       (ui/button
-        "Submit"
-        :on-click
-        (fn []
-          (user-handler/set-email! @email)))
+       "Submit"
+       :on-click
+       (fn []
+         (user-handler/set-email! @email)))
 
       [:hr]
 
@@ -63,10 +64,10 @@
            :on-change (fn [e]
                         (reset! cors (util/evalue e)))}]]]]
       (ui/button
-        "Submit"
-        :on-click
-        (fn []
-          (user-handler/set-cors! @cors)))
+       "Submit"
+       :on-click
+       (fn []
+         (user-handler/set-cors! @cors)))
 
       [:hr]
 
@@ -78,11 +79,12 @@
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for label-for}
     name]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.rounded-md
-     {:style {:display "flex" :gap "1rem" :align-items "center"}}
+   [:div.rounded-md.sm:max-w-tss.sm:col-span-2
+    [:div.rounded-md {:style {:display "flex" :gap "1rem" :align-items "center"}}
      (ui/toggle state on-toggle true)
      detail-text]]])
+
+
 
 (rum/defcs app-updater < rum/reactive
   [state version]
@@ -91,20 +93,23 @@
     [:span.cp__settings-app-updater
 
      [:div.ctls.flex.items-center
-      (ui/button
-        (if update-pending? "Checking ..." "Check for updates")
-        :class "text-sm p-1 mr-3"
-        :disabled update-pending?
-        :on-click #(js/window.apis.checkForUpdates false))
 
-      [:span version]]
+      [:div.mt-1.sm:mt-0.sm:col-span-2
+       {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
+       [:div (ui/button
+              (if update-pending? "Checking ..." "Check for updates")
+              :class "text-sm p-1 mr-1"
+              :disabled update-pending?
+              :on-click #(js/window.apis.checkForUpdates false))]
+
+       [:div.text-sm.opacity-50 (str "Version " version)]]]
 
      (when-not (or update-pending?
                    (string/blank? type))
-       [:div.update-state
+       [:div.update-state.text-sm
         (case type
           "update-not-available"
-          [:p "😀 Your app is up-to-date!"]
+          [:p "Your app is up-to-date 🎉"]
 
           "update-available"
           (let [{:keys [name url]} payload]
@@ -158,12 +163,45 @@
            :width  500
            :height 500}]]])
 
+(defn row-with-button-action
+  [{:keys [left-label action button-label href on-click desc -for]}]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
+
+     ;; left column
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for -for}
+    left-label]
+
+     ;; right column
+   [:div.mt-1.sm:mt-0.sm:col-span-2
+    {:style {:display "flex" :gap "0.5rem" :align-items "center"}}
+    [:div (if action action (ui/button
+                             button-label
+                             :class    "text-sm p-1"
+                             :href     href
+                             :on-click on-click))]
+    (when-not (or (util/mobile?)
+                  (mobile-util/is-native-platform?))
+      [:div.text-sm desc])]])
+
+
 (defn edit-config-edn []
   (rum/with-context [[t] i18n/*tongue-context*]
-    [:div
-     [:a.text-xs {:href     (rfe/href :file {:path (config/get-config-path)})
-                  :on-click #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))}
-      (t :settings-page/edit-config-edn)]]))
+    (row-with-button-action
+     {:left-label   "Custom configuration"
+      :button-label (t :settings-page/edit-config-edn)
+      :href         (rfe/href :file {:path (config/get-config-path)})
+      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+      :-for         "config_edn"})))
+
+(defn edit-custom-css []
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (row-with-button-action
+     {:left-label   "Custom theme"
+      :button-label (t :settings-page/edit-custom-css)
+      :href         (rfe/href :file {:path (config/get-custom-css-path)})
+      :on-click     #(js/setTimeout (fn [] (ui-handler/toggle-settings-modal!)))
+      :-for         "customize_css"})))
 
 (defn show-brackets-row [t show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -175,14 +213,13 @@
      (ui/toggle show-brackets?
                 config-handler/toggle-ui-show-brackets!
                 true)]]
-   [:div {:style {:text-align "right"}}
-    (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))]])
+   (when (not (or (util/mobile?) (mobile-util/is-native-platform?)))
+     [:div {:style {:text-align "right"}}
+      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))])])
 
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
-  (let [enabled? (state/sub [:electron/user-cfgs :spell-check])
-        enabled? (if (nil? enabled?) true enabled?)]
-
+  (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
       (t :settings-page/spell-checker)]
@@ -202,7 +239,7 @@
   (let [enabled? (state/get-git-auto-commit-enabled?)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      "Enable Git auto commit"]
+      (t :settings-page/git-switcher-label)]
      [:div
       [:div.rounded-md.sm:max-w-xs
        (ui/toggle
@@ -217,7 +254,7 @@
   (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
      [:label.block.text-sm.font-medium.leading-5.opacity-70
-      "Git auto commit seconds"]
+      (t :settings-page/git-commit-delay)]
      [:div.mt-1.sm:mt-0.sm:col-span-2
       [:div.max-w-lg.rounded-md.sm:max-w-xs
        [:input#home-default-page.form-input.is-small.transition.duration-150.ease-in-out
@@ -229,64 +266,42 @@
                               (state/set-state! [:electron/user-cfgs :git/auto-commit-seconds] value)
                               (ipc/ipc "userAppCfgs" :git/auto-commit-seconds value))))}]]]]))
 
-(rum/defc app-auto-update-row < rum/reactive
-  [t]
+(rum/defc app-auto-update-row < rum/reactive [t]
   (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
-
-    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-     [:label.block.text-sm.font-medium.leading-5.opacity-70
-      (t :settings-page/auto-updater)]
-     [:div
-      [:div.rounded-md.sm:max-w-xs
-       (ui/toggle
-        enabled?
-        (fn []
-          (state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
-          (ipc/ipc "userAppCfgs" :auto-update (not enabled?)))
-        true)]]]))
-
-(rum/defcs graph-config
-  [state t]
-  (when-let [current-repo (state/sub :git/current-repo)]
-    (edit-config-edn)))
+    (toggle "usage-diagnostics"
+            (t :settings-page/auto-updater)
+            enabled?
+            #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
+              (ipc/ipc "userAppCfgs" :auto-update (not enabled?))))))
 
 (defn language-row [t preferred-language]
-  [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-start
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "preferred_language"}
-    (t :language)]
-   [:div.mt-1.sm:mt-0.sm:col-span-4
-    [:div.max-w-lg.rounded-md
-     [:select.form-select.is-small
-      {:value     preferred-language
-       :on-change (fn [e]
+  (let [on-change (fn [e]
                     (let [lang-code (util/evalue e)]
                       (state/set-preferred-language! lang-code)
-                      (ui-handler/re-render-root!)))}
-      (for [language dicts/languages]
-        (let [lang-code (name (:value language))
-              lang-label (:label language)]
-          [:option {:key lang-code :value lang-code} lang-label]))]]]])
+                      (ui-handler/re-render-root!)))
+        action [:select.form-select.is-small {:value     preferred-language
+                                              :on-change on-change}
+                (for [language dicts/languages]
+                  (let [lang-code (name (:value language))
+                        lang-label (:label language)]
+                    [:option {:key lang-code :value lang-code} lang-label]))]]
+    (row-with-button-action {:left-label (t :language)
+                             :-for       "preferred_language"
+                             :action     action})))
 
 (defn theme-modes-row [t switch-theme system-theme? dark?]
-  [:div.it.sm:grid.sm:grid-cols-5.sm:gap-4
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "toggle_theme"}
-    (t :right-side-bar/switch-theme (string/capitalize switch-theme))]
-   [:div.flex.flex-row.mt-1.sm:mt-0.sm:col-span-4
-    [:div.rounded-md.sm:max-w-xs
-
-     [:ul.theme-modes-options
-      [:li {:on-click (partial state/use-theme-mode! "light")
-            :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
-      [:li {:on-click (partial state/use-theme-mode! "dark")
-            :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
-      [:li {:on-click (partial state/use-theme-mode! "system")
-            :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
-
-    [:div.pl-16
-     (ui/keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))]]])
+  (let [pick-theme [:ul.theme-modes-options
+                    [:li {:on-click (partial state/use-theme-mode! "light")
+                          :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light] [:strong "light"]]
+                    [:li {:on-click (partial state/use-theme-mode! "dark")
+                          :class    (classnames [{:active (and (not system-theme?) dark?)}])} [:i.mode-dark] [:strong "dark"]]
+                    [:li {:on-click (partial state/use-theme-mode! "system")
+                          :class    (classnames [{:active system-theme?}])} [:i.mode-system] [:strong "system"]]]]
+    (row-with-button-action {:left-label (t :right-side-bar/switch-theme (string/capitalize switch-theme))
+                             :-for       "toggle_theme"
+                             :action     pick-theme
+                             :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
 (defn file-format-row [t preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -363,13 +378,19 @@
           (fn []
             (config-handler/toggle-ui-enable-tooltip!))))
 
+(defn shortcut-tooltip-row [t enable-shortcut-tooltip?]
+  (toggle "enable_tooltip"
+          (t :settings-page/enable-shortcut-tooltip)
+          enable-shortcut-tooltip?
+          (fn []
+            (state/toggle-shortcut-tooltip!))))
+
 (defn timetracking-row [t enable-timetracking?]
   (toggle "enable_timetracking"
           (t :settings-page/enable-timetracking)
           enable-timetracking?
-          (fn []
-            (let [value (not enable-timetracking?)]
-              (config-handler/set-config! :feature/enable-timetracking? value)))))
+          #(let [value (not enable-timetracking?)]
+             (config-handler/set-config! :feature/enable-timetracking? value))))
 
 (defn update-home-page
   [event]
@@ -430,28 +451,19 @@
 
 (defn encryption-row [t enable-encryption?]
   (toggle "enable_encryption"
-          (str (t :settings-page/enable-encryption) "\n(experimental!)")
+          (t :settings-page/enable-encryption)
           enable-encryption?
-          (fn []
-            (let [value (not enable-encryption?)]
-              (config-handler/set-config! :feature/enable-encryption? value)))))
+          #(let [value (not enable-encryption?)]
+             (config-handler/set-config! :feature/enable-encryption? value))
+          [:div.text-sm.opacity-50 "⚠️ This feature is experimental"]))
 
-(rum/defc keyboard-shortcuts-row
-  [t]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "customize_shortcuts"}
-    (t :settings-page/customize-shortcuts)]
-   (let [h (fn []
-             (state/close-settings!)
-             (route-handler/redirect! {:to :shortcut-setting}))]
-     [:div.mt-1.sm:mt-0.sm:col-span-2
-      [:div
-       (ui/button
-         (t :settings-page/shortcut-settings)
-         :class "text-sm p-1"
-         :style {:margin-top "0px"}
-         :on-click h)]])])
+(rum/defc keyboard-shortcuts-row [t]
+  (row-with-button-action
+   {:left-label   (t :settings-page/customize-shortcuts)
+    :button-label (t :settings-page/shortcut-settings)
+    :on-click      #((state/close-settings!)
+                     (route-handler/redirect! {:to :shortcut-setting}))
+    :-for         "customize_shortcuts"}))
 
 (defn zotero-settings-row [t]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-start
@@ -461,16 +473,16 @@
    [:div.mt-1.sm:mt-0.sm:col-span-2
     [:div
      (ui/button
-       "Zotero settings"
-       :class "text-sm p-1"
-       :style {:margin-top "0px"}
-       :on-click
-       (fn []
-         (state/close-settings!)
-         (route-handler/redirect! {:to :zotero-setting})))]]])
+      "Zotero settings"
+      :class "text-sm p-1"
+      :style {:margin-top "0px"}
+      :on-click
+      (fn []
+        (state/close-settings!)
+        (route-handler/redirect! {:to :zotero-setting})))]]])
 
 (defn auto-push-row [t current-repo enable-git-auto-push?]
-  (when (string/starts-with? current-repo "https://")
+  (when (and current-repo (string/starts-with? current-repo "https://"))
     (toggle "enable_git_auto_push"
             "Enable Git auto push"
             enable-git-auto-push?
@@ -483,29 +495,19 @@
           (t :settings-page/disable-sentry)
           (not instrument-disabled?)
           (fn [] (instrument/disable-instrument
-                 (not instrument-disabled?)))
+                  (not instrument-disabled?)))
           [:span.text-sm.opacity-50 "Logseq will never collect your local graph database or sell your data."]))
 
 (defn clear-cache-row [t]
-  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    {:for "clear_cache"}
-    (t :settings-page/clear-cache)]
-   [:div.mt-1.sm:mt-0.sm:col-span-2
-    [:div.max-w-lg.rounded-md.sm:max-w-xs
-     (ui/button
-       (t :settings-page/clear)
-       :class "text-sm p-1"
-       :on-click handler/clear-cache!)]]])
+  (row-with-button-action {:left-label   (t :settings-page/clear-cache)
+                           :button-label (t :settings-page/clear)
+                           :on-click     handler/clear-cache!
+                           :-for         "clear_cache"}))
 
 (defn version-row [t version]
-  [:div.it.app-updater.sm:grid.sm:grid-cols-5.sm:gap-4.sm:items-center
-   [:label.block.text-sm.font-medium.leading-5.opacity-70
-    (t :settings-page/current-version)]
-   [:div.wrap.sm:mt-0.sm:col-span-4
-    (if (util/electron?)
-      (app-updater version)
-      [:span.ver version])]])
+  (row-with-button-action {:left-label (t :settings-page/current-version)
+                           :action     (app-updater version)
+                           :-for       "current-version"}))
 
 (defn developer-mode-row [t developer-mode?]
   (toggle "developer_mode"
@@ -543,6 +545,7 @@
         instrument-disabled? (state/sub :instrument/disabled?)
         logical-outdenting? (state/logical-outdenting?)
         enable-tooltip? (state/enable-tooltip?)
+        enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         show-brackets? (state/show-brackets?)
@@ -567,19 +570,21 @@
 
         [:aside.md:w-64
          [:ul
-          (for [[label text icon] [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
-                                   [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
-                                   [:shortcuts (t :settings-page/tab-shortcuts) (ui/icon "command" {:style {:font-size 20}})]
-                                   [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})]
-                                   [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
+          (for [[label text icon]
+                [[:general (t :settings-page/tab-general) (ui/icon "adjustments" {:style {:font-size 20}})]
+                 [:editor (t :settings-page/tab-editor) (ui/icon "writing" {:style {:font-size 20}})]
+                 (when-not (mobile-util/is-native-platform?)
+                   [:git (t :settings-page/tab-version-control) (ui/icon "history" {:style {:font-size 20}})])
+                 [:advanced (t :settings-page/tab-advanced) (ui/icon "bulb" {:style {:font-size 20}})]]]
 
-            [:li
-             {:class    (util/classnames [{:active (= label @*active)}])
-              :on-click #(reset! *active label)}
+            (when label
+              [:li
+               {:class    (util/classnames [{:active (= label @*active)}])
+                :on-click #(reset! *active label)}
 
-             [:a.flex.items-center
-              icon
-              [:strong text]]])]]
+               [:a.flex.items-center
+                icon
+                [:strong text]]]))]]
 
         [:article
 
@@ -589,7 +594,11 @@
            [:div.panel-wrap.is-general
             (version-row t version)
             (language-row t preferred-language)
-            (theme-modes-row t switch-theme system-theme? dark?)]
+            (theme-modes-row t switch-theme system-theme? dark?)
+            (when-let [current-repo (state/sub :git/current-repo)]
+              [(edit-config-edn)
+               (edit-custom-css)])
+            (keyboard-shortcuts-row t)]
 
            :editor
            [:div.panel-wrap.is-editor
@@ -600,38 +609,45 @@
             (show-brackets-row t show-brackets?)
             (when (util/electron?) (switch-spell-check-row t))
             (outdenting-row t logical-outdenting?)
-            (tooltip-row t enable-tooltip?)
+            (when-not (or (util/mobile?) (mobile-util/is-native-platform?))
+              (shortcut-tooltip-row t enable-shortcut-tooltip?)
+              (tooltip-row t enable-tooltip?))
             (timetracking-row t enable-timetracking?)
             (journal-row t enable-journals?)
-            (enable-all-pages-public-row t enable-all-pages-public?)
             (encryption-row t enable-encryption?)
+            (enable-all-pages-public-row t enable-all-pages-public?)
             (zotero-settings-row t)
-            (auto-push-row t current-repo enable-git-auto-push?)
-            (graph-config t)]
-
-           :shortcuts
-           [:div.panel-wrap
-            (keyboard-shortcuts-row t)]
+            (auto-push-row t current-repo enable-git-auto-push?)]
 
            :git
            [:div.panel-wrap
             [:div.text-sm.my-4
-             [:a {:href "https://git-scm.com/"
-                  :target "_blank"} "Git"]
-             " is used for pages version control, you can click the vertical three dots menu to check the page's history."]
+             [:span.text-sm.opacity-50.my-4
+              "You can view a page's edit history by clicking the three vertical dots "
+              "in the top-right corner and selecting \"Check page's history\". "
+              "Logseq uses "]
+             [:a {:href "https://git-scm.com/" :target "_blank"}
+              "Git"]
+             [:span.text-sm.opacity-50.my-4
+              " for version control."]]
+            [:br]
             (switch-git-auto-commit-row t)
             (git-auto-commit-seconds t)
 
             (ui/admonition
              :warning
-             [:p "You need to restart the app after updating the settings."])]
+             [:p (t :settings-page/git-confirm)])]
 
            :advanced
            [:div.panel-wrap.is-advanced
             (when (and util/mac? (util/electron?)) (app-auto-update-row t))
             (usage-diagnostics-row t instrument-disabled?)
-            (developer-mode-row t developer-mode?)
+            (if-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
             (clear-cache-row t)
+
+            (ui/admonition
+             :warning
+             [:p "Clearing the cache will discard open graphs. You will lose unsaved changes."])
 
             (when logged?
               [:div
@@ -670,8 +686,8 @@
                 [:div.mt-1.sm:mt-0.sm:col-span-2
                  [:div.max-w-lg.rounded-md.sm:max-w-xs
                   (ui/button (t :user/delete-your-account)
-                    :on-click (fn []
-                                (ui-handler/toggle-settings-modal!)
-                                (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
+                             :on-click (fn []
+                                         (ui-handler/toggle-settings-modal!)
+                                         (js/setTimeout #(state/set-modal! delete-account-confirm))))]]]])]
 
            nil)]]])))

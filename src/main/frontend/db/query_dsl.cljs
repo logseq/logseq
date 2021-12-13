@@ -147,6 +147,7 @@
   ([repo e {:keys [sort-by blocks? sample counter current-filter vars] :as env} level]
    ;; TODO: replace with multi-methods for extensibility.
    (let [fe (first e)
+         fe (when fe (symbol (string/lower-case (name fe))))
          page-ref? (text/page-ref? e)]
      (when (or (and page-ref?
                     (not (contains? #{'page-property 'page-tags} (:current-filter env))))
@@ -416,7 +417,8 @@
              (not (string/blank? s)))
     (let [counter (atom 0)]
       (try
-        (let [form (some-> s
+        (let [s (if (= \# (first s)) (util/format "[[%s]]" (subs s 1)) s)
+              form (some-> s
                            (pre-transform)
                            (reader/read-string))]
           (if (symbol? form)
@@ -459,8 +461,10 @@
     (let [query-string (template/resolve-dynamic-template! query-string)]
       (when-not (string/blank? query-string)
         (let [{:keys [query sort-by blocks? sample] :as result} (parse repo query-string)
-              query (if (string? query) (string/trim query) query)]
-          (if (and (string? result) (not (string/includes? result " ")))
+              query (if (string? query) (string/trim query) query)
+              full-text-query? (and (string? result)
+                                    (not (string/includes? result " ")))]
+          (if full-text-query?
             (if (= "\"" (first result) (last result))
               (subs result 1 (dec (count result)))
               result)

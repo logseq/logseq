@@ -2,8 +2,8 @@
   (:require [clojure.string :as string]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.handler.search :as search-handler]
             [frontend.state :as state]
             [frontend.text :as text]
@@ -21,13 +21,36 @@
     (route-fn to path-params query-params)))
 
 (defn redirect-to-home!
+  ([]
+   (redirect-to-home! true))
+  ([pub-event?]
+   (when pub-event? (state/pub-event! [:redirect-to-home]))
+   (redirect! {:to :home})))
+
+(defn redirect-to-all-pages!
   []
-  (redirect! {:to :home}))
+  (redirect! {:to :all-pages}))
+
+(defn redirect-to-graph-view!
+  []
+  (redirect! {:to :graph}))
 
 (defn redirect-to-page!
-  [page-name]
-  (redirect! {:to :page
-              :path-params {:name page-name}}))
+  ([page-name]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}}))
+  ([page-name anchor]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}
+               :query-params {:anchor anchor}}))
+  ([page-name anchor push]
+   (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
+   (redirect! {:to :page
+               :path-params {:name (str page-name)}
+               :query-params {:anchor anchor}
+               :push push})))
 
 (defn get-title
   [name path-params]
@@ -86,7 +109,8 @@
 (defn update-page-label!
   [route]
   (let [{:keys [data]} route]
-    (set! (. js/document.body.dataset -page) (name (:name data)))))
+    (when-let [data-name (:name data)]
+      (set! (. js/document.body.dataset -page) (name data-name)))))
 
 (defn jump-to-anchor!
   [anchor-text]
@@ -103,8 +127,7 @@
       (jump-to-anchor! anchor)
       (util/scroll-to (util/app-scroll-container-node)
                       (state/get-saved-scroll-position)
-                      false))
-    (plugin-handler/hook-plugin-app :route-changed (select-keys route [:template :path :parameters]))))
+                      false))))
 
 (defn go-to-search!
   [search-mode]
@@ -148,7 +171,6 @@
       :file
       (when-let [path (get-in (state/get-route-match) [:path-params :path])]
         (when-let [page (db/get-file-page path)]
-          (redirect! {:to :page
-                      :path-params {:name page}})))
+          (redirect-to-page! page)))
 
       nil)))

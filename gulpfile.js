@@ -79,7 +79,7 @@ exports.electron = () => {
 }
 
 exports.electronMaker = async () => {
-  cp.execSync('yarn cljs:release', {
+  cp.execSync('yarn cljs:release-electron', {
     stdio: 'inherit'
   })
 
@@ -101,11 +101,6 @@ exports.electronMaker = async () => {
       stdio: 'inherit'
     })
   }
-
-  cp.execSync('yarn rebuild:better-sqlite3', {
-    cwd: outputPath,
-    stdio: 'inherit'
-  })
 
   cp.execSync('yarn electron:make', {
     cwd: outputPath,

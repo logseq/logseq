@@ -6,7 +6,8 @@
             [medley.core :as medley]
             [frontend.format.mldoc :as mldoc]
             [frontend.text :as text]
-            [frontend.util.cursor :as cursor]))
+            [frontend.util.cursor :as cursor]
+            [frontend.handler.link :as link]))
 
 (defonce properties-start ":PROPERTIES:")
 (defonce properties-end ":END:")
@@ -43,7 +44,7 @@
   [content]
   (if (contains-properties? content)
     (string/replace content
-                    (re-pattern ":PROPERTIES:\n:END:\n*")
+                    (re-pattern ":PROPERTIES:\n+:END:\n*")
                     "")
     content))
 
@@ -76,28 +77,46 @@
         (when-let [key (get-property-key line :org)]
           (not (contains? #{:PROPERTIES :END} key))))))
 
+(defn get-org-property-keys
+  [content]
+  (let [content-lines (string/split-lines content)
+        [_ properties&body] (split-with #(-> (string/triml %)
+                                             string/upper-case
+                                             (string/starts-with? properties-start)
+                                             not)
+                                        content-lines)
+        properties (rest (take-while #(-> (string/trim %)
+                                          string/upper-case
+                                          (string/starts-with? properties-end)
+                                          not
+                                          (or (string/blank? %)))
+                                     properties&body))]
+    (when (seq properties)
+      (map #(->> (string/split % ":")
+                 (remove string/blank?)
+                 first
+                 string/upper-case)
+           properties))))
+
+(defn get-markdown-property-keys
+  [content]
+  (let [content-lines (string/split-lines content)
+        properties (filter #(re-matches #"^.+::\s*.+" %) content-lines)]
+    (when (seq properties)
+      (map #(->> (string/split % "::")
+                 (remove string/blank?)
+                 first
+                 string/upper-case)
+           properties))))
+
 (defn get-property-keys
   [format content]
   (cond
     (contains-properties? content)
-    (let [content-lines (string/split-lines content)
-          [_ properties&body] (split-with #(-> (string/triml %)
-                                               string/upper-case
-                                               (string/starts-with? properties-start)
-                                               not)
-                                          content-lines)
-          properties (rest (take-while #(-> (string/trim %)
-                                            string/upper-case
-                                            (string/starts-with? properties-end)
-                                            not
-                                            (or (string/blank? %)))
-                                       properties&body))]
-      (when (seq properties)
-        (map #(->> (string/split % ":")
-                   (remove string/blank?)
-                   first
-                   string/upper-case)
-             properties)))))
+    (get-org-property-keys content)
+
+    (= :markdown format)
+    (get-markdown-property-keys content)))
 
 (defn property-key-exist?
   [format content key]
@@ -447,7 +466,7 @@
       (contains? @non-parsing-properties (string/lower-case k))
       v
 
-      (string/starts-with? v "http")
+      (link/link? v)
       v
 
       :else

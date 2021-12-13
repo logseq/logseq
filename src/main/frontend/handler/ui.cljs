@@ -12,20 +12,15 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [clojure.string :as string]
-            [frontend.storage :as storage]
             [rum.core :as rum]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [frontend.mobile.util :as mobile]))
 
 ;; sidebars
 (defn close-left-sidebar!
   []
   (when-let [elem (gdom/getElement "close-left-bar")]
     (.click elem)))
-
-(defn toggle-left-sidebar!
-  []
-  (state/set-left-sidebar-open!
-    (not (@state/state :ui/left-sidebar-open?))))
 
 (defn hide-right-sidebar
   []
@@ -128,37 +123,38 @@
 
 (defn exec-js-if-exists-&-allowed!
   [t]
-  (when-let [href (or
+  (when-not mobile/is-native-platform?
+    (when-let [href (or
                      (state/get-custom-js-link)
                      (config/get-custom-js-path))]
-    (let [k (str "ls-js-allowed-" href)
-          execed #(swap! *js-execed conj href)
-          execed? (contains? @*js-execed href)
-          ask-allow #(let [r (js/confirm (t :plugin/custom-js-alert))]
-                       (if r
-                         (storage/set k (js/Date.now))
-                         (storage/set k false))
-                       r)
-          allowed! (storage/get k)
-          should-ask? (or (nil? allowed!)
-                          (> (- (js/Date.now) allowed!) 604800000))]
-      (when (and (not execed?)
-                 (not= false allowed!))
-        (if (string/starts-with? href "http")
-          (when (or (not should-ask?)
-                    (ask-allow))
-            (load href #(do (js/console.log "[custom js]" href) (execed))))
-          (util/p-handle
-            (fs/read-file (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo))) href)
-            #(when-let [scripts (and % (string/trim %))]
-               (when-not (string/blank? scripts)
-                 (if (or (not should-ask?) (ask-allow))
-                   (try
-                     (do
-                       (js/eval scripts)
-                       (execed))
-                     (catch js/Error e
-                       (js/console.error "[custom js]" e))))))))))))
+      (let [k (str "ls-js-allowed-" href)
+            execed #(swap! *js-execed conj href)
+            execed? (contains? @*js-execed href)
+            ask-allow #(let [r (js/confirm (t :plugin/custom-js-alert))]
+                         (if r
+                           (storage/set k (js/Date.now))
+                           (storage/set k false))
+                         r)
+            allowed! (storage/get k)
+            should-ask? (or (nil? allowed!)
+                            (> (- (js/Date.now) allowed!) 604800000))]
+        (when (and (not execed?)
+                   (not= false allowed!))
+          (if (string/starts-with? href "http")
+            (when (or (not should-ask?)
+                      (ask-allow))
+              (load href #(do (js/console.log "[custom js]" href) (execed))))
+            (util/p-handle
+             (fs/read-file (if (util/electron?) "" (config/get-repo-dir (state/get-current-repo))) href)
+             #(when-let [scripts (and % (string/trim %))]
+                (when-not (string/blank? scripts)
+                  (if (or (not should-ask?) (ask-allow))
+                    (try
+                      (do
+                        (js/eval scripts)
+                        (execed))
+                      (catch js/Error e
+                        (js/console.error "[custom js]" e)))))))))))))
 
 (defn toggle-wide-mode!
   []

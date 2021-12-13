@@ -54,7 +54,8 @@
         new-path (str recycle-dir "/" file-name)]
     (fs/renameSync path new-path)))
 
-(defmethod handle :backupDbFile [_window [_ repo path db-content]]
+(defn backup-file
+  [repo path content]
   (let [basename (path/basename path)
         file-name (-> (string/replace path (str repo "/") "")
                       (string/replace "/" "_")
@@ -63,25 +64,48 @@
         _ (fs-extra/ensureDirSync bak-dir)
         new-path (str bak-dir "/" file-name "."
                       (string/replace (.toISOString (js/Date.)) ":" "_"))]
-    (fs/writeFileSync new-path db-content)
-    (fs/statSync new-path)))
+    (fs/writeFileSync new-path content)
+    (fs/statSync new-path)
+    new-path))
+
+(defmethod handle :backupDbFile [_window [_ repo path db-content]]
+  (backup-file repo path db-content))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
 
-(defmethod handle :writeFile [_window [_ path content]]
+(defn writable?
+  [path]
+  (assert (string? path))
   (try
-    (let [^js Buf (.-Buffer buffer)
-          ^js content (if (instance? js/ArrayBuffer content)
-                        (.from Buf content) content)]
+    (fs/accessSync path (aget fs "W_OK"))
+    (catch js/Error _e
+      false)))
 
+(defmethod handle :writeFile [_window [_ repo path content]]
+  (let [^js Buf (.-Buffer buffer)
+        ^js content (if (instance? js/ArrayBuffer content)
+                      (.from Buf content)
+                      content)]
+    (try
+      (when (and (fs/existsSync path) (not (writable? path)))
+        (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
-      (fs/statSync path))
-    (catch js/Error e
-      (utils/send-to-renderer "notification" {:type "error"
-                                              :payload (str "Write to the file " path
-                                                            " failed, "
-                                                            e)}))))
+      (fs/statSync path)
+      (catch js/Error e
+        (let [backup-path (try
+                            (backup-file repo path content)
+                            (catch js/Error e
+                              (println "Backup file failed")
+                              (js/console.dir e)))]
+          (utils/send-to-renderer "notification" {:type "error"
+                                                  :payload (str "Write to the file " path
+                                                                " failed, "
+                                                                e
+                                                                (when backup-path
+                                                                  " A backup file was saved to "
+                                                                  backup-path
+                                                                  "."))}))))))
 
 (defmethod handle :rename [_window [_ old-path new-path]]
   (fs/renameSync old-path new-path))
@@ -114,13 +138,17 @@
     (vec (cons {:path (utils/fix-win-path! path)} result))))
 
 (defmethod handle :openDir [^js window _messages]
-  (let [result (.showOpenDialogSync dialog (bean/->js
-                                             {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
-        path (first result)]
-    (.. ^js window -webContents
-        (send "open-dir-confirmed"
-              (bean/->js {:opened? true})))
-    (get-files path)))
+  (p/let [result (.showOpenDialog dialog (bean/->js
+                                          {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
+          result (get (js->clj result) "filePaths")
+          path (first result)]
+    (if path
+      (do
+        (.. ^js window -webContents
+            (send "open-dir-confirmed"
+                  (bean/->js {:opened? true})))
+        (p/resolved (bean/->js (get-files path))))
+      (p/rejected (js/Error "path empty")))))
 
 (defmethod handle :getFiles [window [_ path]]
   (get-files path))
@@ -135,7 +163,8 @@
 (defmethod handle :rebuild-blocks-indice [window [_ repo data]]
   (search/truncate-blocks-table! repo)
   ;; unneeded serialization
-  (search/upsert-blocks! repo (bean/->js data)))
+  (search/upsert-blocks! repo (bean/->js data))
+  [])
 
 (defmethod handle :transact-blocks [window [_ repo data]]
   (let [{:keys [blocks-to-remove-set blocks-to-add]} data]
@@ -159,7 +188,8 @@
         (try
           (fs-extra/removeSync path)
           (catch js/Error e
-            (js/console.error e)))))))
+            (js/console.error e)))))
+    (utils/send-to-renderer "redirect" {:payload {:to :home}})))
 
 (defmethod handle :clearCache [_window _]
   (search/close!)
@@ -167,14 +197,15 @@
   (search/ensure-search-dir!))
 
 (defmethod handle :addDirWatcher [window [_ dir]]
+  (watcher/close-watcher!)
   (when dir
     (watcher/watch-dir! window dir)))
 
-(defmethod handle :openDialogSync [^js window _messages]
-  (let [result (.showOpenDialogSync dialog (bean/->js
-                                             {:properties ["openDirectory"]}))
-        path (first result)]
-    path))
+(defmethod handle :openDialog [^js window messages]
+  (p/let [result (.showOpenDialog dialog (bean/->js
+                                          {:properties ["openDirectory"]}))
+          result (get (js->clj result) "filePaths")]
+    (p/resolved (first result))))
 
 (defmethod handle :getLogseqDotDirRoot []
   (utils/get-ls-dotdir-root))
@@ -198,6 +229,9 @@
 
 (defmethod handle :getDirname [_]
   js/__dirname)
+
+(defmethod handle :getAppBaseInfo [^js win [_ opts]]
+  {:isFullScreen (.isFullScreen win)})
 
 (defmethod handle :setCurrentGraph [_ [_ path]]
   (let [path (when path (string/replace path "logseq_local_" ""))]

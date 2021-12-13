@@ -9,16 +9,26 @@
             [frontend.state :as state]
             [frontend.ui.date-picker]
             [frontend.util :as util]
+            [frontend.util.cursor :as cursor]
+            [frontend.handler.plugin :as plugin-handler]
+            [cljs-bean.core :as bean]
             [goog.dom :as gdom]
+            [frontend.modules.shortcut.config :as shortcut-config]
+            [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [promesa.core :as p]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
+            [electron.ipc :as ipc]
             ["react-resize-context" :as Resize]
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["react-tweet-embed" :as react-tweet-embed]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [clojure.string :as str]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.mobile.util :as mobile-util]))
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
@@ -28,7 +38,35 @@
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
 (def ReactTweetEmbed (r/adapt-class react-tweet-embed))
 
-(rum/defc ls-textarea < rum/reactive
+(defn main-content-top-padding
+  []
+  (cond
+    (mobile-util/native-iphone?)
+    (- (mobile-util/get-idevice-statusbar-height) 10)
+
+    (mobile-util/native-ipad?)
+    15
+
+    :else
+    0))
+
+(defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
+
+(rum/defc ls-textarea
+  < rum/reactive
+  {:did-mount (fn [state]
+                (let [^js el (rum/dom-node state)]
+                  (. el addEventListener "mouseup"
+                     #(let [start (.-selectionStart el)
+                            end (.-selectionEnd el)]
+                        (when-let [e (and (not= start end)
+                                          {:caret (cursor/get-caret-pos el)
+                                           :start start :end end
+                                           :text  (. (.-value el) substring start end)
+                                           :point {:x (.-x %) :y (.-y %)}})]
+
+                          (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))))))
+                state)}
   [{:keys [on-change] :as props}]
   (let [skip-composition? (or
                            (state/sub :editor/show-page-search?)
@@ -91,13 +129,14 @@
    (fn [{:keys [close-fn] :as state}]
      [:div.py-1.rounded-md.shadow-xs
       (when links-header links-header)
-      (for [{:keys [options title icon hr]} (if (fn? links) (links) links)]
+      (for [{:keys [options title icon hr hover-detail]} (if (fn? links) (links) links)]
         (let [new-options
-              (assoc options
-                     :on-click (fn [e]
-                                 (when-let [on-click-fn (:on-click options)]
-                                   (on-click-fn e))
-                                 (close-fn)))
+              (merge options
+                     {:title hover-detail
+                      :on-click (fn [e]
+                                  (when-let [on-click-fn (:on-click options)]
+                                    (on-click-fn e))
+                                  (close-fn))})
               child (if hr
                       nil
                       [:div
@@ -166,11 +205,10 @@
                 "M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
                 :fill-rule "evenodd"}]]])]
       [:div.ui__notifications-content
-       {:style {:z-index (if (or (= state "exiting")
-                                 (= state "exited"))
-                           -1
-                           99)
-                :top     "3.2em"}}
+       {:style
+        (when (or (= state "exiting")
+                  (= state "exited"))
+                  {:z-index -1})}
        [:div.max-w-sm.w-full.shadow-lg.rounded-lg.pointer-events-auto.notification-area
         {:class (case state
                   "entering" "transition ease-out duration-300 transform opacity-0 translate-y-2 sm:translate-x-0"
@@ -232,7 +270,7 @@
 
 (defn main-node
   []
-  (gdom/getElement "main-content"))
+  (gdom/getElement "main-container"))
 
 (defn get-scroll-top []
   (.-scrollTop (main-node)))
@@ -243,15 +281,19 @@
 
 (defn inject-document-devices-envs!
   []
-  (let [cl (.-classList js/document.documentElement)]
+  (let [^js cl (.-classList js/document.documentElement)]
     (when util/mac? (.add cl "is-mac"))
     (when util/win32? (.add cl "is-win32"))
     (when (util/electron?) (.add cl "is-electron"))
     (when (util/ios?) (.add cl "is-ios"))
     (when (util/mobile?) (.add cl "is-mobile"))
     (when (util/safari?) (.add cl "is-safari"))
+    (when (mobile-util/native-ios?) (.add cl "is-native-ios"))
+    (when (mobile-util/native-android?) (.add cl "is-native-android"))
     (when (util/electron?)
-      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen")))))
+      (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen"))
+      (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
+                                           (and isFullScreen (.add cl "is-fullscreen")))))))
 
 (defn inject-dynamic-style-node!
   []
@@ -262,35 +304,37 @@
         (.appendChild js/document.head node))
       style)))
 
-(defn setup-patch-ios-fixed-bottom-position!
-  "fix a common issue about ios webpage viewport
-   when soft keyboard setup"
+(defn setup-patch-ios-visual-viewport-state!
   []
-  (when (and
-         (util/ios?)
-         (not (nil? js/window.visualViewport)))
-    (let [viewport js/visualViewport
-          style (get-dynamic-style-node)
-          sheet (.-sheet style)
-          raf-pending? (atom false)
+  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
+                             (mobile-util/native-ios?))
+                         js/window.visualViewport)]
+    (let [raf-pending? (atom false)
           set-raf-pending! #(reset! raf-pending? %)
-          handler
+          on-viewport-changed
           (fn []
-            (when-not @raf-pending?
-              (let [f (fn []
-                        (set-raf-pending! false)
-                        (let [vh (+ (.-offsetTop viewport) (.-height viewport))
-                              rule (.. sheet -rules (item 0))
-                              set-top #(set! (.. rule -style -top) (str % "px"))]
-                          (set-top vh)))]
-                (set-raf-pending! true)
-                (js/window.requestAnimationFrame f))))]
-      (.insertRule sheet ".fix-ios-fixed-bottom {bottom:unset !important; transform: translateY(-100%); top: 100vh;}")
-      (.addEventListener viewport "resize" handler)
-      (.addEventListener viewport "scroll" handler)
+            (let [update-vw-state
+                  (util/debounce 20
+                                 (fn []
+                                   (state/set-visual-viewport-state {:height     (.-height vp)
+                                                                     :page-top   (.-pageTop vp)
+                                                                     :offset-top (.-offsetTop vp)})
+                                   (state/set-state! :ui/visual-viewport-pending? false)))]
+              (when-not @raf-pending?
+                (let [f (fn []
+                          (set-raf-pending! false)
+                          (update-vw-state))]
+                  (set-raf-pending! true)
+                  (state/set-state! :ui/visual-viewport-pending? true)
+                  (js/window.requestAnimationFrame f)))))]
+
+      (.addEventListener vp "resize" on-viewport-changed)
+      (.addEventListener vp "scroll" on-viewport-changed)
+
       (fn []
-        (.removeEventListener viewport "resize" handler)
-        (.removeEventListener viewport "scroll" handler)))))
+        (.removeEventListener vp "resize" on-viewport-changed)
+        (.removeEventListener vp "scroll" on-viewport-changed)
+        (state/set-visual-viewport-state nil)))))
 
 (defn setup-system-theme-effect!
   []
@@ -304,11 +348,13 @@
 
 (defn setup-active-keystroke! []
   (let [active-keystroke (atom #{})
+        heads #{:shift :alt :meta :control}
         handle-global-keystroke (fn [down? e]
                                   (let [handler (if down? conj disj)
                                         keystroke e.key]
                                     (swap! active-keystroke handler keystroke))
-                                  (set-global-active-keystroke (apply str (interpose "+" (vec @active-keystroke)))))
+                                  (when (contains? heads (keyword (util/safe-lower-case e.key)))
+                                    (set-global-active-keystroke (str/join "+" @active-keystroke))))
         keydown-handler (partial handle-global-keystroke true)
         keyup-handler (partial handle-global-keystroke false)
         clear-all #(do (set-global-active-keystroke "")
@@ -323,16 +369,26 @@
       (.removeEventListener js/window "blur" clear-all)
       (.removeEventListener js/window "visibilitychange" clear-all))))
 
+(defonce last-scroll-top (atom 0))
+
+(defn scroll-down?
+  []
+  (let [scroll-top (get-scroll-top)]
+    (let [down? (> scroll-top @last-scroll-top)]
+      (reset! last-scroll-top scroll-top)
+      down?)))
+
 (defn on-scroll
   [node on-load on-top-reached]
   (let [full-height (gobj/get node "scrollHeight")
         scroll-top (gobj/get node "scrollTop")
         client-height (gobj/get node "clientHeight")
         bottom-reached? (<= (- full-height scroll-top client-height) 100)
-        top-reached? (= scroll-top 0)]
-    (when (and bottom-reached? on-load)
+        top-reached? (= scroll-top 0)
+        down? (scroll-down?)]
+    (when (and down? bottom-reached? on-load)
       (on-load))
-    (when (and top-reached? on-top-reached)
+    (when (and (not down?) top-reached? on-top-reached)
       (on-top-reached))))
 
 (defn attach-listeners
@@ -417,17 +473,29 @@
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
-;; `sequence` can be a list of symbols or strings
-(defn keyboard-shortcut [sequence]
-  [:span.keyboard-shortcut
-   (map-indexed (fn [i key]
-                  [:code {:key i}
+;; `sequence` can be a list of symbols, a list of strings, or a string
+(defn render-keyboard-shortcut [sequence]
+  (let [sequence (if (string? sequence)
+                   (-> sequence ;; turn string into sequence
+                       (str/trim)
+                       (str/lower-case)
+                       (str/split  #" |\+"))
+                   sequence)]
+    [:span.keyboard-shortcut
+     (map-indexed (fn [i key]
+                    [:code {:key i}
                    ;; Display "cmd" rather than "meta" to the user to describe the Mac
                    ;; mod key, because that's what the Mac keyboards actually say.
-                   (if (or (= :meta key) (= "meta" key))
-                     (util/meta-key-name)
-                     (name key))])
-                sequence)])
+                     (if (or (= :meta key) (= "meta" key))
+                       (util/meta-key-name)
+                       (name key))])
+                  sequence)]))
+
+(defn keyboard-shortcut-from-config [shortcut-name]
+  (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))
+        custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
+        binding         (or custom-binding default-binding)]
+    (shortcut-helper/decorate-binding binding)))
 
 (defonce modal-show? (atom false))
 (rum/defc modal-overlay
@@ -499,7 +567,11 @@
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 100 -1)}}
+     {:style {:z-index (if show? 9999 -1)
+              :top (when (or (mobile-util/native-iphone?)
+                             (mobile-util/native-android?)
+                             (and (util/mobile?) (util/ios?)))
+                     "22vh")}}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
@@ -569,7 +641,7 @@
    {:class (if collapsed? "rotating-arrow collapsed" "rotating-arrow not-collapsed")}
    (svg/caret-right)])
 
-(rum/defcs foldable <
+(rum/defcs foldable < db-mixins/query rum/reactive
   (rum/local false ::control?)
   (rum/local false ::collapsed?)
   {:will-mount (fn [state]
@@ -592,15 +664,16 @@
                                              (assoc :on-mouse-down on-mouse-down
                                                     :class "cursor"))
        [:div.flex.flex-row.items-center
-        [:a.block-control.opacity-50.hover:opacity-100.mr-2
-         (cond->
-          {:style    {:width       14
-                      :height      16
-                      :margin-left -24}}
-           (not title-trigger?)
-           (assoc :on-mouse-down on-mouse-down))
-         [:span {:class (if @control? "control-show" "control-hide")}
-          (rotating-arrow @collapsed?)]]
+        (when-not (mobile-util/is-native-platform?)
+          [:a.block-control.opacity-50.hover:opacity-100.mr-2
+           (cond->
+               {:style    {:width       14
+                           :height      16
+                           :margin-left -30}}
+             (not title-trigger?)
+             (assoc :on-mouse-down on-mouse-down))
+           [:span {:class (if @control? "control-show" "control-hide")}
+            (rotating-arrow @collapsed?)]])
         (if (fn? header)
           (header @collapsed?)
           header)]]]
@@ -641,9 +714,9 @@
 
 (rum/defc select
   [options on-change class]
-  [:select.mt-1.block.px-3.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-4
+  [:select.mt-1.block.text-base.leading-6.border-gray-300.focus:outline-none.focus:shadow-outline-blue.focus:border-blue-300.sm:text-sm.sm:leading-5.ml-1.sm:ml-4.w-12.sm:w-20
    {:class     (or class "form-select")
-    :style     {:padding "0 0 0 12px"}
+    :style     {:padding "0 0 0 6px"}
     :on-change (fn [e]
                  (let [value (util/evalue e)]
                    (on-change value)))}
@@ -664,6 +737,7 @@
     (Tippy (->
             (merge {:arrow true
                     :sticky true
+                    :delay 600
                     :theme "customized"
                     :disabled (not (state/enable-tooltip?))
                     :unmountHTMLWhenHide true
@@ -683,7 +757,7 @@
                              (when-let [html (:html opts)]
                                (if (fn? html)
                                  (html)
-                                 [:div.pr-3.py-1
+                                 [:div.px-2.py-1
                                   html]))
                              (catch js/Error e
                                (log/error :exception e)
@@ -719,3 +793,17 @@
                            (when (:class opts)
                              (str " " (string/trim (:class opts)))))}
               (dissoc opts :class))]))
+
+(rum/defc with-shortcut < rum/reactive
+  [shortcut-key position content]
+  (let [tooltip? (state/sub :ui/shortcut-tooltip?)]
+    (if tooltip?
+      (tippy
+       {:html [:div.text-sm.font-medium (keyboard-shortcut-from-config shortcut-key)]
+        :interactive true
+        :position    position
+        :theme       "monospace"
+        :delay       [1000, 100]
+        :arrow       true}
+       content)
+      content)))

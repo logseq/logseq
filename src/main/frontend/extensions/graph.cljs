@@ -1,6 +1,5 @@
 (ns frontend.extensions.graph
   (:require [cljs-bean.core :as bean]
-            [cljs-bean.core :as bean]
             [clojure.string :as string]
             [frontend.extensions.graph.pixi :as pixi]
             [frontend.handler.route :as route-handler]
@@ -53,8 +52,7 @@
     (when-not drag?
       (let [page-name (string/lower-case node)]
         (.unhoverNode ^js graph node)
-        (route-handler/redirect! {:to :page
-                                  :path-params {:name page-name}})))))
+        (route-handler/redirect-to-page! page-name)))))
 
 (defn reset-graph!
   [^js graph]

@@ -28,7 +28,8 @@
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [shadow.resource :as rc]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.mobile.util :as mobile]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -154,13 +155,12 @@
    (let [repo-dir (config/get-repo-dir repo-url)]
      (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name))
              _ (fs/mkdir-if-not-exists (str repo-dir "/" config/app-name "/" config/recycle-dir))
-             _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))]
-       (file-handler/create-metadata-file repo-url encrypted?)
-       ;; TODO: move to frontend.handler.file
-       (create-config-file-if-not-exists repo-url)
-       (create-contents-file repo-url)
-       (create-favorites-file repo-url)
-       (create-custom-theme repo-url)
+             _ (fs/mkdir-if-not-exists (str repo-dir "/" (config/get-journals-directory)))
+             _ (file-handler/create-metadata-file repo-url encrypted?)
+             _ (create-config-file-if-not-exists repo-url)
+             _ (create-contents-file repo-url)
+             _ (create-favorites-file repo-url)
+             _ (create-custom-theme repo-url)]
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
 (defn- remove-non-exists-refs!
@@ -284,9 +284,9 @@
   (when (= :repos (state/get-current-route))
     (route-handler/redirect-to-home!))
   (let [config (or (state/get-config repo-url)
-                   (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
-                           :file/content
-                           (common-handler/safe-read-string "Parsing config file failed: ")))
+                   (when-let [content (some-> (first (filter #(= (config/get-config-path repo-url) (:file/path %)) nfs-files))
+                                        :file/content)]
+                     (common-handler/read-config content)))
         relate-path-fn (fn [m k]
                          (some-> (get m k)
                                  (string/replace (str (config/get-local-dir repo-url) "/") "")))
@@ -656,7 +656,7 @@
         (rebuild-index! repo))
       (js/setTimeout
        (fn []
-         (route-handler/redirect! {:to :home}))
+         (route-handler/redirect-to-home!))
        500))))
 
 (defn git-commit-and-push!

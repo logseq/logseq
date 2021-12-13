@@ -114,7 +114,7 @@
 
 (defn page-search
   ([q]
-   (page-search q 3))
+   (page-search q 10))
   ([q limit]
    (when-let [repo (state/get-current-repo)]
      (let [q (string/lower-case q)
@@ -130,6 +130,7 @@
                     (:name item))
                  result)
                 (remove nil?)
+                (map string/trim)
                 (distinct)
                 (filter (fn [name]
                           (exact-matched? q name))))))))))
@@ -182,11 +183,13 @@
                        (doseq [page-name pages-to-remove-set]
                          (.remove indice
                                   (fn [page]
-                                    (= page-name (gobj/get page "name")))))
+                                    (= (util/safe-lower-case page-name)
+                                       (util/safe-lower-case (gobj/get page "name"))))))
                        (when (seq pages-to-add)
                          (doseq [page pages-to-add]
                            (.add indice (bean/->js page)))))
                      indice))))
+
         (when (seq blocks)
           (let [blocks-result (->> (db/pull-many '[:db/id :block/uuid :block/format :block/content :block/page] (set (map :e blocks)))
                                    (map (fn [b] (assoc b :block/page (get-in b [:block/page :db/id])))))
@@ -211,11 +214,11 @@
    (when repo
      (when-let [engine (get-engine repo)]
        (let [pages (search-db/make-pages-indice!)]
-        (p/let [blocks (protocol/rebuild-blocks-indice! engine)]
-          (let [result {:pages pages
-                        :blocks blocks}]
-            (swap! indices assoc repo result)
-            indices)))))))
+         (p/let [blocks (protocol/rebuild-blocks-indice! engine)]
+           (let [result {:pages pages
+                         :blocks blocks}]
+             (swap! indices assoc repo result)
+             indices)))))))
 
 (defn reset-indice!
   [repo]

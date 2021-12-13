@@ -23,7 +23,7 @@
                                                      uid {:content content
                                                           :status status}))
 
-     (when clear?
-       (js/setTimeout #(clear! uid) 3000))
+     (when (and clear? (not= status :error))
+       (js/setTimeout #(clear! uid) 1500))
 
      uid)))

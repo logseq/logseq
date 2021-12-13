@@ -28,7 +28,6 @@
    :compiler-options {:infer-externs :auto
                       :output-feature-set :es-next-in
                       :source-map true
-                      :source-map-include-sources-content true
                       :externs ["datascript/externs.js"
                                 "externs.js"]
                       :warnings {:fn-deprecated false}}

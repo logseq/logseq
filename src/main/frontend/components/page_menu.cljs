@@ -14,7 +14,8 @@
             [frontend.util :as util]
             [rum.core :as rum]
             [frontend.handler.shell :as shell]
-            [frontend.handler.plugin :as plugin-handler]))
+            [frontend.handler.plugin :as plugin-handler]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn- delete-page!
   [page-name]
@@ -30,16 +31,10 @@
   (fn [close-fn]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div
-       [:div.sm:flex.sm:items-start
+       [:div.sm:flex.items-center
         [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-red-100.sm:mx-0.sm:h-10.sm:w-10
-         [:svg.h-6.w-6.text-red-600
-          {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-          [:path
-           {:d
-            "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            :stroke-width "2"
-            :stroke-linejoin "round"
-            :stroke-linecap "round"}]]]
+         [:span.text-red-600.text-xl
+          (ui/icon "alert-triangle")]]
         [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
          [:h3#modal-headline.text-lg.leading-6.font-medium
           (t :page/delete-confirmation)]]]
@@ -89,14 +84,19 @@
                          (page-handler/unfavorite-page! page-original-name)
                          (page-handler/favorite-page! page-original-name)))}}
 
-          {:title (t :page/presentation-mode)
-           :options {:on-click (fn []
-                                 (state/sidebar-add-block!
-                                  repo
-                                  (:db/id page)
-                                  :page-presentation
-                                  {:page page}))}}
+          (when-not (mobile-util/is-native-platform?)
+           {:title (t :page/presentation-mode)
+            :options {:on-click (fn []
+                                  (state/sidebar-add-block!
+                                   repo
+                                   (:db/id page)
+                                   :page-presentation
+                                   {:page page}))}})
 
+          ;; TODO: In the future, we'd like to extract file-related actions
+          ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
+          ;; this one. However this component doesn't yet exist. PRs are welcome!
+          ;; Details: https://github.com/logseq/logseq/pull/3003#issuecomment-952820676
           (when-let [file-path (and (util/electron?) (page-handler/get-page-file-path))]
             [{:title   (t :page/open-in-finder)
               :options {:on-click #(js/window.apis.showItemInFolder file-path)}}
@@ -143,8 +143,9 @@
                                       [:div
                                        [:pre.code page-data]
                                        [:br]
-                                       (ui/button "Copy to clipboard"
-                                         :on-click #(.writeText js/navigator.clipboard page-data))]
+                                       (ui/button
+                                        "Copy to clipboard"
+                                        :on-click #(.writeText js/navigator.clipboard page-data))]
                                       :success
                                       false)))}})]
          (flatten)

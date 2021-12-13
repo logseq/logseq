@@ -15,7 +15,8 @@
             ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
             [electron.state :as state]
-            [electron.git :as git]))
+            [electron.git :as git]
+            ["/electron/utils" :as utils]))
 
 (defonce LSP_SCHEME "lsp")
 (defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
@@ -51,6 +52,7 @@
                                           {:plugins                 true ; pdf
                                            :nodeIntegration         false
                                            :nodeIntegrationInWorker false
+                                           :webSecurity             (not dev?)
                                            :contextIsolation        true
                                            :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
                                            ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
@@ -79,7 +81,7 @@
                 (callback #js {:cancel false
                                :requestHeaders requestHeaders}))))))
     (.loadURL win url)
-    (when dev? (.. win -webContents (openDevTools)))
+    ;;(when dev? (.. win -webContents (openDevTools)))
     win))
 
 (defn setup-updater! [^js win]
@@ -118,59 +120,61 @@
      (.unregisterProtocol protocol "assets")))
 
 (defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames]
-  (let [app-path (. app getAppPath)
-        asset-filenames (js->clj asset-filenames)
-        paths (js->clj (. dialog showOpenDialogSync (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]})))]
-    (when (seq paths)
-      (let [root-dir (first paths)
-            static-dir (path/join root-dir "static")
+  (p/let [app-path (. app getAppPath)
+          asset-filenames (js->clj asset-filenames)
+          result (. dialog showOpenDialog (clj->js {:properties ["openDirectory" "createDirectory" "promptToCreate", "multiSelections"]}))
+          result (get (js->clj result) "filePaths")
+          root-dir (first result)]
+    (when root-dir
+      (let [static-dir (path/join root-dir "static")
             assets-from-dir (path/join repo-path "assets")
             assets-to-dir (path/join root-dir "assets")
             index-html-path (path/join root-dir "index.html")]
         (p/let [_ (. fs ensureDir static-dir)
                 _ (. fs ensureDir assets-to-dir)
                 _ (p/all (concat
-                           [(. fs writeFile index-html-path html)
+                          [(. fs writeFile index-html-path html)
 
 
-                            (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
+                           (. fs copy (path/join app-path "404.html") (path/join root-dir "404.html"))]
 
-                           (map
-                             (fn [filename]
-                               (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
-                                   (p/catch
-                                     (fn [e]
-                                       (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
-                                       (js/console.error e)))))
-                             asset-filenames)
+                          (map
+                            (fn [filename]
+                              (-> (. fs copy (path/join assets-from-dir filename) (path/join assets-to-dir filename))
+                                  (p/catch
+                                      (fn [e]
+                                        (println (str "Failed to copy " (path/join assets-from-dir filename) " to " (path/join assets-to-dir filename)))
+                                        (js/console.error e)))))
+                            asset-filenames)
 
-                           (map
-                             (fn [part]
-                               (. fs copy (path/join app-path part) (path/join static-dir part)))
-                             ["css" "fonts" "icons" "img" "js"])))
+                          (map
+                            (fn [part]
+                              (. fs copy (path/join app-path part) (path/join static-dir part)))
+                            ["css" "fonts" "icons" "img" "js"])))
                 custom-css (. fs readFile custom-css-path)
                 _ (. fs writeFile (path/join static-dir "css" "custom.css") custom-css)
                 js-files ["main.js" "code-editor.js" "excalidraw.js"]
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" file)))
-                              js-files))
+                           js-files))
                 _ (p/all (map (fn [file]
                                 (. fs moveSync
                                    (path/join static-dir "js" "publishing" file)
                                    (path/join static-dir "js" file)))
-                              js-files))
+                           js-files))
                 _ (. fs removeSync (path/join static-dir "js" "publishing"))
                 ;; remove source map files
                 ;; TODO: ugly, replace with ls-files and filter with ".map"
                 _ (p/all (map (fn [file]
                                 (. fs removeSync (path/join static-dir "js" (str file ".map"))))
-                              ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
+                           ["main.js" "code-editor.js" "excalidraw.js" "age-encryption.js"]))]
           (. dialog showMessageBox (clj->js {:message (str "Export public pages and publish assets to " root-dir " successfully")})))))))
 
 (defn setup-app-manager!
   [^js win]
   (let [toggle-win-channel "toggle-max-or-min-active-win"
         call-app-channel "call-application"
+        call-win-channel "call-main-win"
         export-publish-assets "export-publish-assets"
         quit-dirty-state "set-quit-dirty-state"
         web-contents (. win -webContents)]
@@ -196,6 +200,13 @@
                (fn [_ type & args]
                  (try
                    (js-invoke app type args)
+                   (catch js/Error e
+                     (js/console.error e)))))
+
+      (.handle call-win-channel
+               (fn [_ type & args]
+                 (try
+                   (js-invoke @*win type args)
                    (catch js/Error e
                      (js/console.error e))))))
 
@@ -243,7 +254,8 @@
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
          (.removeHandler ipcMain quit-dirty-state)
-         (.removeHandler ipcMain call-app-channel))))
+         (.removeHandler ipcMain call-app-channel)
+         (.removeHandler ipcMain call-win-channel))))
 
 (defn- destroy-window!
   [^js win]
@@ -284,6 +296,8 @@
                    *quitting? (atom false)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
+               (utils/disableXFrameOptions win)
+
                (when (search/version-changed?)
                  (search/rm-search-dir!))
 
@@ -319,7 +333,10 @@
                                             (destroy-window! win)
                                             (reset! *win nil))
                                           (do (.preventDefault ^js/Event e)
-                                              (.hide win))))))))
+                                              (if (and mac? (.isFullScreen win))
+                                                (do (.once win "leave-full-screen" #(.hide win))
+                                                    (.setFullScreen win false))
+                                                (.hide win)))))))))
                (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
                (.on app "activate" #(if @*win (.show win)))))))))
 

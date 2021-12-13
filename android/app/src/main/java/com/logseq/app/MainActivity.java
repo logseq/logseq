@@ -10,4 +10,10 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         registerPlugin(FolderPicker.class);
     }
+
+    @Override
+    public void onPause() {
+        overridePendingTransition(0, R.anim.byebye);
+        super.onPause();
+    }
 }

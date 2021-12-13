@@ -213,6 +213,17 @@
      1]
     ["" 0]))
 
+(defn with-label-link
+  [format label link]
+  (case format
+    :org
+    [(util/format "[[%s][label]]" link label)
+     (+ 4 (count link) (count label))]
+    :markdown
+    [(util/format "[%s](%s)" label link)
+     (+ 4 (count link) (count label))]
+    ["" 0]))
+
 (defn with-default-label
   [format label]
   (case format
@@ -294,6 +305,11 @@
   (string/includes? path (str (get-journals-directory) "/")))
 
 (defonce local-repo "local")
+
+(defn demo-graph?
+  []
+  (= (state/get-current-repo) local-repo))
+
 (defonce local-assets-dir "assets")
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")

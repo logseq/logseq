@@ -34,7 +34,7 @@
 
  [frontend.db.model
   block-and-children-transform blocks-count blocks-count-cache clean-export!  cloned? delete-blocks get-pre-block
-  delete-file! delete-file-blocks! delete-file-pages! delete-file-tx delete-files delete-pages-by-files
+  delete-file! delete-file-blocks! delete-page-blocks delete-file-pages! delete-file-tx delete-files delete-pages-by-files
   filter-only-public-pages-and-blocks get-all-block-contents get-all-tagged-pages
   get-all-templates get-block-and-children get-block-by-uuid get-block-children sort-by-left
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
@@ -49,7 +49,7 @@
   get-all-pages get-pages get-pages-relation get-pages-that-mentioned-page get-public-pages get-tag-pages
   journal-page? local-native-fs? mark-repo-as-cloned! page-alias-set page-blocks-transform pull-block
   set-file-last-modified-at! transact-files-db! page-empty? page-empty-or-dummy? get-alias-source-page
-  set-file-content! has-children? get-namespace-pages get-all-namespace-relation]
+  set-file-content! has-children? get-namespace-pages get-all-namespace-relation get-pages-by-name-partition]
 
  [frontend.db.react
   get-current-marker get-current-page get-current-priority set-key-value

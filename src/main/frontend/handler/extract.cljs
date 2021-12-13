@@ -16,7 +16,8 @@
             [frontend.util :as util]
             [frontend.util.property :as property]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.mobile.util :as mobile]))
 
 (defn- extract-page-list
   [content]
@@ -136,9 +137,10 @@
                            (remove nil? blocks))
                      (remove nil?))
           pages (remove nil? pages)
-          pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)]
-      [pages
-       (remove nil? blocks)])
+          pages (map (fn [page] (assoc page :block/uuid (db/new-block-id))) pages)
+          blocks (->> (remove nil? blocks)
+                      (map (fn [b] (dissoc b :block/title :block/body :block/level))))]
+      [pages blocks])
     (catch js/Error e
       (log/error :exception e))))
 
@@ -150,7 +152,10 @@
      (p/resolved [])
      (p/let [format (format/get-format file)
              _ (println "Parsing start : " file)
-             ast (mldoc/->edn-async content (mldoc/default-config format))]
+             parse-f (if (mobile/is-native-platform?)
+                       mldoc/->edn
+                       mldoc/->edn-async)
+             ast (parse-f content (mldoc/default-config format))]
        _ (println "Parsing finished : " file)
        (let [journal? (config/journal? file)
              first-block (ffirst ast)
@@ -197,7 +202,7 @@
                  (let [block-refs (if refresh? (set refs)
                                       (set/intersection (set refs) block-ids-set))]
                    (set/union
-                    (filter :block/name refs)
+                    (set (filter :block/name refs))
                     block-refs)))]
     (-> block
         (update :block/refs aux-fn)
@@ -207,7 +212,7 @@
   [repo-url files metadata refresh?]
   (when (seq files)
     (-> (p/all (map
-                 (fn [{:file/keys [path content]} contents]
+                 (fn [{:file/keys [path content]}]
                    (when content
                      (let [org? (= "org" (string/lower-case (util/get-file-ext path)))
                            content (if org?
@@ -228,8 +233,11 @@
                             pages (with-ref-pages pages blocks)
                             blocks (map (fn [block]
                                           (let [id (:block/uuid block)
-                                                properties (get-in metadata [:block/properties id])]
-                                            (update block :block/properties merge properties)))
+                                                properties (merge (get-in metadata [:block/properties id])
+                                                                  (:block/properties block))]
+                                            (if (seq properties)
+                                              (assoc block :block/properties properties)
+                                              (dissoc block :block/properties))))
                                      blocks)
                             ;; To prevent "unique constraint" on datascript
                             pages-index (map #(select-keys % [:block/name]) pages)

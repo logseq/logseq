@@ -11,13 +11,14 @@
 ;; FIXME: use block/namespace to get the relation
 (defn get-relation
   [page]
-  (when (text/namespace-page? page)
-    (->> (db/get-namespace-pages (state/get-current-repo) page)
-         (map (fn [page]
-                (or (:block/original-name page) (:block/name page))))
-         (map #(string/split % #"/"))
-         (remove #(= % [page]))
-         (sort))))
+  (when-let [page (or (text/get-nested-page-name page) page)]
+   (when (text/namespace-page? page)
+     (->> (db/get-namespace-pages (state/get-current-repo) page)
+          (map (fn [page]
+                 (or (:block/original-name page) (:block/name page))))
+          (map #(string/split % #"/"))
+          (remove #(= % [page]))
+          (sort)))))
 
 (rum/defc structures
   [page]
@@ -43,4 +44,5 @@
                                          {}
                                          page))))
              (interpose [:span.mx-2.opacity-30 "/"]))])]
-        {:default-collapsed? true})])))
+        {:default-collapsed? true
+         :title-trigger? true})])))

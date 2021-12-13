@@ -150,6 +150,16 @@ contextBridge.exposeInMainWorld('apis', {
     return await ipcRenderer.invoke('call-application', type, ...args)
   },
 
+  /**
+   * internal
+   * @param type
+   * @param args
+   * @private
+   */
+  async _callMainWin (type, ...args) {
+    return await ipcRenderer.invoke('call-main-win', type, ...args)
+  },
+
   getFilePathFromClipboard,
 
   setZoomFactor (factor) {

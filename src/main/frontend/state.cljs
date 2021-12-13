@@ -14,9 +14,12 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.mobile.util :as mobile]
+            [frontend.mobile.util :as mobile-util]
+            [cljs.cache :as cache]))
 
-(defonce ^:private state
+(defonce state
   (let [document-mode? (or (storage/get :document/mode?) false)
         current-graph (let [graph (storage/get :git/current-repo)]
                         (when graph (ipc/ipc "setCurrentGraph" graph))
@@ -77,6 +80,11 @@
                               false)
       ;; remember scroll positions of visited paths
       :ui/paths-scroll-positions {}
+      :ui/shortcut-tooltip? (if (false? (storage/get :ui/shortcut-tooltip?))
+                              false
+                              true)
+      :ui/visual-viewport-pending? false
+      :ui/visual-viewport-state nil
 
       :document/mode? document-mode?
 
@@ -103,6 +111,7 @@
       :editor/document-mode? document-mode?
       :editor/args nil
       :editor/on-paste? false
+      :editor/last-key-code nil
 
       :db/last-transact-time {}
       :db/last-persist-transact-ids {}
@@ -180,6 +189,31 @@
 
       :srs/cards-due-count nil})))
 
+;; block uuid -> {content(String) -> ast}
+(def blocks-ast-cache (atom (cache/lru-cache-factory {} :threshold 5000)))
+(defn add-block-ast-cache!
+  [block-uuid content ast]
+  (when (and block-uuid content ast)
+    (let [k block-uuid
+          add-cache! (fn []
+                       (reset! blocks-ast-cache (cache/evict @blocks-ast-cache block-uuid))
+                       (reset! blocks-ast-cache (cache/miss @blocks-ast-cache k {content ast})))]
+      (if (cache/has? @blocks-ast-cache k)
+        (let [m (cache/lookup @blocks-ast-cache k)]
+          (if (and (map? m) (get m content))
+            (reset! blocks-ast-cache (cache/hit @blocks-ast-cache k))
+            (add-cache!)))
+        (add-cache!)))))
+
+(defn get-block-ast
+  [block-uuid content]
+  (when (and block-uuid content)
+    (let [k block-uuid]
+      (when (cache/has? @blocks-ast-cache k)
+        (let [m (cache/lookup @blocks-ast-cache k)]
+          (when-let [result (and (map? m) (get m content))]
+            (reset! blocks-ast-cache (cache/hit @blocks-ast-cache k))
+            result))))))
 
 (defn sub
   [ks]
@@ -227,13 +261,21 @@
 
 (defn get-current-repo
   []
-  (or (:git/current-repo @state) "local"))
+  (or (:git/current-repo @state)
+      (when-not (mobile/is-native-platform?)
+        "local")))
 
 (defn get-config
   ([]
    (get-config (get-current-repo)))
   ([repo-url]
    (get-in @state [:config repo-url])))
+
+(def default-arweave-gateway "https://arweave.net")
+
+(defn get-arweave-gateway
+  []
+  (:arweave/gateway (get-config) default-arweave-gateway))
 
 (defonce built-in-macros
   {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
@@ -349,6 +391,15 @@
 
      (get-in @state [:me :preferred_format] "markdown")))))
 
+;; TODO: consider adding a pane in Settings to set this through the GUI (rather
+;; than having to go through the config.edn file)
+(defn get-editor-command-trigger
+  ([] (get-editor-command-trigger (get-current-repo)))
+  ([repo-url]
+   (or
+    (:editor/command-trigger (get-config repo-url)) ;; Get from user config
+    "/"))) ;; Set the default
+
 (defn markdown?
   []
   (= (keyword (get-preferred-format))
@@ -414,7 +465,7 @@
 
 (defn add-repo!
   [repo]
-  (when repo
+  (when (not (string/blank? repo))
     (update-state! [:me :repos]
                    (fn [repos]
                      (->> (conj repos repo)
@@ -516,6 +567,10 @@
 (defn get-edit-content
   []
   (get (:editor/content @state) (get-edit-input-id)))
+
+(defn sub-edit-content
+  []
+  (sub [:editor/content (get-edit-input-id)]))
 
 (defn append-current-edit-content!
   [append-text]
@@ -669,7 +724,6 @@
 
 (defn drop-last-selection-block!
   []
-  (def blocks (:selection/blocks @state))
   (let [last-block (peek (vec (:selection/blocks @state)))]
     (swap! state assoc
            :selection/mode true
@@ -749,14 +803,16 @@
 
 (defn sidebar-add-block!
   [repo db-id block-type block-data]
-  (when db-id
-    (update-state! :sidebar/blocks (fn [blocks]
-                                     (->> (remove #(= (second %) db-id) blocks)
-                                          (cons [repo db-id block-type block-data])
-                                          (distinct))))
-    (open-right-sidebar!)
-    (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
-      (util/scroll-to elem 0))))
+  (when-not (or (util/mobile?)
+            (mobile-util/is-native-platform?))
+   (when db-id
+     (update-state! :sidebar/blocks (fn [blocks]
+                                      (->> (remove #(= (second %) db-id) blocks)
+                                           (cons [repo db-id block-type block-data])
+                                           (distinct))))
+     (open-right-sidebar!)
+     (when-let [elem (gdom/getElementByClass "cp__right-sidebar-scrollable")]
+       (util/scroll-to elem 0)))))
 
 (defn sidebar-remove-block!
   [idx]
@@ -834,6 +890,7 @@
                      :editor/editing? {edit-input-id true}
                      :editor/last-edit-block-input-id edit-input-id
                      :editor/last-edit-block block
+                     :editor/last-key-code nil
                      :cursor-range cursor-range))))
 
        (when-let [input (gdom/getElement edit-input-id)]
@@ -853,6 +910,12 @@
   (swap! state merge {:editor/editing? nil
                       :editor/block nil
                       :cursor-range nil}))
+
+(defn into-code-editor-mode!
+  []
+  (swap! state merge {:editor/editing? nil
+                      :cursor-range nil
+                      :editor/code-mode? true}))
 
 (defn set-last-pos!
   [new-pos]
@@ -1130,6 +1193,11 @@
   (storage/set "ls-left-sidebar-open?" (boolean value))
   (set-state! :ui/left-sidebar-open? value))
 
+(defn toggle-left-sidebar!
+  []
+  (set-left-sidebar-open!
+    (not (get-left-sidebar-open?))))
+
 (defn set-developer-mode!
   [value]
   (set-state! :ui/developer-mode? value)
@@ -1158,13 +1226,23 @@
     (set-state! :document/mode? (not mode))
     (storage/set :document/mode? (not mode))))
 
+(defn shortcut-tooltip-enabled?
+  []
+  (get @state :ui/shortcut-tooltip?))
+
+(defn toggle-shortcut-tooltip!
+  []
+  (let [mode (shortcut-tooltip-enabled?)]
+    (set-state! :ui/shortcut-tooltip? (not mode))
+    (storage/set :ui/shortcut-tooltip? (not mode))))
+
 (defn enable-tooltip?
   []
   (if (util/mobile?)
     false
     (get (get (sub-config) (get-current-repo))
-        :ui/enable-tooltip?
-        true)))
+         :ui/enable-tooltip?
+         true)))
 
 (defn show-command-doc?
   []
@@ -1364,6 +1442,10 @@
   []
   (toggle! :ui/settings-open?))
 
+(defn settings-open?
+  []
+  (:ui/settings-open? @state))
+
 (defn close-settings!
   []
   (set-state! :ui/settings-open? false))
@@ -1516,3 +1598,19 @@
 (defn get-git-auto-commit-enabled?
   []
   (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
+
+(defn set-last-key-code!
+  [key-code]
+  (set-state! :editor/last-key-code key-code))
+
+(defn get-last-key-code
+  []
+  (:editor/last-key-code @state))
+
+(defn set-visual-viewport-state
+  [input]
+  (set-state! :ui/visual-viewport-state input))
+
+(defn get-visual-viewport-state
+  []
+  (:ui/visual-viewport-state @state))

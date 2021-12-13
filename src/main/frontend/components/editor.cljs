@@ -8,6 +8,7 @@
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
+            [frontend.handler.notification :as notification]
             [frontend.db :as db]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
@@ -19,6 +20,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
+            [frontend.util.keycode :as keycode]
             [goog.dom :as gdom]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -63,14 +65,16 @@
             (reset! commands/*current-command command)
             (let [command-steps (get (into {} matched) command)
                   restore-slash? (or
-                                  (contains? #{"Today" "Yesterday" "Tomorrow"} command)
+                                  (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
                                   (and
                                    (not (fn? command-steps))
                                    (not (contains? (set (map first command-steps)) :editor/input))
                                    (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
               (editor-handler/insert-command! id command-steps
                                               format
-                                              {:restore? restore-slash?}))))
+                                              {:restore? restore-slash?})
+              (state/pub-event! [:instrument {:type :editor/command-triggered
+                                              :payload {:command command}}]))))
         :class
         "black"}))))
 
@@ -105,9 +109,24 @@
                  (when (state/sub :editor/show-page-search-hashtag?)
                    (util/safe-subs edit-content pos current-pos))
                  (when (> (count edit-content) current-pos)
-                   (util/safe-subs edit-content pos current-pos)))
+                   (util/safe-subs edit-content pos current-pos))
+                 "")
               matched-pages (when-not (string/blank? q)
-                              (editor-handler/get-matched-pages q))]
+                              (editor-handler/get-matched-pages q))
+              matched-pages (cond
+                              (contains? (set (map string/lower-case matched-pages)) (string/trim q))
+                              matched-pages
+
+                              (empty? matched-pages)
+                              matched-pages
+
+                              :else
+                              (->>
+                               (cons (first matched-pages)
+                                     (cons
+                                      (str "New page: " q)
+                                      (rest matched-pages)))
+                               (remove nil?)))]
           (ui/auto-complete
            matched-pages
            {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
@@ -135,7 +154,7 @@
                                             (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
                      (reset! result matched-blocks)))
                  state)}
-  [state edit-block input id q format content]
+  [state edit-block input id q format]
   (let [result (rum/react (get state ::result))
         chosen-handler (editor-handler/block-on-chosen-handler input id q format)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
@@ -151,7 +170,7 @@
                              repo (state/sub :git/current-repo)
                              format (db/get-page-format page)]
 
-                         [:.py-2 (search/block-search-result-item repo uuid format content q)]))
+                         [:.py-2 (search/block-search-result-item repo uuid format content q :block)]))
         :class       "black"}))))
 
 (rum/defcs block-search < rum/reactive
@@ -201,82 +220,99 @@
 
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
-  [:div#mobile-editor-toolbar.bg-base-2.fix-ios-fixed-bottom
-   [:div.flex.justify-evenly.w-full
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (editor-handler/indent-outdent true))}
-      (ui/icon "chevrons-right")]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (editor-handler/indent-outdent false))}
-      (ui/icon "chevrons-left")]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        ((editor-handler/move-up-down true)))}
-      (ui/icon "chevron-up")]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        ((editor-handler/move-up-down false)))}
-      (ui/icon "chevron-down")]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (editor-handler/cycle-todo!))}
-      (ui/icon "checkbox")]]
-    [:div
-     [:button.bottom-action
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (commands/simple-insert! parent-id "\n"
-                                                 {:forward-pos 1})
-                        ;; TODO: should we add this focus step to `simple-insert!`?
-                        (when-let [input (gdom/getElement parent-id)]
-                          (.focus input)))}
-      (ui/icon "arrow-back")]]
-    [:div
-     [:button.bottom-action.text-sm
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (commands/simple-insert!
-                         parent-id "[[]]"
-                         {:backward-pos 2
-                          :check-fn     (fn [_ _ new-pos]
-                                          (reset! commands/*slash-caret-pos new-pos)
-                                          (commands/handle-step [:editor/search-page]))})
-                        (when-let [input (gdom/getElement parent-id)]
-                          (.focus input)))}
-      "[["]]
-    [:div
-     [:button.bottom-action.text-sm
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (commands/simple-insert!
-                         parent-id "(())"
-                         {:backward-pos 2
-                          :check-fn     (fn [_ _ new-pos]
-                                          (reset! commands/*slash-caret-pos new-pos)
-                                          (commands/handle-step [:editor/search-block]))})
-                        (when-let [input (gdom/getElement parent-id)]
-                          (.focus input)))}
-      "(("]]
-    [:div
-     [:button.bottom-action.text-sm
-      {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (commands/simple-insert! parent-id "/" {})
-                        (when-let [input (gdom/getElement parent-id)]
-                          (.focus input)))}
-      "/"]]]])
+  (let [vw-state (state/sub :ui/visual-viewport-state)
+        vw-pending? (state/sub :ui/visual-viewport-pending?)]
+    [:div#mobile-editor-toolbar.bg-base-2
+     {:style {:bottom (if (and vw-state)
+                        (- (.-clientHeight js/document.documentElement)
+                           (:height vw-state)
+                           (:offset-top vw-state))
+                        0)}
+      :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
+     [:div.flex.justify-around.w-full
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/indent-outdent true))}
+        (ui/icon "arrow-bar-right"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/indent-outdent false))}
+        (ui/icon "arrow-bar-left"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          ((editor-handler/move-up-down true)))}
+        (ui/icon "arrow-bar-to-up"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          ((editor-handler/move-up-down false)))}
+        (ui/icon "arrow-bar-to-down"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (commands/simple-insert! parent-id "\n"
+                                                   {:forward-pos 1})
+                          ;; TODO: should we add this focus step to `simple-insert!`?
+                          (when-let [input (gdom/getElement parent-id)]
+                            (.focus input)))}
+        (ui/icon "arrow-back"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/cycle-todo!))}
+        (ui/icon "checkbox"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (commands/simple-insert!
+                            parent-id "[[]]"
+                            {:backward-pos 2
+                             :check-fn     (fn [_ _ new-pos]
+                                             (reset! commands/*slash-caret-pos new-pos)
+                                             (commands/handle-step [:editor/search-page]))})
+                          (when-let [input (gdom/getElement parent-id)]
+                            (.focus input)))}
+        (ui/icon "brackets"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (commands/simple-insert!
+                            parent-id "(())"
+                            {:backward-pos 2
+                             :check-fn     (fn [_ _ new-pos]
+                                             (reset! commands/*slash-caret-pos new-pos)
+                                             (commands/handle-step [:editor/search-block]))})
+                          (when-let [input (gdom/getElement parent-id)]
+                            (.focus input)))}
+        (ui/icon "parentheses"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (commands/simple-insert! parent-id "/" {})
+                          (when-let [input (gdom/getElement parent-id)]
+                            (.focus input)))}
+        (ui/icon "command"
+                 {:style {:fontSize ui/icon-size}})]]]]))
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -304,7 +340,7 @@
         (let [command (:command (first input-option))]
           [:div.p-2.rounded-md.shadow-lg
            (for [{:keys [id placeholder type autoFocus] :as input-item} input-option]
-             [:div.my-3
+             [:div.my-3 {:key id}
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
@@ -431,20 +467,41 @@
 
 (def starts-with? clojure.string/starts-with?)
 
-(defn get-editor-heading-class [content]
+(defn get-editor-style-class
+  "Get textarea css class according to it's content"
+  [content format]
   (let [content (if content (str content) "")]
-    (cond
-      (string/includes? content "\n") "multiline-block"
-      (starts-with? content "# ") "h1"
-      (starts-with? content "## ") "h2"
-      (starts-with? content "### ") "h3"
-      (starts-with? content "#### ") "h4"
-      (starts-with? content "##### ") "h5"
-      (starts-with? content "###### ") "h6"
-      (starts-with? content "TODO ") "todo-block"
-      (starts-with? content "DOING ") "doing-block"
-      (starts-with? content "DONE ") "done-block"
-      :else "normal-block")))
+    ;; as the function is binding to the editor content, optimization is welcome
+    (str
+     (if (or (> (.-length content) 1000)
+             (string/includes? content "\n"))
+       "multiline-block"
+       "uniline-block")
+     " "
+     (case format
+       :markdown
+       (cond
+         (starts-with? content "# ") "h1"
+         (starts-with? content "## ") "h2"
+         (starts-with? content "### ") "h3"
+         (starts-with? content "#### ") "h4"
+         (starts-with? content "##### ") "h5"
+         (starts-with? content "###### ") "h6"
+         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         :else "normal-block")
+       ;; other formats
+       (cond
+         (and (starts-with? content "---\n") (.endsWith content "\n---")) "page-properties"
+         :else "normal-block")))))
+
+(defn editor-row-height-unchanged?
+  "Check if the row height of editor textarea is changed, which happens when font-size changed"
+  []
+  ;; FIXME: assuming enter key is the only trigger of the height changing (under markdown editing of headlines)
+  ;; FIXME: looking for an elegant & robust way to track the change of font-size, or wait for our own WYSIWYG text area
+  (let [last-key (state/get-last-key-code)]
+    (and (not= keycode/enter (:key-code last-key))
+         (not= keycode/enter-code (:code last-key)))))
 
 (rum/defc mock-textarea <
   rum/static
@@ -476,7 +533,7 @@
 
 (rum/defc mock-textarea-wrapper < rum/reactive
   []
-  (let [content (state/sub [:editor/content (state/get-edit-input-id)])]
+  (let [content (state/sub-edit-content)]
     (mock-textarea content)))
 
 (defn animated-modal
@@ -527,7 +584,7 @@
      (state/sub :editor/show-input)
      (animated-modal "input" (input id
                                     (fn [command m pos]
-                                      (editor-handler/handle-command-input command id format m pos)))
+                                      (editor-handler/handle-command-input command id format m)))
                      true (util/react *slash-caret-pos))
 
      (state/sub :editor/show-zotero)
@@ -547,23 +604,20 @@
   lifecycle/lifecycle
   [state {:keys [on-hide node format block block-parent-id heading-level]
           :as   option} id config]
-  (let [content (state/get-edit-content)
-        heading-level (get state ::heading-level)]
-    [:div.editor-inner {:class (str
-                                (if block "block-editor" "non-block-editor")
-                                " "
-                                (get-editor-heading-class content))}
+  (let [content (state/sub-edit-content)
+        heading-class (get-editor-style-class content format)]
+    [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
      (when config/mobile? (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
-       :cacheMeasurements true
+       :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
        :default-value     (or content "")
        :minRows           (if (state/enable-grammarly?) 2 1)
        :on-click          (editor-handler/editor-on-click! id)
        :on-change         (editor-handler/editor-on-change! block id search-timeout)
        :on-paste          (editor-handler/editor-on-paste! id)
        :auto-focus        false
-       :class             (get-editor-heading-class content)})
+       :class             heading-class})
 
      (mock-textarea-wrapper)
      (modals id format)

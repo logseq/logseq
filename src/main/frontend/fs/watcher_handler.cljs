@@ -7,6 +7,7 @@
             [frontend.handler.editor :as editor]
             [frontend.handler.extract :as extract]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.page :as page-handler]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
@@ -30,7 +31,7 @@
     (let [repo (config/get-local-repo dir)
           {:keys [mtime]} stat
           db-content (or (db/get-file repo path) "")]
-      (when (and content
+      (when (and (or content (= type "unlink"))
                  (not (encrypt/content-encrypted? content))
                  (not (:encryption/graph-parsing? @state/state)))
         (cond
@@ -44,7 +45,7 @@
 
           (and (= "change" type)
                (not (db/file-exists? repo path)))
-          (js/console.warn "Can't get file in the db: " path)
+          (js/console.error "Can't get file in the db: " path)
 
           (and (= "change" type)
                (not= (string/trim content) (string/trim db-content))
@@ -63,6 +64,12 @@
                                                                   :from-disk? true})]
               (set-missing-block-ids! content)
               (db/set-file-last-modified-at! repo path mtime)))
+
+          (and (= "unlink" type)
+               (db/file-exists? repo path))
+          (when-let [page-name (db/get-file-page path)]
+            (println "Delete page: " page-name ", file path: " path ".")
+            (page-handler/delete! page-name #() :delete-file? false))
 
           (contains? #{"add" "change" "unlink"} type)
           nil

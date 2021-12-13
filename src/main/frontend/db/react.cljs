@@ -56,13 +56,19 @@
     (reset! query-state state)))
 
 (defn get-current-repo-refs-keys
-  []
+  [{:keys [key data]}]
   (when-let [current-repo (state/get-current-repo)]
     (->>
      (map (fn [[repo k id]]
             (when (and (= repo current-repo)
                        (contains? #{:block/refed-blocks :block/unlinked-refs} k))
-              [k id]))
+              (if (= k :block/refed-blocks)
+                (if (every? (fn [m]
+                              (when (map? m)
+                                (= id (:db/id (:block/page m))))) data)
+                  nil
+                  [k id])
+                [k id])))
        (keys @query-state))
      (remove nil?))))
 
@@ -229,7 +235,9 @@
                             (util/concat-without-nil
                              (mapcat
                               (fn [block]
-                                (when-let [page-id (:db/id (:block/page block))]
+                                (when-let [page-id (or (:db/id (:block/page block))
+                                                       (and (int? (:block/page block))
+                                                            (:block/page block)))]
                                   [[:blocks (:block/uuid block)]
                                    [:page/blocks page-id]
                                    [:page/ref-pages page-id]]))
@@ -248,7 +256,6 @@
 
                              (when current-page-id
                                [[:page/ref-pages current-page-id]
-                                ;; [:block/refed-blocks current-page-id]
                                 [:page/mentioned-pages current-page-id]])
 
                              (apply concat
@@ -270,7 +277,8 @@
                              (when (= k :block/refed-blocks)
                                [:page/ref-pages page-id]))
                             related-keys)
-              all-refed-blocks (get-current-repo-refs-keys)
+              all-refed-blocks (get-current-repo-refs-keys {:key key
+                                                            :data data})
               custom-queries (some->>
                               (filter (fn [v]
                                         (and (= (first v) (state/get-current-repo))
