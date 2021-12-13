@@ -84,11 +84,11 @@
                 (fn [node]
                   (.dropNode graph node))))
 
-(defn- clear-edges!
-  [graph]
-  (.forEachEdge graph
-                (fn [edge]
-                  (.dropEdge graph edge))))
+;; (defn- clear-edges!
+;;   [graph]
+;;   (.forEachEdge graph
+;;                 (fn [edge]
+;;                   (.dropEdge graph edge))))
 
 (defn destroy-instance!
   []
@@ -189,7 +189,6 @@
                                   :style      style
                                   :hoverStyle hover-style
                                   :height     height}))]
-            (prn "new graph")
             (reset! *graph-instance
                     {:graph graph
                      :pixi  pixi-graph})
