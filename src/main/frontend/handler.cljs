@@ -55,15 +55,7 @@
             (let [repo (state/get-current-repo)]
               (when-not (state/nfs-refreshing?)
                 ;; Don't create the journal file until user writes something
-                (page-handler/create-today-journal!))
-
-              (when (and (state/input-idle? repo)
-                         (> (- (util/time-ms) @cards-last-check-time)
-                            (* 60 1000)))
-                (let [total (srs/get-srs-cards-total)]
-                  (state/set-state! :srs/cards-due-count total)
-                  (reset! cards-last-check-time (util/time-ms))
-                  ))))]
+                (page-handler/create-today-journal!))))]
     (f)
     (js/setInterval f 5000)))
 
