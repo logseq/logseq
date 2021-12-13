@@ -54,15 +54,15 @@
   height: 100%;
   padding-top: 12px;
   width: var(--ls-left-sidebar-sm-width);
-  overflow-x: hidden;
-  overflow-y: auto;
   background-color: var(--ls-primary-background-color);
   transition: transform .3s;
   transform: translateX(-100%);
   z-index: 3;
 
   > .wrap {
-    padding-top: 55px;
+    margin-top: 55px;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .dropdown-wrapper {
