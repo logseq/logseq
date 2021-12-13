@@ -396,7 +396,7 @@ jobs:
           cat RELEASE-NOTES.txt
 
       - name: Update Nightly Release
-        uses: andelf/nightly-release@main
+        uses: andelf/nightly-release@v0.0.2
         with:
           tag_name: daily
           name: 'Desktop App Nightly Relase $$'
