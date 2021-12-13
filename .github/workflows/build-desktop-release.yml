@@ -389,7 +389,7 @@ jobs:
         with:
           tag_name: nightly
           name: 'Desktop App Nightly Relase $$'
-          draft: true
+          draft: false
           prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
           body: "This is a nightly release of the Logseq desktop app."
           files: |
