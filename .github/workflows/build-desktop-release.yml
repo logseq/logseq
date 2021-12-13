@@ -352,7 +352,7 @@ jobs:
 
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows ]
+    needs: [ build-macos-x64, build-linux, build-windows ]
     runs-on: ubuntu-18.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -361,11 +361,11 @@ jobs:
           name: logseq-darwin-x64-builds
           path: ./
 
-      - name: Download MacOS arm64 Artifacts
-        uses: actions/download-artifact@v2
-        with:
-          name: logseq-darwin-arm64-builds
-          path: ./
+      #- name: Download MacOS arm64 Artifacts
+      #  uses: actions/download-artifact@v2
+      #  with:
+      #    name: logseq-darwin-arm64-builds
+      #    path: ./
 
       - name: Download The Linux Artifacts
         uses: actions/download-artifact@v2
