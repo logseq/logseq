@@ -1,10 +1,11 @@
 .extensions__code {
-
+  @apply relative;
+  z-index: 0;
   display: flex;
   flex-direction: row-reverse;
   flex-wrap: nowrap;
   &-lang {
-    @apply right-0 p-1 text-sm;
+    @apply p-1 text-sm;
     margin-top: 3px;
     background: var(--ls-secondary-background-color);
     word-break: keep-all;
@@ -34,6 +35,7 @@
   }
 
   > .CodeMirror {
+    z-index: 0;
     height: auto;
     margin-top: 4px;
     margin-bottom: 6px;
