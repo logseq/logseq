@@ -24,32 +24,30 @@
   [dark? current-page page-links tags nodes namespaces]
   (let [parents (set (map last namespaces))
         current-page (or current-page "")
-        pages (->> (set (flatten nodes))
-                   (remove nil?))]
+        pages (set (flatten nodes))]
     (->>
+     pages
+     (remove nil?)
      (mapv (fn [p]
-             (when p
-               (let [p (str p)
-                     current-page? (= p current-page)
-                     color (case [dark? current-page?] ; FIXME: Put it into CSS
-                             [false false] "#999"
-                             [false true]  "#045591"
-                             [true false]  "#93a1a1"
-                             [true true]   "#ffffff")
-                     color (if (contains? tags p)
-                             (if dark? "orange" "green")
-                             color)]
-                 (let [n (get page-links p 1)
-                       size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
-                   (cond->
-                     {:id p
-                      :label p
-                      :size size
-                      :color color}
-                     (contains? parents p)
-                     (assoc :parent true))))))
-           pages)
-     (remove nil?))))
+             (let [p (str p)
+                   current-page? (= p current-page)
+                   color (case [dark? current-page?] ; FIXME: Put it into CSS
+                           [false false] "#999"
+                           [false true]  "#045591"
+                           [true false]  "#93a1a1"
+                           [true true]   "#ffffff")
+                   color (if (contains? tags p)
+                           (if dark? "orange" "green")
+                           color)]
+               (let [n (get page-links p 1)
+                     size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
+                 (cond->
+                   {:id p
+                    :label p
+                    :size size
+                    :color color}
+                   (contains? parents p)
+                   (assoc :parent true)))))))))
 
 ;; slow
 (defn- uuid-or-asset?
