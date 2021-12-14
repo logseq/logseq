@@ -63,8 +63,7 @@
                    (reset! pixi/*graph-instance nil)
                    state)}
   [state opts]
-  [:div.graph {:style {:height "100vh"}
-               :ref (fn [value]
+  [:div.graph {:ref (fn [value]
                       (let [ref (get state :ref)]
                         (when (and ref value)
                           (reset! ref value))))}])
