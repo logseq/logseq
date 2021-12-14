@@ -437,10 +437,11 @@
   (editor-handler/open-block-in-sidebar! (medley/uuid block-uuid)))
 
 (def ^:export edit_block
-  (fn [block-uuid {:keys [pos] :or {pos :max} :as opts}]
+  (fn [block-uuid ^js opts]
     (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
       (when-let [block (db-model/query-block-by-uuid block-uuid)]
-        (editor-handler/edit-block! block pos block-uuid)))))
+        (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
+          (editor-handler/edit-block! block pos block-uuid))))))
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
