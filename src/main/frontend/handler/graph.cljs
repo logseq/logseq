@@ -38,18 +38,18 @@
                            [true true]   "#ffffff")
                    color (if (contains? tags p)
                            (if dark? "orange" "green")
-                           color)]
-               (let [n (get page-links p 1)
-                     size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
-                 (cond->
-                   {:id p
-                    :label p
-                    :size size
-                    :color color}
-                   (contains? parents p)
-                   (assoc :parent true)))))))))
+                           color)
+                   n (get page-links p 1)
+                   size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
+                (cond->
+                  {:id p
+                   :label p
+                   :size size
+                   :color color}
+                  (contains? parents p)
+                  (assoc :parent true))))))))
 
-;; slow
+                  ;; slow
 (defn- uuid-or-asset?
   [id]
   (or (util/uuid-string? id)
