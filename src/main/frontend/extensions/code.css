@@ -37,6 +37,7 @@
 
   > .CodeMirror {
     order: 1;
+    width: 100%;
     z-index: 0;
     height: auto;
     margin-top: 4px;
