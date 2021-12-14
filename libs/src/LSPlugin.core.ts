@@ -759,7 +759,7 @@ class PluginLocal
         readyFn()
       }
 
-      this._disposes.push(async () => {
+      this._dispose(async () => {
         await this._caller?.destroy()
       })
     } catch (e) {
