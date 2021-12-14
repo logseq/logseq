@@ -15,7 +15,7 @@
             [frontend.config :as config]
             [frontend.search :as search]
             [clojure.string :as string]
-            [goog.dom :as gdom]
+            [goog.object :as gobj]
             [medley.core :as medley]
             [frontend.context.i18n :as i18n]
             [frontend.date :as date]
@@ -387,8 +387,9 @@
             :on-change     (fn [e]
                              (when @search-timeout
                                (js/clearTimeout @search-timeout))
-                             (let [value (util/evalue e)]
-                               (if (string/blank? value)
+                             (let [value (util/evalue e)
+                                   is-composing? (gobj/getValueByKeys e "nativeEvent" "isComposing")]
+                               (if (and (string/blank? value) (not is-composing?))
                                  (search-handler/clear-search! false)
                                  (let [search-mode (state/get-search-mode)
                                        opts (if (= :page search-mode)
