@@ -85,13 +85,7 @@
 }
 
 .ui__modal {
-  @apply fixed bottom-0 inset-x-0 px-4 pb-4;
-
-  @screen sm {
-    & {
-      @apply inset-0 flex items-baseline justify-center top-24;
-    }
-  }
+  @apply fixed px-4 pb-4 inset-0 flex items-baseline justify-center top-24;
 
   &-overlay {
     @apply fixed inset-0 transition-opacity;
@@ -120,6 +114,12 @@
     @apply text-gray-400 hover:text-gray-500
     focus:outline-none focus:text-gray-500
     transition ease-in-out duration-150;
+  }
+}
+
+html.is-mobile {
+  .ui__modal {
+    @apply bottom-0 inset-x-0;
   }
 }
 
