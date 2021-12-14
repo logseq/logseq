@@ -6,6 +6,8 @@
     -webkit-overflow-scrolling: touch;
 
     .menu-link {
+      word-break: break-all;
+
       .has-help {
         display: flex;
         align-items: center;
@@ -100,13 +102,23 @@
 
     overflow: hidden;
     background: var(--ls-secondary-background-color);
-    max-width: 96vw;
 
     .panel-content {
       overflow-y: auto;
-      max-width: 1024px;
+      width: 94vw;
       max-height: 85vh;
       padding: 2rem;
+
+      @screen md {
+        min-width: 760px;
+        width: auto;
+
+        .ls-card {
+          width: 740px;
+          min-height: 60vh;
+          max-height: 740px;
+        }
+      }
     }
   }
 
@@ -133,18 +145,6 @@ html.is-mobile {
     input[type='checkbox'] {
       margin-right: 8px;
     }
-  }
-}
-
-@media (min-width: 1024px) {
-  .panel-content {
-    min-width: 820px;
-  }
-
-  .panel-content .ls-card {
-    width: 740px;
-    min-height: 60vh;
-    max-height: 740px;
   }
 }
 
