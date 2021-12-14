@@ -55,6 +55,7 @@ input::-webkit-inner-spin-button {
           color: var(--ls-icon-color);
           background-color: transparent;
           transition: none;
+          word-break: normal;
 
           &.is-active {
             opacity: 1;
@@ -69,6 +70,8 @@ input::-webkit-inner-spin-button {
       }
 
       .pager {
+        white-space: nowrap;
+
         > .nu {
           padding-right: 4px;
 
