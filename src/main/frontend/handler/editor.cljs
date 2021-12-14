@@ -707,8 +707,13 @@
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               [block-m sibling?] (cond
                                    before?
-                                   (let [block (db/pull (:db/id (:block/left block)))
-                                         sibling? (if (:block/name block) false sibling?)]
+                                   (let [first-child? (->> [:block/parent :block/left]
+                                                           (map #(:db/id (get block %)))
+                                                           (apply =))
+                                         block (db/pull (:db/id (:block/left block)))
+                                         sibling? (if (or first-child? ;; insert as first child
+                                                          (:block/name block))
+                                                    false sibling?)]
                                      [block sibling?])
 
                                    sibling?

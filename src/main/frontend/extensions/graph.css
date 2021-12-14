@@ -7,3 +7,7 @@
     position: relative;
     z-index: 4;
 }
+
+.graph {
+    height: calc(100vh - 100px) !important;
+}

@@ -582,7 +582,7 @@
     (global-graph-inner graph settings theme)))
 
 (rum/defc page-graph-inner < rum/static
-  [graph dark?]
+  [page graph dark?]
   [:div.sidebar-item.flex-col
    (graph/graph-2d {:nodes (:nodes graph)
                     :links (:links graph)
@@ -605,7 +605,7 @@
                 (graph-handler/build-block-graph (uuid page) theme)
                 (graph-handler/build-page-graph page theme))]
     (when (seq (:nodes graph))
-      (page-graph-inner graph dark?))))
+      (page-graph-inner page graph dark?))))
 
 (defn- sort-pages-by
   [by-item desc? pages]
