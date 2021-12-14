@@ -40,13 +40,7 @@
                              (if dark? "orange" "green")
                              color)]
                  (let [n (get page-links p 1)
-                       size-v (if (> n 2)
-                                (js/Math.cbrt n)
-                                n)
-                       size-v (if (< size-v 1)
-                                1
-                                (int size-v))
-                       size (* size-v 8)]
+                       size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
                    (cond->
                      {:id p
                       :label p
