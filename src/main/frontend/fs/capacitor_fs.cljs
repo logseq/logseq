@@ -47,7 +47,8 @@
                              files (->> files
                                         (remove (fn [file]
                                                   (or (string/starts-with? file ".")
-                                                      (string/starts-with? file "#")
+                                                      (string/includes? file "#")
+                                                      (string/includes? file "%")
                                                       (= file "bak")))))
                              files (->> files
                                         (map (fn [file]

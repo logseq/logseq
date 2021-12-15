@@ -1128,7 +1128,9 @@
       (remove-boundary-slashes)
       (string/replace #"/" ".")
       ;; Windows reserved path characters
-      (string/replace windows-reserved-chars "_")))
+      (string/replace windows-reserved-chars "_")
+      ;; for android filesystem compatiblity
+      (string/replace #"%#" "_")))
 
 (defn lowercase-first
   [s]
