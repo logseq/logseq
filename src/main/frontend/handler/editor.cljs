@@ -2790,7 +2790,8 @@
           shift? (.-shiftKey e)
           code (gobj/getValueByKeys e "event_" "code")]
       (cond
-        (util/event-is-composing? e)
+        (and (util/event-is-composing? e true)
+             (not (state/get-editor-show-page-search-hashtag?)))
         nil
 
         (or ctrlKey metaKey)
