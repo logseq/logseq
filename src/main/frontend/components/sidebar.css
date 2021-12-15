@@ -224,11 +224,11 @@
     height: 3rem;
     width: calc(var(--ls-left-sidebar-sm-width) - var(--ls-scrollbar-width));
     transition: width .3s;
-    background-color: transparent;
+    background-color: var(--ls-primary-background-color);
     position: fixed;
     left: 0;
     top: 0;
-    opacity: .8;
+    opacity: 1;
     z-index: 5;
   }
 
