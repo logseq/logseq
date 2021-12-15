@@ -1496,12 +1496,14 @@
      "Check if keydown event is a composing (IME) event. 
       Ignore the IME process by default."
      ([e]
-      (event-is-composing? e true))
-     ([e ignore-process?]
+      (event-is-composing? e false))
+     ([e include-process?]
       (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")]
-        (if ignore-process?
-          event-composing?
-          (or event-composing? (= (gobj/get e "key") "Process")))))))
+        (if include-process?
+          (or event-composing? 
+              (= (gobj/get e "keyCode") 229)
+              (= (gobj/get e "key") "Process"))
+          event-composing?)))))
 
 #?(:cljs
    (defn onchange-event-is-composing?
