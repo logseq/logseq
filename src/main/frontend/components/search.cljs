@@ -388,7 +388,7 @@
                              (when @search-timeout
                                (js/clearTimeout @search-timeout))
                              (let [value (util/evalue e)
-                                   is-composing? (gobj/getValueByKeys e "nativeEvent" "isComposing")]
+                                   is-composing? (util/event-is-composing? e)]
                                (if (and (string/blank? value) (not is-composing?))
                                  (search-handler/clear-search! false)
                                  (let [search-mode (state/get-search-mode)
