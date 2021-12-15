@@ -191,4 +191,8 @@ html.is-ios.is-safari {
 
 html.is-native-ios {
   --ls-headbar-inner-top-padding: 36px;
+
+  .cp__header > .r {
+    display: flex;
+  }
 }

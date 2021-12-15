@@ -45,8 +45,8 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
             [frontend.state :as state]
+            [frontend.utf8 :as utf8]
             [frontend.util :as util]
-            [frontend.text :as text]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [rum.core :as rum]))
@@ -68,29 +68,15 @@
       (cond
         (:block/uuid config)
         (let [block (db/pull [:block/uuid (:block/uuid config)])
-              format (:block/format block)
               content (:block/content block)
-              {:keys [lines]} (last (:rum/args state))
-              full-content (:full_content (last (:rum/args state)))
-              value (text/remove-indentations value)]
-          (when full-content
-            (let [lines (string/split-lines full-content)
-                  fl (first lines)
-                  ll (last lines)]
-              (when (and fl ll)
-                (let [src (->> (subvec (vec lines) 1 (dec (count lines)))
-                               (string/join "\n"))
-                      src (text/remove-indentations src)
-                      full-content (str (string/trim fl)
-                                        (if (seq src)
-                                          (str "\n" src "\n")
-                                          "\n")
-                                        (string/trim ll))]
-                  (when (string/includes? content full-content)
-                    (let [value' (str (string/trim fl) "\n" value "\n" (string/trim ll))
-                          ;; FIXME: What if there're multiple code blocks with the same value?
-                          content' (string/replace-first content full-content value')]
-                      (editor-handler/save-block-if-changed! block content'))))))))
+              {:keys [start_pos end_pos]} (:pos_meta (last (:rum/args state)))
+              raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
+              prefix (utf8/decode (.slice raw-content 0 (- start_pos 2)))
+              surfix (utf8/decode (.slice raw-content (- end_pos 2)))
+              new-content (if (string/blank? value)
+                            (str prefix surfix)
+                            (str prefix value "\n" surfix))]
+          (editor-handler/save-block-if-changed! block new-content))
 
         (:file-path config)
         (let [path (:file-path config)
@@ -137,9 +123,8 @@
                               (get-in config [:block :block/uuid])))
         _ (state/set-state! :editor/code-mode? false)
         original-mode (get attr :data-lang)
-        mode original-mode
-        clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} mode)
-        mode (if clojure? "clojure" (text->cm-mode mode))
+        clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} original-mode)
+        mode (if clojure? "clojure" (text->cm-mode original-mode))
         lisp? (or clojure?
                   (contains? #{"scheme" "racket" "lisp"} mode))
         textarea (gdom/getElement id)
@@ -152,14 +137,12 @@
                                      :lineNumbers true
                                      :styleActiveLine true
                                      :extraKeys #js {"Esc" (fn [cm]
+                                                             (reset! esc-pressed? true)
                                                              (save-file-or-block-when-blur-or-esc! cm textarea config state)
                                                              (when-let [block-id (:block/uuid config)]
-                                                               (let [block (db/pull [:block/uuid block-id])
-                                                                     value (.getValue cm)
-                                                                     textarea-value (gobj/get textarea "value")]
+                                                               (let [block (db/pull [:block/uuid block-id])]
                                                                  (editor-handler/edit-block! block :max block-id)))
                                                              ;; TODO: return "handled" or false doesn't always prevent event bubbles
-                                                             (reset! esc-pressed? true)
                                                              (js/setTimeout #(reset! esc-pressed? false) 10))}}))]
     (when editor
       (let [textarea-ref (rum/ref-node state textarea-ref-name)]

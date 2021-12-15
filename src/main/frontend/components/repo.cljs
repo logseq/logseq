@@ -76,11 +76,11 @@
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-4 {:key id}
                (if local?
-                 [:a
-                  {:title url ;; show full path on hover
-                   :on-click #(open-repo-url url)}
-                  (some-> (config/get-local-dir url)
-                          (text/get-graph-name-from-path))]
+                 (let [local-dir (config/get-local-dir url)
+                       graph-name (text/get-graph-name-from-path local-dir)]
+                   [:a {:title local-dir
+                        :on-click #(open-repo-url url)}
+                    graph-name])
                  [:a {:target "_blank"
                       :href url}
                   (db/get-repo-path url)])

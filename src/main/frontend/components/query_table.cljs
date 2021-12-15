@@ -128,7 +128,11 @@
 
                              :block       ; block title
                              (let [content (:block/content item)
-                                   {:block/keys [title]} (block/parse-title-and-body (:block/format item) (:block/pre-block? item) content)]
+                                   {:block/keys [title]} (block/parse-title-and-body
+                                                          (:block/uuid item)
+                                                          (:block/format item)
+                                                          (:block/pre-block? item)
+                                                          content)]
                                (if (seq title)
                                  [:element (->elem :div (map-inline config title))]
                                  [:string content]))

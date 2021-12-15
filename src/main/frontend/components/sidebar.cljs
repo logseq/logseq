@@ -336,8 +336,8 @@
              (ui/loading (t :loading))]]
 
            :else
-           [:div.pb-24 {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto"))
-                        :style {:margin-bottom (if global-graph-pages? 0 120)}}
+           [:div {:class (if global-graph-pages? "" (util/hiccup->class "max-w-7xl.mx-auto.pb-24"))
+                  :style {:margin-bottom (if global-graph-pages? 0 120)}}
             main-content])]]])))
 
 (rum/defc footer

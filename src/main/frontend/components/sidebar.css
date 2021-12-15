@@ -188,7 +188,7 @@
   width: 0;
   height: 100vh;
   position: fixed;
-  top: 0;
+  top: var(--ls-headbar-inner-top-padding);
   left: 0;
   z-index: 9;
   transition: width 1.2s;
@@ -224,11 +224,11 @@
     height: 3rem;
     width: calc(var(--ls-left-sidebar-sm-width) - var(--ls-scrollbar-width));
     transition: width .3s;
-    background-color: transparent;
+    background-color: var(--ls-primary-background-color);
     position: fixed;
     left: 0;
     top: 0;
-    opacity: .8;
+    opacity: 1;
     z-index: 5;
   }
 

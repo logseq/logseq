@@ -125,9 +125,9 @@
       data)))
 
 (defn- page-exists-in-another-file
-  [page file]
+  [repo-url page file]
   (when-let [page-name (:block/name page)]
-    (let [current-file (:file/path (db/get-page-file page-name))]
+    (let [current-file (:file/path (db/get-page-file repo-url page-name))]
       (when (not= file current-file)
        current-file))))
 
@@ -157,9 +157,14 @@
           utf8-content (utf8/encode content)
           file-content [{:file/path file}]]
       (p/let [tx (if (contains? config/mldoc-support-formats format)
-                   (p/let [delete-blocks (db/delete-file-blocks! repo-url file)
-                           [pages blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
-                           _ (when-let [current-file (page-exists-in-another-file (first pages) file)]
+                   (p/let [[pages blocks] (extract-handler/extract-blocks-pages repo-url file content utf8-content)
+                           first-page (first pages)
+                           delete-blocks (->
+                                          (concat
+                                           (db/delete-file-blocks! repo-url file)
+                                           (when first-page (db/delete-page-blocks repo-url (:block/name first-page))))
+                                          (distinct))
+                           _ (when-let [current-file (page-exists-in-another-file repo-url first-page file)]
                                (when (not= file current-file)
                                  (let [error (str "Page already exists with another file: " current-file ", current file: " file)]
                                    (state/pub-event! [:notification/show

@@ -653,13 +653,26 @@
            res)))))
 
 #?(:cljs
+   (defn safe-set-range-text!
+     ([input text start end]
+      (try
+        (.setRangeText input "" start end)
+        (catch js/Error _e
+          nil)))
+     ([input text start end select-mode]
+      (try
+        (.setRangeText input "" start end select-mode)
+        (catch js/Error _e
+          nil)))))
+
+#?(:cljs
    (defn kill-line-before!
      [input]
      (let [val (.-value input)
            end (.-selectionStart input)
            n-pos (string/last-index-of val \newline (dec end))
            start (if n-pos (inc n-pos) 0)]
-       (.setRangeText input "" start end))))
+       (safe-set-range-text! input "" start end))))
 
 #?(:cljs
    (defn kill-line-after!
@@ -668,14 +681,14 @@
            start (.-selectionStart input)
            end   (or (string/index-of val \newline start)
                      (count val))]
-       (.setRangeText input "" start end))))
+       (safe-set-range-text! input "" start end))))
 
 #?(:cljs
    (defn insert-at-current-position!
      [input text]
      (let [start (.-selectionStart input)
            end   (.-selectionEnd input)]
-       (.setRangeText input text start end "end"))))
+       (safe-set-range-text! input text start end "end"))))
 
 ;; copied from re_com
 #?(:cljs
@@ -1323,7 +1336,7 @@
                           (recur (dec idx))
                           idx))
                       inc))]
-       (.setRangeText input "" idx current))))
+       (safe-set-range-text! input "" idx current))))
 
 #?(:cljs
    (defn forward-kill-word
@@ -1339,7 +1352,7 @@
                         (remove nil?)
                         (apply min))
                    (count val))]
-       (.setRangeText input "" current (inc idx)))))
+       (safe-set-range-text! input "" current (inc idx)))))
 
 #?(:cljs
    (defn fix-open-external-with-shift!

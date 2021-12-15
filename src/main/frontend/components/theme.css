@@ -36,6 +36,12 @@ html {
   }
 }
 
+@media (prefers-color-scheme: dark) {
+  .preboot-loading {
+    color: lightgray;
+  }
+}
+
 .form-checkbox {
   color: var(--ls-page-checkbox-color, #6093a0);
   background-color: var(--ls-page-checkbox-color, #6093a0);

@@ -1785,7 +1785,7 @@
 
 (defn clock-summary-cp
   [block body]
-  [:span.text-right {:style {:max-width 100}}
+  [:div {:style {:max-width 100}}
    (when (and (state/enable-timetracking?)
               (or (= (:block/marker block) "DONE")
                   (contains? #{"TODO" "LATER"} (:block/marker block))))
@@ -1812,7 +1812,7 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
-                                                 (merge block (block/parse-title-and-body format pre-block? content)))
+                                                 (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (get properties :collapsed)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
@@ -1841,51 +1841,48 @@
        (merge attrs))
 
      [:span
-      ;; .flex.relative {:style {:width "100%"}}
-      [:span
-       ;; .flex-1.flex-col.relative.block-content
-       [:span.flex.flex-row.justify-between
-        [:span
-         (cond
-           (seq title)
-           (build-block-title config block)
+      [:div.flex.flex-row.justify-between
+       [:div.flex-1
+        (cond
+          (seq title)
+          (build-block-title config block)
 
-           :else
-           nil)]
+          :else
+          nil)]
 
-        (clock-summary-cp block body)]
+       (clock-summary-cp block body)]
 
-       (when (seq children)
-         (dnd-separator-wrapper block block-id slide? false true))
+      (when (seq children)
+        (dnd-separator-wrapper block block-id slide? false true))
 
-       (when deadline
-         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
-           (timestamp-cp block "DEADLINE" deadline-ast)))
+      (when deadline
+        (when-let [deadline-ast (block-handler/get-deadline-ast block)]
+          (timestamp-cp block "DEADLINE" deadline-ast)))
 
-       (when scheduled
-         (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
-           (timestamp-cp block "SCHEDULED" scheduled-ast)))
+      (when scheduled
+        (when-let [scheduled-ast (block-handler/get-scheduled-ast block)]
+          (timestamp-cp block "SCHEDULED" scheduled-ast)))
 
-       (when (and (seq properties)
-                  (let [hidden? (property/properties-built-in? properties)]
-                    (not hidden?))
-                  (not block-ref?)
-                  (not (:slide? config)))
-         (properties-cp config block))
+      (when (and (seq properties)
+                 (let [hidden? (property/properties-built-in? properties)]
+                   (not hidden?))
+                 (not block-ref?)
+                 (not (:slide? config)))
+        (properties-cp config block))
 
-       (when (and (not block-ref-with-title?) (seq body))
-         [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
-          ;; TODO: consistent id instead of the idx (since it could be changed later)
-          (let [body (block/trim-break-lines! (:block/body block))]
-            (for [[idx child] (medley/indexed body)]
-              (when-let [block (markup-element-cp config child)]
-                (rum/with-key (block-child block)
-                  (str uuid "-" idx)))))])
+      (when (and (not block-ref-with-title?) (seq body))
+        [:div.block-body {:style {:display (if (and collapsed? (seq title)) "none" "")}}
+         ;; TODO: consistent id instead of the idx (since it could be changed later)
+         (let [body (block/trim-break-lines! (:block/body block))]
+           (for [[idx child] (medley/indexed body)]
+             (when-let [block (markup-element-cp config child)]
+               (rum/with-key (block-child block)
+                 (str uuid "-" idx)))))])
 
-       (case (:block/warning block)
-         :multiple-blocks
-         [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
-         nil)]]]))
+      (case (:block/warning block)
+        :multiple-blocks
+        [:p.warning.text-sm "Full content is not displayed, Logseq doesn't support multiple unordered lists or headings in a block."]
+        nil)]]))
 
 (rum/defc block-refs-count < rum/reactive
   [block]
@@ -2000,7 +1997,11 @@
             parents-props (doall
                            (for [{:block/keys [uuid name content] :as block} parents]
                              (when-not name ; not page
-                               (let [{:block/keys [title body]} (block/parse-title-and-body (:block/format block) (:block/pre-block? block) content)]
+                               (let [{:block/keys [title body]} (block/parse-title-and-body
+                                                                 uuid
+                                                                 (:block/format block)
+                                                                 (:block/pre-block? block)
+                                                                 content)]
                                  [block
                                  (if (seq title)
                                    (->elem :span (map-inline config title))
@@ -2160,7 +2161,7 @@
                        (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                              (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
   [state config {:block/keys [uuid repo children pre-block? top? properties refs heading-level level type format content] :as block}]
-  (let [block (merge block (block/parse-title-and-body format pre-block? content))
+  (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
         body (:block/body block)
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
@@ -2638,7 +2639,9 @@
               [:div.opacity-50.font-medium
                (util/format ":%s:" (string/upper-case name))]
               [:div.opacity-50.font-medium
-               (logbook-cp lines)
+               (if (= name "logbook")
+                 (logbook-cp lines)
+                 (apply str lines))
                [:div ":END:"]]
               {:default-collapsed? true
                :title-trigger? true})]]])

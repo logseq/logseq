@@ -33,38 +33,39 @@
   [content q]
   (if (or (string/blank? content) (string/blank? q))
     content
-    (let [q-words (string/split q #" ")
-          lc-content (string/lower-case content)
-          lc-q (string/lower-case q)]
-      (if (and (string/includes? lc-content lc-q)
-              (not (util/safe-re-find #" " q)))
-        (let [i (string/index-of lc-content lc-q)
-              [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
-          [:div
-           (when-not (string/blank? before)
-             [:span before])
-           [:mark {:class "p-0 rounded-none"} (subs content i (+ i (count q)))]
-           (when-not (string/blank? after)
-             [:span after])])
-        (let [elements (loop [words q-words
-                              content content
-                              result []]
-                         (if (and (seq words) content)
-                           (let [word (first words)
-                                 lc-word (string/lower-case word)
-                                 lc-content (string/lower-case content)]
-                             (if-let [i (string/index-of lc-content lc-word)]
-                               (recur (rest words)
-                                      (subs content (+ i (count word)))
-                                      (vec
-                                       (concat result
-                                               [[:span (subs content 0 i)]
-                                                [:mark (subs content i (+ i (count word)))]])))
-                               (recur nil
-                                      content
-                                      result)))
-                           (conj result [:span content])))]
-          [:p {:class "m-0"} elements])))))
+    (when (and content q)
+      (let [q-words (string/split q #" ")
+            lc-content (string/lower-case content)
+            lc-q (string/lower-case q)]
+        (if (and (string/includes? lc-content lc-q)
+                 (not (util/safe-re-find #" " q)))
+          (let [i (string/index-of lc-content lc-q)
+                [before after] [(subs content 0 i) (subs content (+ i (count q)))]]
+            [:div
+             (when-not (string/blank? before)
+               [:span before])
+             [:mark {:class "p-0 rounded-none"} (subs content i (+ i (count q)))]
+             (when-not (string/blank? after)
+               [:span after])])
+          (let [elements (loop [words q-words
+                                content content
+                                result []]
+                           (if (and (seq words) content)
+                             (let [word (first words)
+                                   lc-word (string/lower-case word)
+                                   lc-content (string/lower-case content)]
+                               (if-let [i (string/index-of lc-content lc-word)]
+                                 (recur (rest words)
+                                        (subs content (+ i (count word)))
+                                        (vec
+                                         (concat result
+                                                 [[:span (subs content 0 i)]
+                                                  [:mark (subs content i (+ i (count word)))]])))
+                                 (recur nil
+                                        content
+                                        result)))
+                             (conj result [:span content])))]
+            [:p {:class "m-0"} elements]))))))
 
 (rum/defc search-result-item
   [type content]
@@ -148,16 +149,18 @@
                                         (cond->
                                           {:type :page
                                            :data page}
-                                          (not= (string/lower-case page)
-                                                (string/lower-case alias))
-                                          (assoc :alias alias)))) pages))
+                                          (and alias
+                                               (not= (string/lower-case page)
+                                                     (string/lower-case alias)))
+                                          (assoc :alias alias))))
+                                 (remove nil? pages)))
           files (when-not all? (map (fn [file] {:type :file :data file}) files))
           blocks (map (fn [block] {:type :block :data block}) blocks)
           search-mode (state/sub :search/mode)
           new-page (if (or
                         (and (seq pages)
-                             (= (string/lower-case search-q)
-                                (string/lower-case (:data (first pages)))))
+                             (= (util/safe-lower-case search-q)
+                                (util/safe-lower-case (:data (first pages)))))
                         (nil? result)
                         all?)
                      []
@@ -205,12 +208,13 @@
                             (case type
                               :page
                               (let [data (or alias data)
-                                    page (db/entity [:block/name (string/lower-case data)])]
-                                (state/sidebar-add-block!
-                                 (state/get-current-repo)
-                                 (:db/id page)
-                                 :page
-                                 {:page page}))
+                                    page (when data (db/entity [:block/name (string/lower-case data)]))]
+                                (when page
+                                  (state/sidebar-add-block!
+                                   (state/get-current-repo)
+                                   (:db/id page)
+                                   :page
+                                   {:page page})))
 
                               :block
                               (let [block-uuid (uuid (:block/uuid data))
@@ -297,6 +301,7 @@
    (let [recent-search (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
          pages (->> (db/get-key-value :recent/pages)
                     (remove nil?)
+                    (filter string?)
                     (remove #(= (string/lower-case %) "contents"))
                     (mapv (fn [page] {:type :page :data page})))
          result (concat (take 5 recent-search) pages)]
@@ -324,12 +329,13 @@
                           (case type
                             :page
                             (let [page data]
-                              (when-let [page (db/pull [:block/name (string/lower-case page)])]
-                               (state/sidebar-add-block!
-                                (state/get-current-repo)
-                                (:db/id page)
-                                :page
-                                {:page page})))
+                              (when (string? page)
+                                (when-let [page (db/pull [:block/name (string/lower-case page)])]
+                                 (state/sidebar-add-block!
+                                  (state/get-current-repo)
+                                  (:db/id page)
+                                  :page
+                                  {:page page}))))
 
                             nil))
        :item-render (fn [{:keys [type data]}]
@@ -386,8 +392,8 @@
                                  (search-handler/clear-search! false)
                                  (let [search-mode (state/get-search-mode)
                                        opts (if (= :page search-mode)
-                                              (let [current-page (or (state/get-current-page)
-                                                                     (date/today))]
+                                              (when-let [current-page (or (state/get-current-page)
+                                                                          (date/today))]
                                                 {:page-db-id (:db/id (db/entity [:block/name (string/lower-case current-page)]))})
                                               {})]
                                    (state/set-q! value)

@@ -348,9 +348,9 @@
 
 (defn wrap-parse-block
   [{:block/keys [content format left page uuid level pre-block?] :as block}]
-  (let [block (merge
-               (or (and (:db/id block) (db/pull (:db/id block))) block)
-               (block/parse-title-and-body format pre-block? content))
+  (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
+        block (merge block
+                     (block/parse-title-and-body uuid format pre-block? (:block/content block)))
         properties (:block/properties block)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
@@ -707,8 +707,13 @@
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               [block-m sibling?] (cond
                                    before?
-                                   (let [block (db/pull (:db/id (:block/left block)))
-                                         sibling? (if (:block/name block) false sibling?)]
+                                   (let [first-child? (->> [:block/parent :block/left]
+                                                           (map #(:db/id (get block %)))
+                                                           (apply =))
+                                         block (db/pull (:db/id (:block/left block)))
+                                         sibling? (if (or first-child? ;; insert as first child
+                                                          (:block/name block))
+                                                    false sibling?)]
                                      [block sibling?])
 
                                    sibling?
@@ -1113,18 +1118,19 @@
     (state/exit-editing-and-set-selected-blocks! [block])))
 
 (defn- blocks-with-level
+  "Should be sorted already."
   [blocks]
-  (let [level-blocks (mapv #(assoc % :level 1) blocks)
-        level-blocks-map (into {} (mapv (fn [b] [(:db/id b) b]) level-blocks))
-        [level-blocks-map _]
-        (reduce (fn [[r state] [id block]]
-                  (if-let [parent-level (get-in state [(:db/id (:block/parent block)) :level])]
-                    [(conj r [id (assoc block :level (inc parent-level))])
-                     (assoc-in state [(:db/id block) :level] (inc parent-level))]
-                    [(conj r [id block])
-                     state]))
-                [{} level-blocks-map] level-blocks-map)]
-    level-blocks-map))
+  (let [root (assoc (first blocks) :level 1)]
+    (loop [m [[(:db/id root) root]]
+           blocks (rest blocks)]
+      (if (empty? blocks)
+        m
+        (let [block (first blocks)
+              parent-id (:db/id (:block/parent block))
+              parent-level (:level (second (first (filter (fn [x] (= (first x) parent-id)) m))))
+              block (assoc block :level (inc parent-level))
+              m' (vec (conj m [(:db/id block) block]))]
+          (recur m' (rest blocks)))))))
 
 (defn- blocks-vec->tree
   [blocks]
@@ -1160,8 +1166,8 @@
                                  (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
                                  [b])) blocks))
         block-ids* (mapv :block/uuid blocks*)
-        level-blocks-map (blocks-with-level blocks*)
-        level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
+        level-blocks (blocks-with-level blocks*)
+        level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (map second level-blocks)))
         level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
         tree (blocks-vec->tree level-blocks)
         top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))
@@ -1254,8 +1260,8 @@
                                [b])) )
                (flatten))
           block-ids* (mapv :block/uuid blocks*)
-          level-blocks-map (blocks-with-level blocks*)
-          level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (vals level-blocks-map)))
+          level-blocks (blocks-with-level blocks*)
+          level-blocks-uuid-map (into {} (mapv (fn [b] [(:block/uuid b) b]) (map second level-blocks)))
           level-blocks (mapv (fn [uuid] (get level-blocks-uuid-map uuid)) block-ids*)
           tree (blocks-vec->tree level-blocks)
           top-level-block-uuids (mapv :block/uuid (filterv #(not (vector? %)) tree))]
@@ -1372,8 +1378,11 @@
 (defn cut-block!
   [block-id]
   (when-let [block (db/pull [:block/uuid block-id])]
-    (let [content (:block/content block)]
-      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) content)
+    (let [repo (state/get-current-repo)
+          content (:block/content block)
+          ;; TODO: support org mode
+          [md-content _tree] (compose-copied-blocks-contents-&-block-tree repo [block-id])]
+      (common-handler/copy-to-clipboard-without-id-property! (:block/format block) md-content)
       (delete-block-aux! block true))))
 
 (defn clear-last-selected-block!
@@ -1869,11 +1878,6 @@
           (util/stop event)
           (state/append-current-edit-content! doc-text))))))
 
-(defn- block-and-children-content
-  [block-children]
-  (-> (map :block/content block-children)
-      string/join))
-
 (defn- reorder-selected-blocks
   [blocks]
   (let [repo (state/get-current-repo)
@@ -2298,12 +2302,15 @@
            block-uuid (:block/uuid block)
            template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
            blocks (if template-including-parent? (db/get-block-and-children repo block-uuid) (db/get-block-children repo block-uuid))
-           level-blocks (vals (blocks-with-level blocks))
-           grouped-blocks (group-by #(= db-id (:db/id %)) level-blocks)
-           root-block (or (first (get grouped-blocks true)) (assoc (db/pull db-id) :level 1))
-           blocks-exclude-root (get grouped-blocks false)
+           root-block (db/pull db-id)
+           blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
            sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
-           result-blocks (if template-including-parent? sorted-blocks (drop 1 sorted-blocks))
+           sorted-blocks (->> (blocks-with-level sorted-blocks)
+                              (map second))
+           result-blocks (if template-including-parent?
+                           sorted-blocks
+                           (->> (drop 1 sorted-blocks)
+                                (map (fn [block] (update block :level dec)))))
            tree (blocks-vec->tree result-blocks)]
        (when element-id
          (insert-command! element-id "" format {}))
@@ -2608,7 +2615,7 @@
           (cursor/move-cursor-forward input))))))
 
 (defn- delete-and-update [^js input start end]
-  (.setRangeText input "" start end)
+  (util/safe-set-range-text! input "" start end)
   (state/set-edit-content! (state/get-edit-input-id) (.-value input)))
 
 (defn- delete-concat [current-block]
@@ -3309,7 +3316,7 @@
      (map (fn [x] (dissoc x :block/children))))))
 
 (defn collapsable? [block-id]
-  (if-let [block (db-model/get-block-by-uuid block-id)]
+  (if-let [block (db-model/query-block-by-uuid block-id)]
     (let [block (block/parse-title-and-body block)]
       (and
        (nil? (-> block :block/properties :collapsed))

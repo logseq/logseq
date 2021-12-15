@@ -74,7 +74,9 @@
                                    (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
               (editor-handler/insert-command! id command-steps
                                               format
-                                              {:restore? restore-slash?}))))
+                                              {:restore? restore-slash?})
+              (state/pub-event! [:instrument {:type :editor/command-triggered
+                                              :payload {:command command}}]))))
         :class
         "black"}))))
 
