@@ -707,8 +707,13 @@
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               [block-m sibling?] (cond
                                    before?
-                                   (let [block (db/pull (:db/id (:block/left block)))
-                                         sibling? (if (:block/name block) false sibling?)]
+                                   (let [first-child? (->> [:block/parent :block/left]
+                                                           (map #(:db/id (get block %)))
+                                                           (apply =))
+                                         block (db/pull (:db/id (:block/left block)))
+                                         sibling? (if (or first-child? ;; insert as first child
+                                                          (:block/name block))
+                                                    false sibling?)]
                                      [block sibling?])
 
                                    sibling?
@@ -1252,7 +1257,7 @@
                ;; expand collapsed blocks
                (mapv (fn [b] (if (:collapsed (:block/properties b))
                                (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
-                               [b])) )
+                               [b])))
                (flatten))
           block-ids* (mapv :block/uuid blocks*)
           level-blocks (blocks-with-level blocks*)
@@ -1693,9 +1698,9 @@
    "^" "^"
    "=" "="
    "/" "/"
-   "+" "+"
+   "+" "+"})
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
-   })
+
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -2781,13 +2786,11 @@
           value (gobj/get input "value")
           ctrlKey (gobj/get e "ctrlKey")
           metaKey (gobj/get e "metaKey")
-          is-composing? (gobj/getValueByKeys e "event_" "isComposing")
           pos (cursor/pos input)
           shift? (.-shiftKey e)
           code (gobj/getValueByKeys e "event_" "code")]
       (cond
-        (and (or is-composing? (= key-code 229))
-             (not (state/get-editor-show-page-search-hashtag?)))
+        (util/event-is-composing? e)
         nil
 
         (or ctrlKey metaKey)
@@ -2864,112 +2867,112 @@
         :else
         nil))))
 
-;; key up
 (defn keyup-handler
   [state input input-id search-timeout]
   (fn [e key-code]
-    (let [k (gobj/get e "key")]
-      (when-not (= k "Process")
-        (let [code (gobj/getValueByKeys e "event_" "code")
-              format (:format (get-state))
-              current-pos (cursor/pos input)
-              value (gobj/get input "value")
-              c (util/nth-safe value (dec current-pos))
-              last-key-code (state/get-last-key-code)
-              blank-selected? (string/blank? (util/get-selected-text))
-              shift? (.-shiftKey e)]
-          (when-not (state/get-editor-show-input)
-            (cond
-              (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
-                   (not (:editor/show-page-search? @state/state))
-                   (not (:editor/show-page-search-hashtag? @state/state))
-                   (wrapped-by? input "[[" "]]"))
-              (let [orig-pos (cursor/get-caret-pos input)
-                    value (gobj/get input "value")
-                    square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) "[[")
-                    pos (+ square-pos 2)
-                    _ (state/set-last-pos! pos)
-                    pos (assoc orig-pos :pos pos)
-                    command-step (if (= \# (util/nth-safe value (dec square-pos)))
-                                   :editor/search-page-hashtag
-                                   :editor/search-page)]
-                (commands/handle-step [command-step])
-                (reset! commands/*slash-caret-pos pos))
+    (when-not (util/event-is-composing? e)
+      (let [k (gobj/get e "key")
+            code (gobj/getValueByKeys e "event_" "code")
+            format (:format (get-state))
+            current-pos (cursor/pos input)
+            value (gobj/get input "value")
+            c (util/nth-safe value (dec current-pos))
+            last-key-code (state/get-last-key-code)
+            blank-selected? (string/blank? (util/get-selected-text))
+            shift? (.-shiftKey e)]
+        (when-not (state/get-editor-show-input)
+          (cond
+            (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
+                 (not (:editor/show-page-search? @state/state))
+                 (not (:editor/show-page-search-hashtag? @state/state))
+                 (wrapped-by? input "[[" "]]"))
+            (let [orig-pos (cursor/get-caret-pos input)
+                  value (gobj/get input "value")
+                  square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) "[[")
+                  pos (+ square-pos 2)
+                  _ (state/set-last-pos! pos)
+                  pos (assoc orig-pos :pos pos)
+                  command-step (if (= \# (util/nth-safe value (dec square-pos)))
+                                 :editor/search-page-hashtag
+                                 :editor/search-page)]
+              (commands/handle-step [command-step])
+              (reset! commands/*slash-caret-pos pos))
 
-              (and blank-selected?
-                   (or (= keycode/left-square-bracket key-code (:key-code last-key-code))
-                       (= keycode/left-square-bracket-code code (:code last-key-code)))
-                   (not shift?)
-                   (> current-pos 0)
-                   (not (wrapped-by? input "[[" "]]")))
-              (do
-                (commands/handle-step [:editor/input "[[]]" {:backward-truncate-number 2
-                                                             :backward-pos 2}])
-                (commands/handle-step [:editor/search-page])
-                (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+            (and blank-selected?
+                 (or (= keycode/left-square-bracket key-code (:key-code last-key-code))
+                     (= keycode/left-square-bracket-code code (:code last-key-code)))
+                 (not shift?)
+                 (> current-pos 0)
+                 (not (wrapped-by? input "[[" "]]")))
+            (do
+              (commands/handle-step [:editor/input "[[]]" {:backward-truncate-number 2
+                                                           :backward-pos 2}])
+              (commands/handle-step [:editor/search-page])
+              (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
-              (and blank-selected?
-                   (or (= keycode/left-paren key-code (:key-code last-key-code))
-                       (= keycode/left-paren-code code (:code last-key-code)))
-                   (:shift? last-key-code)
-                   shift?
-                   (> current-pos 0)
-                   (not (wrapped-by? input "((" "))")))
-              (do
-                (commands/handle-step [:editor/input "(())" {:backward-truncate-number 2
-                                                             :backward-pos 2}])
-                (commands/handle-step [:editor/search-block :reference])
-                (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+            (and blank-selected?
+                 (or (= keycode/left-paren key-code (:key-code last-key-code))
+                     (= keycode/left-paren-code code (:code last-key-code)))
+                 (:shift? last-key-code)
+                 shift?
+                 (> current-pos 0)
+                 (not (wrapped-by? input "((" "))")))
+            (do
+              (commands/handle-step [:editor/input "(())" {:backward-truncate-number 2
+                                                           :backward-pos 2}])
+              (commands/handle-step [:editor/search-block :reference])
+              (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
-              (and (= "〈" c)
-                   (= "《" (util/nth-safe value (dec (dec current-pos))))
-                   (> current-pos 0))
-              (do
-                (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
-                                                                             :backward-pos 0}])
-                (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
-                (reset! commands/*show-block-commands true))
+            (and (= "〈" c)
+                 (= "《" (util/nth-safe value (dec (dec current-pos))))
+                 (> current-pos 0))
+            (do
+              (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
+                                                                           :backward-pos 0}])
+              (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
+              (reset! commands/*show-block-commands true))
 
-              (and (= c " ")
-                   (or (= (util/nth-safe value (dec (dec current-pos))) "#")
-                       (not (state/get-editor-show-page-search?))
-                       (and (state/get-editor-show-page-search?)
-                            (not= (util/nth-safe value current-pos) "]"))))
-              (state/set-editor-show-page-search-hashtag! false)
+            (and (= c " ")
+                 (or (= (util/nth-safe value (dec (dec current-pos))) "#")
+                     (not (state/get-editor-show-page-search?))
+                     (and (state/get-editor-show-page-search?)
+                          (not= (util/nth-safe value current-pos) "]"))))
+            (state/set-editor-show-page-search-hashtag! false)
 
-              (and @*show-commands (not= k (state/get-editor-command-trigger)))
-              (let [matched-commands (get-matched-commands input)]
-                (if (seq matched-commands)
-                  (do
-                    (reset! *show-commands true)
-                    (reset! commands/*matched-commands matched-commands))
-                  (reset! *show-commands false)))
+            (and @*show-commands (not= k (state/get-editor-command-trigger)))
+            (let [matched-commands (get-matched-commands input)]
+              (if (seq matched-commands)
+                (do
+                  (reset! *show-commands true)
+                  (reset! commands/*matched-commands matched-commands))
+                (reset! *show-commands false)))
 
-              (and @*show-block-commands (not= key-code 188)) ; not <
-              (let [matched-block-commands (get-matched-block-commands input)]
-                (if (seq matched-block-commands)
-                  (cond
-                    (= key-code 9)       ;tab
-                    (when @*show-block-commands
-                      (util/stop e)
-                      (insert-command! input-id
-                                       (last (first matched-block-commands))
-                                       format
-                                       {:last-pattern commands/angle-bracket}))
+            (and @*show-block-commands (not= key-code 188)) ; not <
+            (let [matched-block-commands (get-matched-block-commands input)]
+              (if (seq matched-block-commands)
+                (cond
+                  (= key-code 9)       ;tab
+                  (when @*show-block-commands
+                    (util/stop e)
+                    (insert-command! input-id
+                                     (last (first matched-block-commands))
+                                     format
+                                     {:last-pattern commands/angle-bracket}))
 
-                    :else
-                    (reset! commands/*matched-block-commands matched-block-commands))
-                  (reset! *show-block-commands false)))
+                  :else
+                  (reset! commands/*matched-block-commands matched-block-commands))
+                (reset! *show-block-commands false)))
 
-              (nil? @search-timeout)
-              (close-autocomplete-if-outside input)
+            (nil? @search-timeout)
+            (close-autocomplete-if-outside input)
 
-              :else
-              nil))
-          (when-not (= k "Shift")
-            (state/set-last-key-code! {:key-code key-code
-                                       :code code
-                                       :shift? (.-shiftKey e)})))))))
+            :else
+            nil))
+        (when-not (= k "Shift")
+          (state/set-last-key-code! {:key-code key-code
+                                     :code code
+                                     :shift? (.-shiftKey e)}))))))
+
 
 (defn editor-on-click!
   [id]

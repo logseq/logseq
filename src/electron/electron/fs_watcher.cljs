@@ -10,7 +10,7 @@
 ;; TODO: explore different solutions for different platforms
 ;; 1. https://github.com/Axosoft/nsfw
 
-(defonce polling-interval 5000)
+(defonce polling-interval 10000)
 (defonce file-watcher (atom nil))
 
 (defonce file-watcher-chan "file-watcher")
@@ -26,8 +26,7 @@
                           (clj->js
                            {:ignored (fn [path]
                                        (utils/ignored-path? dir path))
-                            ;; :ignoreInitial false
-                            :ignoreInitial true
+                            :ignoreInitial false
                             :ignorePermissionErrors true
                             :interval polling-interval
                             :binaryInterval polling-interval
