@@ -2790,8 +2790,8 @@
           shift? (.-shiftKey e)
           code (gobj/getValueByKeys e "event_" "code")]
       (cond
-        (and (util/event-is-composing? e true)
-             (not (state/get-editor-show-page-search-hashtag?)))
+        (and (util/event-is-composing? e true) ;; #3218
+             (not (state/get-editor-show-page-search-hashtag?))) ;; #3283
         nil
 
         (or ctrlKey metaKey)
@@ -2880,8 +2880,11 @@
             c (util/nth-safe value (dec current-pos))
             last-key-code (state/get-last-key-code)
             blank-selected? (string/blank? (util/get-selected-text))
-            shift? (.-shiftKey e)]
-        (when-not (state/get-editor-show-input)
+            shift? (.-shiftKey e)
+            is-processed? (util/event-is-composing? e true) ;; #3440
+            non-enter-processed? (and is-processed? ;; #3251
+                                      (not= code "Enter"))] ;; #3459
+        (when-not (or (state/get-editor-show-input) non-enter-processed?)
           (cond
             (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
                  (not (:editor/show-page-search? @state/state))
@@ -2969,7 +2972,7 @@
 
             :else
             nil))
-        (when-not (= k "Shift")
+        (when-not (or (= k "Shift") is-processed?)
           (state/set-last-key-code! {:key-code key-code
                                      :code code
                                      :shift? (.-shiftKey e)}))))))
