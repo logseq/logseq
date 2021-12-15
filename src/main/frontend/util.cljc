@@ -1494,19 +1494,18 @@
 #?(:cljs
    (defn event-is-composing?
      "Check if keydown event is a composing (IME) event. 
-      Ignore the IME finishing keycode by default."
+      Ignore the IME process by default."
      ([e]
       (event-is-composing? e true))
-     ([e ignore-finish?]
-      (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")
-            finish-keycode?  (= (.-keyCode e) 229)]
-       (if ignore-finish?
-         (and event-composing? (not finish-keycode?))
-         (or event-composing?  finish-keycode?))))))
+     ([e ignore-process?]
+      (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")]
+        (if ignore-process?
+          event-composing?
+          (or event-composing? (= (gobj/get e "key") "Process")))))))
 
 #?(:cljs
    (defn onchange-event-is-composing?
       "Check if onchange event of Input is a composing (IME) event.
-       Including IME finishing."
+       Always ignore the IME process."
      [e]
      (gobj/getValueByKeys e "nativeEvent" "isComposing"))) ;; No keycode available
