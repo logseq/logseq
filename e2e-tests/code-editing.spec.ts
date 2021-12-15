@@ -177,3 +177,32 @@ test('multiple code block', async ({ page }) => {
   expect(await page.inputValue('.block-editor textarea'))
     .toBe('中文 Heading\n```clojure\n:key-test\n\n```\nMiddle 🚀\n```clojure\n\n  :key-test 日本語\n\n```\nFooter')
 })
+
+test('click outside to exit', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.fill('.block-editor textarea', 'Header ``Click``\n```\n  ABC\n```')
+  await page.waitForTimeout(500) // wait for fill
+  await escapeToCodeEditor(page)
+  await page.type('.CodeMirror textarea', '  DEF\nGHI')
+
+  await page.waitForTimeout(500)
+  await page.click('text=Click')
+  await page.waitForTimeout(500)
+  // NOTE: auto-indent is on
+  expect(await page.inputValue('.block-editor textarea')).toBe('Header ``Click``\n```\n  ABC  DEF\n  GHI\n```')
+})
+
+test('click lanuage label to exit #3463', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.fill('.block-editor textarea', '```cpp\n```')
+  await page.waitForTimeout(500)
+  await escapeToCodeEditor(page)
+  await page.type('.CodeMirror textarea', '#include<iostream>')
+
+  await page.waitForTimeout(500)
+  await page.click('text=cpp') // the language label
+  await page.waitForTimeout(500)
+  expect(await page.inputValue('.block-editor textarea')).toBe('```cpp\n#include<iostream>\n```')
+})
