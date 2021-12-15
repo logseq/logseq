@@ -35,6 +35,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [sci.core :as sci]
+            [frontend.handler.shell :as shell]
             [frontend.modules.layout.core]))
 
 ;; helpers
@@ -614,6 +615,11 @@
   []
   (when-let [repo (state/get-current-repo)]
     (export-handler/export-repo-as-zip! repo)))
+
+(defn ^:export exec_git_command
+  [^js args]
+  (when-let [args (and args (seq (bean/->clj args)))]
+    (shell/run-git-command! args)))
 
 ;; helpers
 (defn ^:export show_msg
