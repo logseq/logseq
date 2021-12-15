@@ -1700,7 +1700,7 @@
    "/" "/"
    "+" "+"})
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
-   
+
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -2786,13 +2786,11 @@
           value (gobj/get input "value")
           ctrlKey (gobj/get e "ctrlKey")
           metaKey (gobj/get e "metaKey")
-          is-composing? (gobj/getValueByKeys e "event_" "isComposing")
           pos (cursor/pos input)
           shift? (.-shiftKey e)
           code (gobj/getValueByKeys e "event_" "code")]
       (cond
-        (and (or is-composing? (= key-code 229))
-             (not (state/get-editor-show-page-search-hashtag?)))
+        (util/event-is-composing? e)
         nil
 
         (or ctrlKey metaKey)
@@ -2869,12 +2867,12 @@
         :else
         nil))))
 
-;; key up
 (defn keyup-handler
   [state input input-id search-timeout]
   (fn [e key-code]
-    (let [k (gobj/get e "key")]
-      (let [code (gobj/getValueByKeys e "event_" "code")
+    (when-not (util/event-is-composing? e)
+      (let [k (gobj/get e "key")
+            code (gobj/getValueByKeys e "event_" "code")
             format (:format (get-state))
             current-pos (cursor/pos input)
             value (gobj/get input "value")
@@ -2974,7 +2972,7 @@
           (state/set-last-key-code! {:key-code key-code
                                      :code code
                                      :shift? (.-shiftKey e)}))))))
-                                       
+
 
 (defn editor-on-click!
   [id]

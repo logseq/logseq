@@ -1490,3 +1490,9 @@
    (defn sm-breakpoint?
      []
      (< (.-offsetWidth js/document.documentElement) 640)))
+
+#?(:cljs
+   (defn event-is-composing?
+     [e]
+     (or (gobj/getValueByKeys e "event_" "isComposing")
+         (= (.-keyCode e) 229))))
