@@ -2788,10 +2788,14 @@
           metaKey (gobj/get e "metaKey")
           pos (cursor/pos input)
           shift? (.-shiftKey e)
-          code (gobj/getValueByKeys e "event_" "code")]
+          code (gobj/getValueByKeys e "event_" "code")
+          hashtag? (or (surround-by? input "#" " ")
+                       (surround-by? input "#" :end)
+                       (= key "#"))]
       (cond
         (and (util/event-is-composing? e true) ;; #3218
-             (not (state/get-editor-show-page-search-hashtag?))) ;; #3283
+             (not hashtag?) ;; #3283 @Rime
+             (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
         nil
 
         (or ctrlKey metaKey)
@@ -2836,10 +2840,7 @@
           (util/stop e)
           (autopair input-id key format nil))
 
-        (or
-         (surround-by? input "#" " ")
-         (surround-by? input "#" :end)
-         (= key "#"))
+        hashtag?
         (do
           (commands/handle-step [:editor/search-page-hashtag])
           (state/set-last-pos! (cursor/pos input))
