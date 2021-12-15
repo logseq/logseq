@@ -1110,7 +1110,9 @@
   [s]
   (and (string? s)
        (or (include-windows-reserved-chars? s)
-           (string/includes? s "."))))
+           (string/includes? s ".")
+           (string/includes? s "%")
+           (string/includes? s "#"))))
 
 (defn remove-boundary-slashes
   [s]
@@ -1130,7 +1132,7 @@
       ;; Windows reserved path characters
       (string/replace windows-reserved-chars "_")
       ;; for android filesystem compatiblity
-      (string/replace #"%#" "_")))
+      (string/replace #"[\\#|%]+" "_")))
 
 (defn lowercase-first
   [s]
