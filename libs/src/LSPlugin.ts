@@ -278,6 +278,12 @@ export interface IAppProxy {
   quit: () => Promise<void>
   openExternalLink: (url: string) => Promise<void>
 
+  /**
+   * @link https://github.com/desktop/dugite/blob/master/docs/api/exec.md
+   * @param args
+   */
+  execGitCommand: (args: string[]) => Promise<string>
+
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>
 
