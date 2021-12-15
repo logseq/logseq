@@ -231,7 +231,7 @@ export class LSPluginUser extends EventEmitter<LSPluginUserEvents> implements IL
    */
   private _ui = new Map<number, uiState>()
 
-  private _fileStorage: LSPluginFileStorage
+  private readonly _fileStorage: LSPluginFileStorage
 
   /**
    * handler of before unload plugin
