@@ -24,7 +24,8 @@
             [frontend.util.keycode :as keycode]
             [goog.dom :as gdom]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.history :as history]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -228,7 +229,7 @@
                            (:offset-top vw-state))
                         0)}
       :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
-     [:div.flex.overflow-scroll
+     [:div.flex {:style {:overflow "overlay"}}
       [:div
        [:button.bottom-action
         {:on-mouse-down (fn [e]
@@ -274,6 +275,13 @@
                           (when-let [input (gdom/getElement parent-id)]
                             (.focus input)))}
         (ui/icon "arrow-back"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (history/undo! e))}
+        (ui/icon "rotate"
                  {:style {:fontSize ui/icon-size}})]]
       [:div
        [:button.bottom-action
