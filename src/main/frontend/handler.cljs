@@ -216,6 +216,8 @@
     (on-load-events)
     (set-network-watcher!)
 
+    (mobile/init!)
+
     (util/indexeddb-check?
      (fn [_error]
        (notification/show! "Sorry, it seems that your browser doesn't support IndexedDB, we recommend to use latest Chrome(Chromium) or Firefox(Non-private mode)." :error false)
@@ -237,7 +239,6 @@
       (enable-datalog-console))
     (when (util/electron?)
       (el/listen!))
-    (mobile/init!)
     (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []
