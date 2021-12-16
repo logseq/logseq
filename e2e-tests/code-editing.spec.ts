@@ -196,6 +196,9 @@ test('click outside to exit', async ({ page }) => {
 test('click lanuage label to exit #3463', async ({ page }) => {
   await createRandomPage(page)
 
+  await page.press('.block-editor textarea', 'Enter')
+  await page.waitForTimeout(200)
+
   await page.fill('.block-editor textarea', '```cpp\n```')
   await page.waitForTimeout(500)
   await escapeToCodeEditor(page)
@@ -205,4 +208,39 @@ test('click lanuage label to exit #3463', async ({ page }) => {
   await page.click('text=cpp') // the language label
   await page.waitForTimeout(500)
   expect(await page.inputValue('.block-editor textarea')).toBe('```cpp\n#include<iostream>\n```')
+})
+
+test('multi properties with code', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.fill('.block-editor textarea',
+    'type:: code\n' +
+    '类型:: 代码\n' +
+    '```go\n' +
+    'if err != nil {\n' +
+    '\treturn err\n' +
+    '}\n' +
+    '```'
+  )
+  await page.waitForTimeout(500)
+  await escapeToCodeEditor(page)
+
+  // first character of code
+  await page.click('.CodeMirror pre', { position: { x: 1, y: 5 } })
+  await page.waitForTimeout(500)
+  await page.type('.CodeMirror textarea', '// Returns nil\n')
+
+  await page.waitForTimeout(500)
+  await page.press('.CodeMirror textarea', 'Escape')
+  await page.waitForTimeout(500)
+  expect(await page.inputValue('.block-editor textarea')).toBe(
+    'type:: code\n' +
+    '类型:: 代码\n' +
+    '```go\n' +
+    '// Returns nil\n' +
+    'if err != nil {\n' +
+    '\treturn err\n' +
+    '}\n' +
+    '```'
+  )
 })
