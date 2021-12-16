@@ -81,7 +81,6 @@
         "d3-force": "3.0.0",
         "diff": "5.0.0",
         "diff-match-patch": "1.0.5",
-        "electron": "15.1.2",
         "fs": "0.0.1-security",
         "fs-extra": "9.1.0",
         "fuse.js": "6.4.6",
@@ -107,6 +106,7 @@
         "react-tweet-embed": "1.2.2",
         "reakit": "0.11.1",
         "threads": "1.6.5",
-        "yargs-parser": "20.2.4"
+        "yargs-parser": "20.2.4",
+        "electron": "15.1.2"
     }
 }
