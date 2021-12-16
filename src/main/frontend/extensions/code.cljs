@@ -158,9 +158,10 @@
         (let [block (db/pull [:block/uuid (:block/uuid config)])
               content (:block/content block)
               {:keys [start_pos end_pos]} (:pos_meta (last (:rum/args state)))
+              offset (if (:block/pre-block? block) 0 2)
               raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
-              prefix (utf8/decode (.slice raw-content 0 (- start_pos 2)))
-              surfix (utf8/decode (.slice raw-content (- end_pos 2)))
+              prefix (utf8/decode (.slice raw-content 0 (- start_pos offset)))
+              surfix (utf8/decode (.slice raw-content (- end_pos offset)))
               new-content (if (string/blank? value)
                             (str prefix surfix)
                             (str prefix value "\n" surfix))]
