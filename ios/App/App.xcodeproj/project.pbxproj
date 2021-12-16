@@ -16,6 +16,7 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		7435D10C2704659F00AB88E0 /* FolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10B2704659F00AB88E0 /* FolderPicker.swift */; };
 		7435D10F2704660B00AB88E0 /* FolderPicker.m in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10E2704660B00AB88E0 /* FolderPicker.m */; };
+		C3718FCEFAECFFB66E93FFC4 /* Pods_Logseq.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */; };
 		D32752BE275496C60039291C /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D32752BD275496C60039291C /* CloudKit.framework */; };
 		D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A09275C92880003FBDC /* FileContainer.swift */; };
 		D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A0B275C928F0003FBDC /* FileContainer.m */; };
@@ -35,6 +36,7 @@
 		7435D10D2704660A00AB88E0 /* App-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "App-Bridging-Header.h"; sourceTree = "<group>"; };
 		7435D10E2704660B00AB88E0 /* FolderPicker.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FolderPicker.m; sourceTree = "<group>"; };
 		8A489CEC51E94726DDD58810 /* Pods-Logseq.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.release.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.release.xcconfig"; sourceTree = "<group>"; };
+		B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Logseq.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		D32752BC275496A60039291C /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		D32752BD275496C60039291C /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
 		D32752BF2754C5AB0039291C /* AppDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppDebug.entitlements; sourceTree = "<group>"; };
@@ -49,6 +51,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D32752BE275496C60039291C /* CloudKit.framework in Frameworks */,
+				C3718FCEFAECFFB66E93FFC4 /* Pods_Logseq.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,6 +102,7 @@
 			isa = PBXGroup;
 			children = (
 				D32752BD275496C60039291C /* CloudKit.framework */,
+				B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
