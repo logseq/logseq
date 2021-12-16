@@ -74,8 +74,7 @@
   [repo dir path content opts]
   (when content
     (let [fs-record (get-fs dir)]
-      (p/let [md-or-org? (or (string/ends-with? path ".md")
-                             (string/ends-with? path ".org"))
+      (p/let [md-or-org? (contains? #{"md" "markdown" "org"} (util/get-file-ext path))
               content (if-not md-or-org? content (encrypt/encrypt content))]
         (->
          (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
