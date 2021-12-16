@@ -92,8 +92,8 @@
 
 (defn- get-list-item-indent&bullet [line]
   (when-not (string/blank? line)
-    (or (re-matches #"^([ \t\r]*)(\+|\*|-) (\[[X ]\])*.*$" line)
-        (re-matches #"^([\s]*)(\d+)\. (\[[X ]\])*.*$" line))))
+    (or (re-matches #"^([ \t\r]*)(\+|\*|-){1} (\[[X ]\])?.*$" line)
+        (re-matches #"^([\s]*)(\d+){1}\. (\[[X ]\])?.*$" line))))
 
 (defn list-item-at-point [& [input]]
   (when-let [line (line-at-point input)]

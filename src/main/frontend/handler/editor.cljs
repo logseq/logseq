@@ -47,6 +47,7 @@
             [frontend.util.page-property :as page-property]
             [frontend.util.property :as property]
             [frontend.util.thingatpt :as thingatpt]
+            [frontend.util.list :as list]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
@@ -2422,6 +2423,34 @@
                 (cursor/move-cursor-backward input move-to-pos)))
             (insert "\n")))))))
 
+(defn- dwim-in-list
+  [state]
+  (when-not (auto-complete?)
+    (let [{:keys [block]} (get-state)]
+      (when block
+        (let [input (state/get-input)]
+          (when-let [item (thingatpt/list-item-at-point input)]
+            (let [{:keys [full-content indent bullet checkbox ordered _]} item
+                  current-bullet (cljs.reader/read-string bullet)
+                  next-bullet (if ordered (str (inc current-bullet) ".") bullet)
+                  checkbox (when checkbox "[ ] ")]
+              (if (= (count full-content)
+                     (+ (if ordered (+ (count bullet) 2) 2) (when checkbox (count checkbox))))
+                (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
+                (do (cursor/move-cursor-to-line-end input)
+                    (insert (str "\n" indent next-bullet " " checkbox))
+                    (when ordered
+                      (let [bullet-atom (atom (inc current-bullet))]
+                        (while (when-let [next-item (list/get-next-item input)]
+                                 (swap! bullet-atom inc)
+                                 (let [{:keys [full-content start end]} next-item
+                                       new-bullet @bullet-atom]
+                                   (delete-and-update input start end)
+                                   (insert (string/replace-first full-content (:bullet next-item) new-bullet))
+                                   true))
+                          nil)
+                        (cursor/move-cursor-to input (+ (:end item) (count next-bullet) 2)))))))))))))
+
 (defn- keydown-new-block
   [state]
   (when-not (auto-complete?)
@@ -2445,7 +2474,7 @@
                   (when (thingatpt/get-setting :properties?)
                     (thingatpt/properties-at-point input))
                   (when (thingatpt/get-setting :list?)
-                    (and (cursor/end-of-line? input) ;; only apply DWIM when cursor at EOL
+                    (and (not (cursor/beginning-of-line? input))
                          (thingatpt/list-item-at-point input))))]
           (cond
             thing-at-point
@@ -2466,19 +2495,8 @@
               "page-ref" (when-not (string/blank? (:link thing-at-point))
                            (insert-first-page-block-if-not-exists! (:link thing-at-point))
                            (route-handler/redirect-to-page! (:link thing-at-point)))
-              "list-item"
-              (let [{:keys [full-content indent bullet checkbox ordered _]} thing-at-point
-                    next-bullet (if ordered
-                                  (str (inc (cljs.reader/read-string bullet)) ".")
-                                  bullet)
-                    checkbox (when checkbox "[ ] ")]
-                (if (= (count full-content)
-                       (+ (if ordered (+ (count bullet) 2) 2) (when checkbox (count checkbox))))
-                  (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
-                  (do (cursor/move-cursor-to-line-end input)
-                      (insert (str "\n" indent next-bullet " " checkbox)))))
-              "properties-drawer"
-              (dwim-in-properties state))
+              "list-item" (dwim-in-list state)
+              "properties-drawer" (dwim-in-properties state))
 
             (and
              (string/blank? content)
