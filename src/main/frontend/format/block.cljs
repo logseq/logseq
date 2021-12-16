@@ -21,12 +21,6 @@
    (vector? block)
    (= "Heading" (first block))))
 
-(defn properties-block?
-  [block]
-  (and
-   (vector? block)
-   (= "Properties" (first block))))
-
 (defn get-tag
   [block]
   (when-let [tag-value (and (vector? block)
@@ -746,7 +740,7 @@
                title (when (heading-block? (first ast))
                        (:title (second (first ast))))
                body (vec (if title (rest ast) ast))
-               body (drop-while properties-block? body)
+               body (drop-while property/properties-ast? body)
                result (cond->
                         (if (seq body) {:block/body body} {})
                         title
