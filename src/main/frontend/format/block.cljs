@@ -738,8 +738,7 @@
   ([block-uuid format pre-block? content]
    (when-not (string/blank? content)
      (let [content (if pre-block? content
-                       (str (config/get-block-pattern format) " " (string/triml content)))
-           content (property/remove-properties format content)]
+                       (str (config/get-block-pattern format) " " (string/triml content)))]
        (if-let [result (state/get-block-ast block-uuid content)]
          result
          (let [ast (->> (format/to-edn content format (mldoc/default-config format))
