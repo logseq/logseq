@@ -108,10 +108,10 @@
                                      block-id (or (:block/uuid (state/get-edit-block))
                                                   (:block/uuid block))
                                      typ (or @commands/*current-command typ)]
+                                 (state/clear-edit!)
                                  (editor-handler/set-block-timestamp! block-id
                                                                       typ
                                                                       text)
-                                 (state/clear-edit!)
                                  (when show?
                                    (reset! show? false))))
                              (clear-timestamp!)

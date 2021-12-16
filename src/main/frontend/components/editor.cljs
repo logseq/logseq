@@ -104,7 +104,6 @@
       (when input
         (let [current-pos (cursor/pos input)
               edit-content (or (state/sub [:editor/content id]) "")
-              edit-block (state/sub :editor/block)
               sidebar? (in-sidebar? input)
               q (or
                  @editor-handler/*selected-text

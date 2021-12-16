@@ -379,6 +379,13 @@ jobs:
           name: logseq-win64-builds
           path: ./
 
+      - name: Generate SHA256 checksums
+        run: |
+          sha256sum *-darwin-* > SHA256SUMS.txt
+          sha256sum *-win-* >> SHA256SUMS.txt
+          sha256sum *-linux-* >> SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: List files
         run: ls -rl
 
@@ -388,12 +395,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: nightly
-          name: 'Desktop App Nightly Relase $$'
+          name: 'Desktop APP Nightly Release $$'
           draft: false
           prerelease: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.is-pre-release) || (github.event_name == 'schedule')}}
-          body: "This is a nightly release of the Logseq desktop app."
+          body: |
+            This is a nightly release of the Logseq desktop app.
+            It's unstable compared to the official releases, **use it with caution**!
           files: |
-            ./VERSION
             ./SHA256SUMS.txt
             ./*.zip
             ./*.dmg

@@ -1742,18 +1742,18 @@
                  (d/has-class? target "image-resize"))
         (editor-handler/clear-selection!)
         (editor-handler/unhighlight-blocks!)
-        (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-              f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
+        (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+                       cursor-range (util/caret-range (gdom/getElement block-id))
+                       new-content (:block/content block)
                        content (-> (property/remove-built-in-properties (:block/format block)
                                                                         content)
                                    (drawer/remove-logbook))]
                    ;; save current editing block
                    (let [{:keys [value] :as state} (editor-handler/get-state)]
                      (editor-handler/save-block! state value))
-
                    (state/set-editing!
                     edit-input-id
-                    content
+                    new-content
                     block
                     cursor-range
                     false))]
@@ -1934,8 +1934,8 @@
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (ui/catch-error
-          (block-content-fallback edit-input-id block)
-          (block-content config block edit-input-id block-id slide?))]
+         (block-content-fallback edit-input-id block)
+         (block-content config block edit-input-id block-id slide?))]
        [:div.flex.flex-row
         (when (and (:embed? config)
                    (:embed-parent config))
@@ -2612,6 +2612,8 @@
             (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
             [:div
              (lazy-editor/editor config (str (dc/squuid)) attr code options)
+             ;; FIXME: The following code seemed unreachable
+             ;; options has key: :lines, :language, :full_content, :pos_meta
              (let [options (:options options)]
                (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
                  (sci/eval-result code)))]))))))

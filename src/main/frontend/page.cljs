@@ -10,11 +10,12 @@
   [view route-match]
   (view route-match))
 
-(defn- teardown-fn
+(defn- setup-fns!
   []
   (try
-    (ui/setup-active-keystroke!)
-    (ui/setup-patch-ios-visual-viewport-state!)
+    (comp
+      (ui/setup-active-keystroke!)
+      (ui/setup-patch-ios-visual-viewport-state!))
     (catch js/Error _e
       nil)))
 
@@ -25,11 +26,10 @@
                    (ui/inject-document-devices-envs!)
                    (ui/inject-dynamic-style-node!)
                    (plugin-handler/host-mounted!)
-                   (assoc state ::teardown teardown-fn))
+                   (assoc state ::teardown (setup-fns!) ))
    :will-unmount (fn [state]
-                   (let [teardown (::teardown state)]
-                     (when-not (nil? teardown)
-                       (teardown))))}
+                   (when-let [teardown (::teardown state)]
+                     (teardown)))}
   []
   (when-let [route-match (state/sub :route-match)]
     (i18n/tongue-provider
