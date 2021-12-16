@@ -1594,9 +1594,13 @@
       (util/electron?)
       (str "assets://" repo-dir path)
 
-      (mobile/is-native-platform?)
+      (mobile/native-android?)
       (mobile/convert-file-src
        (str "file://" repo-dir path))
+
+      (mobile/native-ios?)
+      (mobile/convert-file-src
+       (str repo-dir path))
 
       :else
       (let [handle-path (str "handle" repo-dir path)

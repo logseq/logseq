@@ -182,4 +182,8 @@
  ;;  :enabled-in-all-blocks true ;display logbook in all blocks after timetracking
  ;;  :enabled-in-timestamped-blocks false ;don't display logbook at all
  ;; }
+
+ ;; Mobile photo uploading setup
+ ;; :mobile/photo
+ ;; {:allow-editing? true}
  }

@@ -12,6 +12,7 @@ dependencies {
     implementation project(':capacitor-app')
     implementation project(':capacitor-filesystem')
     implementation project(':capacitor-splash-screen')
+    implementation project(':capacitor-camera')
 
 }
 
