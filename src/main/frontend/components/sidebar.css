@@ -185,9 +185,9 @@
 }
 
 .cp__sidebar-left-layout {
-  width: 0;
-  height: 100vh;
   position: fixed;
+  width: 0;
+  height: calc(100vh - var(--ls-headbar-inner-top-padding));
   top: var(--ls-headbar-inner-top-padding);
   left: 0;
   z-index: 9;
@@ -203,6 +203,7 @@
     z-index: -1;
     opacity: 0;
     transition: opacity .1s;
+    touch-action: none;
   }
 
   &.is-open {
