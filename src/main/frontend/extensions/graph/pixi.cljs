@@ -169,7 +169,7 @@
                                                                                       (fn [link]
                                                                                         (and (nodes-set (:source link)) (nodes-set (:target link))))
                                                                                       links)
-                                                                                     (distinct))
+                                                                                     (distinct)) ;; #3331 (@zhaohui0923) seems caused by duplicated links. Why distinct doesn't work?
           nodes                                                                     (remove nil? nodes)
           links                                                                     (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
           nodes-js                                                                  (bean/->js nodes)
@@ -180,7 +180,9 @@
         (doseq [link links-js]
           (let [source (.-id (.-source link))
                 target (.-id (.-target link))]
-            (.addEdge graph source target link)))
+            (try (.addEdge graph source target link)
+                 (catch js/Error e
+                   (js/console.error e)))))
         (when-let [container-ref (:ref state)]
           (let [pixi-graph (new (.-PixiGraph Pixi-Graph)
                                 (bean/->js
