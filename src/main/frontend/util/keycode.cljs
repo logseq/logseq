@@ -9,5 +9,5 @@
 ;; (def left-paren-code "Digit9") ;; deprecated
 (def enter-code "Enter")
 
-(def left-square-brackets-keys #{"[" "【"})
+(def left-square-brackets-keys #{"[" "【" "「"})
 (def left-paren-keys #{"(" "（"})
