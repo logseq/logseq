@@ -513,8 +513,3 @@ body[data-page=plugins] {
     padding-right: 30px;
   }
 }
-
-html.is-native-ios, .is-native-android,
-html.is-mobile.is-ios {
-  top: 22vh
-}

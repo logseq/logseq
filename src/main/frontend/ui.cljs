@@ -567,11 +567,7 @@
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 9999 -1)
-              :top (when (or (mobile-util/native-iphone?)
-                             (mobile-util/native-android?)
-                             (and (util/mobile?) (util/ios?)))
-                     "22vh")}}
+     {:style {:z-index (if show? 9999 -1)}}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
