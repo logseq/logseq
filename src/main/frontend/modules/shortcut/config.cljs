@@ -592,7 +592,16 @@
     :editor/expand-block-children
     :editor/toggle-open-blocks
     :go/backward
-    :go/forward]
+    :go/forward
+    :go/home
+    :go/journals
+    :go/all-pages
+    :go/graph-view
+    :go/flashcards
+    :go/tomorrow
+    :go/next-journal
+    :go/prev-journal
+    :go/keyboard-shortcuts]
 
    :shortcut.category/block-editing
    ^{:doc "Block editing general"}
@@ -650,15 +659,7 @@
 
    :shortcut.category/others
    ^{:doc "Others"}
-   [:go/home
-    :go/journals
-    :go/all-pages
-    :go/graph-view
-    :go/flashcards
-    :go/tomorrow
-    :go/next-journal
-    :go/prev-journal
-    :pdf/previous-page
+   [:pdf/previous-page
     :pdf/next-page
     :command/run
     :command-palette/toggle
