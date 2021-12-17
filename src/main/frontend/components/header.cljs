@@ -86,7 +86,7 @@
 
        (when (and developer-mode? (util/electron?))
          {:title (t :plugins)
-          :options {:href (rfe/href :plugins)}})
+          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}})
 
        (when developer-mode?
          {:title (t :themes)

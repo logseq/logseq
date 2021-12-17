@@ -403,7 +403,7 @@
          #())
        [id])
      [:div.lsp-hook-ui-slot
-      (merge opts {:id id
+      (merge opts {:id            id
                    :on-mouse-down (fn [e] (util/stop e))})])))
 
 (rum/defc ui-item-renderer
@@ -443,12 +443,20 @@
   []
 
   (let [[active set-active!] (rum/use-state :installed)
-        market? (= active :marketplace)]
+        market? (= active :marketplace)
+        *el-ref (rum/create-ref)]
+
+    (rum/use-effect!
+      #(let [^js el (rum/deref *el-ref)]
+         (js/setTimeout (fn [] (.focus el)) 100))
+      [])
 
     (rum/with-context
       [[t] i18n/*tongue-context*]
 
       [:div.cp__plugins-page
+       {:ref *el-ref
+        :tab-index "-1"}
        [:h1 (t :plugins)]
        (security-warning)
        [:hr]
@@ -477,3 +485,9 @@
         (ui-handler/exec-js-if-exists-&-allowed! t)))
     [current-repo db-restoring? nfs-granted?])
   nil)
+
+(defn open-plugins-modal!
+  []
+  (state/set-modal!
+    (fn [close!]
+      (plugins-page))))

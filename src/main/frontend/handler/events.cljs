@@ -207,6 +207,9 @@
                     {:fullscreen? false
                      :close-btn?  false}))
 
+(defmethod handle :go/plugins [_]
+  (plugin/open-plugins-modal!))
+
 (defmethod handle :redirect-to-home [_]
   (page-handler/create-today-journal!))
 

@@ -59,6 +59,10 @@
 
       ;; modals
       :modal/show? false
+      :modal/panel-content nil
+      :modal/fullscreen? false
+      :modal/close-btn? nil
+      :modal/subsets []
 
       ;; right sidebar
       :ui/fullscreen? false

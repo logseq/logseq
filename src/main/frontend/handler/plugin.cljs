@@ -333,7 +333,7 @@
 
 (defn goto-plugins-dashboard!
   []
-  (rfe/push-state :plugins))
+  (state/pub-event! [:go/plugins]))
 
 (defn- get-user-default-plugins
   []
