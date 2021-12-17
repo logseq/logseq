@@ -52,7 +52,7 @@
                                                       (= file "bak")))))
                              files (->> files
                                         (map (fn [file]
-                                               (futil/node-path.join d file))))
+                                               (futil/node-path.join d (futil/url-encode file)))))
                              files-with-stats (p/all
                                                (mapv
                                                 (fn [file]
