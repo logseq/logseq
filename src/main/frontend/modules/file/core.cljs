@@ -24,8 +24,8 @@
         (ffirst body))))
 
 (defn transform-content
-  [{:block/keys [format pre-block? unordered content heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
-  (let [{:block/keys [title body]} (block/parse-title-and-body format pre-block? content)
+  [{:block/keys [uuid format pre-block? unordered content heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
+  (let [{:block/keys [title body]} (block/parse-title-and-body uuid format pre-block? content)
         content (or content "")
         heading-with-title? (seq title)
         allowed-block-as-title? (allowed-block-as-title? title body)

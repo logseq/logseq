@@ -50,20 +50,26 @@
 	<string></string>
 	<key>NSUbiquitousContainers</key>
 	<dict>
-		<key>iCloud.$(PRODUCT_BUNDLE_IDENTIFIER)</key>
+		<key>iCloud.com.logseq.logseq</key>
 		<dict>
 			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
 			<true/>
 			<key>NSUbiquitousContainerName</key>
 			<string>Logseq</string>
 			<key>NSUbiquitousContainerSupportedFolderLevels</key>
-			<string>None</string>
+			<string>ANY</string>
 		</dict>
 	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string></string>
+	<key>NSCameraUsageDescription</key>
+	<string></string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string></string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>armv7</string>

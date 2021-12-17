@@ -1742,18 +1742,18 @@
                  (d/has-class? target "image-resize"))
         (editor-handler/clear-selection!)
         (editor-handler/unhighlight-blocks!)
-        (let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-              f #(let [cursor-range (util/caret-range (gdom/getElement block-id))
+        (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+                       cursor-range (util/caret-range (gdom/getElement block-id))
+                       new-content (:block/content block)
                        content (-> (property/remove-built-in-properties (:block/format block)
                                                                         content)
                                    (drawer/remove-logbook))]
                    ;; save current editing block
                    (let [{:keys [value] :as state} (editor-handler/get-state)]
                      (editor-handler/save-block! state value))
-
                    (state/set-editing!
                     edit-input-id
-                    content
+                    new-content
                     block
                     cursor-range
                     false))]
@@ -1812,7 +1812,7 @@
 (rum/defc block-content < rum/reactive
   [config {:block/keys [uuid content children properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [{:block/keys [title body] :as block} (if (:block/title block) block
-                                                 (merge block (block/parse-title-and-body format pre-block? content)))
+                                                 (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (get properties :collapsed)
         block-ref? (:block-ref? config)
         block-ref-with-title? (and block-ref? (seq title))
@@ -1934,8 +1934,8 @@
       [:div.flex.flex-row.block-content-wrapper
        [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
         (ui/catch-error
-          (block-content-fallback edit-input-id block)
-          (block-content config block edit-input-id block-id slide?))]
+         (block-content-fallback edit-input-id block)
+         (block-content config block edit-input-id block-id slide?))]
        [:div.flex.flex-row
         (when (and (:embed? config)
                    (:embed-parent config))
@@ -1997,7 +1997,11 @@
             parents-props (doall
                            (for [{:block/keys [uuid name content] :as block} parents]
                              (when-not name ; not page
-                               (let [{:block/keys [title body]} (block/parse-title-and-body (:block/format block) (:block/pre-block? block) content)]
+                               (let [{:block/keys [title body]} (block/parse-title-and-body
+                                                                 uuid
+                                                                 (:block/format block)
+                                                                 (:block/pre-block? block)
+                                                                 content)]
                                  [block
                                  (if (seq title)
                                    (->elem :span (map-inline config title))
@@ -2157,7 +2161,7 @@
                        (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                              (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
   [state config {:block/keys [uuid repo children pre-block? top? properties refs heading-level level type format content] :as block}]
-  (let [block (merge block (block/parse-title-and-body format pre-block? content))
+  (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
         body (:block/body block)
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
@@ -2608,6 +2612,8 @@
             (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
             [:div
              (lazy-editor/editor config (str (dc/squuid)) attr code options)
+             ;; FIXME: The following code seemed unreachable
+             ;; options has key: :lines, :language, :full_content, :pos_meta
              (let [options (:options options)]
                (when (and (= language "text/x-clojure") (contains? (set options) ":results"))
                  (sci/eval-result code)))]))))))

@@ -79,6 +79,14 @@ class PluginSettings extends EventEmitter<'change'> {
       Object.assign({}, this._settings), o)
   }
 
+  set settings (value: Record<string, any>) {
+    this._settings = value
+  }
+
+  get settings (): Record<string, any> {
+    return this._settings
+  }
+
   toJSON () {
     return this._settings
   }
@@ -374,34 +382,61 @@ class PluginLocal
     initApiProxyHandlers(this)
   }
 
-  async _setupUserSettings () {
+  async _setupUserSettings (
+    reload?: boolean
+  ) {
     const { _options } = this
     const logger = _options.logger = new PluginLogger('Loader')
 
+    if (_options.settings && !reload) {
+      return
+    }
+
     try {
-      const [userSettingsFilePath, userSettings] = await invokeHostExportedApi('load_plugin_user_settings', this.id)
+      const loadFreshSettings = () => invokeHostExportedApi('load_plugin_user_settings', this.id)
+      const [userSettingsFilePath, userSettings] = await loadFreshSettings()
       this._dotSettingsFile = userSettingsFilePath
 
-      const settings = _options.settings = new PluginSettings(userSettings)
+      let settings = _options.settings
 
-      // observe settings
-      settings.on('change', (a, b) => {
-        debug('linked settings change', a)
+      if (!settings) {
+        settings = _options.settings = new PluginSettings(userSettings)
+      }
+
+      if (reload) {
+        settings.settings = userSettings
+        return
+      }
+
+      const handler = async (a, b) => {
+        debug('Settings changed', this.debugTag, a)
 
         if (!a.disabled && b.disabled) {
           // Enable plugin
-          this.load()
+          const [, freshSettings] = await loadFreshSettings()
+          freshSettings.disabled = false
+          a = deepMerge(a, freshSettings)
+          settings.settings = a
+          await this.load()
         }
 
         if (a.disabled && !b.disabled) {
           // Disable plugin
-          this.unload()
+          const [, freshSettings] = await loadFreshSettings()
+          freshSettings.disabled = true
+          a = deepMerge(a, freshSettings)
+          await this.unload()
         }
 
         if (a) {
           invokeHostExportedApi(`save_plugin_user_settings`, this.id, a)
         }
-      })
+      }
+
+      // observe settings
+      settings.on('change', handler)
+
+      return () => {}
     } catch (e) {
       debug('[load plugin user settings Error]', e)
       logger?.error(e)
@@ -678,7 +713,12 @@ class PluginLocal
     return dispose
   }
 
-  async load (readyIndicator?: DeferredActor) {
+  async load (
+    opts?: Partial<{
+      indicator: DeferredActor,
+      reload: boolean
+    }>
+  ) {
     if (this.pending) {
       return
     }
@@ -692,9 +732,9 @@ class PluginLocal
 
       let installPackageThemes = await this._preparePackageConfigs()
 
-      if (!this.settings) {
-        await this._setupUserSettings()
-      }
+      this._dispose(
+        await this._setupUserSettings(opts?.reload)
+      )
 
       if (!this.disabled) {
         await installPackageThemes.call(null)
@@ -713,13 +753,13 @@ class PluginLocal
         this._caller?.callUserModel(LSPMSG_READY, { pid: this.id })
       }
 
-      if (readyIndicator) {
-        readyIndicator.promise.then(readyFn)
+      if (opts?.indicator) {
+        opts.indicator.promise.then(readyFn)
       } else {
         readyFn()
       }
 
-      this._disposes.push(async () => {
+      this._dispose(async () => {
         await this._caller?.destroy()
       })
     } catch (e) {
@@ -746,7 +786,7 @@ class PluginLocal
 
     this._ctx.emit('beforereload', this)
     await this.unload()
-    await this.load()
+    await this.load({ reload: true })
     this._ctx.emit('reloaded', this)
   }
 
@@ -1026,7 +1066,7 @@ class LSPluginCore
         const perfInfo = { o: pluginLocal, s: performance.now(), e: 0 }
         perfTable.set(pluginLocal.id, perfInfo)
 
-        await pluginLocal.load(readyIndicator)
+        await pluginLocal.load({ indicator: readyIndicator })
 
         const { loadErr } = pluginLocal
 

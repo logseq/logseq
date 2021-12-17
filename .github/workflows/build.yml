@@ -83,7 +83,6 @@ jobs:
           node static/tests.js
 
       - name: Run Playwright test
-        if: github.event_name == 'pull_request'
         run: |
           yarn release
           (cd static && yarn install && yarn rebuild:better-sqlite3)

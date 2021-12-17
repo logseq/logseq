@@ -74,9 +74,8 @@
   [repo dir path content opts]
   (when content
     (let [fs-record (get-fs dir)]
-      (p/let [metadata-or-css? (or (string/ends-with? path (str "/" config/metadata-file))
-                                   (string/ends-with? path (str "/" config/custom-css-file)))
-              content (if metadata-or-css? content (encrypt/encrypt content))]
+      (p/let [md-or-org? (contains? #{"md" "markdown" "org"} (util/get-file-ext path))
+              content (if-not md-or-org? content (encrypt/encrypt content))]
         (->
          (p/let [_ (protocol/write-file! (get-fs dir) repo dir path content opts)]
            (when (= bfs-record fs-record)

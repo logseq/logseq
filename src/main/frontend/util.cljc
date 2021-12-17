@@ -1494,3 +1494,24 @@
    (defn sm-breakpoint?
      []
      (< (.-offsetWidth js/document.documentElement) 640)))
+
+#?(:cljs
+   (defn event-is-composing?
+     "Check if keydown event is a composing (IME) event. 
+      Ignore the IME process by default."
+     ([e]
+      (event-is-composing? e false))
+     ([e include-process?]
+      (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")]
+        (if include-process?
+          (or event-composing? 
+              (= (gobj/get e "keyCode") 229)
+              (= (gobj/get e "key") "Process"))
+          event-composing?)))))
+
+#?(:cljs
+   (defn onchange-event-is-composing?
+      "Check if onchange event of Input is a composing (IME) event.
+       Always ignore the IME process."
+     [e]
+     (gobj/getValueByKeys e "nativeEvent" "isComposing"))) ;; No keycode available

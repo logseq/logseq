@@ -142,7 +142,7 @@ test('multiple code block', async ({ page }) => {
   await createRandomPage(page)
 
   // NOTE: the two code blocks are of the same content
-  await page.fill('.block-editor textarea', 'Heading\n```clojure\n```\nMiddle\n```clojure\n```\nFooter')
+  await page.fill('.block-editor textarea', '中文 Heading\n```clojure\n```\nMiddle 🚀\n```clojure\n```\nFooter')
   await page.waitForTimeout(500)
 
   await page.press('.block-editor textarea', 'Escape')
@@ -159,7 +159,7 @@ test('multiple code block', async ({ page }) => {
   await page.press('.CodeMirror textarea >> nth=0', 'Escape')
   await page.waitForTimeout(500)
   expect(await page.inputValue('.block-editor textarea'))
-    .toBe('Heading\n```clojure\n:key-test\n\n```\nMiddle\n```clojure\n```\nFooter')
+    .toBe('中文 Heading\n```clojure\n:key-test\n\n```\nMiddle 🚀\n```clojure\n```\nFooter')
 
   // second
   await page.press('.block-editor textarea', 'Escape')
@@ -169,11 +169,78 @@ test('multiple code block', async ({ page }) => {
   await page.click('.CodeMirror pre >> nth=1')
   await page.waitForTimeout(500)
 
-  await page.type('.CodeMirror textarea >> nth=1', '\n  :key-test\n', { strict: true })
+  await page.type('.CodeMirror textarea >> nth=1', '\n  :key-test 日本語\n', { strict: true })
   await page.waitForTimeout(500)
 
   await page.press('.CodeMirror textarea >> nth=1', 'Escape')
   await page.waitForTimeout(500)
   expect(await page.inputValue('.block-editor textarea'))
-    .toBe('Heading\n```clojure\n:key-test\n\n```\nMiddle\n```clojure\n\n  :key-test\n\n```\nFooter')
+    .toBe('中文 Heading\n```clojure\n:key-test\n\n```\nMiddle 🚀\n```clojure\n\n  :key-test 日本語\n\n```\nFooter')
+})
+
+test('click outside to exit', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.fill('.block-editor textarea', 'Header ``Click``\n```\n  ABC\n```')
+  await page.waitForTimeout(500) // wait for fill
+  await escapeToCodeEditor(page)
+  await page.type('.CodeMirror textarea', '  DEF\nGHI')
+
+  await page.waitForTimeout(500)
+  await page.click('text=Click')
+  await page.waitForTimeout(500)
+  // NOTE: auto-indent is on
+  expect(await page.inputValue('.block-editor textarea')).toBe('Header ``Click``\n```\n  ABC  DEF\n  GHI\n```')
+})
+
+test('click lanuage label to exit #3463', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.press('.block-editor textarea', 'Enter')
+  await page.waitForTimeout(200)
+
+  await page.fill('.block-editor textarea', '```cpp\n```')
+  await page.waitForTimeout(500)
+  await escapeToCodeEditor(page)
+  await page.type('.CodeMirror textarea', '#include<iostream>')
+
+  await page.waitForTimeout(500)
+  await page.click('text=cpp') // the language label
+  await page.waitForTimeout(500)
+  expect(await page.inputValue('.block-editor textarea')).toBe('```cpp\n#include<iostream>\n```')
+})
+
+test('multi properties with code', async ({ page }) => {
+  await createRandomPage(page)
+
+  await page.fill('.block-editor textarea',
+    'type:: code\n' +
+    '类型:: 代码\n' +
+    '```go\n' +
+    'if err != nil {\n' +
+    '\treturn err\n' +
+    '}\n' +
+    '```'
+  )
+  await page.waitForTimeout(500)
+  await escapeToCodeEditor(page)
+
+  // first character of code
+  await page.click('.CodeMirror pre', { position: { x: 1, y: 5 } })
+  await page.waitForTimeout(500)
+  await page.type('.CodeMirror textarea', '// Returns nil\n')
+
+  await page.waitForTimeout(500)
+  await page.press('.CodeMirror textarea', 'Escape')
+  await page.waitForTimeout(500)
+  expect(await page.inputValue('.block-editor textarea')).toBe(
+    'type:: code\n' +
+    '类型:: 代码\n' +
+    '```go\n' +
+    '// Returns nil\n' +
+    'if err != nil {\n' +
+    '\treturn err\n' +
+    '}\n' +
+    '```'
+  )
 })

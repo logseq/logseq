@@ -1,12 +1,17 @@
 .extensions__code {
   @apply relative;
   z-index: 0;
-
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
   &-lang {
-    @apply absolute right-0 p-1 text-sm;
-    top: 3px;
-    z-index: 1;
+    @apply p-1 text-sm;
+    margin-top: 3px;
     background: var(--ls-secondary-background-color);
+    word-break: keep-all;
+    height:2rem;
+    order:3;
   }
 
   &-calc {
@@ -31,6 +36,8 @@
   }
 
   > .CodeMirror {
+    order: 1;
+    width: 100%;
     z-index: 0;
     height: auto;
     margin-top: 4px;

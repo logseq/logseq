@@ -14,8 +14,7 @@ public class FileContainer: CAPPlugin, UIDocumentPickerDelegate {
     public var _call: CAPPluginCall? = nil
 
     var containerUrl: URL? {
-        let id = "iCloud.com.logseq.app"
-        return FileManager.default.url(forUbiquityContainerIdentifier: id)?.appendingPathComponent("Documents")
+        return FileManager.default.url(forUbiquityContainerIdentifier: nil)?.appendingPathComponent("Documents")
     }
 
     @objc func ensureDocuments(_ call: CAPPluginCall) {
@@ -31,6 +30,15 @@ public class FileContainer: CAPPlugin, UIDocumentPickerDelegate {
                 print("container doesn't exist")
                 print(error.localizedDescription)
             }
+        }
+
+        let str = ""
+        let filename = (self.containerUrl?.appendingPathComponent(".logseq"))!
+
+        do {
+            try str.write(to: filename, atomically: true, encoding: String.Encoding.utf8)
+        } catch {
+            // failed to write file – bad permissions, bad filename, missing permissions, or more likely it can't be converted to the encoding
         }
 
         self._call?.resolve([

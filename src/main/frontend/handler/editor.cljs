@@ -47,6 +47,7 @@
             [frontend.util.page-property :as page-property]
             [frontend.util.property :as property]
             [frontend.util.thingatpt :as thingatpt]
+            [frontend.util.list :as list]
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
@@ -350,7 +351,7 @@
   [{:block/keys [content format left page uuid level pre-block?] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (merge block
-                     (block/parse-title-and-body format pre-block? (:block/content block)))
+                     (block/parse-title-and-body uuid format pre-block? (:block/content block)))
         properties (:block/properties block)
         real-content (:block/content block)
         content (if (and (seq properties) real-content (not= real-content content))
@@ -707,8 +708,13 @@
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
               [block-m sibling?] (cond
                                    before?
-                                   (let [block (db/pull (:db/id (:block/left block)))
-                                         sibling? (if (:block/name block) false sibling?)]
+                                   (let [first-child? (->> [:block/parent :block/left]
+                                                           (map #(:db/id (get block %)))
+                                                           (apply =))
+                                         block (db/pull (:db/id (:block/left block)))
+                                         sibling? (if (or first-child? ;; insert as first child
+                                                          (:block/name block))
+                                                    false sibling?)]
                                      [block sibling?])
 
                                    sibling?
@@ -1252,7 +1258,7 @@
                ;; expand collapsed blocks
                (mapv (fn [b] (if (:collapsed (:block/properties b))
                                (vec (tree/sort-blocks (db/get-block-children repo (:block/uuid b)) b))
-                               [b])) )
+                               [b])))
                (flatten))
           block-ids* (mapv :block/uuid blocks*)
           level-blocks (blocks-with-level blocks*)
@@ -1589,9 +1595,13 @@
       (util/electron?)
       (str "assets://" repo-dir path)
 
-      (mobile/is-native-platform?)
+      (mobile/native-android?)
       (mobile/convert-file-src
        (str "file://" repo-dir path))
+
+      (mobile/native-ios?)
+      (mobile/convert-file-src
+       (str repo-dir path))
 
       :else
       (let [handle-path (str "handle" repo-dir path)
@@ -1693,9 +1703,9 @@
    "^" "^"
    "=" "="
    "/" "/"
-   "+" "+"
+   "+" "+"})
    ;; ":" ":"                              ; TODO: only properties editing and org mode tag
-   })
+
 
 (def reversed-autopair-map
   (zipmap (vals autopair-map)
@@ -2413,6 +2423,34 @@
                 (cursor/move-cursor-backward input move-to-pos)))
             (insert "\n")))))))
 
+(defn- dwim-in-list
+  [state]
+  (when-not (auto-complete?)
+    (let [{:keys [block]} (get-state)]
+      (when block
+        (let [input (state/get-input)]
+          (when-let [item (thingatpt/list-item-at-point input)]
+            (let [{:keys [full-content indent bullet checkbox ordered _]} item
+                  current-bullet (cljs.reader/read-string bullet)
+                  next-bullet (if ordered (str (inc current-bullet) ".") bullet)
+                  checkbox (when checkbox "[ ] ")]
+              (if (= (count full-content)
+                     (+ (if ordered (+ (count bullet) 2) 2) (when checkbox (count checkbox))))
+                (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
+                (do (cursor/move-cursor-to-line-end input)
+                    (insert (str "\n" indent next-bullet " " checkbox))
+                    (when ordered
+                      (let [bullet-atom (atom (inc current-bullet))]
+                        (while (when-let [next-item (list/get-next-item input)]
+                                 (swap! bullet-atom inc)
+                                 (let [{:keys [full-content start end]} next-item
+                                       new-bullet @bullet-atom]
+                                   (delete-and-update input start end)
+                                   (insert (string/replace-first full-content (:bullet next-item) new-bullet))
+                                   true))
+                          nil)
+                        (cursor/move-cursor-to input (+ (:end item) (count next-bullet) 2)))))))))))))
+
 (defn- keydown-new-block
   [state]
   (when-not (auto-complete?)
@@ -2436,7 +2474,7 @@
                   (when (thingatpt/get-setting :properties?)
                     (thingatpt/properties-at-point input))
                   (when (thingatpt/get-setting :list?)
-                    (and (cursor/end-of-line? input) ;; only apply DWIM when cursor at EOL
+                    (and (not (cursor/beginning-of-line? input))
                          (thingatpt/list-item-at-point input))))]
           (cond
             thing-at-point
@@ -2457,19 +2495,8 @@
               "page-ref" (when-not (string/blank? (:link thing-at-point))
                            (insert-first-page-block-if-not-exists! (:link thing-at-point))
                            (route-handler/redirect-to-page! (:link thing-at-point)))
-              "list-item"
-              (let [{:keys [full-content indent bullet checkbox ordered _]} thing-at-point
-                    next-bullet (if ordered
-                                  (str (inc (cljs.reader/read-string bullet)) ".")
-                                  bullet)
-                    checkbox (when checkbox "[ ] ")]
-                (if (= (count full-content)
-                       (+ (if ordered (+ (count bullet) 2) 2) (when checkbox (count checkbox))))
-                  (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
-                  (do (cursor/move-cursor-to-line-end input)
-                      (insert (str "\n" indent next-bullet " " checkbox)))))
-              "properties-drawer"
-              (dwim-in-properties state))
+              "list-item" (dwim-in-list state)
+              "properties-drawer" (dwim-in-properties state))
 
             (and
              (string/blank? content)
@@ -2781,13 +2808,16 @@
           value (gobj/get input "value")
           ctrlKey (gobj/get e "ctrlKey")
           metaKey (gobj/get e "metaKey")
-          is-composing? (gobj/getValueByKeys e "event_" "isComposing")
           pos (cursor/pos input)
           shift? (.-shiftKey e)
-          code (gobj/getValueByKeys e "event_" "code")]
+          code (gobj/getValueByKeys e "event_" "code")
+          hashtag? (or (surround-by? input "#" " ")
+                       (surround-by? input "#" :end)
+                       (= key "#"))]
       (cond
-        (and (or is-composing? (= key-code 229))
-             (not (state/get-editor-show-page-search-hashtag?)))
+        (and (util/event-is-composing? e true) ;; #3218
+             (not hashtag?) ;; #3283 @Rime
+             (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
         nil
 
         (or ctrlKey metaKey)
@@ -2832,10 +2862,7 @@
           (util/stop e)
           (autopair input-id key format nil))
 
-        (or
-         (surround-by? input "#" " ")
-         (surround-by? input "#" :end)
-         (= key "#"))
+        hashtag?
         (do
           (commands/handle-step [:editor/search-page-hashtag])
           (state/set-last-pos! (cursor/pos input))
@@ -2864,112 +2891,115 @@
         :else
         nil))))
 
-;; key up
 (defn keyup-handler
   [state input input-id search-timeout]
   (fn [e key-code]
-    (let [k (gobj/get e "key")]
-      (when-not (= k "Process")
-        (let [code (gobj/getValueByKeys e "event_" "code")
-              format (:format (get-state))
-              current-pos (cursor/pos input)
-              value (gobj/get input "value")
-              c (util/nth-safe value (dec current-pos))
-              last-key-code (state/get-last-key-code)
-              blank-selected? (string/blank? (util/get-selected-text))
-              shift? (.-shiftKey e)]
-          (when-not (state/get-editor-show-input)
-            (cond
-              (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
-                   (not (:editor/show-page-search? @state/state))
-                   (not (:editor/show-page-search-hashtag? @state/state))
-                   (wrapped-by? input "[[" "]]"))
-              (let [orig-pos (cursor/get-caret-pos input)
-                    value (gobj/get input "value")
-                    square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) "[[")
-                    pos (+ square-pos 2)
-                    _ (state/set-last-pos! pos)
-                    pos (assoc orig-pos :pos pos)
-                    command-step (if (= \# (util/nth-safe value (dec square-pos)))
-                                   :editor/search-page-hashtag
-                                   :editor/search-page)]
-                (commands/handle-step [command-step])
-                (reset! commands/*slash-caret-pos pos))
+    (when-not (util/event-is-composing? e)
+      (let [k (gobj/get e "key")
+            code (gobj/getValueByKeys e "event_" "code")
+            format (:format (get-state))
+            current-pos (cursor/pos input)
+            value (gobj/get input "value")
+            c (util/nth-safe value (dec current-pos))
+            last-key-code (state/get-last-key-code)
+            blank-selected? (string/blank? (util/get-selected-text))
+            shift? (.-shiftKey e)
+            is-processed? (util/event-is-composing? e true) ;; #3440
+            non-enter-processed? (and is-processed? ;; #3251
+                                      (not= code "Enter"))] ;; #3459
+        (when-not (or (state/get-editor-show-input) non-enter-processed?)
+          (cond
+            (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
+                 (not (:editor/show-page-search? @state/state))
+                 (not (:editor/show-page-search-hashtag? @state/state))
+                 (wrapped-by? input "[[" "]]"))
+            (let [orig-pos (cursor/get-caret-pos input)
+                  value (gobj/get input "value")
+                  square-pos (string/last-index-of (subs value 0 (:pos orig-pos)) "[[")
+                  pos (+ square-pos 2)
+                  _ (state/set-last-pos! pos)
+                  pos (assoc orig-pos :pos pos)
+                  command-step (if (= \# (util/nth-safe value (dec square-pos)))
+                                 :editor/search-page-hashtag
+                                 :editor/search-page)]
+              (commands/handle-step [command-step])
+              (reset! commands/*slash-caret-pos pos))
 
-              (and blank-selected?
-                   (or (= keycode/left-square-bracket key-code (:key-code last-key-code))
-                       (= keycode/left-square-bracket-code code (:code last-key-code)))
-                   (not shift?)
-                   (> current-pos 0)
-                   (not (wrapped-by? input "[[" "]]")))
-              (do
-                (commands/handle-step [:editor/input "[[]]" {:backward-truncate-number 2
-                                                             :backward-pos 2}])
-                (commands/handle-step [:editor/search-page])
-                (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+            (and blank-selected?
+                 (or (= keycode/left-square-bracket key-code (:key-code last-key-code))
+                     (= keycode/left-square-bracket-code code (:code last-key-code)))
+                 (not shift?)
+                 (> current-pos 0)
+                 (not (wrapped-by? input "[[" "]]")))
+            (do
+              (commands/handle-step [:editor/input "[[]]" {:backward-truncate-number 2
+                                                           :backward-pos 2}])
+              (commands/handle-step [:editor/search-page])
+              (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
-              (and blank-selected?
-                   (or (= keycode/left-paren key-code (:key-code last-key-code))
-                       (= keycode/left-paren-code code (:code last-key-code)))
-                   (:shift? last-key-code)
-                   shift?
-                   (> current-pos 0)
-                   (not (wrapped-by? input "((" "))")))
-              (do
-                (commands/handle-step [:editor/input "(())" {:backward-truncate-number 2
-                                                             :backward-pos 2}])
-                (commands/handle-step [:editor/search-block :reference])
-                (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
+            (and blank-selected?
+                 (or (= keycode/left-paren key-code (:key-code last-key-code))
+                     (= keycode/left-paren-code code (:code last-key-code)))
+                 (:shift? last-key-code)
+                 shift?
+                 (> current-pos 0)
+                 (not (wrapped-by? input "((" "))")))
+            (do
+              (commands/handle-step [:editor/input "(())" {:backward-truncate-number 2
+                                                           :backward-pos 2}])
+              (commands/handle-step [:editor/search-block :reference])
+              (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
-              (and (= "〈" c)
-                   (= "《" (util/nth-safe value (dec (dec current-pos))))
-                   (> current-pos 0))
-              (do
-                (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
-                                                                             :backward-pos 0}])
-                (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
-                (reset! commands/*show-block-commands true))
+            (and (= "〈" c)
+                 (= "《" (util/nth-safe value (dec (dec current-pos))))
+                 (> current-pos 0))
+            (do
+              (commands/handle-step [:editor/input commands/angle-bracket {:last-pattern "《〈"
+                                                                           :backward-pos 0}])
+              (reset! commands/*angle-bracket-caret-pos (cursor/get-caret-pos input))
+              (reset! commands/*show-block-commands true))
 
-              (and (= c " ")
-                   (or (= (util/nth-safe value (dec (dec current-pos))) "#")
-                       (not (state/get-editor-show-page-search?))
-                       (and (state/get-editor-show-page-search?)
-                            (not= (util/nth-safe value current-pos) "]"))))
-              (state/set-editor-show-page-search-hashtag! false)
+            (and (= c " ")
+                 (or (= (util/nth-safe value (dec (dec current-pos))) "#")
+                     (not (state/get-editor-show-page-search?))
+                     (and (state/get-editor-show-page-search?)
+                          (not= (util/nth-safe value current-pos) "]"))))
+            (state/set-editor-show-page-search-hashtag! false)
 
-              (and @*show-commands (not= k (state/get-editor-command-trigger)))
-              (let [matched-commands (get-matched-commands input)]
-                (if (seq matched-commands)
-                  (do
-                    (reset! *show-commands true)
-                    (reset! commands/*matched-commands matched-commands))
-                  (reset! *show-commands false)))
+            (and @*show-commands (not= k (state/get-editor-command-trigger)))
+            (let [matched-commands (get-matched-commands input)]
+              (if (seq matched-commands)
+                (do
+                  (reset! *show-commands true)
+                  (reset! commands/*matched-commands matched-commands))
+                (reset! *show-commands false)))
 
-              (and @*show-block-commands (not= key-code 188)) ; not <
-              (let [matched-block-commands (get-matched-block-commands input)]
-                (if (seq matched-block-commands)
-                  (cond
-                    (= key-code 9)       ;tab
-                    (when @*show-block-commands
-                      (util/stop e)
-                      (insert-command! input-id
-                                       (last (first matched-block-commands))
-                                       format
-                                       {:last-pattern commands/angle-bracket}))
+            (and @*show-block-commands (not= key-code 188)) ; not <
+            (let [matched-block-commands (get-matched-block-commands input)]
+              (if (seq matched-block-commands)
+                (cond
+                  (= key-code 9)       ;tab
+                  (when @*show-block-commands
+                    (util/stop e)
+                    (insert-command! input-id
+                                     (last (first matched-block-commands))
+                                     format
+                                     {:last-pattern commands/angle-bracket}))
 
-                    :else
-                    (reset! commands/*matched-block-commands matched-block-commands))
-                  (reset! *show-block-commands false)))
+                  :else
+                  (reset! commands/*matched-block-commands matched-block-commands))
+                (reset! *show-block-commands false)))
 
-              (nil? @search-timeout)
-              (close-autocomplete-if-outside input)
+            (nil? @search-timeout)
+            (close-autocomplete-if-outside input)
 
-              :else
-              nil))
-          (when-not (= k "Shift")
-            (state/set-last-key-code! {:key-code key-code
-                                       :code code
-                                       :shift? (.-shiftKey e)})))))))
+            :else
+            nil))
+        (when-not (or (= k "Shift") is-processed?)
+          (state/set-last-key-code! {:key-code key-code
+                                     :code code
+                                     :shift? (.-shiftKey e)}))))))
+
 
 (defn editor-on-click!
   [id]

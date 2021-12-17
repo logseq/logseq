@@ -3,8 +3,8 @@
             [frontend.state :as state]
             ["@capacitor/app" :refer [^js App]]
             [reitit.frontend.easy :as rfe]
-            [clojure.string :as string]))
-
+            [clojure.string :as string]
+            [frontend.fs.capacitor-fs :as fs]))
 
 (defn init!
   []
@@ -28,4 +28,7 @@
                                (string/ends-with? href "/")
                                (not (string/includes? href "#/")))
                          (.exitApp App)
-                         (js/window.history.back)))))))
+                         (js/window.history.back))))))
+  (when (mobile-util/native-ios?)
+    (let [path (fs/iOS-ensure-documents!)]
+      (println "iOS container path: " path))))

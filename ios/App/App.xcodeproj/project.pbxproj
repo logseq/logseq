@@ -16,7 +16,7 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		7435D10C2704659F00AB88E0 /* FolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10B2704659F00AB88E0 /* FolderPicker.swift */; };
 		7435D10F2704660B00AB88E0 /* FolderPicker.m in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10E2704660B00AB88E0 /* FolderPicker.m */; };
-		B50C6194D06FE919721B594B /* Pods_Logseq.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 659A484D0A608EE5D778DEF1 /* Pods_Logseq.framework */; };
+		C3718FCEFAECFFB66E93FFC4 /* Pods_Logseq.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */; };
 		D32752BE275496C60039291C /* CloudKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D32752BD275496C60039291C /* CloudKit.framework */; };
 		D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A09275C92880003FBDC /* FileContainer.swift */; };
 		D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */ = {isa = PBXBuildFile; fileRef = D3D62A0B275C928F0003FBDC /* FileContainer.m */; };
@@ -32,13 +32,11 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
-		659A484D0A608EE5D778DEF1 /* Pods_Logseq.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Logseq.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7435D10B2704659F00AB88E0 /* FolderPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPicker.swift; sourceTree = "<group>"; };
 		7435D10D2704660A00AB88E0 /* App-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "App-Bridging-Header.h"; sourceTree = "<group>"; };
 		7435D10E2704660B00AB88E0 /* FolderPicker.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FolderPicker.m; sourceTree = "<group>"; };
 		8A489CEC51E94726DDD58810 /* Pods-Logseq.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Logseq.release.xcconfig"; path = "Target Support Files/Pods-Logseq/Pods-Logseq.release.xcconfig"; sourceTree = "<group>"; };
-		A693BFCEA424C37DF4D9AF1B /* Pods-App.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.release.xcconfig"; path = "Target Support Files/Pods-App/Pods-App.release.xcconfig"; sourceTree = "<group>"; };
-		B9A79754543D95E609C23F91 /* Pods-App.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-App.debug.xcconfig"; path = "Target Support Files/Pods-App/Pods-App.debug.xcconfig"; sourceTree = "<group>"; };
+		B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Logseq.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		D32752BC275496A60039291C /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		D32752BD275496C60039291C /* CloudKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CloudKit.framework; path = System/Library/Frameworks/CloudKit.framework; sourceTree = SDKROOT; };
 		D32752BF2754C5AB0039291C /* AppDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppDebug.entitlements; sourceTree = "<group>"; };
@@ -53,7 +51,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D32752BE275496C60039291C /* CloudKit.framework in Frameworks */,
-				B50C6194D06FE919721B594B /* Pods_Logseq.framework in Frameworks */,
+				C3718FCEFAECFFB66E93FFC4 /* Pods_Logseq.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -104,7 +102,7 @@
 			isa = PBXGroup;
 			children = (
 				D32752BD275496C60039291C /* CloudKit.framework */,
-				659A484D0A608EE5D778DEF1 /* Pods_Logseq.framework */,
+				B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -112,8 +110,6 @@
 		D337740F89DEEAD18C87762B /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				B9A79754543D95E609C23F91 /* Pods-App.debug.xcconfig */,
-				A693BFCEA424C37DF4D9AF1B /* Pods-App.release.xcconfig */,
 				DE5650F4AD4E2242AB9C012D /* Pods-Logseq.debug.xcconfig */,
 				8A489CEC51E94726DDD58810 /* Pods-Logseq.release.xcconfig */,
 			);
@@ -388,14 +384,14 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = App/AppDebug.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2.2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K378MFWK59;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 2.2;
+				MARKETING_VERSION = 0.0.1;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
-				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OBJC_BRIDGING_HEADER = "App/App-Bridging-Header.h";
@@ -413,13 +409,13 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2.2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = K378MFWK59;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 2.2;
-				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.app;
+				MARKETING_VERSION = 0.0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.logseq.logseq;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "App/App-Bridging-Header.h";

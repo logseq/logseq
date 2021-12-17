@@ -7,6 +7,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
+            [frontend.mobile.camera :as mobile-camera]
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.db :as db]
@@ -23,7 +24,8 @@
             [frontend.util.keycode :as keycode]
             [goog.dom :as gdom]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.history :as history]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -102,7 +104,6 @@
       (when input
         (let [current-pos (cursor/pos input)
               edit-content (or (state/sub [:editor/content id]) "")
-              edit-block (state/sub :editor/block)
               sidebar? (in-sidebar? input)
               q (or
                  @editor-handler/*selected-text
@@ -229,7 +230,14 @@
                            (:offset-top vw-state))
                         0)}
       :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
-     [:div.flex.justify-around.w-full
+     [:div.flex {:style {:overflow "overlay"}}
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                        (util/stop e)
+                        (mobile-camera/embed-photo parent-id))}
+        (ui/icon "camera"
+               {:style {:fontSize ui/icon-size}})]]
       [:div
        [:button.bottom-action
         {:on-mouse-down (fn [e]
@@ -268,6 +276,13 @@
                           (when-let [input (gdom/getElement parent-id)]
                             (.focus input)))}
         (ui/icon "arrow-back"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (history/undo! e))}
+        (ui/icon "rotate"
                  {:style {:fontSize ui/icon-size}})]]
       [:div
        [:button.bottom-action
