@@ -91,6 +91,16 @@
           result (js->clj result :keywordize-keys true)]
     (map (fn [result] (update result :uri clean-uri)) result)))
 
+(defn- encode-path [orig-dir orig-path]
+  (let [[dir path] (map #(-> (string/replace % "file://" "")
+                             (string/replace "file:" ""))
+                        [orig-dir orig-path])
+        path (string/escape path {\  "%20"})
+        path-diff (string/replace path dir "")]
+    (str orig-dir (-> path-diff
+                      futil/url-decode
+                      futil/url-encode))))
+
 (defrecord Capacitorfs []
   protocol/Fs
   (mkdir! [this dir]
@@ -130,7 +140,7 @@
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
     (let [path (cond
                  (= (util/platform) "ios")
-                 (str dir path)
+                 (encode-path dir path)
 
                  (string/starts-with? path (config/get-repo-dir repo))
                  path
