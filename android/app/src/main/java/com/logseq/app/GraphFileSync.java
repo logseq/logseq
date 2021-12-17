@@ -7,6 +7,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.logseq.file_sync.FileSync;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @CapacitorPlugin(name = "GraphFileSync")
@@ -16,10 +17,11 @@ public class GraphFileSync extends Plugin {
     @PluginMethod()
     public void watch(PluginCall call) {
         String path = call.getString("path");
+        List<String> ignorePatterns = new ArrayList<>();
         android.util.Log.i("FileSync", "path = " + path);
 
         FileSync.ping();
-        String watched = FileSync.watch(this, path);
+        String watched = FileSync.watch(this, path, ignorePatterns);
         android.util.Log.i("FileSync", "started");
         JSObject ret = new JSObject();
         ret.put("path", watched);
