@@ -2904,9 +2904,6 @@
             non-enter-processed? (and is-processed? ;; #3251
                                       (not= code keycode/enter-code))] ;; #3459
         (when-not (or (state/get-editor-show-input) non-enter-processed?)
-          (js/console.log "---")
-          (js/console.log e)
-          (js/console.log last-key-code)
           (cond
             (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
                  (not (:editor/show-page-search? @state/state))
