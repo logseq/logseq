@@ -84,7 +84,7 @@
                                   :binding "t"
                                   :fn      srs/recall}
 
-   :editor/escape-editing        {:desc    "Escape editing (remap to ctrl+open-square-bracket for example)"
+   :editor/escape-editing        {:desc    "Escape editing"
                                   :binding false
                                   :fn      (fn [_ _] (editor-handler/escape-editing))}
 
