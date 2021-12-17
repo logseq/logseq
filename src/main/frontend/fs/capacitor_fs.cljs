@@ -130,7 +130,7 @@
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
     (let [path (cond
                  (= (util/platform) "ios")
-                 path
+                 (str dir path)
 
                  (string/starts-with? path (config/get-repo-dir repo))
                  path
