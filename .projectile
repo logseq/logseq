@@ -5,7 +5,6 @@
 -/.cpcache
 -/.shadow-cljs/
 -/resources/static/js/cljs-runtime/
--/resources/static/js/common.js
 -/resources/static/js/main.js
 -/resources/static/js/sentry.min.js
 -/resources/static/js/highlight.min.js
