@@ -205,8 +205,7 @@
           (home-button))
 
         (when (or (util/electron?)
-                  ;; (mobile-util/is-native-platform?)
-                  )
+                  (mobile-util/native-ios?))
           (back-and-forward))
 
         (new-block-mode)
