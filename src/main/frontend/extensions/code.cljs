@@ -270,10 +270,7 @@
    (when-let [mode (:data-lang attr)]
      (when-not (= mode "calc")
        [:div.extensions__code-lang
-        (let [mode (string/lower-case mode)]
-          (if (= mode "text/x-clojure")
-            "clojure"
-            mode))]))
+        (string/lower-case mode)]))
    [:textarea (merge {:id id
                       ;; Expose the textarea associated with the CodeMirror instance via
                       ;; ref so that we can autofocus into the CodeMirror instance later.
