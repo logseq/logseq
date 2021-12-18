@@ -115,8 +115,7 @@
          (and format (contains? (config/text-formats) format))
          (when-let [file-content (db/get-file path)]
            (let [content (string/trim file-content)
-                 mode (util/get-file-ext path)
-                 mode (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} mode) "text/x-clojure" mode)]
+                 mode (util/get-file-ext path)]
              (lazy-editor/editor {:file? true
                                   :file-path path} path {:data-lang mode} content {})))
 
