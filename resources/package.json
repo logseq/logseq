@@ -3,6 +3,7 @@
   "version": "0.5.4",
   "main": "electron.js",
   "author": "Logseq",
+  "license": "AGPL-3.0",
   "description": "A privacy-first, open-source platform for knowledge management and collaboration.",
   "repository": "https://github.com/logseq/logseq",
   "scripts": {
