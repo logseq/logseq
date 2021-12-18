@@ -184,22 +184,11 @@
 (defn- text->cm-mode
   [text]
   (when text
-    (let [mode (string/lower-case text)]
-      (case mode
-        "html" "text/html"
-        "c" "text/x-csrc"
-        "c++" "text/x-c++src"
-        "java" "text/x-java"
-        "c#" "text/x-csharp"
-        "csharp" "text/x-csharp"
-        "objective-c" "text/x-objectivec"
-        "scala" "text/x-scala"
-        "js" "text/javascript"
-        "typescript" "text/typescript"
-        "ts" "text/typescript"
-        "tsx" "text/typescript-jsx"
-        "scss" "text/x-scss"
-        "less" "text/x-less"
+    (let [mode (string/lower-case text)
+          find-mode-by-name (gobj/get cm "findModeByName")
+          cm-mode (find-mode-by-name mode)]
+      (if cm-mode
+        (.-mime cm-mode)
         mode))))
 
 (defn render!
@@ -212,16 +201,14 @@
                               (get-in config [:block :block/uuid])))
         _ (state/set-state! :editor/code-mode? false)
         original-mode (get attr :data-lang)
-        clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} original-mode)
-        mode (if clojure? "clojure" (text->cm-mode original-mode))
-        lisp? (or clojure?
-                  (contains? #{"scheme" "racket" "lisp"} mode))
+        mode (text->cm-mode original-mode)
+        lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
         textarea (gdom/getElement id)
         editor (when textarea
                  (from-textarea textarea
                                 #js {:mode mode
                                      :theme (str "solarized " theme)
-                                     :matchBrackets lisp?
+                                     :matchBrackets lisp-like?
                                      :autoCloseBrackets true
                                      :lineNumbers true
                                      :styleActiveLine true
