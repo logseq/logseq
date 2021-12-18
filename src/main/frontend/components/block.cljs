@@ -2607,9 +2607,12 @@
         (highlight/html-export attr code)
 
         :else
-        (let [language (if (contains? #{"edn" "clj" "cljc" "cljs" "clojure"} language) "text/x-clojure" language)]
+        (let [language (if (contains? #{"edn" "clj" "cljc" "cljs"} language) "clojure" language)]
           (if (:slide? config)
-            (highlight/highlight (str (medley/random-uuid)) {:data-lang language} code)
+            (highlight/highlight (str (medley/random-uuid))
+                                 {:class (str "language-" language)
+                                  :data-lang language}
+                                 code)
             [:div
              (lazy-editor/editor config (str (dc/squuid)) attr code options)
              ;; FIXME: The following code seemed unreachable
