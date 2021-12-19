@@ -592,7 +592,8 @@
 
            :general
            [:div.panel-wrap.is-general
-            (version-row t version)
+            (when-not (mobile-util/is-native-platform?)
+              (version-row t version))
             (language-row t preferred-language)
             (theme-modes-row t switch-theme system-theme? dark?)
             (when-let [current-repo (state/sub :git/current-repo)]
