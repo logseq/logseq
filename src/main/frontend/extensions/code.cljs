@@ -132,6 +132,7 @@
             [frontend.extensions.calc :as calc]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.utf8 :as utf8]
             [frontend.util :as util]
@@ -170,13 +171,17 @@
         (:file-path config)
         (let [path (:file-path config)
               content (db/get-file-no-sub path)
-              value (some-> (gdom/getElement path)
+              [_ id _ _ _] (:rum/args state)
+              value (some-> (gdom/getElement id)
                             (gobj/get "value"))]
           (when (and
                  (not (string/blank? value))
                  (not= (string/trim value) (string/trim content)))
-            (file-handler/alter-file (state/get-current-repo) path (string/trim value)
-                                     {:re-render-root? true})))
+            (file-handler/alter-file (state/get-current-repo)
+                                     path
+                                     (str (string/trim value) "\n")
+                                     {:re-render-root? true})
+            (notification/show! "Saved file!" :success)))
 
         :else
         nil))))
@@ -272,10 +277,16 @@
    :did-mount (fn [state]
                 (load-and-render! state)
                 state)
+   :will-update (fn [state]
+                  (when-let [editor @(:editor-atom state)]
+                    (.toTextArea ^js editor)
+                    (let [[_ _ _ code _] (:rum/args state)]
+                      (when-let [textarea (rum/ref-node state textarea-ref-name)]
+                        (gobj/set textarea "defaultValue" code)
+                        (gobj/set textarea "value" code))))
+                  state)
+
    :did-update (fn [state]
-                 (when-let [editor @(:editor-atom state)]
-                   ;; clear the previous instance
-                   (.toTextArea ^js editor))
                  (load-and-render! state)
                  state)}
   [state config id attr code theme options]
