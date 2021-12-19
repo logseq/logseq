@@ -21,6 +21,7 @@
                                         (:yStart detail)
                                         (if (mobile-util/native-android?)
                                           (<= (:yStart detail) 200)
-                                          true))
+                                          true)
+                                        (<= (:xStart detail) 20))
                                (state/set-left-sidebar-open! true))
                              nil))))))

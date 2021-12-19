@@ -7,11 +7,17 @@
   justify-content: space-between;
   &-lang {
     @apply p-1 text-sm;
-    margin-top: 3px;
     background: var(--ls-secondary-background-color);
     word-break: keep-all;
-    height:2rem;
+    position: absolute;
+    width: fit-content;
+    /* height:2rem; */
     order:3;
+    display: flex;
+    left: auto;
+    right: 0;
+    margin-top: 4px;
+    z-index: 9999;
   }
 
   &-calc {
@@ -42,6 +48,7 @@
     height: auto;
     margin-top: 4px;
     margin-bottom: 6px;
+    padding-top: 20px;
     font-family: Fira Code, Monaco, Menlo, Consolas, 'COURIER NEW', monospace;
     max-width: var(--ls-main-content-max-width-wide);
     border-radius: 2px;
