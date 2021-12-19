@@ -2,6 +2,7 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.string :as string]
+            [datascript.core :as dc]
             [frontend.components.content :as content]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
@@ -73,11 +74,12 @@
   (let [path (get-path state)
         format (format/get-format path)
         page (db/get-file-page path)
+        random-id (str (dc/squuid))
         config? (= path (config/get-config-path))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
-      [:div.file {:id (str "file-" path)}
+      [:div.file {:id (str "file-edit-wrapper-" random-id)}
        [:h1.title
-        path]
+        [:bdi path]]
        (when page
          [:div.text-sm.mb-4.ml-1 "Page: "
           [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
@@ -117,7 +119,11 @@
            (let [content (string/trim file-content)
                  mode (util/get-file-ext path)]
              (lazy-editor/editor {:file? true
-                                  :file-path path} path {:data-lang mode} content {})))
+                                  :file-path path}
+                                 (str "file-edit-" random-id)
+                                 {:data-lang mode}
+                                 content
+                                 {})))
 
          :else
          [:div (tongue :file/format-not-supported (name format))])])))
