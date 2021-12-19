@@ -185,15 +185,17 @@
         (left-menu-button {:on-click (fn []
                                        (open-fn)
                                        (state/set-left-sidebar-open!
-                                         (not (:ui/left-sidebar-open? @state/state))))})
+                                        (not (:ui/left-sidebar-open? @state/state))))})
 
         (when current-repo ;; this is for the Search button
           (ui/with-shortcut :go/search "right"
             [:a.button#search-button
-             {:on-click #(do (state/set-left-sidebar-open! false)
+             {:on-click #(do (when (or (mobile-util/native-android?)
+                                       (mobile-util/native-iphone?))
+                               (state/set-left-sidebar-open! false))
                              (state/pub-event! [:go/search]))}
              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
-
+       
        [:div.r.flex
         (when (and (not (mobile-util/is-native-platform?))
                    (not (util/electron?)))
