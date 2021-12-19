@@ -68,8 +68,8 @@
     > article {
       flex: 1;
       padding: 0 12px 12px;
-      max-height: 70vh;
-      overflow: auto;
+      max-height: 80vh;
+      /* overflow: auto; */
     }
 
     .panel-wrap {
