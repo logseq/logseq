@@ -60,7 +60,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [shadow.loader :as loader]
-            [frontend.components.query-table :as query-table]))
+            [frontend.components.query-table :as query-table]
+            [frontend.mobile.util :as mobile-util]))
 
 ;; TODO: remove rum/with-context because it'll make reactive queries not working
 
@@ -1352,17 +1353,21 @@
                (seq children)
                (not collapsed?))
       (let [doc-mode? (state/sub :document/mode?)]
-        [:div.block-children {:style {:margin-left (if doc-mode? 18 29)
+        [:div.block-children {:style {:margin-left (if doc-mode? 18
+                                                       (if (or (mobile-util/native-android?)
+                                                               (mobile-util/native-iphone?))
+                                                         22
+                                                         29))
                                       :display (if collapsed? "none" "")}}
          (for [child children]
            (when (map? child)
              (let [child (dissoc child :block/meta)
                    config (cond->
-                           (-> config
-                               (assoc :block/uuid (:block/uuid child))
-                               (dissoc :breadcrumb-show? :embed-parent))
-                            ref?
-                            (assoc :ref-child? true))]
+                              (-> config
+                                  (assoc :block/uuid (:block/uuid child))
+                                  (dissoc :breadcrumb-show? :embed-parent))
+                              ref?
+                              (assoc :ref-child? true))]
                (rum/with-key (block-container config child)
                  (:block/uuid child)))))]))))
 
@@ -1394,7 +1399,7 @@
         ref? (:ref? config)
         collapsed? (if ref? ref-collapsed? collapsed?)
         empty-content? (block-content-empty? block)]
-    [:div.mr-2.flex.flex-row.items-center
+    [:div.mr-1.flex.flex-row.items-center.sm:mr-2
      {:style {:height 24
               :margin-top 0
               :float "left"}}

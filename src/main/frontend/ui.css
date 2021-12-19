@@ -138,7 +138,11 @@ html.is-native-iphone
 
     .references .foldable-title {
         margin-left: 4px
-}
+    }
+
+    .cards-review .block-control {
+        margin-left: -24px;
+    }
 }
 
 html.is-mobile {
