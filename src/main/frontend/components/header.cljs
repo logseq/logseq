@@ -200,13 +200,13 @@
         (when (and (not (mobile-util/is-native-platform?))
                    (not (util/electron?)))
           (login logged?))
-
+        
         (when plugin-handler/lsp-enabled?
           (plugins/hook-ui-items :toolbar))
 
         (when (not= (state/get-current-route) :home)
           (home-button))
-
+        
         (when (or (util/electron?)
                   (mobile-util/native-ios?))
           (back-and-forward))

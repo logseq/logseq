@@ -129,12 +129,16 @@
   }
 }
 
-html.is-native-andorid
+html.is-native-andorid,
 html.is-native-iphone
 {
     .ui__modal {
         top: 22vh;
     }
+
+    .references .foldable-title {
+        margin-left: 4px
+}
 }
 
 html.is-mobile {
