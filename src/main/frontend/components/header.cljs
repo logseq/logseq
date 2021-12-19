@@ -190,7 +190,8 @@
         (when current-repo ;; this is for the Search button
           (ui/with-shortcut :go/search "right"
             [:a.button#search-button
-             {:on-click #(state/pub-event! [:go/search])}
+             {:on-click #(do (state/set-left-sidebar-open! false)
+                             (state/pub-event! [:go/search]))}
              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
 
        [:div.r.flex

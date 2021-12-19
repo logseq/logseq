@@ -133,7 +133,7 @@ html.is-native-andorid
 html.is-native-iphone
 {
     .ui__modal {
-        top: 15vh;
+        top: 22vh;
     }
 }
 
