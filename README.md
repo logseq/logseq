@@ -48,7 +48,7 @@ Please go to https://discuss.logseq.com/c/feature-requests/7.
 2. Start writing and have fun!
 
 ## FAQ
-Please go to https://logseq.github.io/#/page/faq.
+Please go to https://docs.logseq.com/#/page/faq.
 
 ## Credits
 
