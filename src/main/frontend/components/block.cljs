@@ -1740,6 +1740,7 @@
                  (d/has-class? target "forbid-edit")
                  (d/has-class? target "bullet")
                  (util/link? target)
+                 (util/time? target)
                  (util/input? target)
                  (util/details-or-summary? target)
                  (and (util/sup? target)
