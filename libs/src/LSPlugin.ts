@@ -505,7 +505,7 @@ export interface IEditorProxy extends Record<string, any> {
 export interface IDBProxy {
   /**
    * Run a DSL query
-   * @link https://logseq.github.io/#/page/queries
+   * @link https://docs.logseq.com/#/page/queries
    * @param dsl
    */
   q: <T = any>(dsl: string) => Promise<Array<T> | null>
