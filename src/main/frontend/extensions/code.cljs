@@ -182,26 +182,34 @@
         nil))))
 
 (defn- text->cm-mode
-  [text]
-  (when text
-    (let [mode (string/lower-case text)
-          find-mode-by-name (gobj/get cm "findModeByName")
-          cm-mode (find-mode-by-name mode)]
-      (if cm-mode
-        (.-mime cm-mode)
-        mode))))
+  ([text]
+   (text->cm-mode text :name))
+  ([text by]
+   (when text
+     (let [mode (string/lower-case text)
+           find-fn-name (case by
+                          :name "findModeByName"
+                          :ext "findModeByExtension"
+                          :file-name "findModeByFileName"
+                          "findModeByName")
+           find-fn (gobj/get cm find-fn-name)
+           cm-mode (find-fn mode)]
+       (if cm-mode
+         (.-mime cm-mode)
+         mode)))))
 
 (defn render!
   [state]
   (let [esc-pressed? (atom nil)
-        dark? (state/dark?)
         [config id attr code theme] (:rum/args state)
         default-open? (and (:editor/code-mode? @state/state)
                            (= (:block/uuid (state/get-edit-block))
                               (get-in config [:block :block/uuid])))
         _ (state/set-state! :editor/code-mode? false)
         original-mode (get attr :data-lang)
-        mode (text->cm-mode original-mode)
+        mode (if (:file? config)
+               (text->cm-mode original-mode :ext) ;; ref: src/main/frontend/components/file.cljs
+               (text->cm-mode original-mode :name))
         lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
         textarea (gdom/getElement id)
         editor (when textarea
