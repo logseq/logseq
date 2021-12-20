@@ -241,7 +241,7 @@
                               :on-confirm (fn [_ {:keys [close-fn]}]
                                             (close-fn)
                                             (plugin-handler/unregister-plugin id))})]
-                       (state/set-modal! confirm-fn))}
+                       (state/set-sub-modal! confirm-fn))}
                (t :plugin/uninstall)]]]]
 
            [:div.r.flex.items-center
@@ -336,8 +336,7 @@
                    (and installing (= (keyword (:id installing)) pid))
                    (contains? installed-plugins pid)
                    (get stats pid)))
-               (:id item)))]])])
-    ))
+               (:id item)))]])])))
 
 (rum/defcs installed-plugins
   < rum/static rum/reactive

@@ -287,11 +287,11 @@
                   content (parse-user-md-content content item)]
             (and (string/blank? (string/trim content)) (throw nil))
             (state/set-state! :plugin/active-readme [content item])
-            (state/set-modal! (fn [_] (display))))
+            (state/set-sub-modal! (fn [_] (display))))
           (p/catch #(do (js/console.warn %)
                         (notifications/show! "No README content." :warn))))
       ;; market
-      (state/set-modal! (fn [_] (display repo nil))))))
+      (state/set-sub-modal! (fn [_] (display repo nil))))))
 
 (defn load-unpacked-plugin
   []

@@ -306,7 +306,7 @@
 
 (defn setup-patch-ios-visual-viewport-state!
   []
-  (when-let [^js vp (and (or (and (util/mobile?) (util/safari?))
+  (if-let [^js vp (and (or (and (util/mobile?) (util/safari?))
                              (mobile-util/native-ios?))
                          js/window.visualViewport)]
     (let [raf-pending? (atom false)
@@ -334,7 +334,8 @@
       (fn []
         (.removeEventListener vp "resize" on-viewport-changed)
         (.removeEventListener vp "scroll" on-viewport-changed)
-        (state/set-visual-viewport-state nil)))))
+        (state/set-visual-viewport-state nil)))
+    #()))
 
 (defn setup-system-theme-effect!
   []
@@ -624,6 +625,28 @@
             {:type     "button"
              :on-click (comp on-cancel close-fn)}
             (t :cancel)]]]]))))
+
+(rum/defc sub-modal < rum/reactive
+  []
+  (when-let [modals (seq (state/sub :modal/subsets))]
+    (for [[idx modal] (medley/indexed modals)]
+      (let [id (:modal/id modal)
+            modal-panel-content (:modal/panel-content modal)
+            close-btn? (:modal/close-btn? modal)
+            show? (boolean modal-panel-content)
+            close-fn (fn []
+                       (state/close-sub-modal! id))
+            modal-panel-content (or modal-panel-content (fn [close] [:div]))]
+        [:div.ui__modal.is-sub-modal
+         {:style {:z-index (if show? (+ 9999 idx) -1)}}
+         (css-transition
+           {:in show? :timeout 0}
+           (fn [state]
+             (modal-overlay state close-fn)))
+         (css-transition
+           {:in show? :timeout 0}
+           (fn [state]
+             (modal-panel show? modal-panel-content state close-fn false close-btn?)))]))))
 
 (defn loading
   [content]

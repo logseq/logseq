@@ -5,6 +5,7 @@
             [cljs.core.async :as async]
             [clojure.string :as string]
             [dommy.core :as dom]
+            [medley.core :as medley]
             [electron.ipc :as ipc]
             [frontend.storage :as storage]
             [frontend.util :as util]
@@ -1162,11 +1163,47 @@
           :modal/fullscreen? fullscreen?
           :modal/close-btn? close-btn?)))
 
+(defn get-sub-modals
+  []
+  (:modal/subsets @state))
+
+(defn set-sub-modal!
+  ([panel-content]
+   (set-sub-modal! panel-content
+                   {:close-btn? true}))
+  ([panel-content {:keys [id close-btn? show?] :as opts}]
+   (if (not (modal-opened?))
+     (set-modal! panel-content opts)
+     (let [modals (:modal/subsets @state)
+           idx (and id (first (keep-indexed #(when (= (:modal/id %2) id) %1)
+                                            modals)))
+           input (medley/filter-vals
+                  #(not (nil? %1))
+                  {:modal/id            id
+                   :modal/show?         (if (boolean? show?) show? true)
+                   :modal/panel-content panel-content
+                   :modal/close-btn?    close-btn?})]
+       (swap! state update-in
+              [:modal/subsets (or idx (count modals))]
+              merge input)
+       (:modal/subsets @state)))))
+
+(defn close-sub-modal!
+  ([] (close-sub-modal! nil))
+  ([id]
+   (let [modals (:modal/subsets @state)]
+     (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
+                        (dec (count modals)))]
+       (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals)))
+       (:modal/subsets @state)))))
+
 (defn close-modal!
   []
-  (swap! state assoc
-         :modal/show? false
-         :modal/panel-content nil))
+  (if (seq (get-sub-modals))
+    (close-sub-modal!)
+    (swap! state assoc
+           :modal/show? false
+           :modal/panel-content nil)))
 
 (defn get-db-batch-txs-chan
   []

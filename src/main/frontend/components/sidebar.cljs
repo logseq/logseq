@@ -568,6 +568,7 @@
 
         (ui/notification)
         (ui/modal)
+        (ui/sub-modal)
         (settings-modal)
         (command-palette/command-palette-modal)
         (custom-context-menu)
