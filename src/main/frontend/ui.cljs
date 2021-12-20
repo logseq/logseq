@@ -633,7 +633,7 @@
       (let [id (:modal/id modal)
             modal-panel-content (:modal/panel-content modal)
             close-btn? (:modal/close-btn? modal)
-            show? (boolean modal-panel-content)
+            show? (:modal/show? modal)
             close-fn (fn []
                        (state/close-sub-modal! id))
             modal-panel-content (or modal-panel-content (fn [close] [:div]))]
