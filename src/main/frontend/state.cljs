@@ -108,6 +108,7 @@
       :editor/block-dom-id nil
       :editor/set-timestamp-block nil
       :editor/last-input-time nil
+      :editor/pos nil
       :editor/document-mode? document-mode?
       :editor/args nil
       :editor/on-paste? false

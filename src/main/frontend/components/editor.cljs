@@ -235,6 +235,7 @@
        [:button.bottom-action
         {:on-mouse-down (fn [e]
                           (util/stop e)
+                          (state/set-state! :editor/pos (cursor/pos (state/get-input)))
                           (editor-handler/indent-outdent true))}
         (ui/icon "arrow-bar-right"
                  {:style {:fontSize ui/icon-size}})]]
@@ -242,6 +243,7 @@
        [:button.bottom-action
         {:on-mouse-down (fn [e]
                           (util/stop e)
+                          (state/set-state! :editor/pos (cursor/pos (state/get-input)))
                           (editor-handler/indent-outdent false))}
         (ui/icon "arrow-bar-left"
                  {:style {:fontSize ui/icon-size}})]]
