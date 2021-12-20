@@ -2842,17 +2842,13 @@
         nil
 
         (and (not (string/blank? (util/get-selected-text)))
-             (or (= key-code keycode/left-square-bracket)
-                 (= keycode/left-square-bracket-code code))
-             (not shift?))
+             (contains? keycode/left-square-brackets-keys key))
         (do
           (autopair input-id "[" format nil)
           (util/stop e))
 
         (and (not (string/blank? (util/get-selected-text)))
-             (or (= key-code keycode/left-paren)
-                 (= keycode/left-paren-code code))
-             shift?)
+             (contains? keycode/left-paren-keys key))
         (do
           (util/stop e)
           (autopair input-id "(" format nil))
@@ -2906,7 +2902,7 @@
             shift? (.-shiftKey e)
             is-processed? (util/event-is-composing? e true) ;; #3440
             non-enter-processed? (and is-processed? ;; #3251
-                                      (not= code "Enter"))] ;; #3459
+                                      (not= code keycode/enter-code))] ;; #3459
         (when-not (or (state/get-editor-show-input) non-enter-processed?)
           (cond
             (and (not (contains? #{"ArrowDown" "ArrowLeft" "ArrowRight" "ArrowUp"} k))
@@ -2926,9 +2922,8 @@
               (reset! commands/*slash-caret-pos pos))
 
             (and blank-selected?
-                 (or (= keycode/left-square-bracket key-code (:key-code last-key-code))
-                     (= keycode/left-square-bracket-code code (:code last-key-code)))
-                 (not shift?)
+                 (contains? keycode/left-square-brackets-keys k)
+                 (= (:key last-key-code) k)
                  (> current-pos 0)
                  (not (wrapped-by? input "[[" "]]")))
             (do
@@ -2938,10 +2933,8 @@
               (reset! commands/*slash-caret-pos (cursor/get-caret-pos input)))
 
             (and blank-selected?
-                 (or (= keycode/left-paren key-code (:key-code last-key-code))
-                     (= keycode/left-paren-code code (:code last-key-code)))
-                 (:shift? last-key-code)
-                 shift?
+                 (contains? keycode/left-paren-keys k)
+                 (= (:key last-key-code) k)
                  (> current-pos 0)
                  (not (wrapped-by? input "((" "))")))
             (do
@@ -2998,6 +2991,7 @@
         (when-not (or (= k "Shift") is-processed?)
           (state/set-last-key-code! {:key-code key-code
                                      :code code
+                                     :key k
                                      :shift? (.-shiftKey e)}))))))
 
 
