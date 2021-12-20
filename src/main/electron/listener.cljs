@@ -4,7 +4,6 @@
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.db :as db]
-            [frontend.idb :as idb]
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [frontend.handler.notification :as notification]

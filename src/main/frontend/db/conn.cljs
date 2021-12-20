@@ -6,7 +6,6 @@
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.idb :as idb]
             [datascript.core :as d]))
 
 (defonce conns (atom {}))
