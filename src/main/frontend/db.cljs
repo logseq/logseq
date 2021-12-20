@@ -9,7 +9,6 @@
             [frontend.db.query-react]
             [frontend.db.react]
             [frontend.db.persist :as db-persist]
-            [frontend.idb :as idb]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
             [frontend.util :as util]
