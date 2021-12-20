@@ -176,8 +176,11 @@
   (when-let [node (gdom/getElement (str id))]
     (when-let [cursor-range (state/get-cursor-range)]
       (when-let [range cursor-range]
-        (let [pos (diff/find-position markup range)]
-          (cursor/move-cursor-to node pos))))))
+        (let [pos (:editor/pos @state/state)
+              pos (or pos (diff/find-position markup range))]
+          (cursor/move-cursor-to node pos)
+          (state/set-state! :editor/pos nil))))))
+
 
 (defn highlight-block!
   [block-uuid]
