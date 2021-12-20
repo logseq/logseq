@@ -36,6 +36,7 @@
   (redirect! {:to :graph}))
 
 (defn redirect-to-page!
+  "Must ensure `page-name` is dereferenced (not an alias), or it will create a wrong new page with that name (#3511)."
   ([page-name]
    (recent-handler/add-page-to-recent! (state/get-current-repo) page-name)
    (redirect! {:to :page

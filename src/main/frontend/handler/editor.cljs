@@ -1284,6 +1284,7 @@
           (delete-blocks! repo blocks))))))
 
 (defn- get-nearest-page
+  "Return the nearset page-name (not dereferenced, may be an alias)"
   []
   (when-let [block (state/get-edit-block)]
     (when (:block/uuid block)
@@ -1318,7 +1319,7 @@
   []
   (when-let [page (get-nearest-page)]
     (when-not (string/blank? page)
-      (let [page-name (string/lower-case page)]
+      (let [page-name (db-model/get-redirect-page-name page)]
         (state/clear-edit!)
         (insert-first-page-block-if-not-exists! page-name)
         (route-handler/redirect-to-page! page-name)))))
@@ -2496,8 +2497,10 @@
                                  nil))
               "block-ref" (open-block-in-sidebar! (:link thing-at-point))
               "page-ref" (when-not (string/blank? (:link thing-at-point))
-                           (insert-first-page-block-if-not-exists! (:link thing-at-point))
-                           (route-handler/redirect-to-page! (:link thing-at-point)))
+                           (let [page (:link thing-at-point)
+                                 page-name (db-model/get-redirect-page-name page)]
+                             (insert-first-page-block-if-not-exists! page-name)
+                             (route-handler/redirect-to-page! page-name)))
               "list-item" (dwim-in-list state)
               "properties-drawer" (dwim-in-properties state))
 
