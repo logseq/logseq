@@ -1739,6 +1739,7 @@
       (when-not (or
                  (d/has-class? target "forbid-edit")
                  (d/has-class? target "bullet")
+                 (d/has-class? target "logbook")
                  (util/link? target)
                  (util/time? target)
                  (util/input? target)
@@ -2644,7 +2645,7 @@
            [:div.text-sm
             [:div.drawer {:data-drawer-name name}
              (ui/foldable
-              [:div.opacity-50.font-medium
+              [:div.opacity-50.font-medium.logbook
                (util/format ":%s:" (string/upper-case name))]
               [:div.opacity-50.font-medium
                (if (= name "logbook")
