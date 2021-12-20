@@ -127,8 +127,13 @@
 
 (defn open-dir
   [ok-handler]
-  (let [record (get-record)]
-    (p/let [result (protocol/open-dir record ok-handler)]
+  (let [record (get-record)
+        ;; it is not easy to invoke `ls-dir-files` in electron
+        ;; we add a secret backdoor here for testing
+        global-node-dir (or (.-secretlogseqgraphdir js/window) nil)]
+    (p/let [result (if global-node-dir
+                       (protocol/get-files record global-node-dir ok-handler)
+                       (protocol/open-dir record ok-handler))]
       (if (or (util/electron?)
               (mobile-util/is-native-platform?))
         (let [[dir & paths] (bean/->clj result)]
