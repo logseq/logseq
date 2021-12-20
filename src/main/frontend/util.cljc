@@ -473,6 +473,13 @@
       (gobj/get node "tagName"))))
 
 #?(:cljs
+   (defn time?
+     [node]
+     (contains?
+      #{"TIME"}
+      (gobj/get node "tagName"))))
+
+#?(:cljs
    (defn sup?
      [node]
      (contains?
