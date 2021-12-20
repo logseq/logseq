@@ -1,7 +1,7 @@
 (ns frontend.handler.link
   (:require [frontend.util :as util]))
 
-(def plain-link "(\b(https?|file)://)?[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]")
+(def plain-link "(\bhttps?://)?[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]")
 (def plain-link-re (re-pattern plain-link))
 (def org-link-re-1 (re-pattern (util/format "\\[\\[(%s)\\]\\[(.+)\\]\\]" plain-link)))
 (def org-link-re-2 (re-pattern (util/format "\\[\\[(%s)\\]\\]" plain-link)))
