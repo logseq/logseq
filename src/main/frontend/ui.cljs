@@ -334,7 +334,8 @@
       (fn []
         (.removeEventListener vp "resize" on-viewport-changed)
         (.removeEventListener vp "scroll" on-viewport-changed)
-        (state/set-visual-viewport-state nil)))))
+        (state/set-visual-viewport-state nil))))
+  #())
 
 (defn setup-system-theme-effect!
   []
