@@ -1744,16 +1744,16 @@
         (editor-handler/unhighlight-blocks!)
         (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
                        cursor-range (util/caret-range (gdom/getElement block-id))
-                       new-content (:block/content block)
-                       content (-> (property/remove-built-in-properties (:block/format block)
-                                                                        content)
-                                   (drawer/remove-logbook))]
+                       {:block/keys [content format]} block
+                       content (->> content
+                                    (property/remove-built-in-properties format)
+                                    (drawer/remove-logbook))]
                    ;; save current editing block
                    (let [{:keys [value] :as state} (editor-handler/get-state)]
                      (editor-handler/save-block! state value))
                    (state/set-editing!
                     edit-input-id
-                    new-content
+                    content
                     block
                     cursor-range
                     false))]
