@@ -121,9 +121,9 @@
          {}
          (t :on-boarding/our-blog)
          [:a
-          {:href "https://logseq.github.io/"
+          {:href "https://docs.logseq.com/"
            :target "_blank"}
-          "https://logseq.github.io/"]]]
+          "https://docs.logseq.com/"]]]
        [:h2 (t :on-boarding/credits-to)]
        [:ul
         {}
@@ -191,18 +191,18 @@
                           [:div.flex-row.inline-flex.items-center
                            [:span.mr-1 (t :help/shortcuts)]
                            (ui/icon "command" {:style {:font-size 20}})]]]
-                        [(t :help/docs) "https://logseq.github.io/"]
-                        ["FAQ" "https://logseq.github.io/#/page/faq"]]}
+                        [(t :help/docs) "https://docs.logseq.com/"]
+                        ["FAQ" "https://docs.logseq.com/#/page/faq"]]}
 
             {:title "About"
-             :children [[(t :help/start) "https://logseq.github.io/#/page/getting%20started"]
+             :children [[(t :help/start) "https://docs.logseq.com/#/page/getting%20started"]
                         [(t :help/about) "https://logseq.com/blog/about"]]}
 
             {:title "Development"
              :children [[(t :help/roadmap) "https://trello.com/b/8txSM12G/roadmap"]
                         [(t :help/bug) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.md&title="]
                         [(t :help/feature) "https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=feature_request.md&title="]
-                        [(t :help/changelog) "https://logseq.github.io/#/page/changelog"]]}
+                        [(t :help/changelog) "https://docs.logseq.com/#/page/changelog"]]}
 
             {:title "Terms"
              :children [[(t :help/privacy) "https://logseq.com/blog/privacy-policy"]

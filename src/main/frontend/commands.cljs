@@ -42,7 +42,7 @@
     [:li.mb-1 [:code "{{query (page-tags #tag)}}"]]]
 
    [:p "Check more examples at "
-    [:a {:href "https://logseq.github.io/#/page/queries"
+    [:a {:href "https://docs.logseq.com/#/page/queries"
          :target "_blank"}
      "Queries documentation"]
     "."]])
