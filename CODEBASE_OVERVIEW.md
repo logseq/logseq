@@ -68,4 +68,4 @@ After the change changes, React will dutifully refresh the screen.
 
 ## Architecture
 
-Logseq has undergone a heavy refactoring, results in a much more robust and clear architecture. Read [this article](https://logseq.github.io/#/page/The%20Refactoring%20Of%20Logseq) written by the main contributor to the refactoring for a detailed tour.
+Logseq has undergone a heavy refactoring, results in a much more robust and clear architecture. Read [this article](https://docs.logseq.com/#/page/The%20Refactoring%20Of%20Logseq) written by the main contributor to the refactoring for a detailed tour.
