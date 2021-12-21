@@ -7,6 +7,8 @@
             [electron.state :as state]
             [clojure.core.async :as async]))
 
+(defonce *quitting? (atom false))
+
 (def MAIN_WINDOW_ENTRY (if dev?
                          ;;"http://localhost:3001"
                          (str "file://" (path/join js/__dirname "index.html"))
@@ -71,7 +73,9 @@
                        (.send web-contents "persistent-dbs"))
                      (async/go
                        (let [_ (async/<! state/persistent-dbs-chan)]
-                         (destroy-window! win))))))
+                         (destroy-window! win)
+                         (when @*quitting?
+                           (async/put! state/persistent-dbs-chan true)))))))
 
 (defn get-all-windows
   []

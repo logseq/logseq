@@ -238,8 +238,7 @@
            (fn []
              (let [t0 (setup-interceptor!)
                    ^js win (win/create-main-window)
-                   _ (reset! *win win)
-                   *quitting? (atom false)]
+                   _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
                (utils/disableXFrameOptions win)
@@ -274,7 +273,7 @@
                                       (.send web-contents "persistent-dbs"))
                                     (async/go
                                       (let [_ (async/<! state/persistent-dbs-chan)]
-                                        (if (or @*quitting? (not mac?))
+                                        (if (or @win/*quitting? (not mac?))
                                           (when-let [win @*win]
                                             (win/destroy-window! win)
                                             (reset! *win nil))
@@ -284,7 +283,8 @@
                                                     (.setFullScreen win false))
                                                 (.hide win)))))))))
 
-               (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
+               (.on app "before-quit" (fn [_e]
+                                        (reset! win/*quitting? true)))
 
                (.on app "activate" #(if @*win (.show win)))))))))
 
