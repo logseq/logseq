@@ -17,6 +17,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.persist-var :as persist-var]
+            [frontend.fs :as fs]
             [frontend.version :as version]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
