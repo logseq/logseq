@@ -1151,17 +1151,7 @@
   []
   (:modal/show? @state))
 
-(defn set-modal!
-  ([modal-panel-content]
-   (set-modal! modal-panel-content
-               {:fullscreen? false
-                :close-btn?  true}))
-  ([modal-panel-content {:keys [fullscreen? close-btn?]}]
-   (swap! state assoc
-          :modal/show? (boolean modal-panel-content)
-          :modal/panel-content modal-panel-content
-          :modal/fullscreen? fullscreen?
-          :modal/close-btn? close-btn?)))
+(declare set-modal!)
 
 (defn get-sub-modals
   []
@@ -1190,12 +1180,29 @@
 
 (defn close-sub-modal!
   ([] (close-sub-modal! nil))
-  ([id]
-   (let [modals (:modal/subsets @state)]
-     (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
-                        (dec (count modals)))]
-       (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals)))
-       (:modal/subsets @state)))))
+  ([all?-a-id]
+   (if (true? all?-a-id)
+     (swap! state assoc :modal/subsets [])
+     (let [id all?-a-id
+           modals (:modal/subsets @state)]
+       (when-let [idx (if id (first (keep-indexed #(when (= (:modal/id %2) id) %1) modals))
+                             (dec (count modals)))]
+         (swap! state assoc :modal/subsets (into [] (medley/remove-nth idx modals))))))
+   (:modal/subsets @state)))
+
+(defn set-modal!
+  ([modal-panel-content]
+   (set-modal! modal-panel-content
+               {:fullscreen? false
+                :close-btn?  true}))
+  ([modal-panel-content {:keys [fullscreen? close-btn?]}]
+   (when (seq (get-sub-modals))
+     (close-sub-modal! true))
+   (swap! state assoc
+          :modal/show? (boolean modal-panel-content)
+          :modal/panel-content modal-panel-content
+          :modal/fullscreen? fullscreen?
+          :modal/close-btn? close-btn?)))
 
 (defn close-modal!
   []
