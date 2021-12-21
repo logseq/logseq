@@ -804,9 +804,8 @@
 
 (defn sidebar-add-block!
   [repo db-id block-type block-data]
-  (when-not (or (util/mobile?)
-            (mobile-util/is-native-platform?))
-   (when db-id
+  (when (not (util/sm-breakpoint?))
+    (when db-id
      (update-state! :sidebar/blocks (fn [blocks]
                                       (->> (remove #(= (second %) db-id) blocks)
                                            (cons [repo db-id block-type block-data])
