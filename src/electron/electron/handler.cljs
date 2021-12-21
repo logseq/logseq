@@ -5,6 +5,7 @@
             ["buffer" :as buffer]
             ["fs-extra" :as fs-extra]
             ["path" :as path]
+            ["os" :as os]
             [electron.fs-watcher :as watcher]
             [electron.configs :as cfgs]
             [promesa.core :as p]
@@ -15,7 +16,8 @@
             [clojure.core.async :as async]
             [electron.search :as search]
             [electron.git :as git]
-            [electron.plugin :as plugin]))
+            [electron.plugin :as plugin]
+            [electron.window :as win]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -143,15 +145,72 @@
           result (get (js->clj result) "filePaths")
           path (first result)]
     (if path
-      (do
-        (.. ^js window -webContents
-            (send "open-dir-confirmed"
-                  (bean/->js {:opened? true})))
-        (p/resolved (bean/->js (get-files path))))
+      (p/resolved (bean/->js (get-files path)))
       (p/rejected (js/Error "path empty")))))
 
 (defmethod handle :getFiles [window [_ path]]
   (get-files path))
+
+(defn- sanitize-graph-name
+  [graph-name]
+  (when graph-name
+    (string/replace graph-name "/" "++")))
+
+(defn- graph-name->path
+  [graph-name]
+  (when graph-name
+    (string/replace graph-name "++" "/")))
+
+(defn- get-graphs-dir
+  []
+  (let [dir (.join path (.homedir os) ".logseq" "graphs")]
+    (fs-extra/ensureDirSync dir)
+    dir))
+
+(defn- get-graphs
+  []
+  (let [dir (get-graphs-dir)
+        graphs-path (.join path (.homedir os) ".logseq" "graphs")]
+    (->> (readdir dir)
+         (remove #{graphs-path})
+         (map #(path/basename % ".transit"))
+         (map graph-name->path))))
+
+(defmethod handle :getGraphs [window [_]]
+  (get-graphs))
+
+(defn- get-graph-path
+  [graph-name]
+  (when graph-name
+    (let [graph-name (sanitize-graph-name graph-name)
+          dir (get-graphs-dir)]
+      (.join path dir (str graph-name ".transit")))))
+
+(defn- get-serialized-graph
+  [graph-name]
+  (when graph-name
+    (when-let [file-path (get-graph-path graph-name)]
+      (when (fs/existsSync file-path)
+        (utils/read-file file-path)))))
+
+(defmethod handle :getSerializedGraph [window [_ graph-name]]
+  (get-serialized-graph graph-name))
+
+(defmethod handle :saveGraph [window [_ graph-name value-str]]
+  (when (and graph-name value-str)
+    (when-let [file-path (get-graph-path graph-name)]
+      (fs/writeFileSync file-path value-str))))
+
+(defmethod handle :deleteGraph [window [_ graph-name]]
+  (when graph-name
+    (when-let [file-path (get-graph-path graph-name)]
+      (when (fs/existsSync file-path)
+        (fs-extra/removeSync file-path)))))
+
+(defmethod handle :openNewWindow [window [_]]
+  (let [win (win/create-main-window)]
+    (win/on-close-save! win)
+    nil))
 
 (defmethod handle :persistent-dbs-saved [window _]
   (async/put! state/persistent-dbs-chan true)
@@ -182,6 +241,9 @@
 
 (defn clear-cache!
   []
+  (let [graphs-dir (get-graphs-dir)]
+    (fs-extra/removeSync graphs-dir))
+
   (let [path (.getPath ^object app "userData")]
     (doseq [dir ["search" "IndexedDB"]]
       (let [path (path/join path dir)]
@@ -256,6 +318,10 @@
 
 (defmethod handle :quitAndInstall []
   (.quitAndInstall autoUpdater))
+
+(defmethod handle :graphUnlinked [^js win [_ repo]]
+  (doseq [window (win/get-all-windows)]
+    (utils/send-to-renderer window "graphUnlinked" (bean/->clj repo))))
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))

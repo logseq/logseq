@@ -129,6 +129,22 @@
   }
 }
 
+html.is-native-andorid,
+html.is-native-iphone
+{
+    .ui__modal {
+        top: 22vh;
+    }
+
+    .references .foldable-title {
+        margin-left: 4px
+    }
+
+    .cards-review .block-control {
+        margin-left: -24px;
+    }
+}
+
 html.is-mobile {
   .ui__modal {
     @apply bottom-0 inset-x-0;
@@ -247,3 +263,4 @@ html.is-mobile {
 .rotating-arrow svg {
   transition: all 100ms ease-in 0ms;
 }
+

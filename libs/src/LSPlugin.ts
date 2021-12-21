@@ -198,6 +198,10 @@ export type ExternalCommandType =
   'logseq.editor/toggle-open-blocks' |
   'logseq.editor/zoom-in' |
   'logseq.editor/zoom-out' |
+  'logseq.editor/indent' |
+  'logseq.editor/outdent' |
+  'logseq.editor/copy' |
+  'logseq.editor/cut' |
   'logseq.go/home' |
   'logseq.go/journals' |
   'logseq.go/keyboard-shortcuts' |
@@ -273,6 +277,12 @@ export interface IAppProxy {
   relaunch: () => Promise<void>
   quit: () => Promise<void>
   openExternalLink: (url: string) => Promise<void>
+
+  /**
+   * @link https://github.com/desktop/dugite/blob/master/docs/api/exec.md
+   * @param args
+   */
+  execGitCommand: (args: string[]) => Promise<string>
 
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>

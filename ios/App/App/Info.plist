@@ -65,11 +65,11 @@
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string></string>
+	<string>We will access your album when you save a photo.</string>
 	<key>NSCameraUsageDescription</key>
-	<string></string>
+	<string>We will access your camera when you take a photo, and embed it in your note.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string></string>
+	<string>We will access your album when you choose a photo, and embed it in your note.</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>armv7</string>

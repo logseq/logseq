@@ -110,14 +110,15 @@
                  "FolderSync"]
                 "."]]
               [:div
-               [:p "iCloud TBD"]])]
-
+               [:p "You can sync your graphs by using iCloud. Please choose an existing graph or create a new graph in logseq directory."]
+               [:p "We're developing our built-in paid Logseq Sync. Stay tuned."]])]
+           
            [:li.mt-8
             [:div.font-bold.mb-2 "I need some help"]
             [:p "👋 Join our discord group to chat with the makers and our helpful community members."]
             (ui/button "Join the community"
-              :href "https://discord.gg/KpN4eHY"
-              :target "_blank")]]]
+                       :href "https://discord.gg/KpN4eHY"
+                       :target "_blank")]]]
          [:div.cp__widgets-open-local-directory
           [:div.select-file-wrap.cursor
            (when nfs-supported?
@@ -138,6 +139,28 @@
                                "new native filesystem API"]
                               [:span ", please use any Chromium 86+ based browser like Chrome, Vivaldi, Edge, etc. Notice that the API doesn't support mobile browsers at the moment."]]))]]]))]))
 
+(rum/defc android-permission-alert
+  []
+  (when (mobile-util/native-android?)
+    (rum/with-context [[t] i18n/*tongue-context*]
+      [:div.flex.flex-col
+       [:h1.title "Storage access permission"]
+       [:div.text-sm
+        [:div
+         [:p "Logseq needs the permission to access your device storage. Read "
+          [:a {:href "https://developer.android.com/about/versions/11/privacy/storage#all-files-access"
+               :target "_blank"}
+           "more"]
+          "."]
+         [:div
+          (ui/button "Grant Permission"
+                     :on-click #(page-handler/ls-dir-files! shortcut/refresh!))]
+         [:p.mb-1 "Note:"]
+         [:ol
+          [:li "We will never access files outside of your graph folders you choose."]
+          [:li "If you have granted the permission, you don't need to do it again."]]]
+        [:hr]]])))
+
 (rum/defcs add-graph <
   [state & {:keys [graph-types]
             :or {graph-types [:local :github]}
@@ -151,8 +174,10 @@
                            "add-github-repo"))
 
                        :local
-                       (rum/with-key (add-local-directory)
-                         "add-local-directory")
+                       [(rum/with-key (android-permission-alert)
+                          "andoird-permission-alert")
+                        (rum/with-key (add-local-directory)
+                          "add-local-directory")]
 
                        nil))
         available-graph (->> (set graph-types)

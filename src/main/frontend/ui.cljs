@@ -290,6 +290,7 @@
     (when (util/safari?) (.add cl "is-safari"))
     (when (mobile-util/native-ios?) (.add cl "is-native-ios"))
     (when (mobile-util/native-android?) (.add cl "is-native-android"))
+    (when (mobile-util/native-iphone?) (.add cl "is-native-iphone"))
     (when (util/electron?)
       (js/window.apis.on "full-screen" #(js-invoke cl (if (= % "enter") "add" "remove") "is-fullscreen"))
       (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen]} (js->clj % :keywordize-keys true)]
@@ -568,11 +569,7 @@
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 9999 -1)
-              :top (when (or (mobile-util/native-iphone?)
-                             (mobile-util/native-android?)
-                             (and (util/mobile?) (util/ios?)))
-                     "22vh")}}
+     {:style {:z-index (if show? 9999 -1)}}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]

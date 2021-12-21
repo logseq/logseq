@@ -13,6 +13,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.handler.ui :as ui-handler]
             [frontend.handler.web.nfs :as nfs-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
@@ -260,7 +261,9 @@
                                                         (state/close-modal!)
                                                         (repo-handler/re-index!
                                                          nfs-handler/rebuild-index!
-                                                         page-handler/create-today-journal!)))]]))}}])]
+                                                         page-handler/create-today-journal!)))]]))}}
+                           {:title        (t :open-new-window)
+                            :options {:on-click ui-handler/open-new-window!}}])]
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]

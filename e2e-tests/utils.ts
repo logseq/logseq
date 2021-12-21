@@ -35,6 +35,22 @@ export async function createRandomPage(page: Page) {
     await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
 }
 
+/**
+* Locate the last block in the inner editor
+* @param page The Playwright Page object.
+* @returns The locator of the last block.
+*/
+export async function lastInnerBlock(page: Page): Promise<Locator> {
+    // discard any popups
+    await page.keyboard.press('Escape')
+    // click last block
+    await page.click('.page-blocks-inner .ls-block >> nth=-1')
+    // wait for textarea
+    await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+
+    return page.locator(':nth-match(textarea, 1)')
+}
+
 export async function lastBlock(page: Page): Promise<Locator> {
     // discard any popups
     await page.keyboard.press('Escape')
@@ -42,6 +58,18 @@ export async function lastBlock(page: Page): Promise<Locator> {
     await page.click('.ls-block >> nth=-1')
     // wait for textarea
     await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+
+    return page.locator(':nth-match(textarea, 1)')
+}
+
+/**
+* Create and locate a new block at the end of the inner editor
+* @param page The Playwright Page object 
+* @returns The locator of the last block
+*/
+export async function newInnerBlock(page: Page): Promise<Locator> {
+    await lastInnerBlock(page)
+    await page.press(':nth-match(textarea, 1)', 'Enter')
 
     return page.locator(':nth-match(textarea, 1)')
 }

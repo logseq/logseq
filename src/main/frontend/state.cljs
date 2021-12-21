@@ -33,7 +33,7 @@
       :notification/show? false
       :notification/content nil
       :repo/cloning? false
-      :repo/loading-files? nil
+      :repo/loading-files? {}
       :repo/importing-to-db? nil
       :repo/sync-status {}
       :repo/changed-files nil
@@ -108,6 +108,7 @@
       :editor/block-dom-id nil
       :editor/set-timestamp-block nil
       :editor/last-input-time nil
+      :editor/pos nil
       :editor/document-mode? document-mode?
       :editor/args nil
       :editor/on-paste? false
@@ -803,9 +804,8 @@
 
 (defn sidebar-add-block!
   [repo db-id block-type block-data]
-  (when-not (or (util/mobile?)
-            (mobile-util/is-native-platform?))
-   (when db-id
+  (when (not (util/sm-breakpoint?))
+    (when db-id
      (update-state! :sidebar/blocks (fn [blocks]
                                       (->> (remove #(= (second %) db-id) blocks)
                                            (cons [repo db-id block-type block-data])
@@ -1320,8 +1320,13 @@
   (:editor/in-composition? @state))
 
 (defn set-loading-files!
-  [value]
-  (set-state! :repo/loading-files? value))
+  [repo value]
+  (when repo
+    (set-state! [:repo/loading-files? repo] value)))
+
+(defn loading-files?
+  [repo]
+  (get-in @state [:repo/loading-files? repo]))
 
 (defn set-importing-to-db!
   [value]

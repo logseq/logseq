@@ -15,7 +15,12 @@
 
   &-inner {
     > aside {
-      border-right: 1px solid var(--ls-quaternary-background-color);
+        border-right: 0px solid var(--ls-quaternary-background-color);
+        border-bottom: 1px solid var(--ls-quaternary-background-color);
+        @screen md {
+            border-right: 1px solid var(--ls-quaternary-background-color);
+            border-bottom: 0px solid var(--ls-quaternary-background-color);
+        }
 
       ul {
         padding: 12px;
@@ -63,8 +68,8 @@
     > article {
       flex: 1;
       padding: 0 12px 12px;
-      max-height: 70vh;
-      overflow: auto;
+      max-height: 80vh;
+      /* overflow: auto; */
     }
 
     .panel-wrap {

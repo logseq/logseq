@@ -234,14 +234,8 @@
       [:div
        [:button.bottom-action
         {:on-mouse-down (fn [e]
-                        (util/stop e)
-                        (mobile-camera/embed-photo parent-id))}
-        (ui/icon "camera"
-               {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
                           (util/stop e)
+                          (state/set-state! :editor/pos (cursor/pos (state/get-input)))
                           (editor-handler/indent-outdent true))}
         (ui/icon "arrow-bar-right"
                  {:style {:fontSize ui/icon-size}})]]
@@ -249,6 +243,7 @@
        [:button.bottom-action
         {:on-mouse-down (fn [e]
                           (util/stop e)
+                          (state/set-state! :editor/pos (cursor/pos (state/get-input)))
                           (editor-handler/indent-outdent false))}
         (ui/icon "arrow-bar-left"
                  {:style {:fontSize ui/icon-size}})]]
@@ -281,13 +276,6 @@
        [:button.bottom-action
         {:on-mouse-down (fn [e]
                           (util/stop e)
-                          (history/undo! e))}
-        (ui/icon "rotate"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
                           (editor-handler/cycle-todo!))}
         (ui/icon "checkbox"
                  {:style {:fontSize ui/icon-size}})]]
@@ -296,11 +284,11 @@
         {:on-mouse-down (fn [e]
                           (util/stop e)
                           (commands/simple-insert!
-                            parent-id "[[]]"
-                            {:backward-pos 2
-                             :check-fn     (fn [_ _ new-pos]
-                                             (reset! commands/*slash-caret-pos new-pos)
-                                             (commands/handle-step [:editor/search-page]))})
+                           parent-id "[[]]"
+                           {:backward-pos 2
+                            :check-fn     (fn [_ _ new-pos]
+                                            (reset! commands/*slash-caret-pos new-pos)
+                                            (commands/handle-step [:editor/search-page]))})
                           (when-let [input (gdom/getElement parent-id)]
                             (.focus input)))}
         (ui/icon "brackets"
@@ -310,11 +298,11 @@
         {:on-mouse-down (fn [e]
                           (util/stop e)
                           (commands/simple-insert!
-                            parent-id "(())"
-                            {:backward-pos 2
-                             :check-fn     (fn [_ _ new-pos]
-                                             (reset! commands/*slash-caret-pos new-pos)
-                                             (commands/handle-step [:editor/search-block]))})
+                           parent-id "(())"
+                           {:backward-pos 2
+                            :check-fn     (fn [_ _ new-pos]
+                                            (reset! commands/*slash-caret-pos new-pos)
+                                            (commands/handle-step [:editor/search-block]))})
                           (when-let [input (gdom/getElement parent-id)]
                             (.focus input)))}
         (ui/icon "parentheses"
@@ -327,6 +315,75 @@
                           (when-let [input (gdom/getElement parent-id)]
                             (.focus input)))}
         (ui/icon "command"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (commands/simple-insert!
+                           parent-id "#"
+                           {:check-fn     (fn [_ _ new-pos]
+                                            (commands/handle-step [:editor/search-page-hashtag])
+                                            (reset! commands/*slash-caret-pos new-pos))})
+                          (when-let [input (gdom/getElement parent-id)]
+                            (.focus input)))}
+        (ui/icon "tag"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (mobile-camera/embed-photo parent-id))}
+        (ui/icon "camera"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/html-link-format!))}
+        (ui/icon "link"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (history/undo! e))}
+        (ui/icon "rotate"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (history/redo! e))}
+        (ui/icon "rotate-clockwise"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/bold-format!))}
+        (ui/icon "bold"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/italics-format!))}
+        (ui/icon "italic"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/strike-through-format!))}
+        (ui/icon "strikethrough"
+                 {:style {:fontSize ui/icon-size}})]]
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (editor-handler/highlight-format!))}
+        (ui/icon "paint"
                  {:style {:fontSize ui/icon-size}})]]]]))
 
 (rum/defcs input < rum/reactive
@@ -335,12 +392,12 @@
    (fn [state]
      (mixins/on-key-down
       state
-      {;; enter
+      { ;; enter
        13 (fn [state e]
             (let [input-value (get state ::input-value)
                   input-option (get @state/state :editor/show-input)]
               (when (seq @input-value)
-                  ;; no new line input
+                ;; no new line input
                 (util/stop e)
                 (let [[_id on-submit] (:rum/args state)
                       {:keys [pos]} @*slash-caret-pos
@@ -359,16 +416,16 @@
               [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
                (merge
                 (cond->
-                 {:key           (str "modal-input-" (name id))
-                  :id            (str "modal-input-" (name id))
-                  :type          (or type "text")
-                  :on-change     (fn [e]
-                                   (swap! input-value assoc id (util/evalue e)))
-                  :auto-complete (if (util/chrome?) "chrome-off" "off")}
-                  placeholder
-                  (assoc :placeholder placeholder)
-                  autoFocus
-                  (assoc :auto-focus true))
+                    {:key           (str "modal-input-" (name id))
+                     :id            (str "modal-input-" (name id))
+                     :type          (or type "text")
+                     :on-change     (fn [e]
+                                      (swap! input-value assoc id (util/evalue e)))
+                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                    placeholder
+                    (assoc :placeholder placeholder)
+                    autoFocus
+                    (assoc :auto-focus true))
                 (dissoc input-item :id))]])
            (ui/button
             "Submit"

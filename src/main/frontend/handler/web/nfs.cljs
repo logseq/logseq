@@ -121,22 +121,24 @@
         electron? (util/electron?)
         mobile-native? (mobile-util/is-native-platform?)
         nfs? (and (not electron?)
-                  (not mobile-native?))]
+                  (not mobile-native?))
+        *repo (atom nil)]
     ;; TODO: add ext filter to avoid loading .git or other ignored file handlers
     (->
      (p/let [result (fs/open-dir (fn [path handle]
                                    (when nfs?
                                      (swap! path-handles assoc path handle))))
-             _ (state/set-loading-files! true)
-             _ (when-not (state/home?)
-                 (route-handler/redirect-to-home! false))
              root-handle (first result)
              dir-name (if nfs?
                         (gobj/get root-handle "name")
-                        root-handle)]
+                        root-handle)
+             repo (str config/local-db-prefix dir-name)
+             _ (state/set-loading-files! repo true)
+             _ (when-not (state/home?)
+                 (route-handler/redirect-to-home! false))]
+       (reset! *repo repo)
        (when-not (string/blank? dir-name)
-         (p/let [repo (str config/local-db-prefix dir-name)
-                 root-handle-path (str config/local-handle-prefix dir-name)
+         (p/let [root-handle-path (str config/local-handle-prefix dir-name)
                  _ (when nfs?
                      (idb/set-item! root-handle-path root-handle)
                      (nfs/add-nfs-file-handle! root-handle-path root-handle))
@@ -174,7 +176,7 @@
                                                                     {:first-clone? true
                                                                      :nfs-files    files})]
                              (state/add-repo! {:url repo :nfs? true})
-                             (state/set-loading-files! false)
+                             (state/set-loading-files! repo false)
                              (and ok-handler (ok-handler))
                              (when (util/electron?)
                                (fs/watch-dir! dir-name))
@@ -186,7 +188,7 @@
      (p/catch (fn [error]
                 (log/error :exception error)
                 (if (contains? #{"AbortError" "Error"} (gobj/get error "name"))
-                  (state/set-loading-files! false)
+                  (when @*repo (state/set-loading-files! @*repo false))
                   ;; (log/error :nfs/open-dir-error error)
                   ))))))
 
@@ -285,9 +287,7 @@
        (when re-index?
          (state/set-graph-syncing? true))
        (->
-        (p/let [handle (-> (idb/get-item handle-path)
-                           (p/catch (fn [_error]
-                                      nil)))]
+        (p/let [handle (when-not electron? (idb/get-item handle-path))]
           (when (or handle electron? mobile-native?)   ; electron doesn't store the file handle
             (p/let [_ (when handle (nfs/verify-permission repo handle true))
                     files-result (fs/get-files (if nfs? handle
