@@ -33,6 +33,8 @@ export async function createRandomPage(page: Page) {
     await page.click('text=/.*New page: ".*/')
     // wait for textarea of first block
     await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+
+    return randomTitle;
 }
 
 /**

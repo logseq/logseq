@@ -1,18 +1,30 @@
+import fs from 'fs'
+import path from 'path'
 import { test as base } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
+import { randomString } from './utils';
 
 let electronApp: ElectronApplication
 let context: BrowserContext
 let page: Page
+let repoName = randomString(10)
+export let graphDir = path.resolve(__dirname, '../tmp/e2e-graph', repoName)
 
 base.beforeAll(async () => {
   if (electronApp) {
     return ;
   }
 
+  fs.mkdirSync(graphDir, {
+    recursive: true,
+  });
+
   electronApp = await electron.launch({
     cwd: "./static",
     args: ["electron.js"],
+    env: {
+      LOGSEQ_OVERWRITE_OPEN_DIR: graphDir
+    }
   })
 
   context = electronApp.context()
@@ -35,6 +47,12 @@ base.beforeAll(async () => {
     console.log('Page loaded!')
     await page.screenshot({ path: 'startup.png' })
   })
+
+  // load temporary graph
+  await page.click('#head >> .button >> text=Open')
+  
+  // make sure the temp graph is loaded
+  await page.waitForSelector(`#left-sidebar >> text=${repoName}`)
 })
 
 base.beforeEach(async () => {
