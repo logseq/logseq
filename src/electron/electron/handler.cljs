@@ -319,6 +319,10 @@
 (defmethod handle :quitAndInstall []
   (.quitAndInstall autoUpdater))
 
+(defmethod handle :graphUnlinked [^js win [_ repo]]
+  (doseq [window (win/get-all-windows)]
+    (utils/send-to-renderer window "graphUnlinked" (bean/->clj repo))))
+
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
 

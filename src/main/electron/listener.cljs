@@ -8,6 +8,7 @@
             [electron.ipc :as ipc]
             [frontend.handler.notification :as notification]
             [frontend.handler.metadata :as metadata-handler]
+            [frontend.handler.repo :as repo-handler]
             [frontend.ui :as ui]
             [frontend.db.persist :as db-persist]))
 
@@ -58,6 +59,11 @@
                              type (keyword type)
                              comp [:div (str payload)]]
                          (notification/show! comp type false))))
+
+  (js/window.apis.on "graphUnlinked"
+                     (fn [data]
+                       (let [repo (bean/->clj data)]
+                         (repo-handler/remove-repo! repo))))
 
   (js/window.apis.on "setGitUsernameAndEmail"
                      (fn []
