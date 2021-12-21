@@ -50,7 +50,7 @@
         result (map (fn [b]
                       (let [b (block/parse-title-and-body b)]
                         (assoc-in b ks (or (clock/clock-summary (:block/body b) false) 0))))
-                 result)]
+                    result)]
     (if (every? #(zero? (get-in % ks)) result)
       (map #(medley/dissoc-in % ks) result)
       result)))
@@ -109,62 +109,65 @@
       [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                              :style {:width "100%"}}
        [:table.table-auto
-        (for [key keys]
-          (let [key-name (if (and (= key :clock-time) (integer? clock-time-total))
-                           (util/format "clock-time(total: %s)" (clock/minutes->days:hours:minutes
-                                                                  clock-time-total))
-                           (name key))]
-            (sortable-title key-name key *sort-by-item *desc? (:block/uuid current-block))))
-        (for [item result]
-          (let [format (:block/format item)
-                edit-input-id (str "edit-block-" (:id config) "-" (:block/uuid item))
-                heading-level (:block/heading-level item)]
-            [:tr.cursor
-             (for [key keys]
-               (let [value (case key
-                             :page
-                             [:string (or (:block/original-name item)
-                                          (:block/name item))]
+        [:thead
+         [:tr.cursor
+          (for [key keys]
+            (let [key-name (if (and (= key :clock-time) (integer? clock-time-total))
+                             (util/format "clock-time(total: %s)" (clock/minutes->days:hours:minutes
+                                                                   clock-time-total))
+                             (name key))]
+              (sortable-title key-name key *sort-by-item *desc? (:block/uuid current-block))))]]
+        [:tbody
+         (for [item result]
+           (let [format (:block/format item)
+                 edit-input-id (str "edit-block-" (:id config) "-" (:block/uuid item))
+                 heading-level (:block/heading-level item)]
+             [:tr.cursor
+              (for [key keys]
+                (let [value (case key
+                              :page
+                              [:string (or (:block/original-name item)
+                                           (:block/name item))]
 
-                             :block       ; block title
-                             (let [content (:block/content item)
-                                   {:block/keys [title]} (block/parse-title-and-body
-                                                          (:block/uuid item)
-                                                          (:block/format item)
-                                                          (:block/pre-block? item)
-                                                          content)]
-                               (if (seq title)
-                                 [:element (->elem :div (map-inline config title))]
-                                 [:string content]))
+                              :block       ; block title
+                              (let [content (:block/content item)
+                                    {:block/keys [title]} (block/parse-title-and-body
+                                                           (:block/uuid item)
+                                                           (:block/format item)
+                                                           (:block/pre-block? item)
+                                                           content)]
+                                (if (seq title)
+                                  [:element (->elem :div (map-inline config title))]
+                                  [:string content]))
 
-                             :created-at
-                             [:string (when-let [created-at (:block/created-at item)]
-                                        (date/int->local-time-2 created-at))]
+                              :created-at
+                              [:string (when-let [created-at (:block/created-at item)]
+                                         (date/int->local-time-2 created-at))]
 
-                             :updated-at
-                             [:string (when-let [updated-at (:block/updated-at item)]
-                                        (date/int->local-time-2 updated-at))]
+                              :updated-at
+                              [:string (when-let [updated-at (:block/updated-at item)]
+                                         (date/int->local-time-2 updated-at))]
 
-                             [:string (get-in item [:block/properties key])])]
-                 [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
-                                         :on-mouse-move (fn [] (reset! select? true))
-                                         :on-mouse-up (fn []
-                                                        (when-not @select?
-                                                          (state/sidebar-add-block!
-                                                           (state/get-current-repo)
-                                                           (:db/id item)
-                                                           :block-ref
-                                                           {:block item})))}
-                  (when value
-                    (if (= :element (first value))
-                      (second value)
-                      (let [value (second value)]
-                        (if (coll? value)
-                          (let [vals (for [item value]
-                                       (page-cp {} {:block/name item}))]
-                            (interpose [:span ", "] vals))
-                          (if (not (string? value))
-                            value
-                            (if-let [page (db/entity [:block/name (string/lower-case value)])]
-                              (page-cp {} page)
-                              (inline-text format value)))))))]))]))]])))
+                              [:string (get-in item [:block/properties key])])]
+                  [:td.whitespace-nowrap {:on-mouse-down (fn [] (reset! select? false))
+                                          :on-mouse-move (fn [] (reset! select? true))
+                                          :on-mouse-up (fn []
+                                                         (when-not @select?
+                                                           (state/sidebar-add-block!
+                                                            (state/get-current-repo)
+                                                            (:db/id item)
+                                                            :block-ref
+                                                            {:block item})))}
+                   (when value
+                     (if (= :element (first value))
+                       (second value)
+                       (let [value (second value)]
+                         (if (coll? value)
+                           (let [vals (for [item value]
+                                        (page-cp {} {:block/name item}))]
+                             (interpose [:span ", "] vals))
+                           (if (not (string? value))
+                             value
+                             (if-let [page (db/entity [:block/name (string/lower-case value)])]
+                               (page-cp {} page)
+                               (inline-text format value)))))))]))]))]]])))
