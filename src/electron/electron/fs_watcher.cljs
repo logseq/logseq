@@ -5,7 +5,8 @@
             [promesa.core :as p]
             [clojure.string :as string]
             [electron.utils :as utils]
-            ["electron" :refer [app]]))
+            ["electron" :refer [app]]
+            [electron.window :as win]))
 
 ;; TODO: explore different solutions for different platforms
 ;; 1. https://github.com/Axosoft/nsfw
@@ -38,23 +39,29 @@
       ;; TODO: batch sender
       (.on watcher "add"
            (fn [path]
-             (send-file-watcher! win "add"
-                                 {:dir (utils/fix-win-path! dir)
-                                  :path (utils/fix-win-path! path)
-                                  :content (utils/read-file path)
-                                  :stat (fs/statSync path)})))
+             (let [windows (win/get-all-windows)]
+               (doseq [win windows]
+                 (send-file-watcher! win "add"
+                                     {:dir (utils/fix-win-path! dir)
+                                      :path (utils/fix-win-path! path)
+                                      :content (utils/read-file path)
+                                      :stat (fs/statSync path)})))))
       (.on watcher "change"
            (fn [path]
-             (send-file-watcher! win "change"
-                                 {:dir (utils/fix-win-path! dir)
-                                  :path (utils/fix-win-path! path)
-                                  :content (utils/read-file path)
-                                  :stat (fs/statSync path)})))
+             (let [windows (win/get-all-windows)]
+               (doseq [win windows]
+                 (send-file-watcher! win "change"
+                                     {:dir (utils/fix-win-path! dir)
+                                      :path (utils/fix-win-path! path)
+                                      :content (utils/read-file path)
+                                      :stat (fs/statSync path)})))))
       (.on watcher "unlink"
            (fn [path]
-             (send-file-watcher! win "unlink"
-                                 {:dir (utils/fix-win-path! dir)
-                                  :path (utils/fix-win-path! path)})))
+             (let [windows (win/get-all-windows)]
+               (doseq [win windows]
+                 (send-file-watcher! win "unlink"
+                                     {:dir (utils/fix-win-path! dir)
+                                      :path (utils/fix-win-path! path)})))))
       (.on watcher "error"
            (fn [path]
              (println "Watch error happened: "
