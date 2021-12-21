@@ -72,3 +72,7 @@
                      (async/go
                        (let [_ (async/<! state/persistent-dbs-chan)]
                          (destroy-window! win))))))
+
+(defn get-all-windows
+  []
+  (.getAllWindows BrowserWindow))

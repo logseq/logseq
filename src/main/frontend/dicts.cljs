@@ -278,7 +278,7 @@
         :delete "Delete"
         :re-index "Re-index"
         :re-index-detail "Rebuild the graph"
-        :open-new-window "Open new window"
+        :open-new-window "New window"
         :sync-from-local-files "Refresh"
         :sync-from-local-files-detail "Import changes from local files"
         :unlink "unlink"
