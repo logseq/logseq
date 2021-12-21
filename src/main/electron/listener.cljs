@@ -9,12 +9,13 @@
             [electron.ipc :as ipc]
             [frontend.handler.notification :as notification]
             [frontend.handler.metadata :as metadata-handler]
-            [frontend.ui :as ui]))
+            [frontend.ui :as ui]
+            [frontend.db.persist :as db-persist]))
 
 (defn persist-dbs!
   []
   (->
-   (p/let [repos (idb/get-nfs-dbs)
+   (p/let [repos (db-persist/get-all-graphs)
            repos (-> repos
                      (conj (state/get-current-repo))
                      (distinct))]

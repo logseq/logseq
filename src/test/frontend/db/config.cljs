@@ -1,6 +1,7 @@
 (ns frontend.db.config
   (:require [frontend.db.conn :as conn]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.db.persist :as db-persist]))
 
 (defonce test-db "test-db")
 
@@ -16,6 +17,6 @@
 
 (defn clear-current-repo []
   (let [current-repo (state/get-current-repo)]
-    (conn/remove-db! current-repo)
+    (db-persist/delete-graph! current-repo)
     (destroy-db!)
     (conn/start! nil current-repo)))

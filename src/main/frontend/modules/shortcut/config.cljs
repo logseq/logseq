@@ -319,9 +319,10 @@
                                     :fn      (fn [] (state/toggle! :ui/command-palette-open?))
                                     :force?   true}
 
-   :command/run                    {:desc    "Run git command"
-                                    :binding "mod+shift+1"
-                                    :fn      #(state/pub-event! [:command/run])}
+   :command/run                    (when (util/electron?)
+                                     {:desc    "Run git command"
+                                      :binding "mod+shift+1"
+                                      :fn      #(state/pub-event! [:command/run])})
 
    :go/home                        {:desc    "Go to home"
                                     :binding "g h"
@@ -386,18 +387,24 @@
    :ui/toggle-contents              {:desc    "Toggle Contents in sidebar"
                                      :binding "mod+shift+c"
                                      :fn      ui-handler/toggle-contents!}
+   :ui/open-new-window              (when (util/electron?)
+                                      {:desc    "Open another window"
+                                       :binding "mod+n"
+                                       :fn      ui-handler/open-new-window!})
 
    :command/toggle-favorite         {:desc    "Add to/remove from favorites"
                                      :binding "mod+shift+f"
                                      :fn      page-handler/toggle-favorite!}
 
-   :editor/open-file-in-default-app {:desc    "Open file in default app"
-                                     :binding nil
-                                     :fn      page-handler/open-file-in-default-app}
+   :editor/open-file-in-default-app (when (util/electron?)
+                                      {:desc    "Open file in default app"
+                                       :binding nil
+                                       :fn      page-handler/open-file-in-default-app})
 
-   :editor/open-file-in-directory   {:desc    "Open file in parent directory"
-                                     :binding nil
-                                     :fn      page-handler/open-file-in-directory}
+   :editor/open-file-in-directory   (when (util/electron?)
+                                      {:desc    "Open file in parent directory"
+                                       :binding nil
+                                       :fn      page-handler/open-file-in-directory})
 
    :ui/toggle-wide-mode             {:desc    "Toggle wide mode"
                                      :binding "t w"
@@ -547,6 +554,7 @@
                           :ui/toggle-help
                           :ui/toggle-theme
                           :ui/toggle-contents
+                          :ui/open-new-window
                           :editor/open-file-in-default-app
                           :editor/open-file-in-directory
                           :ui/toggle-wide-mode
@@ -601,7 +609,8 @@
     :go/tomorrow
     :go/next-journal
     :go/prev-journal
-    :go/keyboard-shortcuts]
+    :go/keyboard-shortcuts
+    :ui/open-new-window]
 
    :shortcut.category/block-editing
    ^{:doc "Block editing general"}

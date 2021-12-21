@@ -33,7 +33,8 @@
             [cljs.reader :refer [read-string]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.db.persist :as db-persist]))
 
 (defn set-global-error-notification!
   []
@@ -169,7 +170,7 @@
   []
   (let [logged? (state/logged?)
         me (state/get-me)]
-    (p/let [nfs-dbs (idb/get-nfs-dbs)
+    (p/let [nfs-dbs (db-persist/get-all-graphs)
             nfs-dbs (map (fn [db]
                            {:url db :nfs? true}) nfs-dbs)]
       (cond
@@ -193,9 +194,9 @@
 
 (defn clear-cache!
   []
-  (p/let [_ (idb/clear-local-storage-and-idb!)
-          _ (when (util/electron?)
-              (ipc/ipc "clearCache"))]
+  (p/let [_ (when (util/electron?)
+              (ipc/ipc "clearCache"))
+          _ (idb/clear-local-storage-and-idb!)]
     (js/setTimeout #(js/window.location.reload %) 3000)))
 
 (defn- register-components-fns!
@@ -244,30 +245,8 @@
 (defn stop! []
   (prn "stop!"))
 
-(defonce triggered? (atom false))
-(when (util/electron?)
-  (.addEventListener js/window "beforeunload"
-                     (fn [e]
-                       (when-not @triggered?
-                         (.preventDefault e)
-                         (state/pub-event! [:modal/show
-                                            [:div
-                                             [:p "Reload Logseq?"]
-                                             (ui/button
-                                              "Yes"
-                                              :autoFocus "on"
-                                              :large? true
-                                              :on-click (fn []
-                                                          (pool/terminate-parser-pool!)
-                                                          (p/let [_ (el/persist-dbs!)]
-                                                            (reset! triggered? true)
-                                                            (js/window.location.reload))))]])
-                         (reset! triggered? false)
-                         (set! (.-returnValue e) "")))))
-
 (defn quit-and-install-new-version!
   []
   (p/let [_ (el/persist-dbs!)
-          _ (reset! triggered? true)
           _ (ipc/invoke "set-quit-dirty-state" false)]
     (ipc/ipc :quitAndInstall)))
