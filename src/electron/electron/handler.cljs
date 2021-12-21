@@ -194,7 +194,8 @@
   [graph-name]
   (when graph-name
     (when-let [file-path (get-graph-path graph-name)]
-      (utils/read-file file-path))))
+      (when (fs/existsSync file-path)
+        (utils/read-file file-path)))))
 
 (defmethod handle :getSerializedGraph [window [_ graph-name]]
   (get-serialized-graph graph-name))

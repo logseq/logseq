@@ -219,6 +219,14 @@
                                           :secure          true
                                           :bypassCSP       true
                                           :supportFetchAPI true}}]))
+
+      (.on app "second-instance"
+           (fn [_event _commandLine _workingDirectory]
+             (when-let [win @*win]
+               (when (.isMinimized ^object win)
+                 (.restore win))
+               (.focus win))))
+
       (.on app "window-all-closed" (fn []
                                      (try
                                        (fs-watcher/close-watcher!)
@@ -275,6 +283,8 @@
                                                 (do (.once win "leave-full-screen" #(.hide win))
                                                     (.setFullScreen win false))
                                                 (.hide win)))))))))
+
+               (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
 
                (.on app "activate" #(if @*win (.show win)))))))))
 
