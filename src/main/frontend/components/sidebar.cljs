@@ -534,7 +534,8 @@
                          (util/fix-open-external-with-shift! e))}
 
        [:div.theme-inner
-        {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?}])}
+        {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
+                                   :ls-right-sidebar-open sidebar-open?}])}
 
         [:div.#app-container
          {:style {:padding-top (ui/main-content-top-padding)}}
