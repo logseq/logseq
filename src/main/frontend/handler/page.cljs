@@ -135,7 +135,7 @@
     (when-not (string/blank? file-path)
       (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
       (->
-       (p/let [_ (or (config/local-db? repo) 
+       (p/let [_ (or (config/local-db? repo)
                      (git/remove-file repo file-path))
                _ (and (config/local-db? repo)
                       (mobile-util/is-native-platform?)
@@ -685,7 +685,7 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when (and (state/enable-journals? repo)
-               (not (:repo/loading-files? @state/state)))
+               (not (state/loading-files? repo)))
       (state/set-today! (date/today))
       (when (or (db/cloned? repo)
                 (config/local-db? repo)

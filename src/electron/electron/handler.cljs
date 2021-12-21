@@ -145,11 +145,7 @@
           result (get (js->clj result) "filePaths")
           path (first result)]
     (if path
-      (do
-        (.. ^js window -webContents
-            (send "open-dir-confirmed"
-                  (bean/->js {:opened? true})))
-        (p/resolved (bean/->js (get-files path))))
+      (p/resolved (bean/->js (get-files path)))
       (p/rejected (js/Error "path empty")))))
 
 (defmethod handle :getFiles [window [_ path]]
