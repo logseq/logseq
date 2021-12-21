@@ -46,12 +46,6 @@
 
 (defn listen-to-electron!
   []
-  (js/window.apis.on "open-dir-confirmed"
-                     (fn []
-                       (state/set-loading-files! true)
-                       (when-not (state/home?)
-                         (route-handler/redirect-to-home!))))
-
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (js/window.apis.on "file-watcher"
                      (fn [data]

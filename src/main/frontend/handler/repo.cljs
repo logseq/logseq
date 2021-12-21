@@ -260,7 +260,7 @@
 (defn parse-files-and-load-to-db!
   [repo-url files {:keys [first-clone? delete-files delete-blocks re-render? re-render-opts refresh?] :as opts
                    :or {re-render? true}}]
-  (state/set-loading-files! false)
+  (state/set-loading-files! repo-url false)
   (when-not refresh? (state/set-importing-to-db! true))
   (let [file-paths (map :file/path files)]
     (let [metadata-file (config/get-metadata-path)
@@ -312,7 +312,7 @@
                   (js/console.dir error)
                   ;; Empty repo
                   (create-default-files! repo-url)
-                  (state/set-loading-files! false))))
+                  (state/set-loading-files! repo-url false))))
 
       :else
       (when (seq diffs)
