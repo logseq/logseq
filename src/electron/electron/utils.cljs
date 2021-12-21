@@ -77,7 +77,9 @@
   (.getFocusedWindow BrowserWindow))
 
 (defn send-to-renderer
-  [kind payload]
-  (when-let [window (get-focused-window)]
-    (.. ^js window -webContents
-       (send kind (bean/->js payload)))))
+  ([kind payload]
+   (send-to-renderer (get-focused-window) kind payload))
+  ([window kind payload]
+   (when window
+     (.. ^js window -webContents
+         (send kind (bean/->js payload))))))

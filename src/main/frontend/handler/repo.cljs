@@ -30,7 +30,8 @@
             [shadow.resource :as rc]
             [clojure.set :as set]
             [frontend.mobile.util :as mobile]
-            [frontend.db.persist :as db-persist]))
+            [frontend.db.persist :as db-persist]
+            [electron.ipc :as ipc]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -537,10 +538,12 @@
   [{:keys [id url] :as repo}]
   ;; (spec/validate :repos/repo repo)
   (let [delete-db-f (fn []
-                      (db/remove-conn! url)
-                      (db-persist/delete-graph! url)
-                      (search/remove-db! url)
-                      (state/delete-repo! repo))]
+                      (let [graph-exists? (db/get-conn url)]
+                        (db/remove-conn! url)
+                        (db-persist/delete-graph! url)
+                        (search/remove-db! url)
+                        (state/delete-repo! repo)
+                        (when graph-exists? (ipc/ipc "graphUnlinked" repo))))]
     (if (or (config/local-db? url) (= url "local"))
       (p/let [_ (idb/clear-local-db! url)] ; clear file handles
         (delete-db-f))
