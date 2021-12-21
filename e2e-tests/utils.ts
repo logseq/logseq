@@ -36,20 +36,26 @@ export async function createRandomPage(page: Page) {
 }
 
 /**
-* Locate the last block in the editor
+* Locate the last block in the inner editor
 * @param page The Playwright Page object.
-* @param inner_only If true, only return the .page-inner-block which has no 
-extra blocks like linked references included. Defaults to false.
 * @returns The locator of the last block.
 */
-export async function lastBlock(page: Page, inner_only: Boolean = false): Promise<Locator> {
+export async function lastInnerBlock(page: Page): Promise<Locator> {
     // discard any popups
     await page.keyboard.press('Escape')
     // click last block
-    if (inner_only) 
-        await page.click('.page-blocks-inner .ls-block >> nth=-1')
-    else
-        await page.click('.ls-block >> nth=-1')
+    await page.click('.page-blocks-inner .ls-block >> nth=-1')
+    // wait for textarea
+    await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
+
+    return page.locator(':nth-match(textarea, 1)')
+}
+
+export async function lastBlock(page: Page): Promise<Locator> {
+    // discard any popups
+    await page.keyboard.press('Escape')
+    // click last block
+    await page.click('.ls-block >> nth=-1')
     // wait for textarea
     await page.waitForSelector(':nth-match(textarea, 1)', { state: 'visible' })
 
@@ -57,14 +63,19 @@ export async function lastBlock(page: Page, inner_only: Boolean = false): Promis
 }
 
 /**
-* Create and locate a new block at the end of the editor
+* Create and locate a new block at the end of the inner editor
 * @param page The Playwright Page object 
-* @param inner_only If true, only consider the .page-inner-block that no extra 
-blocks like linked references considered. Defaults to false.
 * @returns The locator of the last block
 */
-export async function newBlock(page: Page, inner_only: Boolean = false): Promise<Locator> {
-    await lastBlock(page, inner_only)
+export async function newInnerBlock(page: Page): Promise<Locator> {
+    await lastInnerBlock(page)
+    await page.press(':nth-match(textarea, 1)', 'Enter')
+
+    return page.locator(':nth-match(textarea, 1)')
+}
+
+export async function newBlock(page: Page): Promise<Locator> {
+    await lastBlock(page)
     await page.press(':nth-match(textarea, 1)', 'Enter')
 
     return page.locator(':nth-match(textarea, 1)')
