@@ -1,6 +1,6 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { IsMac, createRandomPage, newBlock, lastBlock } from './utils'
+import { IsMac, createRandomPage, newBlock, newInnerBlock, lastBlock, lastInnerBlock } from './utils'
 
 
 test('page alias', async ({ page }) => {
@@ -30,27 +30,27 @@ test('page alias', async ({ page }) => {
   await page.keyboard.press(hotkeyOpenLink)
 
   // shortcut opening test
-  await lastBlock(page, true)
+  await lastInnerBlock(page)
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('page alias test content')
-  await newBlock(page, true)
+  await newInnerBlock(page)
   await page.type(':nth-match(textarea, 1)', 'yet another page alias test content')
   await page.keyboard.press(hotkeyBack)
 
   // pressing enter opening test
-  await lastBlock(page, true)
+  await lastInnerBlock(page)
   await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
   await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
   await page.press(':nth-match(textarea, 1)', 'ArrowLeft')
   await page.press(':nth-match(textarea, 1)', 'Enter')
-  await lastBlock(page, true)
+  await lastInnerBlock(page)
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('yet another page alias test content')
-  await newBlock(page, true)
+  await newInnerBlock(page)
   await page.type(':nth-match(textarea, 1)', 'still another page alias test content')
   await page.keyboard.press(hotkeyBack)
 
   // clicking opening test
   await page.click('.page-blocks-inner .ls-block .page-ref >> nth=-1')
-  await lastBlock(page, true)
+  await lastInnerBlock(page)
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('still another page alias test content')
 
   // TODO: test alias from graph clicking
