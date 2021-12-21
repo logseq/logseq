@@ -139,11 +139,22 @@
                  (remove nil?))]
     (vec (cons {:path (utils/fix-win-path! path)} result))))
 
-(defmethod handle :openDir [^js window _messages]
+(defn- dir-chooser
+  []
   (p/let [result (.showOpenDialog dialog (bean/->js
                                           {:properties ["openDirectory" "createDirectory" "promptToCreate"]}))
           result (get (js->clj result) "filePaths")
           path (first result)]
+    path))
+
+(defmethod handle :openDir [^js window _messages]
+  ;; by setting env LOGSEQ_OVERWRITE_OPEN_DIR,
+  ;; choosing graph dir by opening dialog will be skipped and use this path instead
+  (p/let [open-dir-overwrite (.-LOGSEQ-OVERWRITE-OPEN-DIR js/process.env)
+          _ (when open-dir-overwrite 
+              (js/console.log "open-dir-overwrite using: " open-dir-overwrite))
+          path (p/resolved (or open-dir-overwrite
+                               (dir-chooser)))]
     (if path
       (p/resolved (bean/->js (get-files path)))
       (p/rejected (js/Error "path empty")))))
