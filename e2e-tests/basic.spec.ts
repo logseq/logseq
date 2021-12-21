@@ -223,18 +223,34 @@ test('auto completion and auto pair', async ({ page }) => {
   await page.fill(':nth-match(textarea, 1)', 'Auto-completion test')
   await page.press(':nth-match(textarea, 1)', 'Enter')
 
-  // {}
+  // {{
   await page.type(':nth-match(textarea, 1)', 'type {{')
-  // FIXME: keycode seq is wrong
-  // expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type {{}}')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type {{}}')
 
-  // (()
+  // ((
   await newBlock(page)
 
   await page.type(':nth-match(textarea, 1)', 'type (')
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type ()')
   await page.type(':nth-match(textarea, 1)', '(')
   expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type (())')
+
+  // 99  #3444
+  // TODO: Test under different keyboard layout when Playwright supports it
+  // await newBlock(page)
+
+  // await page.type(':nth-match(textarea, 1)', 'type 9')
+  // expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type 9')
+  // await page.type(':nth-match(textarea, 1)', '9')
+  // expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type 99')
+
+  // [[  #3251
+  await newBlock(page)
+
+  await page.type(':nth-match(textarea, 1)', 'type [')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type []')
+  await page.type(':nth-match(textarea, 1)', '[')
+  expect(await page.inputValue(':nth-match(textarea, 1)')).toBe('type [[]]')
 
   // ``
   await newBlock(page)

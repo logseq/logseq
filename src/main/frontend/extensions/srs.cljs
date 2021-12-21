@@ -655,9 +655,9 @@
 
          [:div
           [:p "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."]
-          [:img.my-4 {:src "https://logseq.github.io/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
+          [:img.my-4 {:src "https://docs.logseq.com/assets/2021-07-22_22.28.02_1626964258528_0.gif"}]
           [:p "You can "
-           [:a {:href "https://logseq.github.io/#/page/cards" :target "_blank"}
+           [:a {:href "https://docs.logseq.com/#/page/cards" :target "_blank"}
             "click this link"]
            " to check the documentation."]]]
         [:div.opacity-60.custom-query-title.ls-card
