@@ -29,7 +29,8 @@
             [promesa.core :as p]
             [shadow.resource :as rc]
             [clojure.set :as set]
-            [frontend.mobile.util :as mobile]))
+            [frontend.mobile.util :as mobile]
+            [frontend.db.persist :as db-persist]))
 
 ;; Project settings should be checked in two situations:
 ;; 1. User changes the config.edn directly in logseq.com (fn: alter-file)
@@ -537,7 +538,7 @@
   ;; (spec/validate :repos/repo repo)
   (let [delete-db-f (fn []
                       (db/remove-conn! url)
-                      (db/remove-db! url)
+                      (db-persist/delete-graph! url)
                       (search/remove-db! url)
                       (state/delete-repo! repo))]
     (if (or (config/local-db? url) (= url "local"))
@@ -640,7 +641,7 @@
     (search/reset-indice! url)
     (db/remove-conn! url)
     (db/clear-query-state!)
-    (-> (p/do! (db/remove-db! url)
+    (-> (p/do! (db-persist/delete-graph! url)
                (clone-and-load-db url))
         (p/catch (fn [error]
                    (prn "Delete repo failed, error: " error))))))

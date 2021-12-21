@@ -2,6 +2,25 @@
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
+function isElectron() {
+  // Renderer process
+  if (typeof window !== 'undefined' && typeof window.process === 'object' && window.process.type === 'renderer') {
+    return true;
+  }
+
+  // Main process
+  if (typeof process !== 'undefined' && typeof process.versions === 'object' && !!process.versions.electron) {
+    return true;
+  }
+
+  // Detect the user agent when the `nodeIntegration` option is set to true
+  if (typeof navigator === 'object' && typeof navigator.userAgent === 'string' && navigator.userAgent.indexOf('Electron') >= 0) {
+    return true;
+  }
+
+  return false;
+}
+
 class Store {
     constructor(dbName = 'keyval-store', storeName = 'keyval', version = 1) {
         this.storeName = storeName;
@@ -12,18 +31,18 @@ class Store {
         this._init();
     }
     _init() {
-        if (this._dbp) {
-            return;
-        }
-        this._dbp = new Promise((resolve, reject) => {
-            const openreq = indexedDB.open(this._dbName, this._version);
-            openreq.onerror = () => reject(openreq.error);
-            openreq.onsuccess = () => resolve(openreq.result);
-            // First time setup: create an empty object store
-            openreq.onupgradeneeded = () => {
-                openreq.result.createObjectStore(this._storeName);
-            };
-        });
+      if (this._dbp) {
+        return;
+      }
+      this._dbp = new Promise((resolve, reject) => {
+        const openreq = indexedDB.open(this._dbName, this._version);
+        openreq.onerror = () => reject(openreq.error);
+        openreq.onsuccess = () => resolve(openreq.result);
+        // First time setup: create an empty object store
+        openreq.onupgradeneeded = () => {
+          openreq.result.createObjectStore(this._storeName);
+        };
+      });
     }
     _withIDBStore(type, callback) {
         this._init();
