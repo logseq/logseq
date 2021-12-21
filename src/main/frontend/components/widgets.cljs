@@ -110,14 +110,15 @@
                  "FolderSync"]
                 "."]]
               [:div
-               [:p "iCloud TBD"]])]
-
+               [:p "You can sync your graphs by using iCloud. Please choose an existing graph or create a new graph in logseq directory."]
+               [:p "We're developing our built-in paid Logseq Sync. Stay tuned."]])]
+           
            [:li.mt-8
             [:div.font-bold.mb-2 "I need some help"]
             [:p "👋 Join our discord group to chat with the makers and our helpful community members."]
             (ui/button "Join the community"
-              :href "https://discord.gg/KpN4eHY"
-              :target "_blank")]]]
+                       :href "https://discord.gg/KpN4eHY"
+                       :target "_blank")]]]
          [:div.cp__widgets-open-local-directory
           [:div.select-file-wrap.cursor
            (when nfs-supported?
