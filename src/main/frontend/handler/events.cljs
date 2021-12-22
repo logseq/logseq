@@ -223,7 +223,8 @@
 
 
 (defmethod handle :mobile/keyboard-will-show [[_]]
-  (when (state/get-left-sidebar-open?)
+  (when (and (state/get-left-sidebar-open?)
+             (state/editing?))
     (state/set-left-sidebar-open! false)))
 
 (defmethod handle :mobile/keyboard-did-show [[_]]
