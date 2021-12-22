@@ -34,7 +34,9 @@
   (when (mobile-util/native-ios?)
     (let [path (fs/iOS-ensure-documents!)]
       (println "iOS container path: " path))
-    ;; keyboard watcher
+
+    ;; Keyboard watcher
     (.addListener Keyboard "keyboardWillShow"
-                  #(when (state/get-left-sidebar-open?)
-                     (state/set-left-sidebar-open! false)))))
+                  #(state/pub-event! [:mobile/keyboard-will-show]))
+    (.addListener Keyboard "keyboardDidShow"
+                  #(state/pub-event! [:mobile/keyboard-did-show]))))
