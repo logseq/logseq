@@ -228,7 +228,7 @@
 
 (defmethod handle :mobile/keyboard-did-show [[_]]
   (when-let [input (state/get-input)]
-    (js/setTimeout #(util/make-el-into-viewport input 60) 64)))
+    (util/make-el-into-viewport input 60)))
 
 (defn run!
   []

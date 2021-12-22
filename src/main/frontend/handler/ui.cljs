@@ -283,3 +283,10 @@
 (defn open-new-window!
   []
   (ipc/ipc "openNewWindow"))
+
+(defn try-to-editing-input-into-viewport!
+  []
+  (when-let [input (state/get-input)]
+    (if (or (mobile/is-native-platform?)
+            (util/mobile?))
+      (util/make-el-into-viewport input 60))))
