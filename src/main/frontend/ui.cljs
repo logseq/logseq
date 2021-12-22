@@ -50,6 +50,12 @@
     :else
     0))
 
+(defn reset-ios-whole-page-offset!
+  []
+  (and (util/ios?)
+       (util/safari?)
+       (js/window.scrollTo 0 0)))
+
 (defonce icon-size (if (mobile-util/is-native-platform?) 23 20))
 
 (rum/defc ls-textarea
