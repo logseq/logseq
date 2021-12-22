@@ -20,6 +20,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
@@ -269,7 +270,8 @@
                                                   {:forward-pos 1})
                          ;; TODO: should we add this focus step to `simple-insert!`?
                          (when-let [input (gdom/getElement parent-id)]
-                           (.focus input)))}
+                           (.focus input)
+                           (ui-handler/try-to-editing-input-into-viewport!)))}
        (ui/icon "arrow-back"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
