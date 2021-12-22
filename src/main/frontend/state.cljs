@@ -1238,7 +1238,7 @@
 
 (defn enable-tooltip?
   []
-  (if (util/mobile?)
+  (if (or (util/mobile?) (mobile-util/is-native-platform?))
     false
     (get (get (sub-config) (get-current-repo))
          :ui/enable-tooltip?
