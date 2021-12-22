@@ -12,10 +12,10 @@
             ["path" :as path]
             ["os" :as os]
             ["electron" :refer [BrowserWindow app protocol ipcMain dialog Menu MenuItem session] :as electron]
-            ["electron-window-state" :as windowStateKeeper]
             [clojure.core.async :as async]
             [electron.state :as state]
             [electron.git :as git]
+            [electron.window :as win]
             ["/electron/utils" :as utils]))
 
 (defonce LSP_SCHEME "lsp")
@@ -25,10 +25,6 @@
 (defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
 
 (def ROOT_PATH (path/join js/__dirname ".."))
-(def MAIN_WINDOW_ENTRY (if dev?
-                         ;;"http://localhost:3001"
-                         (str "file://" (path/join js/__dirname "index.html"))
-                         (str "file://" (path/join js/__dirname "electron.html"))))
 
 (defonce *setup-fn (volatile! nil))
 (defonce *teardown-fn (volatile! nil))
@@ -36,53 +32,6 @@
 
 ;; Handle creating/removing shortcuts on Windows when installing/uninstalling.
 (when (js/require "electron-squirrel-startup") (.quit app))
-
-(defn create-main-window
-  "Creates main app window"
-  []
-  (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
-        win-opts (cond->
-                   {:width                (.-width win-state)
-                    :height               (.-height win-state)
-                    :frame                true
-                    :titleBarStyle        "hiddenInset"
-                    :trafficLightPosition {:x 16 :y 16}
-                    :autoHideMenuBar      (not mac?)
-                    :webPreferences
-                                          {:plugins                 true ; pdf
-                                           :nodeIntegration         false
-                                           :nodeIntegrationInWorker false
-                                           :webSecurity             (not dev?)
-                                           :contextIsolation        true
-                                           :spellcheck              ((fnil identity true) (cfgs/get-item :spell-check))
-                                           ;; Remove OverlayScrollbars and transition `.scrollbar-spacing`
-                                           ;; to use `scollbar-gutter` after the feature is implemented in browsers.
-                                           :enableBlinkFeatures     'OverlayScrollbars'
-                                           :preload                 (path/join js/__dirname "js/preload.js")}}
-                   linux?
-                   (assoc :icon (path/join js/__dirname "icons/logseq.png")))
-        url MAIN_WINDOW_ENTRY
-        win (BrowserWindow. (clj->js win-opts))]
-    (.manage win-state win)
-    (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
-      (clj->js {:urls (array "*://*.youtube.com/*")})
-      (fn [^js details callback]
-        (let [url (.-url details)
-              urlObj (js/URL. url)
-              origin (.-origin urlObj)
-              requestHeaders (.-requestHeaders details)]
-          (if (and
-                (.hasOwnProperty requestHeaders "referer")
-                (not-empty (.-referer requestHeaders)))
-              (callback #js {:cancel false
-                             :requestHeaders requestHeaders})
-              (do
-                (set! (.-referer requestHeaders) origin)
-                (callback #js {:cancel false
-                               :requestHeaders requestHeaders}))))))
-    (.loadURL win url)
-    ;;(when dev? (.. win -webContents (openDevTools)))
-    win))
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -257,10 +206,6 @@
          (.removeHandler ipcMain call-app-channel)
          (.removeHandler ipcMain call-win-channel))))
 
-(defn- destroy-window!
-  [^js win]
-  (.destroy win))
-
 (defn main
   []
   (if-not (.requestSingleInstanceLock app)
@@ -269,11 +214,12 @@
       (.quit app))
     (do
       (.registerSchemesAsPrivileged
-        protocol (bean/->js [{:scheme     LSP_SCHEME
-                              :privileges {:standard        true
-                                           :secure          true
-                                           :bypassCSP       true
-                                           :supportFetchAPI true}}]))
+       protocol (bean/->js [{:scheme     LSP_SCHEME
+                             :privileges {:standard        true
+                                          :secure          true
+                                          :bypassCSP       true
+                                          :supportFetchAPI true}}]))
+
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
              (when-let [win @*win]
@@ -291,9 +237,8 @@
       (.on app "ready"
            (fn []
              (let [t0 (setup-interceptor!)
-                   ^js win (create-main-window)
-                   _ (reset! *win win)
-                   *quitting? (atom false)]
+                   ^js win (win/create-main-window)
+                   _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
                (utils/disableXFrameOptions win)
@@ -328,16 +273,19 @@
                                       (.send web-contents "persistent-dbs"))
                                     (async/go
                                       (let [_ (async/<! state/persistent-dbs-chan)]
-                                        (if (or @*quitting? (not mac?))
+                                        (if (or @win/*quitting? (not mac?))
                                           (when-let [win @*win]
-                                            (destroy-window! win)
+                                            (win/destroy-window! win)
                                             (reset! *win nil))
                                           (do (.preventDefault ^js/Event e)
                                               (if (and mac? (.isFullScreen win))
                                                 (do (.once win "leave-full-screen" #(.hide win))
                                                     (.setFullScreen win false))
                                                 (.hide win)))))))))
-               (.on app "before-quit" (fn [_e] (reset! *quitting? true)))
+
+               (.on app "before-quit" (fn [_e]
+                                        (reset! win/*quitting? true)))
+
                (.on app "activate" #(if @*win (.show win)))))))))
 
 (defn start []

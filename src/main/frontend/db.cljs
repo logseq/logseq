@@ -8,7 +8,7 @@
             [frontend.db.query-custom]
             [frontend.db.query-react]
             [frontend.db.react]
-            [frontend.idb :as idb]
+            [frontend.db.persist :as db-persist]
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -20,7 +20,6 @@
   conns
   get-repo-path
   datascript-db
-  remove-db!
   get-conn
   me-tx
   remove-conn!]
@@ -72,7 +71,7 @@
     (when conn
       (let [db (d/db conn)
             db-str (if db (db->string db) "")]
-        (p/let [_ (idb/set-batch! [{:key key :value db-str}])]
+        (p/let [_ (db-persist/save-graph! key db-str)]
           (state/set-last-persist-transact-id! repo false (get-max-tx-id db)))))))
 
 (defonce persistent-jobs (atom {}))
@@ -142,7 +141,7 @@
                  db-conn (d/create-conn db-schema/schema)
                  _ (d/transact! db-conn [{:schema/version db-schema/version}])
                  _ (swap! conns assoc db-name db-conn)
-                 stored (idb/get-item db-name)
+                 stored (db-persist/get-serialized-graph db-name)
                  _ (if stored
                      (let [stored-db (string->db stored)
                            attached-db (d/db-with stored-db (concat

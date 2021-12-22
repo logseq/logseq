@@ -6,7 +6,6 @@
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.idb :as idb]
             [datascript.core :as d]))
 
 (defonce conns (atom {}))
@@ -21,11 +20,9 @@
 (defn datascript-db
   [repo]
   (when repo
-    (str config/idb-db-prefix (get-repo-path repo))))
-
-(defn remove-db!
-  [repo]
-  (idb/remove-item! (datascript-db repo)))
+    (let [path (get-repo-path repo)]
+      (str (if (util/electron?) "" config/idb-db-prefix)
+           path))))
 
 (defn get-conn
   ([]

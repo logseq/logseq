@@ -29,6 +29,12 @@
     align-items: center;
   }
 
+  /* To prevent header glitch on Safari */
+  > .l, > .r {
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
+  }
+
   .it svg {
     transform: scale(0.8);
   }
@@ -76,7 +82,7 @@
     a {
       color: var(--ls-link-text-color, #045591) !important;
     }
-    
+
     a.restart {
       position: relative;
       cursor: pointer !important;

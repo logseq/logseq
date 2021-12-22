@@ -33,7 +33,7 @@
       :notification/show? false
       :notification/content nil
       :repo/cloning? false
-      :repo/loading-files? nil
+      :repo/loading-files? {}
       :repo/importing-to-db? nil
       :repo/sync-status {}
       :repo/changed-files nil
@@ -1320,8 +1320,13 @@
   (:editor/in-composition? @state))
 
 (defn set-loading-files!
-  [value]
-  (set-state! :repo/loading-files? value))
+  [repo value]
+  (when repo
+    (set-state! [:repo/loading-files? repo] value)))
+
+(defn loading-files?
+  [repo]
+  (get-in @state [:repo/loading-files? repo]))
 
 (defn set-importing-to-db!
   [value]

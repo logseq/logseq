@@ -8,7 +8,8 @@
   (atom {:graph/current nil
          :git/auto-commit-interval nil
 
-         :config (config/get-config)}))
+         :config (config/get-config)
+         :db/persisted-before-closing-non-main-window? nil}))
 
 (defn set-state!
   [path value]

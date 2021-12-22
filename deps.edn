@@ -1,58 +1,54 @@
-{:paths ["src/main" "src/workspaces" "templates"]
+{:paths ["src/main" "src/electron" "src/workspaces" "templates"]
  :deps
- {org.clojure/clojure         {:mvn/version "1.10.0"}
-  cheshire/cheshire {:mvn/version "5.10.0"}
-  rum/rum                     {:mvn/version "0.12.3"}
+ {org.clojure/clojure                   {:mvn/version "1.10.0"}
+  cheshire/cheshire                     {:mvn/version "5.10.0"}
+  rum/rum                               {:mvn/version "0.12.3"}
   ;; rum                         {:local/root "/home/tienson/codes/source/clj/rum"}
   ;; persistent-sorted-set       {:mvn/version "0.1.2"}
-  datascript/datascript       {:git/url "https://github.com/logseq/datascript",
-                               :sha "de8df66e69ecd847c048f548fa0d5de0d4378bd0"}
-  datascript-transit/datascript-transit
-  {:mvn/version "0.3.0"
-   :exclusions [datascript/datascript]}
-  borkdude/rewrite-edn        {:git/url "https://github.com/borkdude/rewrite-edn"
-                               :sha "edd87dc7f045f28d7afcbfc44bc0f0a2683dde62"}
-  funcool/promesa             {:mvn/version "4.0.2"}
-  medley/medley               {:mvn/version "1.2.0"}
-  metosin/reitit-frontend     {:mvn/version "0.3.10"}
-  cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
-  prismatic/dommy             {:mvn/version "1.1.0"}
-  org.clojure/core.match      {:mvn/version "1.0.0"}
-  ;; fork
-  com.andrewmcveigh/cljs-time {:git/url "https://github.com/logseq/cljs-time",
-                               :sha "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
-  cljs-drag-n-drop/cljs-drag-n-drop
-  {:mvn/version "0.1.0"}
-  cljs-http/cljs-http {:mvn/version "0.1.46"}
-  borkdude/sci                {:mvn/version "0.1.1-alpha.6"}
-  hickory/hickory             {:git/url "https://github.com/logseq/hickory",
-                               :sha "9c2c2f1fc2c45efaad906e0faabc3201278deeaa"}
-  hiccups/hiccups             {:mvn/version "0.3.0"}
-  tongue/tongue               {:mvn/version "0.2.9"}
-  org.clojure/core.async      {:mvn/version "1.3.610"}
-  thheller/shadow-cljs        {:mvn/version "2.15.3"}
-  expound/expound             {:mvn/version "0.8.6"}
-  com.lambdaisland/glogi      {:mvn/version "1.0.116"}
-  binaryage/devtools          {:mvn/version "1.0.2"}
-  camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.2"}
-  instaparse/instaparse       {:mvn/version "1.4.10"}
-  nubank/workspaces           {:mvn/version "1.1.1"}
-  frankiesardo/linked         {:mvn/version "1.3.0"}
-  org.clojars.mmb90/cljs-cache {:mvn/version "0.1.4"}}
+  datascript/datascript                 {:git/url "https://github.com/logseq/datascript"
+                                         :sha     "de8df66e69ecd847c048f548fa0d5de0d4378bd0"}
+  datascript-transit/datascript-transit {:mvn/version "0.3.0"
+                                         :exclusions  [datascript/datascript]}
+  borkdude/rewrite-edn                  {:git/url "https://github.com/borkdude/rewrite-edn"
+                                         :sha     "edd87dc7f045f28d7afcbfc44bc0f0a2683dde62"}
+  funcool/promesa                       {:mvn/version "4.0.2"}
+  medley/medley                         {:mvn/version "1.2.0"}
+  metosin/reitit-frontend               {:mvn/version "0.3.10"}
+  cljs-bean/cljs-bean                   {:mvn/version "1.5.0"}
+  prismatic/dommy                       {:mvn/version "1.1.0"}
+  org.clojure/core.match                {:mvn/version "1.0.0"}
+  com.andrewmcveigh/cljs-time           {:git/url "https://github.com/logseq/cljs-time" ;; fork
+                                         :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
+  cljs-drag-n-drop/cljs-drag-n-drop     {:mvn/version "0.1.0"}
+  cljs-http/cljs-http                   {:mvn/version "0.1.46"}
+  borkdude/sci                          {:mvn/version "0.1.1-alpha.6"}
+  hickory/hickory                       {:git/url "https://github.com/logseq/hickory"
+                                         :sha     "9c2c2f1fc2c45efaad906e0faabc3201278deeaa"}
+  hiccups/hiccups                       {:mvn/version "0.3.0"}
+  tongue/tongue                         {:mvn/version "0.2.9"}
+  org.clojure/core.async                {:mvn/version "1.3.610"}
+  thheller/shadow-cljs                  {:mvn/version "2.15.3"}
+  expound/expound                       {:mvn/version "0.8.6"}
+  com.lambdaisland/glogi                {:mvn/version "1.0.116"}
+  binaryage/devtools                    {:mvn/version "1.0.2"}
+  camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.2"}
+  instaparse/instaparse                 {:mvn/version "1.4.10"}
+  nubank/workspaces                     {:mvn/version "1.1.1"}
+  frankiesardo/linked                   {:mvn/version "1.3.0"}
+  org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
-                  :extra-deps  {org.clojure/clojurescript   {:mvn/version "1.10.879"}
-                                org.clojure/tools.namespace {:mvn/version "0.2.11"}
-                                cider/cider-nrepl           {:mvn/version "0.26.0"}
+                  :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.10.879"}
+                                org.clojure/tools.namespace      {:mvn/version "0.2.11"}
+                                cider/cider-nrepl                {:mvn/version "0.26.0"}
                                 org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
-                  :main-opts ["-m" "shadow.cljs.devtools.cli"]}
-           :test
-           {:extra-paths ["src/test/"]
-            :extra-deps  {org.clojure/clojurescript {:mvn/version "1.10.879"}
-                          org.clojure/test.check {:mvn/version "RELEASE"}
-                          org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
-            :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
+                  :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
-           :clj-kondo
-           {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2021.10.19"}}
-            :main-opts ["-m" "clj-kondo.main"]}}}
+           :test {:extra-paths ["src/test/"]
+                  :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.10.879"}
+                                org.clojure/test.check           {:mvn/version "1.1.1"}
+                                org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
+                  :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
+
+           :clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2021.10.19"}}
+                       :main-opts  ["-m" "clj-kondo.main"]}}}

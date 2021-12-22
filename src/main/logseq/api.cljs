@@ -635,8 +635,8 @@
 
 (defn ^:export force_save_graph
   []
-  (p/let [_ (el/persist-dbs!)
-          _ (reset! handler/triggered? true)]))
+  (p/let [_ (el/persist-dbs!)]
+    true))
 
 (defn ^:export __debug_state
   [path]
