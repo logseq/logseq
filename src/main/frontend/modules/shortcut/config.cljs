@@ -398,12 +398,12 @@
 
    :editor/open-file-in-default-app (when (util/electron?)
                                       {:desc    "Open file in default app"
-                                       :binding nil
+                                       :binding false
                                        :fn      page-handler/open-file-in-default-app})
 
    :editor/open-file-in-directory   (when (util/electron?)
                                       {:desc    "Open file in parent directory"
-                                       :binding nil
+                                       :binding false
                                        :fn      page-handler/open-file-in-directory})
 
    :ui/toggle-wide-mode             {:desc    "Toggle wide mode"
