@@ -262,8 +262,9 @@
                                                         (repo-handler/re-index!
                                                          nfs-handler/rebuild-index!
                                                          page-handler/create-today-journal!)))]]))}}
-                           {:title        (t :open-new-window)
-                            :options {:on-click ui-handler/open-new-window!}}])]
+                           (when (util/electron?)
+                             {:title        (t :open-new-window)
+                              :options {:on-click ui-handler/open-new-window!}})])]
         (when (seq repos)
           (ui/dropdown-with-links
            (fn [{:keys [toggle-fn]}]
