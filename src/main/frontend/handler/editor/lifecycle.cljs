@@ -23,7 +23,7 @@
       (.focus element)
       (when (or (mobile-util/is-native-platform?)
                 (util/mobile?))
-        (js/setTimeout #(util/make-el-into-viewport element 60) 80))))
+        (js/setTimeout #(util/make-el-into-viewport element 60) 64))))
   state)
 
 (defn did-remount!

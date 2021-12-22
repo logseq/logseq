@@ -221,6 +221,15 @@
     (reset! st/*inited? true)
     (st/consume-pending-shortcuts!)))
 
+
+(defmethod handle :mobile/keyboard-will-show [[_]]
+  (when (state/get-left-sidebar-open?)
+    (state/set-left-sidebar-open! false)))
+
+(defmethod handle :mobile/keyboard-did-show [[_]]
+  (when-let [input (state/get-input)]
+    (js/setTimeout #(util/make-el-into-viewport input 60) 64)))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]

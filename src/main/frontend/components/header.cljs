@@ -162,7 +162,6 @@
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
         vw-state (state/sub :ui/visual-viewport-state)
-        vw-pending? (state/sub :ui/visual-viewport-pending?)
         show-open-folder? (and (or (nfs/supported?)
                                    (mobile-util/is-native-platform?))
                                (empty? repos)
@@ -172,8 +171,7 @@
       [:div.cp__header#head
        {:class           (util/classnames [{:electron-mac   electron-mac?
                                             :native-ios     (mobile-util/native-ios?)
-                                            :native-android (mobile-util/native-android?)
-                                            :is-vw-pending  (boolean vw-pending?)}])
+                                            :native-android (mobile-util/native-android?)}])
         :on-double-click (fn [^js e]
                            (when-let [target (.-target e)]
                              (when (and (util/electron?)
