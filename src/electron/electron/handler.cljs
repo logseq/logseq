@@ -210,6 +210,7 @@
 (defmethod handle :openNewWindow [window [_]]
   (let [win (win/create-main-window)]
     (win/on-close-save! win)
+    (win/setup-window-listeners! win)
     nil))
 
 (defmethod handle :persistent-dbs-saved [window _]

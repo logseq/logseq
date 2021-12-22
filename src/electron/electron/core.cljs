@@ -159,46 +159,7 @@
                    (catch js/Error e
                      (js/console.error e))))))
 
-
-    (.on web-contents "context-menu"
-         (fn
-           [_event params]
-           (let [menu (Menu.)
-                 suggestions (.-dictionarySuggestions ^js params)]
-
-             (doseq [suggestion suggestions]
-               (. menu append
-                  (MenuItem. (clj->js {:label
-                                       suggestion
-                                       :click
-                                       (fn [] (. web-contents replaceMisspelling suggestion))}))))
-
-             (when-let [misspelled-word (.-misspelledWord ^js params)]
-               (. menu append
-                  (MenuItem. (clj->js {:label
-                                       "Add to dictionary"
-                                       :click
-                                       (fn [] (.. web-contents -session (addWordToSpellCheckerDictionary misspelled-word)))}))))
-
-             (. menu popup))))
-
-
-    (.on web-contents "new-window"
-         (fn [e url]
-           (let [url (if (string/starts-with? url "file:")
-                       (js/decodeURIComponent url) url)
-                 url (if-not win32? (string/replace url "file://" "") url)]
-             (.. logger (info "new-window" url))
-             (if (string/includes?
-                   (.normalize path url)
-                   (.join path (. app getAppPath) "index.html"))
-               (.info logger "pass-window" url)
-               (open url)))
-           (.preventDefault e)))
-
-    (doto win
-      (.on "enter-full-screen" #(.send web-contents "full-screen" "enter"))
-      (.on "leave-full-screen" #(.send web-contents "full-screen" "leave")))
+    (win/setup-window-listeners! win)
 
     #(do (.removeHandler ipcMain toggle-win-channel)
          (.removeHandler ipcMain export-publish-assets)
