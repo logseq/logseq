@@ -57,12 +57,11 @@
 
                        :else " ")
         format (:block/format block)]
-    (p/let [filename (save-photo)]
+    (p/let [filename (save-photo)
+            url (util/format "../assets/%s" filename)]
       (commands/simple-insert!
        id
        (str left-padding
-            (case format
-              :org (util/format "[[../assets/%s]]" filename)
-              (util/format "![%s](../assets/%s)" filename filename))
-            " ")
+            (editor-handler/get-asset-file-link format url filename true)
+        " ")
        {}))))
