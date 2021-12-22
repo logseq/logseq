@@ -1,131 +1,116 @@
 ;; shadow-cljs configuration
-{:deps     true
- :nrepl        {:port 8701}
+{:deps  true
+ :nrepl {:port 8701}
+
+ ;; "." for /static
+ :dev-http {3001 ["public" "."]
+            3002 ["public/workspaces" "."]}
 
  :builds
- {:app
-  {:target :browser
-   :module-loader true
-   ;; handle `require(xxx.css)`
-   :js-options {:ignore-asset-requires true}
-   :modules {:main {:init-fn frontend.core/init}
-             ;; :graph
-             ;; {:entries [frontend.extensions.graph.force]
-             ;;  :depends-on #{:main}}
-             :code-editor
-             {:entries [frontend.extensions.code]
-              :depends-on #{:main}}
-             :age-encryption
-             {:entries [frontend.extensions.age-encryption]
-              :depends-on #{:main}}
-             :excalidraw
-             {:entries [frontend.extensions.excalidraw]
-              :depends-on #{:main}}}
+ {:app {:target        :browser
+        :module-loader true
+        :js-options    {:ignore-asset-requires true} ;; handle `require(xxx.css)`
+        :modules       {:main
+                        {:init-fn    frontend.core/init}
+                        ;; :graph
+                        ;; {:entries [frontend.extensions.graph.force]
+                        ;;  :depends-on #{:main}}
+                        :code-editor
+                        {:entries    [frontend.extensions.code]
+                         :depends-on #{:main}}
+                        :age-encryption
+                        {:entries    [frontend.extensions.age-encryption]
+                         :depends-on #{:main}}
+                        :excalidraw
+                        {:entries    [frontend.extensions.excalidraw]
+                         :depends-on #{:main}}}
+        :output-dir       "./static/js"
+        :asset-path       "/static/js"
+        :release          {:asset-path "https://asset.logseq.com/static/js"}
+        :compiler-options {:infer-externs      :auto
+                           :output-feature-set :es-next-in
+                           :source-map         true
+                           :externs            ["datascript/externs.js"
+                                                "externs.js"]
+                           :warnings           {:fn-deprecated false}}
+        :closure-defines  {goog.debug.LOGGING_ENABLED      true
+                           frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
 
-   :output-dir "./static/js"
-   :asset-path "/static/js"
-   :release {:asset-path "https://asset.logseq.com/static/js"}
-   :compiler-options {:infer-externs :auto
-                      :output-feature-set :es-next-in
-                      :source-map true
-                      :externs ["datascript/externs.js"
-                                "externs.js"]
-                      :warnings {:fn-deprecated false}}
-   :closure-defines {goog.debug.LOGGING_ENABLED true
-                     frontend.config/GITHUB_APP_NAME #shadow/env "GITHUB_APP2_NAME"}
+        :dev      {:asset-path "js"}
+        :devtools {:before-load frontend.core/stop  ;; before live-reloading any code call this function
+                   :after-load  frontend.core/start ;; after live-reloading finishes call this function
+                   :watch-path  "/static"
+                   :watch-dir   "static"
+                   :preloads    [devtools.preload
+                                 shadow.remote.runtime.cljs.browser]}}
 
-   :devtools
-   ;; before live-reloading any code call this function
-   {:before-load frontend.core/stop
-    ;; after live-reloading finishes call this function
-    :after-load frontend.core/start
-    :http-root    "public"
-    :http-port    3001
-    :watch-path   "static"
-    :preloads     [devtools.preload
-                   shadow.remote.runtime.cljs.browser]}}
+  :electron {:target           :node-script
+             :output-to        "static/electron.js"
+             :main             electron.core/main
+             :devtools         {:before-load electron.core/stop
+                                :after-load  electron.core/start}
+             :compiler-options {:infer-externs                      :auto
+                                :source-map                         true
+                                :source-map-include-sources-content true
+                                :source-map-detail-level            :all
 
-  :electron {:target :node-script
-             :output-to "static/electron.js"
-             :main electron.core/main
-             :devtools
-             {:before-load electron.core/stop
-              :after-load electron.core/start}
-             :compiler-options
-             {:infer-externs :auto
-              :source-map true
-              :source-map-include-sources-content true
-              :source-map-detail-level :all
-              :externs ["datascript/externs.js"
-                        "externs.js"]
-              :warnings {:fn-deprecated false}}}
+                                :externs  ["datascript/externs.js"
+                                           "externs.js"]
+                                :warnings {:fn-deprecated false}}}
 
-  :parser-worker
-  {:target :browser
-   :output-dir "./static/js"
-   :asset-path "./js"
-   :compiler-options {:source-map false
-                      :source-map-include-sources-content false}
-   :modules {:parser-worker {:entries [frontend.worker.parser]
-                             :web-worker true
-                             :prepend #shadow/env ["PATCH_PARSER_WORKER" :default ";;"]
-                             }}
-   :release {:compiler-options {:infer-externs :auto}}}
+  :parser-worker {:target           :browser
+                  :output-dir       "./static/js"
+                  :asset-path       "./js"
+                  :compiler-options {:source-map false}
+                  :modules          {:parser-worker {:entries    [frontend.worker.parser]
+                                                     :web-worker true
+                                                     :prepend    #shadow/env ["PATCH_PARSER_WORKER" :default ";;"]}}
+                  :release          {:compiler-options {:infer-externs :auto}}}
 
-  :test
-  {:target :node-test
-   :output-to "static/tests.js"
-   :closure-defines {frontend.util/NODETEST true}
-   :devtools {:enabled false}}
+  :test {:target          :node-test
+         :output-to       "static/tests.js"
+         :closure-defines {frontend.util/NODETEST true}
+         :devtools        {:enabled false}}
 
-  :publishing
-  {:target :browser
-   :module-loader true
-   :js-options {:ignore-asset-requires true}
-   :modules {:main {:init-fn frontend.publishing/init}
-             ;; :graph
-             ;; {:entries [frontend.extensions.graph.force]
-             ;;  :depends-on #{:main}}
-             :code-editor
-             {:entries [frontend.extensions.code]
-              :depends-on #{:main}}
-             :age-encryption
-             {:entries [frontend.extensions.age-encryption]
-              :depends-on #{:main}}
-             :excalidraw
-             {:entries [frontend.extensions.excalidraw]
-              :depends-on #{:main}}}
-
-   :output-dir "./static/js/publishing"
-   :asset-path "static/js"
-
-   :closure-defines {frontend.config/PUBLISHING true
-                     goog.debug.LOGGING_ENABLED true}
-
-   :compiler-options {:infer-externs :auto
-                      :output-feature-set :es-next
-                      :externs ["datascript/externs.js"
-                                "externs.js"]
-                      :warnings {:fn-deprecated false}}
-   :devtools
-   ;; before live-reloading any code call this function
-   {:before-load frontend.core/stop
-    ;; after live-reloading finishes call this function
-    :after-load frontend.core/start
-    :preloads     [devtools.preload]}}
+  :publishing {:target        :browser
+               :module-loader true
+               :js-options    {:ignore-asset-requires true}
+               :modules       {:main
+                               {:init-fn    frontend.publishing/init}
+                               ;; :graph
+                               ;; {:entries [frontend.extensions.graph.force]
+                               ;;  :depends-on #{:main}}
+                               :code-editor
+                               {:entries    [frontend.extensions.code]
+                                :depends-on #{:main}}
+                               :age-encryption
+                               {:entries    [frontend.extensions.age-encryption]
+                                :depends-on #{:main}}
+                               :excalidraw
+                               {:entries    [frontend.extensions.excalidraw]
+                                :depends-on #{:main}}}
+               :output-dir       "./static/js/publishing"
+               :asset-path       "static/js"
+               :closure-defines  {frontend.config/PUBLISHING true
+                                  goog.debug.LOGGING_ENABLED true}
+               :compiler-options {:infer-externs      :auto
+                                  :output-feature-set :es-next
+                                  :externs            ["datascript/externs.js"
+                                                       "externs.js"]
+                                  :warnings           {:fn-deprecated false}}
+               :devtools         {:before-load frontend.core/stop
+                                  :after-load  frontend.core/start
+                                  :preloads    [devtools.preload]}}
 
   :cards {:target     nubank.workspaces.shadow-cljs.target
           :ns-regexp  "(test|cards)$"
-          :output-dir "./static/js/workspaces"
+          :output-dir "./public/workspaces/static/js/workspaces"
           :asset-path "/static/js/workspaces"
-          :preloads   [] ; optional, list namespaces to be pre loaded
-          :devtools
-          {
-           :after-load   nubank.workspaces.core/after-load
-           :loader-mode  :eval
-           :http-root    "public/workspaces"
-           :http-port    3002
-           :watch-path   "static"
-           :preloads     [devtools.preload
-                          shadow.remote.runtime.cljs.browser]}
-          :modules {:main {:entries [workspaces.main]}}}}}
+          :preloads   [] ;; optional, list namespaces to be pre loaded
+          :devtools   {:after-load  nubank.workspaces.core/after-load
+                       :loader-mode :eval
+                       :watch-path  "/static"
+                       :watch-dir   "static"
+                       :preloads    [devtools.preload
+                                     shadow.remote.runtime.cljs.browser]}
+          :modules    {:main {:entries [workspaces.main]}}}}}
