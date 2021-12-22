@@ -35,10 +35,6 @@
     (let [path (fs/iOS-ensure-documents!)]
       (println "iOS container path: " path))
     ;; keyboard watcher
-    (let [*pre-open? (volatile! nil)]
-      (.addListener Keyboard "keyboardWillShow" #(when (state/get-left-sidebar-open?)
-                                                   (state/set-left-sidebar-open! false)
-                                                   (vreset! *pre-open? true)))
-      (.addListener Keyboard "keyboardDidHide" #(when (true? @*pre-open?)
-                                                  (state/set-left-sidebar-open! true)
-                                                  (vreset! *pre-open? nil))))))
+    (.addListener Keyboard "keyboardWillShow"
+                  #(when (state/get-left-sidebar-open?)
+                     (state/set-left-sidebar-open! false)))))
