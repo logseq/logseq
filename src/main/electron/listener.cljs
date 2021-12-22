@@ -4,6 +4,7 @@
             [frontend.handler.ui :as ui-handler]
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
+            [frontend.fs.sync :as sync]
             [frontend.db :as db]
             [datascript.core :as d]
             [promesa.core :as p]
@@ -53,7 +54,8 @@
   (js/window.apis.on "file-watcher"
                      (fn [data]
                        (let [{:keys [type payload]} (bean/->clj data)]
-                         (watcher-handler/handle-changed! type payload))))
+                         (watcher-handler/handle-changed! type payload)
+                         (sync/file-watch-handler type payload))))
 
   (js/window.apis.on "notification"
                      (fn [data]
