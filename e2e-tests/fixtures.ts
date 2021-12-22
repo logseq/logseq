@@ -23,6 +23,7 @@ base.beforeAll(async () => {
     cwd: "./static",
     args: ["electron.js"],
     env: {
+      ...process.env,
       LOGSEQ_OVERWRITE_OPEN_DIR: graphDir
     }
   })
