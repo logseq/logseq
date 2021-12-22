@@ -8,6 +8,7 @@
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
             [frontend.mobile.camera :as mobile-camera]
+            [frontend.mobile.util :as mobile-util]
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.db :as db]
@@ -679,7 +680,8 @@
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
-     (when config/mobile? (mobile-bar state id))
+     (when (or (mobile-util/is-native-platform?) config/mobile?)
+       (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
        :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
