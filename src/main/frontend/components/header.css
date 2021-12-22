@@ -173,8 +173,11 @@ a.button {
   cursor: default !important;
 }
 
-html.is-native-ios,
+html.is-native-ipad,
 html.is-ios.is-safari {
+  --ls-headbar-inner-top-padding: 0px;
+  --ls-headbar-height: 4rem;
+  
   #main-container {
     padding-top: 20px;
   }
@@ -189,7 +192,7 @@ html.is-ios.is-safari {
   }
 }
 
-html.is-ios {
+html.is-native-iphone {
   --ls-headbar-inner-top-padding: 36px;
 
   .cp__header > .r {
@@ -197,9 +200,7 @@ html.is-ios {
   }
 
   @screen sm {
-    --ls-headbar-inner-top-padding: 0px;
-    --ls-headbar-height: 4rem;
-
+      
     .cp__header {
       background-color: transparent !important;
       display: flex;
