@@ -96,10 +96,16 @@
          "Not a known Apple device!")
        landscape?])))
 
+(defn native-iphone-without-notch?
+  []
+  (when-let [model (get-idevice-model)]
+    (str/starts-with? (first model) "iPhone8")))
+
 (defn native-iphone?
   []
   (when-let [model (get-idevice-model)]
-   (str/starts-with? (first model) "iPhone")))
+    (and (str/starts-with? (first model) "iPhone")
+         (not (str/starts-with? (first model) "iPhone8")))))
 
 (defn native-ipad?
   []
