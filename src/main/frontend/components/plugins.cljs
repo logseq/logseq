@@ -241,7 +241,7 @@
                               :on-confirm (fn [_ {:keys [close-fn]}]
                                             (close-fn)
                                             (plugin-handler/unregister-plugin id))})]
-                       (state/set-sub-modal! confirm-fn))}
+                       (state/set-sub-modal! confirm-fn {:center? true}))}
                (t :plugin/uninstall)]]]]
 
            [:div.r.flex.items-center

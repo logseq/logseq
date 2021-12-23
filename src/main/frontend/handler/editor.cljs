@@ -2801,9 +2801,8 @@
       (state/selection?)
       (do
         (util/stop e)
-        (on-tab direction))
-
-      :else nil)))
+        (on-tab direction)))
+    nil))
 
 (defn keydown-not-matched-handler
   [format]

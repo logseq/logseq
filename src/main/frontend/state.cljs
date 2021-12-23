@@ -59,6 +59,7 @@
       :search/graph-filters []
 
       ;; modals
+      :modal/label ""
       :modal/show? false
       :modal/panel-content nil
       :modal/fullscreen? false
@@ -1161,7 +1162,7 @@
   ([panel-content]
    (set-sub-modal! panel-content
                    {:close-btn? true}))
-  ([panel-content {:keys [id close-btn? show?] :as opts}]
+  ([panel-content {:keys [id label close-btn? show? center?] :as opts}]
    (if (not (modal-opened?))
      (set-modal! panel-content opts)
      (let [modals (:modal/subsets @state)
@@ -1170,6 +1171,7 @@
            input (medley/filter-vals
                   #(not (nil? %1))
                   {:modal/id            id
+                   :modal/label         (or label (if center? "ls-modal-align-center" ""))
                    :modal/show?         (if (boolean? show?) show? true)
                    :modal/panel-content panel-content
                    :modal/close-btn?    close-btn?})]
@@ -1195,10 +1197,11 @@
    (set-modal! modal-panel-content
                {:fullscreen? false
                 :close-btn?  true}))
-  ([modal-panel-content {:keys [fullscreen? close-btn?]}]
+  ([modal-panel-content {:keys [label fullscreen? close-btn? center?]}]
    (when (seq (get-sub-modals))
      (close-sub-modal! true))
    (swap! state assoc
+          :modal/label (or label (if center? "ls-modal-align-center" ""))
           :modal/show? (boolean modal-panel-content)
           :modal/panel-content modal-panel-content
           :modal/fullscreen? fullscreen?
@@ -1209,7 +1212,9 @@
   (if (seq (get-sub-modals))
     (close-sub-modal!)
     (swap! state assoc
+           :modal/label ""
            :modal/show? false
+           :modal/fullscreen? false
            :modal/panel-content nil)))
 
 (defn get-db-batch-txs-chan

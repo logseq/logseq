@@ -525,7 +525,7 @@
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
    [:div.absolute.top-0.right-0.pt-2.pr-2
-    (when close-btn?
+    (when-not (false? close-btn?)
       [:a.ui__modal-close.opacity-60.hover:opacity-100
        {:aria-label "Close"
         :type       "button"
@@ -563,13 +563,15 @@
   (let [modal-panel-content (state/sub :modal/panel-content)
         fullscreen? (state/sub :modal/fullscreen?)
         close-btn? (state/sub :modal/close-btn?)
-        show? (boolean modal-panel-content)
+        show? (state/sub :modal/show?)
+        label (state/sub :modal/label)
         close-fn (fn []
                    (state/close-modal!)
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 9999 -1)}}
+     {:style {:z-index (if show? 9999 -1)}
+      :label label}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
@@ -635,11 +637,13 @@
             modal-panel-content (:modal/panel-content modal)
             close-btn? (:modal/close-btn? modal)
             show? (:modal/show? modal)
+            label (:modal/label modal)
             close-fn (fn []
                        (state/close-sub-modal! id))
             modal-panel-content (or modal-panel-content (fn [close] [:div]))]
         [:div.ui__modal.is-sub-modal
-         {:style {:z-index (if show? (+ 9999 idx) -1)}}
+         {:style {:z-index (if show? (+ 9999 idx) -1)}
+          :label label}
          (css-transition
            {:in show? :timeout 0}
            (fn [state]
