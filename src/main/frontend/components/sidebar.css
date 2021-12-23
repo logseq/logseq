@@ -223,8 +223,6 @@
   &:before {
     content: " ";
     height: 3rem;
-    width: calc(var(--ls-left-sidebar-sm-width) - var(--ls-scrollbar-width));
-    transition: width .3s;
     background-color: var(--ls-primary-background-color);
     position: fixed;
     left: 0;
@@ -244,10 +242,6 @@
 
     &.is-open {
       width: var(--ls-left-sidebar-width);
-
-      &:before {
-        width: calc(var(--ls-left-sidebar-width) - var(--ls-scrollbar-width));
-      }
     }
 
     > .shade-mask {

@@ -34,7 +34,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.mobile.util :as mobile]))
+            [frontend.mobile.util :as mobile]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn- get-directory
   [journal?]
@@ -134,7 +135,11 @@
     (when-not (string/blank? file-path)
       (db/transact! [[:db.fn/retractEntity [:file/path file-path]]])
       (->
-       (p/let [_ (or (config/local-db? repo) (git/remove-file repo file-path))
+       (p/let [_ (or (config/local-db? repo)
+                     (git/remove-file repo file-path))
+               _ (and (config/local-db? repo)
+                      (mobile-util/is-native-platform?)
+                      (fs/delete-file! repo file-path file-path {}))
                _ (fs/unlink! repo (config/get-repo-path repo file-path) nil)]
          (common-handler/check-changed-files-status)
          (repo-handler/push-if-auto-enabled! repo))
@@ -680,7 +685,7 @@
   []
   (when-let [repo (state/get-current-repo)]
     (when (and (state/enable-journals? repo)
-               (not (:repo/loading-files? @state/state)))
+               (not (state/loading-files? repo)))
       (state/set-today! (date/today))
       (when (or (db/cloned? repo)
                 (config/local-db? repo)

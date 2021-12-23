@@ -473,6 +473,13 @@
       (gobj/get node "tagName"))))
 
 #?(:cljs
+   (defn time?
+     [node]
+     (contains?
+      #{"TIME"}
+      (gobj/get node "tagName"))))
+
+#?(:cljs
    (defn sup?
      [node]
      (contains?
@@ -1110,7 +1117,9 @@
   [s]
   (and (string? s)
        (or (include-windows-reserved-chars? s)
-           (string/includes? s "."))))
+           (string/includes? s ".")
+           (string/includes? s "%")
+           (string/includes? s "#"))))
 
 (defn remove-boundary-slashes
   [s]
@@ -1128,7 +1137,9 @@
       (remove-boundary-slashes)
       (string/replace #"/" ".")
       ;; Windows reserved path characters
-      (string/replace windows-reserved-chars "_")))
+      (string/replace windows-reserved-chars "_")
+      ;; for android filesystem compatiblity
+      (string/replace #"[\\#|%]+" "_")))
 
 (defn lowercase-first
   [s]

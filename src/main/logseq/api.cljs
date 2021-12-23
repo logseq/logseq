@@ -35,6 +35,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [sci.core :as sci]
+            [frontend.handler.shell :as shell]
             [frontend.modules.layout.core]))
 
 ;; helpers
@@ -437,10 +438,11 @@
   (editor-handler/open-block-in-sidebar! (medley/uuid block-uuid)))
 
 (def ^:export edit_block
-  (fn [block-uuid {:keys [pos] :or {pos :max} :as opts}]
+  (fn [block-uuid ^js opts]
     (when-let [block-uuid (and block-uuid (medley/uuid block-uuid))]
       (when-let [block (db-model/query-block-by-uuid block-uuid)]
-        (editor-handler/edit-block! block pos block-uuid)))))
+        (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
+          (editor-handler/edit-block! block pos block-uuid))))))
 
 (def ^:export insert_block
   (fn [block-uuid-or-page-name content ^js opts]
@@ -614,6 +616,11 @@
   (when-let [repo (state/get-current-repo)]
     (export-handler/export-repo-as-zip! repo)))
 
+(defn ^:export exec_git_command
+  [^js args]
+  (when-let [args (and args (seq (bean/->clj args)))]
+    (shell/run-git-command! args)))
+
 ;; helpers
 (defn ^:export show_msg
   ([content] (show_msg content :success))
@@ -628,8 +635,8 @@
 
 (defn ^:export force_save_graph
   []
-  (p/let [_ (el/persist-dbs!)
-          _ (reset! handler/triggered? true)]))
+  (p/let [_ (el/persist-dbs!)]
+    true))
 
 (defn ^:export __debug_state
   [path]

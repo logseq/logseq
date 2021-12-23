@@ -14,7 +14,8 @@
             [clojure.string :as string]
             [rum.core :as rum]
             [clojure.edn :as edn]
-            [frontend.mobile.util :as mobile]))
+            [frontend.mobile.util :as mobile]
+            [electron.ipc :as ipc]))
 
 ;; sidebars
 (defn close-left-sidebar!
@@ -278,3 +279,7 @@
   (if (:modal/show? @state/state)
     (state/close-modal!)
     (state/pub-event! [:modal/show-cards])))
+
+(defn open-new-window!
+  []
+  (ipc/ipc "openNewWindow"))

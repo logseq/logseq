@@ -62,7 +62,7 @@
         (and
          (not= stat :not-found)         ; file on the disk was deleted
          (not contents-matched?)
-         (not (contains? #{"excalidraw" "edn"} ext))
+         (not (contains? #{"excalidraw" "edn" "css"} ext))
          (not (string/includes? path "/.recycle/"))
          (zero? pending-writes))
         (do

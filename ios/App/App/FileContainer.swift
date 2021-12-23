@@ -32,17 +32,8 @@ public class FileContainer: CAPPlugin, UIDocumentPickerDelegate {
             }
         }
 
-        let str = ""
-        let filename = (self.containerUrl?.appendingPathComponent(".logseq"))!
-
-        do {
-            try str.write(to: filename, atomically: true, encoding: String.Encoding.utf8)
-        } catch {
-            // failed to write file – bad permissions, bad filename, missing permissions, or more likely it can't be converted to the encoding
-        }
-
         self._call?.resolve([
-            "path": self.containerUrl!.path
+            "path": self.containerUrl?.path
                             ])
     }
 }

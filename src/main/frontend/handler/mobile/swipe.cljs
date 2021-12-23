@@ -1,7 +1,8 @@
 (ns frontend.handler.mobile.swipe
   (:require [goog.dom :as gdom]
             [cljs-bean.core :as bean]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.mobile.util :as mobile-util]))
 
 (defn setup-listeners!
   []
@@ -13,13 +14,14 @@
                                               (bean/->clj))]
                            (case (:dir detail)
                              "left"
-                             (do
-                               (when (state/get-left-sidebar-open?)
-                                 (state/set-left-sidebar-open! false)))
+                             (when (state/get-left-sidebar-open?)
+                               (state/set-left-sidebar-open! false))
                              "right"
-                             (do
-                               (when (and (not (state/get-left-sidebar-open?))
-                                          (:yStart detail)
-                                          (<= (:yStart detail) 200))
-                                 (state/set-left-sidebar-open! true)))
+                             (when (and (not (state/get-left-sidebar-open?))
+                                        (:yStart detail)
+                                        (if (mobile-util/native-android?)
+                                          (<= (:yStart detail) 200)
+                                          true)
+                                        (<= (:xStart detail) 20))
+                               (state/set-left-sidebar-open! true))
                              nil))))))

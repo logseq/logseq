@@ -4,17 +4,18 @@
             [cljs-bean.core :as bean]
             [frontend.fs.watcher-handler :as watcher-handler]
             [frontend.db :as db]
-            [frontend.idb :as idb]
             [promesa.core :as p]
             [electron.ipc :as ipc]
             [frontend.handler.notification :as notification]
             [frontend.handler.metadata :as metadata-handler]
-            [frontend.ui :as ui]))
+            [frontend.handler.repo :as repo-handler]
+            [frontend.ui :as ui]
+            [frontend.db.persist :as db-persist]))
 
 (defn persist-dbs!
   []
   (->
-   (p/let [repos (idb/get-nfs-dbs)
+   (p/let [repos (db-persist/get-all-graphs)
            repos (-> repos
                      (conj (state/get-current-repo))
                      (distinct))]
@@ -46,12 +47,6 @@
 
 (defn listen-to-electron!
   []
-  (js/window.apis.on "open-dir-confirmed"
-                     (fn []
-                       (state/set-loading-files! true)
-                       (when-not (state/home?)
-                         (route-handler/redirect-to-home!))))
-
   ;; TODO: move "file-watcher" to electron.ipc.channels
   (js/window.apis.on "file-watcher"
                      (fn [data]
@@ -64,6 +59,11 @@
                              type (keyword type)
                              comp [:div (str payload)]]
                          (notification/show! comp type false))))
+
+  (js/window.apis.on "graphUnlinked"
+                     (fn [data]
+                       (let [repo (bean/->clj data)]
+                         (repo-handler/remove-repo! repo))))
 
   (js/window.apis.on "setGitUsernameAndEmail"
                      (fn []

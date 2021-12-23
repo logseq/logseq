@@ -1,6 +1,9 @@
 .block-content-wrapper {
   /* 38px is the width of block-control */
-  width: calc(100% - 38px);
+    width: calc(100% - 22px);
+    @screen sm {
+        width: calc(100% - 33px);
+    }
 }
 
 .block-content {
@@ -159,6 +162,14 @@
     display: none;
   }
  }
+
+html.is-mobile,
+html.is-native-iphone,
+html.is-native-android {
+    .references .block-control {
+        margin-left: -20px;
+    }
+}
 
 .block-ref {
   border-bottom: 0.5px solid;

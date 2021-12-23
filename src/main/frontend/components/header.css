@@ -189,10 +189,59 @@ html.is-ios.is-safari {
   }
 }
 
-html.is-native-ios {
+html.is-ios {
   --ls-headbar-inner-top-padding: 36px;
 
   .cp__header > .r {
     display: flex;
+  }
+
+  @screen sm {
+    --ls-headbar-inner-top-padding: 0px;
+    --ls-headbar-height: 4rem;
+
+    .cp__header {
+      background-color: transparent !important;
+      display: flex;
+      width: 100%;
+
+      > .l {
+        background-color: var(--ls-primary-background-color);
+        padding-top: 20px;
+      }
+
+      > .r {
+        flex: 1;
+        background-color: var(--ls-primary-background-color);
+        height: 100%;
+        padding-top: 20px;
+        justify-content: flex-end;
+        align-items: center;
+      }
+    }
+
+    .ls-left-sidebar-open {
+      .cp__header {
+        > .l {
+          background-color: transparent;
+        }
+      }
+    }
+
+    .ls-right-sidebar-open {
+     .cp__header {
+       width: calc(100% - var(--ls-right-sidebar-width));
+     }
+    }
+
+    .left-sidebar-inner  {
+      > .wrap {
+        padding-top: 70px;
+      }
+    }
+
+    .cp__right-sidebar {
+      margin-top: 8px;
+    }
   }
 }

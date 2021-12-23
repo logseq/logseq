@@ -152,7 +152,7 @@
      (p/resolved [])
      (p/let [format (format/get-format file)
              _ (println "Parsing start : " file)
-             parse-f (if (mobile/is-native-platform?)
+             parse-f (if (and (mobile/is-native-platform?) config/dev?)
                        mldoc/->edn
                        mldoc/->edn-async)
              ast (parse-f content (mldoc/default-config format))]

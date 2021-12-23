@@ -370,10 +370,10 @@
         cloning? (state/sub :repo/cloning?)
         default-home (get-default-home-if-valid)
         importing-to-db? (state/sub :repo/importing-to-db?)
-        loading-files? (state/sub :repo/loading-files?)
+        current-repo (state/sub :git/current-repo)
+        loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         me (state/sub :me)
         journals-length (state/sub :journals-length)
-        current-repo (state/sub :git/current-repo)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
         logged? (:name me)]
@@ -534,7 +534,8 @@
                          (util/fix-open-external-with-shift! e))}
 
        [:div.theme-inner
-        {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?}])}
+        {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
+                                   :ls-right-sidebar-open sidebar-open?}])}
 
         [:div.#app-container
          {:style {:padding-top (ui/main-content-top-padding)}}

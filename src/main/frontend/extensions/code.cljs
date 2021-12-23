@@ -132,6 +132,7 @@
             [frontend.extensions.calc :as calc]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.file :as file-handler]
+            [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [frontend.utf8 :as utf8]
             [frontend.util :as util]
@@ -170,58 +171,57 @@
         (:file-path config)
         (let [path (:file-path config)
               content (db/get-file-no-sub path)
-              value (some-> (gdom/getElement path)
+              [_ id _ _ _] (:rum/args state)
+              value (some-> (gdom/getElement id)
                             (gobj/get "value"))]
           (when (and
                  (not (string/blank? value))
                  (not= (string/trim value) (string/trim content)))
-            (file-handler/alter-file (state/get-current-repo) path (string/trim value)
-                                     {:re-render-root? true})))
+            (file-handler/alter-file (state/get-current-repo)
+                                     path
+                                     (str (string/trim value) "\n")
+                                     {:re-render-root? true})
+            (notification/show! "Saved file!" :success)))
 
         :else
         nil))))
 
 (defn- text->cm-mode
-  [text]
-  (when text
-    (let [mode (string/lower-case text)]
-      (case mode
-        "html" "text/html"
-        "c" "text/x-csrc"
-        "c++" "text/x-c++src"
-        "java" "text/x-java"
-        "c#" "text/x-csharp"
-        "csharp" "text/x-csharp"
-        "objective-c" "text/x-objectivec"
-        "scala" "text/x-scala"
-        "js" "text/javascript"
-        "typescript" "text/typescript"
-        "ts" "text/typescript"
-        "tsx" "text/typescript-jsx"
-        "scss" "text/x-scss"
-        "less" "text/x-less"
-        mode))))
+  ([text]
+   (text->cm-mode text :name))
+  ([text by]
+   (when text
+     (let [mode (string/lower-case text)
+           find-fn-name (case by
+                          :name "findModeByName"
+                          :ext "findModeByExtension"
+                          :file-name "findModeByFileName"
+                          "findModeByName")
+           find-fn (gobj/get cm find-fn-name)
+           cm-mode (find-fn mode)]
+       (if cm-mode
+         (.-mime cm-mode)
+         mode)))))
 
 (defn render!
   [state]
   (let [esc-pressed? (atom nil)
-        dark? (state/dark?)
         [config id attr code theme] (:rum/args state)
         default-open? (and (:editor/code-mode? @state/state)
                            (= (:block/uuid (state/get-edit-block))
                               (get-in config [:block :block/uuid])))
         _ (state/set-state! :editor/code-mode? false)
         original-mode (get attr :data-lang)
-        clojure? (contains? #{"clojure" "clj" "text/x-clojure" "cljs" "cljc"} original-mode)
-        mode (if clojure? "clojure" (text->cm-mode original-mode))
-        lisp? (or clojure?
-                  (contains? #{"scheme" "racket" "lisp"} mode))
+        mode (if (:file? config)
+               (text->cm-mode original-mode :ext) ;; ref: src/main/frontend/components/file.cljs
+               (text->cm-mode original-mode :name))
+        lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
         textarea (gdom/getElement id)
         editor (when textarea
                  (from-textarea textarea
                                 #js {:mode mode
                                      :theme (str "solarized " theme)
-                                     :matchBrackets lisp?
+                                     :matchBrackets lisp-like?
                                      :autoCloseBrackets true
                                      :lineNumbers true
                                      :styleActiveLine true
@@ -272,10 +272,16 @@
    :did-mount (fn [state]
                 (load-and-render! state)
                 state)
+   :will-update (fn [state]
+                  (when-let [editor @(:editor-atom state)]
+                    (.toTextArea ^js editor)
+                    (let [[_ _ _ code _] (:rum/args state)]
+                      (when-let [textarea (rum/ref-node state textarea-ref-name)]
+                        (gobj/set textarea "defaultValue" code)
+                        (gobj/set textarea "value" code))))
+                  state)
+
    :did-update (fn [state]
-                 (when-let [editor @(:editor-atom state)]
-                   ;; clear the previous instance
-                   (.toTextArea ^js editor))
                  (load-and-render! state)
                  state)}
   [state config id attr code theme options]
@@ -283,10 +289,7 @@
    (when-let [mode (:data-lang attr)]
      (when-not (= mode "calc")
        [:div.extensions__code-lang
-        (let [mode (string/lower-case mode)]
-          (if (= mode "text/x-clojure")
-            "clojure"
-            mode))]))
+        (string/lower-case mode)]))
    [:textarea (merge {:id id
                       ;; Expose the textarea associated with the CodeMirror instance via
                       ;; ref so that we can autofocus into the CodeMirror instance later.
