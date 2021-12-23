@@ -164,19 +164,16 @@
         klass (if background (string/replace klass "indigo" background) klass)
         klass (if small? (str klass ".px-2.py-1") klass)
         klass (if large? (str klass ".text-base") klass)]
-    (if href
-      [:a.ui__button.is-link
-       (merge
-        {:type  "button"
-         :class (str (util/hiccup->class klass) " " class)}
-        (dissoc option :background :class :small?))
-       text]
-      [:button.ui__button
-       (merge
-        {:type  "button"
-         :class (str (util/hiccup->class klass) " " class)}
-        (dissoc option :background :class :small?))
-       text])))
+    [:button.ui__button
+     (merge
+      {:type  "button"
+       :class (str (util/hiccup->class klass) " " class)}
+      (dissoc option :background :class :small?)
+      (when href
+        {:on-click (fn []
+                     (set! (.-href js/window.location) href)
+                     (when (fn? on-click) (on-click)))}))
+     text]))
 
 (rum/defc notification-content
   [state content status uid]
