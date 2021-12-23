@@ -67,18 +67,14 @@
 
         (callback #js {:path path'}))))
 
-  (.registerHttpProtocol
-   protocol LSP_SCHEME
-   (fn [^js request callback]
-     (prn "Request: " (gobj/get request "url"))
-     (js/console.dir request)
-     ;; placeholder
-     ))
+  (.on app "open-url"
+       (fn [event url]
+         (prn {:url url
+               :event event})))
 
   #(do
      (.unregisterProtocol protocol FILE_LSP_SCHEME)
-     (.unregisterProtocol protocol "assets")
-     (.unregisterProtocol protocol LSP_SCHEME)))
+     (.unregisterProtocol protocol "assets")))
 
 (defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
