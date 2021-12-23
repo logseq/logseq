@@ -165,8 +165,11 @@
 
 (defprotocol IRemoteAPI
   (get-remote-all-files-meta [this graph-uuid] "get remote all files' metadata")
-  (get-diff [this graph-uuid from-txid] "get diff from FROM-TXID,
-  return [txns, latest-txid]"))
+  (get-remote-files-meta [this graph-uuid filepaths] "get remote files' metadata")
+  (get-remote-graph [this graph-name-opt graph-uuid-opt] "get graph info by GRAPH-NAME-OPT or GRAPH-UUID-OPT")
+  (list-remote-graphs [this] "list all remote graphs")
+  (get-diff [this graph-uuid from-txid] "get diff from FROM-TXID, return [txns, latest-txid]")
+  (create-graph [this graph-name] "create graph"))
 
 (deftype MockRSAPI []
   IRSAPI
@@ -193,18 +196,40 @@
     ;; TODO
     (set! token "<id-token>")
     token)
+  (request [this api-name body]
+    (go
+      (let [resp (<! (request api-name body (.get-token this) #(.refresh-token this)))]
+        (when-not (http/unexceptional-status? (:status resp))
+          (throw (js/Error. resp)))
+        (get-resp-json-body resp))))
+
   IRemoteAPI
   (get-remote-all-files-meta [this graph-uuid]
-    (request "get_all_files" {:GraphUUID graph-uuid} (.get-token this) #(.refresh-token this)))
+    (.request this "get_all_files" {:GraphUUID graph-uuid}))
+  (get-remote-files-meta [this graph-uuid filepaths]
+    {:pre [(coll? filepaths)]}
+    (.request this "get_files_meta" {:GraphUUID graph-uuid :Files filepaths}))
+  (get-remote-graph [this graph-name-opt graph-uuid-opt]
+    {:pre [(or graph-name-opt graph-uuid-opt)]}
+    (.request this "get_graph" (cond-> {}
+                                 (seq graph-name-opt)
+                                 (assoc :GraphName graph-name-opt)
+                                 (seq graph-uuid-opt)
+                                 (assoc :GraphUUID graph-uuid-opt))))
+  (list-remote-graphs [this]
+    (.request this "list_graphs"))
   (get-diff [this graph-uuid from-txid]
     (go
       (->
-       (<! (request "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid} (.get-token this) #(.refresh-token this)))
-       (get-resp-json-body)
+       (<! (.request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))
        (:Transactions)
-       ((fn [txns] [txns (:TXId (last txns))]))))))
+       ((fn [txns] [txns (:TXId (last txns))])))))
+
+  (create-graph [this graph-name]
+    (.request this "create_graph" {:GraphName graph-name})))
 
 (def remoteapi (->RemoteAPI nil))
+
 
 
 (defn- update-txn [^FileTxnSet filetxnset txn]
@@ -255,7 +280,9 @@
                   repo (state/get-current-repo)]
               (apply-filetxns graph-uuid filetxnset)
               (.reset_value! graphs-txid [graph-uuid latest-txid] repo)
-              (persist-var/persist-save graphs-txid)))
+              (persist-var/persist-save graphs-txid))
+            ;; TODO catch
+            )
           (sync-remote-all-files! graph-uuid-expect))))))
 
 (comment
