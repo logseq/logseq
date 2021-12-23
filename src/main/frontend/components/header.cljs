@@ -32,23 +32,13 @@
 
 (rum/defc login
   [logged?]
-  (when (and (not logged?)
-             (not config/publishing?))
+  (rum/with-context [[t] i18n/*tongue-context*]
+    (when (and (not logged?)
+               (not config/publishing?))
 
-    (ui/dropdown-with-links
-     (fn [{:keys [toggle-fn]}]
-       [:a.button.text-sm.font-medium.block {:on-click toggle-fn}
-        [:span (t :login)]])
-     (let [list [{:title (t :login-github)
-                  :url (str config/website "/login/github")}]]
-       (mapv
-        (fn [{:keys [title url]}]
-          {:title title
-           :options
-           {:on-click
-            (fn [_] (set! (.-href js/window.location) url))}})
-        list))
-     nil)))
+      [:a.button.text-sm.font-medium.block {:on-click (fn []
+                                                        (js/window.open "https://logseq-test.auth.us-east-2.amazoncognito.com/oauth2/authorize?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Ftest"))}
+       [:span (t :login)]])))
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]

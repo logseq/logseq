@@ -65,8 +65,10 @@
   (.registerHttpProtocol
    protocol LSP_SCHEME
    (fn [^js request callback]
+     (prn "Request")
+     (js/console.dir request)
      ;; placeholder
-     (.loadURL MAIN_WINDOW_ENTRY)))
+     ))
 
   #(do
      (.unregisterProtocol protocol LSP_SCHEME)
