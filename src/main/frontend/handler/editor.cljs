@@ -3439,9 +3439,9 @@
                (doseq [{:block/keys [uuid]} blocks-to-collapse]
                  (collapse-block! uuid))))))))))
 
-(defn- collapse-all!
+(defn collapse-all!
   ([]
-   (collapse-all! nil))
+   (collapse-all! nil nil))
   ([block-id]
    (collapse-all! block-id nil))
   ([block-id max-level]
@@ -3450,9 +3450,9 @@
        (doseq [{:block/keys [uuid]} blocks-to-collapse]
          (collapse-block! uuid))))))
 
-(defn- expand-all!
+(defn expand-all!
   ([]
-   (expand-all! nil))
+   (expand-all! nil nil))
   ([block-id]
    (expand-all! block-id nil))
   ([block-id max-level]
