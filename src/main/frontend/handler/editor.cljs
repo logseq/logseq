@@ -3305,8 +3305,20 @@
     (util/forward-kill-word input)
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
 
+(defn collapsable? [block-id]
+  (if-let [block (db-model/query-block-by-uuid block-id)]
+    (let [block (block/parse-title-and-body block)]
+      (and
+        (nil? (-> block :block/properties :collapsed))
+        (or (not-empty (:block/body block))
+            (db-model/has-children? block-id))))
+    false))
+
 (defn all-blocks-with-level
   "Return all blocks associated with correct level
+   if :root-block is not nil, only return root block with its children
+   if :max-level is not nil, only return blocks that level <= :max-level
+   if :expanded? true, return expanded children
    if :collapse? true, return without any collapsed children
    for example:
    - a
@@ -3319,7 +3331,7 @@
     [{:block a :level 1}
      {:block b :level 2}
      {:block e :level 2}]"
-  [{:keys [collapse?] :or {collapse? false}}]
+  [{:keys [collapse? expanded? root-block max-level] :or {collapse? false expanded? false root-block nil max-level nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
     (->>
@@ -3327,24 +3339,27 @@
          (db/get-page-blocks-no-cache)
          (tree/blocks->vec-tree page))
 
-     (#(if collapse?
-         (w/postwalk
-          (fn [x]
-            (if (and (map? x) (-> x :block/properties :collapsed))
-              (assoc x :block/children []) x)) %) %))
+     (#(cond->> %
+         root-block (map (fn find [root]
+                       (if (= root-block (:block/uuid root))
+                         root
+                         (first (filter find (:block/children root []))))))))
+
+     (#(cond->> %
+         collapse? (w/postwalk
+                     (fn [x]
+                      (if (and (map? x) (-> x :block/properties :collapsed))
+                        (assoc x :block/children []) x)))))
 
      (mapcat (fn [x] (tree-seq map? :block/children x)))
 
-     (map (fn [x] (dissoc x :block/children))))))
+     (#(cond->> %
+         expanded? (filter (fn [b] (collapsable? (:block/uuid b))))))
 
-(defn collapsable? [block-id]
-  (if-let [block (db-model/query-block-by-uuid block-id)]
-    (let [block (block/parse-title-and-body block)]
-      (and
-       (nil? (-> block :block/properties :collapsed))
-       (or (not-empty (:block/body block))
-           (db-model/has-children? block-id))))
-    false))
+     (#(cond->> %
+         max-level (filter (fn [b] (>= max-level (:block/level b))))))
+
+     (map (fn [x] (dissoc x :block/children))))))
 
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
@@ -3425,20 +3440,26 @@
                  (collapse-block! uuid))))))))))
 
 (defn- collapse-all!
-  []
-  (let [blocks-to-collapse
-        (->> (all-blocks-with-level {:collapse? true})
-             (filter (fn [b] (collapsable? (:block/uuid b)))))]
-    (when (seq blocks-to-collapse)
-      (doseq [{:block/keys [uuid]} blocks-to-collapse]
-        (collapse-block! uuid)))))
+  ([]
+   (collapse-all! nil))
+  ([block-id]
+   (collapse-all! block-id nil))
+  ([block-id max-level]
+   (let [blocks-to-collapse (all-blocks-with-level {:expanded? true :root-block block-id :max-level max-level})]
+     (when (seq blocks-to-collapse)
+       (doseq [{:block/keys [uuid]} blocks-to-collapse]
+         (collapse-block! uuid))))))
 
 (defn- expand-all!
-  []
-  (->> (all-blocks-with-level {})
-       (filter (fn [b] (-> b :block/properties :collapsed)))
-       (map (comp expand-block! :block/uuid))
-       doall))
+  ([]
+   (expand-all! nil))
+  ([block-id]
+   (expand-all! block-id nil))
+  ([block-id max-level]
+   (->> (all-blocks-with-level {:root-block block-id :max-level max-level})
+        (filter (fn [b] (-> b :block/properties :collapsed)))
+        (map (comp expand-block! :block/uuid))
+        doall)))
 
 (defn toggle-open! []
   (let [all-collapsed?

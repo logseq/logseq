@@ -1336,6 +1336,8 @@
 
 (defn- bullet-on-click
   [e block uuid]
+  (if (-> block :block/properties :collapsed)
+    (editor-handler/expand-all! uuid (:block/level block)))
   (if (gobj/get e "shiftKey")
     (do
       (state/sidebar-add-block!
@@ -1346,6 +1348,14 @@
       (util/stop e))
     (route-handler/redirect-to-page! uuid)))
 
+(defn- block-left-border-on-click
+  [e children]
+  (if (< (.-offsetX (.-nativeEvent e)) 10)
+    (let [block-ids (map :block/uuid children)]
+      (if (some editor-handler/collapsable? block-ids)
+        (dorun (map editor-handler/collapse-block! block-ids))
+        (dorun (map editor-handler/expand-block! block-ids))))))
+
 (rum/defc block-children < rum/reactive
   [config children collapsed? *ref-collapsed?]
   (let [ref? (:ref? config)
@@ -1355,12 +1365,13 @@
                (seq children)
                (not collapsed?))
       (let [doc-mode? (state/sub :document/mode?)]
-        [:div.block-children {:style {:margin-left (if doc-mode? 18
-                                                       (if (or (mobile-util/native-android?)
-                                                               (mobile-util/native-iphone?))
-                                                         22
-                                                         29))
-                                      :display (if collapsed? "none" "")}}
+        [:div.block-children {:style    {:margin-left (if doc-mode? 18
+                                                                    (if (or (mobile-util/native-android?)
+                                                                            (mobile-util/native-iphone?))
+                                                                      22
+                                                                      29))
+                                         :display     (if collapsed? "none" "")}
+                              :on-click (fn [event] (block-left-border-on-click event children))}
          (for [child children]
            (when (map? child)
              (let [child (dissoc child :block/meta)
