@@ -65,7 +65,7 @@
       :ui/settings-open? false
       :ui/sidebar-open? false
       :ui/left-sidebar-open? (boolean (storage/get "ls-left-sidebar-open?"))
-      :ui/theme (or (storage/get :ui/theme) "dark")
+      :ui/theme (or (storage/get :ui/theme) (if (mobile/is-native-platform?) "light" "dark"))
       :ui/system-theme? ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
       :ui/wide-mode? false
       ;; :show-all, :hide-block-body, :hide-block-children
