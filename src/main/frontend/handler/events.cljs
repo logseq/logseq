@@ -229,7 +229,7 @@
 
 (defmethod handle :mobile/keyboard-did-show [[_]]
   (when-let [input (state/get-input)]
-    (util/make-el-into-viewport input 60)))
+    (util/make-el-into-viewport input)))
 
 (defn run!
   []

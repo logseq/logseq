@@ -289,4 +289,4 @@
   (when-let [input (state/get-input)]
     (if (or (mobile/is-native-platform?)
             (util/mobile?))
-      (util/make-el-into-viewport input 60))))
+      (util/make-el-into-viewport input))))

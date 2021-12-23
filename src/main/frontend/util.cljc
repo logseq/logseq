@@ -1490,6 +1490,8 @@
 
 #?(:cljs
    (defn make-el-into-viewport
+     ([^js/HTMLElement el]
+      (make-el-into-viewport el 60))
      ([^js/HTMLElement el offset]
       (make-el-into-viewport el offset true))
      ([^js/HTMLElement el offset async?]
@@ -1511,14 +1513,14 @@
 
 #?(:cljs
    (defn event-is-composing?
-     "Check if keydown event is a composing (IME) event. 
+     "Check if keydown event is a composing (IME) event.
       Ignore the IME process by default."
      ([e]
       (event-is-composing? e false))
      ([e include-process?]
       (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")]
         (if include-process?
-          (or event-composing? 
+          (or event-composing?
               (= (gobj/get e "keyCode") 229)
               (= (gobj/get e "key") "Process"))
           event-composing?)))))

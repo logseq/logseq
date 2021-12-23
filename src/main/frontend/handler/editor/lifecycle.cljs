@@ -23,7 +23,7 @@
       (.focus element)
       (when (or (mobile-util/is-native-platform?)
                 (util/mobile?))
-        (util/make-el-into-viewport element 60))))
+        (util/make-el-into-viewport element))))
   state)
 
 (defn did-remount!
