@@ -147,7 +147,8 @@
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [m (-> (:data this)
-                (dissoc :block/children :block/meta :block/top? :block/bottom?)
+                (dissoc :block/children :block/meta :block/top? :block/bottom?
+                        :block/title :block/body)
                 (util/remove-nils))
           m (if (state/enable-block-timestamps?) (block-with-timestamps m) m)
           other-tx (:db/other-tx m)
