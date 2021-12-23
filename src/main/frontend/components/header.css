@@ -179,8 +179,8 @@ a.button {
   cursor: default !important;
 }
 
-html.is-native-ios,
 html.is-ios.is-safari {
+  
   #main-container {
     padding-top: 20px;
   }
@@ -195,17 +195,20 @@ html.is-ios.is-safari {
   }
 }
 
-html.is-ios {
-  --ls-headbar-inner-top-padding: 36px;
+html.is-native-iphone,
+html.is-native-iphone-without-notch,
+html.is-native-ipad {
 
-  .cp__header > .r {
-    display: flex;
-  }
+    .cp__header > .r {
+        display: flex;
+    }
+}
 
-  @screen sm {
+html.is-native-ipad {
+
     --ls-headbar-inner-top-padding: 0px;
     --ls-headbar-height: 4rem;
-
+    
     .cp__header {
       background-color: transparent !important;
       display: flex;
@@ -250,4 +253,12 @@ html.is-ios {
       margin-top: 8px;
     }
   }
+
+html.is-native-iphone {
+  --ls-headbar-inner-top-padding: 36px;
+}
+
+html.is-native-iphone-without-notch {
+    --ls-headbar-inner-top-padding: 10px;
+    --ls-headbar-height: 3rem;
 }

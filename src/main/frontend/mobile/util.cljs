@@ -69,11 +69,12 @@
     :iPhoneSE4      {:width 320  :height 568  :statusbar 20}
     :iPodtouch5     {:width 320  :height 568  :statusbar 20}}))
 
+
 (defn get-idevice-model
   []
   (when (native-ios?)
-    (let [width (.-innerWidth js/window)
-          height (.-innerHeight js/window)
+    (let [width (.-width js/screen)
+          height (.-height js/screen)
           landscape? (> width height)
           [width height] (if landscape? [height width] [width height])]
       [(case [width height]
@@ -95,15 +96,21 @@
          "Not a known Apple device!")
        landscape?])))
 
+(defn native-iphone-without-notch?
+  []
+  (when-let [model (get-idevice-model)]
+    (str/starts-with? (first model) "iPhone8")))
+
 (defn native-iphone?
   []
   (when-let [model (get-idevice-model)]
-   (str/starts-with? (first model) "iPhone")))
+    (and (str/starts-with? (first model) "iPhone")
+         (not (str/starts-with? (first model) "iPhone8")))))
 
 (defn native-ipad?
   []
   (when-let [model (get-idevice-model)]
-   (str/starts-with? (first model) "iPad")))
+    (str/starts-with? (first model) "iPad")))
 
 (defn get-idevice-statusbar-height
   []

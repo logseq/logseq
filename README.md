@@ -128,13 +128,19 @@ yarn e2e-test # or npx playwright test
 yarn watch
 ```
 
-### 2. Open the dev app
+### 2. Install npm packages for building the desktop app
+
+``` bash
+cd static && yarn install && cd ..
+```
+
+### 3. Open the dev app
 
 ```bash
 yarn dev-electron-app
 ```
 
-### 3. Build a release
+### 4. Build a release
 
 ```bash
 yarn release-electron
