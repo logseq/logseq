@@ -3,12 +3,13 @@
   bottom: 0;
   left: 0;
   width: 100%;
-  justify-content: center;
+  justify-content: space-between;
   height: 2.5rem;
   display: flex;
   align-items: center;
   z-index: 9999;
-
+  overflow-x: overlay;
+  overflow-y: hidden;
   transition: none;
 
   button {

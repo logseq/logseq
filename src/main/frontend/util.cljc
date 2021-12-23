@@ -1490,12 +1490,19 @@
 
 #?(:cljs
    (defn make-el-into-viewport
-     [^js/HTMLElement el offset]
-     (let [wrap-height (.-clientHeight js/document.documentElement)
-           target-bottom (.-bottom (.getBoundingClientRect el))]
-       (when (> (+ target-bottom (or (safe-parse-int offset) 0))
-                wrap-height)
-         (.scrollIntoView el #js {:block "center" :behavior "smooth"})))))
+     ([^js/HTMLElement el offset]
+      (make-el-into-viewport el offset true))
+     ([^js/HTMLElement el offset async?]
+      (let [handle #(let [viewport-height (or (.-height js/window.visualViewport)
+                                              (.-clientHeight js/document.documentElement))
+                          target-bottom (.-bottom (.getBoundingClientRect el))]
+                      (when (> (+ target-bottom (or (safe-parse-int offset) 0))
+                               viewport-height)
+                        (.scrollIntoView el #js {:block "center" :behavior "smooth"})))]
+
+        (if async?
+          (js/setTimeout #(handle) 64)
+          (handle))))))
 
 #?(:cljs
    (defn sm-breakpoint?

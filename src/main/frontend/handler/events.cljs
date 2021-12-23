@@ -221,6 +221,16 @@
     (reset! st/*inited? true)
     (st/consume-pending-shortcuts!)))
 
+
+(defmethod handle :mobile/keyboard-will-show [[_]]
+  (when (and (state/get-left-sidebar-open?)
+             (state/editing?))
+    (state/set-left-sidebar-open! false)))
+
+(defmethod handle :mobile/keyboard-did-show [[_]]
+  (when-let [input (state/get-input)]
+    (util/make-el-into-viewport input 60)))
+
 (defn run!
   []
   (let [chan (state/get-events-chan)]

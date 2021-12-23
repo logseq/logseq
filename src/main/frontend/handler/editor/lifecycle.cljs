@@ -21,9 +21,9 @@
 
     (when-let [element (gdom/getElement id)]
       (.focus element)
-      (when (and (util/mobile?)
-                 (not (mobile-util/native-ios?)))
-        (js/setTimeout #(util/make-el-into-viewport element 60) 64))))
+      (when (or (mobile-util/is-native-platform?)
+                (util/mobile?))
+        (util/make-el-into-viewport element 60))))
   state)
 
 (defn did-remount!

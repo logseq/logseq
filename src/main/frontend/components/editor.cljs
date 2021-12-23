@@ -8,6 +8,7 @@
             [frontend.components.search :as search]
             [frontend.components.svg :as svg]
             [frontend.mobile.camera :as mobile-camera]
+            [frontend.mobile.util :as mobile-util]
             [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.db :as db]
@@ -19,6 +20,7 @@
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [frontend.handler.ui :as ui-handler]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
@@ -230,161 +232,161 @@
                            (:offset-top vw-state))
                         0)}
       :class (util/classnames [{:is-vw-pending (boolean vw-pending?)}])}
-     [:div.flex {:style {:overflow "overlay"}}
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (state/set-state! :editor/pos (cursor/pos (state/get-input)))
-                          (editor-handler/indent-outdent true))}
-        (ui/icon "arrow-bar-right"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (state/set-state! :editor/pos (cursor/pos (state/get-input)))
-                          (editor-handler/indent-outdent false))}
-        (ui/icon "arrow-bar-left"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          ((editor-handler/move-up-down true)))}
-        (ui/icon "arrow-bar-to-up"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          ((editor-handler/move-up-down false)))}
-        (ui/icon "arrow-bar-to-down"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (commands/simple-insert! parent-id "\n"
-                                                   {:forward-pos 1})
-                          ;; TODO: should we add this focus step to `simple-insert!`?
-                          (when-let [input (gdom/getElement parent-id)]
-                            (.focus input)))}
-        (ui/icon "arrow-back"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (editor-handler/cycle-todo!))}
-        (ui/icon "checkbox"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (commands/simple-insert!
-                           parent-id "[[]]"
-                           {:backward-pos 2
-                            :check-fn     (fn [_ _ new-pos]
-                                            (reset! commands/*slash-caret-pos new-pos)
-                                            (commands/handle-step [:editor/search-page]))})
-                          (when-let [input (gdom/getElement parent-id)]
-                            (.focus input)))}
-        (ui/icon "brackets"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (commands/simple-insert!
-                           parent-id "(())"
-                           {:backward-pos 2
-                            :check-fn     (fn [_ _ new-pos]
-                                            (reset! commands/*slash-caret-pos new-pos)
-                                            (commands/handle-step [:editor/search-block]))})
-                          (when-let [input (gdom/getElement parent-id)]
-                            (.focus input)))}
-        (ui/icon "parentheses"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (commands/simple-insert! parent-id "/" {})
-                          (when-let [input (gdom/getElement parent-id)]
-                            (.focus input)))}
-        (ui/icon "command"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (commands/simple-insert!
-                           parent-id "#"
-                           {:check-fn     (fn [_ _ new-pos]
-                                            (commands/handle-step [:editor/search-page-hashtag])
-                                            (reset! commands/*slash-caret-pos new-pos))})
-                          (when-let [input (gdom/getElement parent-id)]
-                            (.focus input)))}
-        (ui/icon "tag"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (mobile-camera/embed-photo parent-id))}
-        (ui/icon "camera"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (editor-handler/html-link-format!))}
-        (ui/icon "link"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (history/undo! e))}
-        (ui/icon "rotate"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (history/redo! e))}
-        (ui/icon "rotate-clockwise"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (editor-handler/bold-format!))}
-        (ui/icon "bold"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (editor-handler/italics-format!))}
-        (ui/icon "italic"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (editor-handler/strike-through-format!))}
-        (ui/icon "strikethrough"
-                 {:style {:fontSize ui/icon-size}})]]
-      [:div
-       [:button.bottom-action
-        {:on-mouse-down (fn [e]
-                          (util/stop e)
-                          (editor-handler/highlight-format!))}
-        (ui/icon "paint"
-                 {:style {:fontSize ui/icon-size}})]]]]))
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (state/set-state! :editor/pos (cursor/pos (state/get-input)))
+                         (editor-handler/indent-outdent true))}
+       (ui/icon "arrow-bar-right"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (state/set-state! :editor/pos (cursor/pos (state/get-input)))
+                         (editor-handler/indent-outdent false))}
+       (ui/icon "arrow-bar-left"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         ((editor-handler/move-up-down true)))}
+       (ui/icon "arrow-bar-to-up"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         ((editor-handler/move-up-down false)))}
+       (ui/icon "arrow-bar-to-down"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (commands/simple-insert! parent-id "\n"
+                                                  {:forward-pos 1})
+                         ;; TODO: should we add this focus step to `simple-insert!`?
+                         (when-let [input (gdom/getElement parent-id)]
+                           (.focus input)
+                           (ui-handler/try-to-editing-input-into-viewport!)))}
+       (ui/icon "arrow-back"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (editor-handler/cycle-todo!))}
+       (ui/icon "checkbox"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (commands/simple-insert!
+                          parent-id "[[]]"
+                          {:backward-pos 2
+                           :check-fn     (fn [_ _ new-pos]
+                                           (reset! commands/*slash-caret-pos new-pos)
+                                           (commands/handle-step [:editor/search-page]))})
+                         (when-let [input (gdom/getElement parent-id)]
+                           (.focus input)))}
+       (ui/icon "brackets"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (commands/simple-insert!
+                          parent-id "(())"
+                          {:backward-pos 2
+                           :check-fn     (fn [_ _ new-pos]
+                                           (reset! commands/*slash-caret-pos new-pos)
+                                           (commands/handle-step [:editor/search-block]))})
+                         (when-let [input (gdom/getElement parent-id)]
+                           (.focus input)))}
+       (ui/icon "parentheses"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (commands/simple-insert! parent-id "/" {})
+                         (when-let [input (gdom/getElement parent-id)]
+                           (.focus input)))}
+       (ui/icon "command"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (commands/simple-insert!
+                          parent-id "#"
+                          {:check-fn     (fn [_ _ new-pos]
+                                           (commands/handle-step [:editor/search-page-hashtag])
+                                           (reset! commands/*slash-caret-pos new-pos))})
+                         (when-let [input (gdom/getElement parent-id)]
+                           (.focus input)))}
+       (ui/icon "tag"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (mobile-camera/embed-photo parent-id))}
+       (ui/icon "camera"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (editor-handler/html-link-format!))}
+       (ui/icon "link"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (history/undo! e))}
+       (ui/icon "rotate"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (history/redo! e))}
+       (ui/icon "rotate-clockwise"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (editor-handler/bold-format!))}
+       (ui/icon "bold"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (editor-handler/italics-format!))}
+       (ui/icon "italic"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (editor-handler/strike-through-format!))}
+       (ui/icon "strikethrough"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (editor-handler/highlight-format!))}
+       (ui/icon "paint"
+                {:style {:fontSize ui/icon-size}})]]]))
 
 (rum/defcs input < rum/reactive
   (rum/local {} ::input-value)
@@ -679,7 +681,8 @@
   (let [content (state/sub-edit-content)
         heading-class (get-editor-style-class content format)]
     [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
-     (when config/mobile? (mobile-bar state id))
+     (when (or (mobile-util/is-native-platform?) config/mobile?)
+       (mobile-bar state id))
      (ui/ls-textarea
       {:id                id
        :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
