@@ -16,10 +16,13 @@
             [electron.git :as git]
             [electron.window :as win]
             [electron.exceptions :as exceptions]
-            ["/electron/utils" :as utils]))
+            ["/electron/utils" :as utils]
+            ["electron-context-menu" :as init-context-menu]
+            [goog.object :as gobj]))
 
 (defonce LSP_SCHEME "logseq")
-(defonce LSP_PROTOCOL (str LSP_SCHEME "://"))
+(defonce FILE_LSP_SCHEME "lsp")
+(defonce LSP_PROTOCOL (str FILE_LSP_SCHEME "://"))
 (defonce PLUGIN_URL (str LSP_PROTOCOL "logseq.io/"))
 (defonce STATIC_URL (str LSP_PROTOCOL "logseq.com/"))
 (defonce PLUGINS_ROOT (.join path (.homedir os) ".logseq/plugins"))
@@ -38,7 +41,9 @@
                    :logger logger
                    :win    win})))
 
-(defn setup-interceptor! [win]
+(defn setup-interceptor! [^js app]
+  (.setAsDefaultProtocolClient app LSP_SCHEME)
+
   (.registerFileProtocol
     protocol "assets"
     (fn [^js request callback]
@@ -48,7 +53,7 @@
         (callback #js {:path path}))))
 
   (.registerFileProtocol
-    protocol LSP_SCHEME
+    protocol FILE_LSP_SCHEME
     (fn [^js request callback]
       (let [url (.-url request)
             url' ^js (js/URL. url)
@@ -65,14 +70,15 @@
   (.registerHttpProtocol
    protocol LSP_SCHEME
    (fn [^js request callback]
-     (prn "Request")
+     (prn "Request: " (gobj/get request "url"))
      (js/console.dir request)
      ;; placeholder
      ))
 
   #(do
-     (.unregisterProtocol protocol LSP_SCHEME)
-     (.unregisterProtocol protocol "assets")))
+     (.unregisterProtocol protocol FILE_LSP_SCHEME)
+     (.unregisterProtocol protocol "assets")
+     (.unregisterProtocol protocol LSP_SCHEME)))
 
 (defn- handle-export-publish-assets [_event html custom-css-path repo-path asset-filenames output-path]
   (p/let [app-path (. app getAppPath)
@@ -178,14 +184,15 @@
     (do
       (search/close!)
       (.quit app))
-    (do
+    (let [privileges {:standard        true
+                      :secure          true
+                      :bypassCSP       true
+                      :supportFetchAPI true}]
       (.registerSchemesAsPrivileged
-       protocol (bean/->js [{:scheme     LSP_SCHEME
-                             :privileges {:standard        true
-                                          :secure          true
-                                          :bypassCSP       true
-                                          :supportFetchAPI true}}]))
-
+        protocol (bean/->js [{:scheme     LSP_SCHEME
+                              :privileges privileges}
+                             {:scheme     FILE_LSP_SCHEME
+                              :privileges privileges}]))
       (.on app "second-instance"
            (fn [_event _commandLine _workingDirectory]
              (when-let [win @*win]
@@ -202,8 +209,8 @@
                                      (.quit app)))
       (.on app "ready"
            (fn []
-             (let [t0 (setup-interceptor!)
-                   ^js win (win/create-main-window)
+             (let [t0 (setup-interceptor! app)
+                   ^js win (create-main-window)
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 
