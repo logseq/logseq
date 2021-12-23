@@ -193,25 +193,25 @@
                                (state/set-left-sidebar-open! false))
                              (state/pub-event! [:go/search]))}
              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
-       
+
        [:div.r.flex
         (when (and (not (mobile-util/is-native-platform?))
                    (not (util/electron?)))
           (login logged?))
-        
+
         (when plugin-handler/lsp-enabled?
           (plugins/hook-ui-items :toolbar))
 
         (when (not= (state/get-current-route) :home)
           (home-button))
-        
+
         (when (or (util/electron?)
                   (mobile-util/native-ios?))
           (back-and-forward))
 
         (new-block-mode)
 
-        (when (mobile-util/is-native-platform?)
+        (when (and (mobile-util/is-native-platform?) (seq repos))
           [:a.text-sm.font-medium.button
            {:on-click
             (fn []
@@ -227,9 +227,8 @@
            (if refreshing?
              [:div {:class "animate-spin-reverse"}
               svg/refresh]
-             (when (seq repos)
-               [:div.flex.flex-row.text-center.open-button__inner.items-center
-                (ui/icon "refresh" {:style {:fontSize ui/icon-size}})]))])
+             [:div.flex.flex-row.text-center.open-button__inner.items-center
+              (ui/icon "refresh" {:style {:fontSize ui/icon-size}})])])
 
         (repo/sync-status current-repo)
 
