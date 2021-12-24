@@ -330,10 +330,10 @@
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel
-             (fn [event args-js]
+             (fn [^js event args-js]
                (try
                  (let [message (bean/->clj args-js)]
-                   (bean/->js (handle window message)))
+                   (bean/->js (handle (or (utils/get-win-from-sender event) window) message)))
                  (catch js/Error e
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
                      (println "IPC error: " {:event event
