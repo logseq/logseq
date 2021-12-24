@@ -2375,7 +2375,8 @@
 
 (defn- keydown-new-line
   []
-  (insert "\n"))
+  (insert "\n")
+  (ui-handler/try-to-editing-input-into-viewport!))
 
 (declare delete-and-update)
 

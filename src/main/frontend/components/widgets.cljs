@@ -110,9 +110,9 @@
                  "FolderSync"]
                 "."]]
               [:div
-               [:p "You can sync your graphs by using iCloud. Please choose an existing graph or create a new graph in logseq directory."]
+               [:p "You can sync your graphs by using iCloud. Please choose an existing graph or create a new graph in your iCloud Drive's Logseq directory."]
                [:p "We're developing our built-in paid Logseq Sync. Stay tuned."]])]
-           
+
            [:li.mt-8
             [:div.font-bold.mb-2 "I need some help"]
             [:p "👋 Join our discord group to chat with the makers and our helpful community members."]

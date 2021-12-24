@@ -1490,12 +1490,21 @@
 
 #?(:cljs
    (defn make-el-into-viewport
-     [^js/HTMLElement el offset]
-     (let [wrap-height (.-clientHeight js/document.documentElement)
-           target-bottom (.-bottom (.getBoundingClientRect el))]
-       (when (> (+ target-bottom (or (safe-parse-int offset) 0))
-                wrap-height)
-         (.scrollIntoView el #js {:block "center" :behavior "smooth"})))))
+     ([^js/HTMLElement el]
+      (make-el-into-viewport el 60))
+     ([^js/HTMLElement el offset]
+      (make-el-into-viewport el offset true))
+     ([^js/HTMLElement el offset async?]
+      (let [handle #(let [viewport-height (or (.-height js/window.visualViewport)
+                                              (.-clientHeight js/document.documentElement))
+                          target-bottom (.-bottom (.getBoundingClientRect el))]
+                      (when (> (+ target-bottom (or (safe-parse-int offset) 0))
+                               viewport-height)
+                        (.scrollIntoView el #js {:block "center" :behavior "smooth"})))]
+
+        (if async?
+          (js/setTimeout #(handle) 64)
+          (handle))))))
 
 #?(:cljs
    (defn sm-breakpoint?
@@ -1504,14 +1513,14 @@
 
 #?(:cljs
    (defn event-is-composing?
-     "Check if keydown event is a composing (IME) event. 
+     "Check if keydown event is a composing (IME) event.
       Ignore the IME process by default."
      ([e]
       (event-is-composing? e false))
      ([e include-process?]
       (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")]
         (if include-process?
-          (or event-composing? 
+          (or event-composing?
               (= (gobj/get e "keyCode") 229)
               (= (gobj/get e "key") "Process"))
           event-composing?)))))
