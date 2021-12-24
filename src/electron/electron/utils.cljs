@@ -76,6 +76,17 @@
   []
   (.getFocusedWindow BrowserWindow))
 
+(defn get-all-windows
+  []
+  (seq (js->clj (.getAllWindows BrowserWindow))))
+
+(defn get-win-from-sender
+  [^js evt]
+  (try
+    (.fromWebContents BrowserWindow (.-sender evt))
+    (catch js/Error _
+      nil)))
+
 (defn send-to-renderer
   ([kind payload]
    (send-to-renderer (get-focused-window) kind payload))
