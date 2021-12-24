@@ -4,9 +4,6 @@ import { randomString, createRandomPage, newBlock } from './utils'
 
 
 test('render app', async ({ page }) => {
-  // Direct Electron console to Node terminal.
-  // page.on('console', console.log)
-
   // NOTE: part of app startup tests is moved to `fixtures.ts`.
 
   expect(await page.title()).toMatch(/^Logseq.*?/)
