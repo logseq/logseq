@@ -331,13 +331,14 @@
                            (.focus input)))}
        (ui/icon "tag"
                 {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
-                         (mobile-camera/embed-photo parent-id))}
-       (ui/icon "camera"
-                {:style {:fontSize ui/icon-size}})]]
+     (when-not (mobile-util/native-ios?)
+      [:div
+       [:button.bottom-action
+        {:on-mouse-down (fn [e]
+                          (util/stop e)
+                          (mobile-camera/embed-photo parent-id))}
+        (ui/icon "camera"
+                 {:style {:fontSize ui/icon-size}})]])
      [:div
       [:button.bottom-action
        {:on-mouse-down (fn [e]

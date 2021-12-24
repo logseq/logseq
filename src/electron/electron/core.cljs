@@ -2,7 +2,7 @@
   (:require [electron.handler :as handler]
             [electron.search :as search]
             [electron.updater :refer [init-updater]]
-            [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open]]
+            [electron.utils :refer [*win mac? win32? linux? prod? dev? logger open get-win-from-sender]]
             [electron.configs :as cfgs]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -125,8 +125,7 @@
         call-app-channel "call-application"
         call-win-channel "call-main-win"
         export-publish-assets "export-publish-assets"
-        quit-dirty-state "set-quit-dirty-state"
-        web-contents (. win -webContents)]
+        quit-dirty-state "set-quit-dirty-state"]
     (doto ipcMain
       (.handle quit-dirty-state
                (fn [_ dirty?]
@@ -153,11 +152,12 @@
                      (js/console.error e)))))
 
       (.handle call-win-channel
-               (fn [_ type & args]
-                 (try
-                   (js-invoke @*win type args)
-                   (catch js/Error e
-                     (js/console.error e))))))
+               (fn [^js e type & args]
+                 (let [win (get-win-from-sender e)]
+                   (try
+                     (js-invoke win type args)
+                     (catch js/Error e
+                       (js/console.error e)))))))
 
     (win/setup-window-listeners! win)
 

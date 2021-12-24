@@ -262,8 +262,10 @@
     (when (or granted? (util/electron?) (mobile/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
-    (when @src
-      (resizable-image config title @src metadata full_text true))))
+    (if (mobile-util/native-ios?)
+      [:span full_text]
+      (when @src
+        (resizable-image config title @src metadata full_text true)))))
 
 (defn ar-url->http-url
   [href]

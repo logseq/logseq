@@ -8,14 +8,16 @@
             [clojure.string :as string]
             [electron.utils :refer [logger]]
             [electron.configs :as cfgs]
+            [electron.window :refer [get-all-windows]]
             [electron.utils :refer [*win fetch extract-zip] :as utils]))
 
 ;; update & install
 (def *installing-or-updating (atom nil))
 (def debug (fn [& args] (apply (.-info logger) (conj args "[Marketplace]"))))
 (def emit (fn [type payload]
-            (.. ^js @*win -webContents
-                (send (name type) (bean/->js payload)))))
+            (doseq [^js win (get-all-windows)]
+              (.. win -webContents
+                  (send (name type) (bean/->js payload))))))
 
 ;; Get a release by tag name: /repos/{owner}/{repo}/releases/tags/{tag}
 ;; Get the latest release: /repos/{owner}/{repo}/releases/latest

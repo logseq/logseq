@@ -143,12 +143,13 @@
 
 (defn get-files
   [path-or-handle ok-handler]
-  (let [record (get-record)]
+  (let [record (get-record)
+        electron? (util/electron?)
+        mobile? (mobile-util/is-native-platform?)]
     (p/let [result (protocol/get-files record path-or-handle ok-handler)]
-      (if (or (util/electron?)
-              (mobile-util/is-native-platform?))
+      (if (or electron? mobile?)
         (let [result (bean/->clj result)]
-          (rest result))
+          (if electron? (rest result) result))
         result))))
 
 (defn watch-dir!

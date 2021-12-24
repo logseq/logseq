@@ -1489,6 +1489,12 @@
               false)))))
 
 #?(:cljs
+  (defn make-el-into-center-viewport
+    [^js/HTMLElement el]
+    (when el
+      (.scrollIntoView el #js {:block "center" :behavior "smooth"}))))
+
+#?(:cljs
    (defn make-el-into-viewport
      ([^js/HTMLElement el]
       (make-el-into-viewport el 60))
@@ -1500,11 +1506,20 @@
                           target-bottom (.-bottom (.getBoundingClientRect el))]
                       (when (> (+ target-bottom (or (safe-parse-int offset) 0))
                                viewport-height)
-                        (.scrollIntoView el #js {:block "center" :behavior "smooth"})))]
+                        (make-el-into-center-viewport el)))]
 
         (if async?
           (js/setTimeout #(handle) 64)
           (handle))))))
+
+#?(:cljs
+   (defn make-el-center-if-near-top
+     ([^js/HTMLElement el]
+      (make-el-center-if-near-top el 80))
+     ([^js/HTMLElement el offset]
+      (let [target-top (.-top (.getBoundingClientRect el))]
+        (when (<= target-top (or (safe-parse-int offset) 0))
+          (make-el-into-center-viewport el))))))
 
 #?(:cljs
    (defn sm-breakpoint?
