@@ -903,7 +903,10 @@
              ;; it seems to me textarea autoresize is completely broken
              #_(set! (.-value input) (string/trim content)))
            (when move-cursor?
-             (cursor/move-cursor-to input pos))))))))
+             (cursor/move-cursor-to input pos))
+
+           (when (or (util/mobile?) (mobile-util/is-native-platform?))
+             (util/make-el-center-if-near-top input))))))))
 
 (defn clear-edit!
   []
