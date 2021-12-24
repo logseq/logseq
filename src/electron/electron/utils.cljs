@@ -76,10 +76,6 @@
   []
   (.getFocusedWindow BrowserWindow))
 
-(defn get-all-windows
-  []
-  (seq (js->clj (.getAllWindows BrowserWindow))))
-
 (defn get-win-from-sender
   [^js evt]
   (try
