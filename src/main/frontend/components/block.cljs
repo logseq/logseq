@@ -204,54 +204,56 @@
                      (when @*resizing-image? (util/stop e)))}
           (and (:width metadata) (not (util/mobile?)))
           (assoc :style {:width (:width metadata)}))
-        [:div.asset-container
-         [:img.rounded-sm.shadow-xl.relative
-          (merge
-           {:loading "lazy"
-            :src     src
-            :title   title}
-           metadata)]
-         [:span.ctl
-          [:a.delete
-           {:title "Delete this image"
-            :on-click
-            (fn [e]
-              (when-let [block-id (:block/uuid config)]
-                (let [confirm-fn (ui/make-confirm-modal
-                                  {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                   :sub-title     (if local? :asset/physical-delete "")
-                                   :sub-checkbox? local?
-                                   :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
-                                                    (close-fn)
-                                                    (editor-handler/delete-asset-of-block!
-                                                     {:block-id    block-id
-                                                      :local?      local?
-                                                      :delete-local? (first sub-selected)
-                                                      :repo        (state/get-current-repo)
-                                                      :href        src
-                                                      :title       title
-                                                      :full-text   full_text}))})]
-                  (state/set-modal! confirm-fn)
-                  (util/stop e))))}
-           svg/trash-sm]
+        (if (mobile-util/native-ios?)
+          [:span full_text]
+          [:div.asset-container
+           [:img.rounded-sm.shadow-xl.relative
+            (merge
+             {:loading "lazy"
+              :src     src
+              :title   title}
+             metadata)]
+           [:span.ctl
+            [:a.delete
+             {:title "Delete this image"
+              :on-click
+              (fn [e]
+                (when-let [block-id (:block/uuid config)]
+                  (let [confirm-fn (ui/make-confirm-modal
+                                    {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                     :sub-title     (if local? :asset/physical-delete "")
+                                     :sub-checkbox? local?
+                                     :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
+                                                      (close-fn)
+                                                      (editor-handler/delete-asset-of-block!
+                                                       {:block-id    block-id
+                                                        :local?      local?
+                                                        :delete-local? (first sub-selected)
+                                                        :repo        (state/get-current-repo)
+                                                        :href        src
+                                                        :title       title
+                                                        :full-text   full_text}))})]
+                    (state/set-modal! confirm-fn)
+                    (util/stop e))))}
+             svg/trash-sm]
 
-          [:a.delete.ml-1
-           {:title    "maximize image"
-            :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
-                                        images (to-array images)
-                                        images (if-not (= (count images) 1)
-                                                 (let [^js _image (.closest (.-target e) ".asset-container")
-                                                       image (. _image querySelector "img")]
-                                                   (cons image (remove #(= image %) images)))
-                                                 images)
-                                        images (for [^js it images] {:src (.-src it)
-                                                                     :w (.-naturalWidth it)
-                                                                     :h (.-naturalHeight it)})]
+            [:a.delete.ml-1
+             {:title    "maximize image"
+              :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
+                                          images (to-array images)
+                                          images (if-not (= (count images) 1)
+                                                   (let [^js _image (.closest (.-target e) ".asset-container")
+                                                         image (. _image querySelector "img")]
+                                                     (cons image (remove #(= image %) images)))
+                                                   images)
+                                          images (for [^js it images] {:src (.-src it)
+                                                                       :w (.-naturalWidth it)
+                                                                       :h (.-naturalHeight it)})]
 
-                                    (when (seq images)
-                                      (lightbox/preview-images! images))))}
+                                      (when (seq images)
+                                        (lightbox/preview-images! images))))}
 
-           (svg/maximize)]]])))))
+             (svg/maximize)]]]))))))
 
 (rum/defcs asset-link < rum/reactive
   (rum/local nil ::src)
