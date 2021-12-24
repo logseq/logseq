@@ -14,8 +14,9 @@
 (def *installing-or-updating (atom nil))
 (def debug (fn [& args] (apply (.-info logger) (conj args "[Marketplace]"))))
 (def emit (fn [type payload]
-            (.. ^js @*win -webContents
-                (send (name type) (bean/->js payload)))))
+            (doseq [^js win (utils/get-all-windows)]
+              (.. win -webContents
+                  (send (name type) (bean/->js payload))))))
 
 ;; Get a release by tag name: /repos/{owner}/{repo}/releases/tags/{tag}
 ;; Get the latest release: /repos/{owner}/{repo}/releases/latest
