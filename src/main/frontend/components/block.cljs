@@ -1334,17 +1334,20 @@
 
 (defn- bullet-on-click
   [e block uuid]
-  (if (-> block :block/properties :collapsed)
-    (editor-handler/expand-all! uuid (:block/level block)))
-  (if (gobj/get e "shiftKey")
-    (do
-      (state/sidebar-add-block!
-       (state/get-current-repo)
-       (:db/id block)
-       :block
-       block)
-      (util/stop e))
-    (route-handler/redirect-to-page! uuid)))
+  (let [block (if (-> block :block/properties :collapsed)
+                (do (editor-handler/expand-block! uuid)
+                    (update-in block [:block/properties] dissoc :collapsed))
+               block)]
+    (if (gobj/get e "shiftKey")
+      (do
+        (state/sidebar-add-block!
+          (state/get-current-repo)
+          (:db/id block)
+          :block
+          block)
+        (util/stop e))
+      (route-handler/redirect-to-page! uuid))
+    ))
 
 (defn- block-left-border-on-click
   [e children]
