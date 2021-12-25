@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       build-target:
-        description: 'Build Target ("nightly"/"beta")'
+        description: 'Build Target ("nightly"/"beta"/"non-release")'
         type: string
         required: true
         default: "beta"
@@ -427,7 +427,7 @@ jobs:
 
   release:
     # NOTE: For now, we only have beta channel to be released on Github
-    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target != 'nightly' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
     needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, build-android ]
     runs-on: ubuntu-18.04
     steps:
