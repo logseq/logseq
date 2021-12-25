@@ -3317,7 +3317,6 @@
 (defn all-blocks-with-level
   "Return all blocks associated with correct level
    if :root-block is not nil, only return root block with its children
-   if :max-level is not nil, only return blocks that level <= :max-level
    if :expanded? true, return expanded children
    if :collapse? true, return without any collapsed children
    for example:
@@ -3331,7 +3330,7 @@
     [{:block a :level 1}
      {:block b :level 2}
      {:block e :level 2}]"
-  [{:keys [collapse? expanded? root-block max-level] :or {collapse? false expanded? false root-block nil max-level nil}}]
+  [{:keys [collapse? expanded? root-block] :or {collapse? false expanded? false root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
     (->>
@@ -3355,9 +3354,6 @@
 
      (#(cond->> %
          expanded? (filter (fn [b] (collapsable? (:block/uuid b))))))
-
-     (#(cond->> %
-         max-level (filter (fn [b] (>= max-level (:block/level b))))))
 
      (map (fn [x] (dissoc x :block/children))))))
 
@@ -3441,22 +3437,18 @@
 
 (defn collapse-all!
   ([]
-   (collapse-all! nil nil))
+   (collapse-all! nil))
   ([block-id]
-   (collapse-all! block-id nil))
-  ([block-id max-level]
-   (let [blocks-to-collapse (all-blocks-with-level {:expanded? true :root-block block-id :max-level max-level})]
+   (let [blocks-to-collapse (all-blocks-with-level {:expanded? true :root-block block-id})]
      (when (seq blocks-to-collapse)
        (doseq [{:block/keys [uuid]} blocks-to-collapse]
          (collapse-block! uuid))))))
 
 (defn expand-all!
   ([]
-   (expand-all! nil nil))
+   (expand-all! nil))
   ([block-id]
-   (expand-all! block-id nil))
-  ([block-id max-level]
-   (->> (all-blocks-with-level {:root-block block-id :max-level max-level})
+   (->> (all-blocks-with-level {:root-block block-id})
         (filter (fn [b] (-> b :block/properties :collapsed)))
         (map (comp expand-block! :block/uuid))
         doall)))
