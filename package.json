@@ -110,5 +110,24 @@
         "reakit": "0.11.1",
         "threads": "1.6.5",
         "yargs-parser": "20.2.4"
-    }
+    },
+    "resolutions": {
+        "pixi-graph-fork/@pixi/app": "6.2.0",
+        "pixi-graph-fork/@pixi/constants": "6.2.0",
+        "pixi-graph-fork/@pixi/core": "6.2.0",
+        "pixi-graph-fork/@pixi/display": "6.2.0",
+        "pixi-graph-fork/@pixi/graphics": "6.2.0",
+        "pixi-graph-fork/@pixi/interaction": "6.2.0",
+        "pixi-graph-fork/@pixi/loaders": "6.2.0",
+        "pixi-graph-fork/@pixi/ticker": "6.2.0",
+        "pixi-graph-fork/@pixi/sprite": "6.2.0",
+        "pixi-graph-fork/@pixi/text": "6.2.0",
+        "pixi-graph-fork/@pixi/text-bitmap": "6.2.0",
+        "pixi-graph-fork/@pixi/utils": "6.2.0",
+        "pixi-graph-fork/@pixi/runner": "6.2.0",
+        "pixi-graph-fork/@pixi/mesh": "6.2.0",
+        "pixi-graph-fork/@pixi/settings": "6.2.0",
+        "pixi-graph-fork/@pixi/mixin-get-child-by-name": "6.2.0",
+        "pixi-graph-fork/@pixi/math": "6.2.0"
+      }
 }
