@@ -3,10 +3,22 @@
             [frontend.config :as config]
             [frontend.util :as util]
             [promesa.core :as p]
+            [clojure.string :as string]
             ["threads" :refer [Pool Worker spawn]]
             [frontend.mobile.util :as mobile-util]))
 
 (defonce parser-pool (atom nil))
+
+(defn- absolute-path-for-worker
+  "Returns the absolute path to the worker file, on Windows.
+
+   NOTE: This is a bug in threads.js.
+   See-also: https://github.com/andywer/threads.js/blob/8f94053f028b0d4e4fb1fdec535867f6d0e23946/src/master/implementation.browser.ts#L10"
+  [path]
+  (if util/win32?
+    (-> path
+        (p/then #(str "//./" (string/replace % "\\" "/"))))
+    path))
 
 (defn create-parser-pool!
   ([]
@@ -14,7 +26,7 @@
   ([num]
    (p/let [static-path (if (and (util/electron?)
                                 (= "file:" (.-protocol js/location)))
-                         (ipc/ipc :getDirname)
+                         (absolute-path-for-worker (ipc/ipc :getDirname))
                          "/static")
            path (str static-path "/js/parser-worker.js")
            path (if (or (util/electron?)
@@ -68,6 +80,4 @@
 
 (comment
   (add-parse-job! "- hello" (frontend.format.mldoc/default-config :markdown))
-  (add-parse-job! "*world*" (frontend.format.mldoc/default-config :markdown))
-
-  )
+  (add-parse-job! "*world*" (frontend.format.mldoc/default-config :markdown)))
