@@ -1131,7 +1131,13 @@
         (subs s 0 (dec (count s)))
         s))))
 
+
+(defn normalize
+  [s]
+  (.normalize s "NFKC"))
+
 (defn page-name-sanity
+  "Sanitize the page-name for file name"
   [page-name]
   (-> page-name
       (remove-boundary-slashes)
@@ -1139,7 +1145,13 @@
       ;; Windows reserved path characters
       (string/replace windows-reserved-chars "_")
       ;; for android filesystem compatiblity
-      (string/replace #"[\\#|%]+" "_")))
+      (string/replace #"[\\#|%]+" "_")
+      (normalize)))
+
+(defn page-query-sanity
+  "Sanitize the query string for a page"
+  [s]
+  (normalize (string/lower-case s)))
 
 (defn get-page-original-name
   [page]
