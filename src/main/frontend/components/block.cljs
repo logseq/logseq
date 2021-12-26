@@ -1351,9 +1351,10 @@
 (defn- toggle-block-children
   [e children]
   (let [block-ids (map :block/uuid children)]
-    (if (some editor-handler/collapsable? block-ids)
-      (dorun (map editor-handler/collapse-block! block-ids))
-      (dorun (map editor-handler/expand-block! block-ids)))))
+    (dorun
+     (if (some editor-handler/collapsable? block-ids)
+       (map editor-handler/collapse-block! block-ids)
+       (map editor-handler/expand-block! block-ids)))))
 
 (rum/defc block-children < rum/reactive
   [config children collapsed? *ref-collapsed?]
