@@ -69,24 +69,6 @@
       (when-not file-exists?
         (file-handler/reset-file! repo-url path default-content)))))
 
-(defn create-favorites-file
-  [repo-url]
-  (spec/validate :repos/url repo-url)
-  (let [repo-dir (config/get-repo-dir repo-url)
-        format (state/get-preferred-format)
-        path (str (state/get-pages-directory)
-                  "/favorites."
-                  (config/get-file-extension format))
-        file-path (str "/" path)
-        default-content (case (name format)
-                          "org" (rc/inline "favorites.org")
-                          "markdown" (rc/inline "favorites.md")
-                          "")]
-    (p/let [_ (fs/mkdir-if-not-exists (str repo-dir "/" (state/get-pages-directory)))
-            file-exists? (fs/create-if-not-exists repo-url repo-dir file-path default-content)]
-      (when-not file-exists?
-        (file-handler/reset-file! repo-url path default-content)))))
-
 (defn create-custom-theme
   [repo-url]
   (spec/validate :repos/url repo-url)
@@ -161,7 +143,6 @@
              _ (file-handler/create-metadata-file repo-url encrypted?)
              _ (create-config-file-if-not-exists repo-url)
              _ (create-contents-file repo-url)
-             _ (create-favorites-file repo-url)
              _ (create-custom-theme repo-url)]
        (state/pub-event! [:page/create-today-journal repo-url])))))
 
@@ -573,7 +554,6 @@
                  (create-today-journal-if-not-exists repo {:content tutorial})))
              (create-config-file-if-not-exists repo)
              (create-contents-file repo)
-             (create-favorites-file repo)
              (create-custom-theme repo)
              (state/set-db-restoring! false)
              (ui-handler/re-render-root!)))
