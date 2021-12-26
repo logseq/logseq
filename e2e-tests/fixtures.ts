@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { test as base } from '@playwright/test';
+import { test as base, expect, ConsoleMessage } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
 import { randomString } from './utils';
 
@@ -10,9 +10,18 @@ let page: Page
 let repoName = randomString(10)
 export let graphDir = path.resolve(__dirname, '../tmp/e2e-graph', repoName)
 
+// NOTE: This is a console log watcher for error logs.
+const consoleLogWatcher = (msg: ConsoleMessage) => {
+  expect(msg.text()).not.toMatch(/^Failed to/)
+  expect(msg.text()).not.toMatch(/^Error/)
+  expect(msg.text()).not.toMatch(/^Uncaught/)
+  // NOTE: React warnings will be logged as error.
+  // expect(msg.type()).not.toBe('error')
+}
+
 base.beforeAll(async () => {
   if (electronApp) {
-    return ;
+    return
   }
 
   fs.mkdirSync(graphDir, {
@@ -27,18 +36,25 @@ base.beforeAll(async () => {
       LOGSEQ_OVERWRITE_OPEN_DIR: graphDir
     }
   })
-
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
 
   // NOTE: The following ensures App first start with the correct path.
-
   const appPath = await electronApp.evaluate(async ({ app }) => {
     return app.getAppPath()
   })
   console.log("Test start with AppPath:", appPath)
 
   page = await electronApp.firstWindow()
+  // Direct Electron console to watcher
+  page.on('console', consoleLogWatcher)
+  page.on('crash', () => {
+    expect('page must not crash!').toBe('page crashed')
+  })
+  page.on('pageerror', (err) => {
+    console.log(err)
+    expect('page must not have errors!').toBe('page has some error')
+  })
 
   await page.waitForLoadState('domcontentloaded')
   await page.waitForFunction('window.document.title != "Loading"')
@@ -69,8 +85,6 @@ base.afterAll(async () => {
   //  await electronApp.close()
   //}
 })
-
-
 
 // hijack electron app into the test context
 export const test = base.extend<{ page: Page, context: BrowserContext, app: ElectronApplication }>({

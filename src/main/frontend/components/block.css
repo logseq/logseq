@@ -133,10 +133,15 @@
   }
 }
 
-.block-children {
-  border-left: 1px solid;
-  border-left-color: var(--ls-guideline-color, #ddd);
+.block-children-left-border {
+  width: 3px;
+  padding-right: 2px;
+  cursor: pointer;
+  background-clip: content-box;
+  background-color: var(--ls-guideline-color, #ddd);
+}
 
+.block-children {
   padding-top: 2px;
   padding-bottom: 3px;
 
@@ -451,8 +456,8 @@ a:hover > .bullet-container {
 .doc-mode {
   margin-left: -16px;
 
-  .block-children {
-    border-left: none;
+  .block-children-left-border {
+    display: none;
   }
 
   .hide-inner-bullet .bullet {

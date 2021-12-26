@@ -67,8 +67,27 @@
           (editor-handler/edit-block! block :max (:block/uuid block))))))
   state)
 
+(defn- expand-top-block!
+  [state]
+  (let [[_ blocks _ _ _] (:rum/args state)]
+    (letfn [(one-top-block? [blocks]
+              (= 1 (->> blocks
+                        (mapcat (juxt :db/id #(-> % :block/parent :db/id)))
+                        (apply hash-map)
+                        (#(remove (reduce
+                                    (fn [acc [id parent]] (if (contains? % parent) (conj acc id) acc))
+                                    #{}
+                                    %)
+                                  (keys %)))
+                        count
+                        )))]
+      (if (and (one-top-block? blocks)
+               (-> blocks first :block/properties :collapsed))
+        (editor-handler/expand-block! (-> blocks first :block/uuid)))))
+  state)
+
 (rum/defc page-blocks-inner <
-  {:did-mount open-first-block!
+  {:did-mount  #(-> % open-first-block! expand-top-block!)
    :did-update open-first-block!}
   [page-name page-blocks hiccup sidebar? preview?]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}

@@ -8,7 +8,9 @@
             [frontend.date :as date]
             [frontend.util :as util]
             [frontend.commands :as commands]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [goog.object :as gobj]
+            [frontend.util.cursor :as cursor]))
 
 (defn- save-photo []
   (p/let [photo (p/catch
@@ -42,11 +44,24 @@
 
 (defn embed-photo [id]
   (let [block (state/get-edit-block)
+        input (state/get-input)
+        content (gobj/get input "value")
+        pos (cursor/pos input)
+        left-padding (cond
+                       (cursor/beginning-of-line? input)
+                       nil
+
+                       (= (and (not (zero? pos))
+                               (subs content (dec pos))) " ")
+                       nil
+
+                       :else " ")
         format (:block/format block)]
-    (p/let [filename (save-photo)]
+    (p/let [filename (save-photo)
+            url (util/format "../assets/%s" filename)]
       (commands/simple-insert!
        id
-       (case format
-         :org (util/format "[[../assets/%s]]" filename)
-         (util/format "![%s](../assets/%s)" filename filename))
+       (str left-padding
+            (editor-handler/get-asset-file-link format url filename true)
+        " ")
        {}))))

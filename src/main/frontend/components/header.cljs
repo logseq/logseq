@@ -162,7 +162,6 @@
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
         vw-state (state/sub :ui/visual-viewport-state)
-        vw-pending? (state/sub :ui/visual-viewport-pending?)
         show-open-folder? (and (or (nfs/supported?)
                                    (mobile-util/is-native-platform?))
                                (empty? repos)
@@ -172,8 +171,7 @@
       [:div.cp__header#head
        {:class           (util/classnames [{:electron-mac   electron-mac?
                                             :native-ios     (mobile-util/native-ios?)
-                                            :native-android (mobile-util/native-android?)
-                                            :is-vw-pending  (boolean vw-pending?)}])
+                                            :native-android (mobile-util/native-android?)}])
         :on-double-click (fn [^js e]
                            (when-let [target (.-target e)]
                              (when (and (util/electron?)
@@ -195,25 +193,25 @@
                                (state/set-left-sidebar-open! false))
                              (state/pub-event! [:go/search]))}
              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
-       
+
        [:div.r.flex
         (when (and (not (mobile-util/is-native-platform?))
                    (not (util/electron?)))
           (login logged?))
-        
+
         (when plugin-handler/lsp-enabled?
           (plugins/hook-ui-items :toolbar))
 
         (when (not= (state/get-current-route) :home)
           (home-button))
-        
+
         (when (or (util/electron?)
                   (mobile-util/native-ios?))
           (back-and-forward))
 
         (new-block-mode)
 
-        (when (mobile-util/is-native-platform?)
+        (when (and (mobile-util/is-native-platform?) (seq repos))
           [:a.text-sm.font-medium.button
            {:on-click
             (fn []
@@ -229,9 +227,8 @@
            (if refreshing?
              [:div {:class "animate-spin-reverse"}
               svg/refresh]
-             (when (seq repos)
-               [:div.flex.flex-row.text-center.open-button__inner.items-center
-                (ui/icon "refresh" {:style {:fontSize ui/icon-size}})]))])
+             [:div.flex.flex-row.text-center.open-button__inner.items-center
+              (ui/icon "refresh" {:style {:fontSize ui/icon-size}})])])
 
         (repo/sync-status current-repo)
 

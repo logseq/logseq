@@ -1489,13 +1489,37 @@
               false)))))
 
 #?(:cljs
+  (defn make-el-into-center-viewport
+    [^js/HTMLElement el]
+    (when el
+      (.scrollIntoView el #js {:block "center" :behavior "smooth"}))))
+
+#?(:cljs
    (defn make-el-into-viewport
-     [^js/HTMLElement el offset]
-     (let [wrap-height (.-clientHeight js/document.documentElement)
-           target-bottom (.-bottom (.getBoundingClientRect el))]
-       (when (> (+ target-bottom (or (safe-parse-int offset) 0))
-                wrap-height)
-         (.scrollIntoView el #js {:block "center" :behavior "smooth"})))))
+     ([^js/HTMLElement el]
+      (make-el-into-viewport el 60))
+     ([^js/HTMLElement el offset]
+      (make-el-into-viewport el offset true))
+     ([^js/HTMLElement el offset async?]
+      (let [handle #(let [viewport-height (or (.-height js/window.visualViewport)
+                                              (.-clientHeight js/document.documentElement))
+                          target-bottom (.-bottom (.getBoundingClientRect el))]
+                      (when (> (+ target-bottom (or (safe-parse-int offset) 0))
+                               viewport-height)
+                        (make-el-into-center-viewport el)))]
+
+        (if async?
+          (js/setTimeout #(handle) 64)
+          (handle))))))
+
+#?(:cljs
+   (defn make-el-center-if-near-top
+     ([^js/HTMLElement el]
+      (make-el-center-if-near-top el 80))
+     ([^js/HTMLElement el offset]
+      (let [target-top (.-top (.getBoundingClientRect el))]
+        (when (<= target-top (or (safe-parse-int offset) 0))
+          (make-el-into-center-viewport el))))))
 
 #?(:cljs
    (defn sm-breakpoint?
@@ -1504,14 +1528,14 @@
 
 #?(:cljs
    (defn event-is-composing?
-     "Check if keydown event is a composing (IME) event. 
+     "Check if keydown event is a composing (IME) event.
       Ignore the IME process by default."
      ([e]
       (event-is-composing? e false))
      ([e include-process?]
       (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")]
         (if include-process?
-          (or event-composing? 
+          (or event-composing?
               (= (gobj/get e "keyCode") 229)
               (= (gobj/get e "key") "Process"))
           event-composing?)))))

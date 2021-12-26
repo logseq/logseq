@@ -29,6 +29,12 @@
     align-items: center;
   }
 
+  /* To prevent header glitch on Safari */
+  > .l, > .r {
+      -webkit-transform: translate3d(0, 0, 0);
+      transform: translate3d(0, 0, 0);
+  }
+
   .it svg {
     transform: scale(0.8);
   }
@@ -76,7 +82,7 @@
     a {
       color: var(--ls-link-text-color, #045591) !important;
     }
-    
+
     a.restart {
       position: relative;
       cursor: pointer !important;
@@ -173,8 +179,8 @@ a.button {
   cursor: default !important;
 }
 
-html.is-native-ios,
 html.is-ios.is-safari {
+  
   #main-container {
     padding-top: 20px;
   }
@@ -189,17 +195,20 @@ html.is-ios.is-safari {
   }
 }
 
-html.is-ios {
-  --ls-headbar-inner-top-padding: 36px;
+html.is-native-iphone,
+html.is-native-iphone-without-notch,
+html.is-native-ipad {
 
-  .cp__header > .r {
-    display: flex;
-  }
+    .cp__header > .r {
+        display: flex;
+    }
+}
 
-  @screen sm {
+html.is-native-ipad {
+
     --ls-headbar-inner-top-padding: 0px;
     --ls-headbar-height: 4rem;
-
+    
     .cp__header {
       background-color: transparent !important;
       display: flex;
@@ -244,4 +253,12 @@ html.is-ios {
       margin-top: 8px;
     }
   }
+
+html.is-native-iphone {
+  --ls-headbar-inner-top-padding: 36px;
+}
+
+html.is-native-iphone-without-notch {
+    --ls-headbar-inner-top-padding: 10px;
+    --ls-headbar-height: 3rem;
 }

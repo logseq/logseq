@@ -2,8 +2,10 @@
   (:require [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             ["@capacitor/app" :refer [^js App]]
+            ["@capacitor/keyboard" :refer [^js Keyboard]]
             [reitit.frontend.easy :as rfe]
             [clojure.string :as string]
+            [frontend.handler.notification :as notification]
             [frontend.fs.capacitor-fs :as fs]))
 
 (defn init!
@@ -31,4 +33,10 @@
                          (js/window.history.back))))))
   (when (mobile-util/native-ios?)
     (let [path (fs/iOS-ensure-documents!)]
-      (println "iOS container path: " path))))
+      (println "iOS container path: " path))
+
+    ;; Keyboard watcher
+    (.addListener Keyboard "keyboardWillShow"
+                  #(state/pub-event! [:mobile/keyboard-will-show]))
+    (.addListener Keyboard "keyboardDidShow"
+                  #(state/pub-event! [:mobile/keyboard-did-show]))))

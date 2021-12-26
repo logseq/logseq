@@ -65,7 +65,7 @@
       :ui/settings-open? false
       :ui/sidebar-open? false
       :ui/left-sidebar-open? (boolean (storage/get "ls-left-sidebar-open?"))
-      :ui/theme (or (storage/get :ui/theme) "dark")
+      :ui/theme (or (storage/get :ui/theme) (if (mobile/is-native-platform?) "light" "dark"))
       :ui/system-theme? ((fnil identity (or util/mac? util/win32? false)) (storage/get :ui/system-theme?))
       :ui/wide-mode? false
       ;; :show-all, :hide-block-body, :hide-block-children
@@ -903,7 +903,10 @@
              ;; it seems to me textarea autoresize is completely broken
              #_(set! (.-value input) (string/trim content)))
            (when move-cursor?
-             (cursor/move-cursor-to input pos))))))))
+             (cursor/move-cursor-to input pos))
+
+           (when (or (util/mobile?) (mobile-util/is-native-platform?))
+             (util/make-el-center-if-near-top input))))))))
 
 (defn clear-edit!
   []
@@ -1238,7 +1241,7 @@
 
 (defn enable-tooltip?
   []
-  (if (util/mobile?)
+  (if (or (util/mobile?) (mobile-util/is-native-platform?))
     false
     (get (get (sub-config) (get-current-repo))
          :ui/enable-tooltip?

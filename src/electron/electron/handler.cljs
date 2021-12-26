@@ -165,12 +165,16 @@
 (defn- sanitize-graph-name
   [graph-name]
   (when graph-name
-    (string/replace graph-name "/" "++")))
+    (-> graph-name
+        (string/replace "/" "++")
+        (string/replace ":" "+3A+"))))
 
-(defn- graph-name->path
-  [graph-name]
-  (when graph-name
-    (string/replace graph-name "++" "/")))
+ (defn- graph-name->path
+   [graph-name]
+   (when graph-name
+     (-> graph-name
+         (string/replace "+3A+" ":")
+         (string/replace "++" "/"))))
 
 (defn- get-graphs-dir
   []
@@ -221,6 +225,7 @@
 (defmethod handle :openNewWindow [window [_]]
   (let [win (win/create-main-window)]
     (win/on-close-save! win)
+    (win/setup-window-listeners! win)
     nil))
 
 (defmethod handle :persistent-dbs-saved [window _]
@@ -340,10 +345,10 @@
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]
     (.handle ipcMain main-channel
-             (fn [event args-js]
+             (fn [^js event args-js]
                (try
                  (let [message (bean/->clj args-js)]
-                   (bean/->js (handle window message)))
+                   (bean/->js (handle (or (utils/get-win-from-sender event) window) message)))
                  (catch js/Error e
                    (when-not (contains? #{"mkdir" "stat"} (nth args-js 0))
                      (println "IPC error: " {:event event

@@ -193,6 +193,10 @@
   z-index: 9;
   transition: width 1.2s;
 
+  a {
+    color: var(--ls-primary-text-color);
+  }
+
   > .shade-mask {
     background-color: rgba(0, 0, 0, .5);
     position: absolute;
@@ -262,8 +266,12 @@
   }
 }
 
-.white-theme #left-sidebar a {
-  color: var(--ls-primary-text-color);
+html[data-theme='dark'] {
+  #left-sidebar {
+    > .shade-mask {
+      background-color: rgba(0, 0, 0, .15);
+    }
+  }
 }
 
 .settings-modal {
