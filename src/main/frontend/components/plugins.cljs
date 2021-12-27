@@ -268,6 +268,48 @@
                          (page-handler/init-commands!))
                        true)]])]])))
 
+(rum/defc panel-control-tabs
+  [t *category selected-unpacked-pkg market?]
+
+  [:div.mb-2.flex.justify-between.control-tabs.relative
+   [:div.flex.align-items
+    (category-tabs t @*category #(reset! *category %))
+
+    (when-not market?
+      [:div
+       (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
+                  :arrow true}
+                 (ui/button
+                   [:span (ui/icon "upload") (t :plugin/load-unpacked)]
+                   :intent "logseq"
+                   :class "load-unpacked"
+                   :on-click plugin-handler/load-unpacked-plugin))
+
+       (unpacked-plugin-loader selected-unpacked-pkg)])]
+
+   [:div.flex.align-items
+
+    ;;(ui/button
+    ;;  (t :plugin/open-preferences)
+    ;;  :intent "logseq"
+    ;;  :on-click (fn []
+    ;;              (p/let [root (plugin-handler/get-ls-dotdir-root)]
+    ;;                (js/apis.openPath (str root "/preferences.json")))))
+
+    ;; sorter
+    (ui/button
+      [:span (ui/icon "arrows-sort") "Sort by"]
+      :intent "logseq")
+
+    ;; developer
+    (ui/button
+      (t :plugin/contribute)
+      :href "https://github.com/logseq/marketplace"
+      :class "contribute"
+      :intent "logseq"
+      :target "_blank")
+    ]])
+
 (rum/defcs marketplace-plugins
   < rum/static rum/reactive
     (rum/local false ::fetching)
@@ -300,17 +342,7 @@
 
       [:div.cp__plugins-marketplace
 
-       [:div.mb-4.flex.justify-between
-        [:div.flex.align-items
-         (category-tabs t @*category #(reset! *category %))]
-
-        [:div.flex.align-items
-         (ui/button
-           (t :plugin/contribute)
-           :href "https://github.com/logseq/marketplace"
-           :intent "logseq"
-           :target "_blank")
-         ]]
+       (panel-control-tabs t *category nil true)
 
        (cond
          (not online?)
@@ -361,37 +393,9 @@
       [[t] i18n/*tongue-context*]
 
       [:div.cp__plugins-installed
-       [:div.mb-4.flex.items-center.justify-between
 
-        [:div.flex.align-items.secondary-tabs
-         [:div.flex.align-items
-          (category-tabs t @*category #(reset! *category %))]]
+       (panel-control-tabs t *category selected-unpacked-pkg false)
 
-        [:div.flex.align-items
-         [:div
-          (unpacked-plugin-loader selected-unpacked-pkg)
-
-          (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
-                     :arrow true}
-                    (ui/button
-                      [:span (ui/icon "upload") (t :plugin/load-unpacked)]
-                      :intent "logseq"
-                      :class "mr-1"
-                      :on-click plugin-handler/load-unpacked-plugin))]
-
-         ;;(ui/button
-         ;;  (t :plugin/open-preferences)
-         ;;  :intent "logseq"
-         ;;  :on-click (fn []
-         ;;              (p/let [root (plugin-handler/get-ls-dotdir-root)]
-         ;;                (js/apis.openPath (str root "/preferences.json")))))
-
-         (ui/button
-           (t :plugin/contribute)
-           :href "https://github.com/logseq/marketplace"
-           :intent "logseq"
-           :target "_blank")
-         ]]
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [item sorted-plugins]
           (rum/with-key
