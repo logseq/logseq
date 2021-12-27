@@ -255,7 +255,8 @@
   "Convert journal file name to user' custom date format"
   [original-page-name]
   (when original-page-name
-    (let [page-name (string/lower-case original-page-name)
+    (let [page-name (-> (string/lower-case original-page-name)
+                        (util/page-name-sanity))
          day (date/journal-title->int page-name)]
      (if day
        (let [original-page-name (date/int->journal-title day)]

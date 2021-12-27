@@ -1139,7 +1139,7 @@
 (defn page-name-sanity
   "Sanitize the page-name for file name"
   [page-name]
-  (-> page-name
+  (some-> page-name
       (remove-boundary-slashes)
       (string/replace #"/" ".")
       ;; Windows reserved path characters
