@@ -341,11 +341,18 @@
 
 (rum/defcs installed-plugins
   < rum/static rum/reactive
+    (rum/local :plugins ::category)
   [state]
   (let [installed-plugins (state/sub :plugin/installed-plugins)
+        installed-plugins (vals installed-plugins)
         updating (state/sub :plugin/installing)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
-        sorted-plugins (->> (vals installed-plugins)
+        *category (::category state)
+        filtered-plugins (when (seq installed-plugins)
+                           (if (= @*category :themes)
+                             (filter #(:theme %) installed-plugins)
+                             (filter #(not (:theme %)) installed-plugins)))
+        sorted-plugins (->> filtered-plugins
                             (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)]
                                        (update %1 k conj %2)) [[] []])
                             (#(update % 0 (fn [it] (sort-by :iir it))))
@@ -357,22 +364,28 @@
        [:div.mb-4.flex.items-center.justify-between
 
         [:div.flex.align-items.secondary-tabs
-         (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
-                    :arrow true}
-                   (ui/button
-                     [:span (ui/icon "upload") (t :plugin/load-unpacked)]
-                     :intent "logseq"
-                     :on-click plugin-handler/load-unpacked-plugin))
-
-         (unpacked-plugin-loader selected-unpacked-pkg)]
+         [:div.flex.align-items
+          (category-tabs t @*category #(reset! *category %))]]
 
         [:div.flex.align-items
+         [:div
+          (unpacked-plugin-loader selected-unpacked-pkg)
+
+          (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
+                     :arrow true}
+                    (ui/button
+                      [:span (ui/icon "upload") (t :plugin/load-unpacked)]
+                      :intent "logseq"
+                      :class "mr-1"
+                      :on-click plugin-handler/load-unpacked-plugin))]
+
          ;;(ui/button
          ;;  (t :plugin/open-preferences)
          ;;  :intent "logseq"
          ;;  :on-click (fn []
          ;;              (p/let [root (plugin-handler/get-ls-dotdir-root)]
          ;;                (js/apis.openPath (str root "/preferences.json")))))
+
          (ui/button
            (t :plugin/contribute)
            :href "https://github.com/logseq/marketplace"
@@ -455,7 +468,7 @@
       [[t] i18n/*tongue-context*]
 
       [:div.cp__plugins-page
-       {:ref *el-ref
+       {:ref       *el-ref
         :tab-index "-1"}
        [:h1 (t :plugins)]
        (security-warning)

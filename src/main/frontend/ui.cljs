@@ -575,7 +575,7 @@
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 9999 -1)}
+     {:style {:z-index (if show? 999 -1)}
       :label label}
      (css-transition
       {:in show? :timeout 0}
@@ -647,7 +647,7 @@
                        (state/close-sub-modal! id))
             modal-panel-content (or modal-panel-content (fn [close] [:div]))]
         [:div.ui__modal.is-sub-modal
-         {:style {:z-index (if show? (+ 9999 idx) -1)}
+         {:style {:z-index (if show? (+ 999 idx) -1)}
           :label label}
          (css-transition
            {:in show? :timeout 0}
