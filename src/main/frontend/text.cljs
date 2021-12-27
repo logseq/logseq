@@ -344,4 +344,4 @@
       (-> (if (not= (first parts) "0")
             (string/join "/" parts)
             (last parts))
-          js/decodeURIComponent))))
+          js/decodeURI))))
