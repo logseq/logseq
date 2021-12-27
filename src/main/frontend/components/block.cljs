@@ -238,18 +238,18 @@
           [:a.delete.ml-1
            {:title    "maximize image"
             :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
-                                        images (to-array images)
-                                        images (if-not (= (count images) 1)
-                                                 (let [^js _image (.closest (.-target e) ".asset-container")
-                                                       image (. _image querySelector "img")]
-                                                   (cons image (remove #(= image %) images)))
-                                                 images)
-                                        images (for [^js it images] {:src (.-src it)
-                                                                     :w (.-naturalWidth it)
-                                                                     :h (.-naturalHeight it)})]
+                                       images (to-array images)
+                                       images (if-not (= (count images) 1)
+                                                (let [^js _image (.closest (.-target e) ".asset-container")
+                                                      image (. _image querySelector "img")]
+                                                  (cons image (remove #(= image %) images)))
+                                                images)
+                                       images (for [^js it images] {:src (.-src it)
+                                                                    :w (.-naturalWidth it)
+                                                                    :h (.-naturalHeight it)})]
 
-                                    (when (seq images)
-                                      (lightbox/preview-images! images))))}
+                                   (when (seq images)
+                                     (lightbox/preview-images! images))))}
 
            (svg/maximize)]]])))))
 
@@ -802,6 +802,24 @@
         (join (config/get-repo-dir (state/get-current-repo))
               (config/get-local-asset-absolute-path path)))))
 
+(rum/defc namespace-hierarchy-aux
+  [config namespace children]
+  [:ul
+   (for [child children]
+     [:li {:key (str "namespace-" namespace "-" (:db/id child))}
+      (page-cp config child)
+      (when (seq (:namespace/children child))
+        (namespace-hierarchy-aux config (:block/name child)
+                                 (:namespace/children child)))])])
+
+(rum/defc namespace-hierarchy
+  [config namespace children]
+  [:div.namespace
+   [:div.font-medium.flex.flex-row.items-center.pb-2
+    [:span.text-sm.mr-1 "Namespace "]
+    (page-cp config {:block/name namespace})]
+   (namespace-hierarchy-aux config namespace children)])
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -1130,6 +1148,13 @@
          [:span.warning
           (util/format "{{function %s}}" (first arguments))])
 
+        (= name "namespace")
+        (let [namespace (first arguments)]
+          (when-not (string/blank? namespace)
+            (let [namespace (string/lower-case (text/page-ref-un-brackets! namespace))
+                  children (model/get-namespace-hierarchy (state/get-current-repo) namespace)]
+              (namespace-hierarchy config namespace children))))
+
         (= name "youtube")
         (when-let [url (first arguments)]
           (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
@@ -1376,9 +1401,9 @@
             (when (map? child)
               (let [child (dissoc child :block/meta)
                     config (cond->
-                            (-> config
-                                (assoc :block/uuid (:block/uuid child))
-                                (dissoc :breadcrumb-show? :embed-parent))
+                             (-> config
+                                 (assoc :block/uuid (:block/uuid child))
+                                 (dissoc :breadcrumb-show? :embed-parent))
                              ref?
                              (assoc :ref-child? true))]
                 (rum/with-key (block-container config child)
@@ -2377,7 +2402,7 @@
         states (filter #(not (string/starts-with? % "CLOCK:")) log)]
     (when (seq clocks)
       (let [tr (fn [elm cols] (->elem :tr
-                                      (mapv (fn [col] (->elem elm col)) cols)))
+                                     (mapv (fn [col] (->elem elm col)) cols)))
             head  [:thead.overflow-x-scroll (tr :th.py-0 ["Type" "Start" "End" "Span"])]
             clock-tbody (->elem
                          :tbody.overflow-scroll.sm:overflow-auto
