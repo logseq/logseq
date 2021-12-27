@@ -9,7 +9,6 @@
 (defn- redirect-to-journal!
   [page]
   (when (and page (state/enable-journals? (state/get-current-repo)))
-    (prn {:page page})
     (route-handler/redirect! {:to          :page
                               :path-params {:name page}})))
 
