@@ -55,7 +55,7 @@
 
       [:div.cp__themes-installed
        {:tab-index -1}
-       [:h1.mb-4.text-2xl.p-2 (t :themes)]
+       [:h1.mb-4.text-2xl.p-1 (t :themes)]
        (map-indexed
          (fn [idx opt]
            (let [current-selected (:selected opt)
@@ -67,12 +67,13 @@
                            [{:is-selected current-selected
                              :is-active   (= idx @*cursor)}])
                :on-click #(do (js/LSPluginCore.selectTheme (if current-selected nil (clj->js opt)))
-                              (state/set-modal! nil))}
+                              (state/close-modal!))}
               [:section
-               [:strong.block (when plg (str (:name plg) " / ")) (:name opt)]
-               [:small.opacity-50.italic (:description opt)]]
+               [:strong.block
+                [:small.opacity-60 (str (or (:name plg) "Logseq") " • ")]
+                (:name opt)]]
               [:small.flex-shrink-0.flex.items-center.opacity-10
-               (if current-selected (svg/check 28))]]))
+               (if current-selected (ui/icon "check"))]]))
          themes)])))
 
 (rum/defc unpacked-plugin-loader
@@ -389,7 +390,7 @@
 
 (defn open-select-theme!
   []
-  (state/set-modal! installed-themes))
+  (state/set-sub-modal! installed-themes))
 
 (rum/defc hook-ui-slot
   ([type payload] (hook-ui-slot type payload nil))
