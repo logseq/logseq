@@ -141,6 +141,11 @@
   background-color: var(--ls-guideline-color, #ddd);
 }
 
+.block-children-left-border:hover {
+  padding-right: 0px;
+  background-color: var(--ls-primary-text-color);
+}
+
 .block-children {
   padding-top: 2px;
   padding-bottom: 3px;

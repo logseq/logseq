@@ -234,17 +234,20 @@
                           (editor-handler/cut-block! block-id))}
              "Cut")
 
-            (ui/menu-link
-              {:key      "Expand all"
-               :on-click (fn [_e]
-                           (editor-handler/expand-all! block-id))}
-              "Expand all")
+            (when (editor-handler/expand-all? block-id)
+              (ui/menu-link
+               {:key      "Expand all"
+                :on-click (fn [_e]
+                            (editor-handler/expand-all! block-id))}
+               "Expand all"))
 
-            (ui/menu-link
-              {:key      "Collapse all"
-               :on-click (fn [_e]
-                           (editor-handler/collapse-all! block-id))}
-              "Collapse all")
+            (when (editor-handler/collapse-all? block-id)
+
+              (ui/menu-link
+               {:key      "Collapse all"
+                :on-click (fn [_e]
+                            (editor-handler/collapse-all! block-id))}
+               "Collapse all"))
 
             (when (state/sub [:plugin/simple-commands])
               (when-let [cmds (state/get-plugins-commands-with-type :block-context-menu-item)]
