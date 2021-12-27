@@ -3566,3 +3566,31 @@
       (save-block! (state/get-current-repo)
                    (:block/uuid block)
                    content))))
+
+(defn block-default-collapsed?
+  "Whether a block should be collapsed by default.
+  Currently, this handles several cases:
+  1. Zoom in mode, it will open the current block if it's collapsed.
+  2. Queries.
+  3. References."
+  [block config]
+  (let [collapsed? (cond
+                     (and (:block? config)
+                          (= (:id config) (str (:block/uuid block))))
+                     false
+
+                     (and (:block? config)
+                          (get-in block [:block/properties :collapsed]))
+                     true
+
+                     :else
+                     (boolean
+                      (and
+                       (seq (:block/children block))
+                       (or (:custom-query? config)
+                           (and (:ref? config)
+                                (>= (:ref/level block)
+                                    (state/get-ref-open-blocks-level)))))))]
+    (if (or (:ref? config) (:block? config))
+      collapsed?
+      (get-in block [:block/properties :collapsed]))))
