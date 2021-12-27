@@ -1,11 +1,13 @@
 (ns frontend.fs.sync
   (:require [frontend.util :as util]
             [cljs.core.async :as async :refer [go timeout go-loop offer! poll! chan <! >!]]
+            [cljs.core.async.interop :refer-macros [<p!]]
             [cljs-http.client :as http]
             [frontend.util.persist-var :as persist-var]
             [clojure.string :as string]
             [frontend.state :as state]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.fs.macro :refer [err? err->]]))
 
 (def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
@@ -41,6 +43,7 @@
 
 (defn- get-json-body [body]
   (or (and (map? body) body)
+      (or (string/blank? body) nil)
       (js->clj (js/JSON.parse body) :keywordize-keys true)))
 
 (defn- get-resp-json-body [resp]
@@ -194,14 +197,21 @@
     (or token (.refresh-token this)))
   (refresh-token [_]
     ;; TODO
-    (set! token "<id-token>")
+    (set! token "<access-token>")
     token)
   (request [this api-name body]
-    (go
-      (let [resp (<! (request api-name body (.get-token this) #(.refresh-token this)))]
-        (when-not (http/unexceptional-status? (:status resp))
-          (throw (js/Error. resp)))
-        (get-resp-json-body resp))))
+    (let [c (chan)]
+      (go
+        (let [resp (<! (request api-name body (.get-token this) #(.refresh-token this)))]
+          (if (http/unexceptional-status? (:status resp))
+            (get-resp-json-body resp)
+            {:err resp :body (get-resp-json-body resp)})))))
+
+  ;; for test
+  (update-files [this graph-uuid txid files]
+    {:pre [(map? files)
+           (number? txid)]}
+    (.request this "update_files" {:GraphUUID graph-uuid :TXId txid :Files files}))
 
   IRemoteAPI
   (get-remote-all-files-meta [this graph-uuid]
@@ -220,17 +230,27 @@
     (.request this "list_graphs"))
   (get-diff [this graph-uuid from-txid]
     (go
-      (->
+      (err->
        (<! (.request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))
        (:Transactions)
-       ((fn [txns] [txns (:TXId (last txns))])))))
+       (as-> txns [txns (:TXId (last txns))]))))
 
   (create-graph [this graph-name]
     (.request this "create_graph" {:GraphName graph-name})))
 
 (def remoteapi (->RemoteAPI nil))
 
-
+(defn- remote-graph-exists? [graph-uuid]
+  "200: true
+404: false
+else: return err resp"
+  (go
+    (let [r (<! (get-remote-graph remoteapi nil graph-uuid))]
+      (if (err? r)
+        (if (= 404 (get-in r [:err :status]))
+          false
+          r)
+        true))))
 
 (defn- update-txn [^FileTxnSet filetxnset txn]
   (let [{:keys [TXType TXContent]} txn]
@@ -264,25 +284,28 @@
 
 (defn sync-remote-all-files! [graph-uuid]
   "pull all files' metadata and sync."
-  (println "sync remote all files" graph-uuid))
+  (go
+    (err->
+     (<! (get-remote-all-files-meta remoteapi graph-uuid))
+     (as-> v (prn "get-remote-all-files-meta:") v))))
 
 (defn current-graph-uuid-and-txid []
   @graphs-txid)
 
 (defn sync-remote! [graph-uuid-expect]
+  "return {:err ...} when error occurs"
   (go
     (let [[graph-uuid txid] (current-graph-uuid-and-txid)]
       (when (or (nil? graph-uuid) (= graph-uuid graph-uuid-expect))
         (if (some? txid)
-          (try
-            (let [[diff-txns latest-txid] (<! (get-diff remoteapi graph-uuid txid))
-                  filetxnset (update-txns (.-EMPTY FileTxnSet) diff-txns)
-                  repo (state/get-current-repo)]
-              (apply-filetxns graph-uuid filetxnset)
-              (.reset_value! graphs-txid [graph-uuid latest-txid] repo)
-              (persist-var/persist-save graphs-txid))
-            ;; TODO catch
-            )
+          (err->
+           (<! (get-diff remoteapi graph-uuid txid))
+           (as-> [diff-txns latest-txid]
+               (let [filetxnset (update-txns (.-EMPTY FileTxnSet) diff-txns)
+                    repo (state/get-current-repo)]
+                (apply-filetxns graph-uuid filetxnset)
+                (.reset_value! graphs-txid [graph-uuid latest-txid] repo)
+                (persist-var/persist-save graphs-txid))))
           (sync-remote-all-files! graph-uuid-expect))))))
 
 (comment
@@ -326,7 +349,7 @@
 (def stop-sync-loop (chan 1))
 (defn sync-loop!
   [graph-uuid]
-  (let [*ws (atom nil)]; reset *ws to false to stop re-connect websocket
+  (let [*ws (atom nil)] ; reset *ws to false to stop re-connect websocket
     (ws-listen! graph-uuid *ws)
     (go-loop []
       (let [{:keys [stop remote local]}
@@ -338,7 +361,9 @@
         (cond
           remote
           (if (need-sync-remote? remote)
-            (sync-remote! graph-uuid))
+            (let [r (sync-remote! graph-uuid)]
+              (when (err? r)
+                (offer! stop-sync-loop 1))))
 
           local
           (sync-local! graph-uuid (:type local) (:payload local)))
