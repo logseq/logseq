@@ -67,16 +67,8 @@
           (editor-handler/edit-block! block :max (:block/uuid block))))))
   state)
 
-(defn- expand-top-block!
-  [state]
-  (when-let [block-id (last (:rum/args state))]
-    (when-let [block (db/get-block-by-uuid block-id)]
-      (when (get-in block [:block/properties :collapsed])
-        (editor-handler/expand-block! block-id))))
-  state)
-
 (rum/defc page-blocks-inner <
-  {:did-mount  #(-> % open-first-block! expand-top-block!)
+  {:did-mount  open-first-block!
    :did-update open-first-block!}
   [page-name page-blocks hiccup sidebar? preview? block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
