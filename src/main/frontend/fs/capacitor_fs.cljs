@@ -65,7 +65,6 @@
                                              (fn [{:keys [type]}]
                                                (contains? #{"directory" "NSFileTypeDirectory"} type)))
                                             (mapv :uri))
-
                              files-result
                              (p/all
                               (->> files-with-stats
@@ -89,7 +88,9 @@
                        (p/recur (concat result files-result)
                                 (concat (rest dirs) files-dir)))))
           result (js->clj result :keywordize-keys true)]
-    (map (fn [result] (update result :uri clean-uri)) result)))
+    (if (util/native-ios?)
+      result
+      (map (fn [result] (update result :uri clean-uri)) result))))
 
 (defn- encode-path [orig-repo orig-path]
   (let [orig-repo (config/get-repo-dir orig-repo)
@@ -145,7 +146,7 @@
 
                  (string/starts-with? path (config/get-repo-dir repo))
                  path
-
+                 
                  :else
                  (-> (str dir "/" path)
                      (string/replace "//" "/")))]
