@@ -1,7 +1,5 @@
 (ns frontend.handler.journal
-  (:require [clojure.string :as string]
-            [frontend.date :as date]
-            [frontend.handler.editor :as editor-handler]
+  (:require [frontend.date :as date]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -11,10 +9,8 @@
 (defn- redirect-to-journal!
   [page]
   (when (and page (state/enable-journals? (state/get-current-repo)))
-    (prn {:page page})
     (route-handler/redirect! {:to          :page
-                              :path-params {:name page}})
-    (editor-handler/insert-first-page-block-if-not-exists! page)))
+                              :path-params {:name page}})))
 
 (defn go-to-tomorrow!
   []

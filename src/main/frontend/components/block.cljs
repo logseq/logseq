@@ -1362,25 +1362,24 @@
                (seq children)
                (not collapsed?))
       (let [doc-mode? (state/sub :document/mode?)]
-        [:div.block-children-container {:style {:display "flex"
-                                                :margin-left (if doc-mode? 18
-                                                                           (if (or (mobile-util/native-android?)
-                                                                                   (mobile-util/native-iphone?))
-                                                                             22
-                                                                             29))}}
+        [:div.block-children-container.flex {:style {:margin-left (if doc-mode? 18
+                                                                      (if (or (mobile-util/native-android?)
+                                                                              (mobile-util/native-iphone?))
+                                                                        22
+                                                                        29))}}
          [:div.block-children-left-border {:on-click (fn [event] (toggle-block-children event children))}]
-         [:div.block-children {:style    {:display     (if collapsed? "none" "")}}
+         [:div.block-children.w-full {:style    {:display     (if collapsed? "none" "")}}
           (for [child children]
             (when (map? child)
               (let [child (dissoc child :block/meta)
                     config (cond->
-                             (-> config
-                                 (assoc :block/uuid (:block/uuid child))
-                                 (dissoc :breadcrumb-show? :embed-parent))
+                            (-> config
+                                (assoc :block/uuid (:block/uuid child))
+                                (dissoc :breadcrumb-show? :embed-parent))
                              ref?
                              (assoc :ref-child? true))]
                 (rum/with-key (block-container config child)
-                              (:block/uuid child)))))]]))))
+                  (:block/uuid child)))))]]))))
 
 (defn- block-content-empty?
   [{:block/keys [properties title body]}]

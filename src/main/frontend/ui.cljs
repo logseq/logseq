@@ -171,7 +171,7 @@
       (dissoc option :background :class :small?)
       (when href
         {:on-click (fn []
-                     (set! (.-href js/window.location) href)
+                     (util/open-url href)
                      (when (fn? on-click) (on-click)))}))
      text]))
 
