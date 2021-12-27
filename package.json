@@ -47,10 +47,10 @@
         "gulp:watch": "gulp watch",
         "gulp:build": "cross-env NODE_ENV=production gulp build",
         "css:build": "postcss tailwind.all.css -o static/css/style.css --verbose --env production",
-        "css:watch": "TAILWIND_MODE=watch postcss tailwind.all.css -o static/css/style.css --verbose --watch",
-        "cljs:watch": "PATCH_PARSER_WORKER=$(cat \"./templates/patch.parser.worker.js\" | sed -e \"s#PWD_ROOT#`pwd`#g\") clojure -M:cljs watch parser-worker app electron",
-        "cljs:app-watch": "PATCH_PARSER_WORKER=$(cat \"./templates/patch.parser.worker.js\" | sed -e \"s#PWD_ROOT#`pwd`#g\") clojure -M:cljs watch parser-worker app",
-        "cljs:electron-watch": "PATCH_PARSER_WORKER=$(cat \"./templates/patch.parser.worker.js\" | sed -e \"s#PWD_ROOT#`pwd`#g\") clojure -M:cljs watch parser-worker app electron",
+        "css:watch": "cross-env TAILWIND_MODE=watch postcss tailwind.all.css -o static/css/style.css --verbose --watch",
+        "cljs:watch": "clojure -M:cljs watch parser-worker app electron",
+        "cljs:app-watch": "clojure -M:cljs watch parser-worker app",
+        "cljs:electron-watch": "clojure -M:cljs watch parser-worker app electron",
         "cljs:release": "clojure -M:cljs release parser-worker app publishing electron",
         "cljs:release-electron": "clojure -M:cljs release parser-worker app publishing electron --debug",
         "cljs:release-app": "clojure -M:cljs release parser-worker app",
@@ -110,5 +110,24 @@
         "reakit": "0.11.1",
         "threads": "1.6.5",
         "yargs-parser": "20.2.4"
-    }
+    },
+    "resolutions": {
+        "pixi-graph-fork/@pixi/app": "6.2.0",
+        "pixi-graph-fork/@pixi/constants": "6.2.0",
+        "pixi-graph-fork/@pixi/core": "6.2.0",
+        "pixi-graph-fork/@pixi/display": "6.2.0",
+        "pixi-graph-fork/@pixi/graphics": "6.2.0",
+        "pixi-graph-fork/@pixi/interaction": "6.2.0",
+        "pixi-graph-fork/@pixi/loaders": "6.2.0",
+        "pixi-graph-fork/@pixi/ticker": "6.2.0",
+        "pixi-graph-fork/@pixi/sprite": "6.2.0",
+        "pixi-graph-fork/@pixi/text": "6.2.0",
+        "pixi-graph-fork/@pixi/text-bitmap": "6.2.0",
+        "pixi-graph-fork/@pixi/utils": "6.2.0",
+        "pixi-graph-fork/@pixi/runner": "6.2.0",
+        "pixi-graph-fork/@pixi/mesh": "6.2.0",
+        "pixi-graph-fork/@pixi/settings": "6.2.0",
+        "pixi-graph-fork/@pixi/mixin-get-child-by-name": "6.2.0",
+        "pixi-graph-fork/@pixi/math": "6.2.0"
+      }
 }

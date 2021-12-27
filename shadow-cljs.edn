@@ -63,8 +63,7 @@
                   :asset-path       "./js"
                   :compiler-options {:source-map false}
                   :modules          {:parser-worker {:entries    [frontend.worker.parser]
-                                                     :web-worker true
-                                                     :prepend    #shadow/env ["PATCH_PARSER_WORKER" :default ";;"]}}
+                                                     :web-worker true}}
                   :release          {:compiler-options {:infer-externs :auto}}}
 
   :test {:target          :node-test

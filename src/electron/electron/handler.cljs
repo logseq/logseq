@@ -154,12 +154,16 @@
 (defn- sanitize-graph-name
   [graph-name]
   (when graph-name
-    (string/replace graph-name "/" "++")))
+    (-> graph-name
+        (string/replace "/" "++")
+        (string/replace ":" "+3A+"))))
 
-(defn- graph-name->path
-  [graph-name]
-  (when graph-name
-    (string/replace graph-name "++" "/")))
+ (defn- graph-name->path
+   [graph-name]
+   (when graph-name
+     (-> graph-name
+         (string/replace "+3A+" ":")
+         (string/replace "++" "/"))))
 
 (defn- get-graphs-dir
   []
