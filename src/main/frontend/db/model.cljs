@@ -573,6 +573,13 @@
          (map (comp :collapsed :block/properties))
          (some true?))))
 
+(defn block-collapsed?
+  ([block-id]
+   (block-collapsed? (state/get-current-repo) block-id))
+  ([repo block-id]
+   (when-let [block (db-utils/entity repo [:block/uuid block-id])]
+     (get-in block [:block/properties :collapsed]))))
+
 (defn get-block-page
   [repo block-id]
   (when-let [block (db-utils/entity repo [:block/uuid block-id])]

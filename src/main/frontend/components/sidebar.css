@@ -35,6 +35,8 @@
 }
 
 #main-content {
+  transition: padding-left .3s;
+
   &.is-left-sidebar-open {
     padding-left: 0;
 
