@@ -146,44 +146,6 @@ yarn dev-electron-app
 yarn release-electron
 ```
 
-## Alternative: Docker based development environment
-
-Basically it just pre-installs Java, Clojure and NodeJS for your convenience.
-
-### 1. Fetch sources
-
-```bash
-git clone https://github.com/logseq/logseq
-```
-
-### 2. Build Docker image
-
-```bash
-cd logseq
-docker build -t logseq-docker .
-```
-
-### 3. Run Docker container
-
-#### MacOS/Linux
-
-```bash
-docker run -v $(pwd):/home/logseq/logseq -p 3001:3001 -p 9630:9630 -p 8701:8701 --rm -it logseq-docker /bin/bash
-```
-#### Windows
-
-```bash
-docker run -v %cd%:/home/logseq/logseq -p 3001:3001 -p 9630:9630 -p 8701:8701 --rm -it logseq-docker /bin/bash
-```
-
-### 4. Inside the container compile as described above
-
-```bash
-cd logseq
-yarn
-yarn watch
-```
-
 ## Thanks
 
 [![JetBrains](docs/assets/jetbrains.svg)](https://www.jetbrains.com/?from=logseq)

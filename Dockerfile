@@ -1,5 +1,9 @@
 # NOTE: please keep it in sync with .github pipelines
-FROM clojure:openjdk-11-tools-deps-1.10.1.727
+
+# Builder image
+FROM clojure:openjdk-11-tools-deps-1.10.1.727 as builder
+
+ARG DEBIAN_FRONTEND=noninteractive
 
 RUN curl -sL https://deb.nodesource.com/setup_16.x | bash - && \
     apt-get install -y nodejs
@@ -10,11 +14,13 @@ RUN apt-get update && apt-get install ca-certificates && \
     apt-get update && \
     apt-get install -y yarn
 
-RUN useradd -ms /bin/bash logseq
+WORKDIR /data/
 
-USER logseq
-WORKDIR /home/logseq
+# Build for static resources
+RUN git clone https://github.com/logseq/logseq.git &&  cd /data/logseq && yarn && yarn release && mv ./static ./public && rm -r ./public/workspaces
 
-EXPOSE 3001
-EXPOSE 9630
-EXPOSE 8701
+# Web App Runner image
+FROM nginx:stable-alpine
+
+COPY --from=builder /data/logseq/public /usr/share/nginx/html
+
