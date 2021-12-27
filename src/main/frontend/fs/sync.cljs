@@ -343,24 +343,31 @@ else: return err resp"
   Object
   (filter-dir-prefix-chan [_ n]
     (chan n (filter (fn [^FileChangeEvent e]
-                      (string/starts-with? dir-prefix (.-dir e))))))
+                      (string/starts-with? (.-dir e) dir-prefix)))))
 
   ILocal->RemoteSync
   (ratelimit [this from-chan]
     (let [c (.filter-dir-prefix-chan this 10000)]
       (go-loop [timeout-c (timeout rate)
                 tcoll (transient [])]
-        (->
-         (let [{:keys [timeout e]}
-               (async/alt! timeout-c {:timeout true}
-                           from-chan ([e] {:e e}))]
-           (if timeout
-             (do
-               (<! (async/onto-chan! c (persistent! tcoll)))
-               (recur (timeout rate) (transient [])))
-             (do
-               (conj! tcoll e)
-               (recur timeout-c tcoll))))))
+        (let [{:keys [timeout e]}
+              (async/alt! timeout-c {:timeout true}
+                          from-chan ([e] {:e e}))]
+          (cond
+            timeout
+            (do
+              (<! (async/onto-chan! c (persistent! tcoll) false))
+              (recur (async/timeout rate) (transient [])))
+
+            (some? e)
+            (do
+              (conj! tcoll e)
+              (recur timeout-c tcoll))
+
+            (nil? e)
+            (do
+              (println "close ratelimit chan")
+              (async/close! c)))))
       c))
 
   (sync-local->remote! [_ ^FileChangeEvent e]
@@ -368,6 +375,7 @@ else: return err resp"
           path (.-path e)]
       (when (and (some? path)
                  (not (string/ends-with? path "logseq/graphs-txid.edn")))
+        (println "sync-local->remote!" e)
         (cond
           (or (= "add" type) (= "change" type))
           (update-remote-file rsapi graph-uuid path)
