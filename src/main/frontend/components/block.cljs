@@ -717,8 +717,10 @@
   (if macro-content
     (let [ast (->> (mldoc/->edn macro-content (mldoc/default-config format))
                    (map first))
-          block? (mldoc/block-with-title? (ffirst ast))]
-      (if block?
+          paragraph? (and (= 1 (count ast))
+                          (= "Paragraph" (ffirst ast)))]
+      (if (and (not paragraph?)
+               (mldoc/block-with-title? (ffirst ast)))
         [:div
          (markup-elements-cp (assoc config :block/format format) ast)]
         (inline-text format macro-content)))
