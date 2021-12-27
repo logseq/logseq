@@ -383,9 +383,12 @@
 
       (and (mobile-util/native-ios?) (local-db? repo-url))
       (let [dir (-> (get-repo-dir repo-url)
-                    (string/replace "file:///" "file:/"))]
-        (str dir relative-path))
-
+                    (string/replace "file:///" "file:/")
+                    (string/replace "%20" " "))]
+        (if (string/starts-with? relative-path dir)
+          relative-path
+          (str dir relative-path)))
+      
       (= "/" (first relative-path))
       (subs relative-path 1)
 

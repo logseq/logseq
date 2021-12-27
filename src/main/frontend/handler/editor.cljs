@@ -3306,13 +3306,14 @@
     (state/set-edit-content! (state/get-edit-input-id) (.-value input))))
 
 (defn collapsable? [block-id]
-  (if-let [block (db-model/query-block-by-uuid block-id)]
-    (let [block (block/parse-title-and-body block)]
-      (and
-        (nil? (-> block :block/properties :collapsed))
-        (or (not-empty (:block/body block))
-            (db-model/has-children? block-id))))
-    false))
+  (when block-id
+    (if-let [block (db-model/query-block-by-uuid block-id)]
+      (let [block (block/parse-title-and-body block)]
+        (and
+         (nil? (-> block :block/properties :collapsed))
+         (or (not-empty (:block/body block))
+             (db-model/has-children? block-id))))
+      false)))
 
 (defn all-blocks-with-level
   "Return all blocks associated with correct level
@@ -3333,29 +3334,30 @@
   [{:keys [collapse? expanded? root-block] :or {collapse? false expanded? false root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
-    (->>
-     (-> page
-         (db/get-page-blocks-no-cache)
-         (tree/blocks->vec-tree page))
+    (let [blocks (-> page
+                     (db/get-page-blocks-no-cache)
+                     (tree/blocks->vec-tree page))]
+      (cond->> blocks
+        root-block
+        (map (fn find [root]
+               (if (= root-block (:block/uuid root))
+                 root
+                 (first (filter find (:block/children root []))))))
 
-     (#(cond->> %
-         root-block (map (fn find [root]
-                       (if (= root-block (:block/uuid root))
-                         root
-                         (first (filter find (:block/children root []))))))))
+        collapse?
+        (w/postwalk
+         (fn [b]
+           (if (and (map? b) (-> b :block/properties :collapsed))
+             (assoc b :block/children []) b)))
 
-     (#(cond->> %
-         collapse? (w/postwalk
-                     (fn [x]
-                      (if (and (map? x) (-> x :block/properties :collapsed))
-                        (assoc x :block/children []) x)))))
+        true
+        (mapcat (fn [x] (tree-seq map? :block/children x)))
 
-     (mapcat (fn [x] (tree-seq map? :block/children x)))
+        expanded?
+        (filter (fn [b] (collapsable? (:block/uuid b))))
 
-     (#(cond->> %
-         expanded? (filter (fn [b] (collapsable? (:block/uuid b))))))
-
-     (map (fn [x] (dissoc x :block/children))))))
+        true
+        (map (fn [x] (dissoc x :block/children)))))))
 
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
@@ -3440,9 +3442,8 @@
    (collapse-all! nil))
   ([block-id]
    (let [blocks-to-collapse (all-blocks-with-level {:expanded? true :root-block block-id})]
-     (when (seq blocks-to-collapse)
-       (doseq [{:block/keys [uuid]} blocks-to-collapse]
-         (collapse-block! uuid))))))
+     (doseq [{:block/keys [uuid]} blocks-to-collapse]
+       (collapse-block! uuid)))))
 
 (defn expand-all!
   ([]
@@ -3451,7 +3452,24 @@
    (->> (all-blocks-with-level {:root-block block-id})
         (filter (fn [b] (-> b :block/properties :collapsed)))
         (map (comp expand-block! :block/uuid))
-        doall)))
+        dorun)))
+
+(defn- get-block-with-its-children
+  [block-uuid]
+  (let [repo (state/get-current-repo)
+        children (db/get-block-children repo block-uuid)
+        block (db/pull [:block/uuid block-uuid])]
+    (cons block (seq children))))
+
+(defn expand-all?
+  [block-uuid]
+  (let [blocks (get-block-with-its-children block-uuid)]
+    (some #(get-in % [:block/properties :collapsed]) blocks)))
+
+(defn collapse-all?
+  [block-uuid]
+  (let [blocks (get-block-with-its-children block-uuid)]
+    (some #(collapsable? (:block/uuid %)) blocks)))
 
 (defn toggle-open! []
   (let [all-collapsed?
@@ -3548,3 +3566,31 @@
       (save-block! (state/get-current-repo)
                    (:block/uuid block)
                    content))))
+
+(defn block-default-collapsed?
+  "Whether a block should be collapsed by default.
+  Currently, this handles several cases:
+  1. Zoom in mode, it will open the current block if it's collapsed.
+  2. Queries.
+  3. References."
+  [block config]
+  (let [collapsed? (cond
+                     (and (:block? config)
+                          (= (:id config) (str (:block/uuid block))))
+                     false
+
+                     (and (:block? config)
+                          (get-in block [:block/properties :collapsed]))
+                     true
+
+                     :else
+                     (boolean
+                      (and
+                       (seq (:block/children block))
+                       (or (:custom-query? config)
+                           (and (:ref? config)
+                                (>= (:ref/level block)
+                                    (state/get-ref-open-blocks-level)))))))]
+    (if (or (:ref? config) (:block? config))
+      collapsed?
+      (get-in block [:block/properties :collapsed]))))

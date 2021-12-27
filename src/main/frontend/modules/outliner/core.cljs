@@ -229,6 +229,15 @@
                       (throw (js/Error. "Number of children and sorted-children are not equal."))))
                   sorted-children)))))))))
 
+(defn set-block-collapsed! [txs-state id collapsed?]
+  (let [e (db/entity id)
+        properties (:block/properties e)
+        properties (if collapsed?
+                     (assoc properties :collapsed true)
+                     (dissoc properties :collapsed))]
+    (swap! txs-state concat [{:db/id id
+                              :block/properties properties}])))
+
 (defn save-node
   ([node]
    (save-node node nil))
@@ -577,7 +586,10 @@
                  (tree/-save txs-state)))
            (some-> last-node-right
                    (tree/-set-left-id first-node-left-id)
-                   (tree/-save txs-state))))
+                   (tree/-save txs-state))
+           (when-let [parent (get-block-by-id first-node-left-id)]
+             (when (db-model/block-collapsed? first-node-left-id)
+               (set-block-collapsed! txs-state (:db/id (get-data parent)) false)))))
        (when-not (first-level? first-node)
          (let [parent (tree/-get-parent first-node)
                parent-parent-id (tree/-get-parent-id parent)
