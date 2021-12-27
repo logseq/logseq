@@ -50,13 +50,13 @@
                                    origin (.-origin urlObj)
                                    requestHeaders (.-requestHeaders details)]
                                (if (and
-                                    (.hasOwnProperty requestHeaders "referer")
-                                    (not-empty (.-referer requestHeaders)))
-                                 (callback #js {:cancel false
+                                     (.hasOwnProperty requestHeaders "referer")
+                                     (not-empty (.-referer requestHeaders)))
+                                 (callback #js {:cancel         false
                                                 :requestHeaders requestHeaders})
                                  (do
                                    (set! (.-referer requestHeaders) origin)
-                                   (callback #js {:cancel false
+                                   (callback #js {:cancel         false
                                                   :requestHeaders requestHeaders}))))))
      (.loadURL win url)
      ;;(when dev? (.. win -webContents (openDevTools)))
@@ -115,9 +115,10 @@
                          (js/decodeURIComponent url) url)
                    url (if-not win32? (string/replace url "file://" "") url)]
                (.. logger (info "new-window" url))
-               (if (string/includes?
-                    (.normalize path url)
-                    (.join path (. app getAppPath) "index.html"))
+               (if (some #(string/includes?
+                            (.normalize path url)
+                            (.join path (. app getAppPath) %))
+                         ["index.html" "electron.html"])
                  (.info logger "pass-window" url)
                  (open url)))
              (.preventDefault e)))
