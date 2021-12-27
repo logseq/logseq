@@ -9,27 +9,6 @@
             [frontend.util.property :as property]
             [frontend.util :as util]))
 
-(defn- reorder-properties
-  [format content]
-  (when (string? content)
-    (let [ast (mldoc/->edn content (mldoc/default-config format))
-          key-exist? (fn [k] (k (last (ffirst ast))))
-          build-property-fn (fn [k]
-                              (when-let [v (key-exist? k)]
-                                (util/format (case format
-                                               :org "#+%s: %s"
-                                               "%s:: %s")
-                                             (name k)
-                                             (if (coll? v)
-                                               (string/join ", " v)
-                                               v))))
-          before (remove nil? (map #(build-property-fn %) [:title :alias :aliases]))
-          other (reduce (fn [acc elem]
-                          (util/replace-ignore-case acc (str elem "\n*") "" "[]{}().+|"))
-                        content before)]
-      (string/join "\n" (remove #(= "" %)
-                                (concat before [other]))))))
-
 (defn insert-property
   [format content key value]
   (when (string? content)
@@ -54,30 +33,27 @@
                                              value)))
           old-property-str (when old-value (build-property-fn old-value))
           new-property-str (build-property-fn new-value)]
-      (reorder-properties
-       format
-       (if (key-exists? key)
-         (string/replace content old-property-str new-property-str)
-         (string/join "\n" (remove #(= "" %)
-                            [new-property-str content])))))))
+      (if (key-exists? key)
+        (string/replace content old-property-str new-property-str)
+        (string/join "\n" (remove #(= "" %)
+                                  [new-property-str content]))))))
 
 (defn insert-properties
   [format content kvs]
-  (let [new-content (reduce
-                     (fn [content [k v]]
-                       (let [k (if (string? k)
-                                 (keyword (-> (string/lower-case k)
-                                              (string/replace " " "-")))
-                                 k)
-                             v (if (coll? v)
-                                 (some->>
-                                  (seq v)
-                                  (distinct)
-                                  (string/join ", "))
-                                 v)]
-                         (insert-property format content k v)))
-                     content kvs)]
-    (reorder-properties format new-content)))
+  (reduce
+   (fn [content [k v]]
+     (let [k (if (string? k)
+               (keyword (-> (string/lower-case k)
+                            (string/replace " " "-")))
+               k)
+           v (if (coll? v)
+               (some->>
+                (seq v)
+                (distinct)
+                (string/join ", "))
+               v)]
+       (insert-property format content k v)))
+   content kvs))
 
 (defn add-property!
   [page-name key value]
