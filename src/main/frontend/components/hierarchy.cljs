@@ -17,7 +17,6 @@
           (map (fn [page]
                  (or (:block/original-name page) (:block/name page))))
           (map #(string/split % #"/"))
-          (remove #(= % [page]))
           (sort)))))
 
 (rum/defc structures

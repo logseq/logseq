@@ -1428,21 +1428,36 @@
 (defn get-namespace-pages
   [repo namespace]
   (assert (string? namespace))
-  (when-let [db (conn/get-conn repo)]
-    (when-not (string/blank? namespace)
-      (let [namespace (string/lower-case (string/trim namespace))
-            ids (->> (d/datoms db :aevt :block/name)
-                     (filter (fn [datom]
-                               (let [page (:v datom)]
-                                 (or
-                                  (= page namespace)
-                                  (string/starts-with? page (str namespace "/"))))))
-                     (map :e))]
-        (when (seq ids)
-          (db-utils/pull-many repo
-                              '[:db/id :block/name :block/original-name
-                                {:block/file [:db/id :file/path]}]
-                              ids))))))
+  (let [namespace (string/lower-case namespace)]
+    (d/q
+      '[:find [(pull ?c [:db/id :block/name :block/original-name
+                         :block/namespace
+                         {:block/file [:db/id :file/path]}]) ...]
+        :in $ % ?namespace
+        :where
+        (namespace ?p ?c)
+        [?p :block/name ?namespace]]
+      (conn/get-conn repo)
+      rules
+      namespace)))
+
+(defn- tree [flat-col root]
+  (let [sort-fn #(sort-by :block/name %)
+        children (group-by :block/namespace flat-col)
+        namespace-children (fn namespace-children [parent-id]
+                             (map (fn [m]
+                                    (assoc m :namespace/children
+                                           (sort-fn (namespace-children {:db/id (:db/id m)}))))
+                               (sort-fn (get children parent-id))))]
+    (namespace-children root)))
+
+(defn get-namespace-hierarchy
+  [repo namespace]
+  (let [children (get-namespace-pages repo namespace)
+        namespace-id (:db/id (db-utils/entity [:block/name (string/lower-case namespace)]))
+        root {:db/id namespace-id}
+        col (conj children root)]
+    (tree col root)))
 
 (defn get-latest-changed-pages
   [repo]
