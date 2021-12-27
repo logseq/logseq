@@ -1546,3 +1546,10 @@
        Always ignore the IME process."
      [e]
      (gobj/getValueByKeys e "nativeEvent" "isComposing"))) ;; No keycode available
+
+#?(:cljs
+   (defn open-url
+     [url]
+     (if (electron?)
+       (js/window.apis.openExternal url)
+       (set! (.-href js/window.location) url))))
