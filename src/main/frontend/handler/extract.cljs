@@ -118,7 +118,7 @@
                                                    tags (if (string? tags) [tags] tags)
                                                    tags (remove string/blank? tags)]
                                                (swap! ref-tags set/union (set tags))
-                                               (map (fn [tag] {:block/name (util/page-name-sanity (string/lower-case tag))
+                                               (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
                                                               :block/original-name tag})
                                                  tags)))))
           pages (->> (concat
@@ -127,7 +127,7 @@
                       (map
                         (fn [page]
                           {:block/original-name page
-                           :block/name (util/page-name-sanity (string/lower-case page))})
+                           :block/name (util/page-name-sanity-lc page)})
                         @ref-tags))
                      ;; remove block references
                      (remove vector?))

@@ -1148,10 +1148,10 @@
       (string/replace #"[\\#|%]+" "_")
       (normalize)))
 
-(defn page-query-sanity
+(defn page-name-sanity-lc
   "Sanitize the query string for a page"
   [s]
-  (normalize (string/lower-case s)))
+  (page-name-sanity (string/lower-case s)))
 
 (defn get-page-original-name
   [page]
