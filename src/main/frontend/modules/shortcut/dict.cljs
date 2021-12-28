@@ -372,7 +372,7 @@
      :command.editor/open-edit               "Rediger valgt blokk"
      :command.editor/delete-selection        "Slett valgte blokker"
      :command.editor/toggle-open-blocks      "Veksle åpne blokker (slå sammen eller utvid alle blokker)"}
-     :pt-PT
+    :pt-PT
     {:shortcut.category/formatting            "Formatação"
      :shortcut.category/basics                "Básico"
      :shortcut.category/navigating            "Navegação"
