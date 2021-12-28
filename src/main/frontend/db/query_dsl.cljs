@@ -343,7 +343,9 @@
               (list
                'or
                [(list '= sym v)]
-               [(list 'contains? sym v)])])
+               [(list 'contains? sym v)])
+               ['?b :block/page '?p] 
+              ])
            [['?p :block/name]
             ['?p :block/properties '?prop]
             [(list 'get '?prop (keyword k)) '?prop-v]
