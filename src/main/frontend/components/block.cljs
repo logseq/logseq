@@ -807,7 +807,10 @@
   [:ul
    (for [child children]
      [:li {:key (str "namespace-" namespace "-" (:db/id child))}
-      (page-cp config child)
+      (let [shorten-name (some-> (or (:block/original-name child) (:block/name child))
+                                 (string/split "/")
+                                 last)]
+        (page-cp {:label shorten-name} child))
       (when (seq (:namespace/children child))
         (namespace-hierarchy-aux config (:block/name child)
                                  (:namespace/children child)))])])
