@@ -1459,6 +1459,26 @@
         col (conj children root)]
     (tree col root)))
 
+(defn get-page-namespace
+  [repo page]
+  (:block/namespace (db-utils/entity repo [:block/name (string/lower-case page)])))
+
+(defn get-page-namespace-routes
+  [repo page]
+  (assert (string? page))
+  (when-let [db (conn/get-conn repo)]
+    (when-not (string/blank? page)
+      (let [page (string/lower-case (string/trim page))
+            ids (->> (d/datoms db :aevt :block/name)
+                     (filter (fn [datom]
+                               (string/ends-with? (:v datom) (str "/" page))))
+                     (map :e))]
+        (when (seq ids)
+          (db-utils/pull-many repo
+                              '[:db/id :block/name :block/original-name
+                                {:block/file [:db/id :file/path]}]
+                              ids))))))
+
 (defn get-latest-changed-pages
   [repo]
   (->>

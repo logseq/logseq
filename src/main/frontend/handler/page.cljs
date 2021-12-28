@@ -481,10 +481,8 @@
       (outliner-file/sync-to-file {:db/id to-id})
 
       (rename-update-refs! from-page
-                           (or (:block/original-name from-page)
-                               (:block/name from-page))
-                           (or (:block/original-name to-page)
-                               (:block/name to-page))))
+                           (util/get-page-original-name from-page)
+                           (util/get-page-original-name to-page)))
 
     (delete! from nil)
 

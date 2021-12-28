@@ -1141,6 +1141,11 @@
       ;; for android filesystem compatiblity
       (string/replace #"[\\#|%]+" "_")))
 
+(defn get-page-original-name
+  [page]
+  (or (:block/original-name page)
+      (:block/name page)))
+
 (defn lowercase-first
   [s]
   (when s
