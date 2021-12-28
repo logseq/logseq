@@ -1484,8 +1484,9 @@
                     :style {:margin-top -2
                             :margin-right 5}
                     :checked checked?
-                    :on-change (fn [_e]
-                                 ;; FIXME: Log timestamp
+                    :on-mouse-down (fn [e]
+                                     (util/stop-propagation e))
+                    :on-change (fn [e]
                                  (if checked?
                                    (editor-handler/uncheck block)
                                    (editor-handler/check block)))}))))
@@ -1510,7 +1511,7 @@
       [:a
        {:class (str "marker-switch block-marker " marker)
         :title (util/format "Change from %s to %s" marker next-marker)
-        :on-click (set-marker-fn next-marker)}
+        :on-mouse-down (set-marker-fn next-marker)}
        marker])))
 
 (defn marker-cp
