@@ -19,10 +19,10 @@
            parent-routes (db-model/get-page-namespace-routes repo page)
            pages (->> (concat namespace-pages parent-routes)
                       (distinct)
+                      (sort-by :block/name)
                       (map (fn [page]
                              (or (:block/original-name page) (:block/name page))))
-                      (map #(string/split % "/"))
-                      (sort))
+                      (map #(string/split % "/")))
            page-namespace (db-model/get-page-namespace repo page)
            page-namespace (util/get-page-original-name page-namespace)]
        (cond
@@ -55,5 +55,5 @@
                                          {}
                                          page))))
              (interpose [:span.mx-2.opacity-30 "/"]))])]
-        {:default-collapsed? true
+        {:default-collapsed? false
          :title-trigger? true})])))
