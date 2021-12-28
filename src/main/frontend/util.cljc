@@ -1550,6 +1550,9 @@
 #?(:cljs
    (defn open-url
      [url]
-     (if (electron?)
-       (js/window.apis.openExternal url)
-       (set! (.-href js/window.location) url))))
+     (let [route? (or (string/starts-with? url
+                        (string/replace js/location.href js/location.hash ""))
+                      (string/starts-with? url "#"))]
+       (if (and (not route?) (electron?))
+         (js/window.apis.openExternal url)
+         (set! (.-href js/window.location) url)))))
