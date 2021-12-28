@@ -60,7 +60,7 @@
            (cp/top-commands limit)
            (get-matched-commands commands @input limit t))
          {:item-render render-command
-          :class       "palette-results"
+          :class       "cp__palette-results"
           :on-chosen   (fn [cmd] (cp/invoke-command cmd))})]])))
 
 (rum/defc command-palette-modal < rum/reactive

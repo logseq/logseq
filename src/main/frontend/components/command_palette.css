@@ -45,5 +45,8 @@
   }
 
   &-results {
+    .tip code {
+      white-space: nowrap;
+    }
   }
 }
