@@ -5,6 +5,7 @@
             [frontend.context.i18n :as i18n]
             [frontend.ui :as ui]
             [frontend.handler.ui :as ui-handler]
+            [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [electron.ipc :as ipc]
@@ -157,7 +158,7 @@
 
 (rum/defc plugin-item-card < rum/static
   [{:keys [id name title settings version url description author icon usf iir repo] :as item}
-   market? installing-or-updating? installed? stat]
+   market? *search-key installing-or-updating? installed? stat]
 
   (let [disabled (:disabled settings)
         name (or title name "Untitled")]
@@ -190,7 +191,9 @@
 
         [:div.flag
          [:p.text-xs.pr-2.flex.justify-between
-          [:small author]
+          [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
+                                (reset! *search-key (str "@" author))
+                                (.select el))} author]
           [:small {:on-click #(do
                                 (notification/show! "Copied!" :success)
                                 (util/copy-to-clipboard! id))}
@@ -269,71 +272,78 @@
                        true)]])]])))
 
 (rum/defc panel-control-tabs
-  [t *search-key *category selected-unpacked-pkg market?]
+  < rum/static
+  [t search-key *search-key category *category selected-unpacked-pkg market?]
 
-  [:div.mb-2.flex.justify-between.control-tabs.relative
-   [:div.flex.align-items
-    (category-tabs t @*category #(reset! *category %))
+  (let [*search-ref (rum/create-ref)]
+    [:div.mb-2.flex.justify-between.control-tabs.relative
+     [:div.flex.align-items.l
+      (category-tabs t category #(reset! *category %))
 
-    (when-not market?
-      [:div
-       (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
-                  :arrow true}
-                 (ui/button
-                   [:span (ui/icon "upload") (t :plugin/load-unpacked)]
-                   :intent "logseq"
-                   :class "load-unpacked"
-                   :on-click plugin-handler/load-unpacked-plugin))
+      (when-not market?
+        [:div
+         (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
+                    :arrow true}
+                   (ui/button
+                     [:span (ui/icon "upload") (t :plugin/load-unpacked)]
+                     :intent "logseq"
+                     :class "load-unpacked"
+                     :on-click plugin-handler/load-unpacked-plugin))
 
-       (unpacked-plugin-loader selected-unpacked-pkg)])]
+         (unpacked-plugin-loader selected-unpacked-pkg)])]
 
-   [:div.flex.align-items
+     [:div.flex.align-items.r
 
-    ;;(ui/button
-    ;;  (t :plugin/open-preferences)
-    ;;  :intent "logseq"
-    ;;  :on-click (fn []
-    ;;              (p/let [root (plugin-handler/get-ls-dotdir-root)]
-    ;;                (js/apis.openPath (str root "/preferences.json")))))
+      ;;(ui/button
+      ;;  (t :plugin/open-preferences)
+      ;;  :intent "logseq"
+      ;;  :on-click (fn []
+      ;;              (p/let [root (plugin-handler/get-ls-dotdir-root)]
+      ;;                (js/apis.openPath (str root "/preferences.json")))))
 
-    [:strong @*search-key]
+      ;; search
+      [:div.search-ctls
+       [:small.absolute.s1
+        (ui/icon "search")]
+       (when-not (string/blank? search-key)
+         [:small.absolute.s2
+          {:on-click #(when-let [^js target (rum/deref *search-ref)]
+                        (reset! *search-key nil)
+                        (.focus target))}
+          (ui/icon "x")])
+       [:input.form-input.is-small
+        {:placeholder "Search plugins"
+         :ref         *search-ref
+         :on-key-down (fn [^js e]
+                        (if (= 27 (.-keyCode e))
+                          (when-not (string/blank? search-key)
+                            (util/stop e)
+                            (reset! *search-key nil))))
+         :on-change   #(let [^js target (.-target %)]
+                         (reset! *search-key (util/trim-safe (.-value target))))
+         :value       (or search-key "")}]]
 
-    ;; search
-    [:div.search-ctls
-     [:small.absolute
-      (ui/icon "search")]
-     [:input.form-input.is-small
-      {:placeholder   "Search plugins"
-       :on-key-down   (fn [^js e]
-                        (let [^js target (.-target e)]
-                          (if (string/blank? (.-value target))
-                            (reset! *search-key nil)
-                            (cond
-                              (= 13 (.-keyCode e)) (reset! *search-key (.-value target))
-                              (= 27 (.-keyCode e)) (do (util/stop e)
-                                                       (set! (.-value target) ""))))))
-       :default-value ""}]]
 
+      ;; sorter
+      (ui/button
+        [:span (ui/icon "arrows-sort") ""]
+        :class "sort-by"
+        :intent "link")
 
-    ;; sorter
-    (ui/button
-      [:span (ui/icon "arrows-sort") ""]
-      :class "sort-by"
-      :intent "link")
+      ;; more - updater
+      (ui/button
+        [:span (ui/icon "dots-vertical")]
+        :class "more-do"
+        :intent "link")
 
-    ;; more - updater
-    (ui/button
-      [:span (ui/icon "dots-vertical")]
-      :intent "link")
-
-    ;; developer
-    (ui/button
-      (t :plugin/contribute)
-      :href "https://github.com/logseq/marketplace"
-      :class "contribute"
-      :intent "logseq"
-      :target "_blank")
-    ]])
+      ;; developer
+      (ui/button
+        (t :plugin/contribute)
+        :href "https://github.com/logseq/marketplace"
+        :class "contribute"
+        :intent "logseq"
+        :target "_blank")
+      ]]))
 
 (rum/defcs marketplace-plugins
   < rum/static rum/reactive
@@ -365,6 +375,15 @@
                         (if (= @*category :themes)
                           (filter #(:theme %) pkgs)
                           (filter #(not (:theme %)) pkgs)))
+        filtered-pkgs (if-not (string/blank? @*search-key)
+                        (if-let [author (and (string/starts-with? @*search-key "@")
+                                             (subs @*search-key 1))]
+                          (filter #(= author (:author %)) filtered-pkgs)
+                          (search/fuzzy-search
+                            filtered-pkgs @*search-key
+                            :limit 30
+                            :extract-fn :title))
+                        filtered-pkgs)
         filtered-pkgs (map #(if-let [stat (get stats (keyword (:id %)))]
                               (let [downloads (:total_downloads stat)]
                                 (assoc % :stat stat
@@ -377,7 +396,10 @@
 
       [:div.cp__plugins-marketplace
 
-       (panel-control-tabs t *search-key *category nil true)
+       (panel-control-tabs
+         t
+         @*search-key *search-key
+         @*category *category nil true)
 
        (cond
          (not online?)
@@ -401,7 +423,7 @@
                (let [pid (keyword (:id item))
                      stat (:stat item)]
                  (plugin-item-card
-                   item true
+                   item true *search-key
                    (and installing (= (keyword (:id installing)) pid))
                    (contains? installed-plugins pid) stat))
                (:id item)))]])])))
@@ -421,6 +443,15 @@
                            (if (= @*category :themes)
                              (filter #(:theme %) installed-plugins)
                              (filter #(not (:theme %)) installed-plugins)))
+        filtered-plugins (if-not (string/blank? @*search-key)
+                           (if-let [author (and (string/starts-with? @*search-key "@")
+                                                (subs @*search-key 1))]
+                             (filter #(= author (:author %)) filtered-plugins)
+                             (search/fuzzy-search
+                               filtered-plugins @*search-key
+                               :limit 30
+                               :extract-fn :name))
+                           filtered-plugins)
         sorted-plugins (->> filtered-plugins
                             (reduce #(let [k (if (get-in %2 [:settings :disabled]) 1 0)]
                                        (update %1 k conj %2)) [[] []])
@@ -431,14 +462,17 @@
 
       [:div.cp__plugins-installed
 
-       (panel-control-tabs t *search-key *category selected-unpacked-pkg false)
+       (panel-control-tabs
+         t
+         @*search-key *search-key
+         @*category *category selected-unpacked-pkg false)
 
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [item sorted-plugins]
           (rum/with-key
             (let [pid (keyword (:id item))]
               (plugin-item-card
-                item false
+                item false *search-key
                 (and updating (= (keyword (:id updating)) pid))
                 true nil)) (:id item)))]])))
 

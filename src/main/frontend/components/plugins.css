@@ -94,20 +94,28 @@
         background: transparent;
       }
 
-      &.sort-by {
-        padding-right: 0;
+      &.sort-by, &.more-do {
+        padding: 0 4px;
       }
     }
 
     .search-ctls {
-      margin: 3px;
+      margin: 3px 13px;
       display: flex;
       align-items: center;
       position: relative;
 
-      small {
+      small.s1 {
         left: 6px;
         top: 6px;
+      }
+
+      small.s2 {
+        right: 4px;
+        top: 6px;
+        user-select: none;
+        cursor: pointer;
+        z-index: 1;
       }
 
       .form-input {
@@ -177,7 +185,7 @@
         color: var(--ls-primary-text-color);
         opacity: .8;
 
-        > small:last-child {
+        > small {
           cursor: pointer;
         }
       }
