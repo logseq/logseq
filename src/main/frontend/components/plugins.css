@@ -74,6 +74,12 @@
     }
 
     .ui__button {
+      border: none;
+
+      &:active {
+        opacity: .8;
+      }
+
       &.contribute {
         position: absolute;
         top: -46px;
@@ -86,6 +92,33 @@
       &.load-unpacked {
         opacity: .9;
         background: transparent;
+      }
+
+      &.sort-by {
+        padding-right: 0;
+      }
+    }
+
+    .search-ctls {
+      margin: 3px;
+      display: flex;
+      align-items: center;
+      position: relative;
+
+      small {
+        left: 6px;
+        top: 6px;
+      }
+
+      .form-input {
+        background-color: var(--ls-primary-background-color);
+        padding: 5px 7px 5px 22px;
+        opacity: .5;
+
+        &:focus {
+          background-color: var(--ls-secondary-background-color);
+          opacity: 1;
+        }
       }
     }
   }
@@ -282,6 +315,8 @@
           &.disabled {
             pointer-events: none;
             cursor: default;
+            color: var(--ls-primary-text-color);
+            opacity: .3;
           }
 
           &.installing {
@@ -300,6 +335,10 @@
     }
 
     &.market {
+      &.installed {
+
+      }
+
       .ctl {
         padding-left: 12px;
         bottom: -5px;

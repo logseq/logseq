@@ -165,7 +165,7 @@
       [[t] i18n/*tongue-context*]
 
       [:div.cp__plugins-item-card
-       {:class (util/classnames [{:market market?}])}
+       {:class (util/classnames [{:market market? :installed installed?}])}
 
        [:div.l.link-block
         {:on-click #(plugin-handler/open-readme!
@@ -210,7 +210,7 @@
             [:li.flex.text-sm.items-center.pr-3 (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
 
             ;; stars
-            (when-let [downloads (and stat (reduce (fn [a b] (+ a (get b 2))) 0 (:releases stat)))]
+            (when-let [downloads (and stat (:total_downloads stat))]
               (if (and downloads (> downloads 0))
                 [:li.flex.text-sm.items-center.pr-3 (svg/cloud-down 16) [:span.pl-1 downloads]]))]
 
@@ -269,7 +269,7 @@
                        true)]])]])))
 
 (rum/defc panel-control-tabs
-  [t *category selected-unpacked-pkg market?]
+  [t *search-key *category selected-unpacked-pkg market?]
 
   [:div.mb-2.flex.justify-between.control-tabs.relative
    [:div.flex.align-items
@@ -296,10 +296,35 @@
     ;;              (p/let [root (plugin-handler/get-ls-dotdir-root)]
     ;;                (js/apis.openPath (str root "/preferences.json")))))
 
+    [:strong @*search-key]
+
+    ;; search
+    [:div.search-ctls
+     [:small.absolute
+      (ui/icon "search")]
+     [:input.form-input.is-small
+      {:placeholder   "Search plugins"
+       :on-key-down   (fn [^js e]
+                        (let [^js target (.-target e)]
+                          (if (string/blank? (.-value target))
+                            (reset! *search-key nil)
+                            (cond
+                              (= 13 (.-keyCode e)) (reset! *search-key (.-value target))
+                              (= 27 (.-keyCode e)) (do (util/stop e)
+                                                       (set! (.-value target) ""))))))
+       :default-value ""}]]
+
+
     ;; sorter
     (ui/button
-      [:span (ui/icon "arrows-sort") "Sort by"]
-      :intent "logseq")
+      [:span (ui/icon "arrows-sort") ""]
+      :class "sort-by"
+      :intent "link")
+
+    ;; more - updater
+    (ui/button
+      [:span (ui/icon "dots-vertical")]
+      :intent "link")
 
     ;; developer
     (ui/button
@@ -313,7 +338,9 @@
 (rum/defcs marketplace-plugins
   < rum/static rum/reactive
     (rum/local false ::fetching)
+    (rum/local "" ::search-key)
     (rum/local :plugins ::category)
+    (rum/local :downloads ::sort-by)
     (rum/local nil ::error)
     {:did-mount (fn [s]
                   (reset! (::fetching s) true)
@@ -329,20 +356,28 @@
         installed-plugins (state/sub :plugin/installed-plugins)
         installing (state/sub :plugin/installing)
         online? (state/sub :network/online?)
+        *search-key (::search-key state)
         *category (::category state)
+        *sort-by (::sort-by state)
         *fetching (::fetching state)
         *error (::error state)
         filtered-pkgs (when (seq pkgs)
                         (if (= @*category :themes)
                           (filter #(:theme %) pkgs)
-                          (filter #(not (:theme %)) pkgs)))]
+                          (filter #(not (:theme %)) pkgs)))
+        filtered-pkgs (map #(if-let [stat (get stats (keyword (:id %)))]
+                              (let [downloads (:total_downloads stat)]
+                                (assoc % :stat stat
+                                         :downloads downloads))
+                              %) filtered-pkgs)
+        sorted-pkgs (sort-by :downloads #(compare %2 %1) filtered-pkgs)]
 
     (rum/with-context
       [[t] i18n/*tongue-context*]
 
       [:div.cp__plugins-marketplace
 
-       (panel-control-tabs t *category nil true)
+       (panel-control-tabs t *search-key *category nil true)
 
        (cond
          (not online?)
@@ -361,24 +396,26 @@
          [:div.cp__plugins-marketplace-cnt
           {:class (util/classnames [{:has-installing (boolean installing)}])}
           [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
-           (for [item filtered-pkgs]
+           (for [item sorted-pkgs]
              (rum/with-key
-               (let [pid (keyword (:id item))]
+               (let [pid (keyword (:id item))
+                     stat (:stat item)]
                  (plugin-item-card
                    item true
                    (and installing (= (keyword (:id installing)) pid))
-                   (contains? installed-plugins pid)
-                   (get stats pid)))
+                   (contains? installed-plugins pid) stat))
                (:id item)))]])])))
 
 (rum/defcs installed-plugins
   < rum/static rum/reactive
+    (rum/local "" ::search-key)
     (rum/local :plugins ::category)
   [state]
   (let [installed-plugins (state/sub :plugin/installed-plugins)
         installed-plugins (vals installed-plugins)
         updating (state/sub :plugin/installing)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
+        *search-key (::search-key state)
         *category (::category state)
         filtered-plugins (when (seq installed-plugins)
                            (if (= @*category :themes)
@@ -394,7 +431,7 @@
 
       [:div.cp__plugins-installed
 
-       (panel-control-tabs t *category selected-unpacked-pkg false)
+       (panel-control-tabs t *search-key *category selected-unpacked-pkg false)
 
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [item sorted-plugins]
