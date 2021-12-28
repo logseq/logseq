@@ -229,7 +229,7 @@
       [:div.left-sidebar-inner.flex-1.flex.flex-col.min-h-0
        {:on-click #(when-let [^js target (and (util/sm-breakpoint?) (.-target %))]
                      (when (some (fn [sel] (boolean (.closest target sel)))
-                                 [".favorites" ".recent" ".dropdown-wrapper" ".nav-header"])
+                                 [".favorites .bd" ".recent .bd" ".dropdown-wrapper" ".nav-header"])
                        (close-modal-fn)))}
        [:div.flex.flex-col.pb-4.wrap
         [:nav.px-2.space-y-1 {:aria-label "Sidebar"}
