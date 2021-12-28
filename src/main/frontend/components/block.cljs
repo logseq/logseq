@@ -238,18 +238,18 @@
           [:a.delete.ml-1
            {:title    "maximize image"
             :on-click (fn [^js e] (let [images (js/document.querySelectorAll ".asset-container img")
-                                       images (to-array images)
-                                       images (if-not (= (count images) 1)
-                                                (let [^js _image (.closest (.-target e) ".asset-container")
-                                                      image (. _image querySelector "img")]
-                                                  (cons image (remove #(= image %) images)))
-                                                images)
-                                       images (for [^js it images] {:src (.-src it)
-                                                                    :w (.-naturalWidth it)
-                                                                    :h (.-naturalHeight it)})]
+                                        images (to-array images)
+                                        images (if-not (= (count images) 1)
+                                                 (let [^js _image (.closest (.-target e) ".asset-container")
+                                                       image (. _image querySelector "img")]
+                                                   (cons image (remove #(= image %) images)))
+                                                 images)
+                                        images (for [^js it images] {:src (.-src it)
+                                                                     :w (.-naturalWidth it)
+                                                                     :h (.-naturalHeight it)})]
 
-                                   (when (seq images)
-                                     (lightbox/preview-images! images))))}
+                                    (when (seq images)
+                                      (lightbox/preview-images! images))))}
 
            (svg/maximize)]]])))))
 
@@ -2405,7 +2405,7 @@
         states (filter #(not (string/starts-with? % "CLOCK:")) log)]
     (when (seq clocks)
       (let [tr (fn [elm cols] (->elem :tr
-                                     (mapv (fn [col] (->elem elm col)) cols)))
+                                      (mapv (fn [col] (->elem elm col)) cols)))
             head  [:thead.overflow-x-scroll (tr :th.py-0 ["Type" "Start" "End" "Span"])]
             clock-tbody (->elem
                          :tbody.overflow-scroll.sm:overflow-auto
