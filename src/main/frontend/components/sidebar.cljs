@@ -269,10 +269,8 @@
 
         (recent-pages t)
 
-        [:div.flex-column-spacer]                           ;; Push following objects to the bottom
-
-        [:nav.px-2.space-y-1 {:aria-label "Sidebar"
-                              :class      "new-page"}
+        [:nav.px-2 {:aria-label "Sidebar"
+                    :class      "new-page"}
          (when-not config/publishing?
            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
             {:on-click (fn []
