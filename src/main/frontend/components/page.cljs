@@ -67,29 +67,10 @@
           (editor-handler/edit-block! block :max (:block/uuid block))))))
   state)
 
-(defn- expand-top-block!
-  [state]
-  (let [[_ blocks _ _ _] (:rum/args state)]
-    (letfn [(one-top-block? [blocks]
-              (= 1 (->> blocks
-                        (mapcat (juxt :db/id #(-> % :block/parent :db/id)))
-                        (apply hash-map)
-                        (#(remove (reduce
-                                    (fn [acc [id parent]] (if (contains? % parent) (conj acc id) acc))
-                                    #{}
-                                    %)
-                                  (keys %)))
-                        count
-                        )))]
-      (if (and (one-top-block? blocks)
-               (-> blocks first :block/properties :collapsed))
-        (editor-handler/expand-block! (-> blocks first :block/uuid)))))
-  state)
-
 (rum/defc page-blocks-inner <
-  {:did-mount  #(-> % open-first-block! expand-top-block!)
+  {:did-mount  open-first-block!
    :did-update open-first-block!}
-  [page-name page-blocks hiccup sidebar? preview?]
+  [page-name page-blocks hiccup sidebar? preview? block-uuid]
   [:div.page-blocks-inner {:style {:margin-left (if sidebar? 0 -20)}}
    (rum/with-key
      (content/content page-name
@@ -163,7 +144,7 @@
               hiccup-config (common-handler/config-with-document-mode hiccup-config)
               hiccup (block/->hiccup page-blocks hiccup-config {})]
           [:div
-           (page-blocks-inner page-name page-blocks hiccup sidebar? preview?)
+           (page-blocks-inner page-name page-blocks hiccup sidebar? preview? block-id)
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}
@@ -444,7 +425,7 @@
                       s1 (if (> c1 1) "s" "")
                       ;; c2 (count (:links graph))
                       ;; s2 (if (> c2 1) "s" "")
-]
+                      ]
                   ;; (util/format "%d page%s, %d link%s" c1 s1 c2 s2)
                   (util/format "%d page%s" c1 s1))]
                [:div.p-6
@@ -704,18 +685,18 @@
 
         [:span.pr-2
          (ui/button
-          (t :cancel)
-          :intent "logseq"
-          :on-click close-fn)]
+           (t :cancel)
+           :intent "logseq"
+           :on-click close-fn)]
 
         (ui/button
-         (t :yes)
-         :on-click (fn []
-                     (close-fn)
-                     (doseq [page-name (map :block/name pages)]
-                       (page-handler/delete! page-name #()))
-                     (notification/show! (str (t :tips/all-done) "!") :success)
-                     (js/setTimeout #(refresh-fn) 200)))]])))
+          (t :yes)
+          :on-click (fn []
+                      (close-fn)
+                      (doseq [page-name (map :block/name pages)]
+                        (page-handler/delete! page-name #()))
+                      (notification/show! (str (t :tips/all-done) "!") :success)
+                      (js/setTimeout #(refresh-fn) 200)))]])))
 
 (rum/defcs all-pages < rum/reactive
   (rum/local nil ::pages)
@@ -748,11 +729,11 @@
         *search-input (rum/create-ref)
 
         *indeterminate (rum/derived-atom
-                        [*checks] ::indeterminate
-                        (fn [checks]
-                          (when-let [checks (vals checks)]
-                            (if (every? true? checks)
-                              1 (if (some true? checks) -1 0)))))
+                           [*checks] ::indeterminate
+                         (fn [checks]
+                           (when-let [checks (vals checks)]
+                             (if (every? true? checks)
+                               1 (if (some true? checks) -1 0)))))
 
         mobile? (util/mobile?)
         total-pages (if-not @*results-all 0
@@ -821,16 +802,16 @@
            [:div.l.flex.items-center
             [:div.actions-wrap
              (ui/button
-              [(ui/icon "trash") (t :delete)]
-              :on-click (fn []
-                          (let [selected (filter (fn [[_ v]] v) @*checks)
-                                selected (and (seq selected)
-                                              (into #{} (for [[k _] selected] k)))]
-                            (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
-                              (state/set-modal! (batch-delete-dialog pages false #(do
-                                                                                    (reset! *checks nil)
-                                                                                    (refresh-pages)))))))
-              :small? true)]
+               [(ui/icon "trash") (t :delete)]
+               :on-click (fn []
+                           (let [selected (filter (fn [[_ v]] v) @*checks)
+                                 selected (and (seq selected)
+                                               (into #{} (for [[k _] selected] k)))]
+                             (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
+                               (state/set-modal! (batch-delete-dialog pages false #(do
+                                                                                     (reset! *checks nil)
+                                                                                     (refresh-pages)))))))
+               :small? true)]
 
             [:div.search-wrap.flex.items-center.pl-2
              (let [search-fn (fn []
@@ -843,8 +824,8 @@
                                 (reset! *search-key nil)))]
 
                [(ui/button (ui/icon "search")
-                           :on-click search-fn
-                           :small? true)
+                  :on-click search-fn
+                  :small? true)
                 [:input.form-input {:placeholder   (t :search/page-names)
                                     :on-key-up     (fn [^js e]
                                                      (let [^js target (.-target e)]

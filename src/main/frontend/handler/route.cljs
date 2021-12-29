@@ -86,8 +86,7 @@
               content))
           "Page no longer exists!!")
         (let [page (db/pull [:block/name (string/lower-case name)])]
-          (or (:block/original-name page)
-              (:block/name page)
+          (or (util/get-page-original-name page)
               "Logseq"))))
     :tag
     (str "#"  (:name path-params))

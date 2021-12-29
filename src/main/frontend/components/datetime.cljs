@@ -9,10 +9,12 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [rum.core :as rum]))
+            [frontend.mixins :as mixins]
+            [rum.core :as rum]
+            [goog.dom :as gdom]
+            [frontend.commands :as commands]))
 
-(defonce default-timestamp-value {:date nil
-                                  :time ""
+(defonce default-timestamp-value {:time ""
                                   :repeater {}})
 (defonce *timestamp (atom default-timestamp-value))
 
@@ -81,18 +83,42 @@
   []
   (reset! *timestamp default-timestamp-value)
   (reset! *show-time? false)
-  (reset! *show-repeater? false))
+  (reset! *show-repeater? false)
+  (state/set-state! :date-picker/date nil))
 
-(rum/defc time-repeater < rum/reactive
-  []
-  (let [{:keys [date time repeater] :as timestamp} (rum/react *timestamp)
-        timestamp (if date
-                    timestamp
-                    (assoc timestamp :date (t/today)))
+(defn- on-submit
+  [e]
+  (when e (util/stop e))
+  (let [{:keys [time repeater] :as timestamp} @*timestamp
+        date (:date-picker/date @state/state)
+        timestamp (assoc timestamp :date (or date (t/today)))
         kind (if (= "w" (:duration repeater)) "++" ".+")
         timestamp (assoc-in timestamp [:repeater :kind] kind)
-        text (repeated/timestamp-map->text timestamp)]
-    [:div.py-1.px-4 {:style {:min-width 300}}
+        text (repeated/timestamp-map->text timestamp)
+        block-data (state/get-timestamp-block)]
+    (let [{:keys [block typ show?]} block-data
+          block-id (or (:block/uuid (state/get-edit-block))
+                       (:block/uuid block))
+          typ (or @commands/*current-command typ)]
+      (editor-handler/set-block-timestamp! block-id
+                                           typ
+                                           text)
+      (when show?
+        (reset! show? false))))
+  (clear-timestamp!)
+  (state/set-editor-show-date-picker! false)
+  (commands/restore-state false))
+
+(rum/defc time-repeater < rum/reactive
+  (mixins/event-mixin
+   (fn [state]
+     (when-let [input (state/get-input)]
+       (js/setTimeout #(mixins/on-enter state
+                                        :node input
+                                        :on-enter on-submit) 100))))
+  []
+  (let [{:keys [time repeater] :as timestamp} (rum/react *timestamp)]
+    [:div#time-repeater.py-1.px-4 {:style {:min-width 300}}
      [:p.text-sm.opacity-50.font-medium.mt-4 "Time:"]
      (time-input time)
 
@@ -101,32 +127,17 @@
 
      [:p.mt-4
       (ui/button "Submit"
-                 :on-click (fn [e]
-                             (util/stop e)
-                             (let [block-data (state/get-timestamp-block)]
-                               (let [{:keys [block typ show?]} block-data
-                                     block-id (or (:block/uuid (state/get-edit-block))
-                                                  (:block/uuid block))
-                                     typ (or @commands/*current-command typ)]
-                                 (editor-handler/set-block-timestamp! block-id
-                                                                      typ
-                                                                      text)
-                                 (state/clear-edit!)
-                                 (when show?
-                                   (reset! show? false))))
-                             (clear-timestamp!)
-                             (state/set-editor-show-date-picker! false)))]]))
+        :on-click on-submit)]]))
 
 (rum/defc date-picker < rum/reactive
   {:init (fn [state]
            (let [ts (last (:rum/args state))]
              (if ts
                (reset! *timestamp ts)
-               (reset! *timestamp {:date (if (and ts (:date ts))
-                                           (:date ts)
-                                           (t/today))
-                                   :time ""
-                                   :repeater {}})))
+               (reset! *timestamp {:time ""
+                                   :repeater {}}))
+             (when-not (:date-picker/date @state/state)
+               (state/set-state! :date-picker/date (t/today))))
            state)
    :will-unmount (fn [state]
                    (clear-timestamp!)
@@ -136,7 +147,7 @@
         deadline-or-schedule? (and current-command
                                    (contains? #{"deadline" "scheduled"}
                                               (string/lower-case current-command)))
-        date (get @*timestamp :date)]
+        date (state/sub :date-picker/date)]
     (when (state/sub :editor/show-date-picker?)
       [:div#date-time-picker.flex.flex-row {:on-click (fn [e] (util/stop e))
                                             :on-mouse-down (fn [e] (.stopPropagation e))}
@@ -155,7 +166,6 @@
                                                format
                                                nil)
                (state/set-editor-show-date-picker! false)
-               (reset! commands/*current-command nil))
-             (swap! *timestamp assoc :date date)))})
+               (reset! commands/*current-command nil))))})
        (when deadline-or-schedule?
          (time-repeater))])))

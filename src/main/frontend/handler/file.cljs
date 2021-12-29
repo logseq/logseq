@@ -118,8 +118,8 @@
                                        (let [id (second ref)]
                                          (or (contains? block-ids id)
                                              (db/entity [:block/uuid id])))
-                                       (and (map? ref) (contains? ref :block/journal?))
-                                       (db/entity [:block/name (ref :block/name)]))) refs))]
+                                       :else
+                                       true)) refs))]
     (map (fn [item]
            (update item :block/refs keep-block-ref-f))
       data)))

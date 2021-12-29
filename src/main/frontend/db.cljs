@@ -12,7 +12,9 @@
             [frontend.namespaces :refer [import-vars]]
             [frontend.state :as state]
             [frontend.util :as util]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]
+            [electron.ipc :as ipc]))
 
 (import-vars
  [frontend.db.conn
@@ -104,7 +106,12 @@
   [repo conn]
   (d/listen! conn :persistence
              (fn [tx-report]
-               (when-not (util/electron?)
+               (if (util/electron?)
+                 (when-not (:dbsync? (:tx-meta tx-report))
+                   ;; sync with other windows if needed
+                   (p/let [graph-has-other-window? (ipc/ipc "graphHasOtherWindow" repo)]
+                    (when graph-has-other-window?
+                      (ipc/ipc "dbsync" repo {:data (db->string (:tx-data tx-report))}))))
                  (let [tx-id (get-tx-id tx-report)]
                    (state/set-last-transact-time! repo (util/time-ms))
                    (persist-if-idle! repo)))

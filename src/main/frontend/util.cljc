@@ -1141,6 +1141,11 @@
       ;; for android filesystem compatiblity
       (string/replace #"[\\#|%]+" "_")))
 
+(defn get-page-original-name
+  [page]
+  (or (:block/original-name page)
+      (:block/name page)))
+
 (defn lowercase-first
   [s]
   (when s
@@ -1546,3 +1551,13 @@
        Always ignore the IME process."
      [e]
      (gobj/getValueByKeys e "nativeEvent" "isComposing"))) ;; No keycode available
+
+#?(:cljs
+   (defn open-url
+     [url]
+     (let [route? (or (string/starts-with? url
+                        (string/replace js/location.href js/location.hash ""))
+                      (string/starts-with? url "#"))]
+       (if (and (not route?) (electron?))
+         (js/window.apis.openExternal url)
+         (set! (.-href js/window.location) url)))))

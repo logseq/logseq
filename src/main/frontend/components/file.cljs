@@ -74,12 +74,11 @@
   (let [path (get-path state)
         format (format/get-format path)
         page (db/get-file-page path)
-        random-id (str (dc/squuid))
-        config? (= path (config/get-config-path))]
+        random-id (str (dc/squuid))]
     (rum/with-context [[tongue] i18n/*tongue-context*]
       [:div.file {:id (str "file-edit-wrapper-" random-id)}
        [:h1.title
-        [:bdi path]]
+        [:bdi (js/decodeURI path)]]
        (when page
          [:div.text-sm.mb-4.ml-1 "Page: "
           [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}

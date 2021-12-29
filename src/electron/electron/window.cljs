@@ -50,13 +50,13 @@
                                    origin (.-origin urlObj)
                                    requestHeaders (.-requestHeaders details)]
                                (if (and
-                                    (.hasOwnProperty requestHeaders "referer")
-                                    (not-empty (.-referer requestHeaders)))
-                                 (callback #js {:cancel false
+                                     (.hasOwnProperty requestHeaders "referer")
+                                     (not-empty (.-referer requestHeaders)))
+                                 (callback #js {:cancel         false
                                                 :requestHeaders requestHeaders})
                                  (do
                                    (set! (.-referer requestHeaders) origin)
-                                   (callback #js {:cancel false
+                                   (callback #js {:cancel         false
                                                   :requestHeaders requestHeaders}))))))
      (.loadURL win url)
      ;;(when dev? (.. win -webContents (openDevTools)))
@@ -70,6 +70,7 @@
   [^js win]
   (.on win "close" (fn [e]
                      (.preventDefault e)
+                     (state/close-window! win)
                      (let [web-contents (. win -webContents)]
                        (.send web-contents "persistent-dbs"))
                      (async/go
@@ -81,6 +82,12 @@
 (defn get-all-windows
   []
   (.getAllWindows BrowserWindow))
+
+(defn get-graph-all-windows
+  [graph-path]
+  (->> (group-by second (:window/graph @state/state))
+       (#(get % graph-path))
+       (map first)))
 
 (defn setup-window-listeners!
   [^js win]
@@ -115,9 +122,10 @@
                          (js/decodeURIComponent url) url)
                    url (if-not win32? (string/replace url "file://" "") url)]
                (.. logger (info "new-window" url))
-               (if (string/includes?
-                    (.normalize path url)
-                    (.join path (. app getAppPath) "index.html"))
+               (if (some #(string/includes?
+                            (.normalize path url)
+                            (.join path (. app getAppPath) %))
+                         ["index.html" "electron.html"])
                  (.info logger "pass-window" url)
                  (open url)))
              (.preventDefault e)))

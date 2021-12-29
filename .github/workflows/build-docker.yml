@@ -1,0 +1,34 @@
+name: Build-Docker
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  CLOJURE_VERSION: '1.10.1.727'
+
+jobs:
+
+  build-docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 1
+          submodules: 'true'
+
+      - name: Build Docker
+        run: |
+          docker build -t ghcr.io/logseq/logseq-webapp:latest .
+
+      - name: Docker Login
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Docker Image
+        run: docker push ghcr.io/logseq/logseq-webapp:latest

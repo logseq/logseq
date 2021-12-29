@@ -341,6 +341,7 @@
   (when (string? path)
     (let [parts (->> (string/split path #"/")
                      (take-last 2))]
-      (if (not= (first parts) "0")
-        (string/join "/" parts)
-        (last parts)))))
+      (-> (if (not= (first parts) "0")
+            (string/join "/" parts)
+            (last parts))
+          js/decodeURI))))

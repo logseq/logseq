@@ -17,18 +17,20 @@
 
 (defn- allowed-block-as-title?
   "Allowed to be in the first line of a block (a.k.a block title)"
-  [title body]
+  [title body properties]
   (and (not (seq title))
-       (contains?
-        #{"Quote" "Table" "Drawer" "Property_Drawer" "Footnote_Definition" "Custom" "Export" "Src" "Example"}
-        (ffirst body))))
+       (or
+        (seq properties)
+        (contains?
+         #{"Quote" "Table" "Drawer" "Property_Drawer" "Footnote_Definition" "Custom" "Export" "Src" "Example" "Horizontal_Rule"}
+         (ffirst body)))))
 
 (defn transform-content
-  [{:block/keys [uuid format pre-block? unordered content heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
+  [{:block/keys [uuid format properties pre-block? unordered content heading-level left page scheduled deadline parent] :as block} level {:keys [heading-to-list?]}]
   (let [{:block/keys [title body]} (block/parse-title-and-body uuid format pre-block? content)
         content (or content "")
         heading-with-title? (seq title)
-        allowed-block-as-title? (allowed-block-as-title? title body)
+        allowed-block-as-title? (allowed-block-as-title? title body properties)
         first-block? (= left page)
         pre-block? (and first-block? pre-block?)
         markdown? (= format :markdown)

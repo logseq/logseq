@@ -24,7 +24,9 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.mobile.util :as mobile-util]
-            [frontend.text :as text]))
+            [frontend.text :as text]
+            [promesa.core :as p]
+            [electron.ipc :as ipc]))
 
 (defn- open-repo-url [url]
   (repo-handler/push-if-auto-enabled! (state/get-current-repo))
@@ -66,13 +68,13 @@
                      (mobile-util/is-native-platform?))
              [:div.mr-8
               (ui/button
-               (t :open-a-directory)
-               :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
+                (t :open-a-directory)
+                :on-click #(page-handler/ls-dir-files! shortcut/refresh!))])
            (when (and (state/logged?) (not (util/electron?)))
              (ui/button
-              "Add another git repo"
-              :href (rfe/href :repo-add nil {:graph-types "github"})
-              :intent "logseq"))]
+               "Add another git repo"
+               :href (rfe/href :repo-add nil {:graph-types "github"})
+               :intent "logseq"))]
           (for [{:keys [id url] :as repo} repos]
             (let [local? (config/local-db? url)]
               [:div.flex.justify-between.mb-4 {:key id}
@@ -172,7 +174,7 @@
               ;; [:a.text-sm.font-bold {:href "/diff"} "Check diff"]
               [:div.flex.flex-row.justify-between.align-items.mt-2
                (ui/button (t :git/push)
-                          :on-click (fn [] (state/set-modal! commit/add-commit-message)))
+                 :on-click (fn [] (state/set-modal! commit/add-commit-message)))
                (when pushing? svg/loading)]]
              [:hr]
              [:div
@@ -181,7 +183,7 @@
                  (str ": " last-pulled-at)])
               [:div.flex.flex-row.justify-between.align-items
                (ui/button (t :git/pull)
-                          :on-click (fn [] (repo-handler/pull-current-repo)))
+                 :on-click (fn [] (repo-handler/pull-current-repo)))
                (when pulling? svg/loading)]
               [:a.mt-5.text-sm.opacity-50.block
                {:on-click (fn []
@@ -190,100 +192,120 @@
               [:p.pt-2.text-sm.opacity-50
                (t :git/version) (str " " version/version)]]])))])))
 
-(rum/defc repos-dropdown < rum/reactive
-  []
-  (when-let [current-repo (state/sub :git/current-repo)]
-    (rum/with-context [[t] i18n/*tongue-context*]
-      (let [get-repo-name (fn [repo]
-                            (cond
-                              (mobile-util/is-native-platform?)
-                              (text/get-graph-name-from-path repo)
+(defn- check-multiple-windows?
+  [state]
+  (when (util/electron?)
+    (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
+      (when multiple-windows?
+        (reset! (::electron-multiple-windows? state) true)))))
 
-                              (config/local-db? repo)
-                              (config/get-local-dir repo)
+(rum/defcs repos-dropdown < rum/reactive
+  (rum/local false ::electron-multiple-windows?)
+  [state]
+  (let [multiple-windows? (::electron-multiple-windows? state)]
+    (when-let [current-repo (state/sub :git/current-repo)]
+      (rum/with-context [[t] i18n/*tongue-context*]
+        (let [get-repo-name (fn [repo]
+                              (cond
+                                (mobile-util/is-native-platform?)
+                                (text/get-graph-name-from-path repo)
 
-                              :else
-                              (db/get-repo-path repo)))
-            repos (state/sub [:me :repos])
-            repos (remove (fn [r] (= config/local-repo (:url r))) repos)
-            switch-repos (remove (fn [repo]
-                                   (= current-repo (:url repo)))
-                                 repos)
-            repo-links (mapv
-                        (fn [{:keys [id url]}]
-                          (let [repo-path (get-repo-name url)
-                                short-repo-name (text/get-graph-name-from-path repo-path)]
-                            {:title short-repo-name
-                             :hover-detail repo-path ;; show full path on hover
-                             :options {:class "ml-1"
-                                       :on-click #(open-repo-url url)}}))
-                        switch-repos)
-            links (concat repo-links
-                          [(when (seq switch-repos)
-                             {:hr true})
-                           {:title (t :new-graph)
-                            :options {:href (rfe/href :repo-add)}}
-                           {:title (t :all-graphs)
-                            :options {:href (rfe/href :repos)}}
-                           (let [nfs-repo? (config/local-db? current-repo)]
-                             (when (and nfs-repo?
-                                        (not= current-repo config/local-repo)
-                                        (or (nfs-handler/supported?)
-                                            (mobile-util/is-native-platform?)))
-                               {:title (t :sync-from-local-files)
-                                :hover-detail (t :sync-from-local-files-detail)
-                                :options {:on-click
-                                          (fn []
-                                            (state/pub-event!
-                                             [:modal/show
-                                              [:div {:style {:max-width 700}}
-                                               [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
-                                               (ui/button
-                                                "Yes"
-                                                :autoFocus "on"
-                                                :large? true
-                                                :on-click (fn []
-                                                            (state/close-modal!)
-                                                            (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}}))
-                           {:title        (t :re-index)
-                            :hover-detail (t :re-index-detail)
-                            :options {:on-click
-                                      (fn []
-                                        (state/pub-event!
-                                         [:modal/show
-                                          [:div {:style {:max-width 700}}
-                                           [:p "Re-index will discard the current graph, and then processes all the files again as they are currently stored on disk. You will lose unsaved changes and it might take a while. Continue?"]
-                                           (ui/button
-                                            "Yes"
-                                            :autoFocus "on"
-                                            :large? true
-                                            :on-click (fn []
-                                                        (state/close-modal!)
-                                                        (repo-handler/re-index!
-                                                         nfs-handler/rebuild-index!
-                                                         page-handler/create-today-journal!)))]]))}}
-                           (when (util/electron?)
-                             {:title        (t :open-new-window)
-                              :options {:on-click ui-handler/open-new-window!}})])]
-        (when (seq repos)
-          (ui/dropdown-with-links
-           (fn [{:keys [toggle-fn]}]
-             (let [repo-path (get-repo-name current-repo)
-                   short-repo-name (if (or (util/electron?)
-                                           (mobile-util/is-native-platform?))
-                                     (text/get-file-basename repo-path)
-                                     repo-path)]
-               [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
-                {:on-click toggle-fn :title repo-path} ;; show full path on hover
-                (ui/icon "database mr-3" {:style {:font-size 20} :id "database-icon"})
-                [:div.graphs
-                 [:span#repo-switch.block.pr-2.whitespace-nowrap
-                  [:span [:span#repo-name.font-medium short-repo-name]]
-                  [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
-           links
-           (cond->
-            {:modal-class (util/hiccup->class
-                           "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
-             (seq switch-repos)
-             (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
-                                   "Switch to:"]))))))))
+                                (config/local-db? repo)
+                                (config/get-local-dir repo)
+
+                                :else
+                                (db/get-repo-path repo)))
+              repos (state/sub [:me :repos])
+              repos (remove (fn [r] (= config/local-repo (:url r))) repos)
+              switch-repos (remove (fn [repo]
+                                     (= current-repo (:url repo)))
+                                   repos)
+              repo-links (mapv
+                          (fn [{:keys [id url]}]
+                            (let [repo-path (get-repo-name url)
+                                  short-repo-name (text/get-graph-name-from-path repo-path)]
+                              {:title short-repo-name
+                               :hover-detail repo-path ;; show full path on hover
+                               :options {:class "ml-1"
+                                         :on-click #(open-repo-url url)}}))
+                          switch-repos)
+              links (->>
+                     (concat repo-links
+                             [(when (seq switch-repos)
+                                {:hr true})
+                              {:title (t :new-graph)
+                               :options {:href (rfe/href :repo-add)}}
+                              {:title (t :all-graphs)
+                               :options {:href (rfe/href :repos)}}
+                              (let [nfs-repo? (config/local-db? current-repo)]
+                                (when (and nfs-repo?
+                                           (not= current-repo config/local-repo)
+                                           (or (nfs-handler/supported?)
+                                               (mobile-util/is-native-platform?)))
+                                  {:title (t :sync-from-local-files)
+                                   :hover-detail (t :sync-from-local-files-detail)
+                                   :options {:on-click
+                                             (fn []
+                                               (state/pub-event!
+                                                [:modal/show
+                                                 [:div {:style {:max-width 700}}
+                                                  [:p "Refresh detects and processes files modified on your disk and diverged from the actual Logseq page content. Continue?"]
+                                                  (ui/button
+                                                    "Yes"
+                                                    :autoFocus "on"
+                                                    :large? true
+                                                    :on-click (fn []
+                                                                (state/close-modal!)
+                                                                (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))}}))
+                              {:title        (t :re-index)
+                               :hover-detail (t :re-index-detail)
+                               :options (cond->
+                                          {:on-click
+                                           (fn []
+                                             (if @multiple-windows?
+                                               (state/pub-event!
+                                                [:modal/show
+                                                 [:div
+                                                  [:p "You need to close the other windows before re-index this graph."]]])
+                                               (state/pub-event!
+                                                [:modal/show
+                                                 [:div {:style {:max-width 700}}
+                                                  [:p "Re-index will discard the current graph, and then processes all the files again as they are currently stored on disk. You will lose unsaved changes and it might take a while. Continue?"]
+                                                  (ui/button
+                                                    "Yes"
+                                                    :autoFocus "on"
+                                                    :large? true
+                                                    :on-click (fn []
+                                                                (state/close-modal!)
+                                                                (repo-handler/re-index!
+                                                                 nfs-handler/rebuild-index!
+                                                                 page-handler/create-today-journal!)))]])))})}
+                              (when (util/electron?)
+                                {:title        (t :open-new-window)
+                                 :options {:on-click ui-handler/open-new-window!}})])
+                     (remove nil?))]
+          (when (seq repos)
+            (ui/dropdown-with-links
+             (fn [{:keys [toggle-fn]}]
+               (let [repo-path (get-repo-name current-repo)
+                     short-repo-name (if (or (util/electron?)
+                                             (mobile-util/is-native-platform?))
+                                       (text/get-file-basename repo-path)
+                                       repo-path)]
+                 [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md
+                  {:on-click (fn []
+                               (check-multiple-windows? state)
+                               (toggle-fn))
+                   :title repo-path} ;; show full path on hover
+                  (ui/icon "database mr-3" {:style {:font-size 20} :id "database-icon"})
+                  [:div.graphs
+                   [:span#repo-switch.block.pr-2.whitespace-nowrap
+                    [:span [:span#repo-name.font-medium short-repo-name]]
+                    [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]))
+             links
+             (cond->
+               {:modal-class (util/hiccup->class
+                              "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
+               (seq switch-repos)
+               (assoc :links-header [:div.font-medium.text-sm.opacity-60.px-4.pt-2
+                                     "Switch to:"])))))))))

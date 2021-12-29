@@ -141,6 +141,11 @@
   background-color: var(--ls-guideline-color, #ddd);
 }
 
+.block-children-left-border:hover {
+  padding-right: 0px;
+  background-color: var(--ls-primary-text-color);
+}
+
 .block-children {
   padding-top: 2px;
   padding-bottom: 3px;
@@ -153,7 +158,6 @@
 }
 
 .block-control, .block-control:hover {
-  @apply: opacity-50.hover:opacity-100;
   text-decoration: none;
   cursor: pointer;
   font-size: 14px;
@@ -264,7 +268,6 @@ html.is-native-android {
 }
 
 .ls-block {
-  @apply: .flex.flex-col.rounded-sm;
   position: relative;
   min-height: 24px;
   padding: 2px 0;

@@ -185,23 +185,23 @@
       (ui/resize-provider
        (ui/resize-consumer
         (cond->
-         {:className "resize image-resize"
-          :onSizeChanged (fn [value]
-                           (when (and (not @*resizing-image?)
-                                      (some? @size)
-                                      (not= value @size))
-                             (reset! *resizing-image? true))
-                           (reset! size value))
-          :onMouseUp (fn []
-                       (when (and @size @*resizing-image?)
-                         (when-let [block-id (:block/uuid config)]
-                           (let [size (bean/->clj @size)]
-                             (editor-handler/resize-image! block-id metadata full_text size))))
-                       (when @*resizing-image?
+          {:className "resize image-resize"
+           :onSizeChanged (fn [value]
+                            (when (and (not @*resizing-image?)
+                                       (some? @size)
+                                       (not= value @size))
+                              (reset! *resizing-image? true))
+                            (reset! size value))
+           :onMouseUp (fn []
+                        (when (and @size @*resizing-image?)
+                          (when-let [block-id (:block/uuid config)]
+                            (let [size (bean/->clj @size)]
+                              (editor-handler/resize-image! block-id metadata full_text size))))
+                        (when @*resizing-image?
                           ;; TODO: need a better way to prevent the clicking to edit current block
-                         (js/setTimeout #(reset! *resizing-image? false) 200)))
-          :onClick (fn [e]
-                     (when @*resizing-image? (util/stop e)))}
+                          (js/setTimeout #(reset! *resizing-image? false) 200)))
+           :onClick (fn [e]
+                      (when @*resizing-image? (util/stop e)))}
           (and (:width metadata) (not (util/mobile?)))
           (assoc :style {:width (:width metadata)}))
         [:div.asset-container
@@ -476,7 +476,7 @@
           redirect-page-name (or (and (= :org (state/get-preferred-format))
                                       (:org-mode/insert-file-link? (state/get-config))
                                       redirect-page-name)
-                              (model/get-redirect-page-name page-name (:block/alias? config)))
+                                 (model/get-redirect-page-name page-name (:block/alias? config)))
           inner (page-inner config
                             page-name-in-block
                             page-name
@@ -717,8 +717,10 @@
   (if macro-content
     (let [ast (->> (mldoc/->edn macro-content (mldoc/default-config format))
                    (map first))
-          block? (mldoc/block-with-title? (ffirst ast))]
-      (if block?
+          paragraph? (and (= 1 (count ast))
+                          (= "Paragraph" (ffirst ast)))]
+      (if (and (not paragraph?)
+               (mldoc/block-with-title? (ffirst ast)))
         [:div
          (markup-elements-cp (assoc config :block/format format) ast)]
         (inline-text format macro-content)))
@@ -799,6 +801,27 @@
     (.. util/node-path
         (join (config/get-repo-dir (state/get-current-repo))
               (config/get-local-asset-absolute-path path)))))
+
+(rum/defc namespace-hierarchy-aux
+  [config namespace children]
+  [:ul
+   (for [child children]
+     [:li {:key (str "namespace-" namespace "-" (:db/id child))}
+      (let [shorten-name (some-> (or (:block/original-name child) (:block/name child))
+                                 (string/split "/")
+                                 last)]
+        (page-cp {:label shorten-name} child))
+      (when (seq (:namespace/children child))
+        (namespace-hierarchy-aux config (:block/name child)
+                                 (:namespace/children child)))])])
+
+(rum/defc namespace-hierarchy
+  [config namespace children]
+  [:div.namespace
+   [:div.font-medium.flex.flex-row.items-center.pb-2
+    [:span.text-sm.mr-1 "Namespace "]
+    (page-cp config {:block/name namespace})]
+   (namespace-hierarchy-aux config namespace children)])
 
 (defn inline
   [{:keys [html-export?] :as config} item]
@@ -922,9 +945,9 @@
             (->elem
              :a
              (cond->
-              {:href      (str "file://" path)
-               :data-href path
-               :target    "_blank"}
+               {:href      (str "file://" path)
+                :data-href path
+                :target    "_blank"}
                title
                (assoc :title title))
              (map-inline config label)))
@@ -981,9 +1004,9 @@
                     (->elem
                      :a
                      (cond->
-                      {:href      (str "file://" href*)
-                       :data-href href*
-                       :target    "_blank"}
+                       {:href      (str "file://" href*)
+                        :data-href href*
+                        :target    "_blank"}
                        title
                        (assoc :title title))
                      (map-inline config label))))))
@@ -1007,20 +1030,20 @@
 
             (= protocol "ar")
             (->elem
-              :a.external-link
-              (cond->
-                {:href (ar-url->http-url href)
-                 :target "_blank"}
-                title
-                (assoc :title title))
-              (map-inline config label))
+             :a.external-link
+             (cond->
+               {:href (ar-url->http-url href)
+                :target "_blank"}
+               title
+               (assoc :title title))
+             (map-inline config label))
 
             :else
             (->elem
              :a.external-link
              (cond->
-              {:href href
-               :target "_blank"}
+               {:href href
+                :target "_blank"}
                title
                (assoc :title title))
              (map-inline config label))))))
@@ -1127,6 +1150,13 @@
                         (js/console.error e)))))))
          [:span.warning
           (util/format "{{function %s}}" (first arguments))])
+
+        (= name "namespace")
+        (let [namespace (first arguments)]
+          (when-not (string/blank? namespace)
+            (let [namespace (string/lower-case (text/page-ref-un-brackets! namespace))
+                  children (model/get-namespace-hierarchy (state/get-current-repo) namespace)]
+              (namespace-hierarchy config namespace children))))
 
         (= name "youtube")
         (when-let [url (first arguments)]
@@ -1349,27 +1379,27 @@
 (defn- toggle-block-children
   [e children]
   (let [block-ids (map :block/uuid children)]
-    (if (some editor-handler/collapsable? block-ids)
-      (dorun (map editor-handler/collapse-block! block-ids))
-      (dorun (map editor-handler/expand-block! block-ids)))))
+    (dorun
+     (if (some editor-handler/collapsable? block-ids)
+       (map editor-handler/collapse-block! block-ids)
+       (map editor-handler/expand-block! block-ids)))))
 
 (rum/defc block-children < rum/reactive
-  [config children collapsed? *ref-collapsed?]
+  [config children collapsed? *default-collapsed?]
   (let [ref? (:ref? config)
-        collapsed? (if ref? (rum/react *ref-collapsed?) collapsed?)
+        collapsed? (if ref? (rum/react *default-collapsed?) collapsed?)
         children (and (coll? children) (filter map? children))]
     (when (and (coll? children)
                (seq children)
                (not collapsed?))
       (let [doc-mode? (state/sub :document/mode?)]
-        [:div.block-children-container {:style {:display "flex"
-                                                :margin-left (if doc-mode? 18
-                                                                           (if (or (mobile-util/native-android?)
-                                                                                   (mobile-util/native-iphone?))
-                                                                             22
-                                                                             29))}}
+        [:div.block-children-container.flex {:style {:margin-left (if doc-mode? 18
+                                                                      (if (or (mobile-util/native-android?)
+                                                                              (mobile-util/native-iphone?))
+                                                                        22
+                                                                        29))}}
          [:div.block-children-left-border {:on-click (fn [event] (toggle-block-children event children))}]
-         [:div.block-children {:style    {:display     (if collapsed? "none" "")}}
+         [:div.block-children.w-full {:style    {:display     (if collapsed? "none" "")}}
           (for [child children]
             (when (map? child)
               (let [child (dissoc child :block/meta)
@@ -1380,7 +1410,7 @@
                              ref?
                              (assoc :ref-child? true))]
                 (rum/with-key (block-container config child)
-                              (:block/uuid child)))))]]))))
+                  (:block/uuid child)))))]]))))
 
 (defn- block-content-empty?
   [{:block/keys [properties title body]}]
@@ -1394,7 +1424,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit?]
+  [state config block uuid block-id body children collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
@@ -1406,9 +1436,7 @@
                                 (seq body))
                            has-children-blocks?)
                        (util/react *control-show?))
-        ref-collapsed? (util/react *ref-collapsed?)
         ref? (:ref? config)
-        collapsed? (if ref? ref-collapsed? collapsed?)
         empty-content? (block-content-empty? block)]
     [:div.mr-1.flex.flex-row.items-center.sm:mr-2
      {:style {:height 24
@@ -1420,11 +1448,9 @@
        :on-click (fn [event]
                    (util/stop event)
                    (when-not (and (not collapsed?) (not has-child?))
-                     (if ref?
-                       (swap! *ref-collapsed? not)
-                       (if collapsed?
-                         (editor-handler/expand-block! uuid)
-                         (editor-handler/collapse-block! uuid)))))}
+                     (if collapsed?
+                       (editor-handler/expand-block! uuid)
+                       (editor-handler/collapse-block! uuid))))}
       [:span {:class (if control-show? "control-show" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
      (let [bullet [:a {:on-click (fn [event]
@@ -1486,8 +1512,9 @@
                     :style {:margin-top -2
                             :margin-right 5}
                     :checked checked?
-                    :on-change (fn [_e]
-                                 ;; FIXME: Log timestamp
+                    :on-mouse-down (fn [e]
+                                     (util/stop-propagation e))
+                    :on-change (fn [e]
                                  (if checked?
                                    (editor-handler/uncheck block)
                                    (editor-handler/check block)))}))))
@@ -1512,7 +1539,7 @@
       [:a
        {:class (str "marker-switch block-marker " marker)
         :title (util/format "Change from %s to %s" marker next-marker)
-        :on-click (set-marker-fn next-marker)}
+        :on-mouse-down (set-marker-fn next-marker)}
        marker])))
 
 (defn marker-cp
@@ -1568,7 +1595,7 @@
 
 (defn build-block-title
   [config {:block/keys [title marker pre-block? properties level heading-level]
-                                :as t}]
+           :as t}]
   (let [config (assoc config :block t)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
@@ -1620,7 +1647,7 @@
           (when (and (util/electron?) (not= block-type :default))
             [:a.prefix-link
              {:on-click #(case block-type
-                            ;; pdf annotation
+                           ;; pdf annotation
                            :annotation (pdf-assets/open-block-ref! t)
                            (.preventDefault %))}
 
@@ -1793,12 +1820,12 @@
            (not (:block/pre-block? block)))
       (let [move-to (rum/react *move-to)]
         (when-not
-         (or (and top? (not= move-to :top))
-             (and (not top?) (= move-to :top))
-             (and block-content? (not= move-to :nested))
-             (and (not block-content?)
-                  (seq (:block/children block))
-                  (= move-to :nested)))
+            (or (and top? (not= move-to :top))
+                (and (not top?) (= move-to :top))
+                (and block-content? (not= move-to :nested))
+                (and (not block-content?)
+                     (seq (:block/children block))
+                     (= move-to :nested)))
           (dnd-separator move-to block-content?))))))
 
 (defn clock-summary-cp
@@ -1841,12 +1868,12 @@
                          :on-mouse-down ; TODO: it seems that Safari doesn't work well with on-mouse-down
                          )
         attrs (cond->
-                  {:blockid       (str uuid)
-                   :data-type (name block-type)
-                   :style {:width "100%"}}
-                  (not block-ref?)
-                  (assoc mouse-down-key (fn [e]
-                                          (block-content-on-mouse-down e block block-id content edit-input-id))))]
+                {:blockid       (str uuid)
+                 :data-type (name block-type)
+                 :style {:width "100%"}}
+                (not block-ref?)
+                (assoc mouse-down-key (fn [e]
+                                        (block-content-on-mouse-down e block block-id content edit-input-id))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-mouse-up (fn [_e]
@@ -2021,16 +2048,16 @@
                                                                  (:block/pre-block? block)
                                                                  content)]
                                  [block
-                                 (if (seq title)
-                                   (->elem :span (map-inline config title))
-                                   (->elem :div (markup-elements-cp config body)))]))))
+                                  (if (seq title)
+                                    (->elem :span (map-inline config title))
+                                    (->elem :div (markup-elements-cp config body)))]))))
             breadcrumb (->> (into [] parents-props)
                             (concat [page-name-props] (when more? [:more]))
                             (filterv identity)
                             (map (fn [x] (if (vector? x)
-                                          (let [[block label] x]
-                                            (breadcrumb-fragment config block label))
-                                          [:span.opacity-70 "⋯"])))
+                                           (let [[block label] x]
+                                             (breadcrumb-fragment config block label))
+                                           [:span.opacity-70 "⋯"])))
                             (interpose (breadcrumb-separator)))]
         [:div.block-parents.flex-row.flex-1
          {:class (when (seq breadcrumb)
@@ -2142,31 +2169,13 @@
      children)
     (distinct @refs)))
 
-;; (rum/defc block-immediate-children < rum/reactive
-;;   [repo config uuid ref? collapsed?]
-;;   (when (and ref? (not collapsed?))
-;;     (let [children (db/get-block-immediate-children repo uuid)
-;;           children (block-handler/filter-blocks repo children (:filters config) false)]
-;;       (when (seq children)
-;;         [:div.ref-children {:style {:margin-left "1.8rem"}}
-;;          (blocks-container children (assoc config
-;;                                            :breadcrumb-show? false
-;;                                            :ref? true
-;;                                            :ref-child? true))]))))
-
 (rum/defcs block-container < rum/reactive
   {:init (fn [state]
-           (let [[config block] (:rum/args state)
-                 ref-collpased? (boolean
-                                 (and
-                                  (seq (:block/children block))
-                                  (or (:custom-query? config)
-                                      (and (:ref? config)
-                                           (>= (:ref/level block)
-                                               (state/get-ref-open-blocks-level))))))]
+           (let [[config block] (:rum/args state)]
              (assoc state
+                    ::init-collapsed? (get-in block [:block/properties :collapsed])
                     ::control-show? (atom false)
-                    ::ref-collapsed? (atom ref-collpased?))))
+                    ::default-collapsed? (atom (editor-handler/block-default-collapsed? block config)))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/properties
                                         :block/parent :block/left
@@ -2179,7 +2188,8 @@
                        (not= (select-keys (first (:rum/args old-state)) config-compare-keys)
                              (select-keys (first (:rum/args new-state)) config-compare-keys)))))}
   [state config {:block/keys [uuid repo children pre-block? top? properties refs heading-level level type format content] :as block}]
-  (let [block (merge block (block/parse-title-and-body uuid format pre-block? content))
+  (let [init-collapsed? (::init-collapsed? state)
+        block (merge block (block/parse-title-and-body uuid format pre-block? content))
         body (:block/body block)
         blocks-container-id (:blocks-container-id config)
         config (update config :block merge block)
@@ -2189,9 +2199,10 @@
                  config)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
-        *ref-collapsed? (get state ::ref-collapsed?)
-        collapsed? (or @*ref-collapsed?
-                       (get properties :collapsed))
+        *default-collapsed? (get state ::default-collapsed?)
+        collapsed? (if (not= init-collapsed? (:collapsed properties))
+                     (:collapsed properties)
+                     @*default-collapsed?)
         ref? (boolean (:ref? config))
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
@@ -2215,15 +2226,15 @@
         review-cards? (:review-cards? config)]
     [:div.ls-block
      (cond->
-      {:id block-id
-       :data-refs data-refs
-       :data-refs-self data-refs-self
-       :data-collapsed (and collapsed? has-child?)
-       :class (str uuid
-                   (when pre-block? " pre-block")
-                   (when (and card? (not review-cards?)) " shadow-xl"))
-       :blockid (str uuid)
-       :haschild (str has-child?)}
+       {:id block-id
+        :data-refs data-refs
+        :data-refs-self data-refs-self
+        :data-collapsed (and collapsed? has-child?)
+        :class (str uuid
+                    (when pre-block? " pre-block")
+                    (when (and card? (not review-cards?)) " shadow-xl"))
+        :blockid (str uuid)
+        :haschild (str has-child?)}
 
        level
        (assoc :level level)
@@ -2255,11 +2266,11 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *ref-collapsed? *control-show? edit?))
+        (block-control config block uuid block-id body children collapsed? *control-show? edit?))
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 
-     (block-children config children collapsed? *ref-collapsed?)
+     (block-children config children collapsed? *default-collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 
@@ -2326,7 +2337,7 @@
         (->elem
          :li
          (cond->
-          {:checked checked?}
+           {:checked checked?}
            number
            (assoc :value number))
          (vec-cat
