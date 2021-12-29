@@ -388,10 +388,10 @@
         (d/transact! (db/get-conn repo false) page-txs)
 
         (when (not= new-page-name new-name)
-          (page-property/add-property! new-name :title new-name))
+          (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))
-          (rename-file! file new-name (fn [] nil)))
+          (rename-file! file new-file-name (fn [] nil)))
 
         (rename-update-refs! page old-original-name new-name)
 
@@ -451,7 +451,7 @@
   "Only accepts unsanitized names"
   [repo old-name new-name]
   (let [pages (db/get-namespace-pages repo old-name)
-        page (db/pull [:block/name (string/lower-case old-name)])
+        page (db/pull [:block/name (util/page-name-sanity-lc old-name)])
         pages (cons page pages)]
     (doseq [{:block/keys [name original-name]} pages]
       (let [old-page-title (or original-name name)

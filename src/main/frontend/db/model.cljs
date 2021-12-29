@@ -1429,7 +1429,7 @@
   "Accepts both sanitized and unsanitized namespaces"
   [repo namespace]
   (assert (string? namespace))
-  (let [namespace (string/lower-case namespace)]
+  (let [namespace (util/page-name-sanity-lc namespace)]
     (d/q
       '[:find [(pull ?c [:db/id :block/name :block/original-name
                          :block/namespace
