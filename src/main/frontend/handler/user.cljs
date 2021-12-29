@@ -8,9 +8,33 @@
             [frontend.util :as util]
             [frontend.debug :as debug]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [clojure.string :as string]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]
+            [cljs-http.client :as http]
+            [cljs.core.async :as async :refer [go go-loop <! >! chan timeout]])
+  (:import [goog.format EmailAddress]))
+
+(defn- email? [v]
+  (and v
+       (.isValid (EmailAddress. v))))
+
+(defn set-email!
+  {:deprecated "-"}
+  [email]
+  (when (email? email)
+    (util/post (str config/api "email")
+               {:email email}
+               (fn [_result]
+                 (db/transact! [{:me/email email}])
+                 (swap! state/state assoc-in [:me :email] email))
+               (fn [_error]
+                 (notification/show! "Email already exists!"
+                                     :error)))))
 
 (defn set-cors!
+  {:deprecated "-"}
   [cors-proxy]
   (util/post (str config/api "cors_proxy")
              {:cors-proxy cors-proxy}
@@ -64,6 +88,7 @@
                    (set! (.-href js/window.location) "/logout")))))))
 
 (defn delete-account!
+  {:deprecated "-"}
   []
   (p/let [_ (idb/clear-local-storage-and-idb!)]
     (util/delete (str config/api "account")
@@ -78,6 +103,11 @@
 
 (def *token-updated
   "used to notify other parts that tokens updated"
+  (atom false))
+
+(def *login-notify
+  "used to notify other parts that login/logout happened,
+  true when login, false when logout"
   (atom false))
 
 (defn- parse-jwt [jwt]
@@ -119,7 +149,8 @@
   (state/set-auth-id-token nil)
   (state/set-auth-access-token nil)
   (state/set-auth-refresh-token nil)
-  (swap! *token-updated not))
+  (swap! *token-updated not)
+  (reset! *login-notify false))
 
 (defn- set-tokens!
   ([id-token access-token]
@@ -136,11 +167,13 @@
   (go
     (let [resp (<! (http/get (str "https://api.logseq.com/auth_callback?code=" code)))]
       (if (= 200 (:status resp))
-        (-> resp
-            (:body)
-            (js/JSON.parse)
-            (js->clj :keywordize-keys true)
-            (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
+        (do
+          (-> resp
+              (:body)
+              (js/JSON.parse)
+              (js->clj :keywordize-keys true)
+              (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
+          (reset! *login-notify true))
         (debug/pprint "login-callback" resp)))))
 
 (defn refresh-id-token&access-token []
