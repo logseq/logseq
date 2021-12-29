@@ -89,7 +89,7 @@
         (ipc/ipc "installMarketPlugin" mft)
         (resolve id)))))
 
-(defn update-marketplace-plugin
+(defn check-or-update-marketplace-plugin
   [{:keys [id] :as pkg} error-handler]
   (when-not (and (:plugin/installing @state/state)
                  (not (installed? id)))
@@ -122,40 +122,45 @@
         listener (fn [^js _ ^js e]
                    (js/console.debug :lsp-installed e)
 
-                   (when-let [{:keys [status payload]} (bean/->clj e)]
+                   (when-let [{:keys [status payload only-check]} (bean/->clj e)]
                      (case (keyword status)
 
                        :completed
                        (let [{:keys [id dst name title version theme]} payload
                              name (or title name "Untitled")]
-                         (if (installed? id)
-                           (when-let [^js pl (get-plugin-inst id)] ;; update
-                             (p/then
-                               (.reload pl)
-                               #(do
-                                  ;;(if theme (select-a-plugin-theme id))
-                                  (notifications/show!
-                                    (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success))))
+                         (if only-check
+                           (state/consume-coming-plugin payload)
+                           (if (installed? id)
+                             (when-let [^js pl (get-plugin-inst id)] ;; update
+                               (p/then
+                                 (.reload pl)
+                                 #(do
+                                    ;;(if theme (select-a-plugin-theme id))
+                                    (notifications/show!
+                                      (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success))))
 
-                           (do                              ;; register new
-                             (p/then
-                               (js/LSPluginCore.register (bean/->js {:key id :url dst}))
-                               (fn [] (if theme (js/setTimeout #(select-a-plugin-theme id) 300))))
-                             (notifications/show!
-                               (str (t :plugin/installed) (t :plugins) ": " name) :success))))
+                             (do                            ;; register new
+                               (p/then
+                                 (js/LSPluginCore.register (bean/->js {:key id :url dst}))
+                                 (fn [] (if theme (js/setTimeout #(select-a-plugin-theme id) 300))))
+                               (notifications/show!
+                                 (str (t :plugin/installed) (t :plugins) ": " name) :success)))))
 
                        :error
-                       (let [[msg type] (case (keyword (string/replace payload #"^[\s\:]+" ""))
+                       (let [error-code (keyword (string/replace (:error-code payload) #"^[\s\:]+" ""))
+                             [msg type] (case error-code
 
                                           :no-new-version
-                                          [(str (t :plugin/up-to-date) " :)") :success]
+                                          [(str "[" (:name payload) "] " (t :plugin/up-to-date) " :)") :warning]
 
-                                          [payload :error])]
+                                          [error-code :error])]
 
-                         (notifications/show!
-                           (str
-                             (if (= :error type) "[Install Error]" "")
-                             msg) type)
+                         (if only-check
+                           (state/consume-coming-plugin payload)
+                           (notifications/show!
+                             (str
+                               (if (= :error type) "[Install Error]" "")
+                               msg) type))
 
                          (js/console.error payload))
 

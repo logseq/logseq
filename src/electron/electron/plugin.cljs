@@ -121,7 +121,7 @@
       (throw e))))
 
 (defn install-or-update!
-  [{:keys [version repo] :as item}]
+  [{:keys [version repo only-check] :as item}]
   (when (and (not @*installing-or-updating) repo)
     (let [updating? (and version (. semver valid version))]
 
@@ -152,19 +152,23 @@
                               (throw (js/Error. :release-asset-not-found)))
 
                           dest (.join path cfgs/dot-root "plugins" (:id item))
-                          _ (download-asset-zip item dl-url dest)
-                          _ (debug "[Updated DONE] " latest-version)]
+                          _ (if-not only-check (download-asset-zip item dl-url dest))
+                          _ (debug "[" (if only-check "Checked" "Updated") "DONE] " latest-version)]
 
                     (emit :lsp-installed
-                          {:status  :completed
-                           :payload (assoc item :zip dl-url :dst dest)})
+                          {:status     :completed
+                           :only-check only-check
+                           :payload    (if only-check
+                                         (assoc item :latest-version latest-version)
+                                         (assoc item :zip dl-url :dst dest))})
 
                     (resolve))
                   (p/catch
                     (fn [^js e]
                       (emit :lsp-installed
                             {:status  :error
-                             :payload (.-message e)}))
+                             :only-check only-check
+                             :payload (assoc item :error-code (.-message e)) }))
                     (resolve nil)))))
 
           (p/finally #(reset! *installing-or-updating nil))))))

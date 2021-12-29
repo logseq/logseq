@@ -161,6 +161,8 @@
       :plugin/marketplace-stats     nil
       :plugin/installing            nil
       :plugin/active-readme         nil
+      :plugin/updates-pending       {}
+      :plugin/updates-coming        {}
 
       ;; pdf
       :pdf/current                  nil
@@ -1675,3 +1677,9 @@
 (defn get-visual-viewport-state
   []
   (:ui/visual-viewport-state @state))
+
+(defn consume-coming-plugin
+  [payload]
+  (when-let [id (keyword (:id payload))]
+    (swap! state update :plugin/updates-pending dissoc id)
+    (swap! state update :plugin/updates-coming assoc id payload)))

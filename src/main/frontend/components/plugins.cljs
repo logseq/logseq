@@ -209,13 +209,15 @@
           ;; market ctls
           [:div.ctl
            [:ul.l.flex.items-center
-            ;; downloads
-            [:li.flex.text-sm.items-center.pr-3 (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
-
             ;; stars
+            [:li.flex.text-sm.items-center.pr-3
+             (svg/star 16) [:span.pl-1 (:stargazers_count stat)]]
+
+            ;; downloads
             (when-let [downloads (and stat (:total_downloads stat))]
               (if (and downloads (> downloads 0))
-                [:li.flex.text-sm.items-center.pr-3 (svg/cloud-down 16) [:span.pl-1 downloads]]))]
+                [:li.flex.text-sm.items-center.pr-3
+                 (svg/cloud-down 16) [:span.pl-1 downloads]]))]
 
            [:div.r.flex.items-center
 
@@ -258,12 +260,12 @@
               [:a.btn
                {:class    (util/classnames [{:disabled (or installing-or-updating?)
                                              :updating installing-or-updating?}])
-                :on-click #(plugin-handler/update-marketplace-plugin
-                             item (fn [e] (notification/show! e :error)))}
+                :on-click #(plugin-handler/check-or-update-marketplace-plugin
+                             (assoc item :only-check true) (fn [e] (notification/show! e :error)))}
 
                (if installing-or-updating?
                  (t :plugin/updating)
-                 (t :plugin/update))])
+                 (t :plugin/check-update))])
 
             (ui/toggle (not disabled)
                        (fn []
@@ -353,10 +355,20 @@
         {})
 
       ;; more - updater
-      (ui/button
-        [:span (ui/icon "dots-vertical")]
-        :class "more-do"
-        :intent "link")
+      (ui/dropdown-with-links
+        (fn [{:keys [toggle-fn]}]
+          (ui/button
+            [:span (ui/icon "dots-vertical")]
+            :class "more-do"
+            :on-click toggle-fn
+            :intent "link"))
+
+        (if market?
+          [{:title   "Refresh lists"
+            :options {:on-click #(notification/show! "refresh..." :success)}}]
+          [{:title   "Check updates"
+            :options {:on-click #(notification/show! "updates..." :success)}}])
+        {})
 
       ;; developer
       (ui/button
