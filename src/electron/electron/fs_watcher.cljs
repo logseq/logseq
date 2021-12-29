@@ -20,6 +20,13 @@
       (send file-watcher-chan
             (bean/->js {:type type :payload payload}))))
 
+(defn- publish-file-event!
+  [win dir path event]
+  (send-file-watcher! win event {:dir (utils/fix-win-path! dir)
+                                 :path (utils/fix-win-path! path)
+                                 :content (utils/read-file path)
+                                 :stat (fs/statSync path)}))
+
 (defn watch-dir!
   [win dir]
   (when (fs/existsSync dir)
@@ -39,29 +46,15 @@
       ;; TODO: batch sender
       (.on watcher "add"
            (fn [path]
-             (let [windows (win/get-all-windows)]
-               (doseq [win windows]
-                 (send-file-watcher! win "add"
-                                     {:dir (utils/fix-win-path! dir)
-                                      :path (utils/fix-win-path! path)
-                                      :content (utils/read-file path)
-                                      :stat (fs/statSync path)})))))
+             (publish-file-event! win dir path "add")))
       (.on watcher "change"
            (fn [path]
-             (let [windows (win/get-all-windows)]
-               (doseq [win windows]
-                 (send-file-watcher! win "change"
-                                     {:dir (utils/fix-win-path! dir)
-                                      :path (utils/fix-win-path! path)
-                                      :content (utils/read-file path)
-                                      :stat (fs/statSync path)})))))
+             (publish-file-event! win dir path "change")))
       (.on watcher "unlink"
            (fn [path]
-             (let [windows (win/get-all-windows)]
-               (doseq [win windows]
-                 (send-file-watcher! win "unlink"
-                                     {:dir (utils/fix-win-path! dir)
-                                      :path (utils/fix-win-path! path)})))))
+             (send-file-watcher! win "unlink"
+                                 {:dir (utils/fix-win-path! dir)
+                                  :path (utils/fix-win-path! path)})))
       (.on watcher "error"
            (fn [path]
              (println "Watch error happened: "
