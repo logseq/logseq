@@ -21,6 +21,7 @@
        (.isValid (EmailAddress. v))))
 
 (defn set-email!
+  {:deprecated "-"}
   [email]
   (when (email? email)
     (util/post (str config/api "email")
@@ -33,6 +34,7 @@
                                      :error)))))
 
 (defn set-cors!
+  {:deprecated "-"}
   [cors-proxy]
   (util/post (str config/api "cors_proxy")
              {:cors-proxy cors-proxy}
@@ -86,6 +88,7 @@
                    (set! (.-href js/window.location) "/logout")))))))
 
 (defn delete-account!
+  {:deprecated "-"}
   []
   (p/let [_ (idb/clear-local-storage-and-idb!)]
     (util/delete (str config/api "account")
@@ -100,6 +103,11 @@
 
 (def *token-updated
   "used to notify other parts that tokens updated"
+  (atom false))
+
+(def *login-notify
+  "used to notify other parts that login/logout happened,
+  true when login, false when logout"
   (atom false))
 
 (defn- parse-jwt [jwt]
@@ -141,7 +149,8 @@
   (state/set-auth-id-token nil)
   (state/set-auth-access-token nil)
   (state/set-auth-refresh-token nil)
-  (swap! *token-updated not))
+  (swap! *token-updated not)
+  (reset! *login-notify false))
 
 (defn- set-tokens!
   ([id-token access-token]
@@ -158,11 +167,13 @@
   (go
     (let [resp (<! (http/get (str "https://api.logseq.com/auth_callback?code=" code)))]
       (if (= 200 (:status resp))
-        (-> resp
-            (:body)
-            (js/JSON.parse)
-            (js->clj :keywordize-keys true)
-            (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
+        (do
+          (-> resp
+              (:body)
+              (js/JSON.parse)
+              (js->clj :keywordize-keys true)
+              (as-> $ (set-tokens! (:id_token $) (:access_token $) (:refresh_token $))))
+          (reset! *login-notify true))
         (debug/pprint "login-callback" resp)))))
 
 (defn refresh-id-token&access-token []

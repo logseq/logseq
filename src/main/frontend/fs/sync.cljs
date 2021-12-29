@@ -461,6 +461,9 @@ else: return err resp"
         (ws-stop! *ws)
         (println "sync loop stop")))))
 
+
+;;; TODO: watch `user/*login-notify` to start/stop sync loop
+
 (comment
   (def graph-uuid "bc5e1ced-96b1-4418-abea-4536cce9a35f")
   (reset! graphs-txid [graph-uuid 0])
