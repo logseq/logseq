@@ -32,15 +32,16 @@
                    (route-handler/go-to-journals!))}
      (ui/icon "home" {:style {:fontSize ui/icon-size}})]))
 
-(rum/defc login
-  [logged?]
+(rum/defc login < rum/reactive
+  []
   (rum/with-context [[t] i18n/*tongue-context*]
-    (when (and (not logged?)
-               (not config/publishing?))
+    (when-not config/publishing?
+      (if (user-handler/logged?)
+        [:span.text-sm.font-medium (user-handler/email)]
 
-      [:a.button.text-sm.font-medium.block {:on-click (fn []
-                                                        (js/window.open "https://logseq-test.auth.us-east-2.amazoncognito.com/oauth2/authorize?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Ftest"))}
-       [:span (t :login)]])))
+        [:a.button.text-sm.font-medium.block {:on-click (fn []
+                                                          (js/window.open "https://logseq-test.auth.us-east-2.amazoncognito.com/oauth2/authorize?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback"))}
+         [:span (t :login)]]))))
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
@@ -52,7 +53,7 @@
 
 (rum/defc dropdown-menu < rum/reactive
   [{:keys [current-repo t]}]
-  (let [logged? (state/logged?)
+  (let [logged? (user-handler/logged?)
         page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
                            (concat page-menu [{:hr true}]))]
@@ -142,7 +143,7 @@
          (svg/reload 16) [:strong (t :updater/quit-and-install)]]]])))
 
 (rum/defc header < rum/reactive
-  [{:keys [open-fn current-repo logged? me default-home new-block-mode]}]
+  [{:keys [open-fn current-repo default-home new-block-mode]}]
   (let [repos (->> (state/sub [:me :repos])
                    (remove #(= (:url %) config/local-repo)))
         electron-mac? (and util/mac? (util/electron?))
@@ -181,7 +182,8 @@
              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
 
        [:div.r.flex
-        (login logged?)
+        (login)
+
 
         (when plugin-handler/lsp-enabled?
           (plugins/hook-ui-items :toolbar))

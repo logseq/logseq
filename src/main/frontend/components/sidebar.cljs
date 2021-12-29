@@ -20,6 +20,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
@@ -279,7 +280,6 @@
                                 (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))}))
                 state)}
   [{:keys [route-match global-graph-pages? route-name indexeddb-support? db-restoring? main-content]}]
-
   (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
@@ -345,11 +345,10 @@
         parsing? (state/sub :repo/parsing-files?)
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
-        me (state/sub :me)
         journals-length (state/sub :journals-length)
         latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
         preferred-format (state/sub [:me :preferred_format])
-        logged? (:name me)]
+        logged? (user-handler/logged?)]
     [:div
      (cond
        (and default-home
@@ -369,15 +368,16 @@
        loading-files?
        (ui/loading (t :loading-files))
 
-       (and (not logged?) latest-journals)
-       (journal/journals latest-journals)
+         ;; (and (not logged?) (seq latest-journals))
+         ;; (journal/journals latest-journals)
 
-       (and logged? (not preferred-format))
-       (widgets/choose-preferred-format)
+         ;; (and logged? (not preferred-format))
+         ;; (widgets/choose-preferred-format)
 
-       ;; TODO: delay this
-       (and logged? (nil? (:email me)))
-       (settings/set-email)
+                         ;; TODO: delay this
+         ;; (and logged? (nil? (:email me)))
+         ;; (settings/set-email)
+
 
        cloning?
        (ui/loading (t :cloning))
@@ -388,7 +388,7 @@
        (or
         (and (mobile-util/is-native-platform?)
              (nil? (state/get-current-repo)))
-        (and logged? (empty? (:repos me))))
+        logged?)
        (widgets/add-graph)
 
        ;; FIXME: why will this happen?
@@ -472,7 +472,6 @@
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         global-graph-pages? (= :graph route-name)
-        logged? (:name me)
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
@@ -480,66 +479,62 @@
         edit? (:editor/editing? @state/state)
         default-home (get-default-home-if-valid)]
     (theme/container
-     {:t             t
-      :theme         theme
-      :route         route-match
-      :current-repo  current-repo
-      :edit?         edit?
-      :nfs-granted?  granted?
-      :db-restoring? db-restoring?
-      :sidebar-open? sidebar-open?
-      :settings-open? settings-open?
-      :sidebar-blocks-len (count right-sidebar-blocks)
-      :system-theme? system-theme?
-      :on-click      (fn [e]
-                       (editor-handler/unhighlight-blocks!)
-                       (util/fix-open-external-with-shift! e))}
+       {:t             t
+        :theme         theme
+        :route         route-match
+        :current-repo  current-repo
+        :edit?         edit?
+        :nfs-granted?  granted?
+        :db-restoring? db-restoring?
+        :sidebar-open? sidebar-open?
+        :settings-open? settings-open?
+        :sidebar-blocks-len (count right-sidebar-blocks)
+        :system-theme? system-theme?
+        :on-click      (fn [e]
+                         (editor-handler/unhighlight-blocks!)
+                         (util/fix-open-external-with-shift! e))}
 
-     [:div.theme-inner
-      {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
-                                 :ls-right-sidebar-open sidebar-open?
-                                 :ls-wide-mode wide-mode?}])}
+       [:div.theme-inner
+        {:class (util/classnames [{:ls-left-sidebar-open left-sidebar-open?
+                                   :ls-right-sidebar-open sidebar-open?
+                                   :ls-wide-mode wide-mode?}])}
 
-      [:div.#app-container
-       [:div#left-container
-        {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
-        (header/header {:open-fn        open-fn
-                        :white?         white?
-                        :current-repo   current-repo
-                        :logged?        logged?
-                        :page?          page?
-                        :route-match    route-match
-                        :me             me
-                        :default-home   default-home
-                        :new-block-mode new-block-mode})
+        [:div.#app-container
+         [:div#left-container
+          {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
+          (header/header {:open-fn        open-fn
+                          :white?         white?
+                          :current-repo   current-repo
+                          :page?          page?
+                          :route-match    route-match
+                          :default-home   default-home
+                          :new-block-mode new-block-mode})
 
-        (main {:route-match         route-match
-               :global-graph-pages? global-graph-pages?
-               :logged?             logged?
-               :home?               home?
-               :route-name          route-name
-               :indexeddb-support?  indexeddb-support?
-               :white?              white?
-               :db-restoring?       db-restoring?
-               :main-content        main-content})
+          (main {:route-match         route-match
+                 :global-graph-pages? global-graph-pages?
+                 :home?               home?
+                 :route-name          route-name
+                 :indexeddb-support?  indexeddb-support?
+                 :white?              white?
+                 :db-restoring?       db-restoring?
+                 :main-content        main-content})
 
-        (footer)]
-       (right-sidebar/sidebar)
+          (footer)]
+         (right-sidebar/sidebar)
 
-       [:div#app-single-container]]
+         [:div#app-single-container]]
 
-      (ui/notification)
-      (ui/modal)
-      (ui/sub-modal)
-      (command-palette/command-palette-modal)
-      (select/select-modal)
-      (custom-context-menu)
-      (plugins/custom-js-installer {:t t
-                                    :current-repo current-repo
-                                    :nfs-granted? granted?
-                                    :db-restoring? db-restoring?})
-      [:a#download.hidden]
-      (when
-          (and (not config/mobile?)
-               (not config/publishing?))
-        (help-button))])))
+        (ui/notification)
+        (ui/modal)
+        (ui/sub-modal)
+        (command-palette/command-palette-modal)
+        (custom-context-menu)
+        (plugins/custom-js-installer {:t t
+                                      :current-repo current-repo
+                                      :nfs-granted? granted?
+                                      :db-restoring? db-restoring?})
+        [:a#download.hidden]
+        (when
+         (and (not config/mobile?)
+              (not config/publishing?))
+          (help-button))])))

@@ -13,6 +13,7 @@
             [frontend.handler.metadata :as metadata-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.ui :as ui]
+            [frontend.handler.user :as user]
             [frontend.db.persist :as db-persist]))
 
 (defn persist-dbs!
@@ -73,7 +74,6 @@
                      (fn []
                        (state/pub-event! [:modal/set-git-username-and-email])))
 
-
   (js/window.apis.on "getCurrentGraph"
                      (fn []
                        (when-let [graph (state/get-current-repo)]
@@ -91,7 +91,10 @@
                              tx-data (db/string->db (:data tx-data))]
                          (when-let [conn (db/get-conn graph false)]
                            (d/transact! conn tx-data {:dbsync? true}))
-                         (ui-handler/re-render-root!)))))
+                         (ui-handler/re-render-root!))))
+  (js/window.apis.on "loginCallback"
+                     (fn [code]
+                       (user/login-callback code))))
 
 (defn listen!
   []
