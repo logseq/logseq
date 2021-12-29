@@ -146,8 +146,11 @@
                                           (not= "/" (first file))))
                (str (config/get-repo-dir repo-url) "/" file)
 
-               (and (mobile/is-native-platform?) (not= "/" (first file)))
+               (and (mobile/native-android?) (not= "/" (first file)))
                (str (config/get-repo-dir repo-url) "/" file)
+               
+               (and (mobile/native-ios?) (not= "/" (first file)))
+               file
 
                :else
                file)
