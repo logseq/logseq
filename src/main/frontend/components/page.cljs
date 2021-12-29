@@ -275,7 +275,7 @@
                                 (state/get-current-page))]
     (let [current-repo (state/sub :git/current-repo)
           repo (or repo current-repo)
-          page-name (string/lower-case path-page-name)
+          page-name (util/page-name-sanity-lc path-page-name)
           block? (util/uuid-string? page-name)
           block-id (and block? (uuid page-name))
           format (let [page (if block-id
@@ -302,9 +302,7 @@
               icon (or icon "")
               today? (and
                       journal?
-                      (= page-name (string/lower-case (date/journal-name))))
-              developer-mode? (state/sub [:ui/developer-mode?])
-              public? (true? (:public properties))]
+                      (= page-name (util/page-name-sanity-lc (date/journal-name))))]
           [:div.flex-1.page.relative
            (merge (if (seq (:block/tags page))
                     (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
