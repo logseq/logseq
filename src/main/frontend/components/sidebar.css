@@ -64,7 +64,9 @@
   z-index: 3;
 
   > .wrap {
-    padding-top: 55px;
+    margin-top: 50px;
+    height: calc(100vh - var(--ls-headbar-inner-top-padding) - 50px);
+    overflow-y: auto;
   }
 
   .dropdown-wrapper {
@@ -189,7 +191,6 @@
 .cp__sidebar-left-layout {
   position: fixed;
   width: 0;
-  height: calc(100vh - var(--ls-headbar-inner-top-padding));
   top: var(--ls-headbar-inner-top-padding);
   left: 0;
   z-index: 9;
