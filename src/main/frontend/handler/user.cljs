@@ -98,6 +98,10 @@
 
 ;;; userinfo, token, login/logout, ...
 
+(def *token-updated
+  "used to notify other parts that tokens updated"
+  (atom false))
+
 (defn- parse-jwt [jwt]
   (some-> jwt
           (string/split ".")
@@ -136,16 +140,19 @@
 (defn- clear-tokens []
   (state/set-auth-id-token nil)
   (state/set-auth-access-token nil)
-  (state/set-auth-refresh-token nil))
+  (state/set-auth-refresh-token nil)
+  (swap! *token-updated not))
 
 (defn- set-tokens!
   ([id-token access-token]
    (state/set-auth-id-token id-token)
-   (state/set-auth-access-token access-token))
+   (state/set-auth-access-token access-token)
+   (swap! *token-updated not))
   ([id-token access-token refresh-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
-   (state/set-auth-refresh-token refresh-token)))
+   (state/set-auth-refresh-token refresh-token)
+   (swap! *token-updated not)))
 
 (defn login-callback [code]
   (go

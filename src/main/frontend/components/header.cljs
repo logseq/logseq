@@ -34,6 +34,7 @@
 
 (rum/defc login < rum/reactive
   []
+  (let [_ (rum/react user-handler/*token-updated)])
   (rum/with-context [[t] i18n/*tongue-context*]
     (when-not config/publishing?
       (if (user-handler/logged?)
