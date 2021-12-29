@@ -71,6 +71,12 @@
       .ti {
         margin-right: 4px;
       }
+
+      .ui__dropdown-trigger {
+        .ti-circle {
+          visibility: hidden;
+        }
+      }
     }
 
     .ui__button {

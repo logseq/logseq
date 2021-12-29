@@ -273,11 +273,12 @@
 
 (rum/defc panel-control-tabs
   < rum/static
-  [t search-key *search-key category *category selected-unpacked-pkg market?]
+  [t search-key *search-key category *category
+   sort-by *sort-by selected-unpacked-pkg market?]
 
   (let [*search-ref (rum/create-ref)]
     [:div.mb-2.flex.justify-between.control-tabs.relative
-     [:div.flex.align-items.l
+     [:div.flex.items-center.l
       (category-tabs t category #(reset! *category %))
 
       (when-not market?
@@ -292,7 +293,7 @@
 
          (unpacked-plugin-loader selected-unpacked-pkg)])]
 
-     [:div.flex.align-items.r
+     [:div.flex.items-center.r
 
       ;;(ui/button
       ;;  (t :plugin/open-preferences)
@@ -325,10 +326,31 @@
 
 
       ;; sorter
-      (ui/button
-        [:span (ui/icon "arrows-sort") ""]
-        :class "sort-by"
-        :intent "link")
+      (ui/dropdown-with-links
+        (fn [{:keys [toggle-fn]}]
+          (ui/button
+            [:span (ui/icon "arrows-sort") ""]
+            :class "sort-by"
+            :on-click toggle-fn
+            :intent "link"))
+        (let [aim-icon #(if (= sort-by %) "check" "circle")]
+          (if market?
+            [{:title   "Downloads (Desc)"
+              :options {:on-click #(reset! *sort-by :downloads)}
+              :icon    (ui/icon (aim-icon :downloads))}
+
+             {:title   "Stars (Desc)"
+              :options {:on-click #(reset! *sort-by :stars)}
+              :icon    (ui/icon (aim-icon :stars))}
+
+             {:title   "Title (A - Z)"
+              :options {:on-click #(reset! *sort-by :letters)}
+              :icon    (ui/icon (aim-icon :letters))}]
+
+            [{:title   "Enabled"
+              :options {:on-click #(reset! *sort-by :enabled)}
+              :icon    (ui/icon (aim-icon :enabled))}]))
+        {})
 
       ;; more - updater
       (ui/button
@@ -350,7 +372,7 @@
     (rum/local false ::fetching)
     (rum/local "" ::search-key)
     (rum/local :plugins ::category)
-    (rum/local :downloads ::sort-by)
+    (rum/local :downloads ::sort-by)                        ;; downloads / stars / letters / updates
     (rum/local nil ::error)
     {:did-mount (fn [s]
                   (reset! (::fetching s) true)
@@ -385,11 +407,18 @@
                             :extract-fn :title))
                         filtered-pkgs)
         filtered-pkgs (map #(if-let [stat (get stats (keyword (:id %)))]
-                              (let [downloads (:total_downloads stat)]
+                              (let [downloads (:total_downloads stat)
+                                    stars (:stargazers_count stat)]
                                 (assoc % :stat stat
+                                         :stars stars
                                          :downloads downloads))
                               %) filtered-pkgs)
-        sorted-pkgs (sort-by :downloads #(compare %2 %1) filtered-pkgs)]
+        sorted-pkgs (apply sort-by
+                           (conj
+                             (case @*sort-by
+                               :letters [:title #(compare %1 %2)]
+                               [@*sort-by #(compare %2 %1)])
+                             filtered-pkgs))]
 
     (rum/with-context
       [[t] i18n/*tongue-context*]
@@ -399,7 +428,9 @@
        (panel-control-tabs
          t
          @*search-key *search-key
-         @*category *category nil true)
+         @*category *category
+         @*sort-by *sort-by
+         nil true)
 
        (cond
          (not online?)
@@ -431,12 +462,14 @@
 (rum/defcs installed-plugins
   < rum/static rum/reactive
     (rum/local "" ::search-key)
+    (rum/local :enabled ::sort-by)                          ;; enabled / letters / updates
     (rum/local :plugins ::category)
   [state]
   (let [installed-plugins (state/sub :plugin/installed-plugins)
         installed-plugins (vals installed-plugins)
         updating (state/sub :plugin/installing)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
+        *sort-by (::sort-by state)
         *search-key (::search-key state)
         *category (::category state)
         filtered-plugins (when (seq installed-plugins)
@@ -465,7 +498,9 @@
        (panel-control-tabs
          t
          @*search-key *search-key
-         @*category *category selected-unpacked-pkg false)
+         @*category *category
+         @*sort-by *sort-by
+         selected-unpacked-pkg false)
 
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [item sorted-plugins]

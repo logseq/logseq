@@ -114,7 +114,7 @@
        :as   opts}]]
   (let [{:keys [open? toggle-fn]} state
         modal-content (modal-content-fn state)]
-    [:div.relative {:style {:z-index z-index}}
+    [:div.relative.ui__dropdown-trigger {:style {:z-index z-index}}
      (content-fn state)
      (css-transition
       {:in @open? :timeout 0}
@@ -145,8 +145,8 @@
                                   (close-fn))})
               child (if hr
                       nil
-                      [:div
-                       {:style {:display "flex" :flex-direction "row"}}
+                      [:div.flex.items-center
+                       (when icon icon)
                        [:div {:style {:margin-right "8px"}} title]])]
           (if hr
             [:hr.my-1]
