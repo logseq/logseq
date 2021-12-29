@@ -90,3 +90,7 @@
    (when window
      (.. ^js window -webContents
          (send kind (bean/->js payload))))))
+
+(defn get-graph-dir
+  [graph-name]
+  (string/replace graph-name "logseq_local_" ""))

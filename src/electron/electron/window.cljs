@@ -70,6 +70,7 @@
   [^js win]
   (.on win "close" (fn [e]
                      (.preventDefault e)
+                     (state/close-window! win)
                      (let [web-contents (. win -webContents)]
                        (.send web-contents "persistent-dbs"))
                      (async/go
@@ -81,6 +82,12 @@
 (defn get-all-windows
   []
   (.getAllWindows BrowserWindow))
+
+(defn get-graph-all-windows
+  [graph-path]
+  (->> (group-by second (:window/graph @state/state))
+       (#(get % graph-path))
+       (map first)))
 
 (defn setup-window-listeners!
   [^js win]

@@ -76,8 +76,7 @@
 
 (rum/defc block-search-result-item
   [repo uuid format content q search-mode]
-  [:div [
-         (when (not= search-mode :page)
+  [:div [(when (not= search-mode :page)
            [:div {:class "mb-1" :key "parents"} (block/block-parents {:id "block-search-block-parent"
                                                                       :block? true
                                                                       :search? true}
@@ -196,11 +195,16 @@
 
                         :block
                         (let [block-uuid (uuid (:block/uuid data))
-                              collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)]
-                          (if collapsed?
-                            (route/redirect-to-page! block-uuid)
-                            (let [page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
-                              (route/redirect-to-page! page  (str "ls-block-" (:block/uuid data))))))
+                              collapsed? (db/parents-collapsed? (state/get-current-repo) block-uuid)
+                              page (:block/name (:block/page (db/entity [:block/uuid block-uuid])))]
+                          (if page
+                            (if collapsed?
+                             (route/redirect-to-page! block-uuid)
+                             (route/redirect-to-page! page (str "ls-block-" (:block/uuid data))))
+                            ;; search indice outdated
+                            (println "[Error] Block page missing: "
+                                     {:block-id block-uuid
+                                      :block (db/pull [:block/uuid block-uuid])})))
                         nil)
                       (state/close-modal!))
          :on-shift-chosen (fn [{:keys [type data alias]}]
@@ -256,8 +260,7 @@
 
                                                   :block
                                                   (let [{:block/keys [page content uuid]} data
-                                                        page (or (:block/original-name page)
-                                                                (:block/name page))
+                                                        page (util/get-page-original-name page)
                                                         repo (state/sub :git/current-repo)
                                                         format (db/get-page-format page)]
                                                     [:span {:data-block-ref uuid}
