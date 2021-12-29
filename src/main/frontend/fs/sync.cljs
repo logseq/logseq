@@ -7,7 +7,8 @@
             [clojure.string :as string]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.fs.macro :refer [err? err->]]))
+            [frontend.fs.macro :refer [err? err->]]
+            [frontend.handler.user :as user]))
 
 (def ws-addr "wss://og96xf1si7.execute-api.us-east-2.amazonaws.com/production?graphuuid=%s")
 
@@ -69,7 +70,7 @@
          (do
            (println "will retry after" (min 60000 (* 1000 retry-count)) "ms")
            (<! (timeout (min 60000 (* 1000 retry-count))))
-           (let [token (refresh-token-fn)]
+           (let [token (<! (refresh-token-fn))]
              (<! (request api-name body token refresh-token-fn (inc retry-count)))))
          (:resp resp))))))
 
@@ -190,18 +191,20 @@
 
 (def rsapi (->MockRSAPI))
 
-(deftype RemoteAPI [^:mutable token]
+(deftype RemoteAPI []
   Object
   (get-token [this]
-    (or token (.refresh-token this)))
+    (go
+      (or (state/get-auth-access-token)
+          (<! (.refresh-token this)))))
   (refresh-token [_]
-    ;; TODO
-    (set! token "<id-token>")
-    token)
+    (go
+      (<! (user/refresh-id-token&access-token))
+      (state/get-auth-access-token)))
   (request [this api-name body]
     (let [c (chan)]
       (go
-        (let [resp (<! (request api-name body (.get-token this) #(.refresh-token this)))]
+        (let [resp (<! (request api-name body (<! (.get-token this)) #(.refresh-token this)))]
           (if (http/unexceptional-status? (:status resp))
             (get-resp-json-body resp)
             {:err resp :body (get-resp-json-body resp)})))))
@@ -237,7 +240,7 @@
   (create-graph [this graph-name]
     (.request this "create_graph" {:GraphName graph-name})))
 
-(def remoteapi (->RemoteAPI nil))
+(def remoteapi (->RemoteAPI))
 
 (defn- remote-graph-exists? [graph-uuid]
   "200: true

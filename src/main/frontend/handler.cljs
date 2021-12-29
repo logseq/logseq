@@ -18,6 +18,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.ui :as ui-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.extensions.srs :as srs]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.util :as mobile-util]
@@ -240,6 +241,7 @@
     (when (util/electron?)
       (el/listen!))
     (persist-var/load-vars)
+    (user-handler/refresh-tokens-loop)
     (js/setTimeout instrument! (* 60 1000))))
 
 (defn stop! []

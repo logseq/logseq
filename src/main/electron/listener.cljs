@@ -11,7 +11,9 @@
             [electron.ipc :as ipc]
             [frontend.ui :as ui]
             [frontend.handler.notification :as notification]
-            [frontend.handler.repo :as repo-handler]))
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.user :as user]
+            [frontend.db.persist :as db-persist]))
 
 (defn persist-dbs!
   []
@@ -56,7 +58,6 @@
                      (fn []
                        (state/pub-event! [:modal/set-git-username-and-email])))
 
-
   (js/window.apis.on "getCurrentGraph"
                      (fn []
                        (when-let [graph (state/get-current-repo)]
@@ -92,7 +93,11 @@
                              handlers {:before     before-f
                                        :on-success after-f
                                        :on-error   error-f}]
-                         (repo-handler/persist-db! repo handlers)))))
+                         (repo-handler/persist-db! repo handlers))))
+
+  (js/window.apis.on "loginCallback"
+                     (fn [code]
+                       (user/login-callback code))))
 
 (defn listen!
   []

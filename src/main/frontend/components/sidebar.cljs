@@ -19,6 +19,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.user :as user-handler]
             [frontend.mixins :as mixins]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
             [frontend.state :as state]
@@ -347,7 +348,9 @@
         current-repo (state/sub :git/current-repo)
         loading-files? (when current-repo (state/sub [:repo/loading-files? current-repo]))
         journals-length (state/sub :journals-length)
-        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)]
+        latest-journals (db/get-latest-journals (state/get-current-repo) journals-length)
+        preferred-format (state/sub [:me :preferred_format])
+        logged? (user-handler/logged?)]
     [:div
      (cond
        (and default-home
@@ -451,7 +454,6 @@
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         global-graph-pages? (= :graph route-name)
-        logged? (:name me)
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
