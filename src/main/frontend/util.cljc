@@ -72,6 +72,17 @@
          (string/includes? ua " electron")))))
 
 #?(:cljs
+   (defn playwright?
+     []
+     (and (electron?) (. js/window -__PLAYWRIGHT__))))
+
+#?(:cljs
+   (defn mocked-open-dir-path
+     "Mocked open DIR path for by-passing open dir in electron during testing. Nil if not given"
+     []
+     (when (playwright?) (. js/window -__MOCKED_OPEN_DIR_PATH__))))
+
+#?(:cljs
    (def nfs? (and (not (electron?))
                   (not (is-native-platform?)))))
 
