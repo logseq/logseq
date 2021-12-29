@@ -230,6 +230,7 @@
                (.on win "close" (fn [e]
                                   (when @*quit-dirty?
                                     (.preventDefault e)
+                                    (state/close-window! win)
                                     (let [web-contents (. win -webContents)]
                                       (.send web-contents "persistent-dbs"))
                                     (async/go
