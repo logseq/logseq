@@ -1,8 +1,7 @@
 .cp__header {
   @apply shadow z-10;
   -webkit-app-region: drag;
-
-  padding-right: 0.5rem;
+  
   padding-top: var(--ls-headbar-inner-top-padding);
   height: calc(var(--ls-headbar-height) + var(--ls-headbar-inner-top-padding));
   display: flex;
@@ -27,6 +26,7 @@
 
   > .r {
     align-items: center;
+    padding-right: 0.5rem;
   }
 
   /* To prevent header glitch on Safari */
