@@ -150,9 +150,10 @@ last-modified-at:: 1609084800002"}]]
        :count 1}
 
       "(or (property prop-c \"page c\") (property prop-b val-b))"
-      {:query '[or
-                (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")]))
-                (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")]))]
+      {:query '[[?b :block/content ?content]
+                (or
+                 (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-c) ?v] (or [(= ?v "page c")] [(contains? ?v "page c")]))
+                 (and [?b :block/properties ?prop] [(missing? $ ?b :block/name)] [(get ?prop :prop-b) ?v] (or [(= ?v "val-b")] [(contains? ?v "val-b")])))]
        :count 2}))
 
   (testing "task queries"

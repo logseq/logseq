@@ -13,6 +13,7 @@
             [frontend.template :as template]
             [frontend.text :as text]
             [frontend.util :as util]
+            [frontend.state :as state]
             [frontend.util.property :as property]
             [lambdaisland.glogi :as log]))
 
@@ -162,12 +163,19 @@
                            (string/lower-case))]
          [['?b :block/path-refs [:block/name page-name]]])
 
+       (string? e)                      ; block content full-text search, could be slow
+       (do
+         (reset! blocks? true)
+         [['?b :block/content '?content]
+         [(list 'clojure.string/includes? '?content e)]])
+
        (contains? #{'and 'or 'not} fe)
        (let [clauses (->> (map (fn [form]
                                  (build-query repo form (assoc env :current-filter fe) (inc level)))
                             (rest e))
                           remove-nil?
-                          (distinct))]
+                          (distinct))
+             nested-and? (and (= fe 'and) (= current-filter 'and))]
          (when (seq clauses)
            (let [result (cond
                           (= fe 'not)
@@ -187,7 +195,8 @@
                             (->> (apply concat clauses)
                                  (apply list fe))
 
-                            (= current-filter 'or)
+                            (or (= current-filter 'or)
+                                nested-and?)
                             (apply concat clauses)
 
                             :else
@@ -208,6 +217,9 @@
                     (= 'or fe)
                     (= #{'?b} vars'))
                [(concat result [['?b]])]
+
+               nested-and?
+               result
 
                (and (zero? level) (= 'and fe))
                (distinct (apply concat clauses))
@@ -392,11 +404,14 @@
                                                  (util/format "(between %s)"))))))
 
 (defn- add-bindings!
-  [q]
-  (let [syms ['?b '?p 'not]
-        [b? p? not?] (-> (set/intersection (set syms) (set (flatten q)))
-                         (map syms))]
-    (if not?
+  [form q]
+  (let [forms (set (flatten q))
+        syms ['?b '?p 'not]
+        [b? p? not?] (-> (set/intersection (set syms) forms)
+                         (map syms))
+        or? (contains? (set (flatten form)) 'or)]
+    (cond
+      not?
       (cond
         (and b? p?)
         (concat [['?b :block/uuid] ['?p :block/name] ['?b :block/page '?p]] q)
@@ -409,6 +424,21 @@
 
         :else
         q)
+
+      or?
+      (cond
+        (->> (flatten form)
+             (remove text/page-ref?)
+             (some string?))            ; block full-text search
+        (concat [['?b :block/content '?content]] [q])
+
+        :else
+        q)
+
+      (and b? p?)
+      (concat [['?b :block/page '?p]] q)
+
+      :else
       q)))
 
 (defn parse
@@ -447,7 +477,7 @@
                                               (rest result)
 
                                               result)]
-                                 (add-bindings! result)))]
+                                 (add-bindings! form result)))]
                   {:query result
                    :sort-by @sort-by
                    :blocks? (boolean @blocks?)
@@ -456,30 +486,32 @@
           (log/error :query-dsl/parse-error e))))))
 
 (defn query
-  [repo query-string]
-  (when (string? query-string)
-    (let [query-string (template/resolve-dynamic-template! query-string)]
-      (when-not (string/blank? query-string)
-        (let [{:keys [query sort-by blocks? sample] :as result} (parse repo query-string)
-              query (if (string? query) (string/trim query) query)
-              full-text-query? (and (string? result)
-                                    (not (string/includes? result " ")))]
-          (if full-text-query?
-            (if (= "\"" (first result) (last result))
-              (subs result 1 (dec (count result)))
-              result)
-            (when-let [query (query-wrapper query blocks?)]
-              (let [sort-by (or sort-by identity)
-                    random-samples (if @sample
-                                     (fn [col]
-                                       (take @sample (shuffle col)))
-                                     identity)
-                    transform-fn (comp sort-by random-samples)]
-                (react/react-query repo
-                                   {:query query
-                                    :query-string query-string}
-                                   {:use-cache? false
-                                    :transform-fn transform-fn})))))))))
+  ([query-string]
+   (query (state/get-current-repo) query-string))
+  ([repo query-string]
+   (when (string? query-string)
+     (let [query-string (template/resolve-dynamic-template! query-string)]
+       (when-not (string/blank? query-string)
+         (let [{:keys [query sort-by blocks? sample] :as result} (parse repo query-string)
+               query (if (string? query) (string/trim query) query)
+               full-text-query? (and (string? result)
+                                     (not (string/includes? result " ")))]
+           (if full-text-query?
+             (if (= "\"" (first result) (last result))
+               (subs result 1 (dec (count result)))
+               result)
+             (when-let [query (query-wrapper query blocks?)]
+               (let [sort-by (or sort-by identity)
+                     random-samples (if @sample
+                                      (fn [col]
+                                        (take @sample (shuffle col)))
+                                      identity)
+                     transform-fn (comp sort-by random-samples)]
+                 (react/react-query repo
+                                    {:query query
+                                     :query-string query-string}
+                                    {:use-cache? false
+                                     :transform-fn transform-fn}))))))))))
 
 (defn custom-query
   [repo query-m query-opts]
