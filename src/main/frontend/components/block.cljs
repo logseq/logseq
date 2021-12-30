@@ -262,10 +262,8 @@
     (when (or granted? (util/electron?) (mobile/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
-    (if (mobile-util/native-ios?)
-      [:span full_text]
-      (when @src
-        (resizable-image config title @src metadata full_text true)))))
+    (when @src
+      (resizable-image config title @src metadata full_text true))))
 
 (defn ar-url->http-url
   [href]
@@ -1424,7 +1422,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *control-show? edit?]
+  [state config block uuid block-id body children collapsed? *default-collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
@@ -1448,6 +1446,7 @@
        :on-click (fn [event]
                    (util/stop event)
                    (when-not (and (not collapsed?) (not has-child?))
+                     (when ref? (swap! *default-collapsed? not))
                      (if collapsed?
                        (editor-handler/expand-block! uuid)
                        (editor-handler/collapse-block! uuid))))}
@@ -2266,7 +2265,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *control-show? edit?))
+        (block-control config block uuid block-id body children collapsed? *default-collapsed? *control-show? edit?))
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 

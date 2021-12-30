@@ -293,20 +293,22 @@
             tx-data (mapv
                      (fn [block]
                        [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                     blocks)]
+                     blocks)
+            page (db/entity [:block/name page-name])]
         (db/transact! tx-data)
 
         (when delete-file? (delete-file! repo page-name))
 
         ;; if other page alias this pagename,
         ;; then just remove some attrs of this entity instead of retractEntity
-        (if (model/get-alias-source-page (state/get-current-repo) page-name)
-          (when-let [id (:db/id (db/entity [:block/name page-name]))]
-            (let [txs (mapv (fn [attribute]
-                              [:db/retract id attribute])
-                            db-schema/retract-page-attributes)]
-              (db/transact! txs)))
-          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
+        (when-not (:block/_namespace page)
+          (if (model/get-alias-source-page (state/get-current-repo) page-name)
+            (when-let [id (:db/id (db/entity [:block/name page-name]))]
+              (let [txs (mapv (fn [attribute]
+                                [:db/retract id attribute])
+                              db-schema/retract-page-attributes)]
+                (db/transact! txs)))
+            (db/transact! [[:db.fn/retractEntity [:block/name page-name]]])))
 
         (unfavorite-page! page-name)
 
