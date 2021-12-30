@@ -39,4 +39,5 @@ test('create page and blocks (diacritics)', async ({ page }) => {
   await page.waitForTimeout(500)
   const results = await page.$$('#ui__ac-inner .block')
   expect(results.length).toEqual(3) // 2 blocks + 1 page
+  await page.keyboard.press("Escape")
 })
