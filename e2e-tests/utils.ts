@@ -100,3 +100,8 @@ export async function escapeToBlockEditor(page: Page): Promise<void> {
     await page.press('.CodeMirror textarea', 'Escape')
     await page.waitForTimeout(500)
 }
+
+export async function activateNewPage(page: Page) {
+    await page.click('.ls-block >> nth=0')
+    await page.waitForTimeout(500)
+}
