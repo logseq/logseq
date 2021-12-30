@@ -262,10 +262,8 @@
     (when (or granted? (util/electron?) (mobile/is-native-platform?))
       (p/then (editor-handler/make-asset-url href) #(reset! src %)))
 
-    (if (mobile-util/native-ios?)
-      [:span full_text]
-      (when @src
-        (resizable-image config title @src metadata full_text true)))))
+    (when @src
+      (resizable-image config title @src metadata full_text true))))
 
 (defn ar-url->http-url
   [href]
@@ -802,6 +800,27 @@
         (join (config/get-repo-dir (state/get-current-repo))
               (config/get-local-asset-absolute-path path)))))
 
+(rum/defc namespace-hierarchy-aux
+  [config namespace children]
+  [:ul
+   (for [child children]
+     [:li {:key (str "namespace-" namespace "-" (:db/id child))}
+      (let [shorten-name (some-> (or (:block/original-name child) (:block/name child))
+                                 (string/split "/")
+                                 last)]
+        (page-cp {:label shorten-name} child))
+      (when (seq (:namespace/children child))
+        (namespace-hierarchy-aux config (:block/name child)
+                                 (:namespace/children child)))])])
+
+(rum/defc namespace-hierarchy
+  [config namespace children]
+  [:div.namespace
+   [:div.font-medium.flex.flex-row.items-center.pb-2
+    [:span.text-sm.mr-1 "Namespace "]
+    (page-cp config {:block/name namespace})]
+   (namespace-hierarchy-aux config namespace children)])
+
 (defn inline
   [{:keys [html-export?] :as config} item]
   (match item
@@ -1130,6 +1149,13 @@
          [:span.warning
           (util/format "{{function %s}}" (first arguments))])
 
+        (= name "namespace")
+        (let [namespace (first arguments)]
+          (when-not (string/blank? namespace)
+            (let [namespace (string/lower-case (text/page-ref-un-brackets! namespace))
+                  children (model/get-namespace-hierarchy (state/get-current-repo) namespace)]
+              (namespace-hierarchy config namespace children))))
+
         (= name "youtube")
         (when-let [url (first arguments)]
           (let [YouTube-regex #"^((?:https?:)?//)?((?:www|m).)?((?:youtube.com|youtu.be))(/(?:[\w-]+\?v=|embed/|v/)?)([\w-]+)(\S+)?$"]
@@ -1376,9 +1402,9 @@
             (when (map? child)
               (let [child (dissoc child :block/meta)
                     config (cond->
-                            (-> config
-                                (assoc :block/uuid (:block/uuid child))
-                                (dissoc :breadcrumb-show? :embed-parent))
+                             (-> config
+                                 (assoc :block/uuid (:block/uuid child))
+                                 (dissoc :breadcrumb-show? :embed-parent))
                              ref?
                              (assoc :ref-child? true))]
                 (rum/with-key (block-container config child)
@@ -1396,7 +1422,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *control-show? edit?]
+  [state config block uuid block-id body children collapsed? *default-collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
@@ -1420,6 +1446,7 @@
        :on-click (fn [event]
                    (util/stop event)
                    (when-not (and (not collapsed?) (not has-child?))
+                     (when ref? (swap! *default-collapsed? not))
                      (if collapsed?
                        (editor-handler/expand-block! uuid)
                        (editor-handler/collapse-block! uuid))))}
@@ -1484,8 +1511,9 @@
                     :style {:margin-top -2
                             :margin-right 5}
                     :checked checked?
-                    :on-change (fn [_e]
-                                 ;; FIXME: Log timestamp
+                    :on-mouse-down (fn [e]
+                                     (util/stop-propagation e))
+                    :on-change (fn [e]
                                  (if checked?
                                    (editor-handler/uncheck block)
                                    (editor-handler/check block)))}))))
@@ -1510,7 +1538,7 @@
       [:a
        {:class (str "marker-switch block-marker " marker)
         :title (util/format "Change from %s to %s" marker next-marker)
-        :on-click (set-marker-fn next-marker)}
+        :on-mouse-down (set-marker-fn next-marker)}
        marker])))
 
 (defn marker-cp
@@ -2237,7 +2265,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *control-show? edit?))
+        (block-control config block uuid block-id body children collapsed? *default-collapsed? *control-show? edit?))
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 

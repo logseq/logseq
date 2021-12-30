@@ -269,7 +269,7 @@ export function setupInjectedUI (
       ui.template, {
         ADD_TAGS: ['iframe'],
         ALLOW_UNKNOWN_PROTOCOLS: true,
-        ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling']
+        ADD_ATTR: ['allow', 'src', 'allowfullscreen', 'frameborder', 'scrolling', 'target']
       })
   } else { // remove ui
     injectedUIEffects.get(id)?.call(null)

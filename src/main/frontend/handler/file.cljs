@@ -118,8 +118,8 @@
                                        (let [id (second ref)]
                                          (or (contains? block-ids id)
                                              (db/entity [:block/uuid id])))
-                                       (and (map? ref) (contains? ref :block/journal?))
-                                       (db/entity [:block/name (ref :block/name)]))) refs))]
+                                       :else
+                                       true)) refs))]
     (map (fn [item]
            (update item :block/refs keep-block-ref-f))
       data)))
@@ -146,8 +146,11 @@
                                           (not= "/" (first file))))
                (str (config/get-repo-dir repo-url) "/" file)
 
-               (and (mobile/is-native-platform?) (not= "/" (first file)))
+               (and (mobile/native-android?) (not= "/" (first file)))
                (str (config/get-repo-dir repo-url) "/" file)
+               
+               (and (mobile/native-ios?) (not= "/" (first file)))
+               file
 
                :else
                file)

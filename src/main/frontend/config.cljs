@@ -374,12 +374,18 @@
   [repo-url relative-path]
   (when (and repo-url relative-path)
     (cond
-      (and (or (util/electron?) (mobile-util/is-native-platform?)) (local-db? repo-url))
+      (and (or (util/electron?) (mobile-util/native-android?)) (local-db? repo-url))
       (let [dir (get-repo-dir repo-url)]
         (if (string/starts-with? relative-path dir)
           relative-path
           (str dir "/"
                (string/replace relative-path #"^/" ""))))
+
+      (and (mobile-util/native-ios?) (local-db? repo-url))
+      (let [dir (-> (get-repo-dir repo-url)
+                    (string/replace "file:///" "file:/"))]
+        (js/decodeURI (str dir relative-path)))
+
       (= "/" (first relative-path))
       (subs relative-path 1)
 

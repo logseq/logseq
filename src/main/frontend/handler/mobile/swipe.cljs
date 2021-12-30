@@ -29,7 +29,7 @@
                (< xstart (/ width 2)))
              (when (state/get-left-sidebar-open?)
                (state/set-left-sidebar-open! false))
-             
+
              :else
              nil)
 
@@ -38,6 +38,8 @@
              (and (mobile-util/native-android?)
                   (<= ystart (/ height 2)))
              (when-not (state/get-left-sidebar-open?)
+               (when (util/sm-breakpoint?)
+                 (state/clear-edit!))
                (state/set-left-sidebar-open! true))
 
              (> xstart (/ width 2))
@@ -47,6 +49,8 @@
              (and (mobile-util/native-ios?)
                   (<= (:xStart detail) 20))
              (when-not (state/get-left-sidebar-open?)
+               (when (mobile-util/native-iphone?)
+                 (state/clear-edit!))
                (state/set-left-sidebar-open! true))
 
              :else nil)

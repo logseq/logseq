@@ -293,20 +293,22 @@
             tx-data (mapv
                      (fn [block]
                        [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                     blocks)]
+                     blocks)
+            page (db/entity [:block/name page-name])]
         (db/transact! tx-data)
 
         (when delete-file? (delete-file! repo page-name))
 
         ;; if other page alias this pagename,
         ;; then just remove some attrs of this entity instead of retractEntity
-        (if (model/get-alias-source-page (state/get-current-repo) page-name)
-          (when-let [id (:db/id (db/entity [:block/name page-name]))]
-            (let [txs (mapv (fn [attribute]
-                              [:db/retract id attribute])
-                            db-schema/retract-page-attributes)]
-              (db/transact! txs)))
-          (db/transact! [[:db.fn/retractEntity [:block/name page-name]]]))
+        (when-not (:block/_namespace page)
+          (if (model/get-alias-source-page (state/get-current-repo) page-name)
+            (when-let [id (:db/id (db/entity [:block/name page-name]))]
+              (let [txs (mapv (fn [attribute]
+                                [:db/retract id attribute])
+                              db-schema/retract-page-attributes)]
+                (db/transact! txs)))
+            (db/transact! [[:db.fn/retractEntity [:block/name page-name]]])))
 
         (unfavorite-page! page-name)
 
@@ -349,7 +351,7 @@
     (doseq [page-id page-ids]
       (outliner-file/sync-to-file page-id))))
 
-(defn- rename-page-aux [old-name new-name]
+(defn- rename-page-aux [old-name new-name redirect?]
   (when-let [repo (state/get-current-repo)]
     (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
       (let [old-original-name   (:block/original-name page)
@@ -385,10 +387,12 @@
 
         (outliner-file/sync-to-file page))
 
+
       ;; Redirect to the new page
-      (route-handler/redirect! {:to          :page
-                                :push        false
-                                :path-params {:name (string/lower-case new-name)}})
+      (when redirect?
+        (route-handler/redirect! {:to          :page
+                                  :push        false
+                                  :path-params {:name (string/lower-case new-name)}}))
 
       (repo-handler/push-if-auto-enabled! repo)
 
@@ -417,7 +421,7 @@
                              (util/format "[[%s]]" new-ns-name))]
           (when (and old-page-title new-page-title)
             (p/do!
-             (rename-page-aux old-page-title new-page-title)
+             (rename-page-aux old-page-title new-page-title false)
              (println "Renamed " old-page-title " to " new-page-title))))))
     (when nested-pages-ns
       ;; rename page "[[obsidian/page1]] is a tool" to "[[logseq/page1]] is a tool"
@@ -429,17 +433,20 @@
                              (util/format "[[%s/" new-ns-name))]
           (when (and old-page-title new-page-title)
             (p/do!
-             (rename-page-aux old-page-title new-page-title)
+             (rename-page-aux old-page-title new-page-title false)
              (println "Renamed " old-page-title " to " new-page-title))))))))
 
 (defn- rename-namespace-pages!
   [repo old-name new-name]
-  (let [pages (db/get-namespace-pages repo old-name)]
+  (let [pages (db/get-namespace-pages repo old-name)
+        page (db/pull [:block/name (string/lower-case old-name)])
+        pages (cons page pages)]
     (doseq [{:block/keys [name original-name]} pages]
       (let [old-page-title (or original-name name)
-            new-page-title (string/replace old-page-title old-name new-name)]
+            new-page-title (string/replace old-page-title old-name new-name)
+            redirect? (= name (:block/name page))]
         (when (and old-page-title new-page-title)
-          (p/let [_ (rename-page-aux old-page-title new-page-title)]
+          (p/let [_ (rename-page-aux old-page-title new-page-title redirect?)]
             (println "Renamed " old-page-title " to " new-page-title)))))))
 
 (defn page-exists?
@@ -481,10 +488,8 @@
       (outliner-file/sync-to-file {:db/id to-id})
 
       (rename-update-refs! from-page
-                           (or (:block/original-name from-page)
-                               (:block/name from-page))
-                           (or (:block/original-name to-page)
-                               (:block/name to-page))))
+                           (util/get-page-original-name from-page)
+                           (util/get-page-original-name to-page)))
 
     (delete! from nil)
 
@@ -505,7 +510,7 @@
       (do
         (cond
           (= (string/lower-case old-name) (string/lower-case new-name))
-          (rename-page-aux old-name new-name)
+          (rename-page-aux old-name new-name true)
 
           (db/pull [:block/name (string/lower-case new-name)])
           (merge-pages! old-name new-name)

@@ -65,7 +65,6 @@
                                              (fn [{:keys [type]}]
                                                (contains? #{"directory" "NSFileTypeDirectory"} type)))
                                             (mapv :uri))
-
                              files-result
                              (p/all
                               (->> files-with-stats
@@ -90,17 +89,6 @@
                                 (concat (rest dirs) files-dir)))))
           result (js->clj result :keywordize-keys true)]
     (map (fn [result] (update result :uri clean-uri)) result)))
-
-(defn- encode-path [orig-repo orig-path]
-  (let [orig-repo (config/get-repo-dir orig-repo)
-        [repo path] (map #(-> (string/replace % "file://" "")
-                              (string/replace "file:" "")
-                              (string/escape {\  "%20"}))
-                         [orig-repo orig-path])
-        path-diff (string/replace path repo "")]
-    (str orig-repo (-> path-diff
-                       futil/url-decode
-                       futil/url-encode))))
 
 (defrecord Capacitorfs []
   protocol/Fs
@@ -141,7 +129,7 @@
   (delete-file! [this repo dir path {:keys [ok-handler error-handler] :as opts}]
     (let [path (cond
                  (= (util/platform) "ios")
-                 (encode-path repo path)
+                 (js/encodeURI (js/decodeURI path))
 
                  (string/starts-with? path (config/get-repo-dir repo))
                  path
@@ -150,19 +138,19 @@
                  (-> (str dir "/" path)
                      (string/replace "//" "/")))]
       (p/catch
-          (p/let [result (.deleteFile Filesystem
-                                      (clj->js
-                                       {:path path}))]
-            (when ok-handler
-              (ok-handler repo path result)))
-          (fn [error]
-            (if error-handler
-              (error-handler error)
-              (log/error :delete-file-failed error))))))
+       (p/let [result (.deleteFile Filesystem
+                                   (clj->js
+                                    {:path path}))]
+         (when ok-handler
+           (ok-handler repo path result)))
+       (fn [error]
+         (if error-handler
+           (error-handler error)
+           (log/error :delete-file-failed error))))))
   (write-file! [this repo dir path content {:keys [ok-handler error-handler] :as opts}]
     (let [path (cond
                  (= (util/platform) "ios")
-                 (encode-path repo path)
+                 (js/encodeURI (js/decodeURI path))
 
                  (string/starts-with? path (config/get-repo-dir repo))
                  path
