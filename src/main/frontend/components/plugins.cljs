@@ -288,7 +288,7 @@
 (rum/defc panel-control-tabs
   < rum/static
   [t search-key *search-key category *category
-   sort-by *sort-by selected-unpacked-pkg market?]
+   sort-by *sort-by selected-unpacked-pkg market? reload-market-fn]
 
   (let [*search-ref (rum/create-ref)]
     [:div.mb-2.flex.justify-between.control-tabs.relative
@@ -377,7 +377,7 @@
 
         (if market?
           [{:title   "Refresh lists"
-            :options {:on-click #(notification/show! "refresh..." :success)}}]
+            :options {:on-click #(reload-market-fn)}}]
           [{:title   "Check updates"
             :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
         {})
@@ -399,13 +399,16 @@
     (rum/local :downloads ::sort-by)                        ;; downloads / stars / letters / updates
     (rum/local nil ::error)
     {:did-mount (fn [s]
-                  (reset! (::fetching s) true)
-                  (reset! (::error s) nil)
-                  (-> (plugin-handler/load-marketplace-plugins false)
-                      (p/then #(plugin-handler/load-marketplace-stats false))
-                      (p/catch #(do (js/console.error %) (reset! (::error s) %)))
-                      (p/finally #(reset! (::fetching s) false)))
-                  s)}
+                  (let [reload-fn (fn [force-refresh?]
+                                    (when-not @(::fetching s)
+                                      (reset! (::fetching s) true)
+                                      (reset! (::error s) nil)
+                                      (-> (plugin-handler/load-marketplace-plugins force-refresh?)
+                                          (p/then #(plugin-handler/load-marketplace-stats false))
+                                          (p/catch #(do (js/console.error %) (reset! (::error s) %)))
+                                          (p/finally #(reset! (::fetching s) false)))))]
+                    (reload-fn false)
+                    (assoc s ::reload (partial reload-fn true))))}
   [state]
   (let [pkgs (state/sub :plugin/marketplace-pkgs)
         stats (state/sub :plugin/marketplace-stats)
@@ -454,7 +457,7 @@
          @*search-key *search-key
          @*category *category
          @*sort-by *sort-by
-         nil true)
+         nil true (::reload state))
 
        (cond
          (not online?)
@@ -526,7 +529,8 @@
          @*search-key *search-key
          @*category *category
          @*sort-by *sort-by
-         selected-unpacked-pkg false)
+         selected-unpacked-pkg
+         false nil)
 
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [item sorted-plugins]
@@ -621,9 +625,8 @@
                     :intent "logseq" :class (if market? "active" ""))]]
 
        [:div.panels
-        (if market?
-          (marketplace-plugins)
-          (installed-plugins))]])))
+        (marketplace-plugins)
+        (installed-plugins)]])))
 
 (rum/defc custom-js-installer
   [{:keys [t current-repo db-restoring? nfs-granted?] :as props}]
