@@ -12,7 +12,7 @@
             [electron.utils :refer [*win fetch extract-zip] :as utils]))
 
 ;; update & install
-(def *installing-or-updating (atom nil))
+;;(def *installing-or-updating (atom nil))
 (def debug (fn [& args] (apply (.-info logger) (conj args "[Marketplace]"))))
 (def emit (fn [type payload]
             (doseq [^js win (get-all-windows)]
@@ -30,7 +30,7 @@
             endpoint (api "releases/latest")
             ^js res (fetch endpoint)
             res (.json res)
-            _ (js/console.debug "[Release Latest] " endpoint)
+            _ (debug "[Release Latest] " endpoint)
             res (bean/->clj res)
             version (:tag_name res)
             asset (first (filter #(string/ends-with? (:name %) ".zip") (:assets res)))]
@@ -122,14 +122,14 @@
 
 (defn install-or-update!
   [{:keys [version repo only-check] :as item}]
-  (when (and (not @*installing-or-updating) repo)
+  (when repo
     (let [updating? (and version (. semver valid version))]
 
-      (js/console.debug (if updating? "Updating:" "Installing:") repo)
+      (debug (if updating? "Updating:" "Installing:") repo)
 
       (-> (p/create
             (fn [resolve reject]
-              (reset! *installing-or-updating item)
+              ;;(reset! *installing-or-updating item)
               ;; get releases
               (-> (p/let [[asset latest-version] (fetch-latest-release-asset item)
 
@@ -162,16 +162,18 @@
                                          (assoc item :latest-version latest-version)
                                          (assoc item :zip dl-url :dst dest))})
 
-                    (resolve))
+                    (resolve nil))
+
                   (p/catch
                     (fn [^js e]
                       (emit :lsp-installed
-                            {:status  :error
+                            {:status     :error
                              :only-check only-check
-                             :payload (assoc item :error-code (.-message e)) }))
+                             :payload    (assoc item :error-code (.-message e))}))
                     (resolve nil)))))
 
-          (p/finally #(reset! *installing-or-updating nil))))))
+          (p/finally
+            (fn []))))))
 
 (defn uninstall!
   [id]

@@ -158,15 +158,21 @@
 
 (rum/defc plugin-item-card < rum/static
   [{:keys [id name title settings version url description author icon usf iir repo] :as item}
-   market? *search-key installing-or-updating? installed? stat]
+   market? *search-key installing-or-updating? installed? stat coming-update]
 
   (let [disabled (:disabled settings)
-        name (or title name "Untitled")]
+        name (or title name "Untitled")
+        unpacked? (not iir)
+        new-version (and coming-update (:latest-version coming-update))]
     (rum/with-context
       [[t] i18n/*tongue-context*]
 
       [:div.cp__plugins-item-card
-       {:class (util/classnames [{:market market? :installed installed?}])}
+       {:class (util/classnames
+                 [{:market          market?
+                   :installed       installed?
+                   :updating        installing-or-updating?
+                   :has-new-version new-version}])}
 
        [:div.l.link-block
         {:on-click #(plugin-handler/open-readme!
@@ -175,7 +181,7 @@
           [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
           svg/folder)
 
-        (when-not (or market? iir)
+        (when (and (not market?) unpacked?)
           [:span.flex.justify-center.text-xs.text-red-500.pt-2 "unpacked"])]
 
        [:div.r
@@ -189,6 +195,7 @@
          ;;[:small (js/JSON.stringify (bean/->js settings))]
          ]
 
+        ;; Author & Identity
         [:div.flag
          [:p.text-xs.pr-2.flex.justify-between
           [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
@@ -199,6 +206,7 @@
                                 (util/copy-to-clipboard! id))}
            (str "ID: " id)]]]
 
+        ;; Github repo
         [:div.flag.is-top.opacity-50
          (if repo
            [:a.flex {:target "_blank"
@@ -251,21 +259,25 @@
                (t :plugin/uninstall)]]]]
 
            [:div.r.flex.items-center
-            (if (and (not iir) (not disabled))
+            (if (and unpacked? (not disabled))
               [:a.btn
                {:on-click #(js-invoke js/LSPluginCore "reload" id)}
                (t :plugin/reload)])
 
-            (if iir
-              [:a.btn
-               {:class    (util/classnames [{:disabled (or installing-or-updating?)
-                                             :updating installing-or-updating?}])
-                :on-click #(plugin-handler/check-or-update-marketplace-plugin
-                             (assoc item :only-check true) (fn [e] (notification/show! e :error)))}
+            (when (not unpacked?)
+              [:div.updates-actions
+               [:a.btn
+                {:class    (util/classnames [{:disabled (or installing-or-updating?)}])
+                 :on-click #(plugin-handler/check-or-update-marketplace-plugin
+                              (assoc item :only-check (not new-version))
+                              (fn [e] (notification/show! e :error)))}
 
-               (if installing-or-updating?
-                 (t :plugin/updating)
-                 (t :plugin/check-update))])
+                (if installing-or-updating?
+                  (t :plugin/updating)
+                  (if new-version
+                    (str (t :plugin/update) " 👉 " new-version)
+                    (t :plugin/check-update))
+                  )]])
 
             (ui/toggle (not disabled)
                        (fn []
@@ -367,7 +379,7 @@
           [{:title   "Refresh lists"
             :options {:on-click #(notification/show! "refresh..." :success)}}]
           [{:title   "Check updates"
-            :options {:on-click #(notification/show! "updates..." :success)}}])
+            :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
         {})
 
       ;; developer
@@ -468,7 +480,7 @@
                  (plugin-item-card
                    item true *search-key
                    (and installing (= (keyword (:id installing)) pid))
-                   (contains? installed-plugins pid) stat))
+                   (contains? installed-plugins pid) stat nil))
                (:id item)))]])])))
 
 (rum/defcs installed-plugins
@@ -481,6 +493,8 @@
         installed-plugins (vals installed-plugins)
         updating (state/sub :plugin/installing)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
+        coming-updates (state/sub :plugin/updates-coming)
+        pending-updates (state/sub :plugin/updates-pending)
         *sort-by (::sort-by state)
         *search-key (::search-key state)
         *category (::category state)
@@ -521,7 +535,7 @@
               (plugin-item-card
                 item false *search-key
                 (and updating (= (keyword (:id updating)) pid))
-                true nil)) (:id item)))]])))
+                true nil (get coming-updates pid))) (:id item)))]])))
 
 (defn open-select-theme!
   []

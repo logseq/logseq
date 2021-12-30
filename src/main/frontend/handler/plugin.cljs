@@ -129,7 +129,7 @@
                        (let [{:keys [id dst name title version theme]} payload
                              name (or title name "Untitled")]
                          (if only-check
-                           (state/consume-coming-plugin payload)
+                           (state/consume-updates-coming-plugin payload false)
                            (if (installed? id)
                              (when-let [^js pl (get-plugin-inst id)] ;; update
                                (p/then
@@ -137,7 +137,8 @@
                                  #(do
                                     ;;(if theme (select-a-plugin-theme id))
                                     (notifications/show!
-                                      (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success))))
+                                      (str (t :plugin/update) (t :plugins) ": " name " - " (.-version (.-options pl))) :success)
+                                    (state/consume-updates-coming-plugin payload true))))
 
                              (do                            ;; register new
                                (p/then
@@ -151,12 +152,13 @@
                              [msg type] (case error-code
 
                                           :no-new-version
-                                          [(str "[" (:name payload) "] " (t :plugin/up-to-date) " :)") :warning]
+                                          [(str (t :plugin/up-to-date) " :)") :success]
 
-                                          [error-code :error])]
+                                          [error-code :error])
+                             updates-pending? (seq (:plugin/updates-pending @state/state))]
 
-                         (if only-check
-                           (state/consume-coming-plugin payload)
+                         (if (and only-check updates-pending?)
+                           (state/consume-updates-coming-plugin payload false)
                            (notifications/show!
                              (str
                                (if (= :error type) "[Install Error]" "")
@@ -355,6 +357,16 @@
       (map #(hash-map :url %) files))
     (fn [e]
       (js/console.error e))))
+
+(defn check-enabled-for-updates
+  [theme?]
+  (let [pending? (seq (:plugin/updates-pending @state/state))]
+    (when-let [plugins (and (not pending?)
+                            ;; TODO: too many requests may be limited by Github api
+                            (seq (take 16 (state/get-enabled-installed-plugins theme?))))]
+      (state/set-state! :plugin/updates-pending
+        (into {} (map (fn [v] [(keyword (:id v)) v]) plugins)))
+      (state/pub-event! [:plugin/consume-updates]))))
 
 ;; components
 (rum/defc lsp-indicator < rum/reactive

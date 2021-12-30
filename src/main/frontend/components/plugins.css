@@ -358,6 +358,22 @@
         bottom: -5px;
       }
     }
+
+    .updates-actions {
+      opacity: 0;
+    }
+
+    &:hover {
+      .updates-actions {
+        opacity: 1;
+      }
+    }
+
+    &.has-new-version, &.updating {
+      .updates-actions {
+        opacity: 1;
+      }
+    }
   }
 
   &-details {
