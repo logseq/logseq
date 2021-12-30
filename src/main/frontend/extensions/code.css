@@ -23,6 +23,7 @@
   &-calc {
     @apply absolute right-0 text-sm;
     padding: 0 0.25em;
+    margin-top: 24px;
     top: 3px;
     z-index: 1;
     background: transparent;
