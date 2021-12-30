@@ -196,6 +196,7 @@
                   (.pickFolder util/folder-picker)
                   #(js->clj % :keywordize-keys true)
                   :path)
+            _ (when (util/native-ios?) (.downloadFilesFromiCloud util/download-icloud-files))
             files (readdir path)
             files (js->clj files :keywordize-keys true)]
       (into [] (concat [{:path path}] files))))
