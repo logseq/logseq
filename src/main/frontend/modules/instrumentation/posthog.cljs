@@ -14,10 +14,12 @@
    (clj->js
     {:app_type (let [platform (mobile/platform)]
                  (cond
-                   platform
-                   platform
                    (util/electron?)
                    "electron"
+
+                   platform
+                   platform
+
                    :else
                    "web"))
      :app_env (if cfg/dev? "development" "production")
