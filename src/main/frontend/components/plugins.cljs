@@ -625,8 +625,9 @@
                     :intent "logseq" :class (if market? "active" ""))]]
 
        [:div.panels
-        (marketplace-plugins)
-        (installed-plugins)]])))
+        (if market?
+          (marketplace-plugins)
+          (installed-plugins))]])))
 
 (rum/defc custom-js-installer
   [{:keys [t current-repo db-restoring? nfs-granted?] :as props}]

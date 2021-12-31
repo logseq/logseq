@@ -19,7 +19,7 @@
 
 (defonce lsp-enabled?
          (and (util/electron?)
-              (= (storage/get "developer-mode") "true")))
+              (state/lsp-enabled?-or-theme)))
 
 (defn invoke-exported-api
   [type & args]

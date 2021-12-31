@@ -3,6 +3,7 @@
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
+            [frontend.storage :as storage]
             [frontend.date :as date]
             [frontend.dicts :as dicts]
             [frontend.handler :as handler]
@@ -521,8 +522,30 @@
                      (js/logseq.api.relaunch)))))
           [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
 
+(rum/defc plugin-enabled-switcher
+  []
+  (let [value (state/lsp-enabled?-or-theme)
+        [on? set-on?] (rum/use-state value)
+        on-toggle #(let [v (not on?)]
+                     (set-on? v)
+                     (storage/set :lsp-core-enabled v))]
+    [:div.flex.items-center
+     (ui/toggle on? on-toggle true)
+     (when (not= (boolean value) on?)
+       [:div.relative.opacity-70
+        [:span.absolute.whitespace-nowrap
+         {:style {:top -18 :left 10}}
+         (ui/button "restart"
+                    :on-click #(js/logseq.api.relaunch)
+                    :small? true :intent "logseq")]])]))
+
+(defn plugin-system-switcher-row [t]
+  (row-with-button-action
+    {:left-label "Plug-in system"
+     :action (plugin-enabled-switcher)}))
+
 (rum/defcs settings
-  < (rum/local :general ::active)
+  < (rum/local :advanced ::active)
   {:will-mount
    (fn [state]
      (state/load-app-user-cfgs)
@@ -644,6 +667,7 @@
             (when (and util/mac? (util/electron?)) (app-auto-update-row t))
             (usage-diagnostics-row t instrument-disabled?)
             (if-not (mobile-util/is-native-platform?) (developer-mode-row t developer-mode?))
+            (when (util/electron?) (plugin-system-switcher-row t))
             (clear-cache-row t)
 
             (ui/admonition

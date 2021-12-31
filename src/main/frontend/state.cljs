@@ -149,6 +149,9 @@
               :electron/user-cfgs                    nil
 
               ;; plugin
+              :plugin/enabled                        (and (util/electron?)
+                                                          ;; true false :theme-only
+                                                          ((fnil identity true) (storage/get :lsp-core-enabled)))
               :plugin/indicator-text                 nil
               :plugin/installed-plugins              {}
               :plugin/installed-themes               []
@@ -1685,6 +1688,10 @@
           (not (get-in % [:settings :disabled]))
           (= (boolean theme?) (:theme %)))
     (vals (:plugin/installed-plugins @state))))
+
+(defn lsp-enabled?-or-theme
+  []
+  (:plugin/enabled @state))
 
 (defn consume-updates-coming-plugin
   [payload updated?]
