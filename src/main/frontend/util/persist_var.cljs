@@ -50,9 +50,9 @@
     (get-in @*value [(state/get-current-repo) :value]))
 
   IReset
-  (-reset! [_o new-value]
-    "Deprecated - use (.reset-value! o) instead."
-    (swap! *value (fn [_o] (assoc-in @*value [(state/get-current-repo) :value] new-value))))
+  (-reset!                              ;    Deprecated - use (.reset-value! o) instead.
+    [o new-value]
+    (swap! *value (fn [o] (assoc-in @*value [(state/get-current-repo) :value] new-value))))
 
 
   IPrintWithWriter

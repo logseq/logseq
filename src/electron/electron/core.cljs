@@ -212,7 +212,7 @@
       (.on app "ready"
            (fn []
              (let [t0 (setup-interceptor! app)
-                   ^js win (create-main-window)
+                   ^js win (win/create-main-window)
                    _ (reset! *win win)]
                (.. logger (info (str "Logseq App(" (.getVersion app) ") Starting... ")))
 

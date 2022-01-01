@@ -17,7 +17,8 @@
             [electron.search :as search]
             [electron.git :as git]
             [electron.plugin :as plugin]
-            [electron.window :as win]))
+            [electron.window :as win]
+            [electron.file-sync-rsapi :as rsapi]))
 
 (defmulti handle (fn [_window args] (keyword (first args))))
 
@@ -399,12 +400,40 @@
   [^js _win [_ graph]]
   (search/version-changed? graph))
 
+
 (defmethod handle :reloadWindowPage [^js win]
   (when-let [web-content (.-webContents win)]
     (.reload web-content)))
 
+
 (defmethod handle :setHttpsAgent [^js _win [_ opts]]
   (utils/set-fetch-agent opts))
+
+;;;;;;;;;;;;;;;;;;;;;;;
+;; file-sync-rs-apis ;;
+;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmethod handle :get-local-files-meta [_ args]
+  (apply rsapi/get-local-files-meta (rest args)))
+
+(defmethod handle :get-local-all-files-meta [_ args]
+  (apply rsapi/get-local-all-files-meta (rest args)))
+
+(defmethod handle :rename-local-file [_ args]
+  (apply rsapi/rename-local-file (rest args)))
+
+(defmethod handle :delete-local-files [_ args]
+  (apply rsapi/delete-local-files (rest args)))
+
+(defmethod handle :update-local-files [_ args]
+  (apply rsapi/update-local-files (rest args)))
+
+(defmethod handle :delete-remote-files [_ args]
+  (apply rsapi/delete-remote-files (rest args)))
+
+(defmethod handle :update-remote-file [_ args]
+  (apply rsapi/update-remote-file (rest args)))
+>>>>>>> b06048fa0 (feat(sync): integrate file-sync-rsapi, update sync.cljs)
 
 (defmethod handle :default [args]
   (println "Error: no ipc handler for: " (bean/->js args)))
