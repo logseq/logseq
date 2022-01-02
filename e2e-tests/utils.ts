@@ -102,3 +102,45 @@ export async function escapeToBlockEditor(page: Page): Promise<void> {
     await page.press('.CodeMirror textarea', 'Escape')
     await page.waitForTimeout(500)
 }
+
+export async function setMockedOpenDirPath(
+  page: Page,
+  path?: string
+): Promise<void> {
+  // set next open directory
+  await page.evaluate(
+    ([path]) => {
+      Object.assign(window, {
+        __MOCKED_OPEN_DIR_PATH__: path,
+      })
+    },
+    [path]
+  )
+}
+
+export async function loadLocalGraph(page: Page, path?: string): Promise<void> {
+  const hasOpenButton = await page.$('#head >> .button >> text=Open')
+  await setMockedOpenDirPath(page, path);
+  if (hasOpenButton) {
+    await page.click('#head >> .button >> text=Open')
+  } else {
+    if (!(await page.$('.ls-left-sidebar-open'))) {
+      await page.click('.cp__header-left-menu.button')
+    }
+    await page.click('#left-sidebar >> #repo-switch')
+    await page.click('text=Add new graph')
+    await page.waitForSelector('h1:has-text("Open a local directory")')
+    await page.click('h1:has-text("Open a local directory")')
+  }
+
+  setMockedOpenDirPath(page, ''); // reset it
+
+  await page.waitForSelector(':has-text("Parsing files")', {
+    state: 'hidden',
+    timeout: 1000 * 60 * 5,
+  })
+
+  await page.waitForFunction('window.document.title != "Loading"')
+
+  console.log('Graph loaded for ' + path)
+}

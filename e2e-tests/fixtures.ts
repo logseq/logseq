@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { test as base, expect, ConsoleMessage } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
-import { randomString } from './utils';
+import { loadLocalGraph, randomString } from './utils';
 
 let electronApp: ElectronApplication
 let context: BrowserContext
@@ -31,10 +31,6 @@ base.beforeAll(async () => {
   electronApp = await electron.launch({
     cwd: "./static",
     args: ["electron.js"],
-    env: {
-      ...process.env,
-      LOGSEQ_OVERWRITE_OPEN_DIR: graphDir
-    }
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
@@ -65,11 +61,7 @@ base.beforeAll(async () => {
     await page.screenshot({ path: 'startup.png' })
   })
 
-  // load temporary graph
-  await page.click('#head >> .button >> text=Open')
-  
-  // make sure the temp graph is loaded
-  await page.waitForSelector(`#left-sidebar >> text=${repoName}`)
+  await loadLocalGraph(page, graphDir);
 })
 
 base.beforeEach(async () => {
