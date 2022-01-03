@@ -251,7 +251,7 @@
               [:li {:on-click
                     #(let [confirm-fn
                            (ui/make-confirm-modal
-                             {:title      (str "Are you sure uninstall plugin [" name "] ?")
+                             {:title      (t :plugin/delete-alert name)
                               :on-confirm (fn [_ {:keys [close-fn]}]
                                             (close-fn)
                                             (plugin-handler/unregister-plugin id))})]
@@ -361,7 +361,7 @@
               :options {:on-click #(reset! *sort-by :letters)}
               :icon    (ui/icon (aim-icon :letters))}]
 
-            [{:title   "Enabled"
+            [{:title   (t :plugin/enabled)
               :options {:on-click #(reset! *sort-by :enabled)}
               :icon    (ui/icon (aim-icon :enabled))}]))
         {})
@@ -376,9 +376,9 @@
             :intent "link"))
 
         (if market?
-          [{:title   "Refresh lists"
+          [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
             :options {:on-click #(reload-market-fn)}}]
-          [{:title   "Check updates"
+          [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
             :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
         {})
 
