@@ -523,7 +523,7 @@
           [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
 
 (rum/defc plugin-enabled-switcher
-  []
+  [t]
   (let [value (state/lsp-enabled?-or-theme)
         [on? set-on?] (rum/use-state value)
         on-toggle #(let [v (not on?)]
@@ -535,14 +535,14 @@
        [:div.relative.opacity-70
         [:span.absolute.whitespace-nowrap
          {:style {:top -18 :left 10}}
-         (ui/button "restart"
+         (ui/button (t :plugin/restart)
                     :on-click #(js/logseq.api.relaunch)
                     :small? true :intent "logseq")]])]))
 
 (defn plugin-system-switcher-row [t]
   (row-with-button-action
     {:left-label "Plug-in system"
-     :action (plugin-enabled-switcher)}))
+     :action (plugin-enabled-switcher t)}))
 
 (rum/defcs settings
   < (rum/local :advanced ::active)
