@@ -66,28 +66,27 @@
         block (cond->
                 (assoc block :block/updated-at updated-at)
                 (nil? (:block/created-at block))
-                (assoc :block/created-at updated-at))
-        ;; content (property/insert-properties (:block/format block)
-        ;;                                     (or (:block/content block) "")
-        ;;                                     {:created-at (:block/created-at block)
-        ;;                                      :updated-at (:block/updated-at block)})
-        ]
+                (assoc :block/created-at updated-at))]
     block))
 
 (defn- remove-orphaned-page-refs!
   [db-id txs-state old-refs new-refs]
   (when (not= old-refs new-refs)
-    (let [new-refs (set (map :block/name new-refs))
+    (let [new-refs (set (map (fn [ref]
+                               (or (:block/name ref)
+                                   (and (:db/id ref)
+                                        (:block/name (db/entity (:db/id ref)))))) new-refs))
           old-pages (->> (map :db/id old-refs)
                          (db-model/get-entities-by-ids)
                          (remove (fn [e] (contains? new-refs (:block/name e))))
                          (map :block/name)
                          (remove nil?))
-          orphaned-pages (db-model/get-orphaned-pages {:pages old-pages
-                                                       :empty-ref-f (fn [page]
-                                                                      (let [refs (:block/_refs page)]
-                                                                        (or (zero? (count refs))
-                                                                            (= #{db-id} (set (map :db/id refs))))))})]
+          orphaned-pages (when (seq old-pages)
+                           (db-model/get-orphaned-pages {:pages old-pages
+                                                         :empty-ref-f (fn [page]
+                                                                        (let [refs (:block/_refs page)]
+                                                                          (or (zero? (count refs))
+                                                                              (= #{db-id} (set (map :db/id refs))))))}))]
       (when (seq orphaned-pages)
         (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
           (swap! txs-state (fn [state] (vec (concat state tx)))))))))
