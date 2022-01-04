@@ -121,6 +121,12 @@
                                                (map (fn [tag] {:block/name (util/page-name-sanity-lc tag)
                                                               :block/original-name tag})
                                                  tags)))))
+          namespace-pages (let [page (:block/original-name page-entity)]
+                            (when (text/namespace-page? page)
+                              (->> (util/split-namespace-pages page)
+                                   (map (fn [page]
+                                          (-> (block/page-name->map page true)
+                                              (assoc :block/format format)))))))
           pages (->> (concat
                       [page-entity]
                       @ref-pages
@@ -128,9 +134,11 @@
                         (fn [page]
                           {:block/original-name page
                            :block/name (util/page-name-sanity-lc page)})
-                        @ref-tags))
+                        @ref-tags)
+                      namespace-pages)
                      ;; remove block references
-                     (remove vector?))
+                     (remove vector?)
+                     (remove nil?))
           pages (util/distinct-by :block/name pages)
           block-ids (->>
                      (mapv (fn [block]

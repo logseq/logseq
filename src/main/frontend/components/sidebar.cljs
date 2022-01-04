@@ -67,8 +67,9 @@
 
 (defn- delta-y
   [e]
-  (let [rect (.. (.. e -target) getBoundingClientRect)]
-    (- (.. e -pageY) (.. rect -top))))
+  (when-let [target (.. e -target)]
+    (let [rect (.. target getBoundingClientRect)]
+     (- (.. e -pageY) (.. rect -top)))))
 
 (defn- move-up?
   [e]
