@@ -332,6 +332,13 @@
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
+                         (editor-handler/toggle-list!))}
+       (ui/icon "list"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
                          (mobile-camera/embed-photo parent-id))}
        (ui/icon "camera"
                 {:style {:fontSize ui/icon-size}})]]
