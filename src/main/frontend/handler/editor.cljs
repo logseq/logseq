@@ -3334,30 +3334,36 @@
   [{:keys [collapse? expanded? root-block] :or {collapse? false expanded? false root-block nil}}]
   (when-let [page (or (state/get-current-page)
                       (date/today))]
-    (let [blocks (-> page
-                     (db/get-page-blocks-no-cache)
-                     (tree/blocks->vec-tree page))]
-      (cond->> blocks
-        root-block
-        (map (fn find [root]
-               (if (= root-block (:block/uuid root))
-                 root
-                 (first (filter find (:block/children root []))))))
+    (let [block? (util/uuid-string? page)
+          block-id (or (and block? (uuid page)) root-block)
+          blocks (if block-id
+                   (db/get-block-and-children (state/get-current-repo) block-id)
+                   (db/get-page-blocks-no-cache page))
+          blocks (tree/blocks->vec-tree blocks (or block-id page))
+          root-block (or block-id root-block)]
+      (->>
+       (cond->> blocks
+         root-block
+         (map (fn find [root]
+                (if (= root-block (:block/uuid root))
+                  root
+                  (first (filter find (:block/children root []))))))
 
-        collapse?
-        (w/postwalk
-         (fn [b]
-           (if (and (map? b) (-> b :block/properties :collapsed))
-             (assoc b :block/children []) b)))
+         collapse?
+         (w/postwalk
+          (fn [b]
+            (if (and (map? b) (-> b :block/properties :collapsed))
+              (assoc b :block/children []) b)))
 
-        true
-        (mapcat (fn [x] (tree-seq map? :block/children x)))
+         true
+         (mapcat (fn [x] (tree-seq map? :block/children x)))
 
-        expanded?
-        (filter (fn [b] (collapsable? (:block/uuid b))))
+         expanded?
+         (filter (fn [b] (collapsable? (:block/uuid b))))
 
-        true
-        (map (fn [x] (dissoc x :block/children)))))))
+         true
+         (map (fn [x] (dissoc x :block/children))))
+       (remove nil?)))))
 
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)

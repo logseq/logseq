@@ -465,6 +465,7 @@
         nil)
       react))))
 
+;; FIXME: merge get-page-blocks and get-block-and-children to simplify the logic
 (defn get-page-blocks
   ([page]
    (get-page-blocks (state/get-current-repo) page nil))
