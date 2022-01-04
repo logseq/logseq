@@ -285,12 +285,7 @@
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (commands/simple-insert!
-                          parent-id "[[]]"
-                          {:backward-pos 2
-                           :check-fn     (fn [_ _ new-pos]
-                                           (reset! commands/*slash-caret-pos new-pos)
-                                           (commands/handle-step [:editor/search-page]))})
+                         (editor-handler/toggle-page-reference-embed parent-id)
                          (when-let [input (gdom/getElement parent-id)]
                            (.focus input)))}
        (ui/icon "brackets"

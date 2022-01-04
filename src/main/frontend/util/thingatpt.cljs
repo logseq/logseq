@@ -59,7 +59,7 @@
                   (:full-content page-ref)))))
 
 (defn embed-macro-at-point [& [input]]
-  (when-let [macro (thing-at-point ["{{embed" "}}"] (first input) " ")]
+  (when-let [macro (thing-at-point ["{{embed" "}}"] input)]
     (assoc macro :type "macro")))
 
 (defn properties-at-point [& [input]]
