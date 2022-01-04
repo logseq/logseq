@@ -1702,3 +1702,9 @@
         (swap! state update :plugin/updates-coming dissoc id)
         (swap! state update :plugin/updates-coming assoc id payload))
       (pub-event! [:plugin/consume-updates id pending? updated?]))))
+
+(defn sub-right-sidebar-blocks
+  []
+  (when-let [current-repo (get-current-repo)]
+    (->> (sub :sidebar/blocks)
+         (filter #(= (first %) current-repo)))))
