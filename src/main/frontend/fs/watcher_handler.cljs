@@ -49,7 +49,7 @@
                (not= (string/trim content) (string/trim db-content))
                (not (string/includes? path "logseq/pages-metadata.edn")))
           (let [backup? (not (string/blank? db-content))]
-            (handle-add-or-changed! repo path content db-content mtime backup?))
+            (handle-add-and-change! repo path content db-content mtime backup?))
 
           (and (= "change" type)
                (not (db/file-exists? repo path)))
@@ -65,7 +65,7 @@
                          (string/trim (or (state/get-default-journal-template) "")))
                       (= (string/trim content) "-")
                       (= (string/trim content) "*")))
-            (handle-add-or-changed! repo path content db-content mtime true))
+            (handle-add-and-change! repo path content db-content mtime true))
 
           (and (= "unlink" type)
                (db/file-exists? repo path))
