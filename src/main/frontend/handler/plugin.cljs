@@ -169,7 +169,7 @@
                        :dunno))
 
                    ;; reset
-                   (state/set-state! :plugin/installing nil)
+                   (js/setTimeout #(state/set-state! :plugin/installing nil) 512)
                    true)]
 
     (js/window.apis.addListener channel listener)

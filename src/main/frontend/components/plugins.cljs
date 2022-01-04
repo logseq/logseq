@@ -62,7 +62,7 @@
            (let [current-selected (:selected opt)
                  plg (get (:plugin/installed-plugins @state/state) (keyword (:pid opt)))]
              [:div.it.flex.px-3.py-1.5.rounded-sm.justify-between
-              {:key      (:url opt)
+              {:key      (str idx (:url opt))
                :title    (if current-selected "Cancel selected theme")
                :class    (util/classnames
                            [{:is-selected current-selected
@@ -157,7 +157,7 @@
       understand the source code."]))
 
 (rum/defc plugin-item-card < rum/static
-  [{:keys [id name title settings version url description author icon usf iir repo] :as item}
+  [{:keys [id name title settings version url description author icon usf iir repo sponsors] :as item}
    market? *search-key has-other-pending?
    installing-or-updating? installed? stat coming-update]
 
@@ -245,7 +245,7 @@
           [:div.ctl
            [:div.l
             [:div.de
-             [:strong (svg/settings)]
+             [:strong (ui/icon "settings")]
              [:ul.menu-list
               [:li {:on-click #(if usf (js/apis.openPath usf))} (t :plugin/open-settings)]
               [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
@@ -257,7 +257,16 @@
                                             (close-fn)
                                             (plugin-handler/unregister-plugin id))})]
                        (state/set-sub-modal! confirm-fn {:center? true}))}
-               (t :plugin/uninstall)]]]]
+               (t :plugin/uninstall)]]]
+
+            (when (seq sponsors)
+              [:div.de.sponsors
+               [:strong (ui/icon "coffee")]
+               [:ul.menu-list
+                (for [link sponsors]
+                  [:li [:a {:href link :target "_blank"}
+                        [:span.flex.items-center link (ui/icon "external-link")]]])]])
+            ]
 
            [:div.r.flex.items-center
             (if (and unpacked? (not disabled))

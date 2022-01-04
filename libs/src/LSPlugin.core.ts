@@ -489,7 +489,7 @@ class PluginLocal
 
       // Pick legal attrs
     ;['name', 'author', 'repository', 'version',
-      'description', 'repo', 'title', 'effect',
+      'description', 'repo', 'title', 'effect', 'sponsors'
     ].concat(!this.isInstalledInDotRoot ? ['devEntry'] : []).forEach(k => {
       this._options[k] = pkg[k]
     })

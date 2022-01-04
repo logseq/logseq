@@ -239,20 +239,25 @@
 
         .de {
           font-size: 10px;
-          padding: 5px 0;
-          padding-right: 10px;
+          padding: 5px 2px;
+          padding-right: 3px;
           border-radius: 2px;
+          margin-right: 5px;
           user-select: none;
           transition: none;
           opacity: .2;
           position: relative;
           z-index: var(--ls-z-index-level-1);
 
+          .ti {
+            font-size: 16px;
+          }
+
           .menu-list {
             @apply shadow-md rounded-sm absolute hidden list-none overflow-hidden m-0 p-0;
 
             background-color: var(--ls-primary-background-color);
-            top: 20px;
+            top: 22px;
             left: 0;
             min-width: 120px;
 
@@ -280,6 +285,23 @@
 
           &.log {
             padding: 5px;
+          }
+
+          &.sponsors {
+            .menu-list {
+              min-width: auto;
+              white-space: nowrap;
+
+              > li {
+                &:hover {
+                  background-color: unset;
+                }
+              }
+
+              .ti {
+                font-size: 12px;
+              }
+            }
           }
 
           svg {
