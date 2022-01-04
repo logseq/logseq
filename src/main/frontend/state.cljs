@@ -1622,3 +1622,9 @@
 (defn get-visual-viewport-state
   []
   (:ui/visual-viewport-state @state))
+
+(defn sub-right-sidebar-blocks
+  []
+  (when-let [current-repo (get-current-repo)]
+    (->> (sub :sidebar/blocks)
+         (filter #(= (first %) current-repo)))))

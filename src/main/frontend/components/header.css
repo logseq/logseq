@@ -27,6 +27,8 @@
   > .r {
     align-items: center;
     padding-right: 0.5rem;
+    flex: 1;
+    justify-content: flex-end;
   }
 
   /* To prevent header glitch on Safari */
@@ -60,15 +62,15 @@
 
   &-tips {
     position: absolute;
-    padding: 6px 0;
+    padding: 13px 0;
     text-align: center;
-    min-width: var(--ls-main-content-max-width);
-    width: 100%;
     font-weight: 500;
-    align-items: center;
-    background: var(--color-level-3);
-    margin-top: -16px;
-    left: 0;
+    background: transparent;
+    margin-top: 0;
+    line-height: 0;
+    top: 0;
+    left: 40%;
+    transform: translateX(-50%);
     z-index: 1000;
 
     > p {

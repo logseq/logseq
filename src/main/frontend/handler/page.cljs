@@ -147,9 +147,9 @@
                   (js/console.error "error: " err)))))))
 
 (defn- compute-new-file-path
-  [old-path new-page-name]
+  [old-path new-name]
   (let [result (string/split old-path "/")
-        file-name (util/page-name-sanity new-page-name)
+        file-name (util/page-name-sanity new-name)
         ext (last (string/split (last result) "."))
         new-file (str file-name "." ext)
         parts (concat (butlast result) [new-file])]
@@ -184,6 +184,7 @@
                 (println "file rename failed: " error))))))
 
 (defn- replace-page-ref!
+  "Unsanitized names"
   [content old-name new-name]
   (let [[original-old-name original-new-name] (map string/trim [old-name new-name])
         [old-ref new-ref] (map #(util/format "[[%s]]" %) [old-name new-name])
@@ -221,6 +222,7 @@
         (util/replace-ignore-case (str " " old-tag "$") (str " " new-tag)))))
 
 (defn- replace-old-page!
+  "Unsanitized names"
   [content old-name new-name]
   (when (and (string? content) (string? old-name) (string? new-name))
     (-> content
@@ -228,6 +230,7 @@
         (replace-tag-ref! old-name new-name))))
 
 (defn- walk-replace-old-page!
+  "Unsanitized names"
   [form old-name new-name]
   (walk/postwalk (fn [f]
                    (cond
@@ -324,15 +327,16 @@
        (vec)))
 
 (defn- rename-update-refs!
+  "Unsanitized only"
   [page old-original-name new-name]
   ;; update all pages which have references to this page
   (let [repo (state/get-current-repo)
-        to-page (db/entity [:block/name (string/lower-case new-name)])
+        to-page (db/entity [:block/name (util/page-name-sanity-lc new-name)])
         blocks   (db/get-page-referenced-blocks-no-cache (:db/id page))
         page-ids (->> (map :block/page blocks)
                       (remove nil?)
                       (set))
-        tx       (->> (map (fn [{:block/keys [uuid content properties format pre-block?] :as block}]
+        tx       (->> (map (fn [{:block/keys [uuid content properties] :as block}]
                              (let [content    (let [content' (replace-old-page! content old-original-name new-name)]
                                                 (when-not (= content' content)
                                                   content'))
@@ -351,16 +355,22 @@
     (doseq [page-id page-ids]
       (outliner-file/sync-to-file page-id))))
 
-(defn- rename-page-aux [old-name new-name redirect?]
-  (when-let [repo (state/get-current-repo)]
-    (when-let [page (db/pull [:block/name (string/lower-case old-name)])]
+(defn- rename-page-aux 
+  "Only accepts unsanitized page names"
+  [old-name new-name redirect?]
+  (let [old-page-name       (util/page-name-sanity-lc old-name)
+        new-file-name       (util/page-name-sanity new-name)
+        new-page-name       (string/lower-case new-file-name)
+        repo                (state/get-current-repo)
+        page                (db/pull [:block/name old-page-name])]
+    (when (and repo page)
       (let [old-original-name   (:block/original-name page)
             file                (:block/file page)
             journal?            (:block/journal? page)
             properties-block    (:data (outliner-tree/-get-down (outliner-core/block page)))
             properties-block-tx (when (and properties-block
                                            (string/includes? (string/lower-case (:block/content properties-block))
-                                                             (string/lower-case old-name)))
+                                                             old-page-name))
                                   (let [front-matter? (and (property/front-matter? (:block/content properties-block))
                                                            (= :markdown (:block/format properties-block)))]
                                     {:db/id         (:db/id properties-block)
@@ -371,17 +381,17 @@
                                                                               front-matter?)}))
             page-txs            [{:db/id               (:db/id page)
                                   :block/uuid          (:block/uuid page)
-                                  :block/name          (string/lower-case new-name)
+                                  :block/name          new-page-name
                                   :block/original-name new-name}]
             page-txs            (if properties-block-tx (conj page-txs properties-block-tx) page-txs)]
 
         (d/transact! (db/get-conn repo false) page-txs)
 
-        (when (not= (util/page-name-sanity new-name) new-name)
-          (page-property/add-property! new-name :title new-name))
+        (when (not= new-page-name new-name)
+          (page-property/add-property! new-page-name :title new-name))
 
         (when (and file (not journal?))
-          (rename-file! file new-name (fn [] nil)))
+          (rename-file! file new-file-name (fn [] nil)))
 
         (rename-update-refs! page old-original-name new-name)
 
@@ -392,23 +402,24 @@
       (when redirect?
         (route-handler/redirect! {:to          :page
                                   :push        false
-                                  :path-params {:name (string/lower-case new-name)}}))
+                                  :path-params {:name new-page-name}}))
 
       (repo-handler/push-if-auto-enabled! repo)
 
-      (when (favorited? old-name)
-        (p/let [_ (unfavorite-page! old-name)]
-          (favorite-page! new-name)))
+      (when (favorited? old-page-name)
+        (p/let [_ (unfavorite-page! old-page-name)]
+          (favorite-page! new-page-name)))
 
-      (recent-handler/update-or-add-renamed-page repo old-name new-name)
+      (recent-handler/update-or-add-renamed-page repo old-page-name new-page-name)
 
       (ui-handler/re-render-root!))))
 
 (defn- rename-nested-pages
+  "Unsanitized names only"
   [old-ns-name new-ns-name]
   (let [repo            (state/get-current-repo)
-        nested-page-str (util/format "[[%s]]" (string/lower-case old-ns-name))
-        ns-prefix       (util/format "[[%s/" (string/lower-case old-ns-name))
+        nested-page-str (util/format "[[%s]]" (util/page-name-sanity-lc old-ns-name))
+        ns-prefix       (util/format "[[%s/" (util/page-name-sanity-lc old-ns-name))
         nested-pages    (db/get-pages-by-name-partition repo nested-page-str)
         nested-pages-ns (db/get-pages-by-name-partition repo ns-prefix)]
     (when nested-pages
@@ -437,9 +448,10 @@
              (println "Renamed " old-page-title " to " new-page-title))))))))
 
 (defn- rename-namespace-pages!
+  "Only accepts unsanitized names"
   [repo old-name new-name]
   (let [pages (db/get-namespace-pages repo old-name)
-        page (db/pull [:block/name (string/lower-case old-name)])
+        page (db/pull [:block/name (util/page-name-sanity-lc old-name)])
         pages (cons page pages)]
     (doseq [{:block/keys [name original-name]} pages]
       (let [old-page-title (or original-name name)
@@ -452,14 +464,17 @@
 (defn page-exists?
   [page-name]
   (when page-name
-    (db/entity [:block/name (string/lower-case page-name)])))
+    (db/entity [:block/name (util/page-name-sanity-lc page-name)])))
 
 (defn merge-pages!
-  [from to]
-  (when (and (page-exists? from) (page-exists? to) (not= from to))
-    (let [to-page (db/entity [:block/name (string/lower-case to)])
+  "Only accepts sanitized page names"
+  [from-page-name to-page-name]
+  (when (and (page-exists? from-page-name)
+             (page-exists? to-page-name)
+             (not= from-page-name to-page-name))
+    (let [to-page (db/entity [:block/name to-page-name])
           to-id (:db/id to-page)
-          from-page (db/entity [:block/name (string/lower-case from)])
+          from-page (db/entity [:block/name from-page-name])
           from-id (:db/id from-page)
           from-first-child (some->> (db/pull from-id)
                                     (outliner-core/block)
@@ -491,17 +506,19 @@
                            (util/get-page-original-name from-page)
                            (util/get-page-original-name to-page)))
 
-    (delete! from nil)
+    (delete! from-page-name nil)
 
     (route-handler/redirect! {:to          :page
                               :push        false
-                              :path-params {:name (string/lower-case to)}})))
+                              :path-params {:name to-page-name}})))
 
 (defn rename!
   [old-name new-name]
   (let [repo          (state/get-current-repo)
         old-name      (string/trim old-name)
         new-name      (string/trim new-name)
+        old-page-name (util/page-name-sanity-lc old-name)
+        new-page-name (util/page-name-sanity-lc new-name)
         name-changed? (not= old-name new-name)]
     (if (and old-name
              new-name
@@ -509,11 +526,11 @@
              name-changed?)
       (do
         (cond
-          (= (string/lower-case old-name) (string/lower-case new-name))
+          (= old-page-name new-page-name)
           (rename-page-aux old-name new-name true)
 
-          (db/pull [:block/name (string/lower-case new-name)])
-          (merge-pages! old-name new-name)
+          (db/pull [:block/name new-page-name])
+          (merge-pages! old-page-name new-page-name)
 
           :else
           (rename-namespace-pages! repo old-name new-name))
