@@ -46,6 +46,7 @@
             [frontend.util.marker :as marker]
             [frontend.util.page-property :as page-property]
             [frontend.util.property :as property]
+            [frontend.util.priority :as priority]
             [frontend.util.thingatpt :as thingatpt]
             [frontend.util.list :as list]
             [goog.dom :as gdom]
@@ -914,6 +915,17 @@
                                           (util/format "[#%s]" priority)
                                           (util/format "[#%s]" new-priority))]
     (save-block-if-changed! block new-content)))
+
+(defn cycle-priority!
+  []
+  (when (state/get-edit-block)
+    (let [format (or (db/get-page-format (state/get-current-page))
+                     (state/get-preferred-format))
+          input-id (state/get-edit-input-id)
+          content (state/get-edit-content)
+          new-priority (priority/cycle-priority-state content)
+          new-value (priority/add-or-update-priority content format new-priority)]
+      (state/set-edit-content! input-id new-value))))
 
 (defn delete-block-aux!
   [{:block/keys [uuid repo] :as _block} children?]

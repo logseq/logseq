@@ -322,6 +322,13 @@
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
+                         (editor-handler/cycle-priority!))}
+       (ui/icon "a-b"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
                          (commands/simple-insert!
                           parent-id "#"
                           {:check-fn     (fn [_ _ new-pos]
