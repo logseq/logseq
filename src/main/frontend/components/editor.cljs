@@ -349,6 +349,13 @@
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
+                         (commands/insert-youtube-timestamp))}
+       (ui/icon "brand-youtube"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
                          (editor-handler/html-link-format!))}
        (ui/icon "link"
                 {:style {:fontSize ui/icon-size}})]]
