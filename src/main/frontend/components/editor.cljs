@@ -310,13 +310,6 @@
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (editor-handler/cycle-priority!))}
-       (ui/icon "a-b"
-                {:style {:fontSize ui/icon-size}})]]
-     [:div
-      [:button.bottom-action
-       {:on-mouse-down (fn [e]
-                         (util/stop e)
                          (viewport-fn)
                          (commands/simple-insert!
                           parent-id "#"
@@ -324,6 +317,13 @@
                                            (commands/handle-step [:editor/search-page-hashtag])
                                            (reset! commands/*slash-caret-pos new-pos))}))}
        (ui/icon "tag"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (editor-handler/cycle-priority!))}
+       (ui/icon "a-b"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
       [:button.bottom-action
