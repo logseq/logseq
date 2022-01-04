@@ -50,9 +50,9 @@
   [repo tag])
 
 (defn download-asset-zip
-  [{:keys [id repo title author description effect sponsors]} url dot-extract-to]
+  [{:keys [id repo title author description effect sponsors]} dl-url dl-version dot-extract-to]
   (p/catch
-    (p/let [^js res (fetch url)
+    (p/let [^js res (fetch dl-url #js {:timeout 30000})
             _ (if-not (.-ok res) (throw (js/Error. :download-network-issue)))
             frm-zip (p/create
                       (fn [resolve1 reject1]
@@ -61,7 +61,7 @@
                               total-size (js/parseInt (.get headers "content-length"))
                               start-at (.now js/Date)
                               *downloaded (atom 0)
-                              dest-basename (path/basename url)
+                              dest-basename (path/basename dl-url)
                               dest-basename (if-not (string/ends-with? dest-basename ".zip")
                                               (str id "_" dest-basename ".zip") dest-basename)
                               tmp-dest-file (path/join (os/tmpdir) (str dest-basename ".pending"))
@@ -111,6 +111,9 @@
                 (set! (.-author pkg) author)
                 (set! (.-description pkg) description)
                 (set! (.-effect pkg) (boolean effect))
+                ;; Force overwrite version because of developers tend to
+                ;; forget to update the version number of package.json
+                (when dl-version (set! (.-version pkg) dl-version))
                 (when sponsors (set! (.-sponsors pkg) sponsors))
                 (fs/writeJsonSync src pkg))
 
@@ -154,7 +157,7 @@
                               (throw (js/Error. :release-asset-not-found)))
 
                           dest (.join path cfgs/dot-root "plugins" (:id item))
-                          _ (if-not only-check (download-asset-zip item dl-url dest))
+                          _ (if-not only-check (download-asset-zip item dl-url latest-version dest))
                           _ (debug "[" (if only-check "Checked" "Updated") "DONE] " latest-version)]
 
                     (emit :lsp-installed
