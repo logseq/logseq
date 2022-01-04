@@ -196,8 +196,7 @@
   [state]
   (when (util/electron?)
     (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
-      (when multiple-windows?
-        (reset! (::electron-multiple-windows? state) true)))))
+      (reset! (::electron-multiple-windows? state) multiple-windows?))))
 
 (rum/defcs repos-dropdown < rum/reactive
   (rum/local false ::electron-multiple-windows?)
