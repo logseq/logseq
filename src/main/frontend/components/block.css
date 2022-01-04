@@ -133,20 +133,31 @@
   }
 }
 
+.block-children-container {
+  position: relative;
+}
+
 .block-children-left-border {
-  width: 3px;
-  padding-right: 2px;
+  z-index: 1;
+  width: 4px;
+  left: -1px;
+  top: 0;
+  height: 100%;
   cursor: pointer;
   background-clip: content-box;
-  background-color: var(--ls-guideline-color, #ddd);
+  background-color: transparent;
+  position: absolute;
+  border-radius: 2px;
 }
 
 .block-children-left-border:hover {
-  padding-right: 0px;
   background-color: var(--ls-primary-text-color);
 }
 
 .block-children {
+  border-left: 1px solid;
+  border-left-color: var(--ls-guideline-color, #ddd);
+
   padding-top: 2px;
   padding-bottom: 3px;
 
@@ -159,7 +170,7 @@
 
 .block-control, .block-control:hover {
   text-decoration: none;
-  cursor: pointer;
+  cursor: default;
   font-size: 14px;
   min-width: 22px;
   min-height: 22px;
