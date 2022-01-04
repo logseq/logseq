@@ -7,4 +7,7 @@ assignees: ''
 
 ---
 
-Please go to [Logseq forum](https://discuss.logseq.com/c/feature-requests/7) to create a feature request so that people can vote there.
+Thank you for the feature request.
+Please note that GitHub is only used to track issues/bugs.
+Feature requests are available on the [Logseq forum](https://discuss.logseq.com/c/feature-requests/7) to allow users to engage in the discussion and vote on it.
+All feature requests on GitHub will be closed.
