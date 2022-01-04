@@ -2473,9 +2473,9 @@
   (let [{:keys [block]} (get-state)]
     (when block
       (let [input (state/get-input)
-            page-ref-fn (fn [] (commands/simple-insert!
-                                parent-id "[[]]"
-                                {:backward-pos 2
+            page-ref-fn (fn [bounds backward-pos] (commands/simple-insert!
+                                parent-id bounds
+                                {:backward-pos backward-pos
                                  :check-fn     (fn [_ _ new-pos]
                                                  (reset! commands/*slash-caret-pos new-pos)
                                                  (commands/handle-step [:editor/search-page]))}))]
@@ -2489,20 +2489,41 @@
               (let [{:keys [raw-content start end]} embed-ref]
                 (delete-and-update input start end)
                 (if (= 5 (count raw-content))
-                  (page-ref-fn)
+                  (page-ref-fn "[[]]" 2)
                   (insert raw-content)))
               (if-let [page-ref (thingatpt/page-ref-at-point input)]
                 (let [{:keys [start end link full-content raw-content]} page-ref]
                   (delete-and-update input start end)
                   (if (= raw-content "")
-                    (commands/simple-insert!
-                     parent-id "{{embed [[]]}}"
-                     {:backward-pos 4
-                      :check-fn     (fn [_ _ new-pos]
-                                      (reset! commands/*slash-caret-pos new-pos)
-                                      (commands/handle-step [:editor/search-page]))})
+                    (page-ref-fn "{{embed [[]]}}" 4)
                     (insert (util/format "{{embed %s}}" full-content))))
-                (page-ref-fn)))))))))
+                (page-ref-fn "[[]]" 2)))))))))
+
+(defn toggle-block-reference-embed
+  [parent-id]
+  (let [{:keys [block]} (get-state)]
+    (when block
+      (let [input (state/get-input)
+            block-ref-fn (fn [bounds backward-pos] (commands/simple-insert!
+                                parent-id bounds
+                                {:backward-pos backward-pos
+                                 :check-fn     (fn [_ _ new-pos]
+                                                 (reset! commands/*slash-caret-pos new-pos)
+                                                 (commands/handle-step [:editor/search-block]))}))]
+        (state/set-editor-show-block-search! false)
+        (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
+          (let [{:keys [raw-content start end]} embed-ref]
+            (delete-and-update input start end)
+            (if (= 5 (count raw-content))
+              (block-ref-fn "(())" 2)
+              (insert raw-content)))
+          (if-let [page-ref (thingatpt/block-ref-at-point input)]
+            (let [{:keys [start end full-content raw-content]} page-ref]
+              (delete-and-update input start end)
+              (if (= raw-content "")
+                (block-ref-fn "{{embed (())}}" 4)
+                (insert (util/format "{{embed %s}}" full-content))))
+            (block-ref-fn "(())" 2)))))))
 
 (defn- keydown-new-block
   [state]
