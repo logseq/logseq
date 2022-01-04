@@ -158,7 +158,8 @@
 
 (rum/defc plugin-item-card < rum/static
   [{:keys [id name title settings version url description author icon usf iir repo] :as item}
-   market? *search-key installing-or-updating? installed? stat coming-update]
+   market? *search-key has-other-pending?
+   installing-or-updating? installed? stat coming-update]
 
   (let [disabled (:disabled settings)
         name (or title name "Untitled")
@@ -268,9 +269,10 @@
               [:div.updates-actions
                [:a.btn
                 {:class    (util/classnames [{:disabled (or installing-or-updating?)}])
-                 :on-click #(plugin-handler/check-or-update-marketplace-plugin
-                              (assoc item :only-check (not new-version))
-                              (fn [e] (notification/show! e :error)))}
+                 :on-click #(if-not has-other-pending?
+                              (plugin-handler/check-or-update-marketplace-plugin
+                                (assoc item :only-check (not new-version))
+                                (fn [e] (notification/show! e :error))))}
 
                 (if installing-or-updating?
                   (t :plugin/updating)
@@ -481,7 +483,7 @@
                (let [pid (keyword (:id item))
                      stat (:stat item)]
                  (plugin-item-card
-                   item true *search-key
+                   item true *search-key installing
                    (and installing (= (keyword (:id installing)) pid))
                    (contains? installed-plugins pid) stat nil))
                (:id item)))]])])))
@@ -497,7 +499,6 @@
         updating (state/sub :plugin/installing)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
         coming-updates (state/sub :plugin/updates-coming)
-        pending-updates (state/sub :plugin/updates-pending)
         *sort-by (::sort-by state)
         *search-key (::search-key state)
         *category (::category state)
@@ -537,7 +538,7 @@
           (rum/with-key
             (let [pid (keyword (:id item))]
               (plugin-item-card
-                item false *search-key
+                item false *search-key updating
                 (and updating (= (keyword (:id updating)) pid))
                 true nil (get coming-updates pid))) (:id item)))]])))
 
