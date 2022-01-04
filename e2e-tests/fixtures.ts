@@ -31,6 +31,7 @@ base.beforeAll(async () => {
   electronApp = await electron.launch({
     cwd: "./static",
     args: ["electron.js"],
+    locale: 'en',
   })
   context = electronApp.context()
   await context.tracing.start({ screenshots: true, snapshots: true });
