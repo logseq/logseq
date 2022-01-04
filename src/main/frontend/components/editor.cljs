@@ -377,6 +377,18 @@
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
+                         (commands/simple-insert!
+                          parent-id "<"
+                          {:check-fn     (fn [_]
+                                           (commands/block-commands-map))})
+                         (when-let [input (gdom/getElement parent-id)]
+                           (.focus input)))}
+       (ui/icon "code"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
                          (editor-handler/bold-format!))}
        (ui/icon "bold"
                 {:style {:fontSize ui/icon-size}})]]
