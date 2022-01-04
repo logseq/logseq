@@ -264,11 +264,11 @@
 
 (defn page-name->map
   [original-page-name with-id?]
-  (when (and original-page-name (string? original-page-name))
+  (cond
+    (and original-page-name (string? original-page-name))
     (let [original-page-name (util/remove-boundary-slashes original-page-name)
           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name)
-          namespace? (and (string/includes? original-page-name "/")
-                          (not (boolean (text/get-nested-page-name original-page-name)))
+          namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
                           (text/namespace-page? original-page-name))
           m (merge
              {:block/name page-name
@@ -285,7 +285,16 @@
         (merge m
                {:block/journal? true
                 :block/journal-day journal-day})
-        (assoc m :block/journal? false)))))
+        (assoc m :block/journal? false)))
+
+    (and (map? original-page-name) (:block/uuid original-page-name))
+    original-page-name
+
+    (and (map? original-page-name) with-id?)
+    (assoc original-page-name :block/uuid (db/new-block-id))
+
+    :else
+    nil))
 
 (defn with-page-refs
   [{:keys [title body tags refs marker priority] :as block} with-id?]
@@ -309,9 +318,13 @@
      (concat title body))
     (let [refs (remove string/blank? @refs)
           children-pages (->> (mapcat (fn [p]
-                                        (let [p (or (text/get-nested-page-name p) p)]
-                                          (when (text/namespace-page? p)
-                                            (util/split-namespace-pages p))))
+                                        (let [p (if (map? p)
+                                                  (:block/original-name p)
+                                                  p)]
+                                          (when (string? p)
+                                            (let [p (or (text/get-nested-page-name p) p)]
+                                              (when (text/namespace-page? p)
+                                                (util/split-namespace-pages p))))))
                                       refs)
                               (remove string/blank?)
                               (distinct))
@@ -479,6 +492,14 @@
         page-refs (remove string/blank? page-refs)]
     (map (fn [page] (page-name->map page true)) page-refs)))
 
+(defn with-page-block-refs
+  [block with-id?]
+  (some-> block
+          (with-page-refs with-id?)
+          with-block-refs
+          block-tags->pages
+          (update :refs (fn [col] (remove nil? col)))))
+
 (defn extract-blocks
   [blocks content with-id? format]
   (try
@@ -566,10 +587,7 @@
                         block (if (seq timestamps)
                                 (merge block (timestamps->scheduled-and-deadline timestamps))
                                 block)
-                        block (-> block
-                                  (with-page-refs with-id?)
-                                  with-block-refs
-                                  block-tags->pages)
+                        block (with-page-block-refs block with-id?)
                         last-pos' (get-in block [:meta :start-pos])
                         {:keys [created-at updated-at]} (:properties properties)
                         block (cond-> block
@@ -598,21 +616,21 @@
                      (cons
                       (merge
                        (let [content (utf8/substring encoded-content 0 first-block-start-pos)
-                             id (get-custom-id-or-new-id {:properties @pre-block-properties})]
-                         (->
-                          {:uuid id
-                           :content content
-                           :level 1
-                           :meta {:start-pos 0
-                                  :end-pos (or first-block-start-pos
-                                               (utf8/length encoded-content))}
-                           :body @pre-block-body
-                           :properties @pre-block-properties
-                           :properties-order (keys @pre-block-properties)
-                           :refs (get-page-refs-from-properties @pre-block-properties)
-                           :pre-block? true
-                           :unordered true}
-                          (block-keywordize)))
+                             id (get-custom-id-or-new-id {:properties @pre-block-properties})
+                             block {:uuid id
+                                    :content content
+                                    :level 1
+                                    :meta {:start-pos 0
+                                           :end-pos (or first-block-start-pos
+                                                        (utf8/length encoded-content))}
+                                    :body @pre-block-body
+                                    :properties @pre-block-properties
+                                    :properties-order (keys @pre-block-properties)
+                                    :refs (get-page-refs-from-properties @pre-block-properties)
+                                    :pre-block? true
+                                    :unordered true}
+                             block (with-page-block-refs block false)]
+                         (block-keywordize block))
                        (select-keys first-block [:block/format :block/page]))
                       blocks)
                      blocks)
