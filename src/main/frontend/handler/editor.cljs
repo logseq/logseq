@@ -2468,6 +2468,42 @@
                           nil)
                         (cursor/move-cursor-to input (+ (:end item) (count next-bullet) 2)))))))))))))
 
+(defn toggle-page-reference-embed
+  [parent-id]
+  (let [{:keys [block]} (get-state)]
+    (when block
+      (let [input (state/get-input)
+            page-ref-fn (fn [] (commands/simple-insert!
+                                parent-id "[[]]"
+                                {:backward-pos 2
+                                 :check-fn     (fn [_ _ new-pos]
+                                                 (reset! commands/*slash-caret-pos new-pos)
+                                                 (commands/handle-step [:editor/search-page]))}))]
+        (state/set-editor-show-page-search! false)
+        (let [selection (get-selection-and-format)
+              {:keys [selection-start selection-end value]} selection]
+          (if (not= selection-start selection-end)
+            (do (delete-and-update selection-start selection-end)
+                (insert (util/format "[[%s]]" value)))
+            (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
+              (let [{:keys [raw-content start end]} embed-ref]
+                (delete-and-update input start end)
+                (if (= 5 (count raw-content))
+                  (page-ref-fn)
+                  (insert raw-content)))
+              (if-let [page-ref (thingatpt/page-ref-at-point input)]
+                (let [{:keys [start end link full-content raw-content]} page-ref]
+                  (delete-and-update input start end)
+                  (if (= raw-content "")
+                    (commands/simple-insert!
+                     parent-id "{{embed [[]]}}"
+                     {:backward-pos 4
+                      :check-fn     (fn [_ _ new-pos]
+                                      (reset! commands/*slash-caret-pos new-pos)
+                                      (commands/handle-step [:editor/search-page]))})
+                    (insert (util/format "{{embed %s}}" full-content))))
+                (page-ref-fn)))))))))
+
 (defn- keydown-new-block
   [state]
   (when-not (auto-complete?)
