@@ -2448,16 +2448,15 @@
         (let [input (state/get-input)]
           (when-let [item (thingatpt/list-item-at-point input)]
             (let [{:keys [full-content indent bullet checkbox ordered _]} item
-                  current-bullet (cljs.reader/read-string bullet)
-                  next-bullet (if ordered (str (inc current-bullet) ".") bullet)
+                  next-bullet (if ordered (str (inc bullet) ".") bullet)
                   checkbox (when checkbox "[ ] ")]
               (if (= (count full-content)
-                     (+ (if ordered (+ (count bullet) 2) 2) (when checkbox (count checkbox))))
+                     (+ (if ordered (+ (count (str bullet)) 2) 2) (when checkbox (count checkbox))))
                 (delete-and-update input (cursor/line-beginning-pos input) (cursor/line-end-pos input))
                 (do (cursor/move-cursor-to-line-end input)
                     (insert (str "\n" indent next-bullet " " checkbox))
                     (when ordered
-                      (let [bullet-atom (atom (inc current-bullet))]
+                      (let [bullet-atom (atom (inc bullet))]
                         (while (when-let [next-item (list/get-next-item input)]
                                  (swap! bullet-atom inc)
                                  (let [{:keys [full-content start end]} next-item
@@ -2468,17 +2467,66 @@
                           nil)
                         (cursor/move-cursor-to input (+ (:end item) (count next-bullet) 2)))))))))))))
 
+(defn toggle-list!
+  []
+  (when-not (auto-complete?)
+    (let [{:keys [block]} (get-state)]
+      (when block
+        (let [input (state/get-input)
+              format (or (db/get-page-format (state/get-current-page)) (state/get-preferred-format))
+              new-unordered-bullet (case format :org "-" "*")
+              current-pos (cursor/pos input)
+              content (state/get-edit-content)
+              pos (atom current-pos)]
+          (if-let [item (thingatpt/list-item-at-point input)]
+            (let [{:keys [ordered]} item
+                  list-beginning-pos (list/list-beginning-pos input)
+                  list-end-pos (list/list-end-pos input)
+                  list (subs content list-beginning-pos list-end-pos)
+                  items (string/split-lines list)
+                  splitter-reg (if ordered #"[\d]*\.\s*" #"[-\*]{1}\s*")
+                  items-without-bullet (vec (map #(last (string/split % splitter-reg 2)) items))
+                  new-list (string/join "\n"
+                                        (if ordered
+                                          (map #(str new-unordered-bullet " " %) items-without-bullet)
+                                          (map-indexed #(str (inc %1) ". " %2) items-without-bullet)))
+                  index-of-current-item (inc (.indexOf items-without-bullet
+                                                       (last (string/split (:raw-content item) splitter-reg 2))))
+                  numbers-length (->> (map-indexed
+                                       #(str (inc %1) ". ")
+                                       (subvec items-without-bullet 0 index-of-current-item))
+                                      string/join
+                                      count)
+                  pos-diff (- numbers-length (* 2 index-of-current-item))]
+              (delete-and-update input list-beginning-pos list-end-pos)
+              (insert new-list)
+              (reset! pos (if ordered
+                            (- current-pos pos-diff)
+                            (+ current-pos pos-diff))))
+            (let [prev-item (list/get-prev-item input)]
+              (cursor/move-cursor-down input)
+              (cursor/move-cursor-to-line-beginning input)
+              (if prev-item
+                (let [{:keys [bullet ordered]} prev-item
+                      current-bullet (if ordered (str (inc bullet) ".") bullet)]
+                  (insert (str current-bullet " "))
+                  (reset! pos (+ current-pos (count current-bullet) 1)))
+                (do (insert (str new-unordered-bullet " "))
+                    (reset! pos (+ current-pos 2))))))
+          (cursor/move-cursor-to input @pos))))))
+
 (defn toggle-page-reference-embed
   [parent-id]
   (let [{:keys [block]} (get-state)]
     (when block
       (let [input (state/get-input)
-            page-ref-fn (fn [bounds backward-pos] (commands/simple-insert!
-                                parent-id bounds
-                                {:backward-pos backward-pos
-                                 :check-fn     (fn [_ _ new-pos]
-                                                 (reset! commands/*slash-caret-pos new-pos)
-                                                 (commands/handle-step [:editor/search-page]))}))]
+            page-ref-fn (fn [bounds backward-pos]
+                          (commands/simple-insert!
+                           parent-id bounds
+                           {:backward-pos backward-pos
+                            :check-fn     (fn [_ _ new-pos]
+                                            (reset! commands/*slash-caret-pos new-pos)
+                                            (commands/handle-step [:editor/search-page]))}))]
         (state/set-editor-show-page-search! false)
         (let [selection (get-selection-and-format)
               {:keys [selection-start selection-end value]} selection]
@@ -2504,12 +2552,13 @@
   (let [{:keys [block]} (get-state)]
     (when block
       (let [input (state/get-input)
-            block-ref-fn (fn [bounds backward-pos] (commands/simple-insert!
-                                parent-id bounds
-                                {:backward-pos backward-pos
-                                 :check-fn     (fn [_ _ new-pos]
-                                                 (reset! commands/*slash-caret-pos new-pos)
-                                                 (commands/handle-step [:editor/search-block]))}))]
+            block-ref-fn (fn [bounds backward-pos]
+                           (commands/simple-insert!
+                            parent-id bounds
+                            {:backward-pos backward-pos
+                             :check-fn     (fn [_ _ new-pos]
+                                             (reset! commands/*slash-caret-pos new-pos)
+                                             (commands/handle-step [:editor/search-block]))}))]
         (state/set-editor-show-block-search! false)
         (if-let [embed-ref (thingatpt/embed-macro-at-point input)]
           (let [{:keys [raw-content start end]} embed-ref]
