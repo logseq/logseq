@@ -176,7 +176,9 @@
           links-js                                                                  (bean/->js links)]
       (let [simulation (layout! nodes-js links-js)]
         (doseq [node nodes-js]
-          (.addNode graph (.-id node) node))
+          (try (.addNode graph (.-id node) node)
+               (catch js/Error e
+                 (js/console.error e))))
         (doseq [link links-js]
           (let [source (.-id (.-source link))
                 target (.-id (.-target link))]
