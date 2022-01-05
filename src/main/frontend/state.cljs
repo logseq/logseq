@@ -70,6 +70,14 @@
       :ui/wide-mode? false
       ;; :show-all, :hide-block-body, :hide-block-children
       :ui/cycle-collapse :show-all
+
+      ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
+      ;; 1. right sidebar
+      ;; 2. zoom-in view
+      ;; 3. queries
+      ;; 4. references
+      ;; graph => {:block-id bool}
+      :ui/collapsed-blocks {}
       :ui/sidebar-collapsed-blocks {}
       :ui/root-component nil
       :ui/file-component nil
@@ -1628,3 +1636,17 @@
   (when-let [current-repo (get-current-repo)]
     (->> (sub :sidebar/blocks)
          (filter #(= (first %) current-repo)))))
+
+(defn toggle-collapsed-block!
+  [block-id]
+  (let [current-repo (get-current-repo)]
+    (update-state! [:ui/collapsed-blocks current-repo block-id] not)))
+
+(defn set-collapsed-block!
+  [block-id value]
+  (let [current-repo (get-current-repo)]
+    (set-state! [:ui/collapsed-blocks current-repo block-id] value)))
+
+(defn sub-collapsed
+  [block-id]
+  (sub [:ui/collapsed-blocks (get-current-repo) block-id]))

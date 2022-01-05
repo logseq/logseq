@@ -3378,12 +3378,21 @@
          (map (fn [x] (dissoc x :block/children))))
        (remove nil?)))))
 
+(defn- skip-collapsing-in-db?
+  []
+  (let [config (:config (state/get-editor-args))]
+    (or (:ref? config) (:block? config))))
+
 (defn collapse-block! [block-id]
   (when (collapsable? block-id)
-    (set-block-property! block-id :collapsed true)))
+    (when-not (skip-collapsing-in-db?)
+      (set-block-property! block-id :collapsed true))
+    (state/set-collapsed-block! block-id true)))
 
 (defn expand-block! [block-id]
-  (remove-block-property! block-id :collapsed))
+  (when-not (skip-collapsing-in-db?)
+    (remove-block-property! block-id :collapsed))
+  (state/set-collapsed-block! block-id false))
 
 (defn expand!
   ([e] (expand! e false))
