@@ -16,9 +16,10 @@
 
 (defonce file-watcher-chan "file-watcher")
 (defn send-file-watcher! [^js win type payload]
-  (.. win -webContents
-      (send file-watcher-chan
-            (bean/->js {:type type :payload payload}))))
+  (when-not (.isDestroyed win)
+    (.. win -webContents
+        (send file-watcher-chan
+              (bean/->js {:type type :payload payload})))))
 
 (defn- publish-file-event!
   [win dir path event]

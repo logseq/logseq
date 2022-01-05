@@ -1,6 +1,5 @@
 (ns frontend.extensions.graph
   (:require [cljs-bean.core :as bean]
-            [clojure.string :as string]
             [frontend.db.model :as model]
             [frontend.extensions.graph.pixi :as pixi]
             [frontend.handler.route :as route-handler]
@@ -31,15 +30,15 @@
 (defn on-click-handler [graph node event *focus-nodes *n-hops drag? dark?]
   ;; shift+click to select the page
   (if (or (gobj/get event "shiftKey") drag?)
-    ((when-not @*n-hops
-        ;; Don't trigger re-render
-       (swap! *focus-nodes
-              (fn [v]
-                (vec (distinct (conj v node))))))
+    (do
+      (when-not @*n-hops
+        (swap! *focus-nodes ;; Don't trigger re-render
+               (fn [v]
+                 (vec (distinct (conj v node))))))
       ;; highlight current node
-     (.setNodeAttribute (.-graph graph) node "parent" "ls-selected-nodes")
-     (highlight-neighbours! graph node (set @*focus-nodes) dark?)
-     (highlight-edges! graph node dark?))
+      (.setNodeAttribute (.-graph graph) node "parent" "ls-selected-nodes")
+      (highlight-neighbours! graph node (set @*focus-nodes) dark?)
+      (highlight-edges! graph node dark?))
     (when-not drag?
       (let [page-name (model/get-redirect-page-name node)]
         (.unhoverNode ^js graph node)

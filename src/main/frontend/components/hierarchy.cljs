@@ -13,27 +13,28 @@
 (defn get-relation
   [page]
   (when-let [page (or (text/get-nested-page-name page) page)]
-   (when (text/namespace-page? page)
-     (let [repo (state/get-current-repo)
-           namespace-pages (db/get-namespace-pages repo page)
-           parent-routes (db-model/get-page-namespace-routes repo page)
-           pages (->> (concat namespace-pages parent-routes)
-                      (distinct)
-                      (sort-by :block/name)
-                      (map (fn [page]
-                             (or (:block/original-name page) (:block/name page))))
-                      (map #(string/split % "/")))
-           page-namespace (db-model/get-page-namespace repo page)
-           page-namespace (util/get-page-original-name page-namespace)]
-       (cond
-         (seq pages)
-         pages
+    (when (or (text/namespace-page? page)
+              (:block/_namespace (db/entity [:block/name (util/page-name-sanity-lc page)])))
+      (let [repo (state/get-current-repo)
+            namespace-pages (db/get-namespace-pages repo page)
+            parent-routes (db-model/get-page-namespace-routes repo page)
+            pages (->> (concat namespace-pages parent-routes)
+                       (distinct)
+                       (sort-by :block/name)
+                       (map (fn [page]
+                              (or (:block/original-name page) (:block/name page))))
+                       (map #(string/split % "/")))
+            page-namespace (db-model/get-page-namespace repo page)
+            page-namespace (util/get-page-original-name page-namespace)]
+        (cond
+          (seq pages)
+          pages
 
-         page-namespace
-         [(string/split page-namespace "/")]
+          page-namespace
+          [(string/split page-namespace "/")]
 
-         :else
-         nil)))))
+          :else
+          nil)))))
 
 (rum/defc structures
   [page]

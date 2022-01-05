@@ -109,6 +109,7 @@
         "react-tweet-embed": "1.2.2",
         "reakit": "0.11.1",
         "threads": "1.6.5",
+        "url": "^0.11.0",
         "yargs-parser": "20.2.4"
     },
     "resolutions": {
@@ -129,5 +130,5 @@
         "pixi-graph-fork/@pixi/settings": "6.2.0",
         "pixi-graph-fork/@pixi/mixin-get-child-by-name": "6.2.0",
         "pixi-graph-fork/@pixi/math": "6.2.0"
-      }
+    }
 }
