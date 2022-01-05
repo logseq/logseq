@@ -137,6 +137,12 @@
    (parse-jwt)
    (:email)))
 
+(defn user-uuid []
+  (some->
+   (state/get-auth-id-token)
+   (parse-jwt)
+   (:sub)))
+
 (defn logged? []
   (boolean
    (some->

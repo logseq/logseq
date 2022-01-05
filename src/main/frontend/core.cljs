@@ -7,6 +7,7 @@
             [frontend.routes :as routes]
             [frontend.spec]
             [frontend.log]
+            [frontend.util.persist-var :as persist-var]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
             [logseq.api]
@@ -43,7 +44,8 @@
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
     (rum/mount (page/current-page) node)
-    (display-welcome-message)))
+    (display-welcome-message)
+    (persist-var/load-vars)))
 
 (defn ^:export init []
   ;; init is called ONCE when the page loads
