@@ -542,7 +542,7 @@
      :action (plugin-enabled-switcher t)}))
 
 (rum/defcs settings
-  < (rum/local :advanced ::active)
+  < (rum/local :general ::active)
   {:will-mount
    (fn [state]
      (state/load-app-user-cfgs)
@@ -553,12 +553,12 @@
      state)}
   rum/reactive
   [state]
-  (let [preferred-format (state/get-preferred-format)
+  (let [current-repo (state/sub :git/current-repo)
+        preferred-format (state/get-preferred-format)
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
         preferred-language (state/sub [:preferred-language])
         enable-timetracking? (state/enable-timetracking?)
-        current-repo (state/get-current-repo)
         enable-journals? (state/enable-journals? current-repo)
         enable-encryption? (state/enable-encryption? current-repo)
         enable-all-pages-public? (state/all-pages-public?)
@@ -599,7 +599,8 @@
 
             (when label
               [:li
-               {:class    (util/classnames [{:active (= label @*active)}])
+               {:key text
+                :class    (util/classnames [{:active (= label @*active)}])
                 :on-click #(reset! *active label)}
 
                [:a.flex.items-center
@@ -616,9 +617,8 @@
               (version-row t version))
             (language-row t preferred-language)
             (theme-modes-row t switch-theme system-theme? dark?)
-            (when-let [current-repo (state/sub :git/current-repo)]
-              [(edit-config-edn)
-               (edit-custom-css)])
+            (when current-repo (edit-config-edn))
+            (when current-repo (edit-custom-css))
             (keyboard-shortcuts-row t)]
 
            :editor
