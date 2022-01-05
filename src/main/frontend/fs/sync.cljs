@@ -692,6 +692,7 @@
 
                 (or need-sync-remote unknown) r))))))))
 
+;;; TODO: add synced-files history
 (deftype SyncState [^:mutable state ^:mutable current-local->remote-files ^:mutable current-remote->local-files]
   Object
   (update-state! [this v]
