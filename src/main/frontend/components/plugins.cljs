@@ -386,11 +386,21 @@
             :on-click toggle-fn
             :intent "link"))
 
-        (if market?
-          [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
-            :options {:on-click #(reload-market-fn)}}]
-          [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
-            :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
+        (concat (if market?
+                  [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/refresh-lists)]
+                    :options {:on-click #(reload-market-fn)}}]
+                  [{:title   [:span (ui/icon "rotate-clockwise") (t :plugin/check-all-updates)]
+                    :options {:on-click #(plugin-handler/check-enabled-for-updates (not= :plugins category))}}])
+                (when (state/developer-mode?)
+                  [{:hr true}
+                   {:title   [:span (ui/icon "file-code") "Open Preferences"]
+                    :options {:on-click
+                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
+                                 (js/apis.openPath (str root "/preferences.json")))}}
+                   {:title   [:span (ui/icon "bug") "Open " [:code " ~/.logseq"]]
+                    :options {:on-click
+                              #(p/let [root (plugin-handler/get-ls-dotdir-root)]
+                                 (js/apis.openPath root))}}]))
         {})
 
       ;; developer

@@ -516,10 +516,7 @@
           developer-mode?
           (fn []
             (let [mode (not developer-mode?)]
-              (state/set-developer-mode! mode)
-              (and mode (util/electron?)
-                   (when (js/confirm (t :developer-mode-alert))
-                     (js/logseq.api.relaunch)))))
+              (state/set-developer-mode! mode)))
           [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
 
 (rum/defc plugin-enabled-switcher
