@@ -46,7 +46,7 @@
                   #(state/pub-event! [:mobile/keyboard-did-show]))
     
     (.addListener App "appStateChange"
-                  #(let [repo (state/get-current-repo)]
+                  #(when-let [repo (state/get-current-repo)]
                      (nfs-handler/refresh! repo repo/refresh-cb)
                      ;; (notification/show! "Notes updated!" :success true)
                      ))))
