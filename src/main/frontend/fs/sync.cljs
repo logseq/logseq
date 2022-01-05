@@ -115,6 +115,10 @@
   (-compare [this ^FileTxn other]
     (compare seq-id (.-seq-id other)))
 
+  ISeqable
+  (-seq [_]
+    `([:from-path ~from-path] [:to-path ~to-path] [:updated ~updated] [:deleted ~deleted]))
+
   IPrintWithWriter
   (-pr-writer [coll w opts]
     (write-all w "#FileTxn[\"" from-path "\" -> \"" to-path
@@ -443,14 +447,17 @@
     (.deleted? filetxn)
     (delete-local-files rsapi graph-uuid base-path [(.-to-path filetxn)])))
 
-(defn- apply-filetxns [graph-uuid base-path filetxns]
-  (go
-    (loop [filetxns* filetxns]
-      (when (seq filetxns*)
-        (let [r (<! (apply-filetxn graph-uuid base-path (first filetxns*)))]
-          (if (instance? ExceptionInfo r)
-            r
-            (recur (next filetxns*))))))))
+(defn- apply-filetxns [^SyncState sync-state graph-uuid base-path filetxns]
+  (go-loop [filetxns* filetxns]
+    (when (seq filetxns*)
+      (let [filetxn (first filetxns*)
+            path (.-to-path filetxn)
+            _ (. sync-state (add-current-remote->local-files! [path]))
+            r (<! (apply-filetxn graph-uuid base-path filetxn))
+            _ (. sync-state (remove-current-remote->local-files! [path]))]
+        (if (instance? ExceptionInfo r)
+          r
+          (recur (next filetxns*)))))))
 
 (defn sync-remote-all-files!
   "pull all files' metadata and sync."
@@ -528,7 +535,7 @@
   (sync-local->remote-all-files! [this] "compare all local files to remote ones, sync if not equal.
   ensure local-txid = remote-txid before calling this func"))
 
-(deftype Remote->LocalSyncer [graph-uuid base-path repo *txid ^:mutable local->remote-syncer]
+(deftype Remote->LocalSyncer [graph-uuid base-path repo *txid ^SyncState sync-state ^:mutable local->remote-syncer]
   Object
   (set-local->remote-syncer! [_ s] (set! local->remote-syncer s))
   IRemote->LocalSync
@@ -544,7 +551,7 @@
                      (add-need-check-files! local->remote-syncer files-to-ignore)
                      (prn "filetxnset" filetxnset)
                      ;; TODO: precheck etag
-                     (let [apply-result (<! (apply-filetxns graph-uuid base-path filetxnset))]
+                     (let [apply-result (<! (apply-filetxns sync-state graph-uuid base-path filetxnset))]
                        (when-not (instance? ExceptionInfo apply-result)
                          (reset! *txid latest-txid)
                          ;; persist txid
@@ -556,12 +563,8 @@
           {:succ true}))))
 
   (sync-remote->local-all-files! [this]
-    (go
-      (exception->
-       (<! (get-remote-all-files-meta remoteapi graph-uuid))
-       (as-> v (or (prn "get-remote-all-files-meta:" v) v))
-       ;; TODO
-       ))))
+    ;; TODO
+    ))
 
 
 (defn- file-changed?
@@ -575,7 +578,7 @@
 (defn- contains-path? [regexps path]
   (reduce #(when (re-find %2 path) (reduced true)) false regexps))
 
-(deftype Local->RemoteSyncer [graph-uuid base-path repo
+(deftype Local->RemoteSyncer [graph-uuid base-path repo ^SyncState sync-state
                               ^:mutable rate ^:mutable files-need-check *txid ^:mutable remote->local-syncer]
   Object
   (filtered-chan [_ n]
@@ -646,7 +649,9 @@
                     ;; (rename-local-file)
                     )]
               (go
-                (let [r* (<! r)]
+                (let [_ (.add-current-local->remote-files! sync-state [path*])
+                      r* (<! r)
+                      _ (.remove-current-local->remote-files! sync-state [path*])]
                   (cond
                     (need-sync-remote? r*)
                     {:need-sync-remote true}
@@ -699,6 +704,10 @@
     (set! current-local->remote-files (set/union current-local->remote-files (set fs))))
   (add-current-remote->local-files! [_ fs]
     (set! current-remote->local-files (set/union current-remote->local-files (set fs))))
+  (remove-current-local->remote-files! [_ fs]
+    (set! current-local->remote-files (set/difference current-local->remote-files (set fs))))
+  (remove-current-remote->local-files! [_ fs]
+    (set! current-remote->local-files (set/difference current-remote->local-files (set fs))))
   (reset-current-local->remote-files! [_] (set! current-local->remote-files #{}))
   (reset-current-remote->local-files! [_] (set! current-remote->local-files #{}))
 
@@ -710,7 +719,7 @@
       (-pr-writer pr-map w opts))))
 
 
-(deftype SyncManager [graph-uuid base-path local->remote-syncer remote->local-syncer
+(deftype SyncManager [graph-uuid base-path ^SyncState sync-state local->remote-syncer remote->local-syncer
                       full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                       local-changes-chan ^:mutable ratelimit-local-changes-chan
                       *txid ^:mutable state ^:mutable _remote-change-chan ^:mutable _*ws ^:mutable _id]
@@ -718,6 +727,7 @@
   (schedule [this next-state & args]
     (println "[SyncManager" (str _id) "]" state "->" next-state)
     (set! state next-state)
+    (.update-state! sync-state next-state)
     (go
       (case state
         ::idle
@@ -812,20 +822,21 @@
             (.schedule this ::idle)))))))
 
 
-(defn sync-manager [graph-uuid base-path repo txid full-sync-chan stop-sync-chan
+(defn sync-manager [graph-uuid base-path repo txid sync-state full-sync-chan stop-sync-chan
                     remote->local-sync-chan local->remote-sync-chan local-changes-chan]
   (let [*txid (atom txid)
         local->remote-syncer (->Local->RemoteSyncer graph-uuid
                                                     base-path
-                                                    repo
+                                                    repo sync-state
                                                     10000
                                                     #{} *txid nil)
         remote->local-syncer (->Remote->LocalSyncer graph-uuid
                                                     base-path
-                                                    repo *txid nil)]
+                                                    repo *txid sync-state nil)]
     (.set-remote->local-syncer! local->remote-syncer remote->local-syncer)
     (.set-local->remote-syncer! remote->local-syncer local->remote-syncer)
-    (->SyncManager graph-uuid base-path local->remote-syncer remote->local-syncer full-sync-chan stop-sync-chan
+    (->SyncManager graph-uuid base-path sync-state local->remote-syncer remote->local-syncer
+                   full-sync-chan stop-sync-chan
                    remote->local-sync-chan local->remote-sync-chan local-changes-chan nil *txid nil nil nil nil)))
 
 (comment
@@ -842,9 +853,10 @@
   (def local->remote-sync-chan (chan))
   (vswap! *graph-base-path-map assoc graph-uuid {:repo (state/get-current-repo)
                                                  :base-path (config/get-repo-dir (state/get-current-repo))})
+  (def sync-state (->SyncState nil #{} #{}))
   (def sm (sync-manager graph-uuid
                         (:base-path (@*graph-base-path-map graph-uuid)) (:repo (@*graph-base-path-map graph-uuid))
-                        txid full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
+                        txid sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
                         local-changes-chan))
   (.. sm start)
   (offer! full-sync-chan true)
