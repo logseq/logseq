@@ -228,7 +228,10 @@
       position: relative;
 
       p {
-        @apply py-1 m-0;
+        @apply py-1 m-0 overflow-hidden overflow-ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
       }
 
       .ctl {
