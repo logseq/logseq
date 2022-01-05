@@ -182,11 +182,7 @@ a.button {
 }
 
 html.is-ios.is-safari {
-  
-  #main-container {
-    padding-top: 20px;
-  }
-
+    
   .cp__header {
     position: fixed !important;
     background-color: var(--ls-primary-background-color);
@@ -201,6 +197,10 @@ html.is-native-iphone,
 html.is-native-iphone-without-notch,
 html.is-native-ipad {
 
+    #main-container {
+        padding-top: 20px;
+    }
+    
     .cp__header > .r {
         display: flex;
     }
@@ -257,10 +257,46 @@ html.is-native-ipad {
   }
 
 html.is-native-iphone {
-  --ls-headbar-inner-top-padding: 36px;
+    --ls-headbar-inner-top-padding: 36px;
+
+    #main-container {
+        padding-top: 75px;
+    }
+
+    @media (orientation: landscape) {
+        --ls-headbar-inner-top-padding: 8px;
+        --ls-headbar-height: 2.5rem;
+
+        .cp__header {
+            @apply shadow z-10;
+        }
+
+        #main-container {
+            padding-top: 20px;
+        }
+        
+        #main-content{
+            padding-top: 0px;
+        }
+    }
 }
 
 html.is-native-iphone-without-notch {
-    --ls-headbar-inner-top-padding: 10px;
-    --ls-headbar-height: 3rem;
+    
+    --ls-headbar-inner-top-padding: 15px;
+    --ls-headbar-height: 2.5rem;
+
+    @media (orientation: landscape) {
+
+        --ls-headbar-inner-top-padding: 0px;
+        --ls-headbar-height: 2.5rem;
+     
+        .cp__header {
+            @apply shadow z-10;
+        }
+
+        #main-container {
+            padding-top: 20px;
+        }
+    }
 }
