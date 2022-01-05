@@ -721,7 +721,9 @@
                         (config/get-file-extension format))
               file-path (str "/" path)
               repo-dir (config/get-repo-dir repo)]
-          (p/let [file-exists? (fs/file-exists? repo-dir file-path)
+          (p/let [_ (when (mobile-util/native-ios?)
+                      (.downloadFilesFromiCloud mobile-util/download-icloud-files))
+                  file-exists? (fs/file-exists? repo-dir file-path)
                   file-content (when file-exists?
                                  (fs/read-file repo-dir file-path))]
             (when (and (db/page-empty? repo today-page)
