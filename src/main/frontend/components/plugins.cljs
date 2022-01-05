@@ -299,14 +299,15 @@
 (rum/defc panel-control-tabs
   < rum/static
   [t search-key *search-key category *category
-   sort-by *sort-by selected-unpacked-pkg market? reload-market-fn]
+   sort-by *sort-by selected-unpacked-pkg
+   market? develop-mode? reload-market-fn]
 
   (let [*search-ref (rum/create-ref)]
     [:div.mb-2.flex.justify-between.control-tabs.relative
      [:div.flex.items-center.l
       (category-tabs t category #(reset! *category %))
 
-      (when-not market?
+      (when (and develop-mode? (not market?))
         [:div
          (ui/tippy {:html  [:div (t :plugin/unpacked-tips)]
                     :arrow true}
@@ -436,6 +437,7 @@
         installed-plugins (state/sub :plugin/installed-plugins)
         installing (state/sub :plugin/installing)
         online? (state/sub :network/online?)
+        develop-mode? (state/sub :ui/developer-mode?)
         *search-key (::search-key state)
         *category (::category state)
         *sort-by (::sort-by state)
@@ -477,8 +479,8 @@
          t
          @*search-key *search-key
          @*category *category
-         @*sort-by *sort-by
-         nil true (::reload state))
+         @*sort-by *sort-by nil true
+         develop-mode? (::reload state))
 
        (cond
          (not online?)
@@ -516,6 +518,7 @@
   (let [installed-plugins (state/sub :plugin/installed-plugins)
         installed-plugins (vals installed-plugins)
         updating (state/sub :plugin/installing)
+        develop-mode? (state/sub :ui/developer-mode?)
         selected-unpacked-pkg (state/sub :plugin/selected-unpacked-pkg)
         coming-updates (state/sub :plugin/updates-coming)
         *sort-by (::sort-by state)
@@ -550,7 +553,7 @@
          @*category *category
          @*sort-by *sort-by
          selected-unpacked-pkg
-         false nil)
+         false develop-mode? nil)
 
        [:div.cp__plugins-item-lists.grid-cols-1.md:grid-cols-2.lg:grid-cols-3
         (for [item sorted-plugins]
