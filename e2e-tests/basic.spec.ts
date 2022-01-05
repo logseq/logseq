@@ -1,5 +1,7 @@
 import { expect } from '@playwright/test'
-import { test } from './fixtures'
+import fs from 'fs/promises'
+import path from 'path'
+import { test, graphDir } from './fixtures'
 import { randomString, createRandomPage, newBlock } from './utils'
 
 
@@ -41,7 +43,7 @@ test('search', async ({ page }) => {
 })
 
 test('create page and blocks', async ({ page }) => {
-  await createRandomPage(page)
+  const pageTitle = await createRandomPage(page)
 
   // do editing
   await page.fill(':nth-match(textarea, 1)', 'this is my first bullet')
@@ -81,6 +83,21 @@ test('create page and blocks', async ({ page }) => {
   await page.keyboard.press('Escape')
   await page.waitForTimeout(500)
   expect(await page.$$('.ls-block')).toHaveLength(5)
+
+  await page.waitForTimeout(500)
+
+  const contentOnDisk = await fs.readFile(
+    path.join(graphDir, `pages/${pageTitle}.md`),
+    'utf8'
+  )
+
+  expect(contentOnDisk.trim()).toEqual(`
+- this is my first bullet
+- this is my second bullet
+	- this is my third bullet
+	- continue editing test
+	  continue
+- test ok`.trim())
 })
 
 test('delete and backspace', async ({ page }) => {
