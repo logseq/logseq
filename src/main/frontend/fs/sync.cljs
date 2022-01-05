@@ -91,6 +91,10 @@
              (<! (request api-name body token refresh-token-fn (inc retry-count)))))
          (:resp resp))))))
 
+(defprotocol IRelativePath
+  (-relative-path [this]))
+
+;from-path, to-path is relative path
 (deftype FileTxn [from-path to-path updated deleted seq-id]
   Object
   (rename [_ to]
@@ -103,6 +107,10 @@
     (not= from-path to-path))
   (updated? [_] updated)
   (deleted? [_] deleted)
+
+  IRelativePath
+  (-relative-path [_] to-path)
+
   IEquiv
   (-equiv [coll ^FileTxn other]
     (and (= from-path (.-from-path other))
@@ -210,6 +218,9 @@
               (string/starts-with? path "/") (string/replace-first "/" "")
               remote? (remove-user-graph-uuid-prefix))))
     normalized-path)
+
+  IRelativePath
+  (-relative-path [_] path)
 
   IEquiv
   (-equiv [o ^FileMetadata other]
@@ -391,7 +402,9 @@
                                  (assoc :GraphUUID graph-uuid-opt))))
   (list-remote-graphs [this]
     (.request this "list_graphs"))
+
   (get-diff [this graph-uuid from-txid]
+    ;; TODO: path in transactions should be relative path(now s3 key, which includes graph-uuid and user-uuid)
     (go
       (exception->
        (<! (.request this "get_diff" {:GraphUUID graph-uuid :FromTXId from-txid}))
@@ -511,6 +524,9 @@
 (def local-changes-chan (chan 100))
 
 (deftype FileChangeEvent [type dir path stat]
+  IRelativePath
+  (-relative-path [_] (remove-dir-prefix dir path))
+
   IPrintWithWriter
   (-pr-writer [coll w opts]
     (write-all w (str {:type type :base-path dir :path path}))))
@@ -526,8 +542,6 @@
   (sync-remote->local-all-files! [this] "sync all files, return ExceptionInfo when error occurs"))
 
 (defprotocol ILocal->RemoteSync
-  (add-need-check-files! [this new] "if file(contained in files-need-check) changes,
-  sync it after check remote&local-md5")
   (get-ignore-files [this] "ignored-files won't be synced to remote")
   (ratelimit [this from-chan] "get watched local file-change events from FROM-CHAN,
   return chan returning events with rate limited")
@@ -546,9 +560,7 @@
              (<! (get-diff remoteapi graph-uuid @*txid))
              (as-> [diff-txns latest-txid]
                  (when (number? latest-txid)
-                   (let [filetxnset (update-txns (.-EMPTY FileTxnSet) diff-txns)
-                         files-to-ignore (.related-files filetxnset)]
-                     (add-need-check-files! local->remote-syncer files-to-ignore)
+                   (let [filetxnset (update-txns (.-EMPTY FileTxnSet) diff-txns)]
                      (prn "filetxnset" filetxnset)
                      ;; TODO: precheck etag
                      (let [apply-result (<! (apply-filetxns sync-state graph-uuid base-path filetxnset))]
@@ -579,7 +591,7 @@
   (reduce #(when (re-find %2 path) (reduced true)) false regexps))
 
 (deftype Local->RemoteSyncer [graph-uuid base-path repo ^SyncState sync-state
-                              ^:mutable rate ^:mutable files-need-check *txid ^:mutable remote->local-syncer]
+                              ^:mutable rate *txid ^:mutable remote->local-syncer]
   Object
   (filtered-chan [_ n]
     "check base-path"
@@ -588,8 +600,6 @@
   (set-remote->local-syncer! [_ s] (set! remote->local-syncer s))
 
   ILocal->RemoteSync
-  (add-need-check-files! [_ new] (set! files-need-check (set/union files-need-check new)))
-
   (get-ignore-files [_] #{#"logseq/graphs-txid.edn$" #"logseq/bak/.*"})
 
   (ratelimit [this from-chan]
@@ -607,19 +617,9 @@
 
             (some? e)
             (do
-              (if (<! (file-changed? graph-uuid (remove-dir-prefix (.-dir e) (.-path e)) base-path))
-                ;; (set! files-need-check (disj files-need-check (.-path e)))
-                (do
-                  (conj! tcoll e))
-                (prn "file unchanged" (remove-dir-prefix (.-dir e) (.-path e))))
-              ;; ;; check etag(md5) of changed-file
-              ;; (if (.has files-need-check (remove-dir-prefix (.-dir e) (.-path e)))
-              ;;   (do
-              ;;     (prn "found in files-need-check" (.-path e))
-              ;;     (when (file-changed? graph-uuid (remove-dir-prefix (.-dir e) (.-path e)) base-path)
-              ;;       (set! files-need-check (disj files-need-check (.-path e)))
-              ;;       (conj! tcoll e)))
-              ;;   (conj! tcoll e))
+              (if (<! (file-changed? graph-uuid (-relative-path e) base-path))
+                (conj! tcoll e)
+                (prn "file unchanged" (-relative-path e)))
               (recur timeout-c tcoll))
 
             (nil? e)
@@ -629,14 +629,12 @@
       c))
 
   (sync-local->remote! [this ^FileChangeEvent e]
-    (let [type (.-type e)
-          path (.-path e)]
-      (if (and (some? path)
-               (contains-path? (get-ignore-files this) (remove-dir-prefix (.-dir e) path)))
+    (let [type (.-type e)]
+      (if (contains-path? (get-ignore-files this) (-relative-path e))
         (go {:succ true})               ; ignore
         (do
           (prn "sync-local->remote!" e)
-          (let [path* (remove-dir-prefix (.-dir e) path)]
+          (let [path* (-relative-path e)]
             (let [r
                   (cond
                     (or (= "add" type) (= "change" type))
@@ -682,7 +680,7 @@
                                (mapv
                                 #(->FileChangeEvent "change" base-path (.get-normalized-path ^FileMetadata %) nil))
                                (filterv (complement
-                                         #(contains-path? ignore-files (remove-dir-prefix (.-dir %) (.-path %))))))]
+                                         #(contains-path? ignore-files (-relative-path %)))))]
         (loop [es change-events]
           (if-not es
             {:succ true}
@@ -690,26 +688,35 @@
                   {:keys [succ need-sync-remote unknown] :as r} (<! (sync-local->remote! this e))]
               (cond
                 succ
-                (do
-                  ;; TODO: update txid
-                  (recur (next es)))
+                (recur (next es))
 
                 (or need-sync-remote unknown) r))))))))
 
-
 (deftype SyncState [^:mutable state ^:mutable current-local->remote-files ^:mutable current-remote->local-files]
   Object
-  (update-state! [_ v] (set! state v))
-  (add-current-local->remote-files! [_ fs]
-    (set! current-local->remote-files (set/union current-local->remote-files (set fs))))
-  (add-current-remote->local-files! [_ fs]
-    (set! current-remote->local-files (set/union current-remote->local-files (set fs))))
-  (remove-current-local->remote-files! [_ fs]
-    (set! current-local->remote-files (set/difference current-local->remote-files (set fs))))
-  (remove-current-remote->local-files! [_ fs]
-    (set! current-remote->local-files (set/difference current-remote->local-files (set fs))))
-  (reset-current-local->remote-files! [_] (set! current-local->remote-files #{}))
-  (reset-current-remote->local-files! [_] (set! current-remote->local-files #{}))
+  (update-state! [this v]
+    (set! state v)
+    (state/set-file-sync-state v))
+  (add-current-local->remote-files! [this fs]
+    (set! current-local->remote-files (set/union current-local->remote-files (set fs)))
+    (state/set-file-sync-uploading-files current-local->remote-files))
+  (add-current-remote->local-files! [this fs]
+    (set! current-remote->local-files (set/union current-remote->local-files (set fs)))
+    (state/set-file-sync-downloading-files current-remote->local-files))
+  (remove-current-local->remote-files! [this fs]
+    (set! current-local->remote-files (set/difference current-local->remote-files (set fs)))
+    (state/set-file-sync-uploading-files current-local->remote-files))
+  (remove-current-remote->local-files! [this fs]
+    (set! current-remote->local-files (set/difference current-remote->local-files (set fs)))
+    (state/set-file-sync-downloading-files current-remote->local-files))
+  (reset-current-local->remote-files! [this]
+    (set! current-local->remote-files #{})
+    (state/set-file-sync-uploading-files current-local->remote-files))
+  (reset-current-remote->local-files! [this]
+    (set! current-remote->local-files #{})
+    (state/set-file-sync-downloading-files current-remote->local-files))
+
+  (stopped? [_] (or (nil? state) (= ::stop state)))
 
   IPrintWithWriter
   (-pr-writer [coll w opts]
@@ -752,7 +759,9 @@
 
   (stop [this]
     (ws-stop! _*ws)
-    (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path]))
+    (debug/pprint ["stop sync-manager, graph-uuid" graph-uuid "base-path" base-path])
+    (.update-state! sync-state ::stop)
+    )
 
   (idle [this]
     (go
@@ -829,7 +838,7 @@
                                                     base-path
                                                     repo sync-state
                                                     10000
-                                                    #{} *txid nil)
+                                                    *txid nil)
         remote->local-syncer (->Remote->LocalSyncer graph-uuid
                                                     base-path
                                                     repo *txid sync-state nil)]
@@ -869,3 +878,30 @@
        (take-while identity))
 
   )
+
+(def full-sync-chan (chan))
+(def stop-sync-chan (chan 1))
+(def remote->local-sync-chan (chan))
+(def local->remote-sync-chan (chan))
+
+(defn sync-start []
+  (let [graph-uuid (first @graphs-txid)
+        txid (second @graphs-txid)
+        sync-state (->SyncState nil #{} #{})
+        sm (sync-manager graph-uuid
+                         (config/get-repo-dir (state/get-current-repo)) (state/get-current-repo)
+                         txid sync-state full-sync-chan stop-sync-chan remote->local-sync-chan local->remote-sync-chan
+                         local-changes-chan)]
+    ;; drain `local-changes-chan`
+    (->> (repeatedly #(poll! local-changes-chan))
+         (take-while identity))
+
+    (.start sm)
+    (state/set-file-sync-state-manager sync-state)
+    (state/set-file-sync-manager sm)))
+
+
+(defn sync-stop []
+  (when-let [sm (state/get-file-sync-manager)]
+    (println "stopping sync-manager")
+    (.stop sm)))

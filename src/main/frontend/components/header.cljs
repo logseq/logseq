@@ -20,7 +20,8 @@
             [cljs-bean.core :as bean]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.mobile.util :as mobile-util]))
+            [frontend.mobile.util :as mobile-util]
+            [frontend.fs.sync :as fs-sync]))
 
 (rum/defc home-button []
   (ui/with-shortcut :go/home "left"
@@ -34,7 +35,7 @@
 
 (rum/defc login < rum/reactive
   []
-  (let [_ (rum/react user-handler/*token-updated)])
+  (let [_ (state/sub :auth/id-token)])
   (rum/with-context [[t] i18n/*tongue-context*]
     (when-not config/publishing?
       (if (user-handler/logged?)
@@ -43,6 +44,21 @@
         [:a.button.text-sm.font-medium.block {:on-click (fn []
                                                           (js/window.open "https://logseq-test.auth.us-east-2.amazoncognito.com/oauth2/authorize?client_id=4fi79en9aurclkb92e25hmu9ts&response_type=code&scope=email+openid+phone&redirect_uri=logseq%3A%2F%2Fauth-callback"))}
          [:span (t :login)]]))))
+
+(rum/defc file-sync < rum/reactive
+  []
+  (let [_ (state/sub :auth/id-token)
+        _ (state/sub :file-sync/sync-state)]
+    (when-not config/publishing?
+      (when (user-handler/logged?)
+        (if (as-> (state/get-file-sync-state-manager) ^fs-sync/SyncState sync-state
+              (or (nil? sync-state) (.stopped? sync-state)))
+          [:a.button
+           {:on-click fs-sync/sync-start}
+           (ui/icon "cloud-off" {:style {:fontSize ui/icon-size}})]
+          [:a.button
+           {:on-click fs-sync/sync-stop}
+           (ui/icon "cloud" {:style {:fontSize ui/icon-size}})])))))
 
 (rum/defc left-menu-button < rum/reactive
   [{:keys [on-click]}]
@@ -183,9 +199,8 @@
              (ui/icon "search" {:style {:fontSize ui/icon-size}})]))]
 
        [:div.r.flex
+        (file-sync)
         (login)
-
-
         (when plugin-handler/lsp-enabled?
           (plugins/hook-ui-items :toolbar))
 

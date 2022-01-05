@@ -101,10 +101,6 @@
 
 ;;; userinfo, token, login/logout, ...
 
-(def *token-updated
-  "used to notify other parts that tokens updated"
-  (atom false))
-
 (def *login-notify
   "used to notify other parts that login/logout happened,
   true when login, false when logout"
@@ -155,19 +151,16 @@
   (state/set-auth-id-token nil)
   (state/set-auth-access-token nil)
   (state/set-auth-refresh-token nil)
-  (swap! *token-updated not)
   (reset! *login-notify false))
 
 (defn- set-tokens!
   ([id-token access-token]
    (state/set-auth-id-token id-token)
-   (state/set-auth-access-token access-token)
-   (swap! *token-updated not))
+   (state/set-auth-access-token access-token))
   ([id-token access-token refresh-token]
    (state/set-auth-id-token id-token)
    (state/set-auth-access-token access-token)
-   (state/set-auth-refresh-token refresh-token)
-   (swap! *token-updated not)))
+   (state/set-auth-refresh-token refresh-token)))
 
 (defn login-callback [code]
   (go
