@@ -3335,7 +3335,7 @@
   (when-let [page (or (state/get-current-page)
                       (date/today))]
     (let [block? (util/uuid-string? page)
-          block-id (or (and block? (uuid page)) root-block)
+          block-id (or root-block (and block? (uuid page)))
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)
                    (db/get-page-blocks-no-cache page))
