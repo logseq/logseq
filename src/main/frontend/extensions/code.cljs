@@ -147,6 +147,9 @@
 (def textarea-ref-name "textarea")
 (def codemirror-ref-name "codemirror-instance")
 
+(defn- extra-codemirror-options []
+  (get (state/get-config)
+       :editor/extra-codemirror-options {}))
 
 (defn- save-file-or-block-when-blur-or-esc!
   [editor textarea config state]
@@ -206,7 +209,7 @@
 (defn render!
   [state]
   (let [esc-pressed? (atom nil)
-        [config id attr code theme] (:rum/args state)
+        [config id attr _code theme] (:rum/args state)
         default-open? (and (:editor/code-mode? @state/state)
                            (= (:block/uuid (state/get-edit-block))
                               (get-in config [:block :block/uuid])))
@@ -217,22 +220,26 @@
                (text->cm-mode original-mode :name))
         lisp-like? (contains? #{"scheme" "lisp" "clojure" "edn"} mode)
         textarea (gdom/getElement id)
+        default-cm-options {:theme (str "solarized " theme)
+                            :autoCloseBrackets true
+                            :lineNumbers true
+                            :matchBrackets lisp-like?
+                            :styleActiveLine true}
+        cm-options (merge default-cm-options
+                          (extra-codemirror-options)
+                          {:mode mode
+                           :extraKeys #js {"Esc"
+                                        (fn [cm]
+                                          (reset! esc-pressed? true)
+                                          (save-file-or-block-when-blur-or-esc! cm textarea config state)
+                                          (when-let [block-id (:block/uuid config)]
+                                            (let [block (db/pull [:block/uuid block-id])]
+                                              (editor-handler/edit-block! block :max block-id)))
+                                             ;; TODO: return "handled" or false doesn't always prevent event bubbles
+                                          (js/setTimeout #(reset! esc-pressed? false) 10))}})
+        _ (js/console.log (clj->js cm-options))
         editor (when textarea
-                 (from-textarea textarea
-                                #js {:mode mode
-                                     :theme (str "solarized " theme)
-                                     :matchBrackets lisp-like?
-                                     :autoCloseBrackets true
-                                     :lineNumbers true
-                                     :styleActiveLine true
-                                     :extraKeys #js {"Esc" (fn [cm]
-                                                             (reset! esc-pressed? true)
-                                                             (save-file-or-block-when-blur-or-esc! cm textarea config state)
-                                                             (when-let [block-id (:block/uuid config)]
-                                                               (let [block (db/pull [:block/uuid block-id])]
-                                                                 (editor-handler/edit-block! block :max block-id)))
-                                                             ;; TODO: return "handled" or false doesn't always prevent event bubbles
-                                                             (js/setTimeout #(reset! esc-pressed? false) 10))}}))]
+                 (from-textarea textarea (clj->js cm-options)))]
     (when editor
       (let [textarea-ref (rum/ref-node state textarea-ref-name)]
         (gobj/set textarea-ref codemirror-ref-name editor))

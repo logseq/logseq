@@ -1,4 +1,6 @@
-{ ;; Currently, we support either "Markdown" or "Org".
+{:meta/version 1
+ 
+ ;; Currently, we support either "Markdown" or "Org".
  ;; This can overwrite your global preference so that
  ;; maybe your personal preferred format is Org but you'd
  ;; need to use Markdown for some projects.
@@ -151,8 +153,6 @@
  ;; Rose is red, violet's blue. Life's ordered: Org assists you.
  :macros {}
 
- :markdown/version 2
-
  ;; The default level to be opened for the linked references.
  ;; For example, if we have some example blocks like this:
  ;; - a [[page]] (level 1)
@@ -186,4 +186,7 @@
  ;; Mobile photo uploading setup
  ;; :mobile/photo
  ;; {:allow-editing? true}
+
+ ;; Extra CodeMirror options
+ ;; :editor/extra-codemirror-options {:keyMap "emacs" :lineWrapping true}
  }
