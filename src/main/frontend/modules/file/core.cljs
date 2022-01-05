@@ -131,7 +131,7 @@
                 (if journal-page?
                   (date/journal-title->default title)
                   (-> (or (:block/original-name page) (:block/name page))
-                      (util/page-name-sanity))) "."
+                      (util/page-name-sanity true))) "."
                 (if (= format "markdown") "md" format))
           file-path (str "/" path)
           dir (config/get-repo-dir repo)]
