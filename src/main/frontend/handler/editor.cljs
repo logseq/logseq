@@ -3122,13 +3122,26 @@
           [:org _ true true]
           nil)))))
 
+(defn paste-text-in-one-block-at-point
+  []
+  (utils/getClipText
+   (fn [clipboard-data]
+     (when-let [_ (state/get-input)]
+       (state/append-current-edit-content! clipboard-data)))
+   (fn [error]
+     (js/console.error error))))
+
 (defn editor-on-paste!
   [id]
   (fn [e]
     (state/set-state! :editor/on-paste? true)
-    (let [text (.getData (gobj/get e "clipboardData") "text")]
+    (let [text (.getData (gobj/get e "clipboardData") "text")
+          input (state/get-input)]
       (if-not (string/blank? text)
-        (paste-text text e)
+        (if (thingatpt/org-admonition&src-at-point input)
+          (do (util/stop e)
+              (paste-text-in-one-block-at-point))
+          (paste-text text e))
         (let [_handled
               (let [clipboard-data (gobj/get e "clipboardData")
                     files (.-files clipboard-data)]
@@ -3335,7 +3348,7 @@
   (when-let [page (or (state/get-current-page)
                       (date/today))]
     (let [block? (util/uuid-string? page)
-          block-id (or (and block? (uuid page)) root-block)
+          block-id (or root-block (and block? (uuid page)))
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)
                    (db/get-page-blocks-no-cache page))
@@ -3522,16 +3535,6 @@
                                         block-content-without-prop
                                         (subs current-block-content end))]
                 (state/set-block-content-and-last-pos! input block-content* 1)))))))))
-
-
-(defn paste-text-in-one-block-at-point
-  []
-  (utils/getClipText
-   (fn [clipboard-data]
-     (when-let [_ (state/get-input)]
-       (state/append-current-edit-content! clipboard-data)))
-   (fn [error]
-     (js/console.error error))))
 
 (defn copy-current-ref
   [block-id]

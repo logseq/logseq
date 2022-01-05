@@ -257,11 +257,11 @@
   (when original-page-name
     (let [page-name (-> (string/lower-case original-page-name)
                         (util/page-name-sanity))
-         day (date/journal-title->int page-name)]
-     (if day
-       (let [original-page-name (date/int->journal-title day)]
-         [original-page-name (string/lower-case original-page-name) day])
-       [original-page-name page-name day]))))
+          day (date/journal-title->int page-name)]
+      (if day
+        (let [original-page-name (date/int->journal-title day)]
+          [original-page-name (string/lower-case original-page-name) day])
+        [original-page-name page-name day]))))
 
 (defn page-name->map
   [original-page-name with-id?]

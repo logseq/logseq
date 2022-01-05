@@ -149,7 +149,7 @@
 (defn- compute-new-file-path
   [old-path new-name]
   (let [result (string/split old-path "/")
-        file-name (util/page-name-sanity new-name)
+        file-name (util/page-name-sanity new-name true)
         ext (last (string/split (last result) "."))
         new-file (str file-name "." ext)
         parts (concat (butlast result) [new-file])]
@@ -355,12 +355,12 @@
     (doseq [page-id page-ids]
       (outliner-file/sync-to-file page-id))))
 
-(defn- rename-page-aux 
+(defn- rename-page-aux
   "Only accepts unsanitized page names"
   [old-name new-name redirect?]
   (let [old-page-name       (util/page-name-sanity-lc old-name)
-        new-file-name       (util/page-name-sanity new-name)
-        new-page-name       (string/lower-case new-file-name)
+        new-file-name       (util/page-name-sanity new-name true)
+        new-page-name       (util/page-name-sanity-lc new-name)
         repo                (state/get-current-repo)
         page                (db/pull [:block/name old-page-name])]
     (when (and repo page)
@@ -721,9 +721,12 @@
                         (config/get-file-extension format))
               file-path (str "/" path)
               repo-dir (config/get-repo-dir repo)]
-          (p/let [file-exists? (fs/file-exists? repo-dir file-path)]
+          (p/let [file-exists? (fs/file-exists? repo-dir file-path)
+                  file-content (when file-exists?
+                                 (fs/read-file repo-dir file-path))]
             (when (and (db/page-empty? repo today-page)
-                       (not file-exists?))
+                       (or (not file-exists?)
+                           (and file-exists? (string/blank? file-content))))
               (create! title {:redirect? false
                               :split-namespace? false
                               :create-first-block? (not template)

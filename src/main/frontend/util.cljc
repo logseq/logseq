@@ -1107,7 +1107,7 @@
          (when (uuid-string? block-id)
            (first (array-seq (js/document.getElementsByClassName block-id))))))))
 
-(def windows-reserved-chars #"[\\/:\\*\\?\"<>|]+")
+(def windows-reserved-chars #"[:\\*\\?\"<>|]+")
 
 (defn include-windows-reserved-chars?
   [s]
@@ -1138,15 +1138,19 @@
 
 (defn page-name-sanity
   "Sanitize the page-name for file name"
-  [page-name]
-  (some-> page-name
-      (remove-boundary-slashes)
-      (string/replace #"/" ".")
-      ;; Windows reserved path characters
-      (string/replace windows-reserved-chars "_")
-      ;; for android filesystem compatiblity
-      (string/replace #"[\\#|%]+" "_")
-      (normalize)))
+  ([page-name]
+   (page-name-sanity page-name false))
+  ([page-name replace-slash?]
+   (let [page (some-> page-name
+                      (remove-boundary-slashes)
+                      ;; Windows reserved path characters
+                      (string/replace windows-reserved-chars "_")
+                      ;; for android filesystem compatiblity
+                      (string/replace #"[\\#|%]+" "_")
+                      (normalize))]
+     (if replace-slash?
+       (string/replace page #"/" ".")
+       page))))
 
 (defn page-name-sanity-lc
   "Sanitize the query string for a page"
