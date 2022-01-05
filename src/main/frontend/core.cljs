@@ -11,7 +11,7 @@
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
             [logseq.api]
-            [frontend.fs.sync]))
+            [frontend.fs.sync :as sync]))
 
 (defn set-router!
   []
@@ -65,4 +65,5 @@
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
+  (sync/sync-stop)
   (js/console.log "stop"))
