@@ -14,6 +14,8 @@
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		5FD5BB71278579F5008E6875 /* DownloadiCloudFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FD5BB70278579F5008E6875 /* DownloadiCloudFiles.swift */; };
+		5FD5BB73278579FF008E6875 /* DownloadiCloudFiles.m in Sources */ = {isa = PBXBuildFile; fileRef = 5FD5BB72278579FF008E6875 /* DownloadiCloudFiles.m */; };
 		7435D10C2704659F00AB88E0 /* FolderPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10B2704659F00AB88E0 /* FolderPicker.swift */; };
 		7435D10F2704660B00AB88E0 /* FolderPicker.m in Sources */ = {isa = PBXBuildFile; fileRef = 7435D10E2704660B00AB88E0 /* FolderPicker.m */; };
 		C3718FCEFAECFFB66E93FFC4 /* Pods_Logseq.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B2E26D73EA097D0B3B22942E /* Pods_Logseq.framework */; };
@@ -32,6 +34,8 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		5FD5BB70278579F5008E6875 /* DownloadiCloudFiles.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DownloadiCloudFiles.swift; sourceTree = "<group>"; };
+		5FD5BB72278579FF008E6875 /* DownloadiCloudFiles.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = DownloadiCloudFiles.m; sourceTree = "<group>"; };
 		7435D10B2704659F00AB88E0 /* FolderPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderPicker.swift; sourceTree = "<group>"; };
 		7435D10D2704660A00AB88E0 /* App-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "App-Bridging-Header.h"; sourceTree = "<group>"; };
 		7435D10E2704660B00AB88E0 /* FolderPicker.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FolderPicker.m; sourceTree = "<group>"; };
@@ -79,6 +83,8 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				5FD5BB72278579FF008E6875 /* DownloadiCloudFiles.m */,
+				5FD5BB70278579F5008E6875 /* DownloadiCloudFiles.swift */,
 				D32752BF2754C5AB0039291C /* AppDebug.entitlements */,
 				D32752BC275496A60039291C /* App.entitlements */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
@@ -234,6 +240,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				5FD5BB71278579F5008E6875 /* DownloadiCloudFiles.swift in Sources */,
+				5FD5BB73278579FF008E6875 /* DownloadiCloudFiles.m in Sources */,
 				D3D62A0A275C92880003FBDC /* FileContainer.swift in Sources */,
 				D3D62A0C275C928F0003FBDC /* FileContainer.m in Sources */,
 				7435D10F2704660B00AB88E0 /* FolderPicker.m in Sources */,

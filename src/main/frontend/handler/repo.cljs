@@ -635,7 +635,9 @@
   (when-let [repo (state/get-current-repo)]
     (let [local? (config/local-db? repo)]
       (if local?
-        (p/let [_ (metadata-handler/set-pages-metadata! repo)]
+        (p/let [_ (when (mobile/native-ios?)
+                    (.downloadFilesFromiCloud mobile/download-icloud-files))
+                _ (metadata-handler/set-pages-metadata! repo)]
           (nfs-rebuild-index! repo ok-handler))
         (rebuild-index! repo))
       (js/setTimeout
