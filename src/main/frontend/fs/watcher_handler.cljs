@@ -8,6 +8,7 @@
             [frontend.handler.extract :as extract]
             [frontend.handler.file :as file-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.handler.ui :as ui-handler]
             [lambdaisland.glogi :as log]
             [electron.ipc :as ipc]
             [promesa.core :as p]
@@ -72,6 +73,12 @@
           (when-let [page-name (db/get-file-page path)]
             (println "Delete page: " page-name ", file path: " path ".")
             (page-handler/delete! page-name #() :delete-file? false))
+
+          (and (contains? #{"add" "change" "unlink"} type)
+               (string/ends-with? path "logseq/custom.css"))
+          (do
+            (println "reloading custom.css")
+            (ui-handler/add-style-if-exists!))
 
           (contains? #{"add" "change" "unlink"} type)
           nil

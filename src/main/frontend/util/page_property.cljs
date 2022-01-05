@@ -48,6 +48,7 @@
    content kvs))
 
 (defn add-property!
+  "Sanitized page-name, unsanitized key / value"
   [page-name key value]
   (when-let [page (db/pull [:block/name (string/lower-case page-name)])]
     (let [repo (state/get-current-repo)
