@@ -92,6 +92,13 @@
                       (error-handler error)
                       (log/error :write-file-failed error)))))))))
 
+(defn- open-dir []
+  (p/let [dir-path (util/mocked-open-dir-path)
+          result (if dir-path
+                   (ipc/ipc "getFiles" dir-path)
+                   (ipc/ipc "openDir" {}))]
+    result))
+
 (defrecord Node []
   protocol/Fs
   (mkdir! [this dir]
@@ -124,7 +131,7 @@
     (let [path (concat-path dir path)]
       (ipc/ipc "stat" path)))
   (open-dir [this ok-handler]
-    (ipc/ipc "openDir" {}))
+    (open-dir))
   (get-files [this path-or-handle ok-handler]
     (ipc/ipc "getFiles" path-or-handle))
   (watch-dir! [this dir]

@@ -106,7 +106,12 @@
           html-str     (str "data:text/html;charset=UTF-8,"
                             (js/encodeURIComponent raw-html-str))]
       (if (util/electron?)
-        (js/window.apis.exportPublishAssets raw-html-str (config/get-custom-css-path) (config/get-repo-dir repo) (clj->js asset-filenames))
+        (js/window.apis.exportPublishAssets
+         raw-html-str
+         (config/get-custom-css-path)
+         (config/get-repo-dir repo)
+         (clj->js asset-filenames)
+         (util/mocked-open-dir-path))
 
         (when-let [anchor (gdom/getElement "download-as-html")]
           (.setAttribute anchor "href" html-str)

@@ -5,6 +5,7 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.text :as text]
+            [frontend.util :as util]
             [frontend.util.drawer :as drawer]
             [frontend.util.property :as property]
             ["fuse.js" :as fuse]))
@@ -19,7 +20,8 @@
   [{:block/keys [uuid content format page] :as block}]
   (when-let [result (->> (text/remove-level-spaces content format)
                          (drawer/remove-logbook)
-                         (property/remove-built-in-properties format))]
+                         (property/remove-built-in-properties format)
+                         (util/normalize))]
     {:id (:db/id block)
      :uuid (str uuid)
      :page page

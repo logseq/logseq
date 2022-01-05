@@ -67,8 +67,9 @@
 
 (defn- delta-y
   [e]
-  (let [rect (.. (.. e -target) getBoundingClientRect)]
-    (- (.. e -pageY) (.. rect -top))))
+  (when-let [target (.. e -target)]
+    (let [rect (.. target getBoundingClientRect)]
+     (- (.. e -pageY) (.. rect -top)))))
 
 (defn- move-up?
   [e]
@@ -308,8 +309,7 @@
         mobile? (util/mobile?)]
     (rum/with-context [[t] i18n/*tongue-context*]
       [:div#main-content.cp__sidebar-main-layout.flex-1.flex
-       {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])
-        :style {:padding-top (ui/main-content-top-padding)}}
+       {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
 
        ;; desktop left sidebar layout
        (left-sidebar {:left-sidebar-open? left-sidebar-open?
@@ -507,7 +507,7 @@
         white? (= "white" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
         left-sidebar-open?  (state/sub :ui/left-sidebar-open?)
-        right-sidebar-blocks (state/sub :sidebar/blocks)
+        right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
         global-graph-pages? (= :graph route-name)
         logged? (:name me)
@@ -538,7 +538,6 @@
                                    :ls-right-sidebar-open sidebar-open?}])}
 
         [:div.#app-container
-         {:style {:padding-top (ui/main-content-top-padding)}}
          [:div#left-container
           {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
           (header/header {:open-fn        open-fn
