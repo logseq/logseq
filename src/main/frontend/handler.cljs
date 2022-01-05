@@ -200,7 +200,7 @@
           _ (idb/clear-local-storage-and-idb!)]
     (js/setTimeout
       (fn [] (if (util/electron?)
-               (js/logseq.api.relaunch)
+               (ipc/ipc :reloadWindowPage)
                (js/window.location.reload)))
       2000)))
 
