@@ -163,7 +163,8 @@
              _ (println "Parsing start : " file)
              parse-f (if (and (mobile/is-native-platform?) config/dev?)
                        mldoc/->edn
-                       mldoc/->edn-async)
+                       (fn [content config]
+                         (mldoc/->edn-async file content config)))
              ast (parse-f content (mldoc/default-config format))]
        _ (println "Parsing finished : " file)
        (let [journal? (config/journal? file)
