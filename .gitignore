@@ -13,6 +13,7 @@ pom.xml.asc
 
 node_modules/
 static/
+tmp
 
 .cpcache/
 /src/gen

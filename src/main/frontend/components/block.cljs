@@ -1383,9 +1383,8 @@
        (map editor-handler/expand-block! block-ids)))))
 
 (rum/defc block-children < rum/reactive
-  [config children collapsed? *default-collapsed?]
+  [config children collapsed?]
   (let [ref? (:ref? config)
-        collapsed? (if ref? (rum/react *default-collapsed?) collapsed?)
         children (and (coll? children) (filter map? children))]
     (when (and (coll? children)
                (seq children)
@@ -1422,7 +1421,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id body children collapsed? *default-collapsed? *control-show? edit?]
+  [state config block uuid block-id body children collapsed? *control-show? edit?]
   (let [doc-mode? (state/sub :document/mode?)
         has-children-blocks? (and (coll? children) (seq children))
         has-child? (and
@@ -1435,6 +1434,7 @@
                            has-children-blocks?)
                        (util/react *control-show?))
         ref? (:ref? config)
+        block? (:block? config)
         empty-content? (block-content-empty? block)]
     [:div.mr-1.flex.flex-row.items-center.sm:mr-2
      {:style {:height 24
@@ -1446,10 +1446,11 @@
        :on-click (fn [event]
                    (util/stop event)
                    (when-not (and (not collapsed?) (not has-child?))
-                     (when ref? (swap! *default-collapsed? not))
-                     (if collapsed?
-                       (editor-handler/expand-block! uuid)
-                       (editor-handler/collapse-block! uuid))))}
+                     (if (or ref? block?)
+                       (state/toggle-collapsed-block! uuid)
+                       (if collapsed?
+                         (editor-handler/expand-block! uuid)
+                         (editor-handler/collapse-block! uuid)))))}
       [:span {:class (if control-show? "control-show" "control-hide")}
        (ui/rotating-arrow collapsed?)]]
      (let [bullet [:a {:on-click (fn [event]
@@ -2171,10 +2172,11 @@
 (rum/defcs block-container < rum/reactive
   {:init (fn [state]
            (let [[config block] (:rum/args state)]
+             (state/set-collapsed-block! (:block/uuid block)
+                                         (editor-handler/block-default-collapsed? block config))
              (assoc state
                     ::init-collapsed? (get-in block [:block/properties :collapsed])
-                    ::control-show? (atom false)
-                    ::default-collapsed? (atom (editor-handler/block-default-collapsed? block config)))))
+                    ::control-show? (atom false))))
    :should-update (fn [old-state new-state]
                     (let [compare-keys [:block/uuid :block/properties
                                         :block/parent :block/left
@@ -2198,11 +2200,11 @@
                  config)
         heading? (and (= type :heading) heading-level (<= heading-level 6))
         *control-show? (get state ::control-show?)
-        *default-collapsed? (get state ::default-collapsed?)
-        collapsed? (if (not= init-collapsed? (:collapsed properties))
-                     (:collapsed properties)
-                     @*default-collapsed?)
         ref? (boolean (:ref? config))
+        block? (boolean (:block? config))
+        collapsed? (if (or ref? block?)
+                     (state/sub-collapsed uuid)
+                     (:collapsed properties))
         breadcrumb-show? (:breadcrumb-show? config)
         slide? (boolean (:slide? config))
         custom-query? (boolean (:custom-query? config))
@@ -2265,11 +2267,11 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id body children collapsed? *default-collapsed? *control-show? edit?))
+        (block-control config block uuid block-id body children collapsed? *control-show? edit?))
 
       (block-content-or-editor config block edit-input-id block-id heading-level edit?)]
 
-     (block-children config children collapsed? *default-collapsed?)
+     (block-children config children collapsed?)
 
      (dnd-separator-wrapper block block-id slide? false false)]))
 

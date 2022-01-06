@@ -224,7 +224,11 @@
 (rum/defc mobile-bar < rum/reactive
   [parent-state parent-id]
   (let [vw-state (state/sub :ui/visual-viewport-state)
-        vw-pending? (state/sub :ui/visual-viewport-pending?)]
+        vw-pending? (state/sub :ui/visual-viewport-pending?)
+        ;; TODO: should we add this focus step to `simple-insert!`?
+        viewport-fn (fn [] (when-let [input (gdom/getElement parent-id)]
+                             (util/make-el-into-center-viewport input)
+                             (.focus input)))]
     [:div#mobile-editor-toolbar.bg-base-2
      {:style {:bottom (if (and vw-state)
                         (- (.-clientHeight js/document.documentElement)
@@ -266,12 +270,9 @@
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
+                         (viewport-fn)
                          (commands/simple-insert! parent-id "\n"
-                                                  {:forward-pos 1})
-                         ;; TODO: should we add this focus step to `simple-insert!`?
-                         (when-let [input (gdom/getElement parent-id)]
-                           (.focus input)
-                           (ui-handler/try-to-editing-input-into-viewport!)))}
+                                                  {:forward-pos 1}))}
        (ui/icon "arrow-back"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
@@ -285,51 +286,51 @@
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (commands/simple-insert!
-                          parent-id "[[]]"
-                          {:backward-pos 2
-                           :check-fn     (fn [_ _ new-pos]
-                                           (reset! commands/*slash-caret-pos new-pos)
-                                           (commands/handle-step [:editor/search-page]))})
-                         (when-let [input (gdom/getElement parent-id)]
-                           (.focus input)))}
+                         (viewport-fn)
+                         (editor-handler/toggle-page-reference-embed parent-id))}
        (ui/icon "brackets"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (commands/simple-insert!
-                          parent-id "(())"
-                          {:backward-pos 2
-                           :check-fn     (fn [_ _ new-pos]
-                                           (reset! commands/*slash-caret-pos new-pos)
-                                           (commands/handle-step [:editor/search-block]))})
-                         (when-let [input (gdom/getElement parent-id)]
-                           (.focus input)))}
+                         (viewport-fn)
+                         (editor-handler/toggle-block-reference-embed parent-id))}
        (ui/icon "parentheses"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
-                         (commands/simple-insert! parent-id "/" {})
-                         (when-let [input (gdom/getElement parent-id)]
-                           (.focus input)))}
+                         (viewport-fn)
+                         (commands/simple-insert! parent-id "/" {}))}
        (ui/icon "command"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
       [:button.bottom-action
        {:on-mouse-down (fn [e]
                          (util/stop e)
+                         (viewport-fn)
                          (commands/simple-insert!
                           parent-id "#"
                           {:check-fn     (fn [_ _ new-pos]
                                            (commands/handle-step [:editor/search-page-hashtag])
-                                           (reset! commands/*slash-caret-pos new-pos))})
-                         (when-let [input (gdom/getElement parent-id)]
-                           (.focus input)))}
+                                           (reset! commands/*slash-caret-pos new-pos))}))}
        (ui/icon "tag"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (editor-handler/cycle-priority!))}
+       (ui/icon "a-b"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (editor-handler/toggle-list!))}
+       (ui/icon "list"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
       [:button.bottom-action
@@ -337,6 +338,13 @@
                          (util/stop e)
                          (mobile-camera/embed-photo parent-id))}
        (ui/icon "camera"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (commands/insert-youtube-timestamp))}
+       (ui/icon "brand-youtube"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
       [:button.bottom-action
@@ -358,6 +366,17 @@
                          (util/stop e)
                          (history/redo! e))}
        (ui/icon "rotate-clockwise"
+                {:style {:fontSize ui/icon-size}})]]
+     [:div
+      [:button.bottom-action
+       {:on-mouse-down (fn [e]
+                         (util/stop e)
+                         (viewport-fn)
+                         (commands/simple-insert!
+                          parent-id "<"
+                          {:check-fn (fn [_]
+                                       (commands/block-commands-map))}))}
+       (ui/icon "code"
                 {:style {:fontSize ui/icon-size}})]]
      [:div
       [:button.bottom-action
